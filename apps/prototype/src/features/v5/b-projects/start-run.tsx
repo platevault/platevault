@@ -1,24 +1,24 @@
 /**
- * "Start a processing run" (sheet, part of S3; PRJ-FR-10, D-W38, D-W49,
- * D-W50). The user chooses one subject and one rig of the Project; both are
- * fixed once the run exists. A mosaic subject creates a run group with one
- * panel run per panel, listed by centre and rotation for the user to confirm
- * (VSEL-FR-18). Then a profile, which the run or the group's shared setup
- * keeps. Every candidate starts selected (D-W49).
+ * "Start run" (sheet, part of S3; PRJ-FR-10, D-W38, D-W49, D-W50): one
+ * subject, one rig of the Project (both fixed once the run exists) and an
+ * optional profile, which the run or the group's shared setup keeps. Every
+ * candidate starts selected (D-W49). A mosaic subject goes on to the mosaic
+ * editor, which places its sessions on panels before the group starts.
+ * Profiles list the applications first; the generic launcher comes last.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { useId, useState } from "react"
-import { Notice } from "@/components/app/feedback"
+import { CountBadge, Pill } from "@/components/app/pill"
+import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { closeSheet, useShellUi } from "@/app/ui-state"
-import { panelForSession, panelLabel, projectCandidates, rigCameraKind, rigName, subjectName, subjectTarget } from "@/domain/derive"
-import type { Project } from "@/domain/types"
-import { formatDec, formatDegrees, formatRa, plural } from "@/lib/format"
-import { setGroupSetup, setRunSetup, startRun } from "@/store/actions/runs"
+import { projectCandidates, rigCameraKind, rigName, subjectName } from "@/domain/derive"
+import type { ApplicationProfile, Catalog, Project } from "@/domain/types"
+import { plural } from "@/lib/format"
+import { setRunSetup, startRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
 import { InlineError } from "./parts"
@@ -29,13 +29,12 @@ export function StartRunSheet() {
   const project = useStore((s) => (sheet?.kind === "start-run" ? s.catalog.projects[sheet.projectId] : undefined))
   return (
     <Sheet open={open} onOpenChange={(next) => !next && closeSheet()}>
-      <SheetContent side="right" className="w-[34rem] max-w-[92vw] gap-0" data-sheet="start-run">
+      <SheetContent side="right" className="w-[30rem] max-w-[92vw] gap-0" data-sheet="start-run">
         {open && project ? (
           <StartRunForm key={project.id} project={project} />
         ) : open ? (
           <SheetHeader>
-            <SheetTitle>Start a processing run</SheetTitle>
-            <SheetDescription>This Project no longer exists in the catalog.</SheetDescription>
+            <SheetTitle>Project not found</SheetTitle>
           </SheetHeader>
         ) : null}
       </SheetContent>
@@ -43,80 +42,78 @@ export function StartRunSheet() {
   )
 }
 
-const LATER = "later"
+export const NO_PROFILE = "none"
+
+/** Profile choices: no profile yet, then the applications by name, then the generic launcher. */
+export function profileOptions(catalog: Catalog): Array<{ value: string; label: string }> {
+  const profiles = Object.values(catalog.profiles)
+  const apps = profiles.filter((p) => p.application !== "generic").sort((a, b) => a.name.localeCompare(b.name))
+  const generic = profiles.filter((p) => p.application === "generic")
+  return [{ value: NO_PROFILE, label: "None" }, ...apps.map(option), ...generic.map((p) => ({ value: p.id, label: "Other app" }))]
+}
+
+function option(profile: ApplicationProfile) {
+  return { value: profile.id, label: profile.name }
+}
 
 function StartRunForm({ project }: { project: Project }) {
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
   const [subjectId, setSubjectId] = useState(project.subjects[0]?.id ?? "")
   const [rigId, setRigId] = useState(project.rigIds[0] ?? "")
-  const [profileId, setProfileId] = useState(LATER)
-  const [panelsConfirmed, setPanelsConfirmed] = useState(false)
+  const [profileId, setProfileId] = useState(NO_PROFILE)
   const [error, setError] = useState<string | null>(null)
-  const ids = { subject: useId(), rig: useId(), confirm: useId() }
+  const ids = { subject: useId(), rig: useId() }
   const subject = project.subjects.find((s) => s.id === subjectId)
-  const candidates = projectCandidates(catalog, project).filter((c) => c.subject.id === subjectId && c.rigId === rigId)
-  const profiles = Object.values(catalog.profiles).sort((a, b) => a.name.localeCompare(b.name))
-  const placement = subject?.mosaic
-    ? subject.mosaic.panels.map((panel) => ({ panel, sessions: candidates.filter((c) => panelForSession(catalog, subject, c.session, rigId).panelId === panel.id).length }))
-    : []
-  const flagged = subject?.mosaic ? candidates.filter((c) => panelForSession(catalog, subject, c.session, rigId).panelId === null) : []
-  const refusal = project.state !== "open" ? `${project.name} is Done: Reopen it first to start a run.` : project.subjects.length === 0 ? "The Project has no subject yet: add one first." : project.rigIds.length === 0 ? "The Project has no rig yet: add one first." : null
+  const candidates = projectCandidates(catalog, project)
+  const count = (rig: string) => candidates.filter((c) => c.subject.id === subjectId && c.rigId === rig).length
+  const blockers = [...(project.state !== "open" ? [{ label: `${project.name} is Done` }] : []), ...(project.subjects.length === 0 ? [{ label: "No subject" }] : []), ...(project.rigIds.length === 0 ? [{ label: "No rig" }] : [])]
 
   function start() {
     if (!subject || !rigId) return
-    if (subject.mosaic && !panelsConfirmed) {
-      setError("Confirm the panels first: each panel run is tied to one panel for good.")
+    const profile = profileId === NO_PROFILE ? null : profileId
+    if (subject.mosaic) {
+      closeSheet()
+      void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: subject.id, rig: rigId, ...(profile ? { profile } : {}) } })
       return
     }
     const outcome = startRun(project.id, subject.id, rigId)
-    if (!outcome.result.ok) {
-      setError(outcome.result.message)
+    if (!outcome.result.ok || !outcome.runId) {
+      setError(outcome.result.ok ? "The run was not created." : outcome.result.message)
       return
     }
-    const profile = profileId === LATER ? null : profileId
     if (profile) {
-      const setup = outcome.groupId ? setGroupSetup(outcome.groupId, { profileId: profile }) : outcome.runId ? setRunSetup(outcome.runId, { profileId: profile }) : null
-      if (setup && !setup.ok) {
-        setError(`The run was created, but its profile was not saved: ${setup.message}`)
+      const setup = setRunSetup(outcome.runId, { profileId: profile })
+      if (!setup.ok) {
+        setError(`Run started; profile not saved: ${setup.message}`)
         return
       }
     }
     closeSheet()
-    if (outcome.groupId) void navigate({ to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: project.id, groupId: outcome.groupId, step: "select" } })
-    else if (outcome.runId) void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: outcome.runId, step: "select" } })
+    void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: outcome.runId, step: "select" } })
   }
 
   return (
     <>
       <SheetHeader className="border-b border-separator">
-        <SheetTitle>Start a processing run</SheetTitle>
-        <SheetDescription>
-          In {project.name}. The subject and the rig are fixed once the run exists.
-        </SheetDescription>
+        <SheetTitle>Start run</SheetTitle>
       </SheetHeader>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm">
-        {refusal ? <Notice tone="refusal" title="Start run refused">{refusal}</Notice> : null}
+        {blockers.length > 0 ? <Refusal action="Can't start run" reason={plural(blockers.length, "blocker")} blockers={blockers} /> : null}
         <fieldset className="space-y-2">
           <legend id={ids.subject} className="text-sm font-semibold">
             Subject
           </legend>
-          <RadioGroup aria-labelledby={ids.subject} value={subjectId} onValueChange={(value) => {
-            setSubjectId(String(value))
-            setPanelsConfirmed(false)
-          }}>
-            {project.subjects.map((s) => {
-              const target = subjectTarget(catalog, s)
-              return (
-                <div key={s.id} className="flex items-center gap-2">
-                  <RadioGroupItem id={`${ids.subject}-${s.id}`} value={s.id} />
-                  <Label htmlFor={`${ids.subject}-${s.id}`} className="font-normal">
-                    <span className="font-medium">{subjectName(catalog, s)}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{s.mosaic ? `Mosaic of ${target?.name ?? "its Target"} · ${plural(s.mosaic.panels.length, "panel")} → a run group` : "Target"}</span>
-                  </Label>
-                </div>
-              )
-            })}
+          <RadioGroup aria-labelledby={ids.subject} value={subjectId} onValueChange={(value) => setSubjectId(String(value))}>
+            {project.subjects.map((s) => (
+              <div key={s.id} className="flex items-center gap-2">
+                <RadioGroupItem id={`${ids.subject}-${s.id}`} value={s.id} />
+                <Label htmlFor={`${ids.subject}-${s.id}`} className="font-normal">
+                  <span className="font-medium">{subjectName(catalog, s)}</span>
+                </Label>
+                {s.mosaic ? <Pill tone="info">Mosaic · {plural(s.mosaic.panels.length, "panel")}</Pill> : null}
+              </div>
+            ))}
           </RadioGroup>
         </fieldset>
 
@@ -127,85 +124,23 @@ function StartRunForm({ project }: { project: Project }) {
           <RadioGroup aria-labelledby={ids.rig} value={rigId} onValueChange={(value) => setRigId(String(value))}>
             {project.rigIds.map((id) => {
               const rig = catalog.opticalTrains[id]
-              const count = projectCandidates(catalog, project).filter((c) => c.subject.id === subjectId && c.rigId === id).length
               const kind = rig ? rigCameraKind(catalog, rig) : null
+              const n = count(id)
               return (
                 <div key={id} className="flex items-center gap-2">
                   <RadioGroupItem id={`${ids.rig}-${id}`} value={id} />
                   <Label htmlFor={`${ids.rig}-${id}`} className="font-normal">
                     <span className="font-medium">{rigName(catalog, id)}</span>
-                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                      {kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Camera unknown"} · {plural(count, "candidate session")}
-                    </span>
                   </Label>
+                  <Pill tone="muted">{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Camera unknown"}</Pill>
+                  <CountBadge count={n} tone={n > 0 ? "info" : "muted"} label={plural(n, "candidate session")} />
                 </div>
               )
             })}
           </RadioGroup>
         </fieldset>
 
-        {subject?.mosaic ? (
-          <section aria-labelledby="sr-panels" className="space-y-2">
-            <h3 id="sr-panels" className="text-sm font-semibold">
-              Panels of {subject.mosaic.name}
-            </h3>
-            <p className="text-xs text-muted-foreground">One panel run per panel, sharing one setup. Sessions are placed by pointing; ambiguous or off-panel ones are flagged for you to place.</p>
-            <table className="w-full text-sm">
-              <caption className="sr-only">Panels by centre and rotation</caption>
-              <thead className="text-[0.6875rem] text-muted-foreground" data-chrome>
-                <tr className="border-b">
-                  <th scope="col" className="py-1 pr-2 text-left font-medium">
-                    Panel
-                  </th>
-                  <th scope="col" className="py-1 pr-2 text-left font-medium">
-                    Centre
-                  </th>
-                  <th scope="col" className="py-1 pr-2 text-left font-medium">
-                    Rotation
-                  </th>
-                  <th scope="col" className="py-1 text-right font-medium">
-                    Placed sessions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {placement.map(({ panel, sessions }) => (
-                  <tr key={panel.id} className="border-b last:border-0">
-                    <th scope="row" className="py-1 pr-2 text-left font-medium">
-                      {panelLabel(panel)}
-                    </th>
-                    <td className="py-1 pr-2 tabular-nums">
-                      {formatRa(panel.ra)} {formatDec(panel.dec)}
-                    </td>
-                    <td className="py-1 pr-2 tabular-nums">{formatDegrees(panel.rotationDeg, 0)}</td>
-                    <td className="py-1 text-right tabular-nums">{sessions}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {flagged.length > 0 ? <p className="text-xs text-warning">{plural(flagged.length, "session")} flagged for you to place in the group&apos;s Select step.</p> : null}
-            <div className="flex items-center gap-2">
-              <Checkbox id={ids.confirm} checked={panelsConfirmed} onCheckedChange={(checked) => setPanelsConfirmed(checked === true)} />
-              <Label htmlFor={ids.confirm} className="font-normal">
-                These {subject.mosaic.panels.length} panels are right; tie one panel run to each.
-              </Label>
-            </div>
-          </section>
-        ) : null}
-
-        <SelectField
-          label="Profile"
-          value={profileId}
-          onChange={setProfileId}
-          options={[{ value: LATER, label: "Choose in Prepare" }, ...profiles.map((p) => ({ value: p.id, label: p.name }))]}
-          description={subject?.mosaic ? "The group's shared setup: every panel run uses it." : "The application profile Prepare lays the run out for. It can change until the run is prepared."}
-        />
-
-        <Notice tone="info" title="What starts">
-          {subject && rigId
-            ? `${subject.mosaic ? `A run group of ${plural(subject.mosaic.panels.length, "panel run")}` : "One run"} of ${subjectName(catalog, subject)} on ${rigName(catalog, rigId)}, with ${plural(candidates.length, "candidate session")} preselected. It opens at Select; nothing on disk changes.`
-            : "Choose a subject and a rig."}
-        </Notice>
+        <SelectField label="Profile (optional)" value={profileId} onChange={setProfileId} options={profileOptions(catalog)} />
       </div>
       <SheetFooter className="border-t border-separator">
         <InlineError message={error} />
@@ -213,8 +148,8 @@ function StartRunForm({ project }: { project: Project }) {
           <Button variant="outline" onClick={closeSheet}>
             Cancel
           </Button>
-          <Button onClick={start} disabled={refusal !== null || !subject || !rigId} focusableWhenDisabled>
-            {subject?.mosaic ? "Start run group" : "Start run"}
+          <Button onClick={start} disabled={blockers.length > 0 || !subject || !rigId} focusableWhenDisabled>
+            {subject?.mosaic ? "Place panels" : "Start run"}
           </Button>
         </div>
       </SheetFooter>

@@ -8,19 +8,20 @@
  * the whole text in their tooltip. Right click opens the row's menu.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
-import { FolderKanban, Plus } from "lucide-react"
+import { Eye, FolderKanban, Grid2x2Plus, PackageCheck, Play, Plus, Trash2 } from "lucide-react"
 import { useId } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import type { MenuEntry } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from "@/components/ui/context-menu"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { GateLabel, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
-import { type GoalProgress, goalProgress, type NextAction, projectGroups, projectNext, projectRuns, projectStage, projectStatus, rigName, subjectName } from "@/domain/derive"
+import { type GoalProgress, goalProgress, type NextAction, projectGroups, projectNext, projectRuns, projectStage, projectStatus, projectWrapUp, rigName, subjectName } from "@/domain/derive"
 import type { Project } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { nowIso, updateSlice, useStore } from "@/store/core"
@@ -34,6 +35,8 @@ interface Row {
   groups: number
   stage: ReturnType<typeof projectStage>
   next: NextAction | null
+  wrapUp: boolean
+  trashed: number
 }
 
 export function ProjectsPage() {
@@ -53,6 +56,8 @@ export function ProjectsPage() {
           groups: projectGroups(s.catalog, project.id).length,
           stage: projectStage(s, project),
           next: projectNext(s, project, now),
+          wrapUp: project.state === "done" || projectWrapUp(s.catalog, project).available,
+          trashed: Object.values(s.catalog.runs).filter((r) => r.projectId === project.id && r.trashedAt).length,
         }
       })
   })
@@ -113,36 +118,38 @@ export function ProjectsPage() {
             <span className="sr-only"> for {r.project.name}</span>
           </Button>
         ) : (
-          <span className="text-muted-foreground">Nothing waiting</span>
+          <span className="text-muted-foreground">–</span>
         ),
     },
   ]
 
-  const menu = (r: Row) => (
-    <ContextMenuGroup>
-      <ContextMenuLabel>{r.project.name}</ContextMenuLabel>
-      <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id } })}>Open</ContextMenuItem>
-      {r.next ? <ContextMenuItem onClick={() => follow(r.next!.link)}>{r.next.label}</ContextMenuItem> : null}
-      <ContextMenuSeparator />
-      {r.project.state === "open" ? (
-        <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search: { start: "run" } as never })}>Start a processing run…</ContextMenuItem>
-      ) : (
-        <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search: { sheet: "done" } as never })}>Done / Archive…</ContextMenuItem>
-      )}
-      <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId/trash", params: { projectId: r.project.id } })}>Open Trash</ContextMenuItem>
-    </ContextMenuGroup>
-  )
+  const open = (r: Row, search?: Record<string, string>) => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search: search ?? {} })
+  const menu = (r: Row): MenuEntry[] => [
+    { heading: r.project.name },
+    { label: "Open", icon: Eye, onSelect: () => open(r) },
+    ...(r.next ? [{ label: r.next.label, onSelect: () => follow(r.next!.link) }] : []),
+    { separator: true },
+    ...(r.project.state === "open"
+      ? [
+          { label: "Start run…", icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: r.project.id }) },
+          { label: "New mosaic…", icon: Grid2x2Plus, onSelect: () => open(r, { mosaic: "new" }) },
+        ]
+      : []),
+    ...(r.wrapUp ? [{ label: "Wrap up", icon: PackageCheck, onSelect: () => open(r, { stage: "wrap-up" }) }] : []),
+    { label: r.trashed > 0 ? `Trash (${r.trashed})` : "Trash", icon: Trash2, onSelect: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: r.project.id } }) },
+  ]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Projects"
-        description="Campaigns: subjects, rigs and goals. Every processing run lives in a Project."
+        meta={shown.length > 0 ? <CountBadge count={shown.length} label={plural(shown.length, "Project")} /> : null}
         actions={
           <>
             <div className="flex items-center gap-2">
               <Switch id={switchId} checked={showDone} onCheckedChange={(checked) => updateSlice("b", (b) => ({ ...b, showDone: checked }))} />
               <Label htmlFor={switchId}>Show done</Label>
+              {!showDone && hiddenDone > 0 ? <Pill tone="muted">{hiddenDone} hidden</Pill> : null}
             </div>
             <Button size="sm" onClick={() => openSheet({ kind: "new-project" })}>
               <Plus aria-hidden="true" data-icon="inline-start" />
@@ -163,16 +170,21 @@ export function ProjectsPage() {
             <EmptyState
               icon={FolderKanban}
               title={rows.length === 0 ? "No Projects yet" : "Every Project is Done"}
-              description={rows.length === 0 ? "A Project names its subjects, rigs and goals; processing runs start inside it." : "Done Projects are hidden. Turn on Show done to list them."}
+              description={null}
               action={
-                <Button size="sm" onClick={() => openSheet({ kind: "new-project" })}>
-                  New Project
-                </Button>
+                rows.length === 0 ? (
+                  <Button size="sm" onClick={() => openSheet({ kind: "new-project" })}>
+                    New Project
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => updateSlice("b", (b) => ({ ...b, showDone: true }))}>
+                    Show done
+                  </Button>
+                )
               }
             />
           }
         />
-        {!showDone && hiddenDone > 0 ? <p className="text-xs text-muted-foreground">{plural(hiddenDone, "Done Project")} hidden. Turn on Show done to list them.</p> : null}
       </PageBody>
     </div>
   )

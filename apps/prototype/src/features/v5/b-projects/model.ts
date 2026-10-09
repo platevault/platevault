@@ -1,13 +1,15 @@
 /**
- * Slice B derivations over the shared store and types: the Done / Archive
- * offers (PRJ-FR-14, PRJ-FR-15, STO-FR-13 to STO-FR-16), the archive and
- * restore transfer plans, the copy each frame keeps (D-W74), goal gaps for
- * planning and the goal channels a Project's rigs can capture. Pure: nothing
- * here writes state. Every OS Trash refusal is the shared `trashRefusal`; the
- * offers and plans stay here because only the Project screens read them.
+ * Slice B derivations over the shared store and types: the Wrap up trash
+ * offers (PRJ-FR-14, PRJ-FR-15, STO-FR-14 to STO-FR-16), the archive and
+ * restore transfer plans (STO-FR-13, P-ARC1), the copy each frame keeps
+ * (D-W74), goal gaps for planning and the goal channels a Project's rigs can
+ * capture. Pure: nothing here writes state. Every OS Trash refusal is the
+ * shared `trashRefusal`; the offers and plans stay here because only the
+ * Project screens read them.
  */
 import { fileAt, fileKey, freeBytes, trashRefusal } from "@/domain/disk"
 import {
+  archiveDestination,
   formatHours,
   goalProgress,
   liveAssetIds,
@@ -21,9 +23,9 @@ import {
 } from "@/domain/derive"
 import { isUnder } from "@/domain/indexing"
 import { qualityApplicability } from "@/domain/library"
-import { NARROW_BANDS } from "@/domain/labels"
+import { GOAL_CHANNELS, NARROW_BANDS } from "@/domain/labels"
 import { namingTemplate, resolveNamingTemplate } from "@/domain/templates"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, Operation, OpticalTrainId, Project, ResultId, Session, SessionId, Subject, Volume } from "@/domain/types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Session, SessionId, Subject, Volume } from "@/domain/types"
 import { formatBytes, formatNight, plural } from "@/lib/format"
 import type { PrototypeState } from "@/store/core"
 import type { TrashItem } from "@/store/actions/trash"
@@ -103,7 +105,7 @@ function frameLabel(catalog: Catalog, asset: Asset): string {
 }
 
 // ---------------------------------------------------------------------------
-// Done / Archive trash offers
+// Wrap up trash offers
 // ---------------------------------------------------------------------------
 
 export type OfferKind = "rejected-frames" | "intermediates" | "duplicate-copies"
@@ -201,26 +203,26 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
       const refuse = (reason: string) => refusals.push({ key: id, label, path, reason })
       const preparedIn = prepared.get(id)
       if (preparedIn) {
-        refuse(`Used in a prepared revision of ${preparedIn}, which is not Complete`)
+        refuse(`in ${preparedIn}, not Complete`)
         continue
       }
       const input = inputs.get(id)
       if (input) {
-        refuse(`Recorded input of the Result ${input}`)
+        refuse(`input of ${input}`)
         continue
       }
       if (asset.sessionId && moving.has(asset.sessionId)) {
-        refuse("An archive transfer is moving it; try again when it settles")
+        refuse("archive moving")
         continue
       }
       const outside = asset.copies.find((c) => catalog.locations[c.locationId]?.role !== "captures")
       if (outside) {
-        refuse(`A copy sits outside Captures storage: ${outside.path}`)
+        refuse("copy outside Captures")
         continue
       }
       const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
       if (copyRefusal) {
-        refuse(`${copyRefusal}; every copy must move, so the frame stays`)
+        refuse(copyRefusal)
         continue
       }
       entries.push({
@@ -316,11 +318,11 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
         const label = `${asset.fileName} on ${catalog.locations[copy.locationId]?.displayName ?? "an unknown location"}`
         const reason =
           linkedBy.has(copy.path) && copy.path !== kept.path
-            ? `Source path of a prepared revision of ${linkedBy.get(copy.path)}, which is not Complete`
+            ? `source of ${linkedBy.get(copy.path)}, not Complete`
             : moving.has(session.id)
-              ? "An archive transfer is moving it; try again when it settles"
+              ? "archive moving"
               : trashRefusal(disk, kept.path)
-                ? `The kept copy on ${keptName} cannot be re-verified: ${trashRefusal(disk, kept.path)}`
+                ? `kept copy on ${keptName} unverified`
                 : trashRefusal(disk, copy.path)
         if (reason) {
           refusals.push({ key, label, path: copy.path, reason })
@@ -334,7 +336,7 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
   return offer("duplicate-copies", disk, entries, refusals, items)
 }
 
-export function doneOffers(state: PrototypeState, project: Project): Record<OfferKind, TrashOffer> {
+export function trashOffers(state: PrototypeState, project: Project): Record<OfferKind, TrashOffer> {
   return {
     "rejected-frames": rejectedFramesOffer(state, project),
     intermediates: intermediatesOffer(state, project),
@@ -431,7 +433,7 @@ function planOver(state: PrototypeState, sessions: Session[], destinationFor: (s
       reason ??= moveRefusal(state, move)
       moves.push(move)
     }
-    if (reason) refused.push({ session, reason: `${reason}; the whole session stays` })
+    if (reason) refused.push({ session, reason })
     else if (moves.length > 0) rows.push({ session, moves, sizeBytes: moves.reduce((n, m) => n + m.sizeBytes, 0), folder: moves[0]!.to.path.split("/").slice(0, -1).join("/") })
   }
   const sizeBytes = rows.reduce((n, r) => n + r.sizeBytes, 0)
@@ -439,17 +441,18 @@ function planOver(state: PrototypeState, sessions: Session[], destinationFor: (s
   let block = blocked
   if (!block && volume && !volume.mounted) block = `${volume.name} is not mounted`
   if (!block && volume && !volume.writable) block = `${volume.name} is not writable`
-  if (!block && volume && sizeBytes > free) block = `${volume.name} has ${formatBytes(free)} free; the transfer needs ${formatBytes(sizeBytes)}`
+  if (!block && volume && sizeBytes > free) block = `${volume.name}: ${formatBytes(free)} free of ${formatBytes(sizeBytes)}`
   return { destination, volume, freeBytes: free, rows, refused, sizeBytes, blocked: block }
 }
 
 /**
- * Archive of a Done Project (STO-FR-13): its member sessions transfer to the
- * archive location along the naming template. A session that a run in
- * another Project not marked Done uses stays and is listed as kept (D-W46);
- * being another Project's candidate does not count.
+ * Archive of a Project at Wrap up (STO-FR-13, P-ARC1): its member sessions
+ * transfer to the chosen archive location (the Project's own, else the
+ * Default) along the naming template. A session that a run in another
+ * Project not marked Done uses stays and is listed as kept (D-W46); being
+ * another Project's candidate does not count.
  */
-export function archivePlan(state: PrototypeState, project: Project): ArchivePlan {
+export function archivePlan(state: PrototypeState, project: Project, destinationId?: string | null): ArchivePlan {
   const { catalog } = state
   const archived = new Set(project.archive?.sessionIds ?? [])
   const usedElsewhere = new Map<SessionId, string[]>()
@@ -462,13 +465,14 @@ export function archivePlan(state: PrototypeState, project: Project): ArchivePla
     .filter((s): s is Session => s !== undefined && !archived.has(s.id))
     .sort((a, b) => a.night.localeCompare(b.night))
   const kept = members.filter((s) => usedElsewhere.has(s.id)).map((session) => ({ session, projects: usedElsewhere.get(session.id)! }))
-  const destination = Object.values(catalog.locations).find((l) => l.role === "archive" && !l.retiredAt) ?? null
+  const chosen = destinationId ? catalog.locations[destinationId] : undefined
+  const destination = chosen && chosen.role === "archive" && !chosen.retiredAt ? chosen : archiveDestination(state, project)
   const plan = planOver(
     state,
     members.filter((s) => !usedElsewhere.has(s.id)),
     (session, asset) => (destination ? { locationId: destination.id, volumeId: destination.volumeId, path: joinPath(templatedFolder(state, destination.path, session), asset.fileName) } : null),
     destination,
-    destination ? null : "No archive location is registered: add one in Settings › Locations",
+    destination ? null : "no archive location",
   )
   return { ...plan, kept }
 }
@@ -501,22 +505,23 @@ export function restorePlan(state: PrototypeState, project: Project, origins: Ar
 // Goals, channels and planning gaps
 // ---------------------------------------------------------------------------
 
-/** Goal channels a rig captures, in the names `goalChannel` reads (D-W29, D-W31). */
-export function rigChannels(catalog: Catalog, rigId: OpticalTrainId): string[] {
+/** Goal channels a rig captures, as `goalChannel` reads them (D-W29, D-W31): a single band, "OSC" or "Dual-band". */
+export function rigChannels(catalog: Catalog, rigId: OpticalTrainId): GoalChannel[] {
   const rig = catalog.opticalTrains[rigId]
   if (!rig) return []
-  if (rigCameraKind(catalog, rig) === "osc") {
-    const out = ["OSC"]
-    if (rig.filters.some((f) => f.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2)) out.push("Dual-band")
-    return out
+  const osc = rigCameraKind(catalog, rig) === "osc"
+  const out = new Set<GoalChannel>(osc ? ["OSC"] : [])
+  for (const filter of rig.filters) {
+    if (filter.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2) out.add("Dual-band")
+    else if (!osc && filter.bands.length === 1) out.add(filter.bands[0]!)
   }
-  return rig.filters.map((f) => f.name)
+  return GOAL_CHANNELS.filter((c) => out.has(c))
 }
 
-export function projectChannels(catalog: Catalog, rigIds: OpticalTrainId[]): string[] {
-  const out: string[] = []
-  for (const id of rigIds) for (const channel of rigChannels(catalog, id)) if (!out.includes(channel)) out.push(channel)
-  return out
+/** Channels the Project's rigs capture, in chip order. */
+export function projectChannels(catalog: Catalog, rigIds: OpticalTrainId[]): GoalChannel[] {
+  const out = new Set(rigIds.flatMap((id) => rigChannels(catalog, id)))
+  return GOAL_CHANNELS.filter((c) => out.has(c))
 }
 
 export interface GoalGap {
