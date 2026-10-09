@@ -1038,11 +1038,11 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
   const unreviewed = candidates.reduce((n, c) => n + unreviewedFrames(catalog, c.session), 0)
   const runs = projectRuns(catalog, project.id)
   if (unreviewed > 0) {
-    const run = runs.find((r) => r.completion === "open" && runCandidates(catalog, r).some((c) => unreviewedFrames(catalog, c.session) > 0))
+    // A run's Review lists only its members, so new candidates are reviewed in the Project's candidate review (PIX-FR-18).
     return {
       label: `Review ${plural(unreviewed, "new frame")}`,
       reason: "Candidates have Unreviewed frames.",
-      link: run ? runStepLink(run, "review", { filter: "unreviewed" }) : projectLink(project.id, { candidates: "unreviewed" }),
+      link: projectLink(project.id, { candidates: "unreviewed" }),
       step: null,
     }
   }
