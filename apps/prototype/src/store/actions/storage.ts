@@ -7,7 +7,8 @@
  */
 import { duplicateCopies } from "@/domain/storage"
 import type { OperationId } from "@/domain/types"
-import { formatBytes, plural } from "@/lib/format"
+import { formatBytes, formatCount } from "@/lib/format"
+import { msg } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
 import { refuse } from "./shared"
@@ -19,10 +20,10 @@ const FRAMES_PER_TICK = 120
 export function startDuplicateScan(): { result: CommitResult; operationId: OperationId | null } {
   const { operations, catalog } = store.getState()
   if (Object.values(operations).some((op) => op.kind === "duplicate-scan" && (op.status === "running" || op.status === "paused"))) {
-    return { result: refuse("Scan for duplicates refused", ["a scan is running"], "/storage"), operationId: null }
+    return { result: refuse(msg("store_refused", { label: msg("storage_scan") }), [msg("store_reason_scan_running")], "/storage"), operationId: null }
   }
   const total = Object.values(catalog.assets).filter((a) => !a.trashed).length
-  const operationId = startOperation({ kind: "duplicate-scan", title: "Scan for duplicates", scope: {}, total, unit: "frames", canCancel: true })
+  const operationId = startOperation({ kind: "duplicate-scan", title: msg("storage_scan"), scope: {}, total, unit: "frames", canCancel: true })
   return { result: { ok: true }, operationId }
 }
 
@@ -34,7 +35,8 @@ const duplicateScanStep: OperationHandler = {
     const groups = duplicateCopies(state.catalog)
     const extra = groups.reduce((n, g) => n + g.extraBytes, 0)
     const next = patchOperation(state, op.id, { progress: { ...op.progress, done }, payload: { groups } })
-    return settleOperation(next, op.id, "succeeded", groups.length === 0 ? "No duplicates." : `${plural(groups.length, "frame")} with extra copies · ${formatBytes(extra)}`, "/storage")
+    const summary = groups.length === 0 ? msg("op_no_duplicates") : msg("op_duplicates_found", { count: groups.length, n: formatCount(groups.length), bytes: formatBytes(extra) })
+    return settleOperation(next, op.id, "succeeded", summary, "/storage")
   },
 }
 

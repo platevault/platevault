@@ -29,10 +29,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useMessages } from "@/app/preferences"
 import { GateLabel } from "@/app/run-ui"
 import { archiveLocations, defaultArchiveLocation, projectRuns, projectWrapUp, runStepLink, type WrapUpStep } from "@/domain/derive"
+import { OPERATION_UNIT_NAME } from "@/domain/labels"
 import { runFootprint } from "@/domain/storage"
 import type { Operation, Project, Run, WrapUpStepId } from "@/domain/types"
 import { formatBytes } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { markProjectDone, setProjectArchiveLocation, setWrapUpStep } from "@/store/actions/projects"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type CommitResult, type PrototypeState, store, updateSlice, useStore } from "@/store/core"
@@ -44,10 +45,10 @@ import { CommitOutcome, useCommitError } from "./parts"
 import { rememberApproval } from "./trash"
 
 const OFFER_ORDER: OfferKind[] = ["rejected-frames", "intermediates", "duplicate-copies"]
-const OFFER_LABEL: Record<OfferKind, string> = { "rejected-frames": "Rejects", intermediates: "Intermediates", "duplicate-copies": "Duplicates" }
+const OFFER_NAME: Record<OfferKind, MessageRef> = { "rejected-frames": msg("wrapup_offer_rejects"), intermediates: msg("run_results_intermediates"), "duplicate-copies": msg("wrapup_offer_duplicates_label") }
 
 function offerLabel(m: Messages, kind: OfferKind): string {
-  return kind === "rejected-frames" ? m.wrapup_offer_rejects() : kind === "intermediates" ? m.run_results_intermediates() : m.wrapup_offer_duplicates_label()
+  return say(m, OFFER_NAME[kind])
 }
 
 type StepPill = { label: string; tone: Tone }
@@ -152,11 +153,11 @@ function ApprovalOutcome({ operationId, label }: { operationId: string; label: s
   const m = useMessages()
   const op = useStore((s) => s.operations[operationId])
   if (!op) return null
-  if (op.status === "running" || op.status === "paused") return <GateLabel state="running" label={`${op.progress.done}/${op.progress.total} ${op.progress.unit}`} />
+  if (op.status === "running" || op.status === "paused") return <GateLabel state="running" label={`${op.progress.done}/${op.progress.total} ${say(m, OPERATION_UNIT_NAME[op.progress.unit])}`} />
   return (
     <span className="inline-flex items-center gap-1">
       <Pill tone={op.status === "succeeded" ? "success" : "warning"}>{op.status === "succeeded" ? label : op.status === "partial" ? m.status_partial() : m.status_failed()}</Pill>
-      {op.summary ? <NoteMarker label={m.wrapup_summary({ label })}>{op.summary}</NoteMarker> : null}
+      {op.summary ? <NoteMarker label={m.wrapup_summary({ label })}>{say(m, op.summary)}</NoteMarker> : null}
     </span>
   )
 }
@@ -301,7 +302,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
     settle(OFFER_ORDER.some((k) => approvals[k]) ? "done" : "skipped")
   }
   const move = (offer: TrashOffer) => {
-    const operationId = moveToOsTrash({ kind: offer.kind, title: `${OFFER_LABEL[offer.kind]} of ${project.name} to Trash`, projectId: project.id, runIds: [], items: offer.items, href: `/projects/${project.id}?stage=wrap-up` })
+    const operationId = moveToOsTrash({ kind: offer.kind, title: msg("op_offer_to_trash", { offer: OFFER_NAME[offer.kind], name: project.name }), projectId: project.id, runIds: [], items: offer.items, href: `/projects/${project.id}?stage=wrap-up` })
     rememberApproval(project.id, offer.kind, operationId)
     afterChange()
   }
@@ -370,7 +371,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
                 ) : null}
               </div>
               {offer.refusals.length > 0 && !operationId && !isSkipped ? (
-                <Refusal action={m.wrapup_items_kept({ count: offer.refusals.length })} reason={m.wrapup_refused()} blockers={offer.refusals.map((r) => ({ label: `${r.label} · ${r.reason}` }))} />
+                <Refusal action={m.wrapup_items_kept({ count: offer.refusals.length })} reason={m.wrapup_refused()} blockers={offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}` }))} />
               ) : null}
             </li>
           )
@@ -460,13 +461,13 @@ function ArchiveStep({ project, step, pill, editable, current, settle }: StepPro
           )}
           <CommitOutcome result={choose.result} action={m.wrapup_refusal_destination()} />
         </fieldset>
-        {plan.blocked && locations.length > 0 ? <Refusal action={m.wrapup_archive_blocked()} reason={plan.blocked} blockers={[]} /> : null}
+        {plan.blocked && locations.length > 0 ? <Refusal action={m.wrapup_archive_blocked()} reason={say(m, plan.blocked)} blockers={[]} /> : null}
         <div className="flex flex-wrap items-center gap-1.5">
           {plan.rows.length > 0 ? <Pill tone="neutral">{m.wrapup_sessions_to_move({ count: plan.rows.length })}</Pill> : null}
           {operationId ? <ApprovalOutcome operationId={operationId} label={m.status_archived()} /> : project.archive ? <Pill tone="success">{m.wrapup_sessions_archived({ count: project.archive.sessionIds.length })}</Pill> : null}
         </div>
         {plan.refused.length > 0 ? (
-          <Refusal action={m.wrapup_sessions_stay({ count: plan.refused.length })} reason={m.wrapup_refused()} blockers={plan.refused.map((r) => ({ label: `${sessionLabel(catalog, r.session)} · ${r.reason}` }))} />
+          <Refusal action={m.wrapup_sessions_stay({ count: plan.refused.length })} reason={m.wrapup_refused()} blockers={plan.refused.map((r) => ({ label: `${sessionLabel(catalog, r.session)} · ${say(m, r.reason)}` }))} />
         ) : null}
         {plan.kept.length > 0 ? (
           <Refusal action={m.wrapup_sessions_kept({ count: plan.kept.length })} reason={m.wrapup_used_by_other_reason()} blockers={plan.kept.map((k) => ({ label: `${sessionLabel(catalog, k.session)} · ${k.projects.join(", ")}` }))} />

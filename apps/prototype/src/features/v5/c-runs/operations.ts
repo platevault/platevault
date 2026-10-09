@@ -8,7 +8,8 @@
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
 import type { Disk, FrameHeader, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { FIELD_KEYWORD, type LinkType, type PrepareEntry, type PrepareJournal } from "./model"
@@ -31,36 +32,36 @@ export interface PreparePayload extends PrepareJournal {
 
 const BATCH = 6
 
-function block(item: OperationItem, detail: string): OperationItem {
+function block(item: OperationItem, detail: MessageRef): OperationItem {
   return { ...item, status: "blocked", phase: null, detail }
 }
 
-function sourceProblem(state: PrototypeState, entry: PrepareEntry): string | null {
-  if (entry.unavailable) return `${entry.unavailable}. Nothing was written for it.`
-  if (deniedAncestor(state.disk, entry.sourcePath)) return `Unreadable: read access to ${entry.sourcePath} is denied. Nothing was written for it.`
-  if (!fileAt(state.disk, entry.sourcePath)) return `Not readable now: nothing is reachable at ${entry.sourcePath}. Nothing was written for it.`
+function sourceProblem(state: PrototypeState, entry: PrepareEntry): MessageRef | null {
+  if (entry.unavailable) return msg("op_prep_unavailable", { reason: entry.unavailable })
+  if (deniedAncestor(state.disk, entry.sourcePath)) return msg("op_prep_denied", { path: entry.sourcePath })
+  if (!fileAt(state.disk, entry.sourcePath)) return msg("op_prep_not_reachable", { path: entry.sourcePath })
   return null
 }
 
 function prepareEntry(state: PrototypeState, payload: PreparePayload, item: OperationItem): { state: PrototypeState; item: OperationItem } {
   const entry = payload.entries[item.id]
-  if (!entry) return { state, item: block(item, "Not in the reviewed selection.") }
+  if (!entry) return { state, item: block(item, msg("op_prep_not_in_selection")) }
   const problem = sourceProblem(state, entry)
   if (problem) return { state, item: block(item, problem) }
   const source = fileAt(state.disk, entry.sourcePath)!
   const asset = entry.assetId ? state.catalog.assets[entry.assetId] : undefined
   if (asset && source.sha256 !== asset.sha256) {
-    return { state, item: block(item, "Source changed since it was indexed: its bytes differ from the catalog fingerprint. Rescan and review it first.") }
+    return { state, item: block(item, msg("op_prep_source_changed")) }
   }
   payload.snapshots[item.id] = source.sha256
   if (payload.mode === "direct-source") {
     payload.expected[item.id] = source.sha256
-    return { state, item: { ...item, status: "done", phase: "verified", detail: "Exact source path listed; identity matches its snapshot." } }
+    return { state, item: { ...item, status: "done", phase: "verified", detail: msg("op_prep_direct_verified") } }
   }
-  if (fileAt(state.disk, entry.destPath)) return { state, item: block(item, `Destination exists: ${entry.destPath}. Nothing was overwritten.`) }
-  if (state.disk.readOnlyPaths.some((p) => isUnder(entry.destPath, p))) return { state, item: block(item, `Write permission removed at ${payload.folderPath}. Nothing was written.`) }
+  if (fileAt(state.disk, entry.destPath)) return { state, item: block(item, msg("op_prep_destination_exists", { path: entry.destPath })) }
+  if (state.disk.readOnlyPaths.some((p) => isUnder(entry.destPath, p))) return { state, item: block(item, msg("op_prep_write_removed", { folder: payload.folderPath })) }
   const volumeId = volumeForPath(state.disk, entry.destPath)
-  if (!volumeId || !state.disk.volumes[volumeId]?.mounted) return { state, item: block(item, `Destination offline: ${payload.folderPath} is on a volume that is not mounted.`) }
+  if (!volumeId || !state.disk.volumes[volumeId]?.mounted) return { state, item: block(item, msg("op_prep_destination_offline", { folder: payload.folderPath })) }
   const at = nowIso()
   let header: FrameHeader | null = source.header
   if (header && entry.patches.length > 0) {
@@ -92,8 +93,8 @@ function prepareEntry(state: PrototypeState, payload: PreparePayload, item: Oper
   const next = { ...state, disk: writeFiles(state.disk, [written]) }
   const reread = fileAt(next.disk, entry.destPath)
   const verified = reread?.linkTarget ? fileAt(next.disk, reread.linkTarget)?.sha256 === source.sha256 : reread?.sha256 === payload.expected[item.id]
-  if (!verified) return { state: next, item: { ...item, status: "failed", phase: null, detail: `The entry at ${entry.destPath} did not re-read to the expected digest.` } }
-  const detail = entry.patches.length > 0 ? `Patched copy verified: ${entry.patches.map((p) => `${FIELD_KEYWORD[p.field]} = ${p.value}`).join(", ")}; original unchanged.` : "Written and re-read against its snapshot."
+  if (!verified) return { state: next, item: { ...item, status: "failed", phase: null, detail: msg("op_prep_reread_failed", { path: entry.destPath }) } }
+  const detail = entry.patches.length > 0 ? msg("op_prep_patched_verified", { patches: entry.patches.map((p) => `${FIELD_KEYWORD[p.field]} = ${p.value}`).join(", ") }) : msg("op_prep_written_verified")
   return { state: next, item: { ...item, status: "done", phase: "verified", detail } }
 }
 
@@ -110,11 +111,11 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
     if (item.status !== "done") return item
     const entry = payload.entries[item.id]
     const current = entry ? fileAt(next.disk, entry.sourcePath) : undefined
-    if (!entry || current?.sha256 !== payload.snapshots[item.id]) return block(item, `Source drift before completion: ${entry?.sourcePath ?? item.label} no longer matches its snapshot. Not counted as prepared.`)
+    if (!entry || current?.sha256 !== payload.snapshots[item.id]) return block(item, msg("op_prep_source_drift", { source: entry ? verbatim(entry.sourcePath) : item.label }))
     return item
   })
   const prep = next.catalog.preparations[payload.preparationId]
-  if (!prep) return settleOperation(next, op.id, "failed", "The preparation record is missing; nothing was settled.")
+  if (!prep) return settleOperation(next, op.id, "failed", msg("op_prep_record_missing"))
   const preparedAssetIds: string[] = []
   const preparedResultIds: string[] = []
   const blocked: Preparation["blocked"] = []
@@ -131,7 +132,7 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
       continue
     }
     const input: PreparationInput = entry.resultId ? { kind: "result", resultId: entry.resultId } : { kind: "asset", assetId: entry.assetId ?? item.id }
-    blocked.push({ input, path: entry.sourcePath, reason: item.detail ?? "Not prepared" })
+    blocked.push({ input, path: entry.sourcePath, reason: item.detail ?? msg("run_not_prepared") })
   }
   const prepared = preparedAssetIds.length + preparedResultIds.length
   const complete = blocked.length === 0
@@ -145,12 +146,13 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
     disk = writeFiles(disk, [makeFile({ path: `${payload.folderPath}/${HANDOFF_FILE}`, volumeId, sizeBytes: 64 * (prepared + calibrationDone) + 120, kind: "text", modifiedAt: nowIso() })])
     next = { ...next, disk }
   }
-  const calibrationNote = calibrationTotal > 0 ? ` Calibration: ${calibrationDone} of ${calibrationTotal} files.` : ""
+  const calibrationNote = calibrationTotal > 0 ? [msg("op_prep_calibration_note", { done: calibrationDone, total: calibrationTotal })] : []
+  const inputs = { count: blocked.length, n: formatCount(blocked.length) }
   const summary = complete
-    ? `Prepared: ${prepared} of ${prep.entryCount} entries match the reviewed membership and their source snapshots.${calibrationNote}`
+    ? joinRefs([msg("op_prep_prepared", { prepared, total: prep.entryCount }), ...calibrationNote], " ")
     : state_ === "failed"
-      ? `Failed: no entry could be prepared; ${plural(blocked.length, "input")} blocked. Sources are untouched.`
-      : `Partial: ${prepared} prepared, ${plural(blocked.length, "input")} blocked.${calibrationNote} Open waits until every entry is prepared; sources are untouched.`
+      ? msg("op_prep_failed", inputs)
+      : joinRefs([msg("op_prep_partial", { prepared, ...inputs }), ...calibrationNote, msg("op_prep_partial_open_waits")], " ")
   next = patchOperation(next, op.id, { items, payload: payload as unknown as Record<string, unknown>, progress: { ...op.progress, done: op.progress.total } })
   next = patchPreparation(next, payload.preparationId, {
     state: state_,

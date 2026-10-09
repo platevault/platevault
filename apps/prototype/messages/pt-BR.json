@@ -6519,5 +6519,760 @@
   "domain_naming_parent_folder": "Uma pasta não pode ser `..`",
   "domain_naming_reserved": "\"{name}\" é um nome reservado",
   "domain_naming_leading_slash": "Um modelo é relativo ao seu local; remova a / inicial",
-  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo."
+  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo.",
+  "op_trash_other_copy_refused": "Outra cópia foi recusada: {reason}",
+  "op_trash_moved": "Movido para a Lixeira do sistema",
+  "op_trash_summary": "Para a Lixeira do sistema: {trashed} ({bytes}); mantidos com um motivo: {refused}. Nada foi excluído permanentemente.",
+  "op_trash_frames_kept": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame mantido",
+        "countPlural=*": "{n} frames mantidos"
+      }
+    }
+  ],
+  "store_cal_output_folder_offline": "Pasta de saída offline",
+  "store_label_mark_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Marcar {n} frame como {quality}",
+        "countPlural=*": "Marcar {n} frames como {quality}"
+      }
+    }
+  ],
+  "store_saved_frames_marked": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame marcado como {quality}",
+        "countPlural=*": "{n} frames marcados como {quality}"
+      }
+    }
+  ],
+  "store_library_scope_detail": "Escopo da biblioteca: todas as execuções e Alvos veem esta decisão.",
+  "store_label_rejected_in_review": "Rejeitado na Revisão",
+  "store_label_unrejected_in_review": "Rejeição desfeita na Revisão",
+  "store_catalog_only_detail": "{name}. Somente o catálogo; cabeçalhos de origem inalterados.",
+  "store_label_add_to_my_targets": "Adicionar {name} a Meus alvos",
+  "store_label_remove_from_my_targets": "Remover {name} de Meus alvos",
+  "store_target_from_resolver": "Coordenadas, tamanho e tipo de {resolver}.",
+  "store_target_from_bundled": "Do catálogo {catalogues} incluído.",
+  "store_target_from_reference": "Do catálogo de referência incluído.",
+  "store_saved_added_to_my_targets": "★ {name} adicionado a Meus alvos",
+  "store_saved_target_added": "Alvo adicionado: {name}",
+  "store_reason_run_uses_it": "{name} o usa",
+  "store_label_create": "Criar {name}",
+  "store_saved_project_created": "Projeto criado: {name}",
+  "store_saved_label_name": "{label}: {name}",
+  "store_label_project_details": "Detalhes do projeto",
+  "store_label_add_subject": "Adicionar objeto",
+  "store_label_remove_subject": "Remover objeto",
+  "store_label_remove_rig": "Remover setup",
+  "store_label_apply_named": "Aplicar {name}",
+  "store_label_archive_destination": "Destino do arquivo",
+  "store_reason_not_archive_location": "não é um local de arquivo",
+  "store_reason_not_complete": "{name} não está Concluída",
+  "store_label_step_done": "{step}: feito",
+  "store_label_step_skipped": "{step}: ignorado",
+  "store_label_step_reset": "{step}: redefinido",
+  "store_reason_no_confirmed_target": "a sessão não tem Alvo confirmado",
+  "store_reason_no_confirmed_rig": "a sessão não tem setup confirmado",
+  "store_note_adds_rig": "Também adiciona o setup {rig} a {project}.",
+  "store_label_mark_named_done": "Marcar {name} como Concluído",
+  "store_reason_not_complete_fix": "{name} não está Concluída: conclua-a ou mova-a para a Lixeira",
+  "store_label_reject_for_project_only": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Rejeitar {n} frame só para {name}",
+        "countPlural=*": "Rejeitar {n} frames só para {name}"
+      }
+    }
+  ],
+  "store_label_undo_project_reject": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Desfazer rejeição no Projeto de {n} frame",
+        "countPlural=*": "Desfazer rejeição no Projeto de {n} frames"
+      }
+    }
+  ],
+  "store_label_default_archive_location": "Local de arquivo padrão",
+  "store_saved_default_archive": "Arquivo padrão: {name}",
+  "store_label_moon_constraint": "Restrição da Lua para {band}",
+  "store_saved_filters": "Filtros salvos: {name}",
+  "store_saved_rig_renamed": "Setup renomeado: {name}",
+  "store_label_goal_template": "Modelo de metas {name}",
+  "store_saved_goal_template": "Modelo de metas salvo: {name}",
+  "store_saved_goal_template_deleted": "Modelo de metas excluído: {name}",
+  "store_goal_template_deleted_detail": "Os Projetos mantêm os valores copiados dele.",
+  "store_label_naming_template": "Modelo de nomes para {type}",
+  "store_saved_naming_default": "Padrão de nomes restaurado: {type}",
+  "store_saved_naming_template": "Modelo de nomes salvo: {type}",
+  "store_label_locate_application": "Localizar aplicativo",
+  "store_label_check_named": "Verificar {name}",
+  "store_reason_scan_running": "uma varredura está em andamento",
+  "op_no_duplicates": "Nenhuma duplicata.",
+  "op_duplicates_found": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame com cópias extras · {bytes}",
+        "countPlural=*": "{n} frames com cópias extras · {bytes}"
+      }
+    }
+  ],
+  "store_label_setup_change": "Alteração de configuração",
+  "store_label_shared_setup_change": "Alteração de configuração compartilhada",
+  "store_saved_output_folder": "Pasta de saída: {name}",
+  "store_label_output_folder_change": "Alteração da pasta de saída",
+  "store_reason_no_reason": "Sem motivo",
+  "store_label_exception_no_kind": "Exceção: sem {kind}",
+  "store_label_defer_kind": "Adiar {kind}",
+  "store_label_automatic_kind": "{kind} automático",
+  "store_label_offer": "Oferta",
+  "store_reason_already_answered": "Já respondida",
+  "store_label_dismiss_master_offer": "Dispensar oferta de master",
+  "store_saved_dismissed": "{name} dispensado",
+  "store_label_add_named": "Adicionar {name}",
+  "store_reason_unreadable_now": "Ilegível agora",
+  "store_reason_still_being_written": "Ainda sendo gravado",
+  "store_label_add_master_to_library": "Adicionar master à biblioteca de calibração",
+  "store_saved_added_to_library": "{name} adicionado à biblioteca de calibração",
+  "store_reason_every_input_unreadable": "Todas as entradas ilegíveis",
+  "store_label_prepare_named": "Preparar {name}",
+  "op_prepare_title_rev": "Preparar {name} (rev {revision})",
+  "store_label_prepare_all_named": "Preparar tudo de {name}",
+  "store_saved_prepare_all": "Preparar tudo: {name}",
+  "store_prepare_all_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input revision",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} execução de painel na revisão {revision} do grupo.",
+        "countPlural=*": "{n} execuções de painel na revisão {revision} do grupo."
+      }
+    }
+  ],
+  "store_reason_profile_removed": "Perfil removido",
+  "store_reason_did_not_launch": "{name} não abriu",
+  "store_reason_not_located": "{name} não localizado",
+  "store_reason_partial_blocked": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Parcial · {n} entrada bloqueada",
+        "countPlural=*": "Parcial · {n} entradas bloqueadas"
+      }
+    }
+  ],
+  "store_reason_preparation_state": "Preparação {state}",
+  "store_label_mark_unverified": "Marcar preparação como não verificada",
+  "store_reason_more_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "e mais {n} entrada",
+        "countPlural=*": "e mais {n} entradas"
+      }
+    }
+  ],
+  "store_saved_opened_in": "{name} aberto em {app}",
+  "store_saved_opened_in_application": "{name} aberto no aplicativo",
+  "store_opened_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada reverificada antes de abrir; {path}.",
+        "countPlural=*": "{n} entradas reverificadas antes de abrir; {path}."
+      }
+    }
+  ],
+  "store_label_mark_unverified_many": "Marcar preparações como não verificadas",
+  "store_reason_entries_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "input file",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {n} entrada alterada ({file})",
+        "countPlural=*": "{name}: {n} entradas alteradas ({file})"
+      }
+    }
+  ],
+  "store_label_open_group_folder": "Abrir pasta do grupo",
+  "store_group_opened_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input folder",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Pasta do grupo {folder}; {n} painel reverificado antes de abrir.",
+        "countPlural=*": "Pasta do grupo {folder}; {n} painéis reverificados antes de abrir."
+      }
+    }
+  ],
+  "store_label_discover_results": "Descobrir Resultados",
+  "store_candidates_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} candidato",
+        "countPlural=*": "{n} candidatos"
+      }
+    }
+  ],
+  "store_intermediates_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} intermediário",
+        "countPlural=*": "{n} intermediários"
+      }
+    }
+  ],
+  "store_calibration_masters_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} master de calibração",
+        "countPlural=*": "{n} masters de calibração"
+      }
+    }
+  ],
+  "store_saved_results_found": "Resultados encontrados: {name}",
+  "store_label_attach_named": "Anexar {name}",
+  "store_label_attach_result": "Anexar Resultado",
+  "store_reason_not_full_path": "Não é um caminho completo",
+  "store_reason_unreadable_or_offline": "Ilegível ou offline",
+  "store_reason_already_listed": "Já listado",
+  "store_reason_not_image": "Não é uma imagem",
+  "store_reason_run_group_only": "Somente grupo de execuções",
+  "store_saved_attached": "{name} anexado",
+  "store_attached_detail": "{kind}, vinculado pelo usuário a {name}; linhagem Desconhecida.",
+  "store_label_inspect_named": "Inspecionar {name}",
+  "store_label_inspect_result": "Inspecionar Resultado",
+  "store_saved_inspected": "{name} inspecionado",
+  "store_sha_recorded": "SHA-256 {hash}… registrado.",
+  "store_reason_changed_since_inspection": "Alterado desde a inspeção",
+  "store_reason_no_kind": "Sem tipo",
+  "store_label_accept_result": "Aceitar Resultado",
+  "store_saved_accepted": "{name} aceito",
+  "store_sha_short": "SHA-256 {hash}…",
+  "store_label_result_kind": "Tipo de Resultado",
+  "store_reason_not_accepted": "Não aceito",
+  "store_reason_mosaic_subject": "Objeto de mosaico",
+  "store_label_clean_up_named": "Limpar {name}",
+  "store_reason_not_complete_short": "Não Concluída",
+  "store_reason_nothing_selected": "Nada selecionado",
+  "store_label_complete_all_named": "Concluir todos de {name}",
+  "store_label_simulated_output": "Saída simulada",
+  "store_reason_prepare_first": "Prepare a execução primeiro: o aplicativo grava na pasta de Resultados registrada",
+  "store_label_proto_app_output": "Protótipo: saída do aplicativo",
+  "store_saved_proto_outputs": "Protótipo: o aplicativo gravou saídas",
+  "store_proto_outputs_detail": "{files} em {folder}.",
+  "store_label_proto_finished_writing": "Protótipo: arquivo terminou de ser gravado",
+  "store_label_simulated_correction": "Correção simulada",
+  "store_reason_no_saved_member": "A execução não tem sessão membro salva",
+  "store_reason_already_corrected": "Esta sessão já tem essa correção",
+  "store_label_proto_catalog_correction": "Protótipo: correção de catálogo",
+  "store_label_simulated_change": "Alteração simulada",
+  "store_reason_no_prepared_source": "Nenhum frame de origem preparado legível",
+  "store_label_proto_source_changed": "Protótipo: frame de origem alterado",
+  "op_prep_unavailable": "{reason}. Nada foi gravado para ela.",
+  "op_prep_denied": "Ilegível: o acesso de leitura a {path} foi negado. Nada foi gravado para ela.",
+  "op_prep_not_reachable": "Ilegível agora: nada está acessível em {path}. Nada foi gravado para ela.",
+  "op_prep_not_in_selection": "Fora da seleção revisada.",
+  "op_prep_source_changed": "A origem mudou desde a indexação: seus bytes diferem da impressão digital do catálogo. Faça nova varredura e revise-a primeiro.",
+  "op_prep_direct_verified": "Caminho exato da origem listado; a identidade confere com o seu instantâneo.",
+  "op_prep_destination_exists": "O destino existe: {path}. Nada foi sobrescrito.",
+  "op_prep_write_removed": "Permissão de gravação removida em {folder}. Nada foi gravado.",
+  "op_prep_destination_offline": "Destino offline: {folder} está em um volume que não está montado.",
+  "op_prep_reread_failed": "A entrada em {path} não foi relida com o resumo esperado.",
+  "op_prep_patched_verified": "Cópia corrigida verificada: {patches}; original inalterado.",
+  "op_prep_written_verified": "Gravada e relida em relação ao seu instantâneo.",
+  "op_prep_source_drift": "Desvio da origem antes da conclusão: {source} não confere mais com o seu instantâneo. Não contada como preparada.",
+  "op_prep_record_missing": "O registro de preparação está ausente; nada foi finalizado.",
+  "op_prep_calibration_note": "Calibração: {done} de {total} arquivos.",
+  "op_prep_prepared": "Preparado: {prepared} de {total} entradas conferem com a composição revisada e com os instantâneos de origem.",
+  "op_prep_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Falhou: nenhuma entrada pôde ser preparada; {n} entrada bloqueada. As origens não foram tocadas.",
+        "countPlural=*": "Falhou: nenhuma entrada pôde ser preparada; {n} entradas bloqueadas. As origens não foram tocadas."
+      }
+    }
+  ],
+  "op_prep_partial": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input prepared",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Parcial: {prepared} preparadas, {n} entrada bloqueada.",
+        "countPlural=*": "Parcial: {prepared} preparadas, {n} entradas bloqueadas."
+      }
+    }
+  ],
+  "op_prep_partial_open_waits": "Abrir aguarda até que todas as entradas estejam preparadas; as origens não foram tocadas.",
+  "op_archive_title": "Arquivar {name}",
+  "op_restore_title": "Restaurar sessões arquivadas de {name}",
+  "op_archive_went_offline": "{name} ficou offline",
+  "op_archive_changed": "{path} mudou desde a revisão (o SHA-256 difere)",
+  "op_archive_destination_volume": "O volume de destino",
+  "op_archive_sessions_archived": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão arquivada",
+        "countPlural=*": "{n} sessões arquivadas"
+      }
+    }
+  ],
+  "op_archive_sessions_restored": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão restaurada",
+        "countPlural=*": "{n} sessões restauradas"
+      }
+    }
+  ],
+  "op_archive_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} mantida",
+        "countPlural=*": "{count} mantidas"
+      }
+    }
+  ],
+  "op_archive_hash_failed": "A verificação SHA-256 falhou (simulada): nada desta sessão foi movido",
+  "op_archived_to": "Arquivado em {folder} · {frames}",
+  "op_restored_to": "Restaurado em {folder} · {frames}",
+  "op_import_group_failed": "{done} de {total} verificados · {failed} com falha: {reason}",
+  "op_import_group_verified": "{done} de {total} verificados",
+  "op_import_source_gone": "origem sumiu",
+  "op_import_destination_not_writable": "destino não aceita gravação",
+  "op_import_sha_mismatch": "SHA-256 não confere",
+  "op_import_to_stack": "{count} de calibração → empilhar",
+  "op_import_masters": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} master",
+        "countPlural=*": "{n} masters"
+      }
+    }
+  ],
+  "op_import_duplicates_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} duplicata ignorada",
+        "countPlural=*": "{n} duplicatas ignoradas"
+      }
+    }
+  ],
+  "op_import_held": "{count} retidos",
+  "op_import_failed_kept": "{count} com falha, mantidos",
+  "op_import_sources_to_trash": "origens → Lixeira do sistema",
+  "op_import_no_source_moved": "nenhuma origem movida",
+  "op_import_move_sources_title": "Mover origens da importação para a Lixeira do sistema",
+  "op_import_frames_to_copy": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame para copiar",
+        "countPlural=*": "{n} frames para copiar"
+      }
+    }
+  ],
+  "op_import_move_from": "Mover de {name}",
+  "op_import_from": "Importar de {name}",
+  "store_import_source_name_needed": "Nome necessário",
+  "store_reason_no_name": "sem nome",
+  "store_label_save_import_source": "Salvar origem de importação {name}",
+  "store_saved_import_source": "Origem de importação salva: {name}",
+  "store_label_new_location": "Novo local {name}",
+  "store_saved_registered": "{name} registrado",
+  "store_location_registered_detail": "Local de {role} em {path}. Nada na pasta foi alterado.",
+  "store_label_changes_to": "Alterações em {name}",
+  "store_saved_updated": "{name} atualizado",
+  "store_label_folder_change": "Troca de pasta de {name}",
+  "store_saved_now_points_to": "{name} agora aponta para {path}",
+  "store_location_repoint_detail": "Nenhum frame indexado referenciava a pasta anterior.",
+  "store_label_removal_of": "Remoção de {name}",
+  "store_saved_removed": "{name} removido",
+  "store_location_removed_detail": "Somente o registro. {path} e seus arquivos estão inalterados.",
+  "store_label_retirement_of": "Aposentadoria de {name}",
+  "store_saved_retired": "{name} aposentado",
+  "store_location_retired_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} cópia em {path} aparece como Aposentada e sai dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado.",
+        "countPlural=*": "{n} cópias em {path} aparecem como Aposentadas e saem dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado."
+      }
+    }
+  ],
+  "store_label_remap_of": "Remapeamento de {name}",
+  "store_saved_remapped": "{name} remapeado para {path}",
+  "store_remap_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame verificado por hash de conteúdo.",
+        "countPlural=*": "{n} frames verificados por hash de conteúdo."
+      }
+    }
+  ],
+  "store_remap_detail_refused": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input refused",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame verificado por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados).",
+        "countPlural=*": "{n} frames verificados por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados)."
+      }
+    }
+  ],
+  "store_remap_identity_note": "Mesmo nome de volume, identidade diferente ({from} → {to}).",
+  "store_label_new_site": "Novo local de observação {name}",
+  "store_label_changes_to_site": "Alterações no local de observação {name}",
+  "store_saved_site_added": "Local de observação {name} adicionado",
+  "store_saved_site_updated": "Local de observação {name} atualizado",
+  "store_site_default_detail": "{name} é o local padrão.",
+  "store_label_default_site": "Local padrão {name}",
+  "store_saved_default_site": "{name} é o local padrão",
+  "store_site_reminders_moved": "Os lembretes agora usam {name}; nenhum campo de local foi alterado.",
+  "store_site_pointer_moved": "Só o indicador de padrão mudou; nenhum campo de local foi alterado.",
+  "store_label_removal_of_site": "Remoção do local de observação {name}",
+  "store_saved_site_removed": "Local de observação {name} removido",
+  "store_label_target_lookup": "Configuração de busca de Alvos",
+  "store_saved_lookup_on": "Busca de Alvos online ativada ({provider})",
+  "store_saved_lookup_off": "Busca de Alvos online desativada",
+  "store_lookup_off_detail": "A busca local de Alvos continua funcionando offline.",
+  "store_saved_measurements_imported": "Medições importadas",
+  "store_measurements_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "input rows",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} linha anexada como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou.",
+        "countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou."
+      }
+    }
+  ],
+  "store_measurements_detail_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "input rows",
+        "input changed",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} linha anexada como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou.",
+        "countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou."
+      }
+    }
+  ],
+  "store_label_attach_imported_row": "Anexar linha importada",
+  "op_measure_no_session": "Frames sem sessão",
+  "op_measure_progress_skipped": "{done} de {total} frames; {skipped} ilegíveis",
+  "op_measure_measured": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame medido",
+        "countPlural=*": "{n} frames medidos"
+      }
+    }
+  ],
+  "op_measure_cached_valid": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} valor em cache ainda válido",
+        "countPlural=*": "{count} valores em cache ainda válidos"
+      }
+    }
+  ],
+  "op_measure_not_measured": "{count} não medidos: nenhuma cópia legível",
+  "op_measure_summary": "{parts}.",
+  "store_optics_camera": "{kind}, {width} × {height} px, {pixel} µm",
+  "store_saved_optics": "Óptica salva: {name}",
+  "store_saved_preset": "Predefinição de Alvos salva: {name}",
+  "store_saved_preset_renamed": "Predefinição de Alvos renomeada: {name}",
+  "store_preset_was": "Era “{name}”.",
+  "store_saved_preset_deleted": "Predefinição de Alvos excluída: {name}",
+  "store_saved_planning_site": "Local de planejamento: {name}",
+  "op_offer_to_trash": "{offer} de {name} para a Lixeira",
+  "seed_cleanup_summary": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} link preparado movido para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados.",
+        "countPlural=*": "{n} links preparados movidos para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados."
+      }
+    }
+  ],
+  "seed_move_rejected_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} frame rejeitado para a Lixeira",
+        "countPlural=*": "Mover {n} frames rejeitados para a Lixeira"
+      }
+    }
+  ],
+  "seed_trash_m31_detail": "{frames} ({session}) movidos para a Lixeira do sistema. Restaurar e fazer nova varredura os traz de volta como Inutilizáveis.",
+  "seed_prep_p2_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input volume",
+        "input entries",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada offline em {volume}; {entries} preparadas.",
+        "countPlural=*": "{n} entradas offline em {volume}; {entries} preparadas."
+      }
+    }
+  ]
 }

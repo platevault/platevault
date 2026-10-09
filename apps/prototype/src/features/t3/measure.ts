@@ -12,11 +12,11 @@
 import { runHref } from "@/domain/derive"
 import { simulateMeasurement } from "@/domain/measurement"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, RunId } from "@/domain/types"
-import { plural } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { formatCount } from "@/lib/format"
+import { joinRefs, m, msg } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { type OperationHandler, isSettled, patchOperation, resumeOperation, settleOperation, startOperation } from "@/store/operations"
-import { currentFile, pixelScaleFor, sessionLabel } from "@/domain/membership"
+import { currentFile, pixelScaleFor, sessionRef } from "@/domain/membership"
 
 export interface MeasurePayload {
   runId: RunId
@@ -123,12 +123,12 @@ export function startMeasurement(runId: RunId, assetIds: AssetId[]): OperationId
   if (total === 0) return null
   const items: OperationItem[] = Object.entries(perSession).map(([sessionId, ids]) => {
     const session = catalog.sessions[sessionId]
-    return { id: sessionId, label: session ? sessionLabel(session) : "Frames without a session", path: null, status: "pending", phase: null, detail: `0 of ${ids.length} frames` }
+    return { id: sessionId, label: session ? sessionRef(session) : msg("op_measure_no_session"), path: null, status: "pending", phase: null, detail: msg("sessions_import_progress", { done: 0, total: ids.length }) }
   })
   const payload: MeasurePayload = { runId, verify, queue, skipped: [], measured: 0, reused: 0, total, perSession }
   return startOperation({
     kind: "measure",
-    title: "Measure frames",
+    title: msg("measure_frames_action"),
     scope: {},
     total,
     unit: "frames",
@@ -222,7 +222,7 @@ export const measureHandler: OperationHandler = {
       const skipped = ids.filter((id) => payload.skipped.includes(id)).length
       const done = ids.length - left
       const status = left > 0 ? (done > 0 ? "running" : "pending") : skipped > 0 ? "blocked" : "done"
-      const detail = skipped > 0 ? `${done - skipped} of ${ids.length} frames; ${skipped} not readable` : `${done} of ${ids.length} frames`
+      const detail = skipped > 0 ? msg("op_measure_progress_skipped", { done: done - skipped, total: ids.length, skipped }) : msg("sessions_import_progress", { done, total: ids.length })
       return { ...item, status, detail }
     })
     next = patchOperation(next, op.id, {
@@ -231,13 +231,13 @@ export const measureHandler: OperationHandler = {
       progress: { done: payload.total - remaining.size, total: payload.total, unit: "frames" },
     })
     if (remaining.size > 0) return next
-    const parts = [`${plural(payload.measured, "frame")} measured`, `${payload.reused} cached ${payload.reused === 1 ? "value" : "values"} still valid`]
-    if (payload.skipped.length > 0) parts.push(`${payload.skipped.length} not measured: no readable copy`)
+    const parts = [msg("op_measure_measured", { count: payload.measured, n: formatCount(payload.measured) }), msg("op_measure_cached_valid", { count: payload.reused })]
+    if (payload.skipped.length > 0) parts.push(msg("op_measure_not_measured", { count: payload.skipped.length }))
     return settleOperation(
       next,
       op.id,
       payload.skipped.length > 0 ? "partial" : "succeeded",
-      `${parts.join(", ")}.`,
+      msg("op_measure_summary", { parts: joinRefs(parts, ", ") }),
       state.catalog.runs[payload.runId] ? runHref(state.catalog.runs[payload.runId]!, "review") : null,
     )
   },

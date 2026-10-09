@@ -637,8 +637,8 @@ export interface MembershipContent {
 export interface MembershipRevision extends MembershipContent {
   revision: number
   savedAt: IsoDateTime
-  /** The changes this save accepted, in words (VSEL-FR-16). */
-  accepted: string[]
+  /** The changes this save accepted (VSEL-FR-16); worded at render. */
+  accepted: MessageRef[]
 }
 
 export interface MembershipDraft extends MembershipContent {

@@ -8,8 +8,8 @@ import { locationAvailability } from "@/domain/library"
 import { fileAt, volumeForPath } from "@/domain/disk"
 import { isUnder, stableHash } from "@/domain/indexing"
 import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Volume } from "@/domain/types"
-import { formatExposure, formatNight } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { formatCount, formatExposure, formatNight } from "@/lib/format"
+import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { save } from "./writes"
@@ -60,6 +60,14 @@ export const ROLE_COPY: Record<LocationRole, RoleCopy> = {
   ),
   results: roleCopy(m.status_role_results, m.location_role_results_description, m.location_role_results_add, m.location_role_results_picker, m.location_role_results_list),
   archive: roleCopy(m.status_role_archive, m.location_role_archive_description, m.location_role_archive_add, m.location_role_archive_picker, m.location_role_archive_list),
+}
+
+/** A role's name for copy worded later (Activity). */
+const ROLE_NAME: Record<LocationRole, MessageRef> = {
+  captures: msg("status_role_captures"),
+  calibration: msg("status_role_calibration"),
+  results: msg("status_role_results"),
+  archive: msg("status_role_archive"),
 }
 
 export interface LocationDraft {
@@ -121,9 +129,9 @@ export function registerLocation(draft: LocationDraft, href: string): { result: 
   }
   const result = save(
     {
-      label: `New location ${displayName}`,
-      saved: `Registered ${displayName}`,
-      detail: `${ROLE_COPY[draft.role].title} location at ${draft.path}. Nothing in the folder was changed.`,
+      label: msg("store_label_new_location", { name: displayName }),
+      saved: msg("store_saved_registered", { name: displayName }),
+      detail: msg("store_location_registered_detail", { role: ROLE_NAME[draft.role], path: draft.path }),
       href,
     },
     (s) => {
@@ -142,7 +150,7 @@ export interface LocationEdit {
 
 export function updateLocation(id: LocationId, edit: LocationEdit, href: string): CommitResult {
   const name = edit.displayName.trim()
-  return save({ label: `Changes to ${name}`, saved: `Updated ${name}`, detail: null, href }, (s) =>
+  return save({ label: msg("store_label_changes_to", { name }), saved: msg("store_saved_updated", { name }), detail: null, href }, (s) =>
     withCatalog(s, (c) => {
       const current = c.locations[id]
       if (!current) return c
@@ -158,7 +166,7 @@ export function repointLocation(id: LocationId, path: string, href: string): Com
   const volumeId = volumeForPath(state.disk, path)
   if (!location || !volumeId) return { ok: false, reason: "write-failed", message: m.location_error_unknown_volume({ path }) }
   return save(
-    { label: `Folder change for ${location.displayName}`, saved: `${location.displayName} now points to ${path}`, detail: "No indexed frame referenced the previous folder.", href },
+    { label: msg("store_label_folder_change", { name: location.displayName }), saved: msg("store_saved_now_points_to", { name: location.displayName, path }), detail: msg("store_location_repoint_detail"), href },
     (s) =>
       withCatalog(s, (c) => {
         const current = c.locations[id]
@@ -188,7 +196,7 @@ export function removeLocation(id: LocationId, href: string): CommitResult {
   const location = store.getState().catalog.locations[id]
   if (!location) return { ok: true }
   return save(
-    { label: `Removal of ${location.displayName}`, saved: `Removed ${location.displayName}`, detail: `Registration only. ${location.path} and its files are unchanged.`, href },
+    { label: msg("store_label_removal_of", { name: location.displayName }), saved: msg("store_saved_removed", { name: location.displayName }), detail: msg("store_location_removed_detail", { path: location.path }), href },
     (s) =>
       withCatalog(s, (c) => {
         const { [id]: _removed, ...locations } = c.locations
@@ -266,12 +274,12 @@ export function retireLocation(review: RetireReview, href: string): CommitResult
     }
   }
   const busy = Object.values(state.operations).find((op) => !isSettled(op.status) && op.scope.locationIds?.includes(review.locationId))
-  if (busy) return { ok: false, reason: "stale", message: m.location_retire_busy({ title: busy.title }) }
+  if (busy) return { ok: false, reason: "stale", message: m.location_retire_busy({ title: say(m, busy.title) }) }
   return save(
     {
-      label: `Retirement of ${review.displayName}`,
-      saved: `Retired ${review.displayName}`,
-      detail: `${review.frames} copies at ${review.path} read Retired and leave integration totals. No file was deleted, moved or modified.`,
+      label: msg("store_label_retirement_of", { name: review.displayName }),
+      saved: msg("store_saved_retired", { name: review.displayName }),
+      detail: msg("store_location_retired_detail", { count: review.frames, n: formatCount(review.frames), path: review.path }),
       href,
     },
     (s) =>
@@ -371,15 +379,16 @@ export function applyRemap(proof: RemapProof, href: string): CommitResult {
   const verified = new Map(proof.verified.map((e) => [e.assetId, e]))
   const refused = new Map([...proof.differs, ...proof.notFound].map((e) => [e.assetId, e]))
   const toVolume = proof.toVolume
-  const volumeNote =
+  const identityNote =
     proof.fromVolume && proof.fromVolume.name === toVolume.name && proof.fromVolume.volumeUuid !== toVolume.volumeUuid
-      ? ` Same volume name, different identity (${proof.fromVolume.volumeUuid} → ${toVolume.volumeUuid}).`
-      : ""
+      ? [msg("store_remap_identity_note", { from: proof.fromVolume.volumeUuid, to: toVolume.volumeUuid })]
+      : []
+  const verifiedCount = { count: proof.verified.length, n: formatCount(proof.verified.length) }
   return save(
     {
-      label: `Remap of ${location.displayName}`,
-      saved: `Remapped ${location.displayName} to ${proof.toPath}`,
-      detail: `${proof.verified.length} frames verified by content hash${refused.size ? `; ${refused.size} refused (bytes differ or not found)` : ""}.${volumeNote}`,
+      label: msg("store_label_remap_of", { name: location.displayName }),
+      saved: msg("store_saved_remapped", { name: location.displayName, path: proof.toPath }),
+      detail: joinRefs([refused.size ? msg("store_remap_detail_refused", { ...verifiedCount, refused: refused.size }) : msg("store_remap_detail", verifiedCount), ...identityNote], " "),
       href,
     },
     (s) =>

@@ -11,14 +11,16 @@
  */
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
 import { readFiles } from "@/domain/indexing"
+import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
 import { registerLocation, type LocationDraft } from "@/features/t1/lib/locations"
-import { formatBytes, plural } from "@/lib/format"
+import { formatBytes, formatCount } from "@/lib/format"
+import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startIndexing, startOperation } from "@/store/operations"
 import type { ImportDraft } from "@/store/slices/a"
-import { type ImportPlan, routeFor, TYPE_LABEL } from "./import-model"
+import { type ImportPlan, routeFor, TYPE_NAME } from "./import-model"
 
 interface QueueItem {
   src: string
@@ -38,7 +40,7 @@ export interface ImportPayload {
   mode: "copy" | "move"
   queue: QueueItem[]
   copied: Array<QueueItem & { sha256: string; sizeBytes: number }>
-  failed: Array<QueueItem & { reason: string }>
+  failed: Array<QueueItem & { reason: MessageRef }>
   phase: "copy" | "index" | "trash"
   skipped: { duplicate: number; imported: number; held: number; notImage: number; nameTaken: number }
   /** Sessions the imported frames belong to, for Sessions' "Imported" highlight. */
@@ -57,7 +59,7 @@ function groupItems(payload: ImportPayload, items: OperationItem[]): OperationIt
     const failed = payload.failed.filter((q) => q.group === item.id)
     const left = payload.queue.filter((q) => q.group === item.id).length
     const status: OperationItem["status"] = left > 0 ? (done + failed.length > 0 ? "running" : "pending") : failed.length > 0 ? (done > 0 ? "uncertain" : "failed") : "done"
-    const detail = failed.length > 0 ? `${done} of ${total} verified · ${failed.length} failed: ${failed[0]!.reason}` : `${done} of ${total} verified`
+    const detail = failed.length > 0 ? msg("op_import_group_failed", { done, total, failed: failed.length, reason: failed[0]!.reason }) : msg("op_import_group_verified", { done, total })
     return { ...item, status, phase: left > 0 ? "copying" : "destination-verified", detail }
   })
 }
@@ -72,11 +74,11 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
     const source = fileAt(disk, item.src)
     const volume = disk.volumes[item.destVolumeId]
     if (!source) {
-      failed.push({ ...item, reason: "source gone" })
+      failed.push({ ...item, reason: msg("op_import_source_gone") })
       continue
     }
     if (!volume?.mounted || !volume.writable) {
-      failed.push({ ...item, reason: `${volume?.name ?? "destination"} not writable` })
+      failed.push({ ...item, reason: volume ? msg("run_parent_read_only", { name: volume.name }) : msg("op_import_destination_not_writable") })
       continue
     }
     const written = makeFile({ path: item.dest, volumeId: item.destVolumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, pixelTruth: source.pixelTruth, sha256: source.sha256, modifiedAt: now })
@@ -84,7 +86,7 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
     // Verify: re-read the copy and compare its digest with the source's.
     const check = fileAt(disk, item.dest)
     if (check?.sha256 !== source.sha256) {
-      failed.push({ ...item, reason: "SHA-256 mismatch" })
+      failed.push({ ...item, reason: msg("op_import_sha_mismatch") })
       continue
     }
     copied.push({ ...item, sha256: source.sha256, sizeBytes: source.sizeBytes })
@@ -139,21 +141,21 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
 }
 
 /** "31 frames · 1.2 GB · 3 sessions · 20 calibration → stack · 12 duplicates skipped": one terse line. */
-function summary(state: PrototypeState, payload: ImportPayload): string {
+function summary(state: PrototypeState, payload: ImportPayload): MessageRef {
   const bytes = payload.copied.reduce((n, c) => n + c.sizeBytes, 0)
   const routes = { sessions: 0, stack: 0, masters: 0 }
   for (const c of payload.copied) routes[routeFor(c.type)] += 1
-  const parts = [`${plural(payload.copied.length, "frame")} · ${formatBytes(bytes)}`]
-  if (routes.sessions > 0) parts.push(plural(payload.sessionIds.filter((id) => state.catalog.sessions[id]?.imageType === "light").length, "session"))
-  if (routes.stack > 0) parts.push(`${routes.stack} calibration → stack`)
-  if (routes.masters > 0) parts.push(plural(routes.masters, "master"))
+  const parts = [unitCount("frames", payload.copied.length), verbatim(formatBytes(bytes))]
+  if (routes.sessions > 0) parts.push(unitCount("sessions", payload.sessionIds.filter((id) => state.catalog.sessions[id]?.imageType === "light").length))
+  if (routes.stack > 0) parts.push(msg("op_import_to_stack", { count: routes.stack }))
+  if (routes.masters > 0) parts.push(msg("op_import_masters", { count: routes.masters, n: formatCount(routes.masters) }))
   const s = payload.skipped
-  if (s.duplicate > 0) parts.push(`${plural(s.duplicate, "duplicate")} skipped`)
-  if (s.imported > 0) parts.push(`${s.imported} imported before`)
-  if (s.held > 0) parts.push(`${s.held} held`)
-  if (payload.failed.length > 0) parts.push(`${payload.failed.length} failed, kept`)
-  if (payload.mode === "move") parts.push(payload.copied.length > 0 ? "sources → OS Trash" : "no source moved")
-  return parts.join(" · ")
+  if (s.duplicate > 0) parts.push(msg("op_import_duplicates_skipped", { count: s.duplicate, n: formatCount(s.duplicate) }))
+  if (s.imported > 0) parts.push(msg("import_imported_before", { count: s.imported }))
+  if (s.held > 0) parts.push(msg("op_import_held", { count: s.held }))
+  if (payload.failed.length > 0) parts.push(msg("op_import_failed_kept", { count: payload.failed.length }))
+  if (payload.mode === "move") parts.push(payload.copied.length > 0 ? msg("op_import_sources_to_trash") : msg("op_import_no_source_moved"))
+  return joinRefs(parts, " · ")
 }
 
 function finish(state: PrototypeState, opId: OperationId, payload: ImportPayload): PrototypeState {
@@ -175,7 +177,7 @@ function requestTrash(opId: OperationId, payload: ImportPayload) {
   window.setTimeout(() => {
     const trashOperationId = moveToOsTrash({
       kind: "import-move",
-      title: "Move import sources to the OS Trash",
+      title: msg("op_import_move_sources_title"),
       projectId: null,
       runIds: [],
       items: payload.copied.map((c) => ({ path: c.src })),
@@ -237,15 +239,15 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
   }
   const items: OperationItem[] = plan.groups.map((g) => ({
     id: g.key,
-    label: `${TYPE_LABEL[g.type]} → ${g.location.displayName}`,
+    label: joinRefs([TYPE_NAME[g.type], verbatim(g.location.displayName)], " → "),
     path: g.items[0]!.destFolder,
     status: "pending",
     phase: null,
-    detail: `${plural(g.items.length, "frame")} to copy`,
+    detail: msg("op_import_frames_to_copy", { count: g.items.length, n: formatCount(g.items.length) }),
   }))
   const id = startOperation({
     kind: "import",
-    title: `${draft.mode === "move" ? "Move" : "Import"} from ${plan.sourceLabel}`,
+    title: draft.mode === "move" ? msg("op_import_move_from", { name: plan.sourceLabel }) : msg("op_import_from", { name: plan.sourceLabel }),
     scope: { locationIds: [...new Set(plan.items.map((i) => i.location.id))] },
     total: queue.length,
     unit: "frames",
@@ -261,12 +263,12 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
 /** Save the chosen folder as an Import source, so Import new can skip what it already imported. */
 export function saveImportSource(name: string, path: string): CommitResult {
   const trimmed = name.trim()
-  if (!trimmed) return { ok: false, reason: "refused", message: "Name needed", reasons: ["no name"] }
+  if (!trimmed) return { ok: false, reason: "refused", message: m.store_import_source_name_needed(), reasons: [m.store_reason_no_name()] }
   const id: ImportSourceId = `src_${path.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`
   const source: ImportSource = { id, name: trimmed, path, lastImportedAt: null, importedSha256: [] }
-  const result = commit(`Save Import source ${trimmed}`, (s) => withCatalog(s, (c) => ({ ...c, importSources: { ...c.importSources, [id]: source } })), { href: "/import" })
+  const result = commit(msg("store_label_save_import_source", { name: trimmed }), (s) => withCatalog(s, (c) => ({ ...c, importSources: { ...c.importSources, [id]: source } })), { href: "/import" })
   if (result.ok) {
-    recordActivity({ kind: "saved", title: `Import source saved: ${trimmed}`, detail: path, operationId: null, href: "/import" })
+    recordActivity({ kind: "saved", title: msg("store_saved_import_source", { name: trimmed }), detail: verbatim(path), operationId: null, href: "/import" })
     updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, source: { kind: "saved", id }, newOnly: true } }))
   }
   return result

@@ -11,11 +11,13 @@
  */
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
+import { unitCount } from "@/domain/labels"
 import type { Catalog, Disk, OperationId, ProjectId, SessionId } from "@/domain/types"
-import { formatBytes, plural } from "@/lib/format"
+import { formatBytes, formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
-import { type ArchiveMove, type ArchiveRow, sessionLabel } from "./model"
+import { type ArchiveMove, type ArchiveRow, sessionRef } from "./model"
 
 // ---------------------------------------------------------------------------
 // Archive and Restore transfers
@@ -35,7 +37,7 @@ interface ArchivePayload {
 export function startArchiveTransfer(projectId: ProjectId, rows: ArchiveRow[], direction: TransferDirection): OperationId {
   const state = store.getState()
   const project = state.catalog.projects[projectId]
-  const name = project?.name ?? "Project"
+  const name = project ? project.name : msg("project_noun")
   const payload: ArchivePayload = {
     projectId,
     direction,
@@ -45,17 +47,17 @@ export function startArchiveTransfer(projectId: ProjectId, rows: ArchiveRow[], d
   }
   return startOperation({
     kind: "archive",
-    title: direction === "archive" ? `Archive ${name}` : `Restore archived sessions of ${name}`,
+    title: direction === "archive" ? msg("op_archive_title", { name }) : msg("op_restore_title", { name }),
     scope: { projectId, sessionIds: rows.map((r) => r.session.id) },
     total: rows.length,
     unit: "sessions",
     items: rows.map((r) => ({
       id: r.session.id,
-      label: sessionLabel(state.catalog, r.session),
+      label: sessionRef(state.catalog, r.session),
       path: r.folder,
       status: "pending",
       phase: null,
-      detail: `${plural(r.moves.length, "frame")} · ${formatBytes(r.sizeBytes)}`,
+      detail: joinRefs([unitCount("frames", r.moves.length), verbatim(formatBytes(r.sizeBytes))], " · "),
     })),
     payload: payload as unknown as Record<string, unknown>,
     canCancel: false,
@@ -63,18 +65,18 @@ export function startArchiveTransfer(projectId: ProjectId, rows: ArchiveRow[], d
 }
 
 /** Re-verify a session's moves immediately before they run (D19); the first failure keeps the whole session. */
-function verify(state: PrototypeState, moves: ArchiveMove[]): string | null {
+function verify(state: PrototypeState, moves: ArchiveMove[]): MessageRef | null {
   for (const move of moves) {
     const source = state.disk.volumes[move.from.volumeId]
-    if (!source?.mounted) return `${source?.name ?? "Its volume"} went offline`
+    if (!source?.mounted) return msg("op_archive_went_offline", { name: source ? source.name : msg("wrapup_its_volume") })
     const file = state.disk.files[fileKey(move.from.volumeId, move.from.path)]
-    if (!file) return `Not found at ${move.from.path}`
+    if (!file) return msg("wrapup_refusal_not_found", { path: move.from.path })
     const asset = state.catalog.assets[move.assetId]
-    if (!asset || file.sha256 !== asset.sha256) return `${move.from.path} changed since the review (SHA-256 differs)`
+    if (!asset || file.sha256 !== asset.sha256) return msg("op_archive_changed", { path: move.from.path })
     const destination = state.disk.volumes[move.to.volumeId]
-    if (!destination?.mounted) return `${destination?.name ?? "The destination volume"} is not mounted`
-    if (!destination.writable) return `${destination.name} is not writable`
-    if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return `Another file already exists at ${move.to.path}`
+    if (!destination?.mounted) return msg("wrapup_refusal_not_mounted", { name: destination ? destination.name : msg("op_archive_destination_volume") })
+    if (!destination.writable) return msg("wrapup_refusal_not_writable", { name: destination.name })
+    if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return msg("wrapup_refusal_file_exists", { path: move.to.path })
   }
   return null
 }
@@ -119,8 +121,9 @@ function finish(state: PrototypeState, id: OperationId, payload: ArchivePayload)
     const archive = sessionIds.length === 0 ? null : { at: payload.direction === "archive" ? nowIso() : (project.archive?.at ?? nowIso()), sessionIds }
     next = withCatalog(next, (c) => ({ ...c, projects: { ...c.projects, [project.id]: { ...project, archive, revision: project.revision + 1 } } }))
   }
-  const verb = payload.direction === "archive" ? "archived" : "restored"
-  const summary = `${plural(moved, "session")} ${verb}${refused > 0 ? ` · ${refused} kept` : ""}`
+  const sessions = { count: moved, n: formatCount(moved) }
+  const main = payload.direction === "archive" ? msg("op_archive_sessions_archived", sessions) : msg("op_archive_sessions_restored", sessions)
+  const summary = refused > 0 ? joinRefs([main, msg("op_archive_kept", { count: refused })], " · ") : main
   return settleOperation(next, id, moved === 0 && refused > 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
 }
 
@@ -131,16 +134,17 @@ export const archiveHandler: OperationHandler = {
     const [group, ...rest] = payload.queue
     if (!group) return finish(state, op.id, payload)
     let next = state
-    let refusal: string | null = null
+    let refusal: MessageRef | null = null
     if (next.faults.failNextHashVerification) {
       next = { ...next, faults: { ...next.faults, failNextHashVerification: false } }
-      refusal = "SHA-256 verification failed (simulated): nothing of this session moved"
+      refusal = msg("op_archive_hash_failed")
     } else refusal = verify(next, group.moves)
     if (!refusal) next = applyMoves(next, group.moves, payload.direction)
-    const verb = payload.direction === "archive" ? "Archived to" : "Restored to"
+    const frames = unitCount("frames", group.moves.length)
+    const moved = payload.direction === "archive" ? msg("op_archived_to", { folder: group.folder, frames }) : msg("op_restored_to", { folder: group.folder, frames })
     next = patchOperation(next, op.id, {
       items: op.items.map((item) =>
-        item.id === group.sessionId ? { ...item, status: refusal ? "blocked" : "done", detail: refusal ?? `${verb} ${group.folder} · ${plural(group.moves.length, "frame")}` } : item,
+        item.id === group.sessionId ? { ...item, status: refusal ? "blocked" : "done", detail: refusal ?? moved } : item,
       ),
       progress: { ...op.progress, done: op.progress.done + 1 },
       payload: { ...payload, queue: rest, moved: refusal ? payload.moved : [...payload.moved, group.sessionId] } as unknown as Record<string, unknown>,

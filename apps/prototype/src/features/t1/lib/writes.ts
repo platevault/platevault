@@ -7,14 +7,15 @@
  * written directly.
  */
 import type { AppSettings, LocationRole } from "@/domain/types"
+import type { MessageRef } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice } from "@/store/core"
 
 export interface SaveOptions {
   /** Noun phrase for the change; failures read "<label> was not saved: …". */
-  label: string
+  label: MessageRef
   /** Activity title after a successful write, e.g. "Registered Astro-T7 captures". */
-  saved: string
-  detail?: string | null
+  saved: MessageRef
+  detail?: MessageRef | null
   /** Route (without #) that owns the outcome. */
   href: string
 }
