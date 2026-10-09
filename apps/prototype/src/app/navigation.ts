@@ -51,7 +51,7 @@ export const UTILITY_ITEMS: NavItem[] = [
 
 export const ALL_NAV_ITEMS: NavItem[] = [...PRIMARY_ITEMS, ...NAV_GROUPS.flatMap((g) => g.items), ...UTILITY_ITEMS]
 
-/** Settings sections (S16): v4's settled sections plus Equipment, Goal templates and Naming. */
+/** Settings sections (S16): v4's settled sections plus Equipment, Goal templates, Naming and Calibration. */
 export const SETTINGS_SECTIONS: Array<{ group: string; items: Array<{ to: string; label: string; keywords: string }> }> = [
   { group: "General", items: [{ to: "/settings/appearance", label: "Appearance", keywords: "theme dark light density language locale portuguese gruvbox nord dracula solarized catppuccin tokyo one rose pine" }] },
   {
@@ -60,6 +60,7 @@ export const SETTINGS_SECTIONS: Array<{ group: string; items: Array<{ to: string
       { to: "/settings/locations", label: "Locations", keywords: "folders captures calibration results archive" },
       { to: "/settings/equipment", label: "Equipment", keywords: "rig optical train camera telescope filter mono osc" },
       { to: "/settings/naming", label: "Naming", keywords: "naming template tokens import archive folder" },
+      { to: "/settings/calibration", label: "Calibration", keywords: "calibration raw frames keep trash masters stacking" },
       { to: "/settings/sites", label: "Observing sites", keywords: "site default location latitude" },
       { to: "/settings/targets", label: "Target lookup", keywords: "simbad sesame resolver online provider" },
     ],

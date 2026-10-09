@@ -1,19 +1,24 @@
 /**
- * S16 Settings › Naming (slice E; D-W20, STO-IMP-FR-07, STO-IMP-AC-08). One
- * folder template per frame type, used by Import and Archive. The nine
- * tokens each have a fallback; a type without an override uses its default.
- * The chip editor and the text field edit the same template; the live
- * preview resolves it against a real library session of that type and
- * against missing metadata, naming every fallback it used. Invalid
- * templates are refused inline and nothing is saved.
+ * S16 Settings › Naming (slice E; D-W20, STO-IMP-FR-07, STO-IMP-AC-08,
+ * P-CAL3). One folder template per frame type, used by Import and Archive;
+ * the master types are the structured calibration storage layout (flats per
+ * train, filter and night; darks and dark flats per camera, exposure,
+ * gain/offset and temperature; bias per camera and gain/offset). Every token
+ * has a fallback; a type without an override uses its default. The chip
+ * editor and the text field edit the same template; the live preview
+ * resolves it against a real library item of that type and against missing
+ * metadata, naming every fallback it used. Invalid templates are refused
+ * inline and nothing is saved.
  */
 import { ArrowLeft, ArrowRight, Plus, RotateCcw, X } from "lucide-react"
 import { type KeyboardEvent, useEffect, useId, useState } from "react"
-import { ActionError, Notice } from "@/components/app/feedback"
-import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { ActionError } from "@/components/app/feedback"
+import { PageBody, PageHeader } from "@/components/app/page"
+import { Pill } from "@/components/app/pill"
+import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { sessionNamingValues } from "@/domain/derive"
+import { rigName, sessionNamingValues } from "@/domain/derive"
 import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, namingValues, resolveNamingTemplate, validateNamingTemplate } from "@/domain/templates"
 import type { Catalog, NamingFrameType, NamingToken } from "@/domain/types"
 import { TextField } from "@/features/t1/components/form-field"
@@ -21,6 +26,7 @@ import { ReturnNotice } from "@/features/t1/settings/settings-layout"
 import { cn } from "@/lib/utils"
 import { setNamingTemplate } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
+import { masterNight } from "./calibration-model"
 
 const TYPES: Array<{ type: NamingFrameType; label: string; role: "captures" | "calibration" }> = [
   { type: "light", label: "Lights", role: "captures" },
@@ -30,6 +36,7 @@ const TYPES: Array<{ type: NamingFrameType; label: string; role: "captures" | "c
   { type: "master-flat", label: "Master flats", role: "calibration" },
   { type: "master-dark", label: "Master darks", role: "calibration" },
   { type: "master-bias", label: "Master bias", role: "calibration" },
+  { type: "master-dark-flat", label: "Master dark flats", role: "calibration" },
 ]
 
 type Chip = { kind: "token"; token: NamingToken } | { kind: "sep" } | { kind: "text"; value: string }
@@ -61,38 +68,46 @@ function sampleValues(catalog: Catalog, type: NamingFrameType): { values: Naming
     const master = Object.values(catalog.masters).find((m) => m.kind === kind)
     if (!master) return null
     return {
-      from: `master ${master.path.split("/").pop()}`,
+      from: master.path.split("/").pop() ?? "master",
       values: namingValues({
         target: null,
         filter: master.channel,
-        night: master.createdAt.slice(0, 10),
+        night: masterNight(catalog, master),
         frameType: type,
         camera: master.cameraName,
         exposureS: master.exposureS,
         gain: master.gain,
+        offset: master.offset,
         binning: master.binning,
         ccdTempC: master.ccdTempC,
+        train: master.opticalTrainId ? rigName(catalog, master.opticalTrainId) : null,
       }),
     }
   }
   const session = Object.values(catalog.sessions).find((s) => s.imageType === type && !s.supersededBy)
   if (!session) return null
-  return { from: `session of ${session.night}${session.channel ? `, ${session.channel}` : ""}`, values: sessionNamingValues(catalog, session, type) }
+  return { from: `${session.night}${session.channel ? ` · ${session.channel}` : ""}`, values: sessionNamingValues(catalog, session, type) }
 }
 
 function Preview({ label, root, template, values }: { label: string; root: string; template: string; values: NamingValues }) {
   const { path, fallbacks } = resolveNamingTemplate(template, values)
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       <div className="text-[0.75rem] text-muted-foreground">{label}</div>
       <div className="font-mono text-xs [overflow-wrap:anywhere]">
         <span className="text-muted-foreground">{root}/</span>
         {path}
       </div>
-      <div className="text-[0.75rem] text-muted-foreground">
-        {fallbacks.length === 0
-          ? "No fallbacks used."
-          : `Fallbacks used: ${fallbacks.map((t) => `{${t}} → ${NAMING_TOKENS.find((x) => x.token === t)!.fallback}`).join(", ")}.`}
+      <div className="flex flex-wrap gap-1" aria-label="Fallbacks">
+        {fallbacks.length === 0 ? (
+          <Pill tone="success">No fallbacks</Pill>
+        ) : (
+          fallbacks.map((t) => (
+            <Pill key={t} tone="warning">
+              {`{${t}} → ${NAMING_TOKENS.find((x) => x.token === t)!.fallback}`}
+            </Pill>
+          ))
+        )}
       </div>
     </div>
   )
@@ -163,7 +178,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2" data-chrome>
         <h3 className="text-sm font-semibold">{type.label}</h3>
-        <span className="text-[0.75rem] text-muted-foreground">{custom ? "Custom template" : "Default template"} · under the {type.role === "captures" ? "Captures" : "Calibration"} location</span>
+        <Pill tone={custom ? "info" : "muted"}>{custom ? "Custom" : "Default"}</Pill>
         <div className="flex-1" />
         {custom ? (
           <Button size="sm" variant="ghost" onClick={() => save(null)}>
@@ -175,16 +190,23 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
           Discard
         </Button>
         <Button size="sm" disabled={!dirty || errors.length > 0} onClick={() => save(text)}>
-          Save template
+          Save
         </Button>
       </div>
 
       <div className="space-y-1.5">
-        <div id={ids.chips} className="text-sm font-medium">
+        <div id={ids.chips} className="inline-flex items-center gap-1.5 text-sm font-medium">
           Template
+          <HelpTip label="Tokens and fallbacks">
+            <ul className="space-y-0.5 font-mono">
+              {NAMING_TOKENS.map((t) => (
+                <li key={t.token}>{`{${t.token}} → ${t.fallback}`}</li>
+              ))}
+            </ul>
+          </HelpTip>
         </div>
         <ul aria-labelledby={ids.chips} aria-describedby={`${ids.chips}-hint`} className="flex min-h-9 flex-wrap items-center gap-1 rounded-md border bg-background px-2 py-1.5">
-          {chips.length === 0 ? <li className="text-xs text-muted-foreground">Empty: files go straight into the location.</li> : null}
+          {chips.length === 0 ? <li className="text-xs text-muted-foreground">Empty</li> : null}
           {chips.map((chip, index) => {
             const text = chip.kind === "token" ? `{${chip.token}}` : chip.kind === "sep" ? "/" : chip.value
             return (
@@ -210,19 +232,19 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
             )
           })}
         </ul>
-        <p id={`${ids.chips}-hint`} className="text-[0.75rem] text-muted-foreground">
+        <p id={`${ids.chips}-hint`} className="sr-only">
           ← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.
-          {focusIndex !== null && chips[focusIndex] ? (
-            <span className="ml-1 inline-flex gap-1 align-middle">
-              <Button size="icon-xs" variant="ghost" aria-label="Move chip left" onClick={() => move(focusIndex, -1)}>
-                <ArrowLeft aria-hidden="true" />
-              </Button>
-              <Button size="icon-xs" variant="ghost" aria-label="Move chip right" onClick={() => move(focusIndex, 1)}>
-                <ArrowRight aria-hidden="true" />
-              </Button>
-            </span>
-          ) : null}
         </p>
+        {focusIndex !== null && chips[focusIndex] ? (
+          <span className="inline-flex gap-1 align-middle">
+            <Button size="icon-xs" variant="ghost" aria-label="Move chip left" onClick={() => move(focusIndex, -1)}>
+              <ArrowLeft aria-hidden="true" />
+            </Button>
+            <Button size="icon-xs" variant="ghost" aria-label="Move chip right" onClick={() => move(focusIndex, 1)}>
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </span>
+        ) : null}
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Insert a token">
           {NAMING_TOKENS.map((t) => (
             <Button key={t.token} size="xs" variant="outline" title={`${t.label}; falls back to “${t.fallback}”`} onClick={() => setChips([...chips, { kind: "token", token: t.token }])}>
@@ -250,15 +272,18 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
         </div>
       </div>
 
-      <TextField id={ids.text} label="As text" mono value={text} onChange={setText} description={`Default: ${DEFAULT_NAMING[type.type]}`} error={errors.length > 0 ? `Template: ${errors.join("; ")}. Not saved.` : undefined} />
+      <TextField id={ids.text} label="As text" mono value={text} onChange={setText} description={`Default: ${DEFAULT_NAMING[type.type]}`} error={errors.length > 0 ? `Not saved · ${errors.join(", ")}` : undefined} />
       {failure ? <ActionError message={failure.message} onRetry={failure.retry} /> : null}
 
-      <Section id={`naming-preview-${type.type}`} level={3} title="Live preview" description={dirty ? "Shows the edited template; Save template to use it for Import and Archive." : "Shows the template Import and Archive use now."}>
+      <section aria-labelledby={`naming-preview-${type.type}-title`} className="space-y-2">
+        <h3 id={`naming-preview-${type.type}-title`} className="inline-flex items-center gap-1.5 text-sm font-semibold">
+          Preview {dirty ? <Pill tone="warning">Unsaved</Pill> : null}
+        </h3>
         <div className="space-y-3 rounded-md border px-3 py-2" aria-live="polite">
-          {sample ? <Preview label={`From the library: ${sample.from}`} root={root} template={text} values={sample.values} /> : null}
-          <Preview label="With no metadata (every token falls back)" root={root} template={text} values={{ frame_type: type.type }} />
+          {sample ? <Preview label={`Library · ${sample.from}`} root={root} template={text} values={sample.values} /> : null}
+          <Preview label="No metadata" root={root} template={text} values={{ frame_type: type.type }} />
         </div>
-      </Section>
+      </section>
     </div>
   )
 }
@@ -269,12 +294,9 @@ export function NamingSettingsPage() {
   const type = TYPES.find((t) => t.type === active)!
   return (
     <div>
-      <PageHeader level={2} title="Naming" description="Folder templates per frame type, used by Import and Archive. Nine tokens, each with a fallback when the metadata lacks it." />
+      <PageHeader level={2} title="Naming" />
       <PageBody>
-        <ReturnNotice task="Naming" />
-        <Notice tone="info" title="Tokens and fallbacks">
-          {NAMING_TOKENS.map((t) => `{${t.token}} → ${t.fallback}`).join(" · ")}
-        </Notice>
+        <ReturnNotice />
         <div className="grid grid-cols-[11rem_minmax(0,1fr)] gap-5">
           <ul aria-label="Frame types" className="space-y-px" data-chrome>
             {TYPES.map((t) => (

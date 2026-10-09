@@ -355,7 +355,7 @@ export function importMasterFile(path: string): { result: CommitResult; processI
 
 /** Settings › Keep raw calibration frames (off by default: raws go to the OS Trash once their master registers). */
 export function setKeepRawCalibration(keep: boolean): CommitResult {
-  return commit("Keep raw calibration frames", (s) => ({ ...s, settings: { ...s.settings, keepRawCalibration: keep } }), { href: "/settings" })
+  return commit("Keep raw calibration frames", (s) => ({ ...s, settings: { ...s.settings, keepRawCalibration: keep } }), { href: "/settings/calibration" })
 }
 
 /** Restore offer (P-CAL2): a dismissed master offer is offered again on the run's Calibrate step. */

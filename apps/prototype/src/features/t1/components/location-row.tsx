@@ -1,13 +1,16 @@
 /**
  * One registered location (J19 S2-S3, LIB-FR-01): display name, path, role,
  * access, availability and scan scope, with the recovery notice that applies
- * (access denied, incomplete scope, offline). Used by the setup steps and by
- * Settings › Locations.
+ * (access denied, incomplete scope, offline), terse: the title names the
+ * state, the actions fix it. Used by the setup steps and by Settings ›
+ * Locations, where a `ContextMenuArea` around the list finds each row by its
+ * menu key.
  */
 import { Archive, FolderSearch, RotateCw } from "lucide-react"
 import type { ReactNode } from "react"
 import { PathText } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
+import { menuKey } from "@/components/app/row-menu"
 import { StatusBadge, statusMeta } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { locationAvailability } from "@/domain/library"
@@ -44,6 +47,8 @@ export interface LocationRowProps {
   onRetire?: (location: Location) => void
   /** Outcome of the last recovery action on this row (refusal or failed write). */
   feedback?: ReactNode
+  /** Pills beside the role, e.g. the Default archive location. */
+  badges?: ReactNode
   /** Heading level of the name inside its section. */
   headingLevel?: 3 | 4
 }
@@ -51,7 +56,7 @@ export interface LocationRowProps {
 // Recovery notices sit inside the row's card: inline, without a second border or surface.
 const INLINE_NOTICE = "rounded-none border-0 bg-transparent px-0 py-0"
 
-export function LocationRow({ location, current, actions, actionsIncludeRescan = false, onChooseAgain, onRetry, onLocate, onRetire, feedback, headingLevel = 3 }: LocationRowProps) {
+export function LocationRow({ location, current, actions, actionsIncludeRescan = false, onChooseAgain, onRetry, onLocate, onRetire, feedback, badges, headingLevel = 3 }: LocationRowProps) {
   const availability = useStore((s) => locationAvailability(s.disk, location))
   const volume = useStore((s) => s.disk.volumes[location.volumeId])
   const frames = useStore((s) => framesInLocation(s.catalog, location.id))
@@ -65,8 +70,8 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
 
   // A scan that could not read the folder is an attempt, never an index; a denied folder with nothing read shows no frame count.
   const facts = [
-    location.lastIndexedAt ? `${denied ? "Last attempt" : "Last indexed"} ${formatDateTime(location.lastIndexedAt)}` : null,
-    frames > 0 || (location.lastIndexedAt && !denied) ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"} read` : null,
+    location.lastIndexedAt ? `${denied ? "Last attempt" : "Indexed"} ${formatDateTime(location.lastIndexedAt)}` : null,
+    frames > 0 || (location.lastIndexedAt && !denied) ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"}` : null,
   ].filter((fact) => fact !== null)
   const nominal = [
     !offline && !retired && location.access === "ok" ? statusMeta("access", "ok").label : null,
@@ -78,7 +83,8 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
     <li
       aria-current={current ? "true" : undefined}
       data-location-id={location.id}
-      className={cn("space-y-2 rounded-lg border bg-card p-3", current && "border-primary/60 shadow-[inset_2px_0_0_var(--primary)]")}
+      {...menuKey(location.id)}
+      className={cn("space-y-2 rounded-md border bg-card p-3", current && "border-primary/60 shadow-[inset_2px_0_0_var(--primary)]")}
     >
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-56 space-y-0.5">
@@ -88,7 +94,8 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         {/* Only health that needs attention is a badge. Nominal access, availability and scope (J19 S2) read as one quiet line. */}
         <div className="flex flex-wrap items-center gap-1.5" aria-label={`${location.displayName} state`} role="group">
           <StatusBadge kind="role" value={location.role} />
-          {/* While offline or retired the last-observed access and scope are history, not current state; the notice says so. */}
+          {badges}
+          {/* While offline or retired the last-observed access and scope are history, not current state. */}
           {offline || retired || location.access === "ok" ? null : <StatusBadge kind="access" value={location.access} />}
           {availability === "online" ? null : <StatusBadge kind="availability" value={availability} />}
           {indexing ? (
@@ -101,14 +108,13 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
 
-      {/* The "Not indexed" badge already says a location was never indexed; this line carries only facts the badges do not. */}
       {facts.length ? <p className="text-xs text-muted-foreground tabular-nums">{facts.join(" · ")}</p> : null}
 
       {offline ? (
         <Notice
           tone="offline"
           className={INLINE_NOTICE}
-          title={`${location.displayName} is offline`}
+          title={`${volume?.name ?? "Volume"} not mounted`}
           actions={
             frames > 0 && (onLocate || onRetire) ? (
               <>
@@ -127,11 +133,7 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
               </>
             ) : undefined
           }
-        >
-          Volume {volume?.name ?? "unknown"} is not mounted. Its frames keep their last-observed metadata and quality decisions
-          {location.lastIndexedAt ? ` from ${formatDateTime(location.lastIndexedAt)}` : ""} and are not offered as inputs. Reconnect it, or locate the
-          folder on another volume.
-        </Notice>
+        />
       ) : null}
 
       {denied ? (
@@ -152,16 +154,14 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
               </Button>
             </>
           }
-        >
-          PlateVault could not read {location.path}. None of its files are marked missing, and other locations keep indexing.
-        </Notice>
+        />
       ) : null}
 
       {incomplete ? (
         <Notice
           tone="warning"
           className={INLINE_NOTICE}
-          title="Incomplete scope"
+          title={location.unreadablePaths.length > 0 ? `Incomplete scope · ${location.unreadablePaths.length === 1 ? "1 folder" : `${location.unreadablePaths.length} folders`} unread` : "Incomplete scope"}
           actions={
             actionsIncludeRescan ? undefined : (
               <Button size="sm" variant="outline" disabled={indexing} onClick={() => onRetry(location)}>
@@ -172,30 +172,18 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
           }
         >
           {location.unreadablePaths.length > 0 ? (
-            <>
-              {location.unreadablePaths.length === 1 ? "1 folder" : `${location.unreadablePaths.length} folders`} could not be read:
-              <ul className="my-1 space-y-0.5">
-                {location.unreadablePaths.map((path) => (
-                  <li key={path}>
-                    <PathText path={path} />
-                  </li>
-                ))}
-              </ul>
-              Frames there read Unknown, never missing, and their sessions keep their last-observed metadata.
-            </>
-          ) : (
-            "Indexing stopped before it finished. Sessions read so far are kept; the rest reads Unknown until you rescan."
-          )}
+            <ul className="space-y-0.5">
+              {location.unreadablePaths.map((path) => (
+                <li key={path}>
+                  <PathText path={path} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Notice>
       ) : null}
 
-      {retired ? (
-        <Notice tone="info" className={INLINE_NOTICE} title={`Retired ${formatDateTime(location.retiredAt!)}`}>
-          Its {formatCount(frames)} {frames === 1 ? "copy reads" : "copies read"} Retired, never missing, and {frames === 1 ? "is" : "are"} no longer counted or offered as
-          inputs. Fixed Views still name them unresolved. A retired location is never reselected, rescanned or remapped; add its folder again to index it as a new
-          location. No file was deleted, moved or modified.
-        </Notice>
-      ) : null}
+      {retired ? <Notice tone="info" className={INLINE_NOTICE} title={`Retired ${formatDateTime(location.retiredAt!)} · ${formatCount(frames)} ${frames === 1 ? "copy" : "copies"}`} /> : null}
 
       {feedback}
     </li>
