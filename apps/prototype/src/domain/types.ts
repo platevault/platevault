@@ -611,7 +611,8 @@ export type SelectionReasonKind =
 
 export interface SelectionReason {
   kind: SelectionReasonKind
-  detail: string
+  /** Persisted with the membership; worded at render. */
+  detail: MessageRef
 }
 
 export interface MembershipContent {

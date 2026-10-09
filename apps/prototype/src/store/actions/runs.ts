@@ -258,7 +258,7 @@ export function saveRun(runId: RunId): CommitResult {
   const base = latestRevision(run)
   const accepted = describeDiff(catalog, diffContent(base, run.draft))
   const revision = (base?.revision ?? 0) + 1
-  const result = editRun(runId, msg("store_label_save_revision", { revision }), (current) => ({
+  const result = editRun(runId, msg("run_save_revision", { revision }), (current) => ({
     ...current,
     revisions: [...current.revisions, { ...contentOf(current.draft!), revision, savedAt: nowIso(), accepted }],
     draft: null,
@@ -309,11 +309,11 @@ export function completeRun(runId: RunId): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
-  if (run.trashedAt) return refuse(msg("store_refused", { label: msg("store_label_complete") }), [msg("store_reason_in_trash", { name: run.name })], runHref(run))
+  if (run.trashedAt) return refuse(msg("store_refused", { label: msg("run_complete") }), [msg("store_reason_in_trash", { name: run.name })], runHref(run))
   const blockers = completeRefusals(state, run)
   if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_complete_named", { name: run.name }) }), blockers, runHref(run, "done"))
   const stage = runPipeline(state, run).current.id
-  return editRun(runId, msg("store_label_complete"), (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
+  return editRun(runId, msg("run_complete"), (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
 }
 
 /** Reopen returns the run to the step it was in (D-W71 as kept by D-W72); returns that step. */

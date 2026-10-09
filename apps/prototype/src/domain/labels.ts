@@ -23,7 +23,7 @@ export const STEP_NAME: Record<RunStep, MessageRef> = {
 /** "Linked run": the run folder holds links to the reviewed inputs (PREP-FR-04). */
 export const MODE_NAME: Record<InputMode, MessageRef> = {
   linked: msg("domain_mode_linked"),
-  "direct-source": msg("domain_mode_direct_source"),
+  "direct-source": msg("apps_direct_source"),
   copy: msg("domain_mode_copy"),
   clone: msg("domain_mode_clone"),
 }
@@ -111,7 +111,7 @@ export function unitCount(unit: OperationUnit, count: number): MessageRef {
     case "prepared-entries":
       return msg("op_count_prepared_entries", { count, n })
     case "sessions":
-      return msg("domain_sessions", { count, n })
+      return msg("location_sessions_count", { count, n })
     case "items":
       return msg("op_count_items", { count, n })
   }

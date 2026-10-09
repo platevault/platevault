@@ -785,7 +785,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     {
       label: msg("domain_gate_sessions_selected"),
       met: selected > 0,
-      detail: selected > 0 ? joinRefs([msg("domain_sessions", { count: selected, n: formatCount(selected) }), framesRef(included)], " · ") : msg("domain_gate_no_sessions"),
+      detail: selected > 0 ? joinRefs([msg("location_sessions_count", { count: selected, n: formatCount(selected) }), framesRef(included)], " · ") : msg("domain_gate_no_sessions"),
     },
     {
       label: msg("domain_gate_no_unresolved"),
@@ -841,7 +841,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const review: RunStepState = {
     ...STEP("review"),
     state: decision.total === 0 ? "idle" : draftNote ? "review" : decision.unreviewed === 0 ? "done" : "review",
-    status: decision.total === 0 ? DASH : (draftNote ?? msg("domain_count_of", decided)),
+    status: decision.total === 0 ? DASH : (draftNote ?? msg("setup_stat_complete_value", decided)),
     items: [
       ...(draftNote ? [{ label: msg("domain_gate_review_saved"), met: false, detail: msg("domain_gate_review_save_detail", { note: draftNote }) } satisfies GateItem] : []),
       { label: msg("domain_gate_frames_reviewed"), met: "advisory", detail: decision.total === 0 ? msg("domain_gate_no_frames") : msg("domain_gate_frames_decided", decided) },
@@ -874,12 +874,12 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : needReview > 0 ? "blocked" : "done",
     status:
       setup.calibrationPolicy === "off"
-        ? msg("domain_status_off")
+        ? msg("run_cal_off")
         : calibration.rows.length === 0
           ? DASH
           : needReview > 0
             ? msg("domain_status_need_review", { count: needReview })
-            : msg("domain_status_automatic"),
+            : msg("run_cal_automatic"),
     items: calibrateItems,
     link: link("calibrate"),
     nextLabel: msg("domain_next_review_matches"),
@@ -903,13 +903,13 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   let prepStatus: MessageRef
   if (prepCurrent?.state === "running" || prepCurrent?.state === "paused") {
     prepState = "running"
-    prepStatus = msg("domain_count_of", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
+    prepStatus = msg("setup_stat_complete_value", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
   } else if (prepCurrent?.state === "prepared") {
     prepState = prepCurrent.unverified ? "review" : "done"
     prepStatus = prepCurrent.unverified ? msg("status_unverified") : prepCurrent.prepRevision > 1 ? msg("domain_status_prepared_revision", { revision: prepCurrent.prepRevision }) : msg("status_prepared")
   } else if (prepCurrent?.state === "partial") {
     prepState = "partial"
-    prepStatus = msg("domain_status_partial_of", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
+    prepStatus = msg("run_partial_count", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
     prepareItems.push({ label: msg("domain_gate_all_prepared"), met: false, detail: msg("domain_gate_inputs_not_prepared", { count: prepCurrent.blocked.length, n: formatCount(prepCurrent.blocked.length) }) })
   } else if (prepCurrent?.state === "failed") {
     prepState = "blocked"
@@ -961,7 +961,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
       {
         label: msg("domain_gate_results_accepted"),
         met: "advisory",
-        detail: products.length === 0 ? msg("domain_gate_no_outputs") : joinRefs([msg("domain_accepted_count", { count: accepted }), msg("domain_candidate_count", { count: candidates })], " · "),
+        detail: products.length === 0 ? msg("domain_gate_no_outputs") : joinRefs([msg("rungroup_accepted_count", { count: accepted }), msg("rungroup_candidates_count", { count: candidates })], " · "),
       },
     ],
     link: link("results"),
@@ -1147,7 +1147,7 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
       status: live.length === 0 ? verbatim("–") : msg("domain_panels_done", { done: doneCount, count: live.length }),
       items: states.flatMap((s, i) => s.items.map((item) => ({ ...item, label: joinRefs([panelRef(live[i]!.panel), item.label], ": ") }))),
       link: groupStepLink(group, id),
-      nextLabel: id === "review" ? msg("domain_next_review_all") : id === "prepare" ? msg("domain_next_prepare_all") : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_NAME[id]),
+      nextLabel: id === "review" ? msg("rungroup_review_all") : id === "prepare" ? msg("domain_next_prepare_all") : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_NAME[id]),
     }
   })
   const allVerified = live.length > 0 && live.every((p) => p.pipeline.steps[3]!.state === "done")
