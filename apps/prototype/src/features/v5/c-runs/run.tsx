@@ -1,18 +1,18 @@
 /**
- * S5 Run (slice C): the run header (subject and rig, fixed at creation; Open
- * / Complete / Trashed; Complete, Reopen, Move to Trash, Restore and Clean
- * up), the step bar, and the Select, Calibrate, Prepare, Results and Done
- * steps. The Review step is slice D's `ReviewStep`, mounted here as the last
- * child of the pane's flex column (D-W3, D-W50, D-W49, D-W54, D-W5, D-W55,
- * D-W51, D-W4, D-W56, D-W26, D-W72).
+ * S5 Run (slice C): the run header (subject and rig as pills, fixed at
+ * creation; Open / Complete / Trashed; Complete, Reopen, Move to Trash,
+ * Restore and Clean up), the step bar, and the Select, Calibrate, Prepare,
+ * Results and Done steps. The Review step is slice D's `ReviewStep`, mounted
+ * here as the last child of the pane's flex column (D-W3, D-W50, D-W49,
+ * D-W54, D-W5, D-W55, D-W51, D-W4, D-W56, D-W26, D-W72).
  */
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ChevronRight, RotateCcw, Trash2, Undo2, Wand2 } from "lucide-react"
+import { ChevronRight, Lock, RotateCcw, Telescope, Trash2, Undo2, Wand2 } from "lucide-react"
 import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { nextFrom, panelLabel, rigName, runPipeline, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
@@ -66,9 +66,14 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
         }
         meta={<StatusBadge kind="run" value={pipeline.status} />}
         description={
-          <>
-            Subject <span className="text-foreground">{subjectText}</span> · rig <span className="text-foreground">{rigName(state.catalog, run.rigId)}</span>, both fixed.
-          </>
+          <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
+            <Pill tone="muted" icon={Telescope} title="Subject (fixed)">
+              {subjectText}
+            </Pill>
+            <Pill tone="muted" icon={Lock} title="Rig (fixed)">
+              {rigName(state.catalog, run.rigId)}
+            </Pill>
+          </span>
         }
         actions={<RunActions ctx={ctx} step={step} onOutcome={outcome.act} />}
       />
@@ -79,17 +84,18 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
         nextId={nextFrom(pipeline.steps, pipeline.next, step)?.step?.id ?? null}
         linkFor={(id) => runStepLink(run, id) as { to: string; params: Record<string, string> }}
       />
-      {outcome.outcome || run.trashedAt || (run.completion === "complete" && step !== "done") ? (
+      {outcome.outcome || run.trashedAt ? (
         <div className="space-y-2 px-5 pt-3">
           <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} />
           {run.trashedAt ? (
-            <Notice tone="info" title={`In ${project.name}'s Trash since ${formatDateTime(run.trashedAt)}`} actions={<Button size="sm" variant="outline" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>Open the Project Trash</Button>}>
-              Nothing on disk moved. Its steps are read-only; Restore brings it back exactly as it was, at {STEP_LABEL[pipeline.current.id]}.
-            </Notice>
-          ) : run.completion === "complete" && step !== "done" ? (
-            <Notice tone="info" title="Complete: membership and preparation are fixed">
-              Reopen returns the run to {STEP_LABEL[run.stageBeforeComplete ?? "select"]}. Accepting Results and Clean up stay available while it is Complete.
-            </Notice>
+            <div className="flex flex-wrap items-center gap-2" data-run-trashed>
+              <Pill tone="muted" icon={Trash2} title={`Restore returns it to ${STEP_LABEL[pipeline.current.id]}`}>
+                In Trash · {formatDateTime(run.trashedAt)}
+              </Pill>
+              <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
+                Open Trash
+              </Button>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -117,7 +123,7 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
   const goTo = (step: RunStep) => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step } })
   if (run.trashedAt) {
     return (
-      <Button size="sm" onClick={() => onOutcome(restoreRun(run.id), { title: `${run.name} restored`, reasons: ["Membership, preparations, Results and stage are as they were."], tone: "info" })}>
+      <Button size="sm" onClick={() => onOutcome(restoreRun(run.id), { title: `${run.name} restored`, tone: "info" })}>
         <Undo2 aria-hidden="true" data-icon="inline-start" />
         Restore
       </Button>
@@ -162,10 +168,9 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
         open={confirmTrash}
         onOpenChange={setConfirmTrash}
         title={`Move ${run.name} to the Trash?`}
-        description={`It leaves the run lists, Home, the pickers and the goal totals of ${project.name}, and waits in the Project's Trash.`}
-        changes={[`${run.name} moves to ${project.name}'s Trash at ${STEP_LABEL[runPipeline(state, run).current.id]}`, "Its members stop counting in project, unless they are still candidates", "Its accepted Results stop being offered as inputs"]}
-        unchanged={["No file moves: prepared folders and the Results folder stay", "Library frames and quality decisions stay", "Restore brings it back exactly as it was"]}
-        confirmLabel="Move run to Trash"
+        description="No file moves."
+        changes={[`Waits in ${project.name}'s Trash at ${STEP_LABEL[runPipeline(state, run).current.id]}`, "Leaves run lists, pickers and goal totals"]}
+        confirmLabel="Move to Trash"
         tone="destructive"
         onConfirm={() => {
           const result = trashRun(run.id)
