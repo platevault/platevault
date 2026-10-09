@@ -1,145 +1,187 @@
 /**
- * S11 Plan (`/plan`, slice E): Tonight at the planning site and the night
- * timeline (D-W16, D-W63, PLAN-FR-02/09/10/11).
+ * S11 Plan (`/plan`, slice E): tonight at the planning site on one compact
+ * night timeline (D-W16, D-W63, PLAN-FR-02/09/10/11).
  *
- * - Tonight: the best window per open-Project subject and ★ favourite, the
- *   Moon (illumination, phase, rise, set), the darkness window, and the site
- *   with its time zone. A mosaic uses its centre; its panels are listed under
- *   it (D-W63).
- * - Night timeline: twilight bands, a Moon band, an altitude curve per row and
- *   window blocks, on one axis in the site's zone.
+ * - The list: the Plan list (`planList`; add from the search, remove with ×
+ *   or right-click), else My targets while the Plan list is empty. "Show
+ *   all" lists My targets with the Plan list. A mosaic uses its centre and
+ *   lists its panels under it (D-W63).
+ * - Each row: best window, Img time and Moon separation beside the night
+ *   (altitude curve, windows); it expands to one sub-row per filter, graded
+ *   good tonight, with that filter's Moon-clear windows. Moon limits edit
+ *   the per-filter constraint behind the grades.
  * - `?project=` (opened from a Project) scopes the page to that Project's
- *   subjects and shows each one's goal gaps ("in project" and "captured").
- * - With no site: "Add an observing site in Settings".
+ *   subjects and shows each one's unmet goals.
+ * - With no site: "Add site".
  */
-import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarClock, X } from "lucide-react"
-import { type ReactNode, useMemo, useState } from "react"
-import { KeyValueList } from "@/components/app/data"
-import { ActionError, EmptyState, Notice } from "@/components/app/feedback"
-import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { useNavigate, useSearch, Link } from "@tanstack/react-router"
+import { CalendarClock, Plus, X } from "lucide-react"
+import { useMemo, useState } from "react"
+import { openSheet } from "@/app/ui-state"
+import { Box } from "@/components/app/box"
+import { ActionError, EmptyState } from "@/components/app/feedback"
+import { PageHeader } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import type { MenuEntry } from "@/components/app/row-menu"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatHours, goalProgress, myTargets, panelLabel, subjectCentre, subjectName, type GoalProgress } from "@/domain/derive"
+import { Toggle } from "@/components/ui/toggle"
+import { formatHours, goalProgress, myTargets, panelLabel, planList, subjectCentre, subjectName, type GoalProgress } from "@/domain/derive"
 import { criteriaSummary } from "@/domain/planning"
-import type { Catalog, Project } from "@/domain/types"
+import type { Catalog, Project, Subject, Target } from "@/domain/types"
 import { save } from "@/features/t1/lib/writes"
-import { formatNight, plural } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { formatNight } from "@/lib/format"
 import type { SearchParams } from "@/routes"
-import { useStore } from "@/store/core"
-import { NightTimeline, type TimelineRow } from "./night-timeline"
-import { AddSiteButton, ProjectBadge, siteTime, siteTimeRange, useSkyContext } from "./parts"
-import { positionSky, type RowSky } from "./targets-model"
+import { addToPlan, removeFromPlan } from "@/store/actions/planning"
+import { type CommitResult, useStore } from "@/store/core"
+import { filtersTonight, limitText } from "./good-tonight"
+import { MoonLimitsButton } from "./moon-limits"
+import { type NightColumn, type NightRow, NightTable } from "./night-timeline"
+import { AddSiteButton, clockRange, MoonLine, SiteLine, siteTimeRange, useSkyContext } from "./parts"
+import { PlanAddSearch } from "./plan-add"
+import { positionSky, type RowSky, selectionBands } from "./targets-model"
 
-interface PlanRow {
+/** One subject, panel or Target before tonight's values. */
+interface Seed {
   key: string
   name: string
-  /** The Target page this row opens, when it is a Target. */
+  /** What the label shows: the name, or "Panel 2" under its mosaic. */
+  short: string
   targetId: string | null
   ra: number | null
   dec: number | null
   projects: Project[]
-  /** Panel rows sit under their mosaic. */
-  panelOf: string | null
-  /** Unmet goals of the scoped Project for this subject or panel. */
+  panel: boolean
   gaps: GoalProgress[]
   favourite: boolean
 }
 
-function planRows(catalog: Catalog, scope: Project | undefined): PlanRow[] {
-  const rows: PlanRow[] = []
-  const projects = scope ? [scope] : Object.values(catalog.projects).filter((p) => p.state === "open")
-  const seen = new Map<string, PlanRow>()
-  for (const project of projects) {
-    const progress = scope ? goalProgress(catalog, project).filter((g) => !g.met) : []
-    for (const subject of project.subjects) {
-      const target = catalog.targets[subject.targetId]
-      if (subject.mosaic) {
-        const centre = subjectCentre(catalog, subject)
-        rows.push({
-          key: `${project.id}:${subject.id}`,
-          name: `${subjectName(catalog, subject)} (centre)`,
-          targetId: subject.targetId,
-          ra: centre?.ra ?? null,
-          dec: centre?.dec ?? null,
-          projects: [project],
-          panelOf: null,
-          gaps: progress.filter((g) => g.goal.subjectId === subject.id && g.goal.panelId === null),
-          favourite: target?.favourite ?? false,
-        })
-        for (const panel of subject.mosaic.panels) {
-          rows.push({
-            key: `${project.id}:${subject.id}:${panel.id}`,
-            name: panelLabel(panel),
-            targetId: null,
-            ra: panel.ra,
-            dec: panel.dec,
-            projects: [project],
-            panelOf: subjectName(catalog, subject),
-            gaps: progress.filter((g) => g.goal.subjectId === subject.id && g.goal.panelId === panel.id),
-            favourite: false,
-          })
-        }
-        continue
-      }
-      const existing = seen.get(subject.targetId)
-      if (existing) {
-        existing.projects.push(project)
-        continue
-      }
-      const row: PlanRow = {
-        key: subject.targetId,
-        name: target?.name ?? "Unknown Target",
-        targetId: subject.targetId,
-        ra: target?.ra ?? null,
-        dec: target?.dec ?? null,
-        projects: [project],
-        panelOf: null,
-        gaps: progress.filter((g) => g.goal.subjectId === subject.id),
-        favourite: target?.favourite ?? false,
-      }
-      seen.set(subject.targetId, row)
-      rows.push(row)
-    }
-  }
-  if (!scope) {
-    for (const { target } of myTargets(catalog)) {
-      if (!target.favourite || seen.has(target.id)) continue
-      rows.push({ key: target.id, name: target.name, targetId: target.id, ra: target.ra, dec: target.dec, projects: [], panelOf: null, gaps: [], favourite: true })
-    }
-  }
-  return rows
+interface PlanRow extends NightRow, Seed {
+  planned: boolean
+  sky: RowSky
 }
+
+/** A subject's rows: one, or a mosaic centre with its panels under it (D-W63). */
+function subjectSeeds(catalog: Catalog, project: Project, subject: Subject, gaps: GoalProgress[], projects: Project[]): Seed[] {
+  const target = catalog.targets[subject.targetId]
+  if (!subject.mosaic) {
+    return [{ key: subject.targetId, name: target?.name ?? "Unknown Target", short: target?.name ?? "Unknown Target", targetId: subject.targetId, ra: target?.ra ?? null, dec: target?.dec ?? null, projects, panel: false, gaps: gaps.filter((g) => g.goal.subjectId === subject.id), favourite: target?.favourite ?? false }]
+  }
+  const centre = subjectCentre(catalog, subject)
+  const name = subjectName(catalog, subject)
+  return [
+    { key: `${project.id}:${subject.id}`, name, short: name, targetId: subject.targetId, ra: centre?.ra ?? null, dec: centre?.dec ?? null, projects, panel: false, gaps: gaps.filter((g) => g.goal.subjectId === subject.id && g.goal.panelId === null), favourite: target?.favourite ?? false },
+    ...subject.mosaic.panels.map((panel) => ({
+      key: `${project.id}:${subject.id}:${panel.id}`,
+      name: `${name} ${panelLabel(panel)}`,
+      short: panelLabel(panel),
+      targetId: null,
+      ra: panel.ra,
+      dec: panel.dec,
+      projects,
+      panel: true,
+      gaps: gaps.filter((g) => g.goal.subjectId === subject.id && g.goal.panelId === panel.id),
+      favourite: false,
+    })),
+  ]
+}
+
+/** The scoped Project's subjects, each with its unmet goals. */
+function scopeGroups(catalog: Catalog, scope: Project): Seed[][] {
+  const gaps = goalProgress(catalog, scope).filter((g) => !g.met)
+  return scope.subjects.map((subject) => subjectSeeds(catalog, scope, subject, gaps, [scope]))
+}
+
+/** Targets as rows; one that is a mosaic subject of an open Project lists its panels. */
+function targetGroups(catalog: Catalog, targets: Target[]): Seed[][] {
+  const projectsOf = new Map(myTargets(catalog).map((m) => [m.target.id, m.projects]))
+  return targets.map((target) => {
+    const projects = projectsOf.get(target.id) ?? []
+    for (const project of projects) {
+      const mosaic = project.subjects.find((s) => s.targetId === target.id && s.mosaic)
+      if (mosaic) return subjectSeeds(catalog, project, mosaic, [], projects)
+    }
+    return [{ key: target.id, name: target.name, short: target.name, targetId: target.id, ra: target.ra, dec: target.dec, projects, panel: false, gaps: [], favourite: target.favourite }]
+  })
+}
+
+type ListMode = "plan" | "all" | "fallback" | "scope"
 
 export function PlanPage() {
   const search = useSearch({ strict: false }) as SearchParams
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
+  const constraints = useStore((s) => s.settings.moonConstraints)
   const sites = useStore((s) => s.catalog.sites)
   const planningSiteId = useStore((s) => s.settings.planningSiteId ?? s.settings.defaultSiteId)
   const ctx = useSkyContext()
-  const [siteError, setSiteError] = useState<{ message: string; retry: () => void } | null>(null)
+  const [error, setError] = useState<{ message: string; retry: () => void } | null>(null)
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const scope = search.project ? catalog.projects[search.project] : undefined
-  const rows = useMemo(() => planRows(catalog, scope), [catalog, scope])
-  const skies = useMemo(() => new Map<string, RowSky>(rows.map((r) => [r.key, positionSky(ctx, r.key, r.ra, r.dec)])), [rows, ctx])
+  const showAll = search.all === "1"
 
-  function chooseSite(siteId: string) {
-    const attempt = () => {
-      const site = sites[siteId]
-      const result = save(
-        { label: "Planning site", saved: `Planning site: ${site?.name ?? siteId}`, detail: "Projects, runs and session sites are unchanged.", href: "/plan" },
-        (s) => ({ ...s, settings: { ...s.settings, planningSiteId: siteId } }),
-      )
-      setSiteError(result.ok ? null : { message: result.message, retry: attempt })
+  const plan = useMemo(() => planList(catalog), [catalog])
+  const planned = useMemo(() => new Set(plan.map((t) => t.id)), [plan])
+  const mode: ListMode = scope ? "scope" : plan.length === 0 ? "fallback" : showAll ? "all" : "plan"
+  const bands = useMemo(() => selectionBands(catalog, Object.keys(catalog.opticalTrains)), [catalog])
+
+  const rows = useMemo((): PlanRow[] => {
+    let groups: Seed[][]
+    if (scope) groups = scopeGroups(catalog, scope)
+    else {
+      const mine = myTargets(catalog).map((m) => m.target)
+      const listed = mode === "plan" ? plan : [...plan, ...mine.filter((t) => !planned.has(t.id))]
+      groups = targetGroups(catalog, listed)
     }
-    attempt()
+    const built = groups.map((group) =>
+      group.map((seed): PlanRow => {
+        const sky = positionSky(ctx, seed.key, seed.ra, seed.dec)
+        return {
+          ...seed,
+          label: null,
+          indent: seed.panel,
+          altitudes: sky.status === "ok" ? sky.altitudes : null,
+          windows: sky.status === "ok" ? sky.windows : [],
+          note: sky.status === "no-coordinates" ? sky.reason : undefined,
+          chips: sky.status === "ok" && ctx ? filtersTonight(ctx, { id: seed.key, ra: seed.ra, dec: seed.dec }, sky.altitudes, constraints, bands) : null,
+          planned: seed.targetId !== null && !seed.panel && planned.has(seed.targetId),
+          sky,
+        }
+      }),
+    )
+    // Groups with a window tonight first, by its start; the rest by name.
+    const start = (r: PlanRow) => (r.sky.status === "ok" && r.sky.best ? Date.parse(r.sky.best.start) : Number.POSITIVE_INFINITY)
+    return built.sort((a, b) => start(a[0]!) - start(b[0]!) || a[0]!.name.localeCompare(b[0]!.name, "en-GB", { numeric: true })).flat()
+  }, [catalog, scope, mode, plan, planned, ctx, constraints, bands])
+
+  function act(run: () => CommitResult) {
+    const result = run()
+    setError(result.ok ? null : { message: result.message, retry: () => act(run) })
   }
+  function chooseSite(siteId: string) {
+    act(() => save({ label: "Planning site", saved: `Planning site: ${sites[siteId]?.name ?? siteId}`, href: "/plan" }, (s) => ({ ...s, settings: { ...s.settings, planningSiteId: siteId } })))
+  }
+  function setSearch(patch: SearchParams) {
+    navigate({ to: "/plan", search: (previous: SearchParams) => {
+      const next: SearchParams = { ...previous, ...patch }
+      for (const key of Object.keys(next)) if (!next[key]) delete next[key]
+      return next
+    }, replace: true } as never)
+  }
+  const toggle = (key: string) =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  const expandable = rows.filter((r) => r.chips !== null)
+  const allOpen = expandable.length > 0 && expandable.every((r) => expanded.has(r.key))
 
   const header = (
     <PageHeader
       title={scope ? `Plan: ${scope.name}` : "Plan"}
-      description={scope ? "Tonight for this Project's subjects and their goal gaps." : "Tonight at the planning site: the best window per open-Project subject and ★ favourite."}
+      meta={ctx ? <Pill tone="muted">{formatNight(ctx.grid.night)}</Pill> : null}
       actions={
         ctx && Object.keys(sites).length > 1 ? (
           <Select items={Object.values(sites).map((s) => ({ value: s.id, label: s.name }))} value={planningSiteId ?? undefined} onValueChange={(value) => chooseSite(value as string)}>
@@ -163,174 +205,201 @@ export function PlanPage() {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {header}
-        <PageBody>
-          <EmptyState
-            icon={CalendarClock}
-            titleAs="h2"
-            title="Add an observing site in Settings"
-            description="Tonight's windows, the Moon and darkness are computed for a planning site. Targets, sessions and Projects work without one."
-            action={<AddSiteButton returnTo={scope ? `/plan?project=${scope.id}` : "/plan"} />}
-          />
-        </PageBody>
+        <div className="px-5 py-4">
+          <EmptyState icon={CalendarClock} titleAs="h2" title="No observing site" description={null} action={<AddSiteButton returnTo={scope ? `/plan?project=${scope.id}` : "/plan"} />} />
+        </div>
       </div>
     )
   }
 
   const { site, tonight, grid, criteria } = ctx
-  const withWindow = rows.filter((r) => {
-    const sky = skies.get(r.key)!
-    return sky.status === "ok" && sky.best !== null
-  })
-  const without = rows.filter((r) => !withWindow.includes(r))
-  const timelineRows: TimelineRow[] = rows.map((r) => {
-    const sky = skies.get(r.key)!
-    return {
-      key: r.key,
-      name: r.panelOf ? `${r.panelOf} ${r.name}` : r.name,
-      indent: r.panelOf !== null,
-      label: r.targetId && !r.panelOf ? (
-        <Link to="/targets/$targetId" params={{ targetId: r.targetId }} className="truncate hover:underline">
-          {r.name}
-        </Link>
-      ) : (
-        <span className="truncate">{r.name}</span>
-      ),
-      altitudes: sky.status === "ok" ? sky.altitudes : null,
-      windows: sky.status === "ok" ? sky.windows : [],
-      note: sky.status === "no-coordinates" ? sky.reason : undefined,
-    }
-  })
+  const byKey = new Map(rows.map((r) => [r.key, r]))
 
-  const reason = (sky: RowSky): string => (sky.status === "no-coordinates" ? sky.reason : sky.status === "ok" ? (sky.zeroReason ?? "No window tonight") : "No site")
-  const nameCell = (r: PlanRow): ReactNode => (
-    <span className={cn("flex min-w-0 items-center gap-1.5", r.panelOf && "pl-4")}>
-      {r.targetId && !r.panelOf ? (
-        <Link to="/targets/$targetId" params={{ targetId: r.targetId }} className="font-medium hover:underline">
+  const columns: NightColumn<PlanRow>[] = [
+    {
+      id: "best",
+      header: "Best",
+      width: "w-24",
+      wide: true,
+      cell: (r) => (r.sky.status === "ok" && r.sky.best ? clockRange(r.sky.best.start, r.sky.best.end, site) : "–"),
+      filterCell: (_r, chip) => (chip.stretches[0] ? clockRange(chip.stretches[0].start, chip.stretches[0].end, site) : "–"),
+    },
+    {
+      id: "img",
+      header: "Img",
+      width: "w-12",
+      align: "right",
+      cell: (r) => {
+        if (r.sky.status !== "ok") return "–"
+        return r.sky.imgTimeS > 0 ? formatHours(r.sky.imgTimeS) : <span title={r.sky.zeroReason ?? undefined}>0h</span>
+      },
+      filterCell: (_r, chip) => (chip.minutes > 0 ? formatHours(chip.minutes * 60) : "–"),
+    },
+    {
+      id: "moon",
+      header: "Moon",
+      width: "w-16",
+      align: "right",
+      cell: (r) => {
+        if (r.sky.status !== "ok") return "–"
+        const sep = Math.round(r.sky.best ? r.sky.best.moonSeparationDeg : r.sky.lunarDeg)
+        return (
+          <span title={`Moon ${sep}° away${r.sky.moonUp === null ? "" : r.sky.moonUp ? ", up in the best window" : ", down in the best window"}`}>
+            {sep}°{r.sky.moonUp ? <span className="ml-0.5 text-[0.625rem] text-muted-foreground">up</span> : null}
+          </span>
+        )
+      },
+      filterCell: (_r, chip) => <span title={limitText(chip.limit)}>≥ {chip.limit.minSeparationDeg}°</span>,
+    },
+    ...(scope
+      ? [
+          {
+            id: "goals",
+            header: "Goals",
+            width: "w-20",
+            cell: (r: PlanRow) =>
+              r.gaps.length === 0 ? (
+                <Pill tone="success" className="h-4 px-1.5 text-[0.625rem]">
+                  Met
+                </Pill>
+              ) : (
+                <Pill tone="warning" title={r.gaps.map((g) => g.line).join("\n")} className="h-4 px-1.5 text-[0.625rem]">
+                  {r.gaps.length} short
+                </Pill>
+              ),
+          },
+        ]
+      : []),
+  ]
+
+  const label = (r: PlanRow) =>
+    r.targetId && !r.panel ? (
+      <>
+        <Link to="/targets/$targetId" params={{ targetId: r.targetId }} className="truncate font-medium hover:underline">
           {r.name}
         </Link>
-      ) : (
-        <span className={cn(r.panelOf ? "text-muted-foreground" : "font-medium")}>
-          {r.panelOf ? <span className="sr-only">{r.panelOf} </span> : null}
-          {r.name}
-        </span>
-      )}
-      {r.favourite ? <span className="text-xs text-muted-foreground" aria-label="favourite">★</span> : null}
-      {!scope && !r.panelOf ? r.projects.map((p) => <ProjectBadge key={p.id} project={p} />) : null}
-    </span>
-  )
+        {r.favourite ? (
+          <span className="shrink-0 text-[0.625rem] text-muted-foreground" aria-label="favourite">
+            ★
+          </span>
+        ) : null}
+      </>
+    ) : (
+      <span className="truncate text-muted-foreground">{r.short}</span>
+    )
+  const shown = rows.map((r) => ({ ...r, label: label(r) }))
+
+  const menu = (key: string): MenuEntry[] => {
+    const r = byKey.get(key)
+    if (!r) return []
+    const entries: MenuEntry[] = []
+    if (r.targetId && !r.panel) entries.push({ label: "Open", onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: r.targetId! } }) })
+    if (r.chips) entries.push({ label: expanded.has(key) ? "Hide filters" : "Show filters", onSelect: () => toggle(key) })
+    if (r.targetId && !r.panel && !scope) entries.push(r.planned ? { label: "Remove from Plan", onSelect: () => act(() => removeFromPlan(r.targetId!)) } : { label: "Add to Plan", onSelect: () => act(() => addToPlan(r.targetId!)) })
+    if (r.projects[0] || (r.targetId && !r.panel)) entries.push({ separator: true })
+    if (r.projects[0]) entries.push({ label: "Open Project", onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: r.projects[0]!.id } }) })
+    if (r.targetId && !r.panel) entries.push({ label: "New Project…", onSelect: () => openSheet({ kind: "new-project", targetId: r.targetId! }) })
+    return entries
+  }
+
+  const trailing = scope
+    ? undefined
+    : (r: PlanRow) =>
+        !r.targetId || r.panel ? null : r.planned ? (
+          <Button size="icon-xs" variant="ghost" aria-label={`Remove ${r.name} from Plan`} title="Remove" onClick={() => act(() => removeFromPlan(r.targetId!))}>
+            <X aria-hidden="true" />
+          </Button>
+        ) : (
+          <Button size="icon-xs" variant="ghost" aria-label={`Add ${r.name} to Plan`} title="Add to Plan" onClick={() => act(() => addToPlan(r.targetId!))}>
+            <Plus aria-hidden="true" />
+          </Button>
+        )
+
+  const listTitle =
+    mode === "scope" ? (
+      scope!.name
+    ) : mode === "plan" ? (
+      <span className="inline-flex items-center gap-1.5">
+        Plan list <CountBadge count={plan.length} label="targets" />
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1.5">
+        {mode === "fallback" ? "My targets" : "All targets"} <CountBadge count={rows.filter((r) => !r.panel).length} label="rows" />
+        {mode === "fallback" ? <Pill tone="muted" className="h-4 px-1.5 text-[0.625rem]">Plan list empty</Pill> : null}
+      </span>
+    )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {header}
-      <PageBody>
-        {siteError ? <ActionError message={siteError.message} onRetry={siteError.retry} /> : null}
-        {search.project && !scope ? (
-          <Notice tone="warning" title="That Project no longer exists" actions={<Button size="sm" variant="outline" onClick={() => navigate({ to: "/plan" })}>Show every subject</Button>}>
-            Showing every open-Project subject and favourite instead.
-          </Notice>
-        ) : null}
+      <div data-chrome className="flex flex-wrap items-center gap-2 border-b border-separator px-5 py-2">
         {scope ? (
-          <Notice
-            tone="info"
-            title={`Scoped to ${scope.name}: ${plural(scope.subjects.length, "subject")}`}
-            actions={
-              <>
-                <Button size="sm" variant="outline" onClick={() => navigate({ to: "/plan" })}>
-                  <X aria-hidden="true" data-icon="inline-start" />
-                  Clear scope
-                </Button>
-                <Button size="sm" variant="outline" render={<Link to="/targets" search={{ project: scope.id }} />}>
-                  Open in Targets
-                </Button>
-                <Button size="sm" variant="outline" render={<Link to="/projects/$projectId" params={{ projectId: scope.id }} />}>
-                  Open {scope.name}
-                </Button>
-              </>
-            }
-          >
-            Each subject shows the goals it still misses, in project and captured.
-          </Notice>
+          <span className="inline-flex items-center gap-1">
+            <Pill tone="info" link={{ to: "/projects/$projectId", params: { projectId: scope.id } }}>
+              {scope.name}
+            </Pill>
+            <Button size="icon-xs" variant="ghost" aria-label="Clear Project scope" title="Clear scope" onClick={() => setSearch({ project: undefined })}>
+              <X aria-hidden="true" />
+            </Button>
+          </span>
+        ) : (
+          <>
+            <Toggle variant="outline" size="sm" className="h-6" pressed={mode === "all" || mode === "fallback"} disabled={mode === "fallback"} title={mode === "fallback" ? "Plan list empty" : undefined} onPressedChange={(pressed) => setSearch({ all: pressed ? "1" : undefined })}>
+              Show all
+            </Toggle>
+            <PlanAddSearch planned={planned} />
+          </>
+        )}
+        <Toggle variant="outline" size="sm" className="h-6" pressed={allOpen} disabled={expandable.length === 0} onPressedChange={(pressed) => setExpanded(pressed ? new Set(expandable.map((r) => r.key)) : new Set())}>
+          Per filter
+        </Toggle>
+        <MoonLimitsButton bands={bands} />
+        <div className="flex-1" />
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+          <MoonLine ctx={ctx} />
+          <span className="text-[0.75rem] text-muted-foreground tabular-nums">
+            <span className="text-foreground">Dark</span> {tonight.darkness ? siteTimeRange(tonight.darkness.start, tonight.darkness.end, site) : "none"}
+          </span>
+          <SiteLine site={site} />
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-3">
+        {error ? <ActionError message={error.message} onRetry={error.retry} /> : null}
+        {search.project && !scope ? (
+          <p className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Project not found</span>
+            <Button size="xs" variant="outline" onClick={() => setSearch({ project: undefined })}>
+              Show all
+            </Button>
+          </p>
         ) : null}
-
-        <Section id="plan-tonight" title={`Tonight · ${site.name}`} description={`Night of ${formatNight(grid.night, true)}. Times in ${site.timeZone}. Criteria: ${criteriaSummary(criteria)}.`}>
-          <KeyValueList
-            columns={2}
-            items={[
-              { label: "Site", value: `${site.name} · ${site.latitude.toFixed(2)}°, ${site.longitude.toFixed(2)}°`, source: site.timeZone },
-              { label: "Darkness", value: tonight.darkness ? siteTimeRange(tonight.darkness.start, tonight.darkness.end, site) : `None: the Sun stays above ${grid.sunLimit}°`, source: site.twilight === "astronomical" ? "Astronomical" : "Nautical" },
-              { label: "Moon", value: `${tonight.moon.illuminationPct}% illuminated · ${tonight.moon.phase}` },
-              { label: "Moonrise / set", value: `${tonight.moon.rise ? siteTime(tonight.moon.rise, site) : "No rise"} / ${tonight.moon.set ? siteTime(tonight.moon.set, site) : "No set"}` },
-            ]}
-          />
-        </Section>
-
-        <Section id="plan-windows" title="Best windows tonight" description="One row per subject and favourite with a window tonight; a mosaic uses its centre and lists its panels.">
-          {withWindow.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing has a window tonight under these criteria.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Best window per subject tonight</caption>
-                <thead className="bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] text-muted-foreground">
-                  <tr className="border-b">
-                    <th scope="col" className="h-(--row-h) px-3 text-left font-medium">Subject</th>
-                    <th scope="col" className="px-3 text-left font-medium">Best window</th>
-                    <th scope="col" className="px-3 text-right font-medium">Peak</th>
-                    <th scope="col" className="px-3 text-right font-medium">Img time</th>
-                    <th scope="col" className="px-3 text-right font-medium">Moon</th>
-                    {scope ? <th scope="col" className="px-3 text-left font-medium">Goal gaps</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {withWindow.map((r) => {
-                    const sky = skies.get(r.key) as Extract<RowSky, { status: "ok" }>
-                    return (
-                      <tr key={r.key} className="h-(--row-h) border-b border-border/50 align-top last:border-0 even:bg-foreground/[0.022]">
-                        <th scope="row" className="px-3 py-1 text-left font-normal whitespace-nowrap">
-                          {nameCell(r)}
-                        </th>
-                        <td className="px-3 py-1 whitespace-nowrap tabular-nums">{siteTimeRange(sky.best!.start, sky.best!.end, site)}</td>
-                        <td className="px-3 py-1 text-right tabular-nums">{Math.round(sky.best!.maxAltitudeDeg)}°</td>
-                        <td className="px-3 py-1 text-right tabular-nums">{formatHours(sky.imgTimeS)}</td>
-                        <td className="px-3 py-1 text-right tabular-nums">
-                          {Math.round(sky.best!.moonSeparationDeg)}° {sky.moonUp ? <span className="text-xs text-muted-foreground">up</span> : <span className="text-xs text-muted-foreground">down</span>}
-                        </td>
-                        {scope ? (
-                          <td className="px-3 py-1 text-xs">
-                            {r.gaps.length === 0 ? <span className="text-muted-foreground">No unmet goals</span> : r.gaps.map((g) => <div key={g.goal.id} className="whitespace-nowrap tabular-nums">{g.line}</div>)}
-                          </td>
-                        ) : null}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {without.length > 0 ? (
-            <div className="space-y-1">
-              <h3 className="text-[0.75rem] font-medium text-muted-foreground">No window tonight</h3>
-              <ul className="space-y-0.5 text-sm">
-                {without.map((r) => (
-                  <li key={r.key} className="flex flex-wrap items-baseline gap-x-2">
-                    {nameCell(r)}
-                    <span className="text-xs text-muted-foreground">{reason(skies.get(r.key)!)}</span>
-                    {scope && r.gaps.length > 0 ? <span className="text-xs">{r.gaps.map((g) => g.line).join("; ")}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </Section>
-
-        <Section id="plan-timeline" title="Night timeline" description="Sunset to sunrise. The curve is altitude; filled blocks are windows that meet every criterion.">
-          {rows.length === 0 ? (
-            <EmptyState icon={CalendarClock} title="Nothing to plan yet" description="★ a Target or add a subject to an open Project and it appears here." action={<Button size="sm" render={<Link to="/targets" search={{ mode: "browse", cat: "Messier" }} />}>Browse catalogues</Button>} />
-          ) : (
-            <NightTimeline grid={grid} rows={timelineRows} minAltitudeDeg={criteria.minAltitudeDeg} nowMs={ctx.nowMs} moonIlluminationPct={tonight.moon.illuminationPct} caption={`Night timeline at ${site.name}`} />
-          )}
-        </Section>
-      </PageBody>
+        {rows.length === 0 ? (
+          <EmptyState icon={CalendarClock} title="Nothing to plan" description={null} action={<Button size="sm" render={<Link to="/targets" search={{ mode: "browse", cat: "Messier" }} />}>Browse catalogues</Button>} />
+        ) : (
+          <Box title={listTitle} flush id="plan-list">
+            <NightTable
+              grid={grid}
+              nowMs={ctx.nowMs}
+              minAltitudeDeg={criteria.minAltitudeDeg}
+              moonIlluminationPct={tonight.moon.illuminationPct}
+              caption={`Tonight at ${site.name}`}
+              labelHeader="Target"
+              rows={shown}
+              columns={columns}
+              expanded={expanded}
+              onToggle={toggle}
+              trailing={trailing}
+              menu={menu}
+              note={[
+                { label: "Night", value: formatNight(grid.night, true) },
+                { label: "Times", value: site.timeZone },
+                { label: "Criteria", value: criteriaSummary(criteria) },
+                { label: "Method", value: "Low-precision Sun and Moon, 10-min grid" },
+              ]}
+            />
+          </Box>
+        )}
+      </div>
     </div>
   )
 }

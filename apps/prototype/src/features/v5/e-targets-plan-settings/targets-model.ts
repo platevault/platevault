@@ -1,21 +1,25 @@
 /**
  * Targets model (slice E, S10): the rows of My targets, Browse catalogues and
  * search over the shared bundled catalogue and SIMBAD fixture (domain/sky);
- * tonight's values per row; Fit per rig; the built-in presets; and "Add to
- * targets", which writes through the shared `addTarget`.
+ * tonight's values per row, with each filter graded "good tonight"; Fit per
+ * rig; the built-in presets; and "Add to targets", which writes through the
+ * shared `addTarget`.
  *
  * Planning values come from the foundation's `computeWindows`, so a row's Img
  * time equals the total of its Plan windows tonight under the same site and
- * criteria (PLAN-TGT-FR-05).
+ * criteria (PLAN-TGT-FR-05). The filter grades come from `filterSuitability`
+ * (good-tonight.ts).
  */
-import { bandStrip, bandUnion, myTargets, sessionTargetId, liveLightSessions, rigName, targetFit, type BandCell, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
+import { bandUnion, myTargets, sessionTargetId, liveLightSessions, rigName, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
 import { BANDS, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import { computeWindows, nightAt, type Tonight } from "@/domain/planning"
 import { BUNDLED_CATALOGUE, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
-import type { Band, Catalog, Disk, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target } from "@/domain/types"
+import type { Band, Catalog, Disk, MoonConstraint, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target } from "@/domain/types"
 import { addTarget, setFavourite } from "@/store/actions/library"
+import { addToPlan } from "@/store/actions/planning"
 import type { CommitResult } from "@/store/core"
+import { bandOk, chipsScore, type FilterChip, filtersTonight } from "./good-tonight"
 import { moonUpAt, type NightGrid, nextOpposition, objectTonight } from "./sky-tonight"
 
 export type ObjectKind = "emission" | "galaxy" | "planetary" | "snr" | "cluster" | "reflection" | "dark" | "other"
@@ -220,8 +224,8 @@ export interface RigFit {
 export interface RowView {
   row: TargetRow
   sky: RowSky
-  /** Bands the selected rigs pass, each viable or limited by the Moon during this row's window. */
-  strip: { cells: BandCell[]; recommendation: string }
+  /** One chip per band the selection passes, graded good tonight; null without a window tonight. */
+  tonight: FilterChip[] | null
   fits: RigFit[]
   captured: Array<{ channel: string; seconds: number }>
   capturedS: number
@@ -233,10 +237,8 @@ function asTarget(row: TargetRow): Target {
   return row.target ?? { id: row.key, name: row.designation, aliases: row.aliases, ra: row.ra, dec: row.dec, sizeDeg: row.sizeDeg, coordinateSource: "catalog", resolver: null, notes: "", favourite: false, createdAt: "", revision: 1 }
 }
 
-export function rowView(catalog: Catalog, disk: Disk, ctx: SkyContext | null, row: TargetRow, rigIds: OpticalTrainId[], sessionCounts: Map<string, number>): RowView {
+export function rowView(catalog: Catalog, disk: Disk, ctx: SkyContext | null, row: TargetRow, rigIds: OpticalTrainId[], sessionCounts: Map<string, number>, constraints: Record<Band, MoonConstraint>): RowView {
   const sky = positionSky(ctx, row.key, row.ra, row.dec)
-  // Broadband is limited only while the Moon is up during the row's own window.
-  const moonPct = sky.status === "ok" && ctx ? (sky.moonUp ? ctx.tonight.moon.illuminationPct : 0) : null
   const captured = row.target
     ? targetCoverage(disk, catalog, row.target.id)
         .channels.map((c) => ({ channel: c.channel, seconds: c.breakdown.captured.seconds }))
@@ -246,7 +248,7 @@ export function rowView(catalog: Catalog, disk: Disk, ctx: SkyContext | null, ro
   return {
     row,
     sky,
-    strip: bandStrip(catalog, rigIds, moonPct),
+    tonight: sky.status === "ok" && ctx ? filtersTonight(ctx, { id: row.key, ra: row.ra, dec: row.dec }, sky.altitudes, constraints, selectionBands(catalog, rigIds)) : null,
     fits: rigIds.map((rigId) => ({ rigId, rigName: rigName(catalog, rigId), fit: targetFit(catalog, { ...target, sizeDeg: row.sizeDeg }, rigId) })),
     captured,
     capturedS: captured.reduce((sum, c) => sum + c.seconds, 0),
@@ -269,7 +271,7 @@ export function sessionCountsByTarget(catalog: Catalog): Map<string, number> {
 // Presets (D-W19, D-W23, PLAN-TGT-FR-09 to PLAN-TGT-FR-13)
 // ---------------------------------------------------------------------------
 
-export type SortColumn = "designation" | "type" | "maxAlt" | "lunar" | "img" | "opposition" | "sessions" | "captured" | "fit" | "source"
+export type SortColumn = "designation" | "type" | "maxAlt" | "lunar" | "img" | "tonight" | "opposition" | "sessions" | "captured" | "fit" | "source"
 export interface SortSpec {
   column: SortColumn
   direction: "asc" | "desc"
@@ -286,38 +288,38 @@ export interface PresetDef {
 }
 
 const imgTime = (v: RowView) => (v.sky.status === "ok" ? v.sky.imgTimeS : 0)
-const viable = (v: RowView, band: Band) => v.strip.cells.some((c) => c.band === band && c.state === "viable")
-const broadViable = (v: RowView) => v.strip.cells.some((c) => !NARROW_BANDS.includes(c.band) && c.state === "viable")
-const narrowViable = (v: RowView) => v.strip.cells.some((c) => NARROW_BANDS.includes(c.band) && c.state === "viable")
+const ok = (v: RowView, band: Band) => bandOk(v.tonight, band)
+const broadOk = (v: RowView) => (v.tonight ?? []).some((c) => !NARROW_BANDS.includes(c.band) && c.grade !== "poor")
+const narrowOk = (v: RowView) => (v.tonight ?? []).some((c) => NARROW_BANDS.includes(c.band) && c.grade !== "poor")
 const moonUp = (v: RowView) => (v.sky.status === "ok" ? v.sky.moonUp : null)
 
 export const BUILT_IN_PRESETS: PresetDef[] = [
   {
     id: "best-tonight",
     label: "Best tonight",
-    definition: "Img time above zero with a broadband band viable, sorted by Img time, longest first.",
+    definition: "Img time above zero, a broadband filter ok tonight; longest first.",
     needs: null,
-    match: (v) => imgTime(v) > 0 && broadViable(v),
+    match: (v) => imgTime(v) > 0 && broadOk(v),
     sort: { column: "img", direction: "desc" },
   },
   {
     id: "narrowband-moon",
     label: "Narrowband (Moon up)",
-    definition: "Img time above zero with Ha, SII or OIII viable while the Moon is up.",
+    definition: "Img time above zero, Ha, SII or OIII ok tonight, Moon up.",
     needs: "narrowband",
-    match: (v) => imgTime(v) > 0 && moonUp(v) === true && narrowViable(v),
+    match: (v) => imgTime(v) > 0 && moonUp(v) === true && narrowOk(v),
     sort: { column: "img", direction: "desc" },
   },
-  { id: "emission-ha", label: "Emission nebulae Ha", definition: "Emission nebulae with Ha viable.", needs: "narrowband", match: (v) => v.row.kind === "emission" && viable(v, "Ha") },
+  { id: "emission-ha", label: "Emission nebulae Ha", definition: "Emission nebulae, Ha ok tonight.", needs: "narrowband", match: (v) => v.row.kind === "emission" && ok(v, "Ha") },
   {
     id: "galaxies-dark",
     label: "Galaxies dark sky",
-    definition: "Galaxies with Img time above zero while the Moon is below the horizon.",
+    definition: "Galaxies, Img time above zero, Moon down.",
     needs: null,
     match: (v) => v.row.kind === "galaxy" && imgTime(v) > 0 && moonUp(v) === false,
     sort: { column: "img", direction: "desc" },
   },
-  { id: "pn-oiii", label: "Planetary nebulae OIII", definition: "Planetary nebulae with OIII viable.", needs: "narrowband", match: (v) => v.row.kind === "planetary" && viable(v, "OIII") },
+  { id: "pn-oiii", label: "Planetary nebulae OIII", definition: "Planetary nebulae, OIII ok tonight.", needs: "narrowband", match: (v) => v.row.kind === "planetary" && ok(v, "OIII") },
   {
     id: "mosaic",
     label: "Mosaic candidates",
@@ -345,6 +347,19 @@ export function presetUnavailable(preset: PresetDef, rigIds: OpticalTrainId[], b
   return null
 }
 
+/** The `good` URL value: one band, else null. */
+export function parseBand(value: string | undefined): Band | null {
+  return BANDS.find((b) => b === value) ?? null
+}
+
+/** The toolbar filter "OIII ok": rows whose band is good or marginal tonight. */
+export function goodFor(views: RowView[], band: Band | null): RowView[] {
+  return band ? views.filter((v) => bandOk(v.tonight, band)) : views
+}
+
+/** Sort of the "Good tonight for <band>" preset: that band's Moon-clear time, longest first. */
+export const GOOD_TONIGHT_SORT: SortSpec = { column: "tonight", direction: "desc" }
+
 // ---------------------------------------------------------------------------
 // Sorting: every column but ★ sorts; unknown values sort last (PLAN-TGT-FR-04)
 // ---------------------------------------------------------------------------
@@ -356,7 +371,7 @@ function fitValue(fit: Fit | undefined): number | null {
   return fit.kind === "panels" ? 10 + fit.panels : fit.coverage
 }
 
-export function sortValue(view: RowView, column: SortColumn, source?: Map<string, string>): string | number | null {
+export function sortValue(view: RowView, column: SortColumn, source?: Map<string, string>, band?: Band | null): string | number | null {
   const sky = view.sky.status === "ok" ? view.sky : null
   switch (column) {
     case "designation":
@@ -369,6 +384,8 @@ export function sortValue(view: RowView, column: SortColumn, source?: Map<string
       return sky?.lunarDeg ?? null
     case "img":
       return sky?.imgTimeS ?? null
+    case "tonight":
+      return chipsScore(view.tonight, band ?? undefined)
     case "opposition":
       return view.opposition
     case "sessions":
@@ -382,11 +399,12 @@ export function sortValue(view: RowView, column: SortColumn, source?: Map<string
   }
 }
 
-export function sortViews(views: RowView[], sort: SortSpec, source?: Map<string, string>): RowView[] {
+/** `band` is the toolbar's good-tonight filter: the Filters column then sorts by that band. */
+export function sortViews(views: RowView[], sort: SortSpec, source?: Map<string, string>, band?: Band | null): RowView[] {
   const factor = sort.direction === "asc" ? 1 : -1
   return [...views].sort((a, b) => {
-    const va = sortValue(a, sort.column, source)
-    const vb = sortValue(b, sort.column, source)
+    const va = sortValue(a, sort.column, source, band)
+    const vb = sortValue(b, sort.column, source, band)
     if (va === null && vb === null) return collator.compare(a.row.designation, b.row.designation)
     if (va === null) return 1
     if (vb === null) return -1
@@ -398,7 +416,7 @@ export function sortViews(views: RowView[], sort: SortSpec, source?: Map<string,
 export function parseSort(value: string | undefined): SortSpec | null {
   if (!value) return null
   const [column, direction] = value.split(".")
-  const columns: SortColumn[] = ["designation", "type", "maxAlt", "lunar", "img", "opposition", "sessions", "captured", "fit", "source"]
+  const columns: SortColumn[] = ["designation", "type", "maxAlt", "lunar", "img", "tonight", "opposition", "sessions", "captured", "fit", "source"]
   if (!columns.includes(column as SortColumn) || (direction !== "asc" && direction !== "desc")) return null
   return { column: column as SortColumn, direction }
 }
@@ -408,7 +426,7 @@ export function formatSort(sort: SortSpec): string {
 }
 
 // ---------------------------------------------------------------------------
-// Add to targets (PLAN-TGT-FR-03)
+// Add to targets (PLAN-TGT-FR-03) and to the Plan list
 // ---------------------------------------------------------------------------
 
 /** Write the row into the library as a ★ Target (or star an existing one). A failed write keeps nothing and returns the error for Retry. */
@@ -416,4 +434,19 @@ export function addToMyTargets(row: TargetRow): { result: CommitResult; targetId
   if (row.target) return { result: setFavourite(row.target.id, true), targetId: row.target.id }
   if (!row.entry) return { result: { ok: false, reason: "stale", message: "This result is no longer available. Search again." }, targetId: null }
   return addTarget(row.entry, { resolver: row.simbad ? "SIMBAD" : null, favourite: true })
+}
+
+/**
+ * Put the row on the Plan list. A catalogue or SIMBAD entry is written into
+ * the library first (not as a favourite), then planned.
+ */
+export function planRow(row: TargetRow): CommitResult {
+  let targetId = row.target?.id ?? null
+  if (!targetId) {
+    if (!row.entry) return { ok: false, reason: "stale", message: "This result is no longer available. Search again." }
+    const written = addTarget(row.entry, { resolver: row.simbad ? "SIMBAD" : null, favourite: false })
+    if (!written.result.ok) return written.result
+    targetId = written.targetId
+  }
+  return targetId ? addToPlan(targetId) : { ok: false, reason: "stale", message: "This result is no longer available. Search again." }
 }
