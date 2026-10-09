@@ -92,7 +92,7 @@ function StartRunForm({ project }: { project: Project }) {
       <SheetHeader className="border-b border-separator">
         <SheetTitle>Start a processing run</SheetTitle>
         <SheetDescription>
-          In {project.name}. One subject and one rig, both fixed once the run exists: another subject or rig needs another run (D-W50).
+          In {project.name}. The subject and the rig are fixed once the run exists.
         </SheetDescription>
       </SheetHeader>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm">

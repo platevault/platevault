@@ -2,18 +2,21 @@
  * S3 Project (`/projects/$projectId`; D-W9, D-W16, D-W26, D-W29, D-W33,
  * D-W36, D-W37, D-W38, D-W46, D-W59, D-W65, D-W72). The header holds the
  * state (Open / Done / Archived) and its actions: Mark Done names each run
- * that is not Complete and refuses until it is completed or trashed; Done
- * opens the Done / Archive sheet; Reopen returns the Project to open without
- * moving a file. The sections follow: subjects, rigs, goals, candidates,
- * runs, planning, archived sessions and Trash.
+ * that is not Complete and stays disabled until each is completed or
+ * trashed; Done opens the Done / Archive sheet; Reopen returns the Project
+ * to open without moving a file. The toolbar Next is the one primary
+ * action, so the header's actions are secondary. The Project's own work
+ * comes first: runs and run groups, then goals, subjects and rigs,
+ * candidates (summarised, with the candidate review one link away),
+ * planning, archived sessions and Trash.
  *
  * Search keys (routes.tsx): `?sheet=done` opens the Done / Archive sheet,
  * `?start=run` opens Start a processing run, and `?candidates=unreviewed`
  * opens frame review over the candidates filtered to Unreviewed (PIX-FR-18).
  */
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { Archive, CheckCheck, Play, RotateCcw, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Archive, CheckCheck, Play, RotateCcw } from "lucide-react"
+import { useEffect, useId, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
@@ -23,7 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { MissingRecord } from "@/app/missing-record"
 import { GateLabel } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
-import { markDoneBlockers, projectStatus, projectTrash, rigName, runPipeline, subjectName } from "@/domain/derive"
+import { GATE_LABEL, markDoneBlockers, projectStatus, rigName, runPipeline, subjectName } from "@/domain/derive"
 import type { Project, Run } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { markProjectDone, reopenProject } from "@/store/actions/projects"
@@ -56,7 +59,6 @@ export function ProjectPage() {
 
 function ProjectDetail({ project }: { project: Project }) {
   const catalog = useStore((s) => s.catalog)
-  const trashCount = useStore((s) => projectTrash(s.catalog, project.id).length)
   const status = projectStatus(project)
   const reopen = useCommitError()
   return (
@@ -71,66 +73,52 @@ function ProjectDetail({ project }: { project: Project }) {
         meta={<StatusBadge kind="project" value={status} />}
         description={project.notes || `${plural(project.subjects.length, "subject")} · ${plural(project.rigIds.length, "rig")}`}
         actions={
-          <>
-            <Button size="sm" variant="ghost" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
-              <Trash2 aria-hidden="true" data-icon="inline-start" />
-              Trash ({trashCount})
-            </Button>
-            {project.state === "open" ? (
-              <>
-                <MarkDoneButton project={project} />
-                <Button size="sm" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
-                  <Play aria-hidden="true" data-icon="inline-start" />
-                  Start a processing run
-                </Button>
-              </>
-            ) : (
-              <>
-                <ConfirmDialog
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                      Reopen…
-                    </Button>
-                  }
-                  title={`Reopen ${project.name}?`}
-                  description="The Project returns to open with its runs, goals and members unchanged."
-                  changes={["Project state Done → Open", ...(project.archive ? [`${plural(project.archive.sessionIds.length, "archived session")} keep reading Archived until you restore them`] : [])]}
-                  unchanged={["No file moves", "Every run, goal and member"]}
-                  confirmLabel="Reopen"
-                  onConfirm={() => reopenProject(project.id)}
-                />
-                <Button size="sm" onClick={() => openSheet({ kind: "done-archive", projectId: project.id })}>
-                  <Archive aria-hidden="true" data-icon="inline-start" />
-                  Done / Archive…
-                </Button>
-              </>
-            )}
-          </>
+          project.state === "open" ? (
+            <>
+              <MarkDoneButton project={project} />
+              <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
+                <Play aria-hidden="true" data-icon="inline-start" />
+                Start a processing run
+              </Button>
+            </>
+          ) : (
+            <>
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                    Reopen…
+                  </Button>
+                }
+                title={`Reopen ${project.name}?`}
+                description="The Project returns to open with its runs, goals and members unchanged."
+                changes={["Project state Done → Open", ...(project.archive ? [`${plural(project.archive.sessionIds.length, "archived session")} keep reading Archived until you restore them`] : [])]}
+                unchanged={["No file moves", "Every run, goal and member"]}
+                confirmLabel="Reopen"
+                onConfirm={() => reopenProject(project.id)}
+              />
+              <Button size="sm" variant="outline" data-done-archive-trigger onClick={() => openSheet({ kind: "done-archive", projectId: project.id })}>
+                <Archive aria-hidden="true" data-icon="inline-start" />
+                Done / Archive…
+              </Button>
+            </>
+          )
         }
       />
       <PageBody>
         <InlineError message={reopen.error} />
         {project.state === "done" ? (
-          <Notice
-            tone="info"
-            title={status === "archived" ? "Done and archived" : "Done"}
-            actions={
-              <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "done-archive", projectId: project.id })}>
-                Open Done / Archive
-              </Button>
-            }
-          >
+          <p className="text-sm text-muted-foreground">
             {status === "archived"
-              ? `${plural(project.archive!.sessionIds.length, "session")} archived. Remaining offers stay on the Done / Archive sheet; Reopen to start new runs.`
-              : "Archive and the trash offers wait on the Done / Archive sheet; each is approved on its own. Reopen to start new runs."}
-          </Notice>
+              ? `${plural(project.archive!.sessionIds.length, "session")} archived; the remaining offers stay on the Done / Archive sheet. Reopen to start new runs.`
+              : "Archive and the trash offers wait on the Done / Archive sheet, each approved on its own. Reopen to start new runs."}
+          </p>
         ) : null}
+        <RunsSection project={project} />
+        <GoalsSection project={project} channels={projectChannels(catalog, project.rigIds)} />
         <SubjectsSection project={project} />
         <RigsSection project={project} />
-        <GoalsSection project={project} channels={projectChannels(catalog, project.rigIds)} />
         <CandidatesSection project={project} />
-        <RunsSection project={project} />
         <PlanningSection project={project} />
         <ArchivedSection project={project} />
         <TrashSection project={project} />
@@ -147,6 +135,7 @@ function MarkDoneButton({ project }: { project: Project }) {
   const [open, setOpen] = useState(false)
   const blockers = useStore((s) => markDoneBlockers(s.catalog, project))
   const done = useCommitError()
+  const reasonId = useId()
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
@@ -157,15 +146,13 @@ function MarkDoneButton({ project }: { project: Project }) {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Mark {project.name} Done?</DialogTitle>
-            <DialogDescription>
-              {blockers.length > 0
-                ? `Every run outside the Trash must be Complete first. Complete each run below, or move it to the Project's Trash.`
-                : "Done opens the Done / Archive sheet. No file moves until you approve an offer there, and you can Reopen at any time."}
-            </DialogDescription>
+            <DialogDescription>Done opens the Done / Archive sheet. No file moves until you approve an offer there, and you can Reopen at any time.</DialogDescription>
           </DialogHeader>
           {blockers.length > 0 ? (
             <div className="space-y-2 text-sm">
-              <Notice tone="refusal" title={`Mark Done refused: ${plural(blockers.length, "run")} not Complete`} />
+              <Notice tone="refusal" title={`Mark Done refused: ${plural(blockers.length, "run")} not Complete`}>
+                <p id={reasonId}>Complete each run below, or move it to the Project&apos;s Trash.</p>
+              </Notice>
               <ul className="divide-y divide-separator rounded-[0.3125rem] border border-separator">
                 {blockers.map((run) => (
                   <BlockerRow key={run.id} run={run} onNavigate={() => setOpen(false)} />
@@ -184,13 +171,11 @@ function MarkDoneButton({ project }: { project: Project }) {
               {blockers.length > 0 ? "Close" : "Cancel"}
             </Button>
             <Button
+              disabled={blockers.length > 0}
+              focusableWhenDisabled
+              aria-describedby={blockers.length > 0 ? reasonId : undefined}
               onClick={() => {
-                if (
-                  done.run(() => {
-                    const result = markProjectDone(project.id)
-                    return result
-                  })
-                ) {
+                if (done.run(() => markProjectDone(project.id))) {
                   setOpen(false)
                   openSheet({ kind: "done-archive", projectId: project.id })
                 }
@@ -205,12 +190,15 @@ function MarkDoneButton({ project }: { project: Project }) {
   )
 }
 
+/** A run that keeps Mark Done refused, with its way out. Complete on a run with open steps previews them inline first. */
 function BlockerRow({ run, onNavigate }: { run: Run; onNavigate: () => void }) {
   const state = useStore((s) => s)
   const pipeline = runPipeline(state, run)
   const project = state.catalog.projects[run.projectId]
   const subject = project?.subjects.find((s) => s.id === run.subjectId)
   const action = useCommitError()
+  const [preview, setPreview] = useState(false)
+  const open = pipeline.steps.slice(0, 5).filter((s) => s.state !== "done")
   return (
     <li className="space-y-1 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -220,19 +208,42 @@ function BlockerRow({ run, onNavigate }: { run: Run; onNavigate: () => void }) {
             {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)}
           </span>
         </div>
-        <GateLabel state={pipeline.current.state} label={`At ${pipeline.current.label}: ${pipeline.current.status}`} />
+        <GateLabel state={pipeline.current.state} label={`${GATE_LABEL[pipeline.current.state]} at ${pipeline.current.label}: ${pipeline.current.status}`} />
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: pipeline.current.id }} onClick={onNavigate} />}>
-          Open run
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => action.run(() => completeRun(run.id))}>
-          Complete<span className="sr-only"> {run.name}</span>
-        </Button>
-        <Button size="sm" variant="destructive" onClick={() => action.run(() => trashRun(run.id))}>
-          Move to Trash<span className="sr-only"> {run.name}</span>
-        </Button>
-      </div>
+      {preview ? (
+        <div className="space-y-1.5 rounded-[0.3125rem] border border-separator bg-muted/40 px-2.5 py-2 text-xs">
+          <p className="font-medium">Complete {run.name} with {plural(open.length, "open step")}?</p>
+          <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+            {open.map((s) => (
+              <li key={s.id}>
+                {s.label} stays {GATE_LABEL[s.state]}: {s.items.find((i) => i.met === false)?.detail ?? s.status}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground">Nothing is removed; Reopen returns the run to {pipeline.current.label}.</p>
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => setPreview(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => action.run(() => completeRun(run.id))}>
+              Complete anyway<span className="sr-only"> {run.name}</span>
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: pipeline.current.id }} onClick={onNavigate} />}>
+            Open run
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => (open.length > 0 ? setPreview(true) : action.run(() => completeRun(run.id)))}>
+            Complete{open.length > 0 ? "…" : ""}
+            <span className="sr-only"> {run.name}</span>
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => action.run(() => trashRun(run.id))}>
+            Move to Trash<span className="sr-only"> {run.name}</span>
+          </Button>
+        </div>
+      )}
       <InlineError message={action.error} />
     </li>
   )

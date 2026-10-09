@@ -3,7 +3,7 @@
  * list + detail, step indicator and the pre-created placeholder page.
  */
 import { Check, ChevronRight } from "lucide-react"
-import { useEffect, type ReactNode } from "react"
+import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 const APP_TITLE = "PlateVault prototype"
@@ -51,15 +51,32 @@ export interface PageHeaderProps {
 /**
  * Harness v4: a pane header, not a web page header. One compact bar: an
  * optional path (the eyebrow, rendered inline as a path control before the
- * title, never as a kicker above it), the title at 15 px, meta badges, and
- * actions on the right; the description is a one-line caption. Level 1 sticks
- * to the top of its pane so the title and actions never scroll away.
+ * title, never as a kicker above it), the title at 17 px, meta badges, and
+ * actions on the right; the description is a one-line caption (11 px) that
+ * truncates, with the whole text in its tooltip. Level 1 sticks to the top
+ * of its pane so the title and actions never scroll away, and publishes its
+ * height as --pane-header-h so focused controls scroll clear of it.
  */
 export function PageHeader({ title, description, eyebrow, meta, actions, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(title, level)
+  const ref = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const header = ref.current
+    const pane = header?.closest<HTMLElement>("#main")
+    if (level !== 1 || !header || !pane) return
+    const update = () => pane.style.setProperty("--pane-header-h", `${header.offsetHeight}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(header)
+    return () => {
+      observer.disconnect()
+      pane.style.removeProperty("--pane-header-h")
+    }
+  }, [level])
   const Heading = level === 1 ? "h1" : "h2"
   return (
     <header
+      ref={ref}
       data-chrome
       className={cn(
         "flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-5",
@@ -75,10 +92,14 @@ export function PageHeader({ title, description, eyebrow, meta, actions, classNa
               <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
             </span>
           ) : null}
-          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-sm")}>{title}</Heading>
+          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-xl" : "text-lg")}>{title}</Heading>
           {meta ? <span className="ml-1 flex flex-wrap items-center gap-2">{meta}</span> : null}
         </div>
-        {description ? <p className="mt-0.5 max-w-[80ch] text-[0.75rem] leading-4 text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={typeof description === "string" ? description : undefined}>
+            {description}
+          </p>
+        ) : null}
       </div>
       {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
     </header>
@@ -96,6 +117,7 @@ export interface SectionProps {
   id?: string
 }
 
+/** A pane section: an h2 at 15 px (h3 at 13 px) with a one-line caption at 11 px; actions sit beside the heading. */
 export function Section({ title, description, actions, children, className, level = 2, id }: SectionProps) {
   const Heading = level === 2 ? "h2" : "h3"
   return (
@@ -103,10 +125,10 @@ export function Section({ title, description, actions, children, className, leve
       <div className="flex flex-wrap items-end justify-between gap-2" data-chrome>
         {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
         <div className="min-w-0 flex-1">
-          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-sm" : "text-[0.75rem] text-muted-foreground")}>
+          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-lg" : "text-sm")}>
             {title}
           </Heading>
-          {description ? <p className="mt-0.5 max-w-[80ch] text-[0.75rem] leading-4 text-pretty text-muted-foreground">{description}</p> : null}
+          {description ? <p className="mt-0.5 max-w-[80ch] text-xs text-pretty text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-1.5 self-start">{actions}</div> : null}
       </div>

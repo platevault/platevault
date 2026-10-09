@@ -19,6 +19,7 @@ import {
   sessionsNeedingWork,
   sessionTargetId,
   type StepLink,
+  workingContent,
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
 import type { Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
@@ -119,9 +120,13 @@ export function filterCounts(rows: SessionRow[]): Record<SessionFilter, number> 
   }
 }
 
-/** Review a candidate's Unreviewed frames: the open run that offers it, else the Project's candidates. */
+/**
+ * Review a candidate's Unreviewed frames. A run's Review lists only its members, so the run is used only when
+ * the session is a member of its working content; a candidate that no run holds yet is reviewed in the
+ * Project's candidate review (PIX-FR-18), as Home's Next does.
+ */
 export function reviewLink(catalog: Catalog, projectId: ProjectId, sessionId: SessionId): StepLink {
-  const run = Object.values(catalog.runs).find((r) => r.projectId === projectId && !r.trashedAt && r.completion === "open" && runCandidates(catalog, r).some((c) => c.session.id === sessionId))
+  const run = Object.values(catalog.runs).find((r) => r.projectId === projectId && !r.trashedAt && r.completion === "open" && (workingContent(r)?.sessions ?? []).some((s) => s.sessionId === sessionId))
   return run ? runStepLink(run, "review", { filter: "unreviewed" }) : projectLink(projectId, { candidates: "unreviewed" })
 }
 

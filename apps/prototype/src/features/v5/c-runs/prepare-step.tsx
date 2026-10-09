@@ -355,9 +355,9 @@ function PreparedLists({ prep }: { prep: Preparation }) {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       <div className="space-y-1">
-        <h4 className="text-[0.75rem] font-medium">
+        <h3 className="text-xs font-medium">
           Prepared · {prepared.length} of {prep.entryCount}
-        </h4>
+        </h3>
         <details className="rounded-md border px-3 py-1.5 text-[0.75rem]">
           <summary className="cursor-default text-muted-foreground">{prepared.length === 0 ? "Nothing was prepared" : `${plural(prepared.length, "entry", "entries")} in ${fileName(prep.folderPath)}/`}</summary>
           <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto font-mono">
@@ -368,11 +368,11 @@ function PreparedLists({ prep }: { prep: Preparation }) {
         </details>
       </div>
       <div className="space-y-1">
-        <h4 className="text-[0.75rem] font-medium">Blocked · {prep.blocked.length}</h4>
+        <h3 className="text-xs font-medium">Blocked · {prep.blocked.length}</h3>
         {prep.blocked.length === 0 ? (
           <p className="text-[0.75rem] text-muted-foreground">No input was blocked.</p>
         ) : (
-          <ul className="max-h-48 space-y-0.5 overflow-y-auto rounded-md border px-3 py-1.5 text-[0.75rem]" data-blocked-list>
+          <ul tabIndex={0} aria-label={`Blocked inputs, ${prep.blocked.length}`} className="max-h-48 space-y-0.5 overflow-y-auto rounded-md border px-3 py-1.5 text-[0.75rem]" data-blocked-list>
             {prep.blocked.map((b) => (
               <li key={`${b.path}-${b.reason}`} className="flex flex-wrap gap-x-2">
                 <span className="font-mono">{fileName(b.path)}</span>

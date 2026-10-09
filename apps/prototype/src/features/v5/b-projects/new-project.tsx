@@ -262,7 +262,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold">Rigs</legend>
-          <p className="text-xs text-muted-foreground">Every rig taking part. Candidates are sessions of a subject on one of these rigs; each run uses exactly one (D-W37).</p>
+          <p className="text-xs text-muted-foreground">Every rig taking part; each run uses exactly one.</p>
           <ul className="divide-y divide-separator rounded-md border">
             {rigs.map((rig) => {
               const id = `${ids.rigs}-${rig.id}`

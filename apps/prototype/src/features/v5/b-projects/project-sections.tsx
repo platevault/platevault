@@ -5,7 +5,7 @@
  * section edits a run's membership (PRJ-FR-05, PRJ-FR-08).
  */
 import { Link } from "@tanstack/react-router"
-import { CircleCheck, FolderKanban, MapPinOff, Play, Trash2, TriangleAlert } from "lucide-react"
+import { ChevronDown, ChevronRight, CircleCheck, FolderKanban, MapPinOff, Play, Trash2, TriangleAlert } from "lucide-react"
 import { useId, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
@@ -20,6 +20,7 @@ import { GateLabel, StepRail, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import {
   formatHours,
+  GATE_LABEL,
   findPanel,
   goalProgress,
   groupPipeline,
@@ -124,7 +125,7 @@ export function SubjectsSection({ project }: { project: Project }) {
     <Section
       id="subjects"
       title={`Subjects (${project.subjects.length})`}
-      description="Targets or mosaics. A mosaic has explicit panels by centre and rotation; each panel gets its own goals and its own panel run."
+      description="Targets or mosaics; each mosaic panel gets its own goals and panel run."
       actions={
         editable && !adding ? (
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
@@ -150,12 +151,12 @@ export function SubjectsSection({ project }: { project: Project }) {
                 )}
               </th>
               <td className={TD}>{subject.mosaic ? `Mosaic of ${target?.name ?? "its Target"}` : "Target"}</td>
-              <td className={`${TD} tabular-nums`}>{centre ? `${formatRa(centre.ra)} ${formatDec(centre.dec)}` : <span className="text-muted-foreground">Position unknown</span>}</td>
+              <td className={`${TD} whitespace-nowrap tabular-nums`}>{centre ? `${formatRa(centre.ra)} ${formatDec(centre.dec)}` : <span className="text-muted-foreground">Position unknown</span>}</td>
               <td className={TD}>
                 {subject.mosaic ? (
                   <ul className="space-y-0.5 text-xs tabular-nums">
                     {subject.mosaic.panels.map((p) => (
-                      <li key={p.id}>
+                      <li key={p.id} className="whitespace-nowrap">
                         <span className="font-medium">{panelLabel(p)}</span> {formatRa(p.ra)} {formatDec(p.dec)} · {formatDegrees(p.rotationDeg, 0)}
                       </li>
                     ))}
@@ -226,7 +227,7 @@ export function RigsSection({ project }: { project: Project }) {
   const editable = project.state === "open"
   const chosen = others.find((r) => r.id === choice) ?? others[0]
   return (
-    <Section id="rigs" title={`Rigs (${project.rigIds.length})`} description="Every rig taking part. Each run uses exactly one, so no run mixes equipment. Adding or removing a rig changes candidates only.">
+    <Section id="rigs" title={`Rigs (${project.rigIds.length})`} description="Each run uses exactly one rig; adding or removing one changes candidates only.">
       <SimpleTable caption={`Rigs of ${project.name}`} headers={["Rig", "Camera", "Filters", "Field of view", "Candidates", "Runs", ""]}>
         {project.rigIds.map((id) => {
           const rig = catalog.opticalTrains[id]
@@ -240,7 +241,7 @@ export function RigsSection({ project }: { project: Project }) {
               </th>
               <td className={TD}>{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Unknown"}</td>
               <td className={TD}>{rig?.filters.map((f) => f.name).join(", ") || <span className="text-muted-foreground">None</span>}</td>
-              <td className={`${TD} tabular-nums`}>{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : <span className="text-muted-foreground">Unknown</span>}</td>
+              <td className={`${TD} whitespace-nowrap tabular-nums`}>{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : <span className="text-muted-foreground">Unknown</span>}</td>
               <td className={`${TD} tabular-nums`}>{candidates.filter((c) => c.rigId === id).length}</td>
               <td className={`${TD} text-xs`}>{users.length > 0 ? users.join(", ") : <span className="text-muted-foreground">None</span>}</td>
               <td className={`${TD} text-right`}>
@@ -301,7 +302,7 @@ export function GoalsSection({ project, channels }: { project: Project; channels
     <Section
       id="goals"
       title="Goals"
-      description="Per subject and channel, and per panel of a mosaic. “in project” counts frames in the Project's runs; “captured” adds every candidate. Goals never block a run and never mark the Project Done."
+      description="Per subject, panel and channel. “In project” counts the Project's runs, “captured” adds every candidate; goals never block a run."
       actions={
         editable && !editing ? (
           <Button size="sm" variant="outline" onClick={() => setEditing(project.goals.map((g) => ({ ...g })))}>
@@ -560,36 +561,67 @@ export function CandidatesTable({ project, filter }: { project: Project; filter:
   )
 }
 
+/**
+ * Candidates, summarised: counts, a link to the candidate review and a disclosure for the table, so the
+ * Project's runs and goals stay first on the page.
+ */
 export function CandidatesSection({ project }: { project: Project }) {
   const [filter, setFilter] = useState<CandidateFilter>("all")
+  const [open, setOpen] = useState(false)
+  const tableId = useId()
+  const rows = useStore((s) => candidateRows(s, project))
   const flagged = useStore((s) =>
     projectRuns(s.catalog, project.id).flatMap((run) => runRefresh(s.catalog, run).noLongerMatching.map((sessionId) => ({ run, session: s.catalog.sessions[sessionId] }))),
   )
   const catalog = useStore((s) => s.catalog)
+  const unreviewedFrames = rows.reduce((n, r) => n + r.unreviewed, 0)
+  const ready = rows.filter((r) => r.runs.length === 0).length
   return (
     <Section
       id="candidates"
-      title="Candidates"
-      description="Derived, never assigned: every session whose confirmed Target is a subject and whose rig is one of the Project's rigs. Sessions join the Project only through a run."
+      title={`Candidates (${rows.length})`}
+      description="Sessions of a subject on one of the Project's rigs; they join the Project only through a run."
       actions={
-        <div className="flex gap-1" role="group" aria-label="Candidates filter">
-          {(
-            [
-              ["all", "All"],
-              ["unreviewed", "Unreviewed"],
-              ["ready", "Ready to add to a run"],
-            ] as const
-          ).map(([value, label]) => (
-            <Button key={value} size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>
-              {label}
-            </Button>
-          ))}
-        </div>
+        rows.length > 0 ? (
+          <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={tableId} onClick={() => setOpen((o) => !o)}>
+            {open ? <ChevronDown aria-hidden="true" data-icon="inline-start" /> : <ChevronRight aria-hidden="true" data-icon="inline-start" />}
+            {open ? "Hide candidates" : "Show candidates"}
+          </Button>
+        ) : null
       }
     >
-      <CandidatesTable project={project} filter={filter} />
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span className="tabular-nums">
+          {rows.length === 0 ? "No candidate sessions yet." : `${plural(rows.length, "session")} · ${plural(ready, "session")} in no run yet`}
+        </span>
+        {unreviewedFrames > 0 ? (
+          <Link to="/projects/$projectId" params={{ projectId: project.id }} search={{ candidates: "unreviewed" } as never} className="text-link underline-offset-2 hover:underline">
+            Review {plural(unreviewedFrames, "new frame")}
+          </Link>
+        ) : rows.length > 0 ? (
+          <span className="text-muted-foreground">Every candidate frame has a quality decision.</span>
+        ) : null}
+      </p>
+      {open ? (
+        <div id={tableId} className="space-y-2">
+          <div className="flex gap-1" role="group" aria-label="Candidates filter">
+            {(
+              [
+                ["all", "All"],
+                ["unreviewed", "Unreviewed"],
+                ["ready", "In no run yet"],
+              ] as const
+            ).map(([value, label]) => (
+              <Button key={value} size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>
+                {label}
+              </Button>
+            ))}
+          </div>
+          <CandidatesTable project={project} filter={filter} />
+        </div>
+      ) : null}
       {flagged.length > 0 ? (
-        <Notice tone="warning" title={`${plural(flagged.length, "member")} no longer matches its subject`}>
+        <Notice tone="warning" title={`${plural(flagged.length, "member")} no longer ${flagged.length === 1 ? "matches its" : "match their"} subject`}>
           <ul className="space-y-1">
             {flagged.map(({ run, session }) => (
               <li key={`${run.id}|${session?.id}`}>
@@ -619,7 +651,7 @@ export function RunsSection({ project }: { project: Project }) {
     <Section
       id="runs"
       title="Runs"
-      description="Each run on its six-step rail with its one Next action. A mosaic's run group lists its panel runs together."
+      description="Each run with its steps and its Next; a mosaic's run group lists its panel runs together."
       actions={
         project.state === "open" ? (
           <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
@@ -636,7 +668,7 @@ export function RunsSection({ project }: { project: Project }) {
           description="A run takes one subject and one rig; its candidates start selected."
           action={
             project.state === "open" ? (
-              <Button size="sm" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
+              <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
                 Start a processing run
               </Button>
             ) : (
@@ -648,6 +680,7 @@ export function RunsSection({ project }: { project: Project }) {
         <ul className="divide-y divide-separator rounded-[0.3125rem] border border-separator">
           {runs.map((run) => {
             const pipeline = runPipeline(state, run)
+            const held = pipeline.blocker ? pipeline.steps.find((s) => s.id === pipeline.blocker!.step) : undefined
             const subject = project.subjects.find((s) => s.id === run.subjectId)
             return (
               <li key={run.id} className="grid gap-x-4 gap-y-1 px-3 py-2 lg:grid-cols-[minmax(12rem,1fr)_auto_auto] lg:items-center">
@@ -660,7 +693,7 @@ export function RunsSection({ project }: { project: Project }) {
                   </span>
                   <span className="flex flex-wrap items-center gap-x-1.5 text-[0.6875rem]">
                     <StatusBadge kind="run" value={pipeline.status} />
-                    {pipeline.blocker ? <span className="text-destructive">· Blocked: {pipeline.blocker.message}</span> : null}
+                    {held ? <GateLabel state={held.state} label={`${GATE_LABEL[held.state]} at ${held.label}: ${pipeline.blocker!.message}`} /> : null}
                   </span>
                 </div>
                 <StepRail steps={pipeline.steps} current={pipeline.current.id} label={`Steps of ${run.name}`} />
@@ -743,7 +776,7 @@ export function PlanningSection({ project }: { project: Project }) {
     </Button>
   )
   return (
-    <Section id="planning" title="Planning" description="Tonight for this Project's subjects, with what each goal still needs. A mosaic uses its centre." actions={open}>
+    <Section id="planning" title="Planning" description="Tonight for this Project's subjects and what each goal still needs." actions={open}>
       {!site || !tonight ? (
         <Notice
           tone="info"
@@ -890,7 +923,7 @@ export function TrashSection({ project }: { project: Project }) {
     <Section
       id="trash"
       title={`Trash (${trashed.length})`}
-      description="Runs moved to the Trash: hidden everywhere else, out of goals and totals, nothing moved on disk."
+      description="Hidden everywhere else and out of the totals; nothing moved on disk."
       actions={
         <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
           <Trash2 aria-hidden="true" data-icon="inline-start" />

@@ -1,9 +1,13 @@
 /**
- * S2 Projects list (`/projects`): one row per Project with its subjects, rigs,
- * goal progress ("in project" / "captured"), open runs, stage and one Next
- * action (D-W1, D-W35, D-W48). Done Projects stay behind "Show done".
+ * S2 Projects list (`/projects`): one row per Project with its subjects and
+ * rigs, goal progress ("in project" / "captured"), open runs, stage and one
+ * Next action (D-W1, D-W35, D-W48). Done Projects stay behind "Show done".
+ * Column priority keeps Next in view from 1024 px: subjects and rigs fold
+ * into the Project cell's second line, State and the unmet goal line show
+ * from 64rem of table, Open runs from 52rem, and long cells truncate with
+ * the whole text in their tooltip. Right click opens the row's menu.
  */
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate } from "@tanstack/react-router"
 import { FolderKanban, Plus } from "lucide-react"
 import { useId } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
@@ -11,6 +15,7 @@ import { EmptyState } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
+import { ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from "@/components/ui/context-menu"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { GateLabel, useFollowLink } from "@/app/run-ui"
@@ -52,6 +57,7 @@ export function ProjectsPage() {
       })
   })
   const follow = useFollowLink()
+  const navigate = useNavigate()
   const switchId = useId()
   const shown = rows.filter((r) => showDone || r.project.state === "open")
   const hiddenDone = rows.length - shown.length
@@ -62,18 +68,24 @@ export function ProjectsPage() {
       header: "Project",
       rowHeader: true,
       sortValue: (r) => r.project.name,
-      cell: (r) => (
-        <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="font-medium underline-offset-2 hover:underline">
-          {r.project.name}
-        </Link>
-      ),
+      cell: (r) => {
+        const detail = `${r.subjects.join(", ") || "No subjects"} · ${r.rigs.join(", ") || "No rigs"}`
+        return (
+          <span className="block min-w-0">
+            <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="font-medium underline-offset-2 hover:underline">
+              {r.project.name}
+            </Link>
+            <span className="block max-w-[12rem] truncate text-xs text-muted-foreground @min-[52rem]:max-w-[18rem]" title={detail}>
+              {detail}
+            </span>
+          </span>
+        )
+      },
     },
-    { id: "state", header: "State", sortValue: (r) => projectStatus(r.project), cell: (r) => <StatusBadge kind="project" value={projectStatus(r.project)} /> },
-    { id: "subjects", header: "Subjects", cell: (r) => <span className="block min-w-[11rem] whitespace-normal">{r.subjects.join(", ") || "None"}</span> },
-    { id: "rigs", header: "Rigs", cell: (r) => <span className="block min-w-[10rem] whitespace-normal">{r.rigs.join(", ") || "None"}</span> },
+    { id: "state", header: "State", className: "@max-[64rem]:hidden", sortValue: (r) => projectStatus(r.project), cell: (r) => <StatusBadge kind="project" value={projectStatus(r.project)} /> },
     {
       id: "goals",
-      header: "Goals (in project / captured)",
+      header: "Goals",
       sortValue: (r) => (r.progress.length === 0 ? null : r.progress.filter((p) => p.met).length / r.progress.length),
       cell: (r) => <GoalSummary progress={r.progress} />,
     },
@@ -81,22 +93,23 @@ export function ProjectsPage() {
       id: "runs",
       header: "Open runs",
       align: "right",
+      className: "@max-[52rem]:hidden",
       sortValue: (r) => r.openRuns,
       cell: (r) => (
         <span className="tabular-nums">
           {r.openRuns}
-          {r.groups > 0 ? <span className="block text-[0.6875rem] text-muted-foreground">{plural(r.groups, "run group")}</span> : null}
+          {r.groups > 0 ? <span className="text-xs text-muted-foreground"> · {plural(r.groups, "group")}</span> : null}
         </span>
       ),
     },
-    { id: "stage", header: "Stage", sortValue: (r) => r.stage.label, cell: (r) => <GateLabel state={r.stage.state} label={r.stage.label} /> },
+    { id: "stage", header: "Stage", sortValue: (r) => r.stage.label, cell: (r) => <GateLabel state={r.stage.state} label={r.stage.label} className="whitespace-nowrap" /> },
     {
       id: "next",
       header: "Next",
       cell: (r) =>
         r.next ? (
-          <Button size="sm" variant="outline" title={r.next.reason} onClick={() => follow(r.next!.link)}>
-            {r.next.label}
+          <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" title={`${r.next.label}: ${r.next.reason}`} onClick={() => follow(r.next!.link)}>
+            <span className="truncate">{r.next.label}</span>
             <span className="sr-only"> for {r.project.name}</span>
           </Button>
         ) : (
@@ -104,6 +117,21 @@ export function ProjectsPage() {
         ),
     },
   ]
+
+  const menu = (r: Row) => (
+    <ContextMenuGroup>
+      <ContextMenuLabel>{r.project.name}</ContextMenuLabel>
+      <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id } })}>Open</ContextMenuItem>
+      {r.next ? <ContextMenuItem onClick={() => follow(r.next!.link)}>{r.next.label}</ContextMenuItem> : null}
+      <ContextMenuSeparator />
+      {r.project.state === "open" ? (
+        <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search: { start: "run" } as never })}>Start a processing run…</ContextMenuItem>
+      ) : (
+        <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search: { sheet: "done" } as never })}>Done / Archive…</ContextMenuItem>
+      )}
+      <ContextMenuItem onClick={() => void navigate({ to: "/projects/$projectId/trash", params: { projectId: r.project.id } })}>Open Trash</ContextMenuItem>
+    </ContextMenuGroup>
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -123,13 +151,14 @@ export function ProjectsPage() {
           </>
         }
       />
-      <PageBody>
+      <PageBody className="@container">
         <DataTable
           label="Projects"
           rows={shown}
           columns={columns}
           getRowId={(r) => r.project.id}
           scroll="none"
+          contextMenu={menu}
           empty={
             <EmptyState
               icon={FolderKanban}
@@ -149,17 +178,17 @@ export function ProjectsPage() {
   )
 }
 
-/** Met count plus the first unmet goal's line, with every line in the tooltip and to screen readers. */
+/** Met count plus the first unmet goal's line (from 64rem of table), with every line in the tooltip and to screen readers. */
 function GoalSummary({ progress }: { progress: GoalProgress[] }) {
   if (progress.length === 0) return <span className="text-muted-foreground">No goals</span>
   const met = progress.filter((p) => p.met).length
   const unmet = progress.find((p) => !p.met)
   return (
-    <span className="block max-w-[26rem] whitespace-normal" title={progress.map((p) => p.line).join("\n")}>
+    <span className="block min-w-0" title={progress.map((p) => p.line).join("\n")}>
       <span className="font-medium tabular-nums">
         {met} of {progress.length} met
       </span>
-      {unmet ? <span className="block text-[0.6875rem] text-muted-foreground tabular-nums">{unmet.line}</span> : null}
+      {unmet ? <span className="block max-w-[18rem] truncate text-xs text-muted-foreground tabular-nums @max-[64rem]:hidden">{unmet.line}</span> : null}
       <span className="sr-only">{progress.map((p) => `${p.line}${p.met ? ", goal met" : ""}`).join("; ")}</span>
     </span>
   )

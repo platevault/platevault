@@ -90,7 +90,7 @@ function TargetFinder({ activeId }: { activeId: string }) {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "mx-1 flex h-(--row-h) items-center gap-1.5 rounded-[0.3125rem] px-2 text-sm hover:bg-foreground/[0.06]",
-                  active && "bg-selected text-selected-foreground hover:bg-selected [&_.text-muted-foreground]:text-selected-foreground/85 [&_svg]:text-selected-foreground",
+                  active && "bg-selected text-selected-foreground hover:bg-selected [&_.text-muted-foreground]:text-selected-foreground [&_svg]:text-selected-foreground",
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">
@@ -248,7 +248,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
           />
         </Section>
 
-        <Section id="tgt-fit" title="Fit on your rigs" description="The Target's major axis against the shorter side of each rig's field of view (D-W61).">
+        <Section id="tgt-fit" title="Fit on your rigs" description="The Target's major axis against the shorter side of each rig's field of view.">
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <caption className="sr-only">Fit per rig</caption>

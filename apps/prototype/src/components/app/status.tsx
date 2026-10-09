@@ -98,7 +98,7 @@ export const STATUS = {
     running: s("Running", "info", Loader),
     paused: s("Paused", "neutral", Pause),
     succeeded: s("Finished", "success", Check),
-    partial: s("Partial", "warning", TriangleAlert),
+    partial: s("Partial", "warning", CircleDashed),
     failed: s("Failed", "danger", CircleX),
     canceled: s("Canceled", "muted", CircleSlash),
     interrupted: s("Interrupted", "warning", CircleAlert),
@@ -134,7 +134,8 @@ export const STATUS = {
   preparation: {
     running: s("Running", "info", Loader),
     prepared: s("Prepared", "success", CheckCheck),
-    partial: s("Partial", "warning", TriangleAlert),
+    // Partial reads the same as the step rail's Partial gate: the dashed circle, never the warning triangle.
+    partial: s("Partial", "warning", CircleDashed),
     failed: s("Failed", "danger", CircleX),
     canceled: s("Canceled", "muted", CircleSlash),
     paused: s("Paused", "neutral", Pause),
@@ -211,7 +212,7 @@ export const STATUS = {
   },
   checklist: {
     met: s("Met", "success", Check),
-    partial: s("Partial", "warning", TriangleAlert),
+    partial: s("Partial", "warning", CircleDashed),
     missing: s("Missing", "danger", CircleX),
     unknown: s("Unknown", "muted", CircleHelp),
   },

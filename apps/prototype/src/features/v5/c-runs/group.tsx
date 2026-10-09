@@ -217,8 +217,8 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
       >
         <ul className="grid gap-1 text-sm">
           {live.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-x-3">
-              <Link className="w-56 text-link underline-offset-4 hover:underline" to="/projects/$projectId/runs/$runId/$step" params={{ projectId: r.projectId, runId: r.id, step: "select" }}>
+            <li key={r.id} className="flex min-h-6 flex-wrap items-center gap-x-3">
+              <Link className="inline-flex min-h-6 w-56 items-center text-link underline-offset-4 hover:underline" to="/projects/$projectId/runs/$runId/$step" params={{ projectId: r.projectId, runId: r.id, step: "select" }}>
                 {r.name}
               </Link>
               <span className="text-[0.75rem] text-muted-foreground">

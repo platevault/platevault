@@ -14,8 +14,7 @@
  * immediately before it moves.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
-import { type ReactNode, useState } from "react"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
+import { type ReactNode, useId, useState } from "react"
 import { PathText } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
@@ -41,7 +40,13 @@ export function DoneArchiveSheet() {
   const project = useStore((s) => (sheet?.kind === "done-archive" ? s.catalog.projects[sheet.projectId] : undefined))
   return (
     <Sheet open={open} onOpenChange={(next) => !next && closeSheet()}>
-      <SheetContent side="right" className="w-[44rem] max-w-[94vw] gap-0" data-sheet="done-archive">
+      <SheetContent
+        side="right"
+        className="w-[52rem] gap-0"
+        data-sheet="done-archive"
+        // Opened by a link or a menu, the invoker is gone: focus returns to the Project's Done / Archive button, else its h1.
+        finalFocus={() => document.querySelector<HTMLElement>("[data-done-archive-trigger]") ?? document.querySelector<HTMLElement>("#main h1") ?? true}
+      >
         {open && project ? (
           <DoneArchive project={project} />
         ) : open ? (
@@ -52,6 +57,60 @@ export function DoneArchiveSheet() {
         ) : null}
       </SheetContent>
     </Sheet>
+  )
+}
+
+/**
+ * An offer's approval, inline in the offer rather than a second dialog over the sheet: the trigger opens the
+ * preview (what this will do, what stays) right under it, with Cancel and the confirming action.
+ */
+function OfferConfirm({ trigger, title, changes, unchanged, confirmLabel, destructive = false, onConfirm }: { trigger: string; title: string; changes: string[]; unchanged: string[]; confirmLabel: string; destructive?: boolean; onConfirm: () => void }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  if (!open) {
+    return (
+      <Button size="sm" variant={destructive ? "destructive" : "default"} aria-expanded={false} aria-controls={id} onClick={() => setOpen(true)}>
+        {trigger}
+      </Button>
+    )
+  }
+  return (
+    <div id={id} role="group" aria-label={title} className="w-full basis-full space-y-2 rounded-[0.3125rem] border border-separator bg-muted/40 p-3 text-sm">
+      <p className="font-medium">{title}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">This will</p>
+          <ul className="list-disc space-y-0.5 pl-4 text-xs">
+            {changes.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Unchanged</p>
+          <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+            {unchanged.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="flex justify-end gap-1.5">
+        <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          variant={destructive ? "destructive" : "default"}
+          onClick={() => {
+            onConfirm()
+            setOpen(false)
+          }}
+        >
+          {confirmLabel}
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -174,13 +233,12 @@ function ArchiveOffer({ project, plan, operationId }: { project: Project; plan: 
   return (
     <SheetSection
       title={title}
-      description="The Project's member sessions transfer to the archive location along the naming templates. A session that a run in another Project not marked Done uses stays at its path. Run membership and totals stay as they are."
+      description="Member sessions transfer to the archive location along the naming templates; a session another open Project's run uses stays at its path."
       actions={
         !nothing && !plan.blocked ? (
-          <ConfirmDialog
-            trigger={<Button size="sm">Archive…</Button>}
-            title={`Archive ${plural(plan.rows.length, "session")} of ${project.name}?`}
-            description={`To ${plan.destination?.displayName ?? "the archive"} on ${plan.volume?.name ?? "its volume"}.`}
+          <OfferConfirm
+            trigger="Archive…"
+            title={`Archive ${plural(plan.rows.length, "session")} of ${project.name} to ${plan.destination?.displayName ?? "the archive"} on ${plan.volume?.name ?? "its volume"}?`}
             changes={[
               `Transfers ${plural(plan.rows.length, "session")} (${plural(plan.rows.reduce((n, r) => n + r.moves.length, 0), "frame")}, ${formatBytes(plan.sizeBytes)}) to ${plan.destination?.path ?? "the archive"} along the naming template`,
               "Verifies every frame's SHA-256 before it moves; a session moves whole or stays",
@@ -191,10 +249,7 @@ function ArchiveOffer({ project, plan, operationId }: { project: Project; plan: 
               "Run membership and totals in every Project",
             ]}
             confirmLabel="Archive"
-            onConfirm={() => {
-              rememberApproval(project.id, "archive", startArchiveTransfer(project.id, plan.rows, "archive"))
-              return { ok: true }
-            }}
+            onConfirm={() => rememberApproval(project.id, "archive", startArchiveTransfer(project.id, plan.rows, "archive"))}
           />
         ) : null
       }
@@ -263,26 +318,20 @@ function TrashOfferSection({ project, offer, operationId }: { project: Project; 
       description={copy.description}
       actions={
         offer.count > 0 ? (
-          <ConfirmDialog
-            trigger={
-              <Button size="sm" variant="destructive">
-                Move to Trash…
-              </Button>
-            }
-            title={`${offer.title}?`}
-            description={`From ${project.name}. Files go to the OS Trash only.`}
+          <OfferConfirm
+            trigger="Move to Trash…"
+            destructive
+            title={`${offer.title} from ${project.name}? Files go to the OS Trash only.`}
             changes={[
               `Moves ${offer.count === 1 ? "1 item" : `${offer.count} items`} (${plural(offer.items.length, "file")}, ${formatBytes(offer.sizeBytes)} reclaimed) to the OS Trash`,
               "Re-verifies each item immediately before it moves; a refused item stays in place with its reason",
               ...(offer.refusals.length > 0 ? [`Leaves the ${plural(offer.refusals.length, "refused item")} listed below in place`] : []),
             ]}
             unchanged={[...copy.unchanged, "Nothing is deleted permanently"]}
-            tone="destructive"
             confirmLabel="Move to Trash"
             onConfirm={() => {
               const approval: DoneApproval = offer.kind
               rememberApproval(project.id, approval, moveToOsTrash({ kind: offer.kind, title: offer.title, projectId: project.id, runIds: [], items: offer.items, href: `/projects/${project.id}` }))
-              return { ok: true }
             }}
           />
         ) : null

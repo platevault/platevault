@@ -24,8 +24,9 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_6%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-foreground/[0.07] hover:text-foreground aria-expanded:bg-foreground/[0.09] aria-expanded:text-foreground",
+        // The one destructive style: a tinted fill with --destructive-foreground text (4.6:1 or better over the fill on every surface).
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30",
+          "bg-destructive/10 text-destructive-foreground hover:bg-destructive/15 dark:bg-destructive/20 dark:hover:bg-destructive/30",
         link: "text-link underline-offset-4 hover:underline",
       },
       size: {

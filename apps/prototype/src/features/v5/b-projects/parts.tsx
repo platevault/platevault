@@ -284,7 +284,7 @@ export function PanelsEditor({ mosaic, onChange, fov, size, fovLabel }: { mosaic
         <Input id={nameId} value={mosaic.name} onChange={(event) => onChange({ ...mosaic, name: event.target.value })} />
       </div>
       <p className="text-xs text-muted-foreground tabular-nums">
-        Centre {formatRa(mosaic.centre.ra)} {formatDec(mosaic.centre.dec)}. Tonight&apos;s windows use this centre (D-W63). Layouts use {fovLabel}.
+        Centre {formatRa(mosaic.centre.ra)} {formatDec(mosaic.centre.dec)}. Tonight&apos;s windows use this centre. Layouts use {fovLabel}.
       </p>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lay out panels">
         <span className="text-xs text-muted-foreground">Lay out</span>

@@ -1029,6 +1029,11 @@ function demoSeed(): SeedData {
   }
   // The M 31 run's prepared links were cleaned up.
   for (const file of prepM31.files) delete disk.files[fileKey(file.volumeId, file.path)]
+  // Refusals the Done / Archive sheet shows: one rejected M 31 L frame and one duplicate copy of an R frame
+  // on Spare lost write permission, so each offer lists a refused item with its reason (D-W57).
+  const lockedReject = catalog.assets[s.m31.L.assetIds[2]!]?.copies[0]?.path
+  const lockedDuplicate = s.m31.R.assetIds.map((id) => catalog.assets[id]?.copies.find((c) => c.path.startsWith("/Volumes/Spare/"))?.path).find((p) => p !== undefined)
+  disk = { ...disk, readOnlyPaths: [lockedReject, lockedDuplicate].filter((p): p is string => p !== undefined) }
 
   // The NAS scan is running when the demo loads; it reads one file at a time (D-W12).
   const nasPending = nasFiles().map((f) => f.path)

@@ -28,6 +28,7 @@ import {
   formatHours,
   goalProgress,
   homeTopLine,
+  liveLightSessions,
   planningSite,
   projectNext,
   projectStage,
@@ -68,13 +69,22 @@ export function HomePage() {
         title="Home"
         description={
           <span data-home-top-line>
-            <Link to="/sessions" search={{ filter: "needs-target" }} className="text-link underline-offset-2 hover:underline">
-              {plural(top.needsTarget, "session")} need{top.needsTarget === 1 ? "s" : ""} a Target
-            </Link>
+            {/* A zero count is a fact, not a destination: only counts above zero open Sessions filtered. */}
+            {top.needsTarget > 0 ? (
+              <Link to="/sessions" search={{ filter: "needs-target" }} className="text-link underline-offset-2 hover:underline">
+                {plural(top.needsTarget, "session")} need{top.needsTarget === 1 ? "s" : ""} a Target
+              </Link>
+            ) : (
+              <span>No session needs a Target</span>
+            )}
             <span aria-hidden="true"> · </span>
-            <Link to="/sessions" search={{ filter: "not-in-project" }} className="text-link underline-offset-2 hover:underline">
-              {formatCount(top.notInProject)} not in any Project
-            </Link>
+            {top.notInProject > 0 ? (
+              <Link to="/sessions" search={{ filter: "not-in-project" }} className="text-link underline-offset-2 hover:underline">
+                {formatCount(top.notInProject)} not in any Project
+              </Link>
+            ) : (
+              <span>none outside a Project</span>
+            )}
           </span>
         }
       />
@@ -354,7 +364,9 @@ function NewSessionsSection({ state, className }: { state: PrototypeState; class
       ) : null}
       {error ? <Notice tone="refusal" title="Not done" actions={<Button size="xs" variant="ghost" onClick={() => setError(null)}>Dismiss</Button>}>{error}</Notice> : null}
       {total === 0 ? (
-        <p className="text-sm text-muted-foreground">Every session has a Target and a Project, its frames are reviewed and it is in a run.</p>
+        <p className="text-sm text-muted-foreground">
+          {liveLightSessions(catalog).length === 0 ? "No light sessions in the library yet. Import a card or a folder to start." : "Every session has a Target and a Project, its frames are reviewed and it is in a run."}
+        </p>
       ) : (
         <div className="grid gap-x-6 gap-y-4 2xl:grid-cols-2">
           <WorkGroup title="Needs a Target" count={work.needsTarget.length} filter="needs-target">
@@ -391,7 +403,7 @@ function NewSessionsSection({ state, className }: { state: PrototypeState; class
             <More total={work.needsTarget.length} filter="needs-target" />
           </WorkGroup>
 
-          <WorkGroup title="Not in a Project" count={work.notInProject.length} filter="not-in-project">
+          <WorkGroup title="Not in any Project" count={work.notInProject.length} filter="not-in-project">
             {work.notInProject.slice(0, ROWS_PER_GROUP).map((session) => (
               <WorkRow
                 key={session.id}
@@ -536,7 +548,7 @@ function TonightSection({ state, className }: { state: PrototypeState; className
           {withWindow.map((r) => (
             <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1">
               <span className="min-w-0 truncate" title={r.projects.join(", ") || "★ favourite"}>
-                {r.favourite ? <span aria-label="Favourite">★ </span> : null}
+                {r.favourite ? <span role="img" aria-label="Favourite">★ </span> : null}
                 {r.name}
               </span>
               <span className="text-xs tabular-nums">
@@ -548,7 +560,7 @@ function TonightSection({ state, className }: { state: PrototypeState; className
           {without.map((r) => (
             <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1 text-muted-foreground">
               <span className="min-w-0 truncate">
-                {r.favourite ? <span aria-label="Favourite">★ </span> : null}
+                {r.favourite ? <span role="img" aria-label="Favourite">★ </span> : null}
                 {r.name}
               </span>
               <span className="text-xs">No window tonight</span>
@@ -630,7 +642,7 @@ function TargetStatusSection({ state, className }: { state: PrototypeState; clas
         columns={columns}
         getRowId={(r) => r.key}
         scroll="none"
-        empty={<p className="px-3 py-3 text-sm text-muted-foreground">Every goal of an open Project is met.</p>}
+        empty={<p className="px-3 py-3 text-sm text-muted-foreground">{Object.values(state.catalog.projects).some((p) => p.state === "open" && p.goals.length > 0) ? "Every goal of an open Project is met." : "No open Project has goals yet."}</p>}
       />
     </Section>
   )

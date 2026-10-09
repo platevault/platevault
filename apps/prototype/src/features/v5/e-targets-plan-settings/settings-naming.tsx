@@ -185,26 +185,30 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
         </div>
         <ul aria-labelledby={ids.chips} aria-describedby={`${ids.chips}-hint`} className="flex min-h-9 flex-wrap items-center gap-1 rounded-md border bg-background px-2 py-1.5">
           {chips.length === 0 ? <li className="text-xs text-muted-foreground">Empty: files go straight into the location.</li> : null}
-          {chips.map((chip, index) => (
-            <li key={index}>
-              <span
-                role="button"
+          {chips.map((chip, index) => {
+            const text = chip.kind === "token" ? `{${chip.token}}` : chip.kind === "sep" ? "/" : chip.value
+            return (
+              // A chip is a focusable list item named from its visible text first ("{date}, Observing night token");
+              // the keyboard hint describes it, and Delete removes it (the × is a pointer shortcut only).
+              <li
+                key={index}
                 tabIndex={0}
                 data-chip-index={index}
-                aria-label={chip.kind === "token" ? `Token ${tokenLabel(chip.token)}` : chip.kind === "sep" ? "Folder separator" : `Text ${chip.value}`}
+                aria-label={chip.kind === "token" ? `${text}, ${tokenLabel(chip.token)} token` : chip.kind === "sep" ? "/, folder separator" : `${text}, text`}
+                aria-describedby={`${ids.chips}-hint`}
                 onKeyDown={(event) => onChipKey(event, index)}
                 className={cn(
                   "inline-flex h-6 items-center gap-1 rounded-[4px] pr-0.5 pl-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   chip.kind === "token" ? "bg-primary/20 text-foreground" : chip.kind === "sep" ? "px-1.5 text-muted-foreground" : "border border-separator font-mono",
                 )}
               >
-                {chip.kind === "token" ? `{${chip.token}}` : chip.kind === "sep" ? "/" : chip.value}
+                {text}
                 <button type="button" tabIndex={-1} aria-hidden="true" onClick={() => remove(index)} className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
                   <X className="size-3" />
                 </button>
-              </span>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
         <p id={`${ids.chips}-hint`} className="text-[0.75rem] text-muted-foreground">
           ← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.
@@ -282,7 +286,7 @@ export function NamingSettingsPage() {
                   className={cn("flex w-full flex-col items-start rounded-[0.3125rem] px-2 py-1 text-left hover:bg-foreground/[0.06]", t.type === active && "bg-selected text-selected-foreground hover:bg-selected")}
                 >
                   <span className="text-sm">{t.label}</span>
-                  <span className={cn("w-full truncate font-mono text-[0.6875rem]", t.type === active ? "text-selected-foreground/85" : "text-muted-foreground")}>{namingTemplate(overrides, t.type)}</span>
+                  <span className={cn("w-full truncate font-mono text-[0.6875rem]", t.type === active ? "text-selected-foreground" : "text-muted-foreground")}>{namingTemplate(overrides, t.type)}</span>
                 </button>
               </li>
             ))}

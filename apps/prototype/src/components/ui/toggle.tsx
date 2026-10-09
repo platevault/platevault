@@ -4,11 +4,13 @@ import { Toggle as TogglePrimitive } from "@base-ui/react/toggle"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
-// Pressed: a tinted fill plus a 2 px accent bar along the bottom edge, so the
+// Pressed: a tinted fill plus a 2 px bar along the bottom edge, so the
 // pressed item differs from its neighbours by shape and at ≥ 3:1, not by a
-// fill alone (WCAG 1.4.1, 1.4.11). Hover keeps the bar.
+// fill alone (WCAG 1.4.1, 1.4.11). The bar is the accent in light (4.6:1)
+// and the lighter ring colour in dark (6.2:1 over the pressed fill). Hover
+// keeps the bar.
 const toggleVariants = cva(
-  "group/toggle inline-flex items-center justify-center gap-1 rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-pressed:bg-primary/12 data-pressed:text-foreground data-pressed:shadow-[inset_0_-2px_0_var(--primary)] data-pressed:hover:bg-primary/18 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/toggle inline-flex items-center justify-center gap-1 rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-pressed:bg-primary/12 data-pressed:text-foreground data-pressed:shadow-[inset_0_-2px_0_var(--primary)] dark:data-pressed:shadow-[inset_0_-2px_0_var(--ring)] data-pressed:hover:bg-primary/18 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
