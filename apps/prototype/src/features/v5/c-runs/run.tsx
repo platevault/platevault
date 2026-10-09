@@ -10,13 +10,15 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { ChevronRight, Lock, RotateCcw, Telescope, Trash2, Undo2, Wand2 } from "lucide-react"
 import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
+import { useMessages } from "@/app/preferences"
+import { stepName } from "@/app/run-ui"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { nextFrom, panelLabel, rigName, runPipeline, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
-import { RUN_STEPS, STEP_LABEL } from "@/domain/labels"
+import { RUN_STEPS } from "@/domain/labels"
 import type { RunStep } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
@@ -31,20 +33,22 @@ import { ResultsStep } from "./results-step"
 import { SelectStep } from "./select-step"
 
 export function RunPage() {
+  const m = useMessages()
   const { projectId, runId, step } = useParams({ strict: false }) as { projectId?: string; runId?: string; step?: string }
   const state = useStore((s) => s)
   const ctx = runId ? runContext(state, runId) : null
-  if (!ctx || ctx.run.projectId !== projectId) return <MissingRecord noun="run" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel="Open the Project" />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel="Open Select" />
+  if (!ctx || ctx.run.projectId !== projectId) return <MissingRecord noun="run" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
+  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel={m.run_open_select()} />
   return <RunScreen ctx={ctx} step={step as RunStep} />
 }
 
 function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const { run, project, subject, panel, group } = ctx
   const pipeline = runPipeline(state, run)
   const outcome = useOutcome(`${run.id}:${step}`)
-  const subjectText = `${subject ? subjectName(state.catalog, subject) : "Unknown subject"}${panel ? ` · ${panelLabel(panel)}` : ""}`
+  const subjectText = `${subject ? subjectName(state.catalog, subject) : m.run_subject_unknown()}${panel ? ` · ${panelLabel(panel)}` : ""}`
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-screen="S5">
       <PageHeader
@@ -67,10 +71,10 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
         meta={<StatusBadge kind="run" value={pipeline.status} />}
         description={
           <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
-            <Pill tone="muted" icon={Telescope} title="Subject (fixed)">
+            <Pill tone="muted" icon={Telescope} title={m.run_subject_fixed()}>
               {subjectText}
             </Pill>
-            <Pill tone="muted" icon={Lock} title="Rig (fixed)">
+            <Pill tone="muted" icon={Lock} title={m.run_rig_fixed()}>
               {rigName(state.catalog, run.rigId)}
             </Pill>
           </span>
@@ -78,7 +82,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
         actions={<RunActions ctx={ctx} step={step} onOutcome={outcome.act} />}
       />
       <StepBar
-        label={`${run.name} steps`}
+        label={m.run_steps_label({ name: run.name })}
         steps={pipeline.steps}
         here={step}
         nextId={nextFrom(pipeline.steps, pipeline.next, step)?.step?.id ?? null}
@@ -89,11 +93,11 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
           <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} />
           {run.trashedAt ? (
             <div className="flex flex-wrap items-center gap-2" data-run-trashed>
-              <Pill tone="muted" icon={Trash2} title={`Restore returns it to ${STEP_LABEL[pipeline.current.id]}`}>
-                In Trash · {formatDateTime(run.trashedAt)}
+              <Pill tone="muted" icon={Trash2} title={m.run_restore_returns_to({ step: stepName(m, pipeline.current.id) })}>
+                {m.run_in_trash({ date: formatDateTime(run.trashedAt) })}
               </Pill>
               <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
-                Open Trash
+                {m.run_open_trash()}
               </Button>
             </div>
           ) : null}
@@ -116,6 +120,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
 
 /** Header actions: each one does what it says, or names why it is refused. On Done, Complete and Clean up live in the step itself. */
 function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: RunStep; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
   const { run, project } = ctx
@@ -123,16 +128,16 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
   const goTo = (step: RunStep) => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step } })
   if (run.trashedAt) {
     return (
-      <Button size="sm" onClick={() => onOutcome(restoreRun(run.id), { title: `${run.name} restored`, tone: "info" })}>
+      <Button size="sm" onClick={() => onOutcome(restoreRun(run.id), { blocked: m.run_restore_blocked(), success: { title: m.run_restored({ name: run.name }), tone: "info" } })}>
         <Undo2 aria-hidden="true" data-icon="inline-start" />
-        Restore
+        {m.run_restore()}
       </Button>
     )
   }
   const requestTrash = () => {
     const blockers = trashRefusals(state, run)
     if (blockers.length > 0) {
-      onOutcome(trashRun(run.id))
+      onOutcome(trashRun(run.id), { blocked: m.run_trash_blocked() })
       return
     }
     setConfirmTrash(true)
@@ -146,15 +151,15 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
             variant="outline"
             onClick={() => {
               const { result, step } = reopenRun(run.id)
-              if (onOutcome(result)) goTo(step)
+              if (onOutcome(result, { blocked: m.run_reopen_blocked() })) goTo(step)
             }}
           >
             <RotateCcw aria-hidden="true" data-icon="inline-start" />
-            Reopen
+            {m.run_reopen()}
           </Button>
           <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: "done" }} hash="cleanup" />}>
             <Wand2 aria-hidden="true" data-icon="inline-start" />
-            Clean up
+            {m.run_clean_up()}
           </Button>
         </>
       ) : (
@@ -162,19 +167,19 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
       )}
       <Button size="sm" variant="ghost" onClick={requestTrash}>
         <Trash2 aria-hidden="true" data-icon="inline-start" />
-        Move to Trash
+        {m.run_move_to_trash()}
       </Button>
       <ConfirmDialog
         open={confirmTrash}
         onOpenChange={setConfirmTrash}
-        title={`Move ${run.name} to the Trash?`}
-        description="No file moves."
-        changes={[`Waits in ${project.name}'s Trash at ${STEP_LABEL[runPipeline(state, run).current.id]}`, "Leaves run lists, pickers and goal totals"]}
-        confirmLabel="Move to Trash"
+        title={m.run_trash_title({ name: run.name })}
+        description={m.run_trash_description()}
+        changes={[m.run_trash_waits({ project: project.name, step: stepName(m, runPipeline(state, run).current.id) }), m.run_trash_leaves()]}
+        confirmLabel={m.run_move_to_trash()}
         tone="destructive"
         onConfirm={() => {
           const result = trashRun(run.id)
-          onOutcome(result)
+          onOutcome(result, { blocked: m.run_trash_blocked() })
           return result
         }}
       />

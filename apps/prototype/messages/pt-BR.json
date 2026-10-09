@@ -497,5 +497,1047 @@
   "tips_help": "Ajuda",
   "tips_note": "Nota {number}",
   "page_step_done": "(concluído)",
-  "ui_breadcrumb": "Trilha de navegação"
+  "ui_breadcrumb": "Trilha de navegação",
+  "run_step_title": "{n} {step}: {gate}",
+  "run_step_holds_next": "tem o Próximo",
+  "run_step_next": "Próximo",
+  "run_dismiss": "Dispensar",
+  "run_try_again": "tente de novo",
+  "run_prototype_simulate": "Simular no disco do protótipo",
+  "run_profile_application": "Aplicativo",
+  "run_sha256": "SHA-256",
+  "run_open_project": "Abrir o Projeto",
+  "run_open_select": "Abrir Selecionar",
+  "run_subject_unknown": "Objeto desconhecido",
+  "run_subject_fixed": "Objeto (fixo)",
+  "run_rig_fixed": "Equipamento (fixo)",
+  "run_steps_label": "Etapas de {name}",
+  "run_restore_returns_to": "Restaurar devolve para {step}",
+  "run_in_trash": "Na Lixeira · {date}",
+  "run_open_trash": "Abrir Lixeira",
+  "run_restore": "Restaurar",
+  "run_restored": "{name} restaurada",
+  "run_restore_blocked": "Restauração bloqueada",
+  "run_reopen": "Reabrir",
+  "run_reopen_blocked": "Reabertura bloqueada",
+  "run_clean_up": "Limpar",
+  "run_move_to_trash": "Mover para a Lixeira",
+  "run_trash_blocked": "Mover para a Lixeira bloqueado",
+  "run_trash_title": "Mover {name} para a Lixeira?",
+  "run_trash_description": "Nenhum arquivo é movido.",
+  "run_trash_waits": "Aguarda na Lixeira de {project} em {step}",
+  "run_trash_leaves": "Sai das listas de execuções, seletores e totais de metas",
+  "run_actions_for": "Ações de {name}",
+  "run_remove": "Remover",
+  "run_copy_path": "Copiar caminho",
+  "run_open_session": "Abrir sessão",
+  "run_none": "Nenhum",
+  "run_unknown_run": "Execução desconhecida",
+  "run_unknown_project": "Projeto desconhecido",
+  "run_unknown_kind": "Tipo desconhecido",
+  "run_another_rig": "Outro equipamento",
+  "run_col_night": "Noite",
+  "run_col_channel": "Canal",
+  "run_col_frames": "Quadros",
+  "run_col_integration": "Integração",
+  "run_col_reason": "Motivo",
+  "run_col_state": "Estado",
+  "run_col_product": "Produto",
+  "run_col_kind": "Tipo",
+  "run_col_from": "Origem",
+  "run_col_rig": "Equipamento",
+  "run_col_accepted_bytes": "Bytes aceitos",
+  "run_product_inputs": "Produtos de entrada",
+  "run_select_pointing_inside_panel": "Apontamento dentro do painel",
+  "run_selection_blocked": "Alteração da seleção bloqueada",
+  "run_select_remove_from_run": "Remover da execução",
+  "run_select_add_to_run": "Adicionar à execução",
+  "run_select_frames_of": "{included} de {total}",
+  "run_select_not_selected": "Não selecionada · {reason}",
+  "run_select_no_longer_matches": "Não corresponde mais",
+  "run_select_remove_session": "Remover {session} da execução",
+  "run_select_in_run": "Na execução",
+  "run_select_new_candidates": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} nova candidata",
+        "countPlural=*": "{count} novas candidatas"
+      }
+    }
+  ],
+  "run_select_add_count": "Adicionar {count}",
+  "run_select_members_no_longer_match": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} membro não corresponde mais",
+        "countPlural=*": "{count} membros não correspondem mais"
+      }
+    }
+  ],
+  "run_select_why_no_longer_match": "Por que membros não correspondem mais",
+  "run_select_no_longer_match_note": "Alvo ou equipamento mudou · conta até ser removido",
+  "run_select_selected_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão selecionada",
+        "countPlural=*": "{count} sessões selecionadas"
+      }
+    }
+  ],
+  "run_select_all_channels": "Todos",
+  "run_select_selected_only": "Só selecionadas",
+  "run_select_sessions_label": "Sessões de {name}",
+  "run_select_no_candidates": "Nenhuma candidata em {rig}",
+  "run_select_revision": "Revisão {revision}",
+  "run_discard": "Descartar",
+  "run_discard_blocked": "Descarte bloqueado",
+  "run_save_revision": "Salvar revisão {revision}",
+  "run_saved_revision": "Revisão {revision} salva",
+  "run_save_blocked": "Salvamento bloqueado",
+  "run_products_blocked": "Produtos de entrada bloqueados",
+  "run_product_inputs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} produto de entrada",
+        "countPlural=*": "{count} produtos de entrada"
+      }
+    }
+  ],
+  "run_product_inputs_help": "Resultados aceitos, de qualquer Projeto e equipamento. A regra de um só equipamento vale apenas para quadros brutos.",
+  "run_products_add": "Adicionar produtos…",
+  "run_products_add_title": "Adicionar produtos",
+  "run_products_none": "Nenhum produto aceito",
+  "run_products_use": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Usar {count} produto",
+        "countPlural=*": "Usar {count} produtos"
+      }
+    }
+  ],
+  "run_complete": "Concluir",
+  "run_completed": "{name} concluída",
+  "run_complete_blocked": "Conclusão bloqueada",
+  "run_complete_title": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Concluir {name} com {count} etapa aberta?",
+        "countPlural=*": "Concluir {name} com {count} etapas abertas?"
+      }
+    }
+  ],
+  "run_complete_description": "Nada é removido.",
+  "run_reopen_returns_to": "Reabrir devolve para {step}",
+  "run_complete_step_stays": "{step} continua {gate}",
+  "run_complete_at": "Concluída · {date}",
+  "run_completion": "Conclusão",
+  "run_cleanup_kind_link": "Link",
+  "run_cleanup_kind_list": "Lista de origens",
+  "run_cleanup_kind_copy": "Cópia ou clone",
+  "run_exclude": "Excluir",
+  "run_include": "Incluir",
+  "run_clean_up_this": "Limpar este…",
+  "run_clean_up_ellipsis": "Limpar…",
+  "run_clean_up_blocked": "Limpeza bloqueada",
+  "run_col_entry": "Entrada",
+  "run_col_size": "Tamanho",
+  "run_entries_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entrada",
+        "countPlural=*": "{count} entradas"
+      }
+    }
+  ],
+  "run_after_complete": "Após concluir",
+  "run_direct_source_nothing_to_clean": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} preparação de origem direta · nada a limpar",
+        "countPlural=*": "{count} preparações de origem direta · nada a limpar"
+      }
+    }
+  ],
+  "run_prepared_entries_label": "Entradas preparadas de {name}",
+  "run_no_prepared_entries": "Nenhuma entrada preparada",
+  "run_all_in_os_trash": "Tudo na Lixeira do sistema",
+  "run_nothing_prepared": "Nada preparado",
+  "run_open_prepare": "Abrir Preparar",
+  "run_clean_up_title": "Limpar {name}?",
+  "run_clean_up_description": "Restaurável pela Lixeira do sistema.",
+  "run_clean_up_moves": [
+    {
+      "declarations": [
+        "input count",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {count} entrada preparada · {bytes}",
+        "countPlural=*": "Move {count} entradas preparadas · {bytes}"
+      }
+    }
+  ],
+  "run_clean_up_from": "De {folder}/",
+  "run_clean_up_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {count} entrada para a Lixeira",
+        "countPlural=*": "Mover {count} entradas para a Lixeira"
+      }
+    }
+  ],
+  "run_hide": "Ocultar",
+  "run_show": "Mostrar",
+  "run_open_named": "Abrir {name}",
+  "run_note_for": "Nota de {name}",
+  "run_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} quadro",
+        "countPlural=*": "{count} quadros"
+      }
+    }
+  ],
+  "run_cal_readiness": "Prontidão",
+  "run_cal_auto_assign": "Atribuir automaticamente",
+  "run_cal_policy_blocked": "Atribuição automática bloqueada",
+  "run_cal_off": "Desligado",
+  "run_cal_no_sessions": "Nenhuma sessão",
+  "run_cal_to_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} a revisar",
+        "countPlural=*": "{count} a revisar"
+      }
+    }
+  ],
+  "run_cal_policy_shared": "Política compartilhada por todos os painéis",
+  "run_cal_matches": "Correspondências",
+  "run_cal_requirements": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requisito",
+        "countPlural=*": "{count} requisitos"
+      }
+    }
+  ],
+  "run_cal_no_sessions_saved": "Nenhuma sessão salva",
+  "run_cal_exception_blocked": "Exceção bloqueada",
+  "run_cal_automatic": "Automática",
+  "run_cal_exception_note": "Exceção · {reason}",
+  "run_cal_tie": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Empate · {count} master igual · vence a noite mais próxima",
+        "countPlural=*": "Empate · {count} masters iguais · vence a noite mais próxima"
+      }
+    }
+  ],
+  "run_cal_stack_from": "Empilhar de {name}",
+  "run_cal_stacking": "Empilhando {name}",
+  "run_cal_assign_blocked": "Atribuição bloqueada",
+  "run_cal_kind_dark": "dark",
+  "run_cal_kind_flat": "flat",
+  "run_cal_kind_bias": "bias",
+  "run_cal_kind_dark_flat": "dark flat",
+  "run_use_named": "Usar {name}",
+  "run_cal_use_as_exception": "Usar {name} como exceção…",
+  "run_cal_process_without": "Processar sem {kind}…",
+  "run_cal_defer": "Adiar",
+  "run_cal_use_automatic": "Usar automática",
+  "run_cal_no_master": "Nenhum master",
+  "run_cal_col_light_session": "Sessão de lights",
+  "run_cal_col_master": "Master",
+  "run_cal_col_criteria": "Critérios",
+  "run_cal_without": "Sem {kind}",
+  "run_cal_closest": "Mais próximo · {name}",
+  "run_cal_vs": "vs {value}",
+  "run_cal_choose_for": "Escolher {name}",
+  "run_cal_requirements_label": "Requisitos de calibração",
+  "run_cal_exception_title": "Exceção: {name}",
+  "run_cal_this_run_only": "só nesta execução",
+  "run_cal_reason_placeholder": "Com dithering; sem dark de 300 s no ganho 100",
+  "run_cal_record_exception": "Registrar exceção",
+  "run_cal_add_blocked": "Adição à biblioteca bloqueada",
+  "run_cal_dismiss_blocked": "Dispensa bloqueada",
+  "run_cal_master_added": "{name} adicionado",
+  "run_cal_master_dismissed": "{name} dispensado",
+  "run_cal_masters_found": "Masters encontrados",
+  "run_cal_masters_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "run_cal_restore_in_library": "Restaurar na biblioteca de Calibração",
+  "run_cal_dismissed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dispensado",
+        "countPlural=*": "{count} dispensados"
+      }
+    }
+  ],
+  "run_cal_none_pending": "Nenhum pendente",
+  "run_cal_add_to_library": "Adicionar à biblioteca",
+  "run_cal_bin": "bin {binning}",
+  "run_wrap_up": "Encerramento",
+  "run_accept": "Aceitar",
+  "run_not_prepared": "Sem preparo",
+  "run_files_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} arquivo",
+        "countPlural=*": "{count} arquivos"
+      }
+    }
+  ],
+  "run_col_file": "Arquivo",
+  "run_col_revision": "Revisão",
+  "run_col_project": "Projeto",
+  "run_col_subject": "Objeto",
+  "run_proto_blocked": "Simulação bloqueada",
+  "run_proto_app_writes_outputs": "O aplicativo grava saídas",
+  "run_proto_app_writes_outputs_detail": "Uma pilha por canal, um arquivo ainda sendo gravado, dois intermediários e um master dark.",
+  "run_proto_finish_writing": "Protótipo: terminar a gravação",
+  "run_results_look_again_blocked": "Nova busca bloqueada",
+  "run_results_new_files_found": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} arquivo novo encontrado",
+        "countPlural=*": "{count} arquivos novos encontrados"
+      }
+    }
+  ],
+  "run_results_nothing_new": "Nada novo",
+  "run_results_folder": "Pasta de Resultados",
+  "run_results_look_again": "Procurar de novo",
+  "run_results_attach_ellipsis": "Anexar…",
+  "run_results_attach": "Anexar",
+  "run_results_attach_blocked": "Anexo bloqueado",
+  "run_results_products": "Produtos",
+  "run_results_products_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} produto",
+        "countPlural=*": "{count} produtos"
+      }
+    }
+  ],
+  "run_results_products_help": "Nunca é aceito sozinho; Aceitar vincula os bytes atuais.",
+  "run_results_intermediates": "Intermediários",
+  "run_results_intermediates_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} intermediário",
+        "countPlural=*": "{count} intermediários"
+      }
+    }
+  ],
+  "run_results_basis_tool": "Evidência da ferramenta",
+  "run_results_basis_window": "Inferido pela janela de tempo",
+  "run_results_basis_unknown": "Sem evidência",
+  "run_results_attached_no_evidence": "Anexado · sem evidência",
+  "run_results_attribution_for": "Atribuição de {name}",
+  "run_results_accept_blocked": "Aceite bloqueado",
+  "run_results_use_as_input": "Usar como entrada…",
+  "run_results_inspect_again": "Inspecionar de novo",
+  "run_results_inspect_blocked": "Inspeção bloqueada",
+  "run_results_kind_option": "Tipo: {kind}",
+  "run_results_kind_blocked": "Alteração de tipo bloqueada",
+  "run_results_kind_missing": "Tipo?",
+  "run_results_changed": "Alterado",
+  "run_results_accept_named": "Aceitar {name}",
+  "run_results_no_products": "Nenhum produto ainda",
+  "run_results_attach_title": "Anexar um Resultado",
+  "run_results_attached": "Anexado",
+  "run_results_lineage_unknown": "Linhagem desconhecida",
+  "run_results_file_path": "Caminho do arquivo",
+  "run_results_path_placeholder": "/Volumes/…",
+  "run_results_channel_optional": "Canal (opcional)",
+  "run_results_channel_placeholder": "Ha",
+  "run_results_run_group": "Grupo de execuções",
+  "run_results_start_blocked": "Início bloqueado",
+  "run_results_mosaic_subjects_only": "apenas objetos de mosaico",
+  "run_one_rig_rule_help": "A regra de um só equipamento vale apenas para quadros brutos.",
+  "run_results_start_run": "Iniciar execução",
+  "run_prepare_running": "{title} em execução",
+  "run_read_only_because": "Somente leitura · {reason}",
+  "run_prepare_shared_title": "Perfil, modo e política compartilhados por todos os painéis",
+  "run_shared_with": "Compartilhado · {name}",
+  "run_profile_blocked": "Troca de perfil bloqueada",
+  "run_mode_blocked": "Troca de modo de entrada bloqueada",
+  "run_folder_blocked": "Troca da pasta da execução bloqueada",
+  "run_layout_output": "<saída>",
+  "run_layout_last_used": "Último usado",
+  "run_layout_not_chosen": "Não escolhido",
+  "run_layout_output_note": "Saída",
+  "run_layout_group": "Grupo",
+  "run_layout_group_rev": "Grupo · rev {revision}",
+  "run_layout_new": "Nova",
+  "run_layout_new_rev": "Nova · rev {revision}",
+  "run_layout_results_folder": "{name} Results",
+  "run_layout_results_every_revision": "Resultados · todas as revisões",
+  "run_layout_change_folder": "Trocar pasta…",
+  "run_layout_choose_folder": "Escolher pasta…",
+  "run_layout_preview": "Prévia da estrutura",
+  "run_layout_output_folder": "Pasta de saída",
+  "run_layout_use": "Usar",
+  "run_proto_object_correction": "Registrar uma correção de OBJECT",
+  "run_proto_object_correction_detail": "Adiciona uma correção de catálogo na primeira sessão membro, para que a revisão de metadados corrigidos apareça.",
+  "run_proto_source_drift": "Alterar um quadro de origem preparado",
+  "run_proto_source_drift_detail": "Uma ferramenta externa regrava uma origem; Abrir então detecta a divergência.",
+  "run_prepare_blocked": "Preparo bloqueado",
+  "run_prepare_ellipsis": "Preparar…",
+  "run_prepare_title": "Preparar {name}?",
+  "run_prepare_title_rev": "Preparar {name} (rev {revision})?",
+  "run_prepare_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Preparar {count} entrada",
+        "countPlural=*": "Preparar {count} entradas"
+      }
+    }
+  ],
+  "run_prepare_creates": "Cria {folder}",
+  "run_prepare_creates_run_folder": "Cria a pasta da execução",
+  "run_prepare_writes_source_list": "Grava uma lista de origens",
+  "run_prepare_writes_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Grava {count} entrada · {bytes}",
+        "countPlural=*": "Grava {count} entradas · {bytes}"
+      }
+    }
+  ],
+  "run_prepare_inputs_blocked_partial": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entrada bloqueada · Parcial",
+        "countPlural=*": "{count} entradas bloqueadas · Parcial"
+      }
+    }
+  ],
+  "run_prepare_records_decisions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Registra {count} decisão de metadados",
+        "countPlural=*": "Registra {count} decisões de metadados"
+      }
+    }
+  ],
+  "run_profile_verified": "Verificado",
+  "run_profile_not_verified": "Não verificado",
+  "run_profile_read_only": "Somente leitura",
+  "run_profile_write_prone": "Propenso a gravar",
+  "run_profile_writes_unknown": "Gravação desconhecida",
+  "run_profile_evidence": "Evidência de {name}",
+  "run_mode_link_type": "Tipo de link",
+  "run_mode_symbolic_links": "Links simbólicos",
+  "run_mode_hard_links": "Hard links",
+  "run_mode_hard_links_help": "Todas as origens e a pasta da execução em um só volume.",
+  "run_mode_named_blocked": "{mode} bloqueado",
+  "run_metadata_hint_accept_source": "Cabeçalho como está",
+  "run_metadata_hint_excluded": "Deixado de fora",
+  "run_metadata_hint_configuration": "Via configuração",
+  "run_metadata_absent": "ausente",
+  "run_metadata_legend": "Como o valor corrigido de {field} chega ao aplicativo",
+  "run_metadata_not_supported": "{name}: não suportado",
+  "run_metadata_needs_isolated": "Requer Cópia ou Clone",
+  "run_footprint_title": "Bytes preparados",
+  "run_footprint_prepared": "{bytes} preparados",
+  "run_footprint_note_label": "Nota de ocupação",
+  "run_footprint_offline": "Volume offline · bytes desconhecidos",
+  "run_launch_opened": "Aberto",
+  "run_launch_not_located": "Não localizado",
+  "run_launch_failed": "Não abriu",
+  "run_named_rev": "{name} (rev {revision})",
+  "run_preparation": "Preparação",
+  "run_preparation_rev": "Preparação (rev {revision})",
+  "run_open_blocked": "Abertura bloqueada",
+  "run_opened": "{name} aberta",
+  "run_open_in": "Abrir no {app}",
+  "run_link_symbolic": "simbólico",
+  "run_link_hard": "hard link",
+  "run_membership_changed": "Membros alterados · preparar r{revision}",
+  "run_unverified_since": "Não verificada desde {date}",
+  "run_entries_changed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entrada alterada",
+        "countPlural=*": "{count} entradas alteradas"
+      }
+    }
+  ],
+  "run_partial_count": "Parcial {done}/{total}",
+  "run_prepared_count": "Preparadas · {done}/{total}",
+  "run_blocked_count": "Bloqueadas · {count}",
+  "run_blocked_inputs_label": "Entradas bloqueadas, {count}",
+  "run_lock_trashed": "Na Lixeira do Projeto",
+  "run_lock_complete": "Concluída · reabra para alterar",
+  "run_parent_none": "Nenhuma pasta de saída",
+  "run_parent_missing": "{name} ausente",
+  "run_parent_read_only": "{name} sem permissão de gravação",
+  "run_field_target": "Alvo",
+  "run_field_equipment": "Equipamento",
+  "run_field_filter": "Filtro",
+  "run_field_exposure": "Exposição",
+  "run_field_focal_length": "Distância focal",
+  "run_metadata_choice_configuration": "Configuração do aplicativo",
+  "run_metadata_choice_patched_copy": "Cópia corrigida",
+  "run_metadata_choice_accept_source": "Aceitar o valor da origem",
+  "run_metadata_choice_excluded": "Excluir estas entradas",
+  "run_mode_semantics_symlink": "Uma pasta da execução com links simbólicos para os originais. Referências, não backups: um aplicativo que grava altera a origem.",
+  "run_mode_semantics_hardlink": "Uma pasta da execução com hard links. Só no mesmo volume; o link e o original são o mesmo arquivo.",
+  "run_mode_semantics_direct_source": "Sem entradas na pasta da execução: o perfil recebe os caminhos originais exatos numa lista de arquivos. Nada é vinculado nem copiado.",
+  "run_mode_semantics_copy": "Cópias completas e isoladas de cada entrada. Requer espaço para cada byte; os originais nunca são tocados.",
+  "run_mode_semantics_clone": "Clones copy-on-write isolados no mesmo volume. Espaço quase nulo até um dos lados mudar.",
+  "run_check_lock": "Estado da execução",
+  "run_check_membership": "Membros salvos",
+  "run_check_profile": "Perfil de aplicativo",
+  "run_check_metadata": "Metadados corrigidos",
+  "run_check_mode": "Modo de entrada",
+  "run_check_destination": "Pasta da execução",
+  "run_check_space": "Espaço livre",
+  "run_check_sources": "Presença das origens",
+  "run_check_entries": "Entradas",
+  "run_entry_denied": "Ilegível: acesso de leitura a {path} negado",
+  "run_entry_offline": "Offline: {name} não está conectado",
+  "run_entry_its_volume": "seu volume",
+  "run_entry_retired": "Aposentado: {name} foi aposentado e nunca é entrada",
+  "run_entry_its_location": "seu local",
+  "run_entry_not_found": "Não encontrado em {path} na última varredura",
+  "run_entry_unresolved": "Membro não resolvido: não pôde ser lido quando foi selecionado",
+  "run_entry_not_readable": "Ilegível em {path}",
+  "run_mode_output_volume": "o volume de saída",
+  "run_mode_write_prone": "{name}: propenso a gravar",
+  "run_mode_writes_unknown": "{name}: gravação nas entradas desconhecida",
+  "run_mode_other_volume": "Origens em outro volume",
+  "run_mode_whole_folders": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Lê pastas inteiras · {count} quadro excluído",
+        "countPlural=*": "Lê pastas inteiras · {count} quadros excluídos"
+      }
+    }
+  ],
+  "run_mode_no_source_paths": "{name}: sem caminhos de origem",
+  "run_mode_no_clones": "{name}: sem clones",
+  "run_mode_needs_space": "Requer {bytes} · {free} livres",
+  "run_check_requirements_to_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requisito a revisar",
+        "countPlural=*": "{count} requisitos a revisar"
+      }
+    }
+  ],
+  "run_check_products_reads": "{name} lê {kinds}",
+  "run_check_products_unsupported": "Não suportado: {files}",
+  "run_check_corrections_to_decide": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} correção a decidir",
+        "countPlural=*": "{count} correções a decidir"
+      }
+    }
+  ],
+  "run_check_patched_needs_isolated": "Cópias corrigidas requerem Cópia ou Clone",
+  "run_check_no_configuration": "{name}: sem configuração",
+  "run_check_decisions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} decisão",
+        "countPlural=*": "{count} decisões"
+      }
+    }
+  ],
+  "run_check_folder_exists": "{name} já existe",
+  "run_check_space_of": "{bytes} de {free} livres",
+  "run_check_sources_readable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} origem legível",
+        "countPlural=*": "{count} origens legíveis"
+      }
+    }
+  ],
+  "run_check_sources_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} origem ilegível · Parcial",
+        "countPlural=*": "{count} origens ilegíveis · Parcial"
+      }
+    }
+  ],
+  "run_check_no_frames": "Nenhum quadro incluído",
+  "run_verify_entry_missing": "A entrada na pasta da execução sumiu ou seu volume está offline.",
+  "run_verify_source_unreadable": "A origem não pode ser lida agora (offline ou ausente).",
+  "run_verify_snapshot_differs": "Alterada desde o snapshot da preparação: o SHA-256 difere.",
+  "run_verify_entry_differs": "Esta entrada não corresponde mais ao que foi preparado.",
+  "run_verify_digest_differs": "Alterada desde que foi preparada: o SHA-256 difere do digest registrado.",
+  "run_verify_entry_missing_or_differs": "Sua entrada na pasta da execução sumiu ou não corresponde mais ao que foi preparado.",
+  "run_rev": "Rev {revision}",
+  "run_cleanup_volume_offline": "{name} está offline",
+  "rungroup_panels_preparing": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel em preparo",
+        "countPlural=*": "{count} painéis em preparo"
+      }
+    }
+  ],
+  "rungroup_names_partial": "{names} parcial",
+  "rungroup_not_every_panel_prepared": "Nem todos os painéis preparados",
+  "rungroup_panels_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel preparado",
+        "countPlural=*": "{count} painéis preparados"
+      }
+    }
+  ],
+  "rungroup_status": "Grupo: {status}",
+  "rungroup_mosaic_fixed": "Mosaico (fixo)",
+  "rungroup_panels_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel",
+        "countPlural=*": "{count} painéis"
+      }
+    }
+  ],
+  "rungroup_in_trash": "{count} na Lixeira",
+  "rungroup_panels": "Painéis",
+  "rungroup_review_status": "Revisão {status}",
+  "rungroup_col_panel": "Painel",
+  "rungroup_col_panel_run": "Execução do painel",
+  "rungroup_col_status": "Situação",
+  "rungroup_panels_label": "Painéis de {name}",
+  "rungroup_placed_by_you": "Colocada em {panel} por você ({detail})",
+  "rungroup_place_blocked": "Posicionamento bloqueado",
+  "rungroup_to_place": "A posicionar",
+  "rungroup_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão",
+        "countPlural=*": "{count} sessões"
+      }
+    }
+  ],
+  "rungroup_all_placed": "Todas posicionadas",
+  "rungroup_place_on": "Colocar em {panel}",
+  "rungroup_selections": "Seleções",
+  "rungroup_save_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Salvar {count} painel",
+        "countPlural=*": "Salvar {count} painéis"
+      }
+    }
+  ],
+  "rungroup_save": "Salvar",
+  "rungroup_candidates_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} candidata",
+        "countPlural=*": "{count} candidatas"
+      }
+    }
+  ],
+  "rungroup_unsaved": "Não salvo",
+  "rungroup_cal_policy": "Política de calibração",
+  "rungroup_cal_policy_help": "Compartilhada por todos os painéis; correspondência por execução de painel.",
+  "rungroup_outcome": "Resultado do grupo",
+  "rungroup_open_folder_title": "Todos os painéis precisam estar preparados e verificados",
+  "rungroup_open_folder": "Abrir pasta",
+  "rungroup_setup_locked": "Configuração travada",
+  "rungroup_complete_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel concluído",
+        "countPlural=*": "{count} painéis concluídos"
+      }
+    }
+  ],
+  "rungroup_layout_folder": "Pasta do grupo",
+  "rungroup_layout_folder_rev": "Pasta do grupo · rev {revision}",
+  "rungroup_inputs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entrada",
+        "countPlural=*": "{count} entradas"
+      }
+    }
+  ],
+  "rungroup_result": "Resultado do grupo",
+  "rungroup_review_all": "Revisar todos",
+  "rungroup_panel_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução de painel",
+        "countPlural=*": "{count} execuções de painel"
+      }
+    }
+  ],
+  "rungroup_prepare_all_blocked": "Preparar todos bloqueado",
+  "rungroup_prepare_all": "Preparar todos…",
+  "rungroup_every_panel_complete": "Todos os painéis concluídos",
+  "rungroup_prepare_all_title": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Preparar o {count} painel de {name}?",
+        "countPlural=*": "Preparar todos os {count} painéis de {name}?"
+      }
+    }
+  ],
+  "rungroup_prepare_all_creates": "Cria {folder}/ com {panels}",
+  "rungroup_blocked_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bloqueada",
+        "countPlural=*": "{count} bloqueadas"
+      }
+    }
+  ],
+  "rungroup_prepare_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Preparar {count} painel",
+        "countPlural=*": "Preparar {count} painéis"
+      }
+    }
+  ],
+  "rungroup_result_help": "Encontrado só em {folder}/. O aplicativo monta os painéis.",
+  "rungroup_result_folder_placeholder": "<Mosaico> Results/Assembled",
+  "rungroup_proto_writes_mosaic": "O aplicativo grava o mosaico montado",
+  "rungroup_proto_writes_mosaic_detail": "Um arquivo em Assembled/.",
+  "rungroup_panel_results": "Resultados dos painéis",
+  "rungroup_accepted_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} aceito",
+        "countPlural=*": "{count} aceitos"
+      }
+    }
+  ],
+  "rungroup_open_panel_results": "Abrir Resultados de {panel}",
+  "rungroup_complete_all_blocked": "Concluir todos bloqueado",
+  "rungroup_complete_all": "Concluir todos",
+  "rungroup_open_done": "Abrir Concluído",
+  "run_revision_short": "r{revision}",
+  "run_mode_no_symlinks": "{name}: sem links simbólicos",
+  "run_mode_no_hardlinks": "{name}: sem hard links",
+  "run_check_mode_symlinks": "{mode} (links simbólicos)",
+  "run_check_mode_hardlinks": "{mode} (hard links)"
 }

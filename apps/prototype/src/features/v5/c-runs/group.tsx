@@ -13,7 +13,8 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { Eye, FolderOpen, Layers, Lock, MapPin, Play, Save, ShieldCheck, Trash2, Wand2 } from "lucide-react"
 import { useEffect, useId, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
-import { GateLabel } from "@/app/run-ui"
+import { useMessages } from "@/app/preferences"
+import { GateLabel, stepName } from "@/app/run-ui"
 import { Box } from "@/components/app/box"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable } from "@/components/app/data-table"
@@ -28,9 +29,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { calibrationPlan, KIND_LABEL } from "@/domain/calibration"
 import { type GroupPanelState, groupCandidates, groupPipeline, groupStepLink, panelLabel, rigName, runPreparations, runResults, subjectName, workingContent } from "@/domain/derive"
-import { MODE_LABEL, RESULT_KIND_LABEL, RUN_STEPS, STEP_LABEL } from "@/domain/labels"
+import { MODE_LABEL, RESULT_KIND_LABEL, RUN_STEPS } from "@/domain/labels"
 import type { InputMode, Preparation, ResultKind, Run, RunGroup, RunStep } from "@/domain/types"
-import { fileName, formatNight, plural } from "@/lib/format"
+import { fileName, formatNight } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { addRunSessions, saveRun } from "@/store/actions/runs"
 import { type PrototypeState, useStore } from "@/store/core"
 import { GroupReviewStep } from "../d-review/review"
@@ -43,12 +45,13 @@ import { AttachDialog, ResultsTable, WrapUpLink } from "./results-step"
 type Act = ReturnType<typeof useOutcome>["act"]
 
 export function RunGroupPage() {
+  const m = useMessages()
   const { projectId, groupId, step } = useParams({ strict: false }) as { projectId?: string; groupId?: string; step?: string }
   const state = useStore((s) => s)
   const group = groupId ? state.catalog.runGroups[groupId] : undefined
   const project = group ? state.catalog.projects[group.projectId] : undefined
-  if (!group || !project || group.projectId !== projectId) return <MissingRecord noun="run group" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel="Open the Project" />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${project.id}/groups/${group.id}/select`} backLabel="Open Select" />
+  if (!group || !project || group.projectId !== projectId) return <MissingRecord noun="run group" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
+  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${project.id}/groups/${group.id}/select`} backLabel={m.run_open_select()} />
   return <GroupScreen group={group} step={step as RunStep} />
 }
 
@@ -58,14 +61,15 @@ export function groupOutcome(state: PrototypeState, group: RunGroup): { label: s
   const preps = live.map((run) => ({ run, prep: currentPreparation(run, runPreparations(state.catalog, run.id)) }))
   const missing = preps.filter((p) => !p.prep).map((p) => p.run.name)
   const by = (s: Preparation["state"]) => preps.filter((p) => p.prep?.state === s)
-  if (by("running").length > 0) return { label: "Running", tone: "preparation", value: "running", detail: `${plural(by("running").length, "panel")} preparing` }
-  if (by("failed").length > 0) return { label: "Failed", tone: "preparation", value: "failed", detail: by("failed").map((p) => p.run.name).join(", ") }
-  if (by("partial").length > 0) return { label: "Partial", tone: "preparation", value: "partial", detail: `${by("partial").map((p) => p.run.name).join(", ")} Partial` }
-  if (missing.length > 0) return { label: missing.length === live.length ? "Not prepared" : "Not every panel prepared", tone: "preparation", value: null, detail: missing.join(", ") }
-  return { label: "Prepared", tone: "preparation", value: "prepared", detail: `${plural(live.length, "panel")} prepared` }
+  if (by("running").length > 0) return { label: m.status_running(), tone: "preparation", value: "running", detail: m.rungroup_panels_preparing({ count: by("running").length }) }
+  if (by("failed").length > 0) return { label: m.status_failed(), tone: "preparation", value: "failed", detail: by("failed").map((p) => p.run.name).join(", ") }
+  if (by("partial").length > 0) return { label: m.status_partial(), tone: "preparation", value: "partial", detail: m.rungroup_names_partial({ names: by("partial").map((p) => p.run.name).join(", ") }) }
+  if (missing.length > 0) return { label: missing.length === live.length ? m.run_not_prepared() : m.rungroup_not_every_panel_prepared(), tone: "preparation", value: null, detail: missing.join(", ") }
+  return { label: m.status_prepared(), tone: "preparation", value: "prepared", detail: m.rungroup_panels_prepared({ count: live.length }) }
 }
 
 function GroupScreen({ group, step }: { group: RunGroup; step: RunStep }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const project = state.catalog.projects[group.projectId]!
   const subject = project.subjects.find((s) => s.id === group.subjectId)
@@ -82,25 +86,25 @@ function GroupScreen({ group, step }: { group: RunGroup; step: RunStep }) {
             {project.name}
           </Link>
         }
-        meta={status.value ? <StatusBadge kind="preparation" value={status.value} label={`Group ${status.label}`} /> : <Pill tone="muted">Not prepared</Pill>}
+        meta={status.value ? <StatusBadge kind="preparation" value={status.value} label={m.rungroup_status({ status: status.label })} /> : <Pill tone="muted">{m.run_not_prepared()}</Pill>}
         description={
           <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
-            <Pill tone="muted" icon={Layers} title="Mosaic (fixed)">
-              {subject ? subjectName(state.catalog, subject) : "Unknown"}
+            <Pill tone="muted" icon={Layers} title={m.rungroup_mosaic_fixed()}>
+              {subject ? subjectName(state.catalog, subject) : m.status_unknown()}
             </Pill>
-            <Pill tone="muted" icon={Lock} title="Rig (fixed)">
+            <Pill tone="muted" icon={Lock} title={m.run_rig_fixed()}>
               {rigName(state.catalog, group.rigId)}
             </Pill>
-            <Pill tone="info">{plural(pipeline.panels.length - trashed, "panel")}</Pill>
+            <Pill tone="info">{m.rungroup_panels_count({ count: pipeline.panels.length - trashed })}</Pill>
             {trashed > 0 ? (
               <Pill tone="muted" icon={Trash2}>
-                {trashed} in Trash
+                {m.rungroup_in_trash({ count: trashed })}
               </Pill>
             ) : null}
           </span>
         }
       />
-      <StepBar label={`${group.name} steps`} steps={pipeline.steps} here={step} nextId={pipeline.next?.step?.id ?? null} linkFor={(id) => groupStepLink(group, id) as { to: string; params: Record<string, string> }} />
+      <StepBar label={m.run_steps_label({ name: group.name })} steps={pipeline.steps} here={step} nextId={pipeline.next?.step?.id ?? null} linkFor={(id) => groupStepLink(group, id) as { to: string; params: Record<string, string> }} />
       {outcome.outcome ? (
         <div className="px-5 pt-3">
           <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} />
@@ -131,21 +135,23 @@ function panelFrames(p: GroupPanelState): number {
 
 /** A panel run's right-click entries: open it at a step, or its Project Trash when trashed. */
 function usePanelMenu(group: RunGroup) {
+  const m = useMessages()
   const navigate = useNavigate()
   const openRun = (run: Run, step: RunStep) => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step } })
   return (p: GroupPanelState, step: RunStep, extra: MenuEntry[] = []): MenuEntry[] =>
     p.trashed
-      ? [{ heading: p.run.name }, { label: "Open Trash", icon: Trash2, onSelect: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: group.projectId } }) }]
-      : [{ heading: p.run.name }, { label: `Open ${STEP_LABEL[step]}`, icon: Eye, onSelect: () => openRun(p.run, step) }, ...extra]
+      ? [{ heading: p.run.name }, { label: m.run_open_trash(), icon: Trash2, onSelect: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: group.projectId } }) }]
+      : [{ heading: p.run.name }, { label: m.run_open_named({ name: stepName(m, step) }), icon: Eye, onSelect: () => openRun(p.run, step) }, ...extra]
 }
 
 function PanelStrip({ panels }: { panels: GroupPanelState[] }) {
+  const m = useMessages()
   return (
-    <ul className="flex flex-wrap gap-x-4 gap-y-1 border-b border-separator px-5 py-1.5 text-[0.75rem]" aria-label="Panels">
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 border-b border-separator px-5 py-1.5 text-[0.75rem]" aria-label={m.rungroup_panels()}>
       {panels.map((p) => (
         <li key={p.run.id} className="flex items-center gap-1.5">
           <span className="font-medium">{panelLabel(p.panel)}</span>
-          {p.trashed ? <Pill tone="muted">Trashed</Pill> : <GateLabel state={p.pipeline.steps[1]!.state} label={`Review ${p.pipeline.steps[1]!.status}`} />}
+          {p.trashed ? <Pill tone="muted">{m.status_trashed()}</Pill> : <GateLabel state={p.pipeline.steps[1]!.state} label={m.rungroup_review_status({ status: p.pipeline.steps[1]!.status })} />}
         </li>
       ))}
     </ul>
@@ -153,15 +159,16 @@ function PanelStrip({ panels }: { panels: GroupPanelState[] }) {
 }
 
 function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPanelState[]; step: RunStep }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const menu = usePanelMenu(group)
   const index = RUN_STEPS.indexOf(step)
   const total = panels.filter((p) => !p.trashed).reduce((n, p) => n + panelFrames(p), 0)
   const allColumns: Column<GroupPanelState>[] = [
-    { id: "panel", header: "Panel", rowHeader: true, cell: (p) => panelLabel(p.panel), sortValue: (p) => p.panel.n },
+    { id: "panel", header: m.rungroup_col_panel(), rowHeader: true, cell: (p) => panelLabel(p.panel), sortValue: (p) => p.panel.n },
     {
       id: "run",
-      header: "Panel run",
+      header: m.rungroup_col_panel_run(),
       cell: (p) =>
         p.trashed ? (
           <Link className="text-link underline-offset-4 hover:underline" to="/projects/$projectId/trash" params={{ projectId: group.projectId }}>
@@ -173,16 +180,16 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
           </Link>
         ),
     },
-    { id: "status", header: "Status", cell: (p) => <StatusBadge kind="run" value={p.trashed ? "trashed" : p.run.completion === "complete" ? "complete" : "open"} /> },
-    { id: "step", header: STEP_LABEL[step], cell: (p) => (p.trashed ? <Pill tone="muted">Skipped</Pill> : <GateLabel state={p.pipeline.steps[index]!.state} label={p.pipeline.steps[index]!.status} />) },
-    { id: "frames", header: "Frames", align: "right", cell: (p) => (p.trashed ? <span className="text-muted-foreground">–</span> : panelFrames(p)), sortValue: (p) => (p.trashed ? -1 : panelFrames(p)) },
+    { id: "status", header: m.rungroup_col_status(), cell: (p) => <StatusBadge kind="run" value={p.trashed ? "trashed" : p.run.completion === "complete" ? "complete" : "open"} /> },
+    { id: "step", header: stepName(m, step), cell: (p) => (p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[index]!.state} label={p.pipeline.steps[index]!.status} />) },
+    { id: "frames", header: m.run_col_frames(), align: "right", cell: (p) => (p.trashed ? <span className="text-muted-foreground">–</span> : panelFrames(p)), sortValue: (p) => (p.trashed ? -1 : panelFrames(p)) },
     {
       id: "prep",
-      header: "Preparation",
+      header: m.run_preparation(),
       cell: (p) => {
         if (p.trashed) return <span className="text-muted-foreground">–</span>
         const prep = currentPreparation(p.run, runPreparations(state.catalog, p.run.id))
-        return prep ? <PrepStateBadge prep={prep} /> : <span className="text-[0.75rem] text-muted-foreground">Not prepared</span>
+        return prep ? <PrepStateBadge prep={prep} /> : <span className="text-[0.75rem] text-muted-foreground">{m.run_not_prepared()}</span>
       },
     },
   ]
@@ -194,17 +201,18 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Panels <CountBadge count={panels.length} label={plural(panels.length, "panel")} />
+          {m.rungroup_panels()} <CountBadge count={panels.length} label={m.rungroup_panels_count({ count: panels.length })} />
         </span>
       }
-      actions={<Pill tone="muted">{plural(total, "frame")}</Pill>}
+      actions={<Pill tone="muted">{m.run_frames_count({ count: total })}</Pill>}
     >
-      <DataTable label={`Panels of ${group.name}`} rows={panels} columns={columns} getRowId={(p) => p.run.id} scroll="none" rowClassName={(p) => (p.trashed ? "text-muted-foreground" : undefined)} contextMenu={(p) => menu(p, step)} />
+      <DataTable label={m.rungroup_panels_label({ name: group.name })} rows={panels} columns={columns} getRowId={(p) => p.run.id} scroll="none" rowClassName={(p) => (p.trashed ? "text-muted-foreground" : undefined)} contextMenu={(p) => menu(p, step)} />
     </Box>
   )
 }
 
 function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
   const { byPanel, flagged } = groupCandidates(state.catalog, group)
@@ -217,7 +225,8 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
     const panel = panels.find((p) => p.id === r.panelId)
     return panel ? panelLabel(panel) : r.name
   }
-  const place = (r: Run, f: (typeof toPlace)[number]) => onOutcome(addRunSessions(r.id, [f.candidate.session.id], { kind: "panel-assigned", detail: `Placed on ${panelName(r)} by you (${f.detail})` }))
+  const place = (r: Run, f: (typeof toPlace)[number]) => onOutcome(addRunSessions(r.id, [f.candidate.session.id], { kind: "panel-assigned", detail: m.rungroup_placed_by_you({ panel: panelName(r), detail: f.detail }) }), { blocked: m.rungroup_place_blocked() })
+  const sessionName = (f: (typeof toPlace)[number]) => `${formatNight(f.candidate.session.night)} · ${f.candidate.session.channel ?? m.palette_session_no_filter()}`
   return (
     <>
       <Box
@@ -226,33 +235,33 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
         flush
         title={
           <span className="flex items-center gap-1.5">
-            To place <CountBadge count={toPlace.length} tone={toPlace.length > 0 ? "warning" : "neutral"} label={plural(toPlace.length, "session")} />
+            {m.rungroup_to_place()} <CountBadge count={toPlace.length} tone={toPlace.length > 0 ? "warning" : "neutral"} label={m.rungroup_sessions_count({ count: toPlace.length })} />
           </span>
         }
       >
         {toPlace.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground">All placed</p>
+          <p className="px-3 py-2 text-sm text-muted-foreground">{m.rungroup_all_placed()}</p>
         ) : (
           <ul className="divide-y divide-separator">
             {toPlace.map((f) => (
               <RowContextMenu
                 key={f.candidate.session.id}
                 entries={[
-                  { heading: `${formatNight(f.candidate.session.night)} · ${f.candidate.session.channel ?? "No filter"}` },
-                  ...live.map((r) => ({ label: `Place on ${panelName(r)}`, icon: MapPin, onSelect: () => place(r, f) })),
+                  { heading: sessionName(f) },
+                  ...live.map((r) => ({ label: m.rungroup_place_on({ panel: panelName(r) }), icon: MapPin, onSelect: () => place(r, f) })),
                   { separator: true },
-                  { label: "Open session", icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: f.candidate.session.id } }) },
+                  { label: m.run_open_session(), icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: f.candidate.session.id } }) },
                 ]}
               >
                 <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-sm">
                   <span className="flex flex-wrap items-center gap-1.5">
-                    {formatNight(f.candidate.session.night)} · {f.candidate.session.channel ?? "No filter"}
+                    {sessionName(f)}
                     <Pill tone="warning">{f.detail}</Pill>
                   </span>
                   <span className="flex flex-wrap gap-1">
                     {live.map((r) => (
                       <Button key={r.id} size="xs" variant="outline" onClick={() => place(r, f)}>
-                        Place on {panelName(r)}
+                        {m.rungroup_place_on({ panel: panelName(r) })}
                       </Button>
                     ))}
                   </span>
@@ -266,10 +275,10 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
         id="group-selections"
         level={2}
         flush
-        title="Selections"
+        title={m.rungroup_selections()}
         actions={
-          <Button size="xs" disabled={drafts.length === 0} onClick={() => drafts.every((r) => onOutcome(saveRun(r.id)))}>
-            Save {plural(drafts.length, "panel")}
+          <Button size="xs" disabled={drafts.length === 0} onClick={() => drafts.every((r) => onOutcome(saveRun(r.id), { blocked: m.run_save_blocked() }))}>
+            {m.rungroup_save_panels({ count: drafts.length })}
           </Button>
         }
       >
@@ -279,8 +288,8 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
               key={r.id}
               entries={[
                 { heading: r.name },
-                { label: "Open Select", icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: r.projectId, runId: r.id, step: "select" } }) },
-                ...(r.draft && r.completion !== "complete" ? [{ label: "Save", icon: Save, onSelect: () => onOutcome(saveRun(r.id)) }] : []),
+                { label: m.run_open_select(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: r.projectId, runId: r.id, step: "select" } }) },
+                ...(r.draft && r.completion !== "complete" ? [{ label: m.rungroup_save(), icon: Save, onSelect: () => onOutcome(saveRun(r.id), { blocked: m.run_save_blocked() }) }] : []),
               ]}
             >
               <li className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1">
@@ -288,9 +297,9 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
                   {r.name}
                 </Link>
                 <span className="flex flex-wrap items-center gap-1">
-                  <Pill tone="muted">{plural(workingContent(r)?.sessions.length ?? 0, "session")}</Pill>
-                  <Pill tone="muted">{plural((byPanel[r.panelId ?? ""] ?? []).length, "candidate")}</Pill>
-                  {r.draft ? <Pill tone="warning">Unsaved</Pill> : <Pill tone="success">r{r.revisions.at(-1)?.revision ?? 0}</Pill>}
+                  <Pill tone="muted">{m.rungroup_sessions_count({ count: workingContent(r)?.sessions.length ?? 0 })}</Pill>
+                  <Pill tone="muted">{m.rungroup_candidates_count({ count: (byPanel[r.panelId ?? ""] ?? []).length })}</Pill>
+                  {r.draft ? <Pill tone="warning">{m.rungroup_unsaved()}</Pill> : <Pill tone="success">{m.run_revision_short({ revision: r.revisions.at(-1)?.revision ?? 0 })}</Pill>}
                 </span>
               </li>
             </RowContextMenu>
@@ -302,6 +311,7 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
 }
 
 function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels: GroupPanelState[]; onOutcome: Act }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const id = useId()
   const menu = usePanelMenu(group)
@@ -312,15 +322,15 @@ function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels:
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Readiness
-          <HelpTip label="Calibration policy">Shared by every panel; matched per panel run.</HelpTip>
+          {m.run_cal_readiness()}
+          <HelpTip label={m.rungroup_cal_policy()}>{m.rungroup_cal_policy_help()}</HelpTip>
         </span>
       }
       actions={
         <span className="flex items-center gap-2">
-          <Switch id={id} checked={group.setup.calibrationPolicy === "automatic"} onCheckedChange={(checked) => onOutcome(changeGroupSetup(group.id, { calibrationPolicy: checked ? "automatic" : "off" }))} />
+          <Switch id={id} checked={group.setup.calibrationPolicy === "automatic"} onCheckedChange={(checked) => onOutcome(changeGroupSetup(group.id, { calibrationPolicy: checked ? "automatic" : "off" }), { blocked: m.run_cal_policy_blocked() })} />
           <Label htmlFor={id} className="text-xs">
-            Auto-assign
+            {m.run_cal_auto_assign()}
           </Label>
         </span>
       }
@@ -335,11 +345,11 @@ function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels:
                 <span className="w-24 font-medium">{panelLabel(p.panel)}</span>
                 <span className="flex flex-1 flex-wrap items-center gap-1">
                   {p.trashed ? (
-                    <Pill tone="muted">Skipped</Pill>
+                    <Pill tone="muted">{m.status_skipped()}</Pill>
                   ) : plan.policy === "off" ? (
-                    <Pill tone="muted">Off</Pill>
+                    <Pill tone="muted">{m.run_cal_off()}</Pill>
                   ) : kinds.length === 0 ? (
-                    <Pill tone="muted">No sessions</Pill>
+                    <Pill tone="muted">{m.run_cal_no_sessions()}</Pill>
                   ) : (
                     kinds.map((k) => (
                       <Pill key={k.kind} tone={k.matched === k.total ? "success" : "warning"}>
@@ -347,11 +357,11 @@ function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels:
                       </Pill>
                     ))
                   )}
-                  {!p.trashed && plan.needsReview.length > 0 ? <Pill tone="warning">{plan.needsReview.length} to review</Pill> : null}
+                  {!p.trashed && plan.needsReview.length > 0 ? <Pill tone="warning">{m.run_cal_to_review({ count: plan.needsReview.length })}</Pill> : null}
                 </span>
                 {!p.trashed ? (
                   <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: p.run.projectId, runId: p.run.id, step: "calibrate" }} />}>
-                    Review
+                    {m.verb_review()}
                   </Button>
                 ) : null}
               </li>
@@ -365,14 +375,15 @@ function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels:
 
 function aggregateModes(lists: ModeOption[][]): ModeOption[] {
   const first = lists[0] ?? []
-  return first.map((m) => {
-    const all = lists.map((l) => l.find((x) => x.mode === m.mode)!)
+  return first.map((option) => {
+    const all = lists.map((l) => l.find((x) => x.mode === option.mode)!)
     const reasons = [...new Set(all.flatMap((x) => x.reasons))]
-    return { ...m, allowed: reasons.length === 0, reasons, footprintBytes: all.reduce((n, x) => n + x.footprintBytes, 0) }
+    return { ...option, allowed: reasons.length === 0, reasons, footprintBytes: all.reduce((n, x) => n + x.footprintBytes, 0) }
   })
 }
 
 function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const project = state.catalog.projects[group.projectId]!
   const subject = project.subjects.find((s) => s.id === group.subjectId)
@@ -394,14 +405,14 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
         level={2}
         title={
           <span className="flex items-center gap-1.5">
-            Group outcome
+            {m.rungroup_outcome()}
             {status.value ? <StatusBadge kind="preparation" value={status.value} label={status.label} /> : <Pill tone="muted">{status.label}</Pill>}
           </span>
         }
         actions={
-          <Button size="xs" variant="outline" onClick={() => onOutcome(openGroupFolder(group.id), { title: `Opened ${group.name}`, tone: "info" })} title="Every panel must be prepared and verified">
+          <Button size="xs" variant="outline" onClick={() => onOutcome(openGroupFolder(group.id), { blocked: m.run_open_blocked(), success: { title: m.run_opened({ name: group.name }), tone: "info" } })} title={m.rungroup_open_folder_title()}>
             <FolderOpen aria-hidden="true" data-icon="inline-start" />
-            Open folder
+            {m.rungroup_open_folder()}
           </Button>
         }
       >
@@ -409,30 +420,30 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
           {allLive.map((run) => (
             <PreparationOutcome key={run.id} run={run} onOutcome={onOutcome} compact />
           ))}
-          {allLive.every((run) => runPreparations(state.catalog, run.id).length === 0) ? <p className="text-sm text-muted-foreground">Not prepared</p> : null}
+          {allLive.every((run) => runPreparations(state.catalog, run.id).length === 0) ? <p className="text-sm text-muted-foreground">{m.run_not_prepared()}</p> : null}
         </div>
       </Box>
-      {setupRefusals.length > 0 ? <Refusal action="Setup locked" reason={plural(setupRefusals.length, "Complete panel")} blockers={setupRefusals.map((label) => ({ label }))} /> : null}
-      <ProfileSection profileId={group.setup.profileId} locked={false} onPick={(id) => onOutcome(chooseProfile(target, id))} />
-      <ModeSection modes={aggregateModes(plans.map((p) => p.plan.modes))} mode={group.setup.inputMode} linkType={choices.linkType} locked={false} onMode={(m: InputMode) => onOutcome(chooseMode(target, m))} onLinkType={(t) => updatePrepareChoices(group.id, { linkType: t })} />
+      {setupRefusals.length > 0 ? <Refusal action={m.rungroup_setup_locked()} reason={m.rungroup_complete_panels({ count: setupRefusals.length })} blockers={setupRefusals.map((label) => ({ label }))} /> : null}
+      <ProfileSection profileId={group.setup.profileId} locked={false} onPick={(id) => onOutcome(chooseProfile(target, id), { blocked: m.run_profile_blocked() })} />
+      <ModeSection modes={aggregateModes(plans.map((p) => p.plan.modes))} mode={group.setup.inputMode} linkType={choices.linkType} locked={false} onMode={(mode: InputMode) => onOutcome(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} onLinkType={(t) => updatePrepareChoices(group.id, { linkType: t })} />
       {first ? (
         <LayoutSection
           layout={first.layout}
           locked={false}
-          onParent={(path) => onOutcome(setOutputParent(target, path))}
+          onParent={(path) => onOutcome(setOutputParent(target, path), { blocked: m.run_folder_blocked() })}
           lines={(l) => (
             <>
-              <LayoutLine path={`${l.parent.path ?? "<output>"}/`} note={l.parent.origin === "none" ? "Not chosen" : "Output"} />
-              <LayoutLine path={`${project.name}/`} note="Project" depth={1} />
-              <LayoutLine path={`${mosaic}${revision > 1 ? ` (rev ${revision})` : ""}/`} note={`Group folder${revision > 1 ? ` · rev ${revision}` : ""}`} depth={2} emphasis />
+              <LayoutLine path={`${l.parent.path ?? m.run_layout_output()}/`} note={l.parent.origin === "none" ? m.run_layout_not_chosen() : m.run_layout_output_note()} />
+              <LayoutLine path={`${project.name}/`} note={m.run_col_project()} depth={1} />
+              <LayoutLine path={`${mosaic}${revision > 1 ? ` (rev ${revision})` : ""}/`} note={revision > 1 ? m.rungroup_layout_folder_rev({ revision }) : m.rungroup_layout_folder()} depth={2} emphasis />
               {plans.map(({ run, plan }) => (
-                <LayoutLine key={run.id} path={`${fileName(plan.layout.folderPath ?? "Panel")}/`} note={`${run.name} · ${plural(plan.entries.length, "input")}`} depth={3} />
+                <LayoutLine key={run.id} path={`${fileName(plan.layout.folderPath ?? "Panel")}/`} note={`${run.name} · ${m.rungroup_inputs_count({ count: plan.entries.length })}`} depth={3} />
               ))}
-              <LayoutLine path={`${mosaic} Results/`} note="Results" depth={2} />
+              <LayoutLine path={`${mosaic} Results/`} note={m.step_results()} depth={2} />
               {plans.map(({ run, plan }) => (
                 <LayoutLine key={run.id} path={`${fileName(plan.layout.resultsPath ?? "Panel")}/`} note={run.name} depth={3} />
               ))}
-              <LayoutLine path="Assembled/" note="Group Result" depth={3} />
+              <LayoutLine path="Assembled/" note={m.rungroup_result()} depth={3} />
             </>
           )}
         />
@@ -443,19 +454,19 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
         level={2}
         title={
           <span className="flex items-center gap-1.5">
-            Review all <CountBadge count={live.length} label={plural(live.length, "panel run")} />
-            {live.length > 0 ? <Pill tone="muted">rev {revision}</Pill> : null}
+            {m.rungroup_review_all()} <CountBadge count={live.length} label={m.rungroup_panel_runs_count({ count: live.length })} />
+            {live.length > 0 ? <Pill tone="muted">{m.run_rev({ revision })}</Pill> : null}
           </span>
         }
         actions={
-          <Button size="xs" onClick={() => (plans.length > 0 && plans.every((p) => p.plan.ready) ? setConfirm(true) : onOutcome(prepareAll(group.id)))}>
+          <Button size="xs" onClick={() => (plans.length > 0 && plans.every((p) => p.plan.ready) ? setConfirm(true) : onOutcome(prepareAll(group.id), { blocked: m.rungroup_prepare_all_blocked() }))}>
             <Play aria-hidden="true" data-icon="inline-start" />
-            Prepare all…
+            {m.rungroup_prepare_all()}
           </Button>
         }
       >
         {live.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Every panel Complete</p>
+          <p className="text-sm text-muted-foreground">{m.rungroup_every_panel_complete()}</p>
         ) : (
           <div className="grid gap-3 xl:grid-cols-2">
             {plans.map(({ run, plan }) => (
@@ -472,16 +483,19 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
-        title={`Prepare all ${plural(live.length, "panel")} of ${group.name}?`}
+        title={m.rungroup_prepare_all_title({ count: live.length, name: group.name })}
         description={`${profileLabel(state.catalog, group.setup.profileId)} · ${group.setup.inputMode ? MODE_LABEL[group.setup.inputMode] : ""}`}
         changes={[
-          `Creates ${fileName(first?.layout.groupFolder ?? mosaic)}/ with ${plans.map((p) => fileName(p.plan.layout.folderPath ?? "")).join(", ")}`,
-          ...plans.map((p) => `${p.run.name}: ${plural(p.plan.entries.length, "input")}${p.plan.entries.some((e) => e.unavailable) ? ` · ${plural(p.plan.entries.filter((e) => e.unavailable).length, "blocked")}` : ""}`),
+          m.rungroup_prepare_all_creates({ folder: fileName(first?.layout.groupFolder ?? mosaic), panels: plans.map((p) => fileName(p.plan.layout.folderPath ?? "")).join(", ") }),
+          ...plans.map((p) => {
+            const blocked = p.plan.entries.filter((e) => e.unavailable).length
+            return `${p.run.name}: ${m.rungroup_inputs_count({ count: p.plan.entries.length })}${blocked > 0 ? ` · ${m.rungroup_blocked_count({ count: blocked })}` : ""}`
+          }),
         ]}
-        confirmLabel={`Prepare ${plural(live.length, "panel")}`}
+        confirmLabel={m.rungroup_prepare_panels({ count: live.length })}
         onConfirm={() => {
           const r = prepareAll(group.id)
-          onOutcome(r)
+          onOutcome(r, { blocked: m.rungroup_prepare_all_blocked() })
           return r.result
         }}
       />
@@ -492,6 +506,7 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
 const GROUP_KINDS = [{ value: "assembled-mosaic", label: RESULT_KIND_LABEL["assembled-mosaic"] }]
 
 function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: GroupPanelState[]; onOutcome: Act }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const menu = usePanelMenu(group)
   const assembled = groupAssembledPath(state, group)
@@ -510,25 +525,25 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
         flush
         title={
           <span className="flex items-center gap-1.5">
-            Group Result
-            <HelpTip label="Group Result">Found only in {assembled ?? "<Mosaic> Results/Assembled"}/. The application assembles the panels.</HelpTip>
+            {m.rungroup_result()}
+            <HelpTip label={m.rungroup_result()}>{m.rungroup_result_help({ folder: assembled ?? m.rungroup_result_folder_placeholder() })}</HelpTip>
           </span>
         }
         actions={
           <>
-            <PrototypeMenu actions={[{ label: "The application writes the assembled mosaic", detail: "One file in Assembled/.", run: () => onOutcome(simulateApplicationOutput({ groupId: group.id })) }]} />
-            <Button size="xs" variant="outline" onClick={() => onOutcome(discoverResults({ groupId: group.id }))}>
-              Look again
+            <PrototypeMenu actions={[{ label: m.rungroup_proto_writes_mosaic(), detail: m.rungroup_proto_writes_mosaic_detail(), run: () => onOutcome(simulateApplicationOutput({ groupId: group.id }), { blocked: m.run_proto_blocked() }) }]} />
+            <Button size="xs" variant="outline" onClick={() => onOutcome(discoverResults({ groupId: group.id }), { blocked: m.run_results_look_again_blocked() })}>
+              {m.run_results_look_again()}
             </Button>
             <Button size="xs" variant="outline" onClick={() => setAttaching(true)}>
-              Attach…
+              {m.run_results_attach_ellipsis()}
             </Button>
           </>
         }
       >
         <ResultsTable rows={rows} rigId={group.rigId} onOutcome={onOutcome} kindOptions={GROUP_KINDS} />
       </Box>
-      <Box id="group-panel-results" level={2} flush title="Panel Results">
+      <Box id="group-panel-results" level={2} flush title={m.rungroup_panel_results()}>
         <ul className="divide-y divide-separator text-sm">
           {panels.map((p) => {
             const { products, intermediates } = runResults(state.catalog, p.run.id)
@@ -539,18 +554,18 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
                   <span className="w-24 font-medium">{panelLabel(p.panel)}</span>
                   <span className="flex flex-1 flex-wrap items-center gap-1">
                     {p.trashed ? (
-                      <Pill tone="muted">Skipped</Pill>
+                      <Pill tone="muted">{m.status_skipped()}</Pill>
                     ) : (
                       <>
-                        <Pill tone={accepted > 0 ? "success" : "muted"}>{accepted} accepted</Pill>
-                        <Pill tone="muted">{plural(products.length - accepted, "candidate")}</Pill>
-                        <Pill tone="muted">{plural(intermediates.length, "intermediate")}</Pill>
+                        <Pill tone={accepted > 0 ? "success" : "muted"}>{m.rungroup_accepted_count({ count: accepted })}</Pill>
+                        <Pill tone="muted">{m.rungroup_candidates_count({ count: products.length - accepted })}</Pill>
+                        <Pill tone="muted">{m.run_results_intermediates_count({ count: intermediates.length })}</Pill>
                       </>
                     )}
                   </span>
                   {!p.trashed ? (
-                    <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: p.run.projectId, runId: p.run.id, step: "results" }} />} aria-label={`Open ${panelLabel(p.panel)} Results`}>
-                      Open
+                    <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: p.run.projectId, runId: p.run.id, step: "results" }} />} aria-label={m.rungroup_open_panel_results({ panel: panelLabel(p.panel) })}>
+                      {m.verb_open()}
                     </Button>
                   ) : null}
                 </li>
@@ -559,12 +574,13 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
           })}
         </ul>
       </Box>
-      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={assembled} kindOptions={GROUP_KINDS} onAttach={(path, kind, channel) => onOutcome(attachResult({ groupId: group.id }, path, kind as ResultKind, channel))} />
+      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={assembled} kindOptions={GROUP_KINDS} onAttach={(path, kind, channel) => onOutcome(attachResult({ groupId: group.id }, path, kind as ResultKind, channel), { blocked: m.run_results_attach_blocked() })} />
     </>
   )
 }
 
 function GroupDone({ group, panels, onOutcome }: { group: RunGroup; panels: GroupPanelState[]; onOutcome: Act }) {
+  const m = useMessages()
   const project = useStore((s) => s.catalog.projects[group.projectId])!
   const menu = usePanelMenu(group)
   const navigate = useNavigate()
@@ -573,13 +589,13 @@ function GroupDone({ group, panels, onOutcome }: { group: RunGroup; panels: Grou
       id="group-done"
       level={2}
       flush
-      title="Completion"
+      title={m.run_completion()}
       actions={
         <>
           <WrapUpLink project={project} />
-          <Button size="xs" onClick={() => onOutcome(completeAllPanels(group.id), { title: "Every panel Complete", tone: "info" })}>
+          <Button size="xs" onClick={() => onOutcome(completeAllPanels(group.id), { blocked: m.rungroup_complete_all_blocked(), success: { title: m.rungroup_every_panel_complete(), tone: "info" } })}>
             <ShieldCheck aria-hidden="true" data-icon="inline-start" />
-            Complete all
+            {m.rungroup_complete_all()}
           </Button>
         </>
       }
@@ -588,17 +604,17 @@ function GroupDone({ group, panels, onOutcome }: { group: RunGroup; panels: Grou
         {panels.map((p) => (
           <RowContextMenu
             key={p.run.id}
-            entries={menu(p, "done", p.run.completion === "complete" ? [{ label: "Clean up", icon: Wand2, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: p.run.projectId, runId: p.run.id, step: "done" }, hash: "cleanup" }) }] : [])}
+            entries={menu(p, "done", p.run.completion === "complete" ? [{ label: m.run_clean_up(), icon: Wand2, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: p.run.projectId, runId: p.run.id, step: "done" }, hash: "cleanup" }) }] : [])}
           >
             <li className="flex flex-wrap items-center gap-2 px-3 py-1.5">
               <span className="w-24 font-medium">{panelLabel(p.panel)}</span>
               <span className="flex flex-1 flex-wrap items-center gap-1.5 text-[0.75rem]">
-                {p.trashed ? <Pill tone="muted">Skipped</Pill> : <GateLabel state={p.pipeline.steps[5]!.state} label={p.pipeline.steps[5]!.status} />}
+                {p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[5]!.state} label={p.pipeline.steps[5]!.status} />}
                 {!p.trashed ? <FootprintPill run={p.run} /> : null}
               </span>
               {!p.trashed ? (
                 <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: p.run.projectId, runId: p.run.id, step: "done" }} hash="cleanup" />}>
-                  {p.run.completion === "complete" ? "Clean up" : "Open Done"}
+                  {p.run.completion === "complete" ? m.run_clean_up() : m.rungroup_open_done()}
                 </Button>
               ) : null}
             </li>
