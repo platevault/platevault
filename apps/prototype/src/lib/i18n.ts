@@ -24,6 +24,54 @@ export { baseLocale as DEFAULT_LOCALE, isLocale, locales as LOCALES, type Locale
 /** The catalogue's type, for helpers that take `m` from a component's `useMessages()`. */
 export type Messages = typeof m
 
+type MessageKey = keyof Messages
+type MessageInputs<K extends MessageKey> = NonNullable<Parameters<Messages[K]>[0]>
+
+/** One catalogue message: the key is the kind, `params` its typed inputs. */
+type KeyedRef = { [K in MessageKey]: { key: K; params: MessageInputs<K> } }[MessageKey]
+
+/**
+ * Copy that is worded later, in the reader's language: what persisted state
+ * (Activity, operations) and derived domain objects (gates, warnings, Fit)
+ * carry instead of a finished string, so a language switch re-words them.
+ * A param may itself be a ref (a step name, a rig), worded first. `text` is
+ * data shown as-is (names, paths), never English; `list` joins finished
+ * pieces with punctuation only.
+ */
+export type MessageRef = KeyedRef | { text: string } | { list: MessageRef[]; separator: string }
+
+type ParamArgs<K extends MessageKey> = {} extends MessageInputs<K> ? [params?: MessageInputs<K>] : [params: MessageInputs<K>]
+
+/** A ref to the catalogue message `key`: `msg("blocker_unreadable_inputs", { count })`. */
+export function msg<K extends MessageKey>(key: K, ...[params]: ParamArgs<K>): MessageRef {
+  return { key, params: params ?? {} } as KeyedRef
+}
+
+/** Data shown as-is in every language: a name, a path, a dash for an absent value. */
+export function verbatim(text: string): MessageRef {
+  return { text }
+}
+
+/** Finished pieces joined by punctuation: refusal reasons by "; ". */
+export function joinRefs(list: MessageRef[], separator: string): MessageRef {
+  return { list, separator }
+}
+
+function isRef(value: unknown): value is MessageRef {
+  return typeof value === "object" && value !== null && ("key" in value || "text" in value || "list" in value)
+}
+
+/** Word a ref with the caller's catalogue (`useMessages()` in a component, so it re-renders on a language switch). */
+export function say(m: Messages, ref: MessageRef): string {
+  if ("text" in ref) return ref.text
+  if ("list" in ref) return ref.list.map((item) => say(m, item)).join(ref.separator)
+  const params: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(ref.params)) params[name] = isRef(value) ? say(m, value) : value
+  // A key a later build renamed reads as the key, as Paraglide renders a missing variant, rather than crashing the page.
+  const word = m[ref.key] as unknown
+  return typeof word === "function" ? (word as (inputs: Record<string, unknown>) => string)(params) : ref.key
+}
+
 /**
  * How much human scrutiny a catalogue has had. `source` is the catalogue the
  * others are translated from, so "reviewed" does not apply to it.

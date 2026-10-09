@@ -14,9 +14,10 @@
 import { createLink, useNavigate } from "@tanstack/react-router"
 import { Circle, CircleArrowRight, CircleCheck, CircleDashed, CircleEllipsis, Loader, OctagonX } from "lucide-react"
 import type { AnchorHTMLAttributes, Ref } from "react"
-import type { GateState, RunStepState, StepLink } from "@/domain/derive"
+import { GATE_WORD, type GateState, type RunStepState, type StepLink } from "@/domain/derive"
+import { STEP_NAME } from "@/domain/labels"
 import type { RunStep } from "@/domain/types"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useMessages } from "./preferences"
 
@@ -32,29 +33,12 @@ const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> 
 
 /** The gate word for a state: the step rail, the toolbar and every `GateLabel`. */
 export function gateWord(m: Messages, state: GateState): string {
-  const word: Record<GateState, () => string> = {
-    done: m.status_done,
-    ready: m.status_ready,
-    review: m.status_needs_review,
-    blocked: m.status_blocked,
-    running: m.status_running,
-    partial: m.status_partial,
-    idle: m.status_not_started,
-  }
-  return word[state]()
+  return say(m, GATE_WORD[state])
 }
 
 /** A run step's name: Select, Review, Calibrate, Prepare, Results, Done. */
 export function stepName(m: Messages, step: RunStep): string {
-  const name: Record<RunStep, () => string> = {
-    select: m.step_select,
-    review: m.step_review,
-    calibrate: m.step_calibrate,
-    prepare: m.step_prepare,
-    results: m.step_results,
-    done: m.step_done,
-  }
-  return name[step]()
+  return say(m, STEP_NAME[step])
 }
 
 /**
@@ -93,11 +77,12 @@ export function StepRail({ steps, current, label, compact = false }: { steps: Ru
     <ol aria-label={label} className="flex min-w-0 flex-wrap items-center gap-x-0.5 gap-y-1">
       {steps.map((step, index) => {
         const here = step.id === current
+        const status = say(m, step.status)
         return (
           <li
             key={step.id}
             aria-current={here ? "step" : undefined}
-            title={`${step.n} ${stepName(m, step.id)}: ${gateWord(m, step.state)}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
+            title={`${step.n} ${stepName(m, step.id)}: ${gateWord(m, step.state)}${status && status !== "–" ? ` · ${status}` : ""}`}
             className={cn("inline-flex h-5 items-center gap-1 rounded-[0.3125rem] px-1 text-[0.6875rem]", here ? "bg-foreground/[0.08] font-medium text-foreground" : "text-muted-foreground")}
           >
             <StepGlyph state={step.state} />

@@ -1,13 +1,15 @@
 /**
  * Project and run derivations for harness v5 (foundation-owned). Candidates,
  * goal progress, warnings, the six run step gates and their Next action, the
- * run blockers, Home's top line and Next rule, Fit per rig and the band
- * strip. Every screen reads these so the numbers and the next step agree
- * everywhere (D-W33, D-W35, D-W36, D-W37). Library-level totals live in
- * library.ts. Nothing here writes state.
+ * run blockers, the Project Next rule and stage, and Fit per rig. Every
+ * screen reads these so the numbers and the next step agree everywhere
+ * (D-W33, D-W35, D-W36, D-W37). Library-level totals live in library.ts.
+ * Nothing here writes state. Copy is a `MessageRef` (a catalogue key and its
+ * params), worded by the screen with `say(m, …)`, so it follows a language
+ * switch; the name helpers that return a string take the caller's `m`.
  */
 import { calibrationPlan, type CalibrationPlan, candidatesFor, reusableSources } from "./calibration"
-import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_LABEL, WRAP_UP_LABEL, WRAP_UP_STEPS } from "./labels"
+import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import {
   assetAvailability,
   effectiveExposureS,
@@ -56,7 +58,8 @@ import type {
   Subject,
   Target,
 } from "./types"
-import { formatExposure, plural } from "@/lib/format"
+import { formatCount, formatExposure } from "@/lib/format"
+import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 
 /** The read-only slice of the prototype state derivations need; `PrototypeState` satisfies it. */
 export interface World {
@@ -130,8 +133,15 @@ export function liveLightSessions(catalog: Catalog): Session[] {
   return Object.values(catalog.sessions).filter((s) => s.imageType === "light" && !s.supersededBy && !isTrashedSession(catalog, s))
 }
 
-export function rigName(catalog: Catalog, rigId: OpticalTrainId | null): string {
-  return rigId ? (catalog.opticalTrains[rigId]?.name ?? "Unknown rig") : "No rig"
+/** The rig's name: "No rig" without one, "Unknown rig" for one no longer in the catalog. */
+export function rigRef(catalog: Catalog, rigId: OpticalTrainId | null): MessageRef {
+  if (!rigId) return msg("domain_rig_none")
+  const rig = catalog.opticalTrains[rigId]
+  return rig ? verbatim(rig.name) : msg("domain_rig_unknown")
+}
+
+export function rigName(m: Messages, catalog: Catalog, rigId: OpticalTrainId | null): string {
+  return say(m, rigRef(catalog, rigId))
 }
 
 /** Mono or OSC comes from the rig's camera (D-W31); null when the camera is unknown. */
@@ -213,8 +223,13 @@ export function subjectTarget(catalog: Catalog, subject: Subject): Target | unde
 }
 
 /** A mosaic reads by its own name; a Target subject by the Target's name. */
-export function subjectName(catalog: Catalog, subject: Subject): string {
-  return subject.mosaic?.name ?? subjectTarget(catalog, subject)?.name ?? "Unknown Target"
+export function subjectRef(catalog: Catalog, subject: Subject): MessageRef {
+  const name = subject.mosaic?.name ?? subjectTarget(catalog, subject)?.name
+  return name === undefined ? msg("domain_subject_unknown") : verbatim(name)
+}
+
+export function subjectName(m: Messages, catalog: Catalog, subject: Subject): string {
+  return say(m, subjectRef(catalog, subject))
 }
 
 export function findSubject(project: Project, subjectId: string): Subject | undefined {
@@ -225,8 +240,13 @@ export function findPanel(subject: Subject | undefined, panelId: string | null):
   return panelId ? subject?.mosaic?.panels.find((p) => p.id === panelId) : undefined
 }
 
-export function panelLabel(panel: MosaicPanel): string {
-  return `Panel ${panel.n}`
+/** "Panel 2". */
+export function panelRef(panel: MosaicPanel): MessageRef {
+  return msg("domain_panel_name", { n: panel.n })
+}
+
+export function panelLabel(m: Messages, panel: MosaicPanel): string {
+  return say(m, panelRef(panel))
 }
 
 /** Centre the Planner uses: a mosaic's centre, else the Target's coordinates (D-W63). */
@@ -238,11 +258,11 @@ export function subjectCentre(catalog: Catalog, subject: Subject): { ra: number;
 
 export type PanelFlag = "ambiguous" | "off-panel" | "no-pointing" | "fov-unknown"
 
-export const PANEL_FLAG_LABEL: Record<PanelFlag, string> = {
-  ambiguous: "Falls in more than one panel",
-  "off-panel": "Outside every panel",
-  "no-pointing": "No pointing",
-  "fov-unknown": "Field of view unknown",
+export const PANEL_FLAG_NAME: Record<PanelFlag, MessageRef> = {
+  ambiguous: msg("domain_panel_flag_ambiguous"),
+  "off-panel": msg("domain_panel_flag_off_panel"),
+  "no-pointing": msg("domain_panel_flag_no_pointing"),
+  "fov-unknown": msg("domain_fov_unknown"),
 }
 
 /**
@@ -251,12 +271,12 @@ export const PANEL_FLAG_LABEL: Record<PanelFlag, string> = {
  * in more than one panel, in none, or without pointing is flagged; nothing is
  * assigned silently.
  */
-export function panelForSession(catalog: Catalog, subject: Subject, session: Session, rigId: OpticalTrainId): { panelId: string | null; flag: PanelFlag | null; detail: string } {
+export function panelForSession(catalog: Catalog, subject: Subject, session: Session, rigId: OpticalTrainId): { panelId: string | null; flag: PanelFlag | null; detail: MessageRef } {
   const panels = subject.mosaic?.panels ?? []
-  if (!session.pointing) return { panelId: null, flag: "no-pointing", detail: PANEL_FLAG_LABEL["no-pointing"] }
+  if (!session.pointing) return { panelId: null, flag: "no-pointing", detail: PANEL_FLAG_NAME["no-pointing"] }
   const rig = catalog.opticalTrains[rigId]
   const fov = rig ? rigFieldOfView(catalog, rig) : null
-  if (!fov) return { panelId: null, flag: "fov-unknown", detail: PANEL_FLAG_LABEL["fov-unknown"] }
+  if (!fov) return { panelId: null, flag: "fov-unknown", detail: PANEL_FLAG_NAME["fov-unknown"] }
   const { ra, dec } = session.pointing
   const inside = panels.filter((panel) => {
     const cos = Math.cos((panel.dec * Math.PI) / 180)
@@ -270,9 +290,9 @@ export function panelForSession(catalog: Catalog, subject: Subject, session: Ses
     const v = -x * Math.sin(r) + y * Math.cos(r)
     return Math.abs(u) <= fov.widthDeg / 2 && Math.abs(v) <= fov.heightDeg / 2
   })
-  if (inside.length === 1) return { panelId: inside[0]!.id, flag: null, detail: `Pointing inside ${panelLabel(inside[0]!)}` }
-  if (inside.length > 1) return { panelId: null, flag: "ambiguous", detail: `${PANEL_FLAG_LABEL.ambiguous}: ${inside.map(panelLabel).join(", ")}` }
-  return { panelId: null, flag: "off-panel", detail: PANEL_FLAG_LABEL["off-panel"] }
+  if (inside.length === 1) return { panelId: inside[0]!.id, flag: null, detail: msg("domain_panel_pointing_inside", { panel: panelRef(inside[0]!) }) }
+  if (inside.length > 1) return { panelId: null, flag: "ambiguous", detail: joinRefs([PANEL_FLAG_NAME.ambiguous, joinRefs(inside.map(panelRef), ", ")], ": ") }
+  return { panelId: null, flag: "off-panel", detail: PANEL_FLAG_NAME["off-panel"] }
 }
 
 // ---------------------------------------------------------------------------
@@ -325,7 +345,7 @@ export interface Candidate {
   subject: Subject
   rigId: OpticalTrainId
   /** "Target NGC 7000 on RedCat 51 / ASI2600MM" (D-W49). */
-  reason: string
+  reason: MessageRef
 }
 
 export function projectCandidates(catalog: Catalog, project: Project): Candidate[] {
@@ -334,7 +354,7 @@ export function projectCandidates(catalog: Catalog, project: Project): Candidate
     const subject = candidateSubject(catalog, project, session)
     if (!subject) continue
     const rigId = sessionRigId(session)!
-    out.push({ session, subject, rigId, reason: `Target ${subjectName(catalog, subject)} on ${rigName(catalog, rigId)}` })
+    out.push({ session, subject, rigId, reason: msg("domain_candidate_reason", { target: subjectRef(catalog, subject), rig: rigRef(catalog, rigId) }) })
   }
   return out.sort((a, b) => a.session.night.localeCompare(b.session.night) || (a.session.channel ?? "").localeCompare(b.session.channel ?? ""))
 }
@@ -394,11 +414,11 @@ export function runRefresh(catalog: Catalog, run: Run): RunRefresh {
 }
 
 /** Panel assignment of a run group's candidates: per panel, plus the flagged sessions the user must place (D-W38). */
-export function groupCandidates(catalog: Catalog, group: RunGroup): { byPanel: Record<string, Candidate[]>; flagged: Array<{ candidate: Candidate; flag: PanelFlag; detail: string }> } {
+export function groupCandidates(catalog: Catalog, group: RunGroup): { byPanel: Record<string, Candidate[]>; flagged: Array<{ candidate: Candidate; flag: PanelFlag; detail: MessageRef }> } {
   const project = catalog.projects[group.projectId]
   const subject = project ? findSubject(project, group.subjectId) : undefined
   const byPanel: Record<string, Candidate[]> = {}
-  const flagged: Array<{ candidate: Candidate; flag: PanelFlag; detail: string }> = []
+  const flagged: Array<{ candidate: Candidate; flag: PanelFlag; detail: MessageRef }> = []
   if (!project || !subject) return { byPanel, flagged }
   for (const panel of subject.mosaic?.panels ?? []) byPanel[panel.id] = []
   for (const candidate of projectCandidates(catalog, project)) {
@@ -458,7 +478,9 @@ export interface GoalProgress {
   /** Integration still needed in project; null without an integration goal. */
   remainingS: number | null
   /** "Ha 6h10 in project · 9h15 captured · goal 10h" ("in project" never above "captured", PRJ-FR-21). */
-  line: string
+  line: MessageRef
+  /** The line without its channel: "6h10 in project · 9h15 captured · goal 10h", beside a channel chip. */
+  amounts: MessageRef
 }
 
 function admitsQuality(catalog: Catalog, asset: Asset, bar: Goal["qualityBar"]): boolean | null {
@@ -529,8 +551,13 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
     const captured = total(capturedIds)
     const hasGoal = goal.integrationS !== null || goal.frameCount !== null
     const met = hasGoal && (goal.integrationS === null || inProject.seconds >= goal.integrationS) && (goal.frameCount === null || inProject.frames >= goal.frameCount)
-    const target = [goal.integrationS !== null ? formatHours(goal.integrationS) : null, goal.frameCount !== null ? plural(goal.frameCount, "frame") : null].filter(Boolean).join(" and ")
-    const amount = (t: FrameTotals) => (goal.integrationS !== null ? formatHours(t.seconds) : plural(t.frames, "frame"))
+    const hours = goal.integrationS !== null ? verbatim(formatHours(goal.integrationS)) : null
+    const frames = goal.frameCount !== null ? framesRef(goal.frameCount) : null
+    const target = hours && frames ? msg("domain_goal_target_both", { hours, frames }) : (hours ?? frames)
+    const amount = (t: FrameTotals) => (goal.integrationS !== null ? verbatim(formatHours(t.seconds)) : framesRef(t.frames))
+    const amounts = target
+      ? msg("domain_goal_amounts", { inProject: amount(inProject), captured: amount(captured), target })
+      : msg("domain_goal_amounts_no_target", { inProject: amount(inProject), captured: amount(captured) })
     return {
       goal,
       inProject,
@@ -538,17 +565,26 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
       unknownQuality,
       met,
       remainingS: goal.integrationS === null ? null : Math.max(0, goal.integrationS - inProject.seconds),
-      line: `${goal.channel} ${amount(inProject)} in project · ${amount(captured)} captured${target ? ` · goal ${target}` : ""}`,
+      line: msg("domain_goal_line", { channel: goal.channel, amounts }),
+      amounts,
     }
   })
 }
 
+/** "1 frame", "1,200 frames". */
+function framesRef(count: number): MessageRef {
+  return msg("domain_frames", { count, n: formatCount(count) })
+}
+
 export interface ProjectWarning {
+  /** Stable per rig, subject, channel and kind of gap. */
+  id: string
   kind: "exposure-mismatch" | "missing-calibration"
   rigId: OpticalTrainId
   subjectId: string
-  channel: string
-  message: string
+  /** The goal channel, or the raw filter when it meets no goal; null without a filter. */
+  channel: string | null
+  message: MessageRef
 }
 
 /**
@@ -564,34 +600,35 @@ export function projectWarnings(disk: Disk, catalog: Catalog, project: Project):
   for (const candidate of projectCandidates(catalog, project)) {
     const { session, subject, rigId } = candidate
     // A warning names the goal channel, or the raw filter when it meets no goal.
-    const channel: string = goalChannel(catalog, session) ?? session.channel ?? "No filter"
+    const channel = goalChannel(catalog, session) ?? session.channel ?? null
+    const channelName = channel === null ? msg("domain_no_filter") : verbatim(channel)
     const exposure = sessionExposureS(session)
     const key = `${rigId}|${subject.id}|${channel}|${exposure}`
     if (seen.has(key)) continue
     seen.add(key)
     const darks = candidatesFor(catalog, session, "dark", sources)
     const flats = candidatesFor(catalog, session, "flat", sources)
-    const rig = rigName(catalog, rigId)
+    const rig = rigRef(catalog, rigId)
+    const base = { rigId, subjectId: subject.id, channel }
     if (!darks.some((d) => d.summary.allCompatible)) {
       const sameCamera = darks.filter((d) => d.criteria.every((c) => c.name === "exposure" || c.result === "compatible"))
       if (sameCamera.length > 0) {
         const others = [...new Set(sameCamera.map((d) => d.source.exposureS).filter((e): e is number => e !== null))].sort((a, b) => a - b)
         out.push({
+          ...base,
+          id: `${key}|dark`,
           kind: "exposure-mismatch",
-          rigId,
-          subjectId: subject.id,
-          channel,
-          message: `${rig}: ${channel} ${formatExposure(exposure)} lights have no matching dark (darks at ${others.map(formatExposure).join(", ")})`,
+          message: msg("warning_exposure_mismatch", { rig, channel: channelName, exposure: formatExposure(exposure), others: others.map(formatExposure).join(", ") }),
         })
       } else {
-        out.push({ kind: "missing-calibration", rigId, subjectId: subject.id, channel, message: `${rig}: no compatible dark for ${channel} ${formatExposure(exposure)} lights` })
+        out.push({ ...base, id: `${key}|dark`, kind: "missing-calibration", message: msg("warning_missing_dark", { rig, channel: channelName, exposure: formatExposure(exposure) }) })
       }
     }
     if (!flats.some((f) => f.summary.allCompatible)) {
       const flatKey = `${rigId}|${subject.id}|${channel}|flat`
       if (!seen.has(flatKey)) {
         seen.add(flatKey)
-        out.push({ kind: "missing-calibration", rigId, subjectId: subject.id, channel, message: `${rig}: no compatible ${channel} flat` })
+        out.push({ ...base, id: flatKey, kind: "missing-calibration", message: msg("warning_missing_flat", { rig, channel: channelName }) })
       }
     }
   }
@@ -608,21 +645,22 @@ export function projectWarnings(disk: Disk, catalog: Catalog, project: Project):
  */
 export type GateState = "done" | "ready" | "review" | "blocked" | "running" | "partial" | "idle"
 
-export const GATE_LABEL: Record<GateState, string> = {
-  done: "Done",
-  ready: "Ready",
-  review: "Needs review",
-  blocked: "Blocked",
-  running: "Running",
-  partial: "Partial",
-  idle: "Not started",
+/** The gate word for a state (`gateWord` in app/run-ui words it). */
+export const GATE_WORD: Record<GateState, MessageRef> = {
+  done: msg("status_done"),
+  ready: msg("status_ready"),
+  review: msg("status_needs_review"),
+  blocked: msg("status_blocked"),
+  running: msg("status_running"),
+  partial: msg("status_partial"),
+  idle: msg("status_not_started"),
 }
 
 export interface GateItem {
-  label: string
+  label: MessageRef
   /** true met, false blocks, "advisory" informs without blocking. */
   met: boolean | "advisory"
-  detail: string
+  detail: MessageRef
 }
 
 /** A route link a screen can follow; `to` is a registered route pattern. */
@@ -634,22 +672,22 @@ export interface StepLink {
   focusId?: string
 }
 
+/** A run step's gate; its name is `stepName(m, id)`. */
 export interface RunStepState {
   id: RunStep
   n: number
-  label: string
   state: GateState
   /** Short status beside the step name, e.g. "Saved r2" or "94 of 208". */
-  status: string
+  status: MessageRef
   items: GateItem[]
   link: StepLink
   /** Verb phrase used when this step holds the Next action. */
-  nextLabel: string
+  nextLabel: MessageRef
 }
 
 export interface NextAction {
-  label: string
-  reason: string
+  label: MessageRef
+  reason: MessageRef
   link: StepLink
   step: RunStepState | null
 }
@@ -658,7 +696,7 @@ export interface NextAction {
 export interface RunBlocker {
   kind: "unresolved-inputs" | "calibration-review" | "preparation-failed"
   step: RunStep
-  message: string
+  message: MessageRef
 }
 
 export interface RunPipeline {
@@ -734,74 +772,117 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const setup = runSetup(catalog, run)
   const refresh = runRefresh(catalog, run)
   const link = (step: RunStep, focusId?: string): StepLink => ({ ...runStepLink(run, step), focusId })
-  const STEP = (id: RunStep) => ({ id, n: RUN_STEPS.indexOf(id) + 1, label: STEP_LABEL[id] })
+  const STEP = (id: RunStep) => ({ id, n: RUN_STEPS.indexOf(id) + 1 })
+  const DASH = verbatim("–")
 
   // 1 Select: the subject's candidates on the run's rig, saved as a revision.
   // A draft made in Review (frames rejected or restored there) belongs to Review: Select keeps its saved state,
   // and Review reads "2 rejected, unsaved" with Save run in its footer.
   const owner = draftOwner(run)
   const selectSaved = saved || owner === "review"
+  const addNew = msg("domain_next_add_new_sessions", { count: refresh.newCandidates.length })
   const selectItems: GateItem[] = [
-    { label: "Sessions selected", met: selected > 0, detail: selected > 0 ? `${plural(selected, "session")} · ${plural(included, "frame")}` : "No sessions yet." },
-    { label: "No unresolved inputs", met: unresolved === 0, detail: unresolved === 0 ? "Every selected frame is readable now." : `${plural(unresolved, "member")} cannot be read.` },
     {
-      label: "Membership saved",
+      label: msg("domain_gate_sessions_selected"),
+      met: selected > 0,
+      detail: selected > 0 ? joinRefs([msg("domain_sessions", { count: selected, n: formatCount(selected) }), framesRef(included)], " · ") : msg("domain_gate_no_sessions"),
+    },
+    {
+      label: msg("domain_gate_no_unresolved"),
+      met: unresolved === 0,
+      detail: unresolved === 0 ? msg("domain_gate_all_readable") : msg("domain_gate_members_unreadable", { count: unresolved, n: formatCount(unresolved) }),
+    },
+    {
+      label: msg("domain_gate_membership_saved"),
       met: owner === "review" ? "advisory" : saved,
-      detail: saved ? `Revision ${latest!.revision} saved.` : owner === "review" ? "Review has unsaved changes: save them in Review." : latest ? `Unsaved changes on revision ${latest.revision}.` : "Not saved yet.",
+      detail: saved
+        ? msg("domain_gate_revision_saved", { revision: latest!.revision })
+        : owner === "review"
+          ? msg("domain_gate_review_unsaved")
+          : latest
+            ? msg("domain_gate_unsaved_on_revision", { revision: latest.revision })
+            : msg("domain_gate_not_saved_yet"),
     },
   ]
-  if (refresh.newCandidates.length > 0) selectItems.push({ label: "New candidates", met: "advisory", detail: `Add ${plural(refresh.newCandidates.length, "new session")}` })
-  if (refresh.noLongerMatching.length > 0) selectItems.push({ label: "No longer matches subject", met: "advisory", detail: `${plural(refresh.noLongerMatching.length, "member")} flagged` })
+  if (refresh.newCandidates.length > 0) selectItems.push({ label: msg("domain_gate_new_candidates"), met: "advisory", detail: addNew })
+  if (refresh.noLongerMatching.length > 0) {
+    selectItems.push({ label: msg("domain_gate_no_longer_matches"), met: "advisory", detail: msg("domain_gate_members_flagged", { count: refresh.noLongerMatching.length }) })
+  }
   const select: RunStepState = {
     ...STEP("select"),
     state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !selectSaved ? "review" : "done",
-    status: selected === 0 ? "No sessions" : unresolved > 0 ? `${unresolved} unresolved` : selectSaved && latest ? `Saved r${latest.revision}` : "Unsaved",
+    status:
+      selected === 0
+        ? msg("domain_status_no_sessions")
+        : unresolved > 0
+          ? msg("domain_status_unresolved", { count: unresolved })
+          : selectSaved && latest
+            ? msg("domain_status_saved_revision", { revision: latest.revision })
+            : msg("domain_status_unsaved"),
     items: selectItems,
     link: link("select", selected > 0 && !selectSaved && !complete ? "save-run" : undefined),
-    nextLabel: selected === 0 ? "Select sessions" : unresolved > 0 ? "Resolve inputs" : !selectSaved ? "Save run" : refresh.newCandidates.length > 0 ? `Add ${plural(refresh.newCandidates.length, "new session")}` : "Edit selection",
+    nextLabel:
+      selected === 0
+        ? msg("domain_next_select_sessions")
+        : unresolved > 0
+          ? msg("domain_next_resolve_inputs")
+          : !selectSaved
+            ? msg("domain_next_save_run")
+            : refresh.newCandidates.length > 0
+              ? addNew
+              : msg("domain_next_edit_selection"),
   }
 
   // 2 Review: quality is advisory; measurements inform, never decide. Counts cover the frames Review lists
   // (included, rejected, excluded and unresolved members), so they match its All / Picked / Rejected / Unreviewed filters.
   const decision = runReviewCounts(catalog, run)
   const draftNote = owner === "review" ? reviewDraftNote(run) : null
+  const decided = { done: decision.total - decision.unreviewed, total: decision.total }
   const review: RunStepState = {
     ...STEP("review"),
     state: decision.total === 0 ? "idle" : draftNote ? "review" : decision.unreviewed === 0 ? "done" : "review",
-    status: decision.total === 0 ? "–" : (draftNote ?? `${decision.total - decision.unreviewed} of ${decision.total}`),
+    status: decision.total === 0 ? DASH : (draftNote ?? msg("domain_count_of", decided)),
     items: [
-      ...(draftNote ? [{ label: "Review changes saved", met: false, detail: `${draftNote[0]!.toUpperCase()}${draftNote.slice(1)}: Save run keeps them as the next revision.` } satisfies GateItem] : []),
-      { label: "Frames reviewed", met: "advisory", detail: decision.total === 0 ? "No frames yet." : `${decision.total - decision.unreviewed} of ${decision.total} have a quality decision.` },
+      ...(draftNote ? [{ label: msg("domain_gate_review_saved"), met: false, detail: msg("domain_gate_review_save_detail", { note: draftNote }) } satisfies GateItem] : []),
+      { label: msg("domain_gate_frames_reviewed"), met: "advisory", detail: decision.total === 0 ? msg("domain_gate_no_frames") : msg("domain_gate_frames_decided", decided) },
     ],
     link: link("review", draftNote && !complete ? "review-save" : undefined),
-    nextLabel: draftNote ? "Save run" : "Review frames",
+    nextLabel: draftNote ? msg("domain_next_save_run") : msg("domain_next_review_frames"),
   }
 
   // 3 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55).
   const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, savedContent(run) ?? content)
   const offers = run.masterOffers.filter((o) => o.state === "pending").length
+  const needReview = calibration.needsReview.length
   const calibrateItems: GateItem[] = [
     {
-      label: "Calibration matched",
-      met: setup.calibrationPolicy === "off" || (calibration.rows.length > 0 && calibration.needsReview.length === 0),
+      label: msg("domain_gate_calibration_matched"),
+      met: setup.calibrationPolicy === "off" || (calibration.rows.length > 0 && needReview === 0),
       detail:
         setup.calibrationPolicy === "off"
-          ? "Calibration policy is off."
+          ? msg("domain_gate_policy_off")
           : calibration.rows.length === 0
-            ? "Select sessions first."
-            : calibration.needsReview.length === 0
-              ? `${plural(calibration.rows.length, "requirement")} matched.`
-              : `${plural(calibration.needsReview.length, "requirement")} ${needs(calibration.needsReview.length)} review.`,
+            ? msg("domain_gate_select_first")
+            : needReview === 0
+              ? msg("domain_gate_requirements_matched", { count: calibration.rows.length })
+              : msg("domain_gate_requirements_need_review", { count: needReview }),
     },
   ]
-  if (offers > 0) calibrateItems.push({ label: "Master found in Results", met: "advisory", detail: `${plural(offers, "master")} offered once.` })
+  if (offers > 0) calibrateItems.push({ label: msg("domain_gate_master_found"), met: "advisory", detail: msg("domain_gate_masters_offered", { count: offers }) })
   const calibrate: RunStepState = {
     ...STEP("calibrate"),
-    state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : calibration.needsReview.length > 0 ? "blocked" : "done",
-    status: setup.calibrationPolicy === "off" ? "Off" : calibration.rows.length === 0 ? "–" : calibration.needsReview.length > 0 ? `${calibration.needsReview.length} ${needs(calibration.needsReview.length)} review` : "Automatic",
+    state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : needReview > 0 ? "blocked" : "done",
+    status:
+      setup.calibrationPolicy === "off"
+        ? msg("domain_status_off")
+        : calibration.rows.length === 0
+          ? DASH
+          : needReview > 0
+            ? msg("domain_status_need_review", { count: needReview })
+            : msg("domain_status_automatic"),
     items: calibrateItems,
     link: link("calibrate"),
-    nextLabel: "Review matches",
+    nextLabel: msg("domain_next_review_matches"),
   }
 
   // 4 Prepare: the latest preparation revision of the latest membership revision.
@@ -810,41 +891,61 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const prepCurrent = prep && latest && prep.membershipRevision === latest.revision ? prep : null
   const profile = setup.profileId ? catalog.profiles[setup.profileId] : undefined
   const prepareItems: GateItem[] = [
-    { label: "Membership saved", met: saved, detail: saved ? `Revision ${latest!.revision}.` : "Save the run first." },
-    { label: "Calibration matched", met: calibrate.state === "done", detail: calibrate.state === "done" ? "Handoff calibration is settled." : `${plural(calibration.needsReview.length, "requirement")} need review.` },
-    { label: "Application profile chosen", met: Boolean(profile), detail: profile ? profile.name : "Choose a profile in Prepare." },
+    { label: msg("domain_gate_membership_saved"), met: saved, detail: saved ? msg("domain_gate_revision", { revision: latest!.revision }) : msg("domain_gate_save_first") },
+    {
+      label: msg("domain_gate_calibration_matched"),
+      met: calibrate.state === "done",
+      detail: calibrate.state === "done" ? msg("domain_gate_handoff_settled") : msg("domain_gate_requirements_need_review", { count: needReview }),
+    },
+    { label: msg("domain_gate_profile_chosen"), met: Boolean(profile), detail: profile ? verbatim(profile.name) : msg("domain_gate_choose_profile") },
   ]
   let prepState: GateState
-  let prepStatus: string
+  let prepStatus: MessageRef
   if (prepCurrent?.state === "running" || prepCurrent?.state === "paused") {
     prepState = "running"
-    prepStatus = `${prepCurrent.preparedAssetIds.length} of ${prepCurrent.entryCount}`
+    prepStatus = msg("domain_count_of", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
   } else if (prepCurrent?.state === "prepared") {
     prepState = prepCurrent.unverified ? "review" : "done"
-    prepStatus = prepCurrent.unverified ? "Unverified" : prepCurrent.prepRevision > 1 ? `Prepared (rev ${prepCurrent.prepRevision})` : "Prepared"
+    prepStatus = prepCurrent.unverified ? msg("status_unverified") : prepCurrent.prepRevision > 1 ? msg("domain_status_prepared_revision", { revision: prepCurrent.prepRevision }) : msg("status_prepared")
   } else if (prepCurrent?.state === "partial") {
     prepState = "partial"
-    prepStatus = `Partial ${prepCurrent.preparedAssetIds.length}/${prepCurrent.entryCount}`
-    prepareItems.push({ label: "All inputs prepared", met: false, detail: `${plural(prepCurrent.blocked.length, "input")} could not be prepared.` })
+    prepStatus = msg("domain_status_partial_of", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
+    prepareItems.push({ label: msg("domain_gate_all_prepared"), met: false, detail: msg("domain_gate_inputs_not_prepared", { count: prepCurrent.blocked.length, n: formatCount(prepCurrent.blocked.length) }) })
   } else if (prepCurrent?.state === "failed") {
     prepState = "blocked"
-    prepStatus = "Failed"
-    prepareItems.push({ label: "Preparation succeeded", met: false, detail: "The last preparation failed." })
+    prepStatus = msg("status_failed")
+    prepareItems.push({ label: msg("domain_gate_preparation_succeeded"), met: false, detail: msg("domain_gate_last_preparation_failed") })
   } else if (prep && !prepCurrent) {
     prepState = "review"
-    prepStatus = `r${prep.membershipRevision} only`
+    prepStatus = msg("domain_status_revision_only", { revision: prep.membershipRevision })
   } else {
     prepState = blocks(prepareItems) ? "idle" : "ready"
-    prepStatus = blocks(prepareItems) ? `${prepareItems.filter((i) => i.met === false).length} to do` : "Ready"
+    prepStatus = blocks(prepareItems) ? msg("domain_status_to_do", { count: prepareItems.filter((i) => i.met === false).length }) : msg("status_ready")
   }
   if (complete && prepState !== "done") prepState = "done"
   const prepare: RunStepState = {
     ...STEP("prepare"),
     state: prepState,
     status: prepStatus,
-    items: prepState === "done" ? [{ label: "Run prepared", met: true, detail: prepCurrent ? `${plural(prepCurrent.entryCount, "entry", "entries")} at ${prepCurrent.folderPath}` : "Complete." }] : prepareItems,
+    items:
+      prepState === "done"
+        ? [
+            {
+              label: msg("domain_gate_run_prepared"),
+              met: true,
+              detail: prepCurrent ? msg("domain_gate_entries_at", { count: prepCurrent.entryCount, n: formatCount(prepCurrent.entryCount), path: prepCurrent.folderPath }) : msg("domain_gate_complete"),
+            },
+          ]
+        : prepareItems,
     link: link("prepare"),
-    nextLabel: prepState === "done" ? "Open in application" : prepState === "partial" || prepState === "blocked" ? "Resolve preparation" : prepState === "running" ? "Watch preparation" : "Review preparation",
+    nextLabel:
+      prepState === "done"
+        ? msg("domain_next_open_in_application")
+        : prepState === "partial" || prepState === "blocked"
+          ? msg("domain_next_resolve_preparation")
+          : prepState === "running"
+            ? msg("domain_next_watch_preparation")
+            : msg("domain_next_review_preparation"),
   }
 
   // 5 Results: discovered in the recorded Results folder, then accepted (D-W4).
@@ -854,13 +955,17 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const results: RunStepState = {
     ...STEP("results"),
     state: complete ? "done" : prepState !== "done" ? "idle" : candidates > 0 ? "review" : accepted > 0 ? "done" : "ready",
-    status: products.length === 0 ? (prepState === "done" ? "Awaiting outputs" : "–") : `${accepted} of ${products.length} accepted`,
+    status: products.length === 0 ? (prepState === "done" ? msg("domain_status_awaiting_outputs") : DASH) : msg("domain_status_accepted_of", { accepted, total: products.length }),
     items: [
-      { label: "Run prepared", met: prepState === "done", detail: prepState === "done" ? "Results are looked for in the Results folder." : "Prepare the run first." },
-      { label: "Results accepted", met: "advisory", detail: products.length === 0 ? "No outputs found yet." : `${accepted} accepted · ${candidates} candidate${candidates === 1 ? "" : "s"}` },
+      { label: msg("domain_gate_run_prepared"), met: prepState === "done", detail: prepState === "done" ? msg("domain_gate_results_folder") : msg("domain_gate_prepare_first") },
+      {
+        label: msg("domain_gate_results_accepted"),
+        met: "advisory",
+        detail: products.length === 0 ? msg("domain_gate_no_outputs") : joinRefs([msg("domain_accepted_count", { count: accepted }), msg("domain_candidate_count", { count: candidates })], " · "),
+      },
     ],
     link: link("results"),
-    nextLabel: candidates > 0 ? "Accept results" : "Look for results",
+    nextLabel: candidates > 0 ? msg("domain_next_accept_results") : msg("domain_next_look_for_results"),
   }
 
   // 6 Done: Complete, then Clean up (prepared entries only, D-W26).
@@ -873,13 +978,13 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const done: RunStepState = {
     ...STEP("done"),
     state: !complete ? (results.state === "done" ? "ready" : "idle") : cleaning ? "running" : cleanedUp ? "done" : "ready",
-    status: !complete ? "Open" : cleaning ? "Cleaning up" : cleanedUp ? "Cleaned up" : "Cleanup available",
+    status: !complete ? msg("status_open") : cleaning ? msg("domain_status_cleaning_up") : cleanedUp ? msg("domain_status_cleaned_up") : msg("domain_status_cleanup_available"),
     items: [
-      { label: "Run complete", met: complete, detail: complete ? "Complete: Clean up can be reviewed." : "Complete when processing is done; it removes nothing." },
-      { label: "Clean up reviewed", met: "advisory", detail: cleanedUp ? (lastCleanup?.summary ?? "Finished.") : "Clean up lists prepared entries only." },
+      { label: msg("domain_gate_run_complete"), met: complete, detail: complete ? msg("domain_gate_cleanup_reviewable") : msg("domain_gate_complete_when_done") },
+      { label: msg("domain_gate_cleanup_reviewed"), met: "advisory", detail: cleanedUp ? (lastCleanup?.summary ?? msg("domain_gate_finished")) : msg("domain_gate_cleanup_lists") },
     ],
     link: link("done"),
-    nextLabel: !complete ? "Complete run" : "Clean up run",
+    nextLabel: !complete ? msg("domain_next_complete_run") : msg("domain_next_clean_up_run"),
   }
 
   const steps = [select, review, calibrate, prepare, results, done]
@@ -890,15 +995,11 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const open = complete ? (done.state === "done" ? undefined : done) : (blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done"))
   const current = open ?? done
   const next: NextAction | null = trashed || !open ? null : stepAction(open)
-  return { runId: run.id, status: trashed ? "trashed" : complete ? "complete" : "open", steps, current, next, blocker: trashed || complete ? null : runBlocker(steps, calibration, unresolved), calibration }
+  const blocker = trashed || complete ? null : runBlocker(prepare.state, needReview, unresolved, prepCurrent?.state === "partial" ? prepCurrent.blocked.length : 0)
+  return { runId: run.id, status: trashed ? "trashed" : complete ? "complete" : "open", steps, current, next, blocker, calibration }
 }
 
-/** "needs" for one, "need" for several. */
-function needs(n: number): string {
-  return n === 1 ? "needs" : "need"
-}
-
-function stepReason(step: RunStepState): string {
+function stepReason(step: RunStepState): MessageRef {
   return step.items.find((i) => i.met === false)?.detail ?? step.items.find((i) => i.met === "advisory")?.detail ?? step.status
 }
 
@@ -935,14 +1036,14 @@ function draftOwner(run: Run): "select" | "review" | null {
 }
 
 /** "2 rejected, unsaved": what a Review draft changed against the latest revision. */
-function reviewDraftNote(run: Run): string | null {
+function reviewDraftNote(run: Run): MessageRef | null {
   const latest = latestRevision(run)
   if (!run.draft || !latest) return null
   const rejected = run.draft.rejected.filter((id) => !latest.rejected.includes(id)).length
   const restored = latest.rejected.filter((id) => !run.draft!.rejected.includes(id)).length
   if (rejected === 0 && restored === 0) return null
-  const parts = [rejected > 0 ? `${rejected} rejected` : null, restored > 0 ? `${restored} restored` : null].filter(Boolean)
-  return `${parts.join(", ")}, unsaved`
+  const changes = [rejected > 0 ? msg("domain_review_rejected", { count: rejected }) : null, restored > 0 ? msg("domain_review_restored", { count: restored }) : null].filter((c) => c !== null)
+  return msg("domain_review_unsaved", { changes: joinRefs(changes, ", ") })
 }
 
 /** Frames a run's Review lists and how many still have no quality decision (Review's Unreviewed filter). */
@@ -962,30 +1063,36 @@ export function runReviewCounts(catalog: Catalog, run: Run): { total: number; un
   return { total: seen.size, unreviewed }
 }
 
-function runBlocker(steps: RunStepState[], calibration: CalibrationPlan, unresolved: number): RunBlocker | null {
-  const prepare = steps[3]!
-  if (unresolved > 0) return { kind: "unresolved-inputs", step: "select", message: `${plural(unresolved, "input")} cannot be read` }
-  if (calibration.needsReview.length > 0) return { kind: "calibration-review", step: "calibrate", message: `${plural(calibration.needsReview.length, "calibration requirement")} ${needs(calibration.needsReview.length)} review` }
-  if (prepare.state === "blocked") return { kind: "preparation-failed", step: "prepare", message: "The last preparation failed" }
-  if (prepare.state === "partial") return { kind: "unresolved-inputs", step: "prepare", message: prepare.items.find((i) => i.met === false)?.detail ?? "Some inputs could not be prepared" }
+function runBlocker(prepare: GateState, needReview: number, unresolved: number, unprepared: number): RunBlocker | null {
+  if (unresolved > 0) return { kind: "unresolved-inputs", step: "select", message: msg("blocker_unreadable_inputs", { count: unresolved, n: formatCount(unresolved) }) }
+  if (needReview > 0) return { kind: "calibration-review", step: "calibrate", message: msg("blocker_calibration_review", { count: needReview }) }
+  if (prepare === "blocked") return { kind: "preparation-failed", step: "prepare", message: msg("blocker_preparation_failed") }
+  if (prepare === "partial") return { kind: "unresolved-inputs", step: "prepare", message: msg("blocker_inputs_not_prepared", { count: unprepared, n: formatCount(unprepared) }) }
   return null
 }
 
+/** An unsettled operation that holds a run back: "Prepare M 31 is running". */
+function operationHolds(op: Operation): MessageRef {
+  if (op.status === "paused") return msg("domain_operation_paused", { title: op.title })
+  if (op.status === "interrupted") return msg("domain_operation_interrupted", { title: op.title })
+  return msg("domain_operation_running", { title: op.title })
+}
+
 /** Why Move to Trash is refused (RES-FR-10): running operations and runs that use one of its accepted Results. */
-export function trashRefusals(world: World, run: Run): string[] {
-  const reasons = runOperations(world.operations, run.id).map((op) => `${op.title} is ${op.status === "running" ? "running" : op.status}`)
+export function trashRefusals(world: World, run: Run): MessageRef[] {
+  const reasons = runOperations(world.operations, run.id).map(operationHolds)
   const accepted = new Set(runResults(world.catalog, run.id).products.filter((r) => r.acceptance === "accepted").map((r) => r.id))
   for (const other of Object.values(world.catalog.runs)) {
     if (other.id === run.id || other.trashedAt) continue
     const inputs = workingContent(other)?.productInputs ?? []
-    if (inputs.some((id) => accepted.has(id))) reasons.push(`${other.name} uses one of its Results as an input`)
+    if (inputs.some((id) => accepted.has(id))) reasons.push(msg("domain_refusal_uses_result", { name: other.name }))
   }
   return reasons
 }
 
 /** Why Complete is refused (RES-FR-07): a running preparation or storage operation affecting the run. */
-export function completeRefusals(world: World, run: Run): string[] {
-  return runOperations(world.operations, run.id).map((op) => `${op.title} is ${op.status === "running" ? "running" : op.status}`)
+export function completeRefusals(world: World, run: Run): MessageRef[] {
+  return runOperations(world.operations, run.id).map(operationHolds)
 }
 
 /** Mark Done names each run outside the Trash that is not Complete (PRJ-FR-14). */
@@ -1036,12 +1143,11 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
     return {
       id,
       n: index + 1,
-      label: STEP_LABEL[id],
       state,
-      status: live.length === 0 ? "–" : `${doneCount} of ${plural(live.length, "panel")}`,
-      items: states.flatMap((s, i) => s.items.map((item) => ({ ...item, label: `${panelLabel(live[i]!.panel)}: ${item.label}` }))),
+      status: live.length === 0 ? verbatim("–") : msg("domain_panels_done", { done: doneCount, count: live.length }),
+      items: states.flatMap((s, i) => s.items.map((item) => ({ ...item, label: joinRefs([panelRef(live[i]!.panel), item.label], ": ") }))),
       link: groupStepLink(group, id),
-      nextLabel: id === "review" ? "Review all" : id === "prepare" ? "Prepare all" : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_LABEL[id]),
+      nextLabel: id === "review" ? msg("domain_next_review_all") : id === "prepare" ? msg("domain_next_prepare_all") : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_NAME[id]),
     }
   })
   const allVerified = live.length > 0 && live.every((p) => p.pipeline.steps[3]!.state === "done")
@@ -1049,8 +1155,8 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
   const open = blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done")
   // The reason names the first panel that holds the step back, e.g. "Panel 2: 30 inputs could not be prepared."
   const holder = open ? live.find((p) => p.pipeline.steps[open.n - 1]!.state === open.state) : undefined
-  const reason = open ? (holder ? `${panelLabel(holder.panel)}: ${stepReason(holder.pipeline.steps[open.n - 1]!)}` : open.status) : ""
-  return { group, panels, steps, allVerified, next: open ? { step: open, label: open.nextLabel, reason, link: open.link } : null }
+  const next = open ? { step: open, label: open.nextLabel, reason: holder ? joinRefs([panelRef(holder.panel), stepReason(holder.pipeline.steps[open.n - 1]!)], ": ") : open.status, link: open.link } : null
+  return { group, panels, steps, allVerified, next }
 }
 
 // ---------------------------------------------------------------------------
@@ -1105,14 +1211,6 @@ export function sessionsNeedingWork(catalog: Catalog): SessionsNeedingWork {
   return out
 }
 
-/** Home's top line: "N sessions need a Target · M not in any Project" (D-W35, PRJ-FR-19). */
-export function homeTopLine(catalog: Catalog): { needsTarget: number; notInProject: number; text: string } {
-  const work = sessionsNeedingWork(catalog)
-  const needsTarget = work.needsTarget.length
-  const notInProject = work.notInProject.length
-  return { needsTarget, notInProject, text: `${plural(needsTarget, "session")} need${needsTarget === 1 ? "s" : ""} a Target · ${notInProject} not in any Project` }
-}
-
 /** The one default site (Settings › Sites); null with no sites. */
 export function defaultSite(world: Pick<World, "catalog" | "settings">): ObservingSite | null {
   const id = world.settings.defaultSiteId
@@ -1144,20 +1242,32 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
   if (unreviewed > 0) {
     // A run's Review lists only its members, so new candidates are reviewed in the Project's candidate review (PIX-FR-18).
     return {
-      label: `Review ${plural(unreviewed, "new frame")}`,
-      reason: "Candidates have Unreviewed frames.",
+      label: msg("domain_next_review_new_frames", { count: unreviewed, n: formatCount(unreviewed) }),
+      reason: msg("domain_reason_candidates_unreviewed"),
       link: projectLink(project.id, { candidates: "unreviewed" }),
       step: null,
     }
   }
   for (const run of runs) {
-    const pipeline = runPipeline(world, run)
-    if (pipeline.blocker) return { label: `Open ${run.name}`, reason: `${STEP_LABEL[pipeline.blocker.step]}: ${pipeline.blocker.message}.`, link: runStepLink(run, pipeline.blocker.step), step: pipeline.steps.find((s) => s.id === pipeline.blocker!.step) ?? null }
+    const { blocker, steps } = runPipeline(world, run)
+    if (blocker) {
+      return {
+        label: msg("domain_next_open", { name: run.name }),
+        reason: msg("domain_reason_step_blocker", { step: STEP_NAME[blocker.step], message: blocker.message }),
+        link: runStepLink(run, blocker.step),
+        step: steps.find((s) => s.id === blocker.step) ?? null,
+      }
+    }
   }
   const wrapUp = projectWrapUp(catalog, project)
   if (wrapUp.available) {
     const step = wrapUp.steps.find((s) => s.id === wrapUp.current)
-    return { label: "Wrap up", reason: step ? `${step.label} is next.` : "Every step is settled; mark the Project Done.", link: projectLink(project.id, { stage: "wrap-up" }), step: null }
+    return {
+      label: msg("domain_wrap_up"),
+      reason: step ? msg("domain_reason_wrap_up_next", { step: step.label }) : msg("domain_reason_wrap_up_settled"),
+      link: projectLink(project.id, { stage: "wrap-up" }),
+      step: null,
+    }
   }
   const site = planningSite(world)
   if (site) {
@@ -1168,25 +1278,30 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
       const target = subject ? subjectTarget(catalog, subject) : undefined
       if (!centre || !target) continue
       if (bestWindowTonight({ ...target, ...centre }, site, defaultCriteria(site), nowMs)) {
-        return { label: "Plan tonight", reason: `${progress.line}; ${subjectName(catalog, subject!)} has a window tonight.`, link: { to: "/plan", search: { project: project.id } }, step: null }
+        return {
+          label: msg("domain_next_plan_tonight"),
+          reason: msg("domain_reason_window_tonight", { line: progress.line, subject: subjectRef(catalog, subject!) }),
+          link: { to: "/plan", search: { project: project.id } },
+          step: null,
+        }
       }
     }
   }
-  return { label: "Start a processing run", reason: "Choose a subject and a rig.", link: projectLink(project.id, { start: "run" }), step: null }
+  return { label: msg("domain_next_start_run"), reason: msg("domain_reason_choose_subject_rig"), link: projectLink(project.id, { start: "run" }), step: null }
 }
 
 /** Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run. */
-export function projectStage(world: World, project: Project): { label: string; step: RunStep | null; state: GateState } {
-  if (project.state === "done") return { label: project.archive ? "Archived" : "Done", step: null, state: "done" }
+export function projectStage(world: World, project: Project): { label: MessageRef; step: RunStep | null; state: GateState } {
+  if (project.state === "done") return { label: project.archive ? msg("status_archived") : msg("status_done"), step: null, state: "done" }
   const runs = projectRuns(world.catalog, project.id)
-  if (runs.length === 0) return { label: "No runs yet", step: null, state: "idle" }
+  if (runs.length === 0) return { label: msg("domain_stage_no_runs"), step: null, state: "idle" }
   const pipelines = runs.map((run) => runPipeline(world, run))
   const blocked = pipelines.find((p) => p.blocker)
   const held = blocked?.blocker ? blocked.steps.find((s) => s.id === blocked.blocker!.step) : undefined
-  if (held) return { label: `${GATE_LABEL[held.state]} at ${held.label}`, step: held.id, state: held.state }
+  if (held) return { label: msg("domain_stage_held_at", { gate: GATE_WORD[held.state], step: STEP_NAME[held.id] }), step: held.id, state: held.state }
   const open = pipelines.filter((p) => p.status === "open").sort((a, b) => a.current.n - b.current.n)[0]
-  if (open) return { label: open.current.label, step: open.current.id, state: open.current.state }
-  return { label: "Wrap up", step: null, state: "ready" }
+  if (open) return { label: STEP_NAME[open.current.id], step: open.current.id, state: open.current.state }
+  return { label: msg("domain_wrap_up"), step: null, state: "ready" }
 }
 
 // ---------------------------------------------------------------------------
@@ -1215,7 +1330,7 @@ export function archiveDestination(world: Pick<World, "catalog" | "settings">, p
 
 export interface WrapUpStep {
   id: WrapUpStepId
-  label: string
+  label: MessageRef
   state: "todo" | "done" | "skipped"
   at: IsoDateTime | null
 }
@@ -1241,7 +1356,7 @@ export function projectWrapUp(catalog: Catalog, project: Project): ProjectWrapUp
   const waitingOn = runs.filter((r) => r.completion !== "complete")
   const steps = WRAP_UP_STEPS.map((id): WrapUpStep => {
     const record = project.wrapUp[id]
-    return { id, label: WRAP_UP_LABEL[id], state: record?.state ?? "todo", at: record?.at ?? null }
+    return { id, label: WRAP_UP_NAME[id], state: record?.state ?? "todo", at: record?.at ?? null }
   })
   return {
     available: project.state === "open" && runs.length > 0 && waitingOn.length === 0,
@@ -1257,12 +1372,12 @@ export type ProjectStageId = "open" | "runs" | "wrap-up" | "done" | "archived"
  * The Project header's stage strip: Open → Runs → Wrap up → Done (or
  * Archived). Earlier stages read done, the current one current.
  */
-export function projectStageStrip(catalog: Catalog, project: Project): { current: ProjectStageId; stages: Array<{ id: ProjectStageId; label: string; state: "done" | "current" | "todo" }> } {
+export function projectStageStrip(catalog: Catalog, project: Project): { current: ProjectStageId; stages: Array<{ id: ProjectStageId; label: MessageRef; state: "done" | "current" | "todo" }> } {
   const runs = projectRuns(catalog, project.id)
   const current: ProjectStageId =
     project.state === "done" ? (project.archive ? "archived" : "done") : runs.length === 0 ? "open" : projectWrapUp(catalog, project).available ? "wrap-up" : "runs"
   const order: ProjectStageId[] = ["open", "runs", "wrap-up", current === "archived" ? "archived" : "done"]
-  const label: Record<ProjectStageId, string> = { open: "Open", runs: "Runs", "wrap-up": "Wrap up", done: "Done", archived: "Archived" }
+  const label: Record<ProjectStageId, MessageRef> = { open: msg("status_open"), runs: msg("common_runs"), "wrap-up": msg("domain_wrap_up"), done: msg("status_done"), archived: msg("status_archived") }
   const at = order.indexOf(current)
   return { current, stages: order.map((id, i) => ({ id, label: label[id], state: i < at ? "done" : i === at ? "current" : "todo" })) }
 }
@@ -1314,27 +1429,27 @@ export interface Fit {
   panels: number
   /** The Target's major axis as a share of the field's shorter side. */
   coverage: number | null
-  /** "fits", "3 panels", "tiny" or "–". */
-  label: string
+  /** "fits (60%)", "3 panels", "tiny" or "–". */
+  label: MessageRef
   /** Why Fit is unknown: "Size unknown" or "Field of view unknown". */
-  reason: string | null
+  reason: MessageRef | null
 }
 
 /** Fit of a Target on one rig (PLAN-TGT-FR-11). */
 export function targetFit(catalog: Catalog, target: Target, rigId: OpticalTrainId): Fit {
   const rig = catalog.opticalTrains[rigId]
   const fov = rig ? rigFieldOfView(catalog, rig) : null
-  if (!target.sizeDeg) return { kind: "unknown", panels: 0, coverage: null, label: "–", reason: "Size unknown" }
-  if (!fov) return { kind: "unknown", panels: 0, coverage: null, label: "–", reason: "Field of view unknown" }
+  if (!target.sizeDeg) return { kind: "unknown", panels: 0, coverage: null, label: verbatim("–"), reason: msg("domain_size_unknown") }
+  if (!fov) return { kind: "unknown", panels: 0, coverage: null, label: verbatim("–"), reason: msg("domain_fov_unknown") }
   const major = Math.max(target.sizeDeg.width, target.sizeDeg.height)
   const minor = Math.min(target.sizeDeg.width, target.sizeDeg.height)
   const long = Math.max(fov.widthDeg, fov.heightDeg)
   const short = Math.min(fov.widthDeg, fov.heightDeg)
   const coverage = major / short
   const panels = Math.ceil(major / long) * Math.ceil(minor / short)
-  if (panels > 1) return { kind: "panels", panels, coverage, label: `${panels} panels`, reason: null }
-  if (coverage < 0.25) return { kind: "tiny", panels: 1, coverage, label: "tiny", reason: null }
-  return { kind: "fits", panels: 1, coverage, label: "fits", reason: null }
+  if (panels > 1) return { kind: "panels", panels, coverage, label: msg("fit_panels", { count: panels }), reason: null }
+  if (coverage < 0.25) return { kind: "tiny", panels: 1, coverage, label: msg("fit_tiny"), reason: null }
+  return { kind: "fits", panels: 1, coverage, label: msg("fit_fits", { percent: Math.round(coverage * 100) }), reason: null }
 }
 
 /** Fits nicely: coverage of 25% to 90% of the field (PLAN-TGT-FR-12). */
@@ -1345,27 +1460,6 @@ export function fitsNicely(fit: Fit): boolean {
 /** Mosaic candidates: Targets that need 2 or more panels (PLAN-TGT-FR-12). */
 export function isMosaicCandidate(fit: Fit): boolean {
   return fit.kind === "panels" && fit.panels >= 2
-}
-
-export interface BandCell {
-  band: Band
-  /** Narrowband stays viable under the Moon; broadband is limited above half illumination. */
-  state: "viable" | "limited"
-}
-
-/**
- * The Filters strip (PLAN-TGT-FR-06): the seven bands with no rig, or only
- * the bands the rigs pass (their union for several rigs), each viable or
- * limited by tonight's Moon, with a recommendation label.
- */
-export function bandStrip(catalog: Catalog, rigIds: OpticalTrainId[] | null, moonIlluminationPct: number | null): { cells: BandCell[]; recommendation: string } {
-  const bands = rigIds && rigIds.length > 0 ? bandUnion(catalog, rigIds) : BANDS
-  const bright = (moonIlluminationPct ?? 0) >= 50
-  const cells = bands.map((band): BandCell => ({ band, state: bright && !NARROW_BANDS.includes(band) ? "limited" : "viable" }))
-  const narrow = cells.some((c) => NARROW_BANDS.includes(c.band))
-  const broad = cells.some((c) => !NARROW_BANDS.includes(c.band))
-  const recommendation = cells.length === 0 ? "No bands on this rig" : bright ? (narrow ? "Narrowband tonight" : "Broadband limited by the Moon") : broad ? "Broadband tonight" : "Narrowband tonight"
-  return { cells, recommendation }
 }
 
 /** The Plan list (Planning): Targets the user added, by name. "Show all" lists My targets instead. */

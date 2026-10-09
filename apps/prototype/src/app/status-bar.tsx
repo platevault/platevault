@@ -29,7 +29,7 @@ import { nowIso, type PrototypeState, useStore } from "@/store/core"
 import { useStatusChips } from "@/store/issues"
 import { type Notice, type NoticeTone, useNotices } from "@/store/notifications"
 import { cancelOperation } from "@/store/operations"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { IssueRow, issueCopy, SEVERITY_TONE } from "./issues-hub"
 import { useMessages } from "./preferences"
 import { useSelectionContext } from "./status-selection"
@@ -225,19 +225,20 @@ function OperationItem({ op, expanded = false }: { op: Operation; expanded?: boo
   const m = useMessages()
   const pct = op.progress.total > 0 ? Math.round((op.progress.done / op.progress.total) * 100) : null
   const word = op.status === "paused" ? m.status_paused() : pct !== null ? `${pct}%` : ""
+  const title = say(m, op.title)
   return (
     <div className={cn("group/op flex min-w-0 items-center gap-1.5", expanded ? "w-full" : "max-w-48")} data-operation={op.id}>
-      <Link to="/activity" className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={op.title}>
-        {op.title}
+      <Link to="/activity" className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={title}>
+        {title}
       </Link>
-      <MiniProgress value={pct} label={op.title} />
+      <MiniProgress value={pct} label={title} />
       <span className={cn("relative inline-flex h-4 shrink-0 items-center justify-end gap-1 tabular-nums", expanded ? "min-w-12" : "w-8")}>
         <span className={cn(!expanded && op.canCancel && "group-focus-within/op:invisible group-hover/op:invisible")}>{word}</span>
         {op.canCancel ? (
           <button
             type="button"
             onClick={() => cancelOperation(op.id)}
-            aria-label={`${m.verb_cancel()}: ${op.title}`}
+            aria-label={`${m.verb_cancel()}: ${title}`}
             title={m.verb_cancel()}
             className={cn(
               "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -306,14 +307,17 @@ function noticeTime(at: string): string {
 }
 
 function NoticeRow({ notice, onNavigate }: { notice: Notice; onNavigate: () => void }) {
+  const m = useMessages()
   const { icon: Glyph, className } = NOTICE_GLYPH[notice.tone]
+  const words = say(m, notice.text)
+  const title = notice.detail ? say(m, notice.detail) : words
   const text = notice.href ? (
-    <Link to={notice.href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={notice.detail ?? notice.text}>
-      {notice.text}
+    <Link to={notice.href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={title}>
+      {words}
     </Link>
   ) : (
-    <span className="min-w-0 flex-1 truncate" title={notice.detail ?? notice.text}>
-      {notice.text}
+    <span className="min-w-0 flex-1 truncate" title={title}>
+      {words}
     </span>
   )
   return (
@@ -335,20 +339,21 @@ function LastNotification() {
   const latest = notices[0]
   if (!latest) return null
   const { icon: Glyph, className } = NOTICE_GLYPH[latest.tone]
+  const text = say(m, latest.text)
   return (
     <>
       <span role="status" className="sr-only">
-        {latest.text}
+        {text}
       </span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={<Button variant="ghost" size="xs" className="min-w-0 max-w-48 shrink justify-start text-muted-foreground min-[1440px]:max-w-72" />}
-          title={latest.text}
-          aria-label={`${m.status_bar_notifications()}: ${latest.text}`}
+          title={text}
+          aria-label={`${m.status_bar_notifications()}: ${text}`}
           data-status-notice
         >
           <Glyph data-icon="inline-start" aria-hidden="true" className={className} />
-          <span className="truncate">{latest.text}</span>
+          <span className="truncate">{text}</span>
         </PopoverTrigger>
         <PopoverContent side="top" align="end" className="w-96 gap-0 p-0" aria-label={m.status_bar_notifications()}>
           <div data-chrome className="flex items-center gap-2 border-b border-border px-3 py-1.5">

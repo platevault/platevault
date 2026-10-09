@@ -16,6 +16,7 @@ import { calibrationProcesses } from "./calibration-process"
 import { runPipeline, runStepLink, type StepLink, sessionsNeedingWork, type World } from "./derive"
 import { locationAvailability, qualityApplicability } from "./library"
 import { formatNight } from "@/lib/format"
+import type { MessageRef } from "@/lib/i18n"
 
 export type IssueSeverity = "info" | "warning" | "danger"
 export type IssueGroup = "sessions" | "storage" | "work" | "runs" | "calibration" | "drift"
@@ -56,8 +57,8 @@ export interface Issue {
   count: number
   /** en-GB source string with `{n}` (count) and `{name}` placeholders, e.g. "{n} need a Target". */
   label: string
-  /** Value for `{name}`: the location, run or session the issue is about. */
-  name: string | null
+  /** Value for `{name}`: the location, run or session the issue is about; an operation's title is a ref, worded by `issueCopy`. */
+  name: string | MessageRef | null
   /** Id of the one record the issue is about (location, run, session, master, process); null for a count. */
   about: string | null
   /** The one action, e.g. "Assign", with where it leads. */
@@ -185,7 +186,7 @@ export interface StatusChip {
   /** en-GB source string with `{n}` and `{name}`: "{n} blocked", "{name} offline". */
   label: string
   /** Value for `{name}` when the chip covers one named record. */
-  name: string | null
+  name: Issue["name"]
   issues: Issue[]
 }
 

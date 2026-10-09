@@ -4,31 +4,27 @@
  * terse with its count, "Import finished · 54 frames"; Activity keeps the
  * full record.
  */
-import type { ActivityEvent, Operation } from "@/domain/types"
-import { formatCount } from "@/lib/format"
+import { unitCount } from "@/domain/labels"
+import type { ActivityEvent, Operation, SettledStatus } from "@/domain/types"
+import { joinRefs, type MessageRef } from "@/lib/i18n"
 import { type PrototypeState, useStore } from "./core"
-import { isSettled, SETTLED_WORD } from "./operations"
+import { activityTitle, isSettled } from "./operations"
 
 export type NoticeTone = "success" | "warning" | "danger" | "neutral"
 
+/** Copy is a `MessageRef`, worded by the status bar with `say`. */
 export interface Notice {
   id: string
   at: string
-  /** "Import finished · 54 frames". */
-  text: string
-  detail: string | null
+  /** "Import: finished · 54 frames". */
+  text: MessageRef
+  detail: MessageRef | null
   tone: NoticeTone
   /** Hash route of the surface that owns the outcome. */
   href: string | null
 }
 
-const WORD_TONE: Record<string, NoticeTone> = { finished: "success", partial: "warning", failed: "danger", canceled: "neutral" }
-
-/** "1 frame", "54 frames", "1 entry": the unit an operation counts in, agreeing with `n`. */
-function countOf(n: number, unit: string): string {
-  const one = unit.endsWith("ies") ? `${unit.slice(0, -3)}y` : unit.replace(/s$/, "")
-  return `${formatCount(n)} ${n === 1 ? one : unit}`
-}
+const STATUS_TONE: Record<SettledStatus, NoticeTone> = { succeeded: "success", partial: "warning", failed: "danger", canceled: "neutral" }
 
 export function noticeOf(event: ActivityEvent, operations: Record<string, Operation>): Notice {
   const base = { id: event.id, at: event.at, detail: event.detail, href: event.href }
@@ -36,14 +32,11 @@ export function noticeOf(event: ActivityEvent, operations: Record<string, Operat
   if (event.kind === "write-refused" || event.kind === "refusal") return { ...base, text: event.title, tone: "warning" }
   if (event.kind === "saved") return { ...base, text: event.title, tone: "success" }
   const op = event.operationId ? operations[event.operationId] : undefined
-  if (op && isSettled(op.status)) {
-    const word = SETTLED_WORD[op.status as keyof typeof SETTLED_WORD]
-    const count = op.progress.done > 0 ? ` · ${countOf(op.progress.done, op.progress.unit)}` : ""
-    return { ...base, text: `${op.title} ${word}${count}`, tone: WORD_TONE[word] ?? "neutral" }
-  }
-  // An outcome without its operation record reads "<title> <word>" too.
-  const match = event.title.match(/^(.*): (finished|partial|failed|canceled)$/)
-  return match ? { ...base, text: `${match[1]} ${match[2]}`, tone: WORD_TONE[match[2]!] ?? "neutral" } : { ...base, text: event.title, tone: "neutral" }
+  const status = op && isSettled(op.status) ? (op.status as SettledStatus) : event.status
+  if (!status) return { ...base, text: event.title, tone: "neutral" }
+  const title = activityTitle({ title: event.title, status })
+  const text = op && op.progress.done > 0 ? joinRefs([title, unitCount(op.progress.unit, op.progress.done)], " · ") : title
+  return { ...base, text, tone: STATUS_TONE[status] }
 }
 
 const HISTORY = 12

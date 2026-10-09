@@ -23,6 +23,7 @@
  * "File into library" filing (D-W11), the Abandoned state (D-W72) and the
  * naming "Auto-apply pattern" (D-W58).
  */
+import type { MessageRef } from "@/lib/i18n"
 
 export type IsoDateTime = string
 /** Local observing-night date, `YYYY-MM-DD` of the evening the night began. */
@@ -1170,16 +1171,23 @@ export type OperationKind =
 
 export type OperationStatus = "running" | "paused" | "succeeded" | "partial" | "failed" | "canceled" | "interrupted"
 
+/** The one outcome an operation settles with. */
+export type SettledStatus = Exclude<OperationStatus, "running" | "paused" | "interrupted">
+
+/** What an operation counts: worded with `OPERATION_UNIT_NAME` and `unitCount` (labels.ts). */
+export type OperationUnit = "files" | "frames" | "entries" | "prepared-entries" | "sessions" | "items"
+
 export type OperationItemStatus = "pending" | "running" | "done" | "blocked" | "failed" | "skipped" | "uncertain"
 
 export interface OperationItem {
   id: string
-  label: string
+  /** Usually a file or location name, as data (`verbatim`). */
+  label: MessageRef
   path: string | null
   status: OperationItemStatus
   /** Kind-specific phase, for example "destination-verified". */
   phase: string | null
-  detail: string | null
+  detail: MessageRef | null
 }
 
 export interface OperationScope {
@@ -1194,15 +1202,16 @@ export interface OperationScope {
   targetId?: TargetId
 }
 
+/** Persisted copy is a `MessageRef`, worded at render (`say`), so Activity and progress follow a language switch. */
 export interface Operation {
   id: OperationId
   kind: OperationKind
-  title: string
+  title: MessageRef
   status: OperationStatus
   scope: OperationScope
-  progress: { done: number; total: number; unit: string }
+  progress: { done: number; total: number; unit: OperationUnit }
   items: OperationItem[]
-  summary: string | null
+  summary: MessageRef | null
   canPause: boolean
   canCancel: boolean
   /** Kind-specific data owned by the track that registered the kind. */
@@ -1218,8 +1227,10 @@ export interface ActivityEvent {
   id: string
   at: IsoDateTime
   kind: ActivityKind
-  title: string
-  detail: string | null
+  title: MessageRef
+  detail: MessageRef | null
+  /** How an "operation" entry settled; its title is the operation's own title. */
+  status?: SettledStatus
   operationId: OperationId | null
   /** Hash route of the surface that owns the outcome. */
   href: string | null

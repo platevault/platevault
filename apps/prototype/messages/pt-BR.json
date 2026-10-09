@@ -497,5 +497,661 @@
   "tips_help": "Ajuda",
   "tips_note": "Nota {number}",
   "page_step_done": "(concluído)",
-  "ui_breadcrumb": "Trilha de navegação"
+  "ui_breadcrumb": "Trilha de navegação",
+  "domain_mode_linked": "Execução vinculada",
+  "domain_mode_direct_source": "Fonte direta",
+  "domain_mode_copy": "Cópia",
+  "domain_mode_clone": "Clone",
+  "domain_result_final_image": "Imagem final",
+  "domain_result_linear_integration": "Integração linear",
+  "domain_result_channel_product": "Produto de canal",
+  "domain_result_mosaic_panel": "Painel de mosaico",
+  "domain_result_assembled_mosaic": "Mosaico montado",
+  "domain_products_final_image": "imagens finais",
+  "domain_products_linear_integration": "integrações lineares",
+  "domain_products_channel_product": "produtos de canal",
+  "domain_products_mosaic_panel": "painéis de mosaico",
+  "domain_products_assembled_mosaic": "mosaicos montados",
+  "domain_quality_any": "Qualquer qualidade",
+  "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
+  "domain_quality_usable_max_fwhm": "Utilizável, FWHM ≤ {arcsec}″",
+  "domain_wrap_up_cleanup": "Limpar execuções",
+  "domain_wrap_up_trash": "Lixeira",
+  "domain_wrap_up_archive": "Arquivar",
+  "domain_rig_none": "Sem equipamento",
+  "domain_rig_unknown": "Equipamento desconhecido",
+  "domain_subject_unknown": "Alvo desconhecido",
+  "domain_panel_name": "Painel {n}",
+  "domain_panel_flag_ambiguous": "Cai em mais de um painel",
+  "domain_panel_flag_off_panel": "Fora de todos os painéis",
+  "domain_panel_flag_no_pointing": "Sem apontamento",
+  "domain_fov_unknown": "Campo de visão desconhecido",
+  "domain_size_unknown": "Tamanho desconhecido",
+  "domain_panel_pointing_inside": "Apontamento dentro de {panel}",
+  "domain_candidate_reason": "Alvo {target} em {rig}",
+  "domain_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "domain_goal_target_both": "{hours} e {frames}",
+  "domain_goal_amounts": "{inProject} no projeto · {captured} capturado · meta {target}",
+  "domain_goal_amounts_no_target": "{inProject} no projeto · {captured} capturado",
+  "domain_goal_line": "{channel} {amounts}",
+  "domain_no_filter": "Sem filtro",
+  "warning_exposure_mismatch": "{rig}: lights {channel} de {exposure} sem dark compatível (darks em {others})",
+  "warning_missing_dark": "{rig}: nenhum dark compatível para lights {channel} de {exposure}",
+  "warning_missing_flat": "{rig}: nenhum flat {channel} compatível",
+  "domain_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão",
+        "countPlural=*": "{n} sessões"
+      }
+    }
+  ],
+  "domain_gate_sessions_selected": "Sessões selecionadas",
+  "domain_gate_no_sessions": "Nenhuma sessão ainda.",
+  "domain_gate_no_unresolved": "Nenhuma entrada sem resolver",
+  "domain_gate_all_readable": "Todos os frames selecionados estão legíveis agora.",
+  "domain_gate_members_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} membro não pode ser lido.",
+        "countPlural=*": "{n} membros não podem ser lidos."
+      }
+    }
+  ],
+  "domain_gate_membership_saved": "Composição salva",
+  "domain_gate_revision_saved": "Revisão {revision} salva.",
+  "domain_gate_review_unsaved": "A Revisão tem alterações não salvas: salve-as na Revisão.",
+  "domain_gate_unsaved_on_revision": "Alterações não salvas na revisão {revision}.",
+  "domain_gate_not_saved_yet": "Ainda não salvo.",
+  "domain_gate_new_candidates": "Novos candidatos",
+  "domain_next_add_new_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Adicionar {count} sessão nova",
+        "countPlural=*": "Adicionar {count} sessões novas"
+      }
+    }
+  ],
+  "domain_gate_no_longer_matches": "Não corresponde mais ao objeto",
+  "domain_gate_members_flagged": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} membro sinalizado",
+        "countPlural=*": "{count} membros sinalizados"
+      }
+    }
+  ],
+  "domain_status_no_sessions": "Sem sessões",
+  "domain_status_unresolved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sem resolver",
+        "countPlural=*": "{count} sem resolver"
+      }
+    }
+  ],
+  "domain_status_saved_revision": "Salvo r{revision}",
+  "domain_status_unsaved": "Não salvo",
+  "domain_next_select_sessions": "Selecionar sessões",
+  "domain_next_resolve_inputs": "Resolver entradas",
+  "domain_next_save_run": "Salvar execução",
+  "domain_next_edit_selection": "Editar seleção",
+  "domain_count_of": "{done} de {total}",
+  "domain_review_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} rejeitado",
+        "countPlural=*": "{count} rejeitados"
+      }
+    }
+  ],
+  "domain_review_restored": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} restaurado",
+        "countPlural=*": "{count} restaurados"
+      }
+    }
+  ],
+  "domain_review_unsaved": "{changes}, não salvo",
+  "domain_gate_review_saved": "Alterações da Revisão salvas",
+  "domain_gate_review_save_detail": "{note}: Salvar execução as guarda como a próxima revisão.",
+  "domain_gate_frames_reviewed": "Frames revisados",
+  "domain_gate_no_frames": "Nenhum frame ainda.",
+  "domain_gate_frames_decided": "{done} de {total} têm uma decisão de qualidade.",
+  "domain_next_review_frames": "Revisar frames",
+  "domain_gate_calibration_matched": "Calibração correspondida",
+  "domain_gate_policy_off": "A política de calibração está desligada.",
+  "domain_gate_select_first": "Selecione as sessões primeiro.",
+  "domain_gate_requirements_matched": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requisito correspondido.",
+        "countPlural=*": "{count} requisitos correspondidos."
+      }
+    }
+  ],
+  "domain_gate_requirements_need_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requisito precisa de revisão.",
+        "countPlural=*": "{count} requisitos precisam de revisão."
+      }
+    }
+  ],
+  "domain_gate_master_found": "Master encontrado nos Resultados",
+  "domain_gate_masters_offered": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master oferecido uma vez.",
+        "countPlural=*": "{count} masters oferecidos uma vez."
+      }
+    }
+  ],
+  "domain_status_off": "Desligada",
+  "domain_status_need_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} precisa de revisão",
+        "countPlural=*": "{count} precisam de revisão"
+      }
+    }
+  ],
+  "domain_status_automatic": "Automática",
+  "domain_next_review_matches": "Revisar correspondências",
+  "domain_gate_revision": "Revisão {revision}.",
+  "domain_gate_save_first": "Salve a execução primeiro.",
+  "domain_gate_handoff_settled": "A calibração para o aplicativo está definida.",
+  "domain_gate_profile_chosen": "Perfil de aplicativo escolhido",
+  "domain_gate_choose_profile": "Escolha um perfil em Preparar.",
+  "domain_status_prepared_revision": "Preparado (rev {revision})",
+  "domain_status_partial_of": "Parcial {done}/{total}",
+  "domain_gate_all_prepared": "Todas as entradas preparadas",
+  "domain_gate_inputs_not_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada não pôde ser preparada.",
+        "countPlural=*": "{n} entradas não puderam ser preparadas."
+      }
+    }
+  ],
+  "domain_gate_preparation_succeeded": "Preparação bem-sucedida",
+  "domain_gate_last_preparation_failed": "A última preparação falhou.",
+  "domain_status_revision_only": "só r{revision}",
+  "domain_status_to_do": "{count} a fazer",
+  "domain_gate_run_prepared": "Execução preparada",
+  "domain_gate_entries_at": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada em {path}",
+        "countPlural=*": "{n} entradas em {path}"
+      }
+    }
+  ],
+  "domain_gate_complete": "Concluída.",
+  "domain_next_open_in_application": "Abrir no aplicativo",
+  "domain_next_resolve_preparation": "Resolver preparação",
+  "domain_next_watch_preparation": "Acompanhar preparação",
+  "domain_next_review_preparation": "Revisar preparação",
+  "domain_status_awaiting_outputs": "Aguardando saídas",
+  "domain_status_accepted_of": "{accepted} de {total} aceitos",
+  "domain_gate_results_folder": "Os resultados são procurados na pasta Resultados.",
+  "domain_gate_prepare_first": "Prepare a execução primeiro.",
+  "domain_gate_results_accepted": "Resultados aceitos",
+  "domain_gate_no_outputs": "Nenhuma saída encontrada ainda.",
+  "domain_accepted_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} aceito",
+        "countPlural=*": "{count} aceitos"
+      }
+    }
+  ],
+  "domain_candidate_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} candidato",
+        "countPlural=*": "{count} candidatos"
+      }
+    }
+  ],
+  "domain_next_accept_results": "Aceitar resultados",
+  "domain_next_look_for_results": "Procurar resultados",
+  "domain_status_cleaning_up": "Limpando",
+  "domain_status_cleaned_up": "Limpa",
+  "domain_status_cleanup_available": "Limpeza disponível",
+  "domain_gate_run_complete": "Execução concluída",
+  "domain_gate_cleanup_reviewable": "Concluída: a Limpeza pode ser revisada.",
+  "domain_gate_complete_when_done": "Conclua quando o processamento terminar; isso não remove nada.",
+  "domain_gate_cleanup_reviewed": "Limpeza revisada",
+  "domain_gate_finished": "Concluída.",
+  "domain_gate_cleanup_lists": "A Limpeza lista apenas entradas preparadas.",
+  "domain_next_complete_run": "Concluir execução",
+  "domain_next_clean_up_run": "Limpar execução",
+  "blocker_unreadable_inputs": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada não pode ser lida",
+        "countPlural=*": "{n} entradas não podem ser lidas"
+      }
+    }
+  ],
+  "blocker_calibration_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requisito de calibração precisa de revisão",
+        "countPlural=*": "{count} requisitos de calibração precisam de revisão"
+      }
+    }
+  ],
+  "blocker_preparation_failed": "A última preparação falhou",
+  "blocker_inputs_not_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada não pôde ser preparada",
+        "countPlural=*": "{n} entradas não puderam ser preparadas"
+      }
+    }
+  ],
+  "domain_operation_running": "{title} está em execução",
+  "domain_operation_paused": "{title} está pausada",
+  "domain_operation_interrupted": "{title} foi interrompida",
+  "domain_refusal_uses_result": "{name} usa um dos seus Resultados como entrada",
+  "domain_panels_done": [
+    {
+      "declarations": [
+        "input count",
+        "input done",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{done} de {count} painel",
+        "countPlural=*": "{done} de {count} painéis"
+      }
+    }
+  ],
+  "domain_next_review_all": "Revisar todos",
+  "domain_next_prepare_all": "Preparar todos",
+  "domain_next_review_new_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Revisar {n} frame novo",
+        "countPlural=*": "Revisar {n} frames novos"
+      }
+    }
+  ],
+  "domain_reason_candidates_unreviewed": "Os candidatos têm frames Não revisados.",
+  "domain_next_open": "Abrir {name}",
+  "domain_reason_step_blocker": "{step}: {message}.",
+  "domain_wrap_up": "Encerramento",
+  "domain_reason_wrap_up_next": "A seguir: {step}.",
+  "domain_reason_wrap_up_settled": "Todas as etapas estão resolvidas; marque o Projeto como Concluído.",
+  "domain_next_plan_tonight": "Planejar esta noite",
+  "domain_reason_window_tonight": "{line}; {subject} tem uma janela esta noite.",
+  "domain_next_start_run": "Iniciar uma execução de processamento",
+  "domain_reason_choose_subject_rig": "Escolha um objeto e um equipamento.",
+  "domain_stage_no_runs": "Nenhuma execução ainda",
+  "domain_stage_held_at": "{gate} em {step}",
+  "fit_fits": "cabe ({percent}%)",
+  "fit_tiny": "minúsculo",
+  "fit_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel",
+        "countPlural=*": "{count} painéis"
+      }
+    }
+  ],
+  "op_unit_files": "arquivos",
+  "op_unit_frames": "frames",
+  "op_unit_entries": "entradas",
+  "op_unit_prepared_entries": "entradas preparadas",
+  "op_unit_sessions": "sessões",
+  "op_unit_items": "itens",
+  "op_count_files": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} arquivo",
+        "countPlural=*": "{n} arquivos"
+      }
+    }
+  ],
+  "op_count_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada",
+        "countPlural=*": "{n} entradas"
+      }
+    }
+  ],
+  "op_count_prepared_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada preparada",
+        "countPlural=*": "{n} entradas preparadas"
+      }
+    }
+  ],
+  "op_count_items": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} item",
+        "countPlural=*": "{n} itens"
+      }
+    }
+  ],
+  "op_canceled_summary": "Cancelada. {done} de {total} itens concluídos antes do cancelamento; nada mais foi alterado.",
+  "op_index_canceled_item": "Cancelada após {files}. Incompleta até ser indexada de novo.",
+  "op_index_not_started": "Não iniciada: a indexação foi cancelada.",
+  "op_interrupted_summary": "O PlateVault reiniciou enquanto isto estava em execução. O progresso registrado é mantido; Tentar novamente o retoma.",
+  "op_index_offline": "Offline. Os últimos metadados observados e as decisões são mantidos.",
+  "op_index_files_to_read": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} arquivo para ler",
+        "countPlural=*": "{n} arquivos para ler"
+      }
+    }
+  ],
+  "op_index_went_offline": "Ficou offline após {files}. Os arquivos lidos até agora são mantidos.",
+  "op_index_access_denied": "Acesso negado. Escolha a pasta de novo ou Tente novamente.",
+  "op_index_incomplete": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Incompleta: {count} pasta ilegível. As pastas legíveis foram indexadas.",
+        "countPlural=*": "Incompleta: {count} pastas ilegíveis. As pastas legíveis foram indexadas."
+      }
+    }
+  ],
+  "op_index_files_read": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} arquivo lido",
+        "countPlural=*": "{n} arquivos lidos"
+      }
+    }
+  ],
+  "op_index_unsupported": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sem suporte",
+        "countPlural=*": "{count} sem suporte"
+      }
+    }
+  ],
+  "op_index_unreadable_folders": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} pasta ilegível",
+        "countPlural=*": "{count} pastas ilegíveis"
+      }
+    }
+  ],
+  "op_index_scope_incomplete": "escopo incompleto ou indisponível",
+  "op_index_locations_incomplete": "{blocked} de {count} locais incompletos ou indisponíveis",
+  "op_index_locations_complete": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} local completo",
+        "countPlural=*": "{count} locais completos"
+      }
+    }
+  ],
+  "op_index_title_one": "Indexando {name}",
+  "op_index_title_many": "Indexando {count} locais",
+  "op_settled_succeeded": "concluída",
+  "op_settled_partial": "parcial",
+  "op_settled_failed": "falhou",
+  "op_settled_canceled": "cancelada",
+  "op_settled_title": "{title}: {outcome}",
+  "store_stale_title": "Recusado: {label}",
+  "store_stale_message": "Recusado: {label}. Este registro foi alterado em outro lugar desde que você o abriu. Revise a versão atual antes de salvar de novo.",
+  "store_not_saved_title": "Não salvo: {label}",
+  "store_not_saved_message": "Não salvo: {label}. A gravação no catálogo falhou. Sua alteração continua na tela; escolha Tentar novamente.",
+  "store_persist_failed_title": "Dados do protótipo não salvos neste navegador",
+  "store_persist_failed_detail": "O armazenamento do navegador recusou a gravação. As alterações ficam nesta aba até ela ser fechada.",
+  "store_refusal_message": "{title}: {reasons}.",
+  "store_record_missing": "Este registro não existe mais no catálogo. Recarregue a página para ver a biblioteca atual."
 }

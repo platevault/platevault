@@ -15,8 +15,10 @@
 import { runHref } from "@/domain/derive"
 import { fileKey } from "@/domain/disk"
 import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
-import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, RunStep } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { unitCount } from "@/domain/labels"
+import type { ActivityEvent, LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, OperationUnit, RunStep, SettledStatus } from "@/domain/types"
+import { formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "./core"
 
 export interface OperationHandler {
@@ -53,10 +55,10 @@ let opCounter = 0
 
 export interface StartOperation {
   kind: OperationKind
-  title: string
+  title: MessageRef
   scope: OperationScope
   total: number
-  unit: string
+  unit: OperationUnit
   items?: OperationItem[]
   payload?: Record<string, unknown>
   canPause?: boolean
@@ -110,25 +112,11 @@ export function patchOperation(state: PrototypeState, id: OperationId, patch: Pa
 }
 
 /** Settle an operation and record its outcome in Activity. */
-export function settleOperation(
-  state: PrototypeState,
-  id: OperationId,
-  status: Exclude<OperationStatus, "running" | "paused" | "interrupted">,
-  summary: string,
-  href: string | null = null,
-): PrototypeState {
+export function settleOperation(state: PrototypeState, id: OperationId, status: SettledStatus, summary: MessageRef, href: string | null = null): PrototypeState {
   const op = state.operations[id]
   if (!op) return state
   const now = nowIso()
-  const event = {
-    id: `act_${id}`,
-    at: now,
-    kind: "operation" as const,
-    title: `${op.title}: ${SETTLED_WORD[status]}`,
-    detail: summary,
-    operationId: id,
-    href,
-  }
+  const event: ActivityEvent = { id: `act_${id}`, at: now, kind: "operation", title: op.title, detail: summary, status, operationId: id, href }
   return {
     ...state,
     operations: { ...state.operations, [id]: { ...op, status, summary, settledAt: now, updatedAt: now } },
@@ -136,12 +124,17 @@ export function settleOperation(
   }
 }
 
-/** The word a settled operation reads in Activity and the status bar: "Import finished". */
-export const SETTLED_WORD: Record<Exclude<OperationStatus, "running" | "paused" | "interrupted">, string> = {
-  succeeded: "finished",
-  partial: "partial",
-  failed: "failed",
-  canceled: "canceled",
+/** The word a settled operation reads in Activity: "Import finished". */
+const SETTLED_WORD: Record<SettledStatus, MessageRef> = {
+  succeeded: msg("op_settled_succeeded"),
+  partial: msg("op_settled_partial"),
+  failed: msg("op_settled_failed"),
+  canceled: msg("op_settled_canceled"),
+}
+
+/** An Activity entry's title: an operation's reads "<title>: finished", other entries their own title. */
+export function activityTitle(event: Pick<ActivityEvent, "title" | "status">): MessageRef {
+  return event.status ? msg("op_settled_title", { title: event.title, outcome: SETTLED_WORD[event.status] }) : event.title
 }
 
 export function pauseOperation(id: OperationId) {
@@ -170,9 +163,9 @@ export function cancelOperation(id: OperationId) {
       if (current) next = { ...next, catalog: markScanStopped(next.catalog, current.locationId, nowIso()) }
       const items = op.items.map((item): OperationItem => {
         if (item.id === current?.locationId) {
-          return { ...item, status: "uncertain", detail: `Canceled after ${plural(current.observed.length, "file")}. Incomplete until indexed again.` }
+          return { ...item, status: "uncertain", detail: msg("op_index_canceled_item", { files: unitCount("files", current.observed.length) }) }
         }
-        if (item.status === "pending") return { ...item, status: "skipped", detail: "Not started: indexing was canceled." }
+        if (item.status === "pending") return { ...item, status: "skipped", detail: msg("op_index_not_started") }
         return item
       })
       next = patchOperation(next, id, { items })
@@ -196,13 +189,7 @@ export function cancelOperation(id: OperationId) {
               : op.scope.projectId
                 ? `/projects/${op.scope.projectId}`
                 : null)
-    return settleOperation(
-      next,
-      id,
-      "canceled",
-      `Canceled. ${done} of ${op.items.length || op.progress.total} items finished before cancel; nothing else was changed.`,
-      href,
-    )
+    return settleOperation(next, id, "canceled", msg("op_canceled_summary", { done, total: op.items.length || op.progress.total }), href)
   })
 }
 
@@ -240,7 +227,7 @@ export function interruptRunningOperations(state: PrototypeState): PrototypeStat
     if (op.status !== "running" || handlers[op.kind]?.survivesRestart) continue
     next = patchOperation(next, op.id, {
       status: "interrupted",
-      summary: "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it.",
+      summary: msg("op_interrupted_summary"),
     })
   }
   return next
@@ -276,8 +263,8 @@ function startNextLocation(state: PrototypeState, op: Operation, payload: IndexP
     const listing = listLocation(next.disk, location)
     const items = op.items.map((item): OperationItem => {
       if (item.id !== locationId) return item
-      if (listing.offline) return { ...item, status: "blocked", detail: "Offline. Last-observed metadata and decisions are kept." }
-      return { ...item, status: "running", detail: `${listing.readable.length} files to read` }
+      if (listing.offline) return { ...item, status: "blocked", detail: msg("op_index_offline") }
+      return { ...item, status: "running", detail: msg("op_index_files_to_read", { count: listing.readable.length, n: formatCount(listing.readable.length) }) }
     })
     next = patchOperation(next, op.id, { items })
     if (listing.offline) continue
@@ -333,12 +320,10 @@ const indexHandler: OperationHandler = {
       const latest = next.operations[op.id]!
       const items = latest.items.map((item): OperationItem => {
         if (item.id !== current.locationId) return item
-        if (!volumeMounted) return { ...item, status: "blocked", detail: `Went offline after ${observed.length} files. Files read so far are kept.` }
-        if (settled.access === "denied") return { ...item, status: "blocked", detail: "Access denied. Choose folder again or Retry." }
-        if (settled.scanScope === "incomplete") {
-          return { ...item, status: "uncertain", detail: `Incomplete: ${settled.unreadablePaths.length} folder unreadable. Readable folders were indexed.` }
-        }
-        return { ...item, status: "done", detail: `${observed.length} files read` }
+        if (!volumeMounted) return { ...item, status: "blocked", detail: msg("op_index_went_offline", { files: unitCount("files", observed.length) }) }
+        if (settled.access === "denied") return { ...item, status: "blocked", detail: msg("op_index_access_denied") }
+        if (settled.scanScope === "incomplete") return { ...item, status: "uncertain", detail: msg("op_index_incomplete", { count: settled.unreadablePaths.length }) }
+        return { ...item, status: "done", detail: msg("op_index_files_read", { count: observed.length, n: formatCount(observed.length) }) }
       })
       next = patchOperation(next, op.id, { items })
       payload = { ...payload, current: null }
@@ -356,20 +341,19 @@ const indexHandler: OperationHandler = {
 function finishIndex(state: PrototypeState, id: OperationId, payload: IndexPayload): PrototypeState {
   const op = state.operations[id]!
   const blocked = op.items.filter((i) => i.status === "blocked" || i.status === "uncertain").length
-  const summary = [
-    `${payload.counts.read} files read`,
-    payload.counts.unsupported ? `${payload.counts.unsupported} unsupported` : null,
-    payload.counts.unreadableFolders ? `${payload.counts.unreadableFolders} unreadable folder${payload.counts.unreadableFolders === 1 ? "" : "s"}` : null,
+  const { read, unsupported, unreadableFolders } = payload.counts
+  const parts = [
+    msg("op_index_files_read", { count: read, n: formatCount(read) }),
+    unsupported ? msg("op_index_unsupported", { count: unsupported }) : null,
+    unreadableFolders ? msg("op_index_unreadable_folders", { count: unreadableFolders }) : null,
     blocked
       ? op.items.length === 1
-        ? "scope incomplete or unavailable"
-        : `${blocked} of ${op.items.length} locations incomplete or unavailable`
-      : `${op.items.length} location${op.items.length === 1 ? "" : "s"} complete`,
-  ]
-    .filter(Boolean)
-    .join(" · ")
+        ? msg("op_index_scope_incomplete")
+        : msg("op_index_locations_incomplete", { blocked, count: op.items.length })
+      : msg("op_index_locations_complete", { count: op.items.length }),
+  ].filter((part) => part !== null)
   // Indexing outcomes belong to the locations they scanned (seam 16).
-  return settleOperation(state, id, blocked ? "partial" : "succeeded", summary, "/settings/locations")
+  return settleOperation(state, id, blocked ? "partial" : "succeeded", joinRefs(parts, " · "), "/settings/locations")
 }
 
 /**
@@ -388,11 +372,11 @@ export function startIndexing(locationIds: LocationId[]): OperationId {
   }
   const id = startOperation({
     kind: "index",
-    title: locations.length === 1 ? `Indexing ${locations[0]!.displayName}` : `Indexing ${locations.length} locations`,
+    title: locations.length === 1 ? msg("op_index_title_one", { name: locations[0]!.displayName }) : msg("op_index_title_many", { count: locations.length }),
     scope: { locationIds: locations.map((l) => l.id) },
     total,
     unit: "files",
-    items: locations.map((l) => ({ id: l.id, label: l.displayName, path: l.path, status: "pending", phase: null, detail: null })),
+    items: locations.map((l) => ({ id: l.id, label: verbatim(l.displayName), path: l.path, status: "pending", phase: null, detail: null })),
     payload: payload as unknown as Record<string, unknown>,
     // Pause stops between batches; Resume continues from `current.pending`.
     canPause: true,
