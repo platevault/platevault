@@ -126,7 +126,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
       <FolderPicker
         open={picker !== null}
         onOpenChange={(open) => !open && setPicker(null)}
-        title={picker ? (picker.mode === "locate" ? m.location_locate_title({ name: picker.location.displayName }) : m.location_choose_folder_for({ name: picker.location.displayName })) : m.location_choose_folder()}
+        title={picker ? (picker.mode === "locate" ? m.settings_locate_named({ name: picker.location.displayName }) : m.location_choose_folder_for({ name: picker.location.displayName })) : m.location_choose_folder()}
         initialPath={picker?.location.path}
         chooseVerb={picker?.mode === "locate" ? m.verb_review() : m.verb_choose()}
         onChoose={(path) => picker && chosen(picker.location, picker.mode, path)}
