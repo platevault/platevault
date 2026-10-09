@@ -21,7 +21,7 @@ import type { MenuEntry } from "@/components/app/row-menu"
 import { Button } from "@/components/ui/button"
 import { runPipeline } from "@/domain/derive"
 import { fileName, formatBytes, formatDateTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { completeRun, reopenRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
 import { startCleanup } from "./actions"
@@ -55,7 +55,7 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
         onOpenChange={setPreview}
         title={m.run_complete_title({ name: run.name, count: open.length })}
         description={m.run_complete_description()}
-        changes={[m.run_reopen_returns_to({ step: stepName(m, runPipeline(state, run).current.id) }), ...open.map((s) => `${m.run_complete_step_stays({ step: stepName(m, s.id), gate: gateWord(m, s.state) })} · ${s.items.find((i) => i.met === false)?.detail ?? s.status}`)]}
+        changes={[m.run_reopen_returns_to({ step: stepName(m, runPipeline(state, run).current.id) }), ...open.map((s) => `${m.run_complete_step_stays({ step: stepName(m, s.id), gate: gateWord(m, s.state) })} · ${say(m, s.items.find((i) => i.met === false)?.detail ?? s.status)}`)]}
         confirmLabel={m.run_complete()}
         onConfirm={() => {
           const result = completeRun(run.id)
@@ -150,7 +150,7 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
           {pipeline.steps.slice(0, 5).map((s) => (
             <span key={s.id} className="inline-flex items-center gap-1 rounded-full px-2 text-xs ring-1 ring-border ring-inset">
               <span className="text-muted-foreground">{stepName(m, s.id)}</span>
-              <GateLabel state={s.state} label={s.status} />
+              <GateLabel state={s.state} label={say(m, s.status)} />
             </span>
           ))}
         </div>
@@ -186,7 +186,7 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
             {review.directSource.length > 0 ? <Pill tone="muted">{m.run_direct_source_nothing_to_clean({ count: review.directSource.length })}</Pill> : null}
             {review.refused.map((r) => (
               <Pill key={r.path} tone="warning" title={r.path}>
-                {fileName(r.path)} · {r.reason}
+                {fileName(r.path)} · {say(m, r.reason)}
               </Pill>
             ))}
           </div>

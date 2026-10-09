@@ -35,14 +35,14 @@ import { StatusBadge, type Tone } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { calibrationPlan, inputDrift, inputKey } from "@/domain/calibration"
+import { calibrationPlan, inputDrift, inputKey, KIND_NAME } from "@/domain/calibration"
 import { dismissedOffers } from "@/domain/calibration-library"
-import { CALIBRATION_STEPS, calibrationProcesses, type ProcessStatus, type ProcessView, stackProfiles } from "@/domain/calibration-process"
+import { CALIBRATION_STEP_NAME, CALIBRATION_STEPS, calibrationProcesses, type ProcessStatus, type ProcessView, stackProfiles } from "@/domain/calibration-process"
 import { type GateState, rigName, runSetup, runStepLink, savedContent, type StepLink, workingContent } from "@/domain/derive"
 import { filesUnder } from "@/domain/disk"
 import type { CalibrationKind, CalibrationMaster, CalibrationStepId, CalibrationStepState, Catalog, Disk, ProfileId, Run } from "@/domain/types"
 import { fileName, formatDateTime, formatExposure, formatNight } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { detectMasters, discardRaws, importMaster, importMasterFile, keepRaws, restoreMasterOffer, startStack } from "@/store/actions/calibration"
 import { type CommitResult, store, useStore } from "@/store/core"
@@ -61,12 +61,12 @@ function outcomeOf(result: CommitResult, action: string, links: Record<string, S
 
 /** A calibration kind's word: "Dark", "Flat", "Bias", "Dark flat". */
 function kindLabel(kind: CalibrationKind): string {
-  return { dark: m.calibration_kind_dark, flat: m.calibration_kind_flat, bias: m.calibration_kind_bias, "dark-flat": m.calibration_kind_dark_flat }[kind]()
+  return say(m, KIND_NAME[kind])
 }
 
 /** A process step's name: Stack, Detect, Import, Register, Raws. */
 function stepLabel(step: CalibrationStepId): string {
-  return { stack: m.calibration_step_stack, detect: m.calibration_step_detect, import: m.calibration_step_import, register: m.calibration_step_register, raws: m.calibration_step_raws }[step]()
+  return say(m, CALIBRATION_STEP_NAME[step])
 }
 
 // ---------------------------------------------------------------------------
@@ -90,13 +90,13 @@ function ProcessSteps({ view }: { view: ProcessView }) {
   const m = useMessages()
   const here = view.failure?.step ?? view.current
   return (
-    <ol aria-label={m.calibration_steps_of({ name: view.name })} className="flex items-center gap-x-0.5 whitespace-nowrap">
+    <ol aria-label={m.calibration_steps_of({ name: say(m, view.name) })} className="flex items-center gap-x-0.5 whitespace-nowrap">
       {CALIBRATION_STEPS.map((id, index) => {
         const record = view.process.steps[id]
         const current = id === here
         const gate: GateState = current && record.state === "todo" ? "ready" : STEP_GATE[record.state]
         const kept = id === "raws" && record.state === "done" ? (view.process.raws === "kept" ? m.calibration_raws_kept() : m.status_trashed()) : null
-        const tip = [STEP_WORD[record.state](), kept, record.reason, record.at ? formatDateTime(record.at) : null].filter(Boolean).join(" · ")
+        const tip = [STEP_WORD[record.state](), kept, record.reason ? say(m, record.reason) : null, record.at ? formatDateTime(record.at) : null].filter(Boolean).join(" · ")
         return (
           <li
             key={id}
@@ -179,15 +179,15 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
   const [picked, setPicked] = useState<Record<string, ProfileId>>({})
   const [refused, setRefused] = useState<{ id: string; props: RefusalProps } | null>(null)
   const profileOf = (view: ProcessView) => picked[view.process.id] ?? view.process.profileId ?? fallbackProfile
-  // Keyed by the store's refusal reasons, which name the blocker to fix.
-  const links: Record<string, StepLink> = Object.fromEntries(profiles.map((p) => [`${p.name} not set up`, { to: "/settings/applications" }]))
-  links["no tool profile"] = { to: "/settings/applications" }
-  links["no output folder"] = { to: "/settings/locations" }
+  // Keyed by the store's refusal reasons, worded in the same language, which name the blocker to fix.
+  const links: Record<string, StepLink> = Object.fromEntries(profiles.map((p) => [m.domain_stack_not_set_up({ name: p.name }), { to: "/settings/applications" }]))
+  links[m.domain_stack_no_profile()] = { to: "/settings/applications" }
+  links[m.run_parent_none()] = { to: "/settings/locations" }
 
   function act(view: ProcessView, action: ProcessAction) {
     const props = outcomeOf(action.run(), action.kind === "retry" ? stepLabel(view.failure?.step ?? "stack") : actionLabel(action.kind), links)
     setRefused(props ? { id: view.process.id, props } : null)
-    if (!props) announce(`${view.name}: ${actionLabel(action.kind)}`)
+    if (!props) announce(`${say(m, view.name)}: ${actionLabel(action.kind)}`)
   }
 
   const follow = useFollowLink()
@@ -236,6 +236,7 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
               <tbody>
                 {processes.map((view) => {
                   const id = view.process.id
+                  const name = say(m, view.name)
                   const profileId = profileOf(view)
                   const actions = processActions(view, profileId)
                   const primary = actions[0]
@@ -244,7 +245,7 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
                   const failure: RefusalProps | null = view.failure
                     ? {
                         action: m.session_step_failed({ step: stepLabel(view.failure.step) }),
-                        reason: view.failure.reason,
+                        reason: say(m, view.failure.reason),
                         blockers: view.failure.step === "detect" && view.process.outputFolder ? [{ label: fileName(view.process.outputFolder) }] : [],
                       }
                     : null
@@ -260,12 +261,12 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
                         <span className="inline-flex items-center gap-1">
                           {view.session ? (
                             <Link to="/sessions/$sessionId" params={{ sessionId: view.session.id }} className="font-medium hover:underline">
-                              {view.name}
+                              {name}
                             </Link>
                           ) : (
-                            <span className="font-medium">{view.name}</span>
+                            <span className="font-medium">{name}</span>
                           )}
-                          {notes.length > 0 ? <NoteMarker label={m.calibration_folders_of({ name: view.name })} rows={notes} /> : null}
+                          {notes.length > 0 ? <NoteMarker label={m.calibration_folders_of({ name })} rows={notes} /> : null}
                         </span>
                       </th>
                       <td className={`${TD} text-right tabular-nums`}>{view.frames > 0 ? view.frames : "–"}</td>
@@ -276,7 +277,7 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
                             value={profileId ?? ""}
                             onValueChange={(value) => setPicked((prev) => ({ ...prev, [id]: String(value) as ProfileId }))}
                           >
-                            <SelectTrigger size="sm" aria-label={m.calibration_tool_for({ name: view.name })} className="w-32 text-xs">
+                            <SelectTrigger size="sm" aria-label={m.calibration_tool_for({ name })} className="w-32 text-xs">
                               <SelectValue className="block truncate" />
                             </SelectTrigger>
                             <SelectContent>
@@ -301,7 +302,7 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
                         {primary ? (
                           <Button size="xs" variant="outline" onClick={() => act(view, primary)}>
                             {actionLabel(primary.kind)}
-                            <span className="sr-only"> {view.name}</span>
+                            <span className="sr-only"> {name}</span>
                           </Button>
                         ) : null}
                       </td>
@@ -376,7 +377,7 @@ interface StorageKey {
 }
 
 const KEY = {
-  train: { id: "train", get header() { return m.calibration_key_train() }, value: (master, c) => (master.opticalTrainId ? rigName(c, master.opticalTrainId) : null) },
+  train: { id: "train", get header() { return m.calibration_key_train() }, value: (master, c) => (master.opticalTrainId ? rigName(m, c, master.opticalTrainId) : null) },
   filter: { id: "filter", get header() { return m.tonight_filter() }, value: (master) => master.channel },
   night: { id: "night", get header() { return m.tonight_night() }, value: (master, c) => masterNight(c, master) },
   camera: { id: "camera", get header() { return m.calibration_key_camera() }, value: (master) => master.cameraName },
@@ -630,7 +631,7 @@ function masterLabel(master: CalibrationMaster): string {
 
 function matches(master: CalibrationMaster, catalog: Catalog, query: string): boolean {
   if (!query) return true
-  const haystack = [kindLabel(master.kind), master.channel, master.cameraName, master.opticalTrainId ? rigName(catalog, master.opticalTrainId) : null, master.path].filter(Boolean).join(" ").toLowerCase()
+  const haystack = [kindLabel(master.kind), master.channel, master.cameraName, master.opticalTrainId ? rigName(m, catalog, master.opticalTrainId) : null, master.path].filter(Boolean).join(" ").toLowerCase()
   return haystack.includes(query)
 }
 

@@ -18,7 +18,7 @@ import { RadioGroupItem } from "@/components/ui/radio-group"
 import type { RunStepState, StepLink } from "@/domain/derive"
 import type { Catalog, RunStep } from "@/domain/types"
 import { profileOptions } from "@/features/v5/b-projects/start-run"
-import { m } from "@/lib/i18n"
+import { m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
 
@@ -41,7 +41,8 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
           const link = linkFor(step.id)
           const current = step.id === here
           const holdsNext = nextId === step.id && !current
-          const status = step.status && step.status !== "–" ? step.status : null
+          const word = say(m, step.status)
+          const status = word && word !== "–" ? word : null
           const name = stepName(m, step.id)
           const gate = gateWord(m, step.state)
           return (

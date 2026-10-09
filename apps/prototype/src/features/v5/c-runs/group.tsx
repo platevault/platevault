@@ -27,12 +27,12 @@ import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { calibrationPlan, KIND_LABEL } from "@/domain/calibration"
-import { type GroupPanelState, groupCandidates, groupPipeline, groupStepLink, panelLabel, rigName, runPreparations, runResults, subjectName, workingContent } from "@/domain/derive"
-import { MODE_LABEL, RESULT_KIND_LABEL, RUN_STEPS } from "@/domain/labels"
+import { calibrationPlan, KIND_NAME } from "@/domain/calibration"
+import { type GroupPanelState, groupCandidates, groupPipeline, groupStepLink, panelLabel, panelRef, rigName, runPreparations, runResults, subjectName, workingContent } from "@/domain/derive"
+import { MODE_NAME, RUN_STEPS } from "@/domain/labels"
 import type { InputMode, Preparation, ResultKind, Run, RunGroup, RunStep } from "@/domain/types"
 import { fileName, formatNight } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
 import { addRunSessions, saveRun } from "@/store/actions/runs"
 import { type PrototypeState, useStore } from "@/store/core"
 import { GroupReviewStep } from "../d-review/review"
@@ -50,8 +50,8 @@ export function RunGroupPage() {
   const state = useStore((s) => s)
   const group = groupId ? state.catalog.runGroups[groupId] : undefined
   const project = group ? state.catalog.projects[group.projectId] : undefined
-  if (!group || !project || group.projectId !== projectId) return <MissingRecord noun="run group" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${project.id}/groups/${group.id}/select`} backLabel={m.review_open_select()} />
+  if (!group || !project || group.projectId !== projectId) return <MissingRecord title={m.rungroup_missing_title()} backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
+  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord title={m.run_step_missing_title()} backTo={`/projects/${project.id}/groups/${group.id}/select`} backLabel={m.review_open_select()} />
   return <GroupScreen group={group} step={step as RunStep} />
 }
 
@@ -90,10 +90,10 @@ function GroupScreen({ group, step }: { group: RunGroup; step: RunStep }) {
         description={
           <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
             <Pill tone="muted" icon={Layers} title={m.rungroup_mosaic_fixed()}>
-              {subject ? subjectName(state.catalog, subject) : m.status_unknown()}
+              {subject ? subjectName(m, state.catalog, subject) : m.status_unknown()}
             </Pill>
             <Pill tone="muted" icon={Lock} title={m.run_rig_fixed()}>
-              {rigName(state.catalog, group.rigId)}
+              {rigName(m, state.catalog, group.rigId)}
             </Pill>
             <Pill tone="info">{m.rungroup_panels_count({ count: pipeline.panels.length - trashed })}</Pill>
             {trashed > 0 ? (
@@ -150,8 +150,8 @@ function PanelStrip({ panels }: { panels: GroupPanelState[] }) {
     <ul className="flex flex-wrap gap-x-4 gap-y-1 border-b border-separator px-5 py-1.5 text-[0.75rem]" aria-label={m.rungroup_panels()}>
       {panels.map((p) => (
         <li key={p.run.id} className="flex items-center gap-1.5">
-          <span className="font-medium">{panelLabel(p.panel)}</span>
-          {p.trashed ? <Pill tone="muted">{m.status_trashed()}</Pill> : <GateLabel state={p.pipeline.steps[1]!.state} label={m.rungroup_review_status({ status: p.pipeline.steps[1]!.status })} />}
+          <span className="font-medium">{panelLabel(m, p.panel)}</span>
+          {p.trashed ? <Pill tone="muted">{m.status_trashed()}</Pill> : <GateLabel state={p.pipeline.steps[1]!.state} label={m.rungroup_review_status({ status: say(m, p.pipeline.steps[1]!.status) })} />}
         </li>
       ))}
     </ul>
@@ -165,7 +165,7 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
   const index = RUN_STEPS.indexOf(step)
   const total = panels.filter((p) => !p.trashed).reduce((n, p) => n + panelFrames(p), 0)
   const allColumns: Column<GroupPanelState>[] = [
-    { id: "panel", header: m.rungroup_col_panel(), rowHeader: true, cell: (p) => panelLabel(p.panel), sortValue: (p) => p.panel.n },
+    { id: "panel", header: m.rungroup_col_panel(), rowHeader: true, cell: (p) => panelLabel(m, p.panel), sortValue: (p) => p.panel.n },
     {
       id: "run",
       header: m.rungroup_col_panel_run(),
@@ -181,7 +181,7 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
         ),
     },
     { id: "status", header: m.rungroup_col_status(), cell: (p) => <StatusBadge kind="run" value={p.trashed ? "trashed" : p.run.completion === "complete" ? "complete" : "open"} /> },
-    { id: "step", header: stepName(m, step), cell: (p) => (p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[index]!.state} label={p.pipeline.steps[index]!.status} />) },
+    { id: "step", header: stepName(m, step), cell: (p) => (p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[index]!.state} label={say(m, p.pipeline.steps[index]!.status)} />) },
     { id: "frames", header: m.run_col_frames(), align: "right", cell: (p) => (p.trashed ? <span className="text-muted-foreground">–</span> : panelFrames(p)), sortValue: (p) => (p.trashed ? -1 : panelFrames(p)) },
     {
       id: "prep",
@@ -221,11 +221,12 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
   const toPlace = flagged.filter((f) => !memberIds.has(f.candidate.session.id))
   const drafts = live.filter((r) => r.draft && r.completion !== "complete")
   const panels = state.catalog.projects[group.projectId]?.subjects.find((s) => s.id === group.subjectId)?.mosaic?.panels ?? []
-  const panelName = (r: Run) => {
+  const panelNameRef = (r: Run): MessageRef => {
     const panel = panels.find((p) => p.id === r.panelId)
-    return panel ? panelLabel(panel) : r.name
+    return panel ? panelRef(panel) : verbatim(r.name)
   }
-  const place = (r: Run, f: (typeof toPlace)[number]) => onOutcome(addRunSessions(r.id, [f.candidate.session.id], { kind: "panel-assigned", detail: m.rungroup_placed_by_you({ panel: panelName(r), detail: f.detail }) }), { blocked: m.rungroup_place_blocked() })
+  const panelName = (r: Run) => say(m, panelNameRef(r))
+  const place = (r: Run, f: (typeof toPlace)[number]) => onOutcome(addRunSessions(r.id, [f.candidate.session.id], { kind: "panel-assigned", detail: msg("rungroup_placed_by_you", { panel: panelNameRef(r), detail: f.detail }) }), { blocked: m.rungroup_place_blocked() })
   const sessionName = (f: (typeof toPlace)[number]) => `${formatNight(f.candidate.session.night)} · ${f.candidate.session.channel ?? m.palette_session_no_filter()}`
   return (
     <>
@@ -256,7 +257,7 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
                 <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-sm">
                   <span className="flex flex-wrap items-center gap-1.5">
                     {sessionName(f)}
-                    <Pill tone="warning">{f.detail}</Pill>
+                    <Pill tone="warning">{say(m, f.detail)}</Pill>
                   </span>
                   <span className="flex flex-wrap gap-1">
                     {live.map((r) => (
@@ -342,7 +343,7 @@ function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels:
           return (
             <RowContextMenu key={p.run.id} entries={menu(p, "calibrate")}>
               <li className="flex flex-wrap items-center gap-2 px-3 py-1.5 text-sm" data-panel-readiness={p.run.id}>
-                <span className="w-24 font-medium">{panelLabel(p.panel)}</span>
+                <span className="w-24 font-medium">{panelLabel(m, p.panel)}</span>
                 <span className="flex flex-1 flex-wrap items-center gap-1">
                   {p.trashed ? (
                     <Pill tone="muted">{m.status_skipped()}</Pill>
@@ -353,7 +354,7 @@ function GroupCalibrate({ group, panels, onOutcome }: { group: RunGroup; panels:
                   ) : (
                     kinds.map((k) => (
                       <Pill key={k.kind} tone={k.matched === k.total ? "success" : "warning"}>
-                        {KIND_LABEL[k.kind]} {k.automatic ? "✓" : `${k.matched}/${k.total}`}
+                        {say(m, KIND_NAME[k.kind])} {k.automatic ? "✓" : `${k.matched}/${k.total}`}
                       </Pill>
                     ))
                   )}
@@ -377,7 +378,8 @@ function aggregateModes(lists: ModeOption[][]): ModeOption[] {
   const first = lists[0] ?? []
   return first.map((option) => {
     const all = lists.map((l) => l.find((x) => x.mode === option.mode)!)
-    const reasons = [...new Set(all.flatMap((x) => x.reasons))]
+    // Panels refuse a mode for the same reason in the same words; refs are compared by their content.
+    const reasons = [...new Map(all.flatMap((x) => x.reasons).map((r) => [JSON.stringify(r), r])).values()]
     return { ...option, allowed: reasons.length === 0, reasons, footprintBytes: all.reduce((n, x) => n + x.footprintBytes, 0) }
   })
 }
@@ -484,7 +486,7 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
         open={confirm}
         onOpenChange={setConfirm}
         title={m.rungroup_prepare_all_title({ count: live.length, name: group.name })}
-        description={`${profileLabel(state.catalog, group.setup.profileId)} · ${group.setup.inputMode ? MODE_LABEL[group.setup.inputMode] : ""}`}
+        description={`${profileLabel(state.catalog, group.setup.profileId)} · ${group.setup.inputMode ? say(m, MODE_NAME[group.setup.inputMode]) : ""}`}
         changes={[
           m.rungroup_prepare_all_creates({ folder: fileName(first?.layout.groupFolder ?? mosaic), panels: plans.map((p) => fileName(p.plan.layout.folderPath ?? "")).join(", ") }),
           ...plans.map((p) => {
@@ -503,7 +505,7 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
   )
 }
 
-const GROUP_KINDS = [{ value: "assembled-mosaic", label: RESULT_KIND_LABEL["assembled-mosaic"] }]
+const GROUP_KINDS: ResultKind[] = ["assembled-mosaic"]
 
 function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: GroupPanelState[]; onOutcome: Act }) {
   const m = useMessages()
@@ -541,7 +543,7 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
           </>
         }
       >
-        <ResultsTable rows={rows} rigId={group.rigId} onOutcome={onOutcome} kindOptions={GROUP_KINDS} />
+        <ResultsTable rows={rows} rigId={group.rigId} onOutcome={onOutcome} kinds={GROUP_KINDS} />
       </Box>
       <Box id="group-panel-results" level={2} flush title={m.rungroup_panel_results()}>
         <ul className="divide-y divide-separator text-sm">
@@ -551,7 +553,7 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
             return (
               <RowContextMenu key={p.run.id} entries={menu(p, "results")}>
                 <li className="flex flex-wrap items-center gap-2 px-3 py-1.5">
-                  <span className="w-24 font-medium">{panelLabel(p.panel)}</span>
+                  <span className="w-24 font-medium">{panelLabel(m, p.panel)}</span>
                   <span className="flex flex-1 flex-wrap items-center gap-1">
                     {p.trashed ? (
                       <Pill tone="muted">{m.status_skipped()}</Pill>
@@ -564,7 +566,7 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
                     )}
                   </span>
                   {!p.trashed ? (
-                    <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: p.run.projectId, runId: p.run.id, step: "results" }} />} aria-label={m.rungroup_open_panel_results({ panel: panelLabel(p.panel) })}>
+                    <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: p.run.projectId, runId: p.run.id, step: "results" }} />} aria-label={m.rungroup_open_panel_results({ panel: panelLabel(m, p.panel) })}>
                       {m.verb_open()}
                     </Button>
                   ) : null}
@@ -574,7 +576,7 @@ function GroupResults({ group, panels, onOutcome }: { group: RunGroup; panels: G
           })}
         </ul>
       </Box>
-      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={assembled} kindOptions={GROUP_KINDS} onAttach={(path, kind, channel) => onOutcome(attachResult({ groupId: group.id }, path, kind as ResultKind, channel), { blocked: m.run_results_attach_blocked() })} />
+      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={assembled} kinds={GROUP_KINDS} onAttach={(path, kind, channel) => onOutcome(attachResult({ groupId: group.id }, path, kind as ResultKind, channel), { blocked: m.run_results_attach_blocked() })} />
     </>
   )
 }
@@ -607,9 +609,9 @@ function GroupDone({ group, panels, onOutcome }: { group: RunGroup; panels: Grou
             entries={menu(p, "done", p.run.completion === "complete" ? [{ label: m.run_clean_up(), icon: Wand2, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: p.run.projectId, runId: p.run.id, step: "done" }, hash: "cleanup" }) }] : [])}
           >
             <li className="flex flex-wrap items-center gap-2 px-3 py-1.5">
-              <span className="w-24 font-medium">{panelLabel(p.panel)}</span>
+              <span className="w-24 font-medium">{panelLabel(m, p.panel)}</span>
               <span className="flex flex-1 flex-wrap items-center gap-1.5 text-[0.75rem]">
-                {p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[5]!.state} label={p.pipeline.steps[5]!.status} />}
+                {p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[5]!.state} label={say(m, p.pipeline.steps[5]!.status)} />}
                 {!p.trashed ? <FootprintPill run={p.run} /> : null}
               </span>
               {!p.trashed ? (

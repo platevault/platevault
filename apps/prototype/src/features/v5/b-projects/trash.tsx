@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
-import { GateLabel } from "@/app/run-ui"
+import { GateLabel, stepName } from "@/app/run-ui"
 import { findPanel, findSubject, panelLabel, projectTrash, rigName, runPipeline, subjectName } from "@/domain/derive"
 import type { OperationId, ProjectId, Run, RunId } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
@@ -95,7 +95,7 @@ export function ProjectTrashPage() {
       const panel = findPanel(subject, run.panelId)
       return {
         run,
-        where: `${subject ? subjectName(s.catalog, subject) : m.project_unknown_subject()}${panel ? ` · ${panelLabel(panel)}` : ""} · ${rigName(s.catalog, run.rigId)}`,
+        where: `${subject ? subjectName(m, s.catalog, subject) : m.project_unknown_subject()}${panel ? ` · ${panelLabel(m, panel)}` : ""} · ${rigName(m, s.catalog, run.rigId)}`,
         stage: runPipeline(s, run).current,
         entries: preparedEntryItems(s, run.id).length,
         results: resultItems(s, run.id).length,
@@ -106,7 +106,7 @@ export function ProjectTrashPage() {
   const [ticked, setTicked] = useState<RunId[]>([])
   const [pending, setPending] = useState<Pending>(null)
   const preview = useStore((s) => emptyTrashPreview(m, s, pending?.kind === "empty" ? pending.runIds : [], ticked))
-  if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel={m.project_back_to_projects()} />
+  if (!project) return <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
   const tickedLive = ticked.filter((id) => rows.some((r) => r.run.id === id))
   const allIds = rows.map((r) => r.run.id)
 
@@ -123,7 +123,7 @@ export function ProjectTrashPage() {
         </span>
       ),
     },
-    { id: "stage", header: m.projects_col_stage(), cell: (r) => <GateLabel state={r.run.completion === "complete" ? "done" : r.stage.state} label={r.run.completion === "complete" ? m.status_complete() : r.stage.label} /> },
+    { id: "stage", header: m.projects_col_stage(), cell: (r) => <GateLabel state={r.run.completion === "complete" ? "done" : r.stage.state} label={r.run.completion === "complete" ? m.status_complete() : stepName(m, r.stage.id)} /> },
     { id: "trashed", header: m.status_trashed(), sortValue: (r) => r.run.trashedAt, cell: (r) => (r.run.trashedAt ? formatDateTime(r.run.trashedAt) : "–") },
     { id: "prepared", header: m.status_prepared(), align: "right", sortValue: (r) => r.entries, cell: (r) => (r.entries > 0 ? <Pill tone="muted">{m.trash_entries({ count: r.entries })}</Pill> : "–") },
     {

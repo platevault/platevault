@@ -473,7 +473,7 @@ export function CandidatesSection({ project }: { project: Project }) {
             {live.length > 0 ? (
               <SelectionBar
                 count={live.length}
-                noun="session"
+                label={m.project_sessions_selected({ count: live.length })}
                 onClear={() => setSelected([])}
                 actions={
                   open ? (
@@ -968,11 +968,11 @@ export function ArchivedSection({ project }: { project: Project }) {
             description={m.project_restore_description()}
             changes={[
               ...plan.rows.map((r) => `${sessionLabel(catalog, r.session)} → ${r.folder}`),
-              ...plan.refused.map((r) => m.project_restore_stays({ name: sessionLabel(catalog, r.session), reason: r.reason })),
+              ...plan.refused.map((r) => m.project_restore_stays({ name: sessionLabel(catalog, r.session), reason: say(m, r.reason) })),
             ]}
             confirmLabel={m.project_restore()}
             onConfirm={(): CommitResult => {
-              if (plan.rows.length === 0) return { ok: false, reason: "refused", message: plan.blocked ?? m.project_restore_nothing_now(), reasons: [] }
+              if (plan.rows.length === 0) return { ok: false, reason: "refused", message: plan.blocked ? say(m, plan.blocked) : m.project_restore_nothing_now(), reasons: [] }
               rememberApproval(project.id, "restore", startArchiveTransfer(project.id, plan.rows, "restore"))
               setChosen([])
               return { ok: true }

@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { currentFile, formatMetricFixed, previewUnavailableReason, sessionLabel } from "@/domain/membership"
 import type { AssetId, Catalog, Disk, MetricKey } from "@/domain/types"
 import { formatExposure, formatTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { STATUS, StatusBadge } from "@/components/app/status"
 import { NoteMarker, type NoteRow } from "@/components/app/tips"
@@ -105,7 +105,7 @@ export function frameColumns(m: Messages, names: Map<AssetId, string>): FrameCol
     },
     { id: "panel", header: m.review_col_panel(), contexts: ["group"], sortValue: (f) => f.panel?.n ?? null, cell: (f) => (f.panel ? m.review_panel_n({ n: f.panel.n }) : "–") },
     { id: "subject", header: m.review_col_subject(), contexts: ["candidates"], sortValue: (f) => f.subject, cell: (f) => f.subject ?? "–" },
-    { id: "session", header: m.review_col_session(), contexts: ["run", "group", "candidates"], sortValue: (f) => f.session?.startedAt ?? null, cell: (f) => (f.session ? sessionLabel(f.session) : <span className="text-muted-foreground">{m.review_no_session()}</span>) },
+    { id: "session", header: m.review_col_session(), contexts: ["run", "group", "candidates"], sortValue: (f) => f.session?.startedAt ?? null, cell: (f) => (f.session ? sessionLabel(m, f.session) : <span className="text-muted-foreground">{m.review_no_session()}</span>) },
     { id: "time", header: m.review_col_time(), sortValue: (f) => f.asset.observed.dateObs, cell: (f) => formatTime(f.asset.observed.dateObs) },
     { id: "exposure", header: m.review_col_exposure(), align: "right", sortValue: (f) => f.asset.observed.exposureS, cell: (f) => formatExposure(f.asset.observed.exposureS) },
     { id: "quality", header: m.review_col_quality(), sortValue: (f) => qualityWord(m, f), cell: (f) => <QualityLabel frame={f} short /> },
@@ -356,7 +356,7 @@ export function FrameTable({
 function Thumbnail({ frame, disk, catalog, className }: { frame: ReviewFrame; disk: Disk; catalog: Catalog; className?: string }) {
   const m = useMessages()
   const file = frame.availability === "available" ? currentFile(disk, catalog, frame.asset) : undefined
-  const reason = frame.availability === "available" ? null : previewUnavailableReason(frame.availability)
+  const reason = frame.availability === "available" ? null : say(m, previewUnavailableReason(frame.availability))
   const thumb = useThumbnail(frame.asset.id, file, reason)
   if (thumb.state === "ready") return <img src={thumb.url} alt="" className={cn("block h-full w-full rounded-[2px] bg-plate object-contain", className)} draggable={false} />
   return (

@@ -276,8 +276,6 @@
   "step_prepare": "Preparar",
   "step_results": "Resultados",
   "step_done": "Concluído",
-  "record_missing_doc_title": "{noun}: não encontrado",
-  "record_missing_title": "Este registro ({noun}) não está no catálogo",
   "record_missing_description": "O link pode ser de uma versão anterior do protótipo, ou o registro foi removido ao esvaziar a Lixeira. Sua biblioteca não foi alterada.",
   "status_online": "Online",
   "status_offline": "Offline",
@@ -422,22 +420,6 @@
   ],
   "table_select_row": "Selecionar {name}",
   "table_no_rows": "Nenhuma linha.",
-  "selection_count": [
-    {
-      "declarations": [
-        "input count",
-        "input noun",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} {noun} selecionado",
-        "countPlural=*": "{count} {noun}s selecionados"
-      }
-    }
-  ],
   "selection_outside_filters": "Selecionados fora dos filtros atuais: {count}",
   "selection_region": "Seleção",
   "selection_show": "Mostrar selecionados",
@@ -6519,5 +6501,26 @@
   "domain_naming_parent_folder": "Uma pasta não pode ser `..`",
   "domain_naming_reserved": "\"{name}\" é um nome reservado",
   "domain_naming_leading_slash": "Um modelo é relativo ao seu local; remova a / inicial",
-  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo."
+  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo.",
+  "project_sessions_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão selecionada",
+        "countPlural=*": "{count} sessões selecionadas"
+      }
+    }
+  ],
+  "session_missing_title": "Esta sessão não está no catálogo",
+  "project_missing_title": "Este Projeto não está no catálogo",
+  "run_missing_title": "Esta execução não está no catálogo",
+  "run_step_missing_title": "Esta etapa da execução não existe",
+  "rungroup_missing_title": "Este grupo de execuções não está no catálogo",
+  "target_missing_title": "Este Alvo não está no catálogo"
 }

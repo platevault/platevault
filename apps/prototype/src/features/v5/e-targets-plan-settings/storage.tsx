@@ -25,9 +25,10 @@ import { Button } from "@/components/ui/button"
 import { freeBytes } from "@/domain/disk"
 import { locationAvailability } from "@/domain/library"
 import { type DuplicateGroup, lastDuplicateScan, liveCopies } from "@/domain/storage"
+import { unitCount } from "@/domain/labels"
 import type { Location, Operation } from "@/domain/types"
-import { formatBytes, formatDateTime, plural } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { formatBytes, formatDateTime } from "@/lib/format"
+import { m, say } from "@/lib/i18n"
 import { startDuplicateScan } from "@/store/actions/storage"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
@@ -144,18 +145,21 @@ export function StoragePage() {
   }
 
   const transferColumns: Column<Operation>[] = [
-    { id: "title", header: m.storage_transfer(), rowHeader: true, truncate: true, sortValue: (op) => op.title, cell: (op) => <span title={op.title}>{op.title}</span> },
+    { id: "title", header: m.storage_transfer(), rowHeader: true, truncate: true, sortValue: (op) => say(m, op.title), cell: (op) => <span title={say(m, op.title)}>{say(m, op.title)}</span> },
     { id: "kind", header: m.storage_kind(), sortValue: (op) => op.kind, cell: (op) => TRANSFER_KIND[op.kind]?.() ?? "–" },
     { id: "status", header: m.storage_status(), sortValue: (op) => op.status, cell: (op) => <StatusBadge kind="operation" value={op.status} /> },
     {
       id: "summary",
       header: m.activity_outcome(),
       truncate: true,
-      cell: (op) => (
-        <span className="text-xs text-muted-foreground" title={op.summary ?? undefined}>
-          {op.summary ?? `${op.progress.done} / ${plural(op.progress.total, op.progress.unit.replace(/s$/, ""))}`}
-        </span>
-      ),
+      cell: (op) => {
+        const summary = op.summary ? say(m, op.summary) : null
+        return (
+          <span className="text-xs text-muted-foreground" title={summary ?? undefined}>
+            {summary ?? `${op.progress.done} / ${say(m, unitCount(op.progress.unit, op.progress.total))}`}
+          </span>
+        )
+      },
     },
     { id: "started", header: m.storage_started(), sortValue: (op) => op.createdAt, cell: (op) => <span className="text-xs">{formatDateTime(op.createdAt)}</span> },
   ]

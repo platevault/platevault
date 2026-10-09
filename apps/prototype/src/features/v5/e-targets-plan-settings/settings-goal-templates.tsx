@@ -23,14 +23,14 @@ import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatHours } from "@/domain/derive"
-import { qualityBarLabel } from "@/domain/labels"
+import { qualityBarRef } from "@/domain/labels"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { GoalTemplate, GoalTemplateValue } from "@/domain/types"
 import { TextField } from "@/features/t1/components/form-field"
 import { ReturnNotice } from "@/features/t1/settings/settings-layout"
 import { GoalValuesEditor } from "@/features/v5/b-projects/goals"
 import { formatCount } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { deleteGoalTemplate, saveGoalTemplate } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 
@@ -49,7 +49,7 @@ function GoalsCell({ values }: { values: GoalTemplateValue[] }) {
         <li key={v.channel} className="inline-flex items-center gap-1 whitespace-nowrap tabular-nums">
           <Pill tone="info">{v.channel}</Pill>
           <span>{kindsText(m, v)}</span>
-          {v.qualityBar ? <Pill tone="muted">{qualityBarLabel(v.qualityBar)}</Pill> : null}
+          {v.qualityBar ? <Pill tone="muted">{say(m, qualityBarRef(v.qualityBar))}</Pill> : null}
         </li>
       ))}
     </ul>

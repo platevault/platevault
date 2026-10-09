@@ -10,16 +10,16 @@ import { PageBody, useDocumentTitle } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { useMessages } from "./preferences"
 
-/** `noun` names the record kind ("Project"); `backLabel` the way back. */
-export function MissingRecord({ noun, backTo, backLabel }: { noun: string; backTo: string; backLabel: string }) {
+/** `title` names what is missing as one complete message ("This Project is not in the catalog"), so its noun agrees in every language; `backLabel` is the way back. */
+export function MissingRecord({ title, backTo, backLabel }: { title: string; backTo: string; backLabel: string }) {
   const m = useMessages()
-  useDocumentTitle(m.record_missing_doc_title({ noun }))
+  useDocumentTitle(title)
   return (
     <PageBody className="mx-auto w-full max-w-lg">
       <EmptyState
         icon={FileQuestion}
         titleAs="h1"
-        title={m.record_missing_title({ noun })}
+        title={title}
         description={m.record_missing_description()}
         action={
           <Button size="sm" render={<Link to={backTo} />}>

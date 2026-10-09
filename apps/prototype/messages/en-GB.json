@@ -276,8 +276,6 @@
   "step_prepare": "Prepare",
   "step_results": "Results",
   "step_done": "Done",
-  "record_missing_doc_title": "{noun} not found",
-  "record_missing_title": "This {noun} is not in the catalog",
   "record_missing_description": "The link may come from an older prototype build, or the record was removed by Empty Trash. Your library is unchanged.",
   "status_online": "Online",
   "status_offline": "Offline",
@@ -422,22 +420,6 @@
   ],
   "table_select_row": "Select {name}",
   "table_no_rows": "No rows.",
-  "selection_count": [
-    {
-      "declarations": [
-        "input count",
-        "input noun",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} {noun} selected",
-        "countPlural=*": "{count} {noun}s selected"
-      }
-    }
-  ],
   "selection_outside_filters": "Selected outside current filters: {count}",
   "selection_region": "Selection",
   "selection_show": "Show selected",
@@ -6463,5 +6445,26 @@
   "domain_naming_parent_folder": "A folder cannot be `..`",
   "domain_naming_reserved": "\"{name}\" is a reserved name",
   "domain_naming_leading_slash": "A template is relative to its location; remove the leading /",
-  "run_verify_frame_not_in_catalog": "A prepared frame is no longer in the catalog."
+  "run_verify_frame_not_in_catalog": "A prepared frame is no longer in the catalog.",
+  "project_sessions_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session selected",
+        "countPlural=*": "{count} sessions selected"
+      }
+    }
+  ],
+  "session_missing_title": "This session is not in the catalog",
+  "project_missing_title": "This Project is not in the catalog",
+  "run_missing_title": "This run is not in the catalog",
+  "run_step_missing_title": "This run step does not exist",
+  "rungroup_missing_title": "This run group is not in the catalog",
+  "target_missing_title": "This Target is not in the catalog"
 }

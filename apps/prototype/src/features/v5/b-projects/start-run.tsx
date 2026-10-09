@@ -112,7 +112,7 @@ function StartRunForm({ project }: { project: Project }) {
               <div key={s.id} className="flex items-center gap-2">
                 <RadioGroupItem id={`${ids.subject}-${s.id}`} value={s.id} />
                 <Label htmlFor={`${ids.subject}-${s.id}`} className="font-normal">
-                  <span className="font-medium">{subjectName(catalog, s)}</span>
+                  <span className="font-medium">{subjectName(m, catalog, s)}</span>
                 </Label>
                 {s.mosaic ? <Pill tone="info">{`${m.startrun_mosaic()} · ${m.project_panels({ count: s.mosaic.panels.length })}`}</Pill> : null}
               </div>
@@ -133,7 +133,7 @@ function StartRunForm({ project }: { project: Project }) {
                 <div key={id} className="flex items-center gap-2">
                   <RadioGroupItem id={`${ids.rig}-${id}`} value={id} />
                   <Label htmlFor={`${ids.rig}-${id}`} className="font-normal">
-                    <span className="font-medium">{rigName(catalog, id)}</span>
+                    <span className="font-medium">{rigName(m, catalog, id)}</span>
                   </Label>
                   <Pill tone="muted">{kind === "osc" ? m.project_camera_osc() : kind === "mono" ? m.project_camera_mono() : m.newproject_camera_unknown()}</Pill>
                   <CountBadge count={n} tone={n > 0 ? "info" : "muted"} label={m.startrun_candidate_sessions({ count: n })} />

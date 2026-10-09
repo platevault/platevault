@@ -16,13 +16,13 @@ import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-m
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { STEP_LABEL } from "@/domain/labels"
+import { STEP_NAME } from "@/domain/labels"
 import type { ActivityEvent, ActivityKind, Operation, RunStep } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
-import { isSettled } from "@/store/operations"
+import { activityTitle, isSettled } from "@/store/operations"
 
 /** Cells grow from the density row height so a two-line entry stays readable. */
 const DENSITY_CELL = "py-[max(0.25rem,calc((var(--row-h)-1.25rem)/2))]"
@@ -75,7 +75,7 @@ export function destinationLabel(href: string): string {
   const [first = "", second, third, fourth, fifth] = href.split(/[?#]/)[0]!.split("/").filter(Boolean)
   if (first === "settings") return (second && SETTINGS_AREA[second]?.()) ?? m.nav_settings()
   if (first === "projects" && second) {
-    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_LABEL ? STEP_LABEL[fifth as RunStep] : third === "runs" ? m.activity_destination_run() : m.run_results_run_group()
+    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_NAME ? say(m, STEP_NAME[fifth as RunStep]) : third === "runs" ? m.activity_destination_run() : m.run_results_run_group()
     if (third === "trash") return m.activity_destination_trash()
     return m.activity_destination_project()
   }
@@ -102,21 +102,23 @@ function Outcome({ event, operation }: { event: ActivityEvent; operation: Operat
 }
 
 function Detail({ event }: { event: ActivityEvent }) {
+  const m = useMessages()
   if (!event.detail) return null
-  // A refusal's reasons are recorded joined by "; ": list each one.
-  if (event.kind === "refusal" && event.detail.includes("; ")) {
+  // A refusal records its reasons as one list joined by "; ": list each one.
+  if (event.kind === "refusal" && "list" in event.detail && event.detail.list.length > 1) {
     return (
       <ul className="list-disc pl-4 text-xs text-pretty text-muted-foreground compact:min-w-0 compact:truncate">
-        {event.detail.split("; ").map((reason) => (
-          <li key={reason}>{reason}</li>
+        {event.detail.list.map((ref, i) => (
+          <li key={i}>{say(m, ref)}</li>
         ))}
       </ul>
     )
   }
+  const detail = say(m, event.detail)
   return (
-    <p className="text-xs text-pretty text-muted-foreground compact:min-w-0 compact:truncate" title={event.detail}>
+    <p className="text-xs text-pretty text-muted-foreground compact:min-w-0 compact:truncate" title={detail}>
       {/* Paths in the mono face; split() puts each captured path at an odd index. */}
-      {event.detail.split(PATH).map((part, i) =>
+      {detail.split(PATH).map((part, i) =>
         i % 2 === 1 ? (
           <span key={i} className="font-mono break-all compact:break-normal">
             {part}
@@ -132,6 +134,7 @@ function Detail({ event }: { event: ActivityEvent }) {
 function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEvent; operation: Operation | undefined; open: boolean; onToggle: () => void }) {
   const m = useMessages()
   const panelId = `activity-${event.id}-items`
+  const title = say(m, activityTitle(event))
   return (
     <Fragment>
       <tr {...menuKey(event.id)} className="h-(--row-h) border-b align-top last:border-0">
@@ -145,7 +148,7 @@ function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEven
         </td>
         <th scope="row" className={cn("min-w-40 px-3 text-left font-normal compact:w-full compact:max-w-0", DENSITY_CELL)}>
           <div className="compact:flex compact:min-w-0 compact:items-baseline compact:gap-2">
-            <div className="font-medium text-pretty compact:shrink-0 compact:whitespace-nowrap">{event.title}</div>
+            <div className="font-medium text-pretty compact:shrink-0 compact:whitespace-nowrap">{title}</div>
             <Detail event={event} />
           </div>
         </th>
@@ -159,7 +162,7 @@ function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEven
             {event.href ? (
               <Button size="sm" variant="outline" className="whitespace-nowrap" render={<a href={`#${event.href}`} />}>
                 {m.activity_open_destination({ name: destinationLabel(event.href) })}
-                <span className="sr-only">: {event.title}</span>
+                <span className="sr-only">: {title}</span>
               </Button>
             ) : null}
           </div>

@@ -25,6 +25,7 @@ import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { type ProjectStageId, projectGroups, projectLink, projectRuns, projectStageStrip, projectWrapUp, type StepLink } from "@/domain/derive"
 import type { Project } from "@/domain/types"
+import { say } from "@/lib/i18n"
 import { reopenProject } from "@/store/actions/projects"
 import { useStore } from "@/store/core"
 import { CandidateReview } from "../d-review/review"
@@ -48,7 +49,7 @@ export function ProjectPage() {
     void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: {}, replace: true })
   }, [project, search.start, navigate])
 
-  if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel={m.project_back_to_projects()} />
+  if (!project) return <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
   if (search.candidates) return <CandidateReviewPage project={project} />
   if (search.mosaic) {
     return (
@@ -134,7 +135,7 @@ function StageStrip({ project, view }: { project: Project; view: View }) {
         <li key={stage.id} aria-current={stage.state === "current" ? "step" : undefined} className="flex items-center gap-1">
           {index > 0 ? <ChevronRight aria-hidden="true" className="size-3 text-muted-foreground" /> : null}
           <Pill tone={STAGE_TONE[stage.state]} icon={stage.state === "done" ? Check : undefined} link={link(stage.id)} className={view === stage.id ? "ring-2 ring-ring/60" : undefined}>
-            {stage.id === "runs" ? `${m.common_runs()} · ${runs}` : stage.label}
+            {stage.id === "runs" ? `${m.common_runs()} · ${runs}` : say(m, stage.label)}
             {stage.state === "current" ? <span className="sr-only"> {m.project_stage_current()}</span> : null}
           </Pill>
         </li>
