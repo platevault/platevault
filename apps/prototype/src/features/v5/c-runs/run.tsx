@@ -7,7 +7,7 @@
  * D-W51, D-W4, D-W56, D-W26, D-W72).
  */
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ChevronRight, RotateCcw, ShieldCheck, Trash2, Undo2, Wand2 } from "lucide-react"
+import { ChevronRight, RotateCcw, Trash2, Undo2, Wand2 } from "lucide-react"
 import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
@@ -15,15 +15,15 @@ import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { panelLabel, rigName, runPipeline, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
+import { nextFrom, panelLabel, rigName, runPipeline, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
 import { RUN_STEPS, STEP_LABEL } from "@/domain/labels"
 import type { RunStep } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
-import { completeRun, reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
+import { reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
 import { ReviewStep } from "../d-review/review"
 import { CalibrateStep } from "./calibrate-step"
-import { DoneStep } from "./done-step"
+import { CompleteButton, DoneStep } from "./done-step"
 import { type RunContext, runContext } from "./model"
 import { OutcomeNotice, StepBar, useOutcome } from "./parts"
 import { PrepareStep } from "./prepare-step"
@@ -67,16 +67,16 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
         meta={<StatusBadge kind="run" value={pipeline.status} />}
         description={
           <>
-            Subject <span className="text-foreground">{subjectText}</span> · rig <span className="text-foreground">{rigName(state.catalog, run.rigId)}</span>. Both are fixed; another subject or rig needs another run.
+            Subject <span className="text-foreground">{subjectText}</span> · rig <span className="text-foreground">{rigName(state.catalog, run.rigId)}</span>, both fixed.
           </>
         }
-        actions={<RunActions ctx={ctx} onOutcome={outcome.act} />}
+        actions={<RunActions ctx={ctx} step={step} onOutcome={outcome.act} />}
       />
       <StepBar
         label={`${run.name} steps`}
         steps={pipeline.steps}
         here={step}
-        nextId={pipeline.next?.step?.id ?? null}
+        nextId={nextFrom(pipeline.steps, pipeline.next, step)?.step?.id ?? null}
         linkFor={(id) => runStepLink(run, id) as { to: string; params: Record<string, string> }}
       />
       {outcome.outcome || run.trashedAt || (run.completion === "complete" && step !== "done") ? (
@@ -101,15 +101,15 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
           {step === "calibrate" ? <CalibrateStep ctx={ctx} /> : null}
           {step === "prepare" ? <PrepareStep ctx={ctx} /> : null}
           {step === "results" ? <ResultsStep ctx={ctx} /> : null}
-          {step === "done" ? <DoneStep ctx={ctx} /> : null}
+          {step === "done" ? <DoneStep ctx={ctx} outcome={outcome} /> : null}
         </PageBody>
       )}
     </div>
   )
 }
 
-/** Header actions: each one does what it says, or names why it is refused. */
-function RunActions({ ctx, onOutcome }: { ctx: RunContext; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
+/** Header actions: each one does what it says, or names why it is refused. On Done, Complete and Clean up live in the step itself. */
+function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: RunStep; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
   const state = useStore((s) => s)
   const navigate = useNavigate()
   const { run, project } = ctx
@@ -133,7 +133,7 @@ function RunActions({ ctx, onOutcome }: { ctx: RunContext; onOutcome: ReturnType
   }
   return (
     <>
-      {run.completion === "complete" ? (
+      {here === "done" ? null : run.completion === "complete" ? (
         <>
           <Button
             size="sm"
@@ -152,10 +152,7 @@ function RunActions({ ctx, onOutcome }: { ctx: RunContext; onOutcome: ReturnType
           </Button>
         </>
       ) : (
-        <Button size="sm" variant="outline" onClick={() => onOutcome(completeRun(run.id), { title: `${run.name} is Complete`, reasons: ["Nothing was removed. Clean up is offered in Done."], tone: "info" })}>
-          <ShieldCheck aria-hidden="true" data-icon="inline-start" />
-          Complete
-        </Button>
+        <CompleteButton ctx={ctx} onOutcome={onOutcome} variant="outline" />
       )}
       <Button size="sm" variant="ghost" onClick={requestTrash}>
         <Trash2 aria-hidden="true" data-icon="inline-start" />

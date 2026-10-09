@@ -11,7 +11,7 @@
  * grid; the filmstrip is the strip with thumbnails.
  */
 import { useSearch } from "@tanstack/react-router"
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Expand, Filter, Grid3x3, ImageOff, Keyboard, LayoutList, ListChecks, Minimize, Rows3, Upload, X } from "lucide-react"
+import { ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Expand, Filter, Grid3x3, ImageOff, Keyboard, LayoutList, ListChecks, Minimize, PanelRight, Rows3, Save, Upload, X } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { getPreferences } from "@/app/preferences"
@@ -47,7 +47,9 @@ import { METRIC_LABEL } from "@/features/t3/measure"
 import { frameField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
 import { plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { discardRunDraft, saveRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
+import { runPipeline } from "@/domain/derive"
 import { registerReviewCommands } from "./commands"
 import { Inspector } from "./inspector"
 import { type Activate, FrameGrid, FrameTable, Filmstrip, frameColumns, type SortState, sortFrames } from "./list"
@@ -64,6 +66,10 @@ type ListView = "table" | "filmstrip" | "grid"
 const HEIGHT_NEXT: Record<TableHeight, TableHeight> = { rows: "strip", strip: "full", full: "rows" }
 const HEIGHT_LABEL: Record<TableHeight, string> = { rows: "About 8 rows", strip: "One-line strip", full: "Full height" }
 const ROW_PX = 26
+/** The preview stage's minimum: caption, a plate of about 240 px, the note and the plots strip. */
+const STAGE_MIN_PX = 416
+/** Review's own chrome around the table and the stage: toolbar, table handle and status line. */
+const REVIEW_CHROME_PX = 66
 const ARROW_OWNERS = "[role=tablist],[data-slot=toggle-group],[role=separator],[role=slider],[role=radiogroup],[role=menu]"
 
 /** Text entry only: a Select trigger (role combobox) is not typing, and the capture-phase handler keeps its typeahead from firing. */
@@ -124,8 +130,12 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const [importOpen, setImportOpen] = useState(false)
   const [announcement, setAnnouncement] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [inspectorShown, setInspectorShown] = useState(false)
   const gridCols = useRef(4)
   const [rootRef, rootSize] = useSize<HTMLDivElement>()
+  const statusLineRef = useRef<HTMLElement>(null)
+  // Under 1000 px of pane (a 1280 px window with the sidebar, or less) the inspector leaves the row and opens over the preview.
+  const inspectorOverlay = rootSize.width > 0 && rootSize.width < 1000
 
   const key = scope?.key ?? ""
   const storedActive = state.slices.d.frames[key]?.activeAssetId ?? null
@@ -311,6 +321,10 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         setFullscreen(false)
         return true
       }
+      if (inspectorOverlay && inspectorShown) {
+        setInspectorShown(false)
+        return true
+      }
       if (selected.size > 0) {
         setSelected(new Set())
         announce("Selection cleared.")
@@ -319,6 +333,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       return false
     },
     shortcuts: () => setShortcutsOpen(true),
+    toggleInspector: () => (inspectorOverlay ? setInspectorShown((v) => !v) : setReviewPrefs({ inspectorOpen: !prefs.inspectorOpen })),
     zoomed,
     gridCols: () => (view === "grid" ? gridCols.current : 1),
   }
@@ -380,6 +395,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         c: h.startCompare,
         g: h.toggleGrid,
         t: h.cycleHeight,
+        i: h.toggleInspector,
         "?": h.shortcuts,
       }
       const action = actions[key === "?" ? "?" : lower]
@@ -400,6 +416,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       { id: "compare", label: "Compare frames", keys: "C", run: () => h().startCompare() },
       { id: "grid", label: "Grid view", keys: "G", run: () => h().toggleGrid() },
       { id: "height", label: "Cycle table height", keys: "T", run: () => h().cycleHeight() },
+      { id: "inspector", label: "Show or hide the frame inspector", keys: "I", run: () => h().toggleInspector() },
       { id: "select-all", label: "Select all shown frames", keys: `${MOD_LABEL}A`, run: () => h().selectAll() },
       { id: "shortcuts", label: "Review shortcuts", keys: "?", run: () => h().shortcuts() },
     ])
@@ -486,8 +503,9 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     empty: emptyList,
   }
 
-  // The "about 8 rows" state keeps its dragged height, capped at 30% of a short review so the preview stays usable.
-  const rowsCap = rootSize.height > 0 ? Math.max(ROW_PX * 4 + 2, Math.round(rootSize.height * 0.3)) : Number.POSITIVE_INFINITY
+  // The table's height comes from the space left once the preview has its minimum (STAGE_MIN_PX): the
+  // dragged or remembered "about 8 rows" is the most it takes, and never less than three rows.
+  const rowsCap = rootSize.height > 0 ? Math.max(ROW_PX * 4 + 2, rootSize.height - STAGE_MIN_PX - REVIEW_CHROME_PX) : Number.POSITIVE_INFINITY
   const rowsPx = Math.min(dragPx ?? prefs.rowsHeightPx, rowsCap)
   const showStage = !(view === "table" && height === "full")
   const thresholdInfo = threshold ? thresholdMatches(threshold) : null
@@ -525,6 +543,11 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         <Button size="icon-sm" variant="outline" aria-label={fullscreen ? "Leave fullscreen (F)" : "Fullscreen preview (F)"} aria-pressed={fullscreen} onClick={() => setFullscreen((f) => !f)}>
           {fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}
         </Button>
+        {inspectorOverlay && !fullscreen ? (
+          <Toggle variant="outline" size="sm" className="h-6 min-w-6 px-1.5" pressed={inspectorShown} onPressedChange={setInspectorShown} aria-label="Frame inspector (I)">
+            <PanelRight aria-hidden="true" />
+          </Toggle>
+        ) : null}
       </div>
     </div>
   ) : null
@@ -602,7 +625,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   )
 
   const inspector =
-    current && prefs.inspectorOpen ? (
+    current && (inspectorOverlay ? inspectorShown : prefs.inspectorOpen) ? (
       <Inspector
         scope={scope}
         frame={current}
@@ -624,19 +647,43 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         onTab={setTab}
         targets={targets.length}
         actions={{ mark: (v) => mark(v), projectReject: () => confirmProjectReject(targets), clearProjectReject: () => clearProjectReject([current]) }}
+        overlay={inspectorOverlay}
+        onClose={inspectorOverlay ? () => setInspectorShown(false) : undefined}
       />
     ) : null
 
   const project = scope.project
   const confirmFrames = projectConfirm ?? []
   const confirmRuns = [...new Set(confirmFrames.flatMap((f) => (f.run && f.run.completion === "open" ? [f.run.name] : [])))]
+  // Unsaved run drafts this review made: Review's status line offers Save run (the toolbar's Next focuses it).
+  const drafts = scope.runs.filter((r) => r.draft && r.completion === "open" && !r.trashedAt)
+  const draftNote = drafts.length === 1 ? (runPipeline(state, drafts[0]!).steps[1]!.status.endsWith("unsaved") ? runPipeline(state, drafts[0]!).steps[1]!.status : "Unsaved changes") : drafts.length > 1 ? `${plural(drafts.length, "panel run")} unsaved` : null
+  const saveDrafts = () => {
+    for (const run of drafts) {
+      const result = saveRun(run.id)
+      if (!result.ok) {
+        setError(result.message)
+        announce(result.message)
+        return
+      }
+    }
+    setError(null)
+    announce(drafts.length === 1 ? `${drafts[0]!.name} saved as revision ${(drafts[0]!.revisions.at(-1)?.revision ?? 0) + 1}.` : `${plural(drafts.length, "run")} saved.`)
+    statusLineRef.current?.focus()
+  }
+  const discardDrafts = () => {
+    for (const run of drafts) discardRunDraft(run.id)
+    announce("Unsaved changes discarded; the runs are back at their saved revisions.")
+    statusLineRef.current?.focus()
+  }
+  const notes = [scope.membershipNote, scope.trashedPanels.length > 0 ? `${scope.trashedPanels.join(", ")} ${scope.trashedPanels.length === 1 ? "is" : "are"} in the Project's Trash: not listed or counted.` : null].filter((n): n is string => n !== null)
 
   return (
-    <div ref={rootRef} className="flex min-h-[28rem] min-w-0 flex-1 flex-col" data-review={scope.key}>
+    <div ref={rootRef} className="@container flex min-h-[36.5rem] min-w-0 flex-1 flex-col" data-review={scope.key}>
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
-      {/* Toolbar: the list's filter, panel, view and height; selection, compare, display. */}
+      {/* Toolbar: the list's filter, panel, view and height; selection, compare, display. One row from 784 px: labels fold to icons. */}
       <div data-chrome className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator bg-[color-mix(in_oklch,var(--chrome)_45%,var(--background))] px-3 py-1">
         <ToggleGroup value={[filter]} onValueChange={(v) => v[0] && setFilter(v[0] as QualityFilter)} variant="outline" size="sm" spacing={0} aria-label="Quality filter">
           {FILTERS.map((f) => (
@@ -667,23 +714,24 @@ export function FrameReview({ context }: { context: ReviewContext }) {
           spacing={0}
           aria-label="View"
         >
-          <ToggleGroupItem value="table" className="h-6 gap-1 px-2 text-xs">
+          <ToggleGroupItem value="table" className="h-6 gap-1 px-2 text-xs" title="Table">
             <LayoutList aria-hidden="true" className="size-3.5" />
-            Table
+            <span className="@max-[62rem]:sr-only">Table</span>
           </ToggleGroupItem>
-          <ToggleGroupItem value="filmstrip" className="h-6 gap-1 px-2 text-xs">
+          <ToggleGroupItem value="filmstrip" className="h-6 gap-1 px-2 text-xs" title="Filmstrip">
             <Columns3 aria-hidden="true" className="size-3.5" />
-            Filmstrip
+            <span className="@max-[62rem]:sr-only">Filmstrip</span>
           </ToggleGroupItem>
-          <ToggleGroupItem value="grid" className="h-6 gap-1 px-2 text-xs" title="G">
+          <ToggleGroupItem value="grid" className="h-6 gap-1 px-2 text-xs" title="Grid (G)">
             <Grid3x3 aria-hidden="true" className="size-3.5" />
-            Grid
+            <span className="@max-[62rem]:sr-only">Grid</span>
           </ToggleGroupItem>
         </ToggleGroup>
         {view === "table" ? (
-          <Button size="sm" variant="outline" className="h-6 text-xs" onClick={cycleHeight} aria-label={`Table height: ${HEIGHT_LABEL[height]}. Next: ${HEIGHT_LABEL[HEIGHT_NEXT[height]]} (T)`}>
+          <Button size="sm" variant="outline" className="h-6 text-xs" onClick={cycleHeight} title={`Table height: ${HEIGHT_LABEL[height]}. T switches to ${HEIGHT_LABEL[HEIGHT_NEXT[height]]}.`}>
             <Rows3 aria-hidden="true" />
-            {HEIGHT_LABEL[height]}
+            <span className="@max-[62rem]:sr-only">{HEIGHT_LABEL[height]}</span>
+            <span className="sr-only">, table height</span>
             <Kbd className="ml-0.5">T</Kbd>
           </Button>
         ) : null}
@@ -704,14 +752,14 @@ export function FrameReview({ context }: { context: ReviewContext }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Toggle variant="outline" size="sm" className="h-6 text-xs" pressed={compare} onPressedChange={() => startCompare()} aria-label="Compare (C)">
+          <Toggle variant="outline" size="sm" className="h-6 text-xs" pressed={compare} onPressedChange={() => startCompare()} title="Compare (C)">
             <ArrowLeftRight aria-hidden="true" />
-            Compare
+            <span className="@max-[62rem]:sr-only">Compare</span>
           </Toggle>
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-6 text-xs" />}>
+            <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-6 text-xs" title="Display" />}>
               <Filter aria-hidden="true" />
-              Display
+              <span className="@max-[62rem]:sr-only">Display</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
               <DropdownMenuGroup>
@@ -747,8 +795,12 @@ export function FrameReview({ context }: { context: ReviewContext }) {
               <DropdownMenuCheckboxItem checked={prefs.autoAdvance} closeOnClick={false} onCheckedChange={(on) => setReviewPrefs({ autoAdvance: on })}>
                 Auto-advance after a mark
               </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={prefs.inspectorOpen} closeOnClick={false} onCheckedChange={(on) => setReviewPrefs({ inspectorOpen: on })}>
-                Show the inspector
+              <DropdownMenuCheckboxItem
+                checked={inspectorOverlay ? inspectorShown : prefs.inspectorOpen}
+                closeOnClick={false}
+                onCheckedChange={(on) => (inspectorOverlay ? setInspectorShown(on) : setReviewPrefs({ inspectorOpen: on }))}
+              >
+                Show the inspector<DropdownMenuShortcut>I</DropdownMenuShortcut>
               </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -758,15 +810,9 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         </div>
       </div>
 
-      {scope.readOnlyReason || scope.membershipNote || scope.trashedPanels.length > 0 || error ? (
+      {scope.readOnlyReason || error ? (
         <div className="shrink-0 space-y-1 border-b border-separator px-3 py-1.5">
           {scope.readOnlyReason ? <Notice tone="info" title={scope.readOnlyReason} /> : null}
-          {scope.membershipNote ? <p className="text-xs text-muted-foreground">{scope.membershipNote}</p> : null}
-          {scope.trashedPanels.length > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {scope.trashedPanels.join(", ")} {scope.trashedPanels.length === 1 ? "is" : "are"} in the Project's Trash: {scope.trashedPanels.length === 1 ? "its" : "their"} frames are not listed or counted here.
-            </p>
-          ) : null}
           {error ? (
             <p role="alert" className="text-xs text-destructive">
               {error}
@@ -774,20 +820,6 @@ export function FrameReview({ context }: { context: ReviewContext }) {
           ) : null}
         </div>
       ) : null}
-
-      <div className="flex shrink-0 items-stretch">
-        <div className="min-w-0 flex-1">
-          <MeasureBar scope={scope} frames={frames} />
-        </div>
-        {context.kind === "run" ? (
-          <div className="flex items-center border-b border-separator pr-3">
-            <Button size="sm" variant="ghost" className="text-xs" onClick={() => setImportOpen(true)}>
-              <Upload aria-hidden="true" data-icon="inline-start" />
-              Import measurements
-            </Button>
-          </div>
-        ) : null}
-      </div>
 
       {threshold && thresholdInfo ? (
         <div role="group" aria-label="Select by threshold" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-separator px-3 py-1 text-xs">
@@ -821,7 +853,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
 
       {view === "table" ? (
         <div
-          className={cn("flex min-h-0 flex-col border-b border-separator", height === "full" ? "flex-1" : "shrink-0")}
+          className={cn("flex min-h-0 flex-col border-b border-separator", height === "full" ? "flex-1" : height === "rows" ? "shrink min-h-[calc(var(--row-h)*4+2px)]" : "shrink-0")}
           style={height === "rows" ? { height: rowsPx } : height === "strip" ? { height: ROW_PX * 2 + 2 } : undefined}
         >
           <FrameTable {...listProps} columns={columns} sort={sort} onSort={setSort} strip={height === "strip"} />
@@ -843,7 +875,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       ) : null}
 
       {showStage ? (
-        <div className={cn("flex min-h-0 flex-1", fullscreen && "fixed inset-0 z-50 flex-col bg-background")} aria-label={fullscreen ? "Fullscreen preview" : undefined} role={fullscreen ? "region" : undefined}>
+        <div className={cn("relative flex flex-1", fullscreen ? "fixed inset-0 z-50 min-h-0 flex-col bg-background" : "min-h-[26rem]")} aria-label={fullscreen ? "Fullscreen preview" : undefined} role={fullscreen ? "region" : undefined}>
           {fullscreen && current ? <FullscreenBar name={names.get(current.asset.id) ?? ""} frame={current} onExit={() => setFullscreen(false)} onMark={mark} disabled={scope.readOnlyReason} /> : null}
           <div className="flex min-h-0 min-w-0 flex-1">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -870,19 +902,53 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         </div>
       ) : null}
 
-      <footer data-chrome className="flex h-6 shrink-0 items-center gap-3 border-t border-separator px-3 text-[0.6875rem] text-muted-foreground tabular-nums">
-        <span>
+      {/* Status line: counts, measurement, notes, imports and the unsaved Review changes with Save run. */}
+      <footer
+        role="group"
+        ref={statusLineRef}
+        tabIndex={-1}
+        aria-label="Review status"
+        data-chrome
+        className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-separator px-3 py-0.5 text-xs text-muted-foreground tabular-nums outline-none"
+      >
+        <span className="shrink-0">
           {plural(ordered.length, "frame")} shown of {frames.length}
           {scope.trashedHidden > 0 ? ` · ${scope.trashedHidden} Trashed not listed` : ""}
+          {selected.size > 0 ? (
+            <span className="text-foreground">
+              {" "}
+              · {selected.size} selected{hiddenSelected > 0 ? ` (${hiddenSelected} hidden by the filter)` : ""}
+            </span>
+          ) : null}
         </span>
-        {selected.size > 0 ? (
-          <span className="text-foreground">
-            {selected.size} selected{hiddenSelected > 0 ? ` (${hiddenSelected} hidden by the filter)` : ""}
+        <MeasureBar scope={scope} frames={frames} home={statusLineRef} />
+        {notes.length > 0 ? (
+          <span className="min-w-0 flex-1 truncate" title={notes.join(" ")}>
+            {notes.join(" ")}
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate" title="Source notes: 1 built-in, PlateVault PSF on linear data with the input SHA-256 per frame in Values; 2 imported, content unverified.">
+            <sup className="text-link">1</sup> built-in · <sup className="text-link">2</sup> imported: content unverified
+          </span>
+        )}
+        {context.kind === "run" ? (
+          <Button size="xs" variant="ghost" className="shrink-0" onClick={() => setImportOpen(true)}>
+            <Upload aria-hidden="true" data-icon="inline-start" />
+            Import measurements
+          </Button>
+        ) : null}
+        {draftNote ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-foreground">
+            <span className="font-medium">{draftNote}</span>
+            <Button size="xs" variant="ghost" onClick={discardDrafts}>
+              Discard
+            </Button>
+            <Button id="review-save" size="xs" variant="outline" onClick={saveDrafts}>
+              <Save aria-hidden="true" data-icon="inline-start" />
+              Save run{drafts.length > 1 ? "s" : ""}
+            </Button>
           </span>
         ) : null}
-        <span className="ml-auto truncate">
-          <sup className="text-link">1</sup> built-in: PlateVault PSF, linear data, input SHA-256 per frame in Values · <sup className="text-link">2</sup> imported: content unverified
-        </span>
       </footer>
 
       <ReviewShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />

@@ -7,7 +7,7 @@
  * Shift-click selects the range from the current frame.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, ImageOff, Loader } from "lucide-react"
-import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
+import { type MouseEvent, type ReactNode, type Ref, useEffect, useLayoutEffect, useRef } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { currentFile, formatMetricFixed, previewUnavailableReason, sessionLabel } from "@/domain/membership"
@@ -143,18 +143,41 @@ function modeOf(event: MouseEvent): "set" | "toggle" | "range" {
   return event.shiftKey ? "range" : event.metaKey || event.ctrlKey ? "toggle" : "set"
 }
 
-function useScrollIntoView(activeId: AssetId | null, prefix: string) {
+/**
+ * Roving focus (WCAG 2.4.3, 2.4.11): the current frame scrolls into view and, while focus is in this list,
+ * focus moves to it on every step and mark, so focus, the current frame and the actions stay on one element.
+ * Focus counts as in the list after its item left it (a mark that moves the frame out of the filter).
+ * Each list is one Tab stop: only the current item is tabbable.
+ */
+function useFollowFocus(activeId: AssetId | null, prefix: string) {
+  const box = useRef<HTMLDivElement>(null)
+  const owns = useRef(false)
   useEffect(() => {
-    if (activeId) document.getElementById(`${prefix}-${activeId}`)?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    const onFocusIn = (event: FocusEvent) => {
+      owns.current = box.current?.contains(event.target as Node) ?? false
+    }
+    document.addEventListener("focusin", onFocusIn)
+    return () => document.removeEventListener("focusin", onFocusIn)
+  }, [])
+  useLayoutEffect(() => {
+    if (!activeId) return
+    const el = document.getElementById(`${prefix}-${activeId}`)
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    const focus = document.activeElement
+    const inside = (focus !== null && box.current?.contains(focus)) || (owns.current && (focus === null || focus === document.body))
+    if (!inside) return
+    const target = el?.matches("[data-frame-item]") ? el : el?.querySelector<HTMLElement>("[data-frame-item]")
+    if (target && target !== focus) target.focus({ preventScroll: true })
   }, [activeId, prefix])
+  return box
 }
 
 /** Right click, Shift+F10 or the Menu key on a frame opens its menu; every item is also on the toolbar or inspector. */
-function WithMenu({ menu, onOpen, children, className }: { menu: ReactNode; onOpen: (event: MouseEvent) => void; children: ReactNode; className?: string }) {
+function WithMenu({ menu, onOpen, children, className, boxRef }: { menu: ReactNode; onOpen: (event: MouseEvent) => void; children: ReactNode; className?: string; boxRef?: Ref<HTMLDivElement> }) {
   return (
     <ContextMenu>
       <ContextMenuTrigger className={className}>
-        <div className="contents" onContextMenu={onOpen}>
+        <div ref={boxRef} className="contents" onContextMenu={onOpen}>
           {children}
         </div>
       </ContextMenuTrigger>
@@ -187,13 +210,15 @@ export function FrameTable({
   ...props
 }: ListProps & { columns: FrameColumn[]; sort: SortState; onSort: (sort: SortState) => void; strip: boolean }) {
   const { frames, activeId, selected, onActivate, onToggleSelected } = props
-  useScrollIntoView(activeId, "frame-row")
+  const box = useFollowFocus(activeId, "frame-row")
   const shown = strip ? frames.filter((f) => f.asset.id === activeId).slice(0, 1) : frames
   const allSelected = frames.length > 0 && frames.every((f) => selected.has(f.asset.id))
   const someSelected = frames.some((f) => selected.has(f.asset.id))
+  const tabbable = shown.some((f) => f.asset.id === activeId) ? activeId : (shown[0]?.asset.id ?? null)
   return (
     <WithMenu
       menu={props.menu}
+      boxRef={box}
       onOpen={(event) => {
         const id = frameIdOf(event)
         if (id === null) event.stopPropagation()
@@ -272,7 +297,7 @@ export function FrameTable({
                   )}
                 >
                   <td className="w-9 px-3">
-                    <Checkbox aria-label={`Select ${props.names.get(id)}`} checked={isSelected} onCheckedChange={(on) => onToggleSelected(id, on)} />
+                    <Checkbox tabIndex={-1} aria-label={`Select ${props.names.get(id)}`} checked={isSelected} onCheckedChange={(on) => onToggleSelected(id, on)} />
                   </td>
                   {columns.map((column) => {
                     const Cell = column.id === "frame" ? "th" : "td"
@@ -283,7 +308,7 @@ export function FrameTable({
                         className={cn("px-3 py-0.5 font-normal whitespace-nowrap tabular-nums", column.align === "right" ? "text-right" : "text-left")}
                       >
                         {column.id === "frame" ? (
-                          <button type="button" data-frame-item className="max-w-full rounded-sm text-left hover:underline" onClick={(event) => onActivate(id, modeOf(event))}>
+                          <button type="button" data-frame-item tabIndex={id === tabbable ? 0 : -1} className="max-w-full rounded-sm text-left hover:underline" onClick={(event) => onActivate(id, modeOf(event))}>
                             {column.cell(f)}
                           </button>
                         ) : (
@@ -315,7 +340,7 @@ function Thumbnail({ frame, disk, catalog, className }: { frame: ReviewFrame; di
   )
 }
 
-function ThumbCell({ frame, props, disk, catalog, size }: { frame: ReviewFrame; props: ListProps; disk: Disk; catalog: Catalog; size: "strip" | "grid" }) {
+function ThumbCell({ frame, props, disk, catalog, size, tabbable }: { frame: ReviewFrame; props: ListProps; disk: Disk; catalog: Catalog; size: "strip" | "grid"; tabbable: boolean }) {
   const id = frame.asset.id
   const isActive = props.activeId === id
   const isSelected = props.selected.has(id)
@@ -327,6 +352,7 @@ function ThumbCell({ frame, props, disk, catalog, size }: { frame: ReviewFrame; 
         id={`frame-thumb-${id}`}
         data-frame-id={id}
         data-frame-item
+        tabIndex={tabbable ? 0 : -1}
         aria-current={isActive ? "true" : undefined}
         aria-pressed={isSelected}
         aria-label={`${props.names.get(id)}, ${qualityWord(frame)}`}
@@ -354,11 +380,18 @@ function ThumbCell({ frame, props, disk, catalog, size }: { frame: ReviewFrame; 
   )
 }
 
+/** The current frame, else the first: the one Tab stop of a filmstrip or grid. */
+function tabbableId(props: ListProps): AssetId | null {
+  return props.frames.some((f) => f.asset.id === props.activeId) ? props.activeId : (props.frames[0]?.asset.id ?? null)
+}
+
 export function Filmstrip({ disk, catalog, ...props }: ListProps & { disk: Disk; catalog: Catalog }) {
-  useScrollIntoView(props.activeId, "frame-thumb")
+  const box = useFollowFocus(props.activeId, "frame-thumb")
+  const tabbable = tabbableId(props)
   return (
     <WithMenu
       menu={props.menu}
+      boxRef={box}
       onOpen={(event) => {
         const id = frameIdOf(event)
         if (id === null) event.stopPropagation()
@@ -371,7 +404,7 @@ export function Filmstrip({ disk, catalog, ...props }: ListProps & { disk: Disk;
       ) : (
         <ul aria-label="Filmstrip" className="flex gap-1 p-1">
           {props.frames.map((f) => (
-            <ThumbCell key={f.asset.id} frame={f} props={props} disk={disk} catalog={catalog} size="strip" />
+            <ThumbCell key={f.asset.id} frame={f} props={props} disk={disk} catalog={catalog} size="strip" tabbable={f.asset.id === tabbable} />
           ))}
         </ul>
       )}
@@ -383,7 +416,8 @@ const GRID_MIN = 152
 const GRID_GAP = 4
 
 export function FrameGrid({ disk, catalog, onColumns, ...props }: ListProps & { disk: Disk; catalog: Catalog; onColumns: (cols: number) => void }) {
-  useScrollIntoView(props.activeId, "frame-thumb")
+  const box = useFollowFocus(props.activeId, "frame-thumb")
+  const tabbable = tabbableId(props)
   const [ref, size] = useSize<HTMLDivElement>()
   const cols = Math.max(1, Math.floor((size.width - 8 + GRID_GAP) / (GRID_MIN + GRID_GAP)))
   const reported = useRef(0)
@@ -397,6 +431,7 @@ export function FrameGrid({ disk, catalog, onColumns, ...props }: ListProps & { 
     <div ref={ref} className="min-h-0 flex-1">
       <WithMenu
         menu={props.menu}
+        boxRef={box}
         onOpen={(event) => {
           const id = frameIdOf(event)
           if (id === null) event.stopPropagation()
@@ -409,7 +444,7 @@ export function FrameGrid({ disk, catalog, onColumns, ...props }: ListProps & { 
         ) : (
           <ul aria-label="Frame grid" className="grid p-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: GRID_GAP }}>
             {props.frames.map((f) => (
-              <ThumbCell key={f.asset.id} frame={f} props={props} disk={disk} catalog={catalog} size="grid" />
+              <ThumbCell key={f.asset.id} frame={f} props={props} disk={disk} catalog={catalog} size="grid" tabbable={f.asset.id === tabbable} />
             ))}
           </ul>
         )}

@@ -1,10 +1,16 @@
 /**
  * Measurement status and the Measure frames control (PIX-FR-01, PIX-AC-01,
  * PIX-AC-06): Review opens idle; only this control starts, resumes or
- * finishes measuring, the current frame first. One line, so the list and the
- * preview keep their room. A Review all measures each panel run's frames.
+ * finishes measuring, the current frame first. It sits in Review's status
+ * line, so the list and the preview keep their room. A Review all measures
+ * each panel run's frames.
+ *
+ * Focus and announcements (WCAG 2.4.3, 4.1.3): Measure frames hands focus to
+ * the Cancel button that replaces it, and back to the status line when the
+ * measurement settles. The start and the summary are announced in a
+ * role=status region; the progress bar carries the running count.
  */
-import { useId } from "react"
+import { type RefObject, useEffect, useId, useRef, useState } from "react"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -31,58 +37,94 @@ export function startScopeMeasurement(scope: ReviewScope): number {
   return started
 }
 
-export function MeasureBar({ scope, frames }: { scope: ReviewScope; frames: ReviewFrame[] }) {
+/** The measurement part of Review's status line; `home` is the focusable status line focus returns to. */
+export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames: ReviewFrame[]; home: RefObject<HTMLElement | null> }) {
   const reasonId = useId()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const handOff = useRef(false)
+  const [said, setSaid] = useState("")
   const active = scope.ops.filter((op) => !isSettled(op.status))
+  const running = active.length > 0
   const notMeasured = frames.filter((f) => f.availability === "available" && f.member !== "unresolved" && f.measure !== "measured").length
   const unreadable = frames.filter((f) => f.availability !== "available").length
-  if (active.length > 0) {
+  const last: Operation | undefined = [...scope.ops].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1)
+  const unfinished = scope.ops.reduce((n, op) => n + unfinishedCount(op), 0)
+  const summary =
+    last?.status === "canceled"
+      ? `Measurement canceled; ${unfinished} not measured.`
+      : `${last?.summary ? `${last.summary} ` : ""}${notMeasured === 0 ? "Every readable frame has a built-in value." : `${plural(notMeasured, "frame")} not measured.`}`
+
+  // Focus follows the control that replaced the one you pressed, then settles on the status line.
+  const wasRunning = useRef(running)
+  useEffect(() => {
+    if (running && handOff.current) {
+      handOff.current = false
+      cancelRef.current?.focus()
+    }
+    if (wasRunning.current && !running) {
+      setSaid(summary)
+      const focus = document.activeElement
+      if (!focus || focus === document.body || home.current?.contains(focus)) home.current?.focus()
+    }
+    wasRunning.current = running
+  }, [running, summary, home])
+
+  const start = () => {
+    const total = [...measureTargets(scope).values()].reduce((n, ids) => n + ids.length, 0)
+    handOff.current = true
+    if (startScopeMeasurement(scope) > 0) setSaid(`Measuring ${plural(total, "frame")}, the current frame first.`)
+    else handOff.current = false
+  }
+
+  const status = (
+    <span role="status" className="sr-only">
+      {said}
+    </span>
+  )
+
+  if (running) {
     const done = active.reduce((n, op) => n + op.progress.done, 0)
     const total = active.reduce((n, op) => n + op.progress.total, 0)
     const verifying = active.some((op) => (op.payload as unknown as MeasurePayload).verify.length > 0)
     const paused = active.every((op) => op.status !== "running")
+    const word = paused ? (active.some((op) => op.status === "interrupted") ? "Interrupted by a restart" : "Paused") : verifying ? "Verifying cached values" : "Measuring"
     return (
-      <div className="flex min-h-8 shrink-0 items-center gap-3 border-b border-separator px-3 py-1">
-        <Progress value={total > 0 ? (done / total) * 100 : 0} aria-label="Measurement progress" getAriaValueText={() => `${done} of ${total} frames`} className="min-w-40 flex-1 gap-0.5">
-          <span className="text-xs tabular-nums" aria-hidden="true">
-            {paused ? (active.some((op) => op.status === "interrupted") ? "Measurement interrupted by a restart" : "Measurement paused") : verifying ? "Verifying cached values" : "Measuring frames"}: {done} of {total} · current frame first
-          </span>
-        </Progress>
+      <span className="flex min-w-0 items-center gap-2">
+        {status}
+        <Progress value={total > 0 ? (done / total) * 100 : 0} aria-label="Measurement progress" getAriaValueText={() => `${done} of ${total} frames`} className="w-24 shrink-0" />
+        <span className="min-w-0 truncate tabular-nums" title="The current frame is measured first.">
+          {word}: {done} of {total}
+        </span>
         {paused ? (
-          <Button size="sm" onClick={() => startScopeMeasurement(scope)}>
+          <Button size="xs" variant="outline" onClick={start}>
             Resume
           </Button>
         ) : null}
-        <Button size="sm" variant="outline" onClick={() => active.forEach((op) => cancelOperation(op.id))}>
+        <Button ref={cancelRef} size="xs" variant="outline" onClick={() => active.forEach((op) => cancelOperation(op.id))}>
           Cancel
         </Button>
-      </div>
+      </span>
     )
   }
-  const last: Operation | undefined = [...scope.ops].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1)
-  const unfinished = scope.ops.reduce((n, op) => n + unfinishedCount(op), 0)
   const disabledReason = scope.readOnlyReason
   return (
-    <div className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-separator px-3 py-1 text-xs">
-      <p className="min-w-0 flex-1 text-pretty text-muted-foreground">
-        {last ? <StatusBadge kind="operation" value={last.status} className="mr-2" /> : null}
-        {last?.status === "canceled" ? `Measurement canceled; ${unfinished} not measured. ` : last?.summary ? `${last.summary} ` : null}
-        {notMeasured === 0
-          ? "Every readable frame has a built-in value."
-          : last
-            ? `${plural(notMeasured, "frame")} not measured.`
-            : `${plural(notMeasured, "frame")} not measured yet. Only Measure frames starts it; browsing and filtering never measure.`}
-        {unreadable > 0 ? ` ${plural(unreadable, "frame")} cannot be read now and stay Not measured.` : ""}
-      </p>
+    <span className="flex min-w-0 items-center gap-2">
+      {status}
+      {last ? <StatusBadge kind="operation" value={last.status} className="shrink-0" /> : null}
+      <span className="min-w-0 truncate" title={`${summary}${unreadable > 0 ? ` ${plural(unreadable, "frame")} cannot be read now and stay Not measured.` : ""}`}>
+        {notMeasured === 0 ? "Every readable frame measured" : `${plural(notMeasured, "frame")} not measured`}
+      </span>
       {notMeasured > 0 ? (
         <>
           <Button
-            size="sm"
-            onClick={() => startScopeMeasurement(scope)}
+            size="xs"
+            variant="outline"
+            onClick={start}
             disabled={disabledReason !== null}
             focusableWhenDisabled
             aria-describedby={disabledReason ? reasonId : undefined}
-            className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+            title="Only Measure frames starts measuring; browsing and filtering never measure."
+            className="shrink-0 aria-disabled:pointer-events-none aria-disabled:opacity-50"
           >
             Measure frames
           </Button>
@@ -93,6 +135,6 @@ export function MeasureBar({ scope, frames }: { scope: ReviewScope; frames: Revi
           ) : null}
         </>
       ) : null}
-    </div>
+    </span>
   )
 }

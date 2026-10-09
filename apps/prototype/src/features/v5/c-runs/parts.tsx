@@ -5,15 +5,14 @@
  * simulated-disk controls, and small read-outs. The run status is the shared
  * `StatusBadge kind="run"`.
  */
-import { Link } from "@tanstack/react-router"
 import { FlaskConical } from "lucide-react"
 import { type ReactNode, useCallback, useState } from "react"
-import { StepGlyph } from "@/app/run-ui"
+import { CurrentLink, StepGlyph } from "@/app/run-ui"
 import { Notice } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RadioGroupItem } from "@/components/ui/radio-group"
-import type { RunStepState } from "@/domain/derive"
+import { GATE_LABEL, type RunStepState } from "@/domain/derive"
 import type { RunStep } from "@/domain/types"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
@@ -22,32 +21,45 @@ import type { CommitResult } from "@/store/core"
 // Step bar
 // ---------------------------------------------------------------------------
 
+/**
+ * The pane's gate bar: each step's glyph and name, never truncated. The
+ * outline beside it carries the short statuses, so here the gate word and
+ * status are in the tooltip and the accessible name ("Calibrate: Blocked,
+ * 1 needs review"); the step that holds Next carries a visible "Next" marker.
+ */
 export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunStepState[]; here: RunStep; nextId: RunStep | null; linkFor: (step: RunStep) => { to: string; params: Record<string, string> }; label: string }) {
   return (
-    <nav aria-label={label} data-chrome className="@container border-b border-separator bg-background px-3">
+    <nav aria-label={label} data-chrome className="border-b border-separator bg-background px-3">
       <ol className="flex min-w-0 items-stretch">
         {steps.map((step) => {
           const link = linkFor(step.id)
           const current = step.id === here
+          const holdsNext = nextId === step.id && !current
+          const status = step.status && step.status !== "–" ? step.status : null
           return (
             <li key={step.id} className="min-w-0 flex-1">
-              <Link
+              <CurrentLink
                 to={link.to as never}
                 params={link.params as never}
-                aria-current={current ? "step" : undefined}
+                current={current ? "step" : false}
+                title={`${step.n} ${step.label}: ${GATE_LABEL[step.state]}${status ? ` · ${status}` : ""}${holdsNext ? " · holds Next" : ""}`}
                 className={cn(
-                  "group flex h-9 min-w-0 items-center gap-1.5 border-b-2 px-2 text-[0.75rem] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "group flex h-8 min-w-0 items-center gap-1.5 border-b-2 px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   current ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <StepGlyph state={step.state} />
-                <span className={cn("shrink-0 font-medium", nextId === step.id && !current && "text-link")}>{step.label}</span>
-                <span className="sr-only">: </span>
-                <span className="hidden min-w-0 truncate text-muted-foreground @min-[48rem]:inline" title={step.status}>
-                  {step.status}
+                <span className="shrink-0 font-medium">{step.label}</span>
+                <span className="sr-only">
+                  : {GATE_LABEL[step.state]}
+                  {status ? `, ${status}` : ""}
                 </span>
-                <span className="sr-only @min-[48rem]:hidden">{step.status}</span>
-              </Link>
+                {holdsNext ? (
+                  <span className="shrink-0 rounded-sm border border-link/50 px-1 text-xs leading-4 font-semibold text-link">
+                    <span className="sr-only">, </span>Next
+                  </span>
+                ) : null}
+              </CurrentLink>
             </li>
           )
         })}

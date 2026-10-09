@@ -6,7 +6,7 @@
  * centre-and-corner regions, and the header.
  */
 import { Link } from "@tanstack/react-router"
-import { Sparkles } from "lucide-react"
+import { Sparkles, X } from "lucide-react"
 import { PathText } from "@/components/app/data"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
@@ -43,6 +43,8 @@ export function Inspector({
   onTab,
   targets,
   actions,
+  overlay = false,
+  onClose,
 }: {
   scope: ReviewScope
   frame: ReviewFrame
@@ -60,6 +62,9 @@ export function Inspector({
   /** How many frames a mark applies to: the selection when it holds more than one. */
   targets: number
   actions: InspectorActions
+  /** Under 1000 px of pane the inspector opens over the preview instead of beside it. */
+  overlay?: boolean
+  onClose?: () => void
 }) {
   const record: FrameMeasurement | undefined = catalog.measurements[frame.asset.id]
   const applies = frame.measure === "measured"
@@ -67,20 +72,33 @@ export function Inspector({
   const plural = targets > 1 ? ` ${targets} frames` : ""
   const stars = field ? detectedStars(field) : []
   return (
-    <aside aria-label="Frame inspector" className="flex min-h-0 w-[19rem] shrink-0 flex-col overflow-y-auto border-l border-separator bg-background">
+    <aside
+      aria-label="Frame inspector"
+      className={cn(
+        "flex min-h-0 shrink-0 flex-col overflow-y-auto border-l border-separator bg-background",
+        overlay ? "absolute inset-y-0 right-0 z-20 w-[min(19rem,100%)] shadow-lg" : "w-[19rem]",
+      )}
+    >
       <div className="space-y-2 border-b border-separator px-3 py-2">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold" title={frame.asset.copies[0]?.path}>
-            {name}
-          </h3>
-          <ul className="mt-0.5 space-y-0.5 text-[0.6875rem] leading-4 text-muted-foreground">
-            {frame.asset.copies.map((c) => (
-              <li key={`${c.volumeId}${c.path}`} className="min-w-0">
-                <span>{catalog.locations[c.locationId]?.displayName ?? "Unknown location"}: </span>
-                <PathText path={c.path} className="inline" />
-              </li>
-            ))}
-          </ul>
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-sm font-semibold" title={frame.asset.copies[0]?.path}>
+              {name}
+            </h2>
+            <ul className="mt-0.5 space-y-0.5 text-xs text-muted-foreground">
+              {frame.asset.copies.map((c) => (
+                <li key={`${c.volumeId}${c.path}`} className="min-w-0">
+                  <span>{catalog.locations[c.locationId]?.displayName ?? "Unknown location"}: </span>
+                  <PathText path={c.path} className="inline" />
+                </li>
+              ))}
+            </ul>
+          </div>
+          {onClose ? (
+            <Button size="icon-sm" variant="ghost" aria-label="Close the inspector (I)" onClick={onClose}>
+              <X aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <QualityLabel frame={frame} />

@@ -591,13 +591,16 @@ export function projectWarnings(disk: Disk, catalog: Catalog, project: Project):
 // Run pipeline: six steps, gates and Next (v4's rule, D-W3)
 // ---------------------------------------------------------------------------
 
-/** Gate vocabulary: each state has its own glyph shape (`StepGlyph`), so colour only reinforces. */
+/**
+ * Gate vocabulary: each state has its own glyph shape (`StepGlyph`), so colour only reinforces. The review gate
+ * says what it waits for, "Needs review", so it does not read as the Review step's name.
+ */
 export type GateState = "done" | "ready" | "review" | "blocked" | "running" | "partial" | "idle"
 
 export const GATE_LABEL: Record<GateState, string> = {
   done: "Done",
   ready: "Ready",
-  review: "Review",
+  review: "Needs review",
   blocked: "Blocked",
   running: "Running",
   partial: "Partial",
@@ -723,31 +726,44 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const STEP = (id: RunStep) => ({ id, n: RUN_STEPS.indexOf(id) + 1, label: STEP_LABEL[id] })
 
   // 1 Select: the subject's candidates on the run's rig, saved as a revision.
+  // A draft made in Review (frames rejected or restored there) belongs to Review: Select keeps its saved state,
+  // and Review reads "2 rejected, unsaved" with Save run in its footer.
+  const owner = draftOwner(run)
+  const selectSaved = saved || owner === "review"
   const selectItems: GateItem[] = [
     { label: "Sessions selected", met: selected > 0, detail: selected > 0 ? `${plural(selected, "session")} · ${plural(included, "frame")}` : "No sessions yet." },
     { label: "No unresolved inputs", met: unresolved === 0, detail: unresolved === 0 ? "Every selected frame is readable now." : `${plural(unresolved, "member")} cannot be read.` },
-    { label: "Membership saved", met: saved, detail: saved ? `Revision ${latest!.revision} saved.` : latest ? `Unsaved changes on revision ${latest.revision}.` : "Not saved yet." },
+    {
+      label: "Membership saved",
+      met: owner === "review" ? "advisory" : saved,
+      detail: saved ? `Revision ${latest!.revision} saved.` : owner === "review" ? "Review has unsaved changes: save them in Review." : latest ? `Unsaved changes on revision ${latest.revision}.` : "Not saved yet.",
+    },
   ]
   if (refresh.newCandidates.length > 0) selectItems.push({ label: "New candidates", met: "advisory", detail: `Add ${plural(refresh.newCandidates.length, "new session")}` })
   if (refresh.noLongerMatching.length > 0) selectItems.push({ label: "No longer matches subject", met: "advisory", detail: `${plural(refresh.noLongerMatching.length, "member")} flagged` })
   const select: RunStepState = {
     ...STEP("select"),
-    state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !saved ? "review" : "done",
-    status: selected === 0 ? "No sessions" : unresolved > 0 ? `${unresolved} unresolved` : saved ? `Saved r${latest!.revision}` : "Unsaved",
+    state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !selectSaved ? "review" : "done",
+    status: selected === 0 ? "No sessions" : unresolved > 0 ? `${unresolved} unresolved` : selectSaved && latest ? `Saved r${latest.revision}` : "Unsaved",
     items: selectItems,
-    link: link("select", selected > 0 && !saved && !complete ? "save-run" : undefined),
-    nextLabel: selected === 0 ? "Select sessions" : unresolved > 0 ? "Resolve inputs" : !saved ? "Save run" : refresh.newCandidates.length > 0 ? `Add ${plural(refresh.newCandidates.length, "new session")}` : "Edit selection",
+    link: link("select", selected > 0 && !selectSaved && !complete ? "save-run" : undefined),
+    nextLabel: selected === 0 ? "Select sessions" : unresolved > 0 ? "Resolve inputs" : !selectSaved ? "Save run" : refresh.newCandidates.length > 0 ? `Add ${plural(refresh.newCandidates.length, "new session")}` : "Edit selection",
   }
 
-  // 2 Review: quality is advisory; measurements inform, never decide.
-  const reviewed = included - (summary?.unreviewed ?? 0)
+  // 2 Review: quality is advisory; measurements inform, never decide. Counts cover the frames Review lists
+  // (included, rejected, excluded and unresolved members), so they match its All / Picked / Rejected / Unreviewed filters.
+  const decision = runReviewCounts(catalog, run)
+  const draftNote = owner === "review" ? reviewDraftNote(run) : null
   const review: RunStepState = {
     ...STEP("review"),
-    state: included === 0 ? "idle" : summary?.unreviewed === 0 ? "done" : "review",
-    status: included === 0 ? "–" : `${reviewed} of ${included}`,
-    items: [{ label: "Frames reviewed", met: "advisory", detail: included === 0 ? "No included frames yet." : `${reviewed} of ${included} have a quality decision.` }],
-    link: link("review"),
-    nextLabel: "Review frames",
+    state: decision.total === 0 ? "idle" : draftNote ? "review" : decision.unreviewed === 0 ? "done" : "review",
+    status: decision.total === 0 ? "–" : (draftNote ?? `${decision.total - decision.unreviewed} of ${decision.total}`),
+    items: [
+      ...(draftNote ? [{ label: "Review changes saved", met: false, detail: `${draftNote[0]!.toUpperCase()}${draftNote.slice(1)}: Save run keeps them as the next revision.` } satisfies GateItem] : []),
+      { label: "Frames reviewed", met: "advisory", detail: decision.total === 0 ? "No frames yet." : `${decision.total - decision.unreviewed} of ${decision.total} have a quality decision.` },
+    ],
+    link: link("review", draftNote && !complete ? "review-save" : undefined),
+    nextLabel: draftNote ? "Save run" : "Review frames",
   }
 
   // 3 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55).
@@ -764,14 +780,14 @@ export function runPipeline(world: World, run: Run): RunPipeline {
             ? "Select sessions first."
             : calibration.needsReview.length === 0
               ? `${plural(calibration.rows.length, "requirement")} matched.`
-              : `${plural(calibration.needsReview.length, "requirement")} need review.`,
+              : `${plural(calibration.needsReview.length, "requirement")} ${needs(calibration.needsReview.length)} review.`,
     },
   ]
   if (offers > 0) calibrateItems.push({ label: "Master found in Results", met: "advisory", detail: `${plural(offers, "master")} offered once.` })
   const calibrate: RunStepState = {
     ...STEP("calibrate"),
     state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : calibration.needsReview.length > 0 ? "blocked" : "done",
-    status: setup.calibrationPolicy === "off" ? "Off" : calibration.rows.length === 0 ? "–" : calibration.needsReview.length > 0 ? `${calibration.needsReview.length} need review` : "Automatic",
+    status: setup.calibrationPolicy === "off" ? "Off" : calibration.rows.length === 0 ? "–" : calibration.needsReview.length > 0 ? `${calibration.needsReview.length} ${needs(calibration.needsReview.length)} review` : "Automatic",
     items: calibrateItems,
     link: link("calibrate"),
     nextLabel: "Review matches",
@@ -858,18 +874,87 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const steps = [select, review, calibrate, prepare, results, done]
   const trashed = run.trashedAt !== null
   // A step that has not started (its prerequisites are missing) never captures Next ahead of an earlier open step.
-  const blocking = steps.find((s) => s.state !== "done" && s.state !== "idle" && blocks(s.items))
-  const open = blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done")
+  // Once Complete, only the Done step (Clean up) can hold Next: earlier gates no longer wait on the user.
+  const blocking = complete ? undefined : steps.find((s) => s.state !== "done" && s.state !== "idle" && blocks(s.items))
+  const open = complete ? (done.state === "done" ? undefined : done) : (blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done"))
   const current = open ?? done
-  const reason = (step: RunStepState) => step.items.find((i) => i.met === false)?.detail ?? step.items.find((i) => i.met === "advisory")?.detail ?? step.status
-  const next: NextAction | null = trashed || !open ? null : { step: open, label: open.nextLabel, reason: reason(open), link: open.link }
-  return { runId: run.id, status: trashed ? "trashed" : complete ? "complete" : "open", steps, current, next, blocker: trashed ? null : runBlocker(steps, calibration, unresolved), calibration }
+  const next: NextAction | null = trashed || !open ? null : stepAction(open)
+  return { runId: run.id, status: trashed ? "trashed" : complete ? "complete" : "open", steps, current, next, blocker: trashed || complete ? null : runBlocker(steps, calibration, unresolved), calibration }
+}
+
+/** "needs" for one, "need" for several. */
+function needs(n: number): string {
+  return n === 1 ? "needs" : "need"
+}
+
+function stepReason(step: RunStepState): string {
+  return step.items.find((i) => i.met === false)?.detail ?? step.items.find((i) => i.met === "advisory")?.detail ?? step.status
+}
+
+function stepAction(step: RunStepState): NextAction {
+  return { step, label: step.nextLabel, reason: stepReason(step), link: step.link }
+}
+
+/**
+ * The toolbar's Next while the user is on `here`. A Next on another step stands. A Next on this step that
+ * focuses a control (Save run) stands too. Otherwise Next never points at the screen it is on: a step whose
+ * gate blocks is resolved here, so Next is null (the caption names what blocks); an advisory step (Review)
+ * moves on to the first later step that is not done; null when nothing later waits.
+ */
+export function nextFrom(steps: RunStepState[], next: NextAction | null, here: RunStep | null): NextAction | null {
+  if (!next?.step || next.step.id !== here || next.link.focusId) return next
+  if (blocks(next.step.items)) return null
+  const later = steps.slice(steps.findIndex((s) => s.id === here) + 1).filter((s) => s.state !== "done")
+  const following = later.find((s) => s.state !== "idle") ?? later[0]
+  return following ? stepAction(following) : null
+}
+
+/** Which step made a run's unsaved draft: Review when only its rejections changed (D-W54), else Select. */
+function draftOwner(run: Run): "select" | "review" | null {
+  if (!run.draft) return null
+  const latest = latestRevision(run)
+  if (!latest) return "select"
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id))
+  const d = run.draft
+  const sessionsSame = same(
+    d.sessions.map((s) => s.sessionId),
+    latest.sessions.map((s) => s.sessionId),
+  )
+  return sessionsSame && same(d.excluded, latest.excluded) && same(d.unresolved, latest.unresolved) && same(d.productInputs, latest.productInputs) ? "review" : "select"
+}
+
+/** "2 rejected, unsaved": what a Review draft changed against the latest revision. */
+function reviewDraftNote(run: Run): string | null {
+  const latest = latestRevision(run)
+  if (!run.draft || !latest) return null
+  const rejected = run.draft.rejected.filter((id) => !latest.rejected.includes(id)).length
+  const restored = latest.rejected.filter((id) => !run.draft!.rejected.includes(id)).length
+  if (rejected === 0 && restored === 0) return null
+  const parts = [rejected > 0 ? `${rejected} rejected` : null, restored > 0 ? `${restored} restored` : null].filter(Boolean)
+  return `${parts.join(", ")}, unsaved`
+}
+
+/** Frames a run's Review lists and how many still have no quality decision (Review's Unreviewed filter). */
+export function runReviewCounts(catalog: Catalog, run: Run): { total: number; unreviewed: number } {
+  const content = workingContent(run)
+  const project = catalog.projects[run.projectId] ?? null
+  if (!content) return { total: 0, unreviewed: 0 }
+  const seen = new Set<AssetId>()
+  let unreviewed = 0
+  for (const id of [...content.included, ...content.rejected, ...content.excluded, ...content.unresolved]) {
+    const asset = catalog.assets[id]
+    if (!asset || asset.trashed || seen.has(id)) continue
+    seen.add(id)
+    const q = frameQuality(asset, project)
+    if (q.library !== "usable" && q.library !== "unusable" && !q.projectRejected) unreviewed += 1
+  }
+  return { total: seen.size, unreviewed }
 }
 
 function runBlocker(steps: RunStepState[], calibration: CalibrationPlan, unresolved: number): RunBlocker | null {
   const prepare = steps[3]!
   if (unresolved > 0) return { kind: "unresolved-inputs", step: "select", message: `${plural(unresolved, "input")} cannot be read` }
-  if (calibration.needsReview.length > 0) return { kind: "calibration-review", step: "calibrate", message: `${plural(calibration.needsReview.length, "calibration requirement")} need review` }
+  if (calibration.needsReview.length > 0) return { kind: "calibration-review", step: "calibrate", message: `${plural(calibration.needsReview.length, "calibration requirement")} ${needs(calibration.needsReview.length)} review` }
   if (prepare.state === "blocked") return { kind: "preparation-failed", step: "prepare", message: "The last preparation failed" }
   if (prepare.state === "partial") return { kind: "unresolved-inputs", step: "prepare", message: prepare.items.find((i) => i.met === false)?.detail ?? "Some inputs could not be prepared" }
   return null
@@ -951,7 +1036,10 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
   const allVerified = live.length > 0 && live.every((p) => p.pipeline.steps[3]!.state === "done")
   const blocking = steps.find((s) => s.state === "blocked" || s.state === "partial")
   const open = blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done")
-  return { group, panels, steps, allVerified, next: open ? { step: open, label: open.nextLabel, reason: open.status, link: open.link } : null }
+  // The reason names the first panel that holds the step back, e.g. "Panel 2: 30 inputs could not be prepared."
+  const holder = open ? live.find((p) => p.pipeline.steps[open.n - 1]!.state === open.state) : undefined
+  const reason = open ? (holder ? `${panelLabel(holder.panel)}: ${stepReason(holder.pipeline.steps[open.n - 1]!)}` : open.status) : ""
+  return { group, panels, steps, allVerified, next: open ? { step: open, label: open.nextLabel, reason, link: open.link } : null }
 }
 
 // ---------------------------------------------------------------------------
@@ -1066,14 +1154,15 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
   return { label: "Start a processing run", reason: "Choose a subject and a rig.", link: projectLink(project.id, { start: "run" }), step: null }
 }
 
-/** Stage for Home and the Projects list: blocked first, else the least advanced open run. */
+/** Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run. */
 export function projectStage(world: World, project: Project): { label: string; step: RunStep | null; state: GateState } {
   if (project.state === "done") return { label: project.archive ? "Archived" : "Done", step: null, state: "done" }
   const runs = projectRuns(world.catalog, project.id)
   if (runs.length === 0) return { label: "No runs yet", step: null, state: "idle" }
   const pipelines = runs.map((run) => runPipeline(world, run))
   const blocked = pipelines.find((p) => p.blocker)
-  if (blocked?.blocker) return { label: `${STEP_LABEL[blocked.blocker.step]} · blocked`, step: blocked.blocker.step, state: "blocked" }
+  const held = blocked?.blocker ? blocked.steps.find((s) => s.id === blocked.blocker!.step) : undefined
+  if (held) return { label: `${GATE_LABEL[held.state]} at ${held.label}`, step: held.id, state: held.state }
   const open = pipelines.filter((p) => p.status === "open").sort((a, b) => a.current.n - b.current.n)[0]
   if (open) return { label: open.current.label, step: open.current.id, state: open.current.state }
   return { label: "All runs complete", step: "done", state: "done" }

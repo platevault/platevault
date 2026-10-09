@@ -4,7 +4,7 @@
  * Harness v5 keeps v4's window: the page never scrolls, only panes do.
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, Download, FlaskConical, HardDrive, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
+import { Aperture, Download, Ellipsis, FlaskConical, HardDrive, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
@@ -13,16 +13,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { groupPipeline, type NextAction, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
+import { GATE_LABEL, groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
 import { cn } from "@/lib/utils"
 import { nowIso, useStore } from "@/store/core"
 import { CommandPalette } from "./command-palette"
@@ -30,7 +32,7 @@ import { SHELLS } from "./contributions"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
 import { ProjectOutline, useActiveRoute } from "./outline"
 import { setTheme, type ThemePreference, usePreferences } from "./preferences"
-import { StepGlyph, useFollowLink } from "./run-ui"
+import { CurrentLink, StepGlyph, useFollowLink } from "./run-ui"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
 import { openPanel, openSheet, toggleSidebar, useShellUi } from "./ui-state"
@@ -64,22 +66,32 @@ function SkipLink() {
   )
 }
 
+/**
+ * A source-list row. The deepest current row takes the accent fill and
+ * aria-current: inside a Project the outline row does, and Projects only
+ * marks that it contains the selection (unless the sidebar is collapsed).
+ */
 function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const Icon = item.icon
+  const within = item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`)
+  const deeper = within && !collapsed && item.to === "/projects" && pathname !== "/projects"
+  const current = within && !deeper
   const link = (
-    <Link
+    <CurrentLink
       to={item.to}
-      activeOptions={{ exact: item.to === "/" }}
+      current={current ? "page" : false}
       className={cn(
         "flex h-6.5 items-center gap-2 rounded-[0.3125rem] px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:text-link",
-        "data-[status=active]:bg-sidebar-primary data-[status=active]:font-medium data-[status=active]:text-sidebar-primary-foreground data-[status=active]:[&>svg]:text-sidebar-primary-foreground",
+        current && "bg-sidebar-primary font-medium text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground [&>svg]:text-sidebar-primary-foreground",
+        deeper && "font-medium",
         collapsed && "justify-center px-0",
       )}
       aria-label={collapsed ? item.label : undefined}
     >
       <Icon aria-hidden="true" className="size-4 shrink-0" />
       {collapsed ? null : <span className="truncate">{item.label}</span>}
-    </Link>
+    </CurrentLink>
   )
   if (!collapsed) return link
   return (
@@ -110,31 +122,37 @@ function useNarrowViewport(): boolean {
 /**
  * The open context's one Next action and step list, derived from the route:
  * a run's or run group's Next (its six steps), else the open Project's Next
- * (D-W35). Null on other pages.
+ * (D-W35). Null on other pages. On the step that holds Next, Next moves on
+ * (`nextFrom`) and `here` carries that step for the caption.
  */
-function useContextNext(): { next: NextAction | null; steps: RunStepState[] | null } {
+function useContextNext(): { next: NextAction | null; steps: RunStepState[] | null; here: RunStepState | null } {
   const active = useActiveRoute()
   const state = useStore((s) => s)
   return useMemo(() => {
     const run = active.runId ? state.catalog.runs[active.runId] : undefined
-    if (run) {
-      const pipeline = runPipeline(state, run)
-      return { next: pipeline.next, steps: pipeline.steps }
-    }
-    const group = active.groupId ? state.catalog.runGroups[active.groupId] : undefined
-    if (group) {
-      const pipeline = groupPipeline(state, group)
-      return { next: pipeline.next, steps: pipeline.steps }
+    const group = !run && active.groupId ? state.catalog.runGroups[active.groupId] : undefined
+    const pipeline = run ? runPipeline(state, run) : group ? groupPipeline(state, group) : null
+    if (pipeline) {
+      const next = nextFrom(pipeline.steps, pipeline.next, active.step)
+      // `here` only when the step on screen held Next and Next moved past it (or now waits on it).
+      const moved = pipeline.next?.step?.id === active.step && next !== pipeline.next
+      return { next, steps: pipeline.steps, here: moved ? (pipeline.steps.find((s) => s.id === active.step) ?? null) : null }
     }
     const project = active.projectId ? state.catalog.projects[active.projectId] : undefined
-    if (project) return { next: projectNext(state, project, Date.parse(nowIso())), steps: null }
-    return { next: null, steps: null }
+    if (project) {
+      const next = projectNext(state, project, Date.parse(nowIso()))
+      // On the candidate review it names, the Project's Next has nothing more to open.
+      const onIt = next?.link.search?.candidates !== undefined && active.search.candidates === next.link.search.candidates
+      return { next: onIt ? null : next, steps: null, here: null }
+    }
+    return { next: null, steps: null, here: null }
   }, [active, state])
 }
 
 /**
  * The one Next action, in the toolbar like a Run button: ⌘↩ runs it, ⌃1–⌃6
- * jump to a step of the open run or run group.
+ * jump to a step of the open run or run group. One row that never wraps: the
+ * label and the caption truncate, with the whole text in the tooltip.
  */
 function NextActionButton() {
   const context = useContextNext()
@@ -160,21 +178,24 @@ function NextActionButton() {
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
-  const next = context.next
-  if (!next) return null
+  const { next, here } = context
+  // The step on screen leads the caption when Next has moved past it ("2 Review: Needs review · 4 of 48 · then …").
+  const hereText = here ? `${here.n} ${here.label}: ${GATE_LABEL[here.state]} · ${here.items.find((i) => i.met === false)?.detail ?? here.status}` : null
+  const caption = [hereText, next ? `${next.step ? `${next.step.n} ${next.step.label} · ` : ""}${next.reason}` : null].filter(Boolean).join(" · then ")
+  if (!next && !here) return <div className="min-w-0 flex-1" />
+  const glyphState = here ? here.state : next?.step?.state
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="hidden min-w-0 items-center gap-1.5 truncate text-[0.75rem] text-muted-foreground lg:flex" title={next.reason}>
-        {next.step ? <StepGlyph state={next.step.state} /> : null}
-        <span className="truncate">
-          {next.step ? `${next.step.n} ${next.step.label} · ` : ""}
-          {next.reason}
-        </span>
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      {next ? (
+        <Button size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`Next: ${next.label}. ${next.reason} (${MOD_LABEL}↩)`}>
+          <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
+          <span className="min-w-0 truncate">Next: {next.label}</span>
+        </Button>
+      ) : null}
+      <span className={cn("min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground", next ? "hidden lg:flex" : "flex")} title={caption}>
+        {glyphState ? <StepGlyph state={glyphState} /> : null}
+        <span className="truncate">{caption}</span>
       </span>
-      <Button size="sm" onClick={() => follow(next.link)} title={`${next.reason} (${MOD_LABEL}↩)`}>
-        <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
-        Next: {next.label}
-      </Button>
     </div>
   )
 }
@@ -298,6 +319,33 @@ function ThemeMenu() {
   )
 }
 
+/** The toolbar's overflow: Prototype controls and Theme, so the toolbar keeps one row at every width. */
+function MoreMenu() {
+  const { theme } = usePreferences()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More: Prototype and Theme" />}>
+        <Ellipsis aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onClick={() => openPanel("simulation")}>
+          <FlaskConical aria-hidden="true" />
+          Prototype controls…
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Theme</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
+            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="system">Match system</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /** Status bar: locations, running and interrupted work. Each item opens where it is resolved. */
 function StatusArea({ narrow }: { narrow: boolean }) {
   const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
@@ -349,7 +397,7 @@ function StatusArea({ narrow }: { narrow: boolean }) {
   )
 }
 
-/** The palette trigger keeps its whole label from 768 px up; below that it is an icon button with the same name. */
+/** The palette trigger keeps its whole label from 1200 px up; below that it is an icon button with the same name, so the toolbar never wraps. */
 function PaletteTrigger({ narrow }: { narrow: boolean }) {
   if (narrow) {
     return (
@@ -360,10 +408,16 @@ function PaletteTrigger({ narrow }: { narrow: boolean }) {
     )
   }
   return (
-    <Button variant="outline" size="sm" className="w-60 min-w-0 shrink justify-start text-muted-foreground xl:w-72" onClick={() => openPanel("palette")}>
+    <Button
+      variant="outline"
+      size="sm"
+      className="min-w-0 shrink-0 justify-start text-muted-foreground max-[75rem]:size-6 max-[75rem]:justify-center max-[75rem]:px-0 min-[75rem]:w-60 2xl:w-72"
+      onClick={() => openPanel("palette")}
+      title={`Search or jump to… (${MOD_LABEL} K)`}
+    >
       <Search data-icon="inline-start" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-left">Search or jump to…</span>
-      <Kbd>{MOD_LABEL} K</Kbd>
+      <span className="min-w-0 flex-1 truncate text-left max-[75rem]:sr-only">Search or jump to…</span>
+      <Kbd className="max-[75rem]:hidden">{MOD_LABEL} K</Kbd>
     </Button>
   )
 }
@@ -449,7 +503,7 @@ function AppFrame({ children }: { children: ReactNode }) {
       <div className="flex min-h-0 flex-1">
         {narrow ? null : <Sidebar />}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header data-chrome className="z-20 flex min-h-10 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-separator bg-chrome px-2 py-1">
+          <header data-chrome className="z-20 flex h-10 min-w-0 shrink-0 flex-nowrap items-center gap-2 border-b border-separator bg-chrome px-2">
             {narrow ? (
               <SidebarDrawer />
             ) : (
@@ -458,17 +512,12 @@ function AppFrame({ children }: { children: ReactNode }) {
               </Button>
             )}
             <NextActionButton />
-            <div className="min-w-0 flex-1" />
-            <Button variant="ghost" size={narrow ? "icon-sm" : "sm"} onClick={() => openSheet({ kind: "import" })} title="Import from a card, folder or network share">
+            <Button variant="ghost" size="sm" className="shrink-0 max-xl:size-6 max-xl:px-0" onClick={() => openSheet({ kind: "import" })} title="Import from a card, folder or network share">
               <Download data-icon="inline-start" aria-hidden="true" />
-              <span className={cn(narrow && "sr-only")}>Import</span>
+              <span className="max-xl:sr-only">Import</span>
             </Button>
             <PaletteTrigger narrow={narrow} />
-            <Button variant="ghost" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
-              <FlaskConical data-icon="inline-start" aria-hidden="true" />
-              <span className={cn(narrow && "sr-only")}>Prototype</span>
-            </Button>
-            <ThemeMenu />
+            <MoreMenu />
           </header>
           <MainArea>{children}</MainArea>
         </div>

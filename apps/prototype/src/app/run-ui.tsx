@@ -4,25 +4,40 @@
  *
  * - StepGlyph: Direction C's gate vocabulary. Each state has its own glyph
  *   shape, so colour only reinforces; the word sits beside it or in
- *   screen-reader text (glyph plus word).
+ *   screen-reader text (glyph plus word). The triangle is kept for warnings,
+ *   so no gate uses it.
  * - StepRail: a run's six steps in one line, for lists (Project runs, Home).
+ * - CurrentLink: a router link whose aria-current the caller sets.
  * - useFollowLink: opens a step link and focuses its target element (e.g.
  *   Save run) once the route has rendered.
  */
-import { useNavigate } from "@tanstack/react-router"
-import { Circle, CircleArrowRight, CircleCheck, CircleDashed, Loader, OctagonX, TriangleAlert } from "lucide-react"
+import { createLink, useNavigate } from "@tanstack/react-router"
+import { Circle, CircleArrowRight, CircleCheck, CircleDashed, CircleEllipsis, Loader, OctagonX } from "lucide-react"
+import type { AnchorHTMLAttributes, Ref } from "react"
 import { GATE_LABEL, type GateState, type RunStepState, type StepLink } from "@/domain/derive"
 import { cn } from "@/lib/utils"
 
 const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> = {
   done: { icon: CircleCheck, className: "text-success" },
   ready: { icon: CircleArrowRight, className: "text-link" },
-  review: { icon: TriangleAlert, className: "text-warning" },
+  review: { icon: CircleEllipsis, className: "text-warning" },
   blocked: { icon: OctagonX, className: "text-destructive" },
   running: { icon: Loader, className: "text-link motion-safe:animate-spin" },
   partial: { icon: CircleDashed, className: "text-warning" },
   idle: { icon: Circle, className: "text-muted-foreground" },
 }
+
+/**
+ * TanStack Link marks every active link `aria-current="page"`, so a section
+ * row, a run row and its step row would all claim the page. This anchor sets
+ * aria-current from `current` only: the deepest row is the page, a step bar
+ * item is the step.
+ */
+function CurrentAnchor({ current = false, ref, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { current?: "page" | "step" | false; ref?: Ref<HTMLAnchorElement> }) {
+  return <a ref={ref} {...props} aria-current={current || undefined} data-current={current ? "" : undefined} />
+}
+
+export const CurrentLink = createLink(CurrentAnchor)
 
 export function StepGlyph({ state, className }: { state: GateState; className?: string }) {
   const meta = GATE_GLYPH[state]
