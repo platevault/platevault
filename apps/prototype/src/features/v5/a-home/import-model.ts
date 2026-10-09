@@ -55,10 +55,10 @@ export function typeLabel(m: Messages, type: ImageType): string {
     dark: m.import_type_dark,
     flat: m.import_type_flat,
     bias: m.import_type_bias,
-    "dark-flat": m.import_type_dark_flat,
+    "dark-flat": m.calibration_kind_dark_flat,
     "master-dark": m.import_type_master_dark,
     "master-flat": m.import_type_master_flat,
-    "master-bias": m.import_type_master_bias,
+    "master-bias": m.calibration_caption_bias,
     "master-dark-flat": m.import_type_master_dark_flat,
     unknown: m.import_type_unclassified,
   }

@@ -16,12 +16,16 @@
 import { formatHours } from "@/domain/derive"
 import { filterSuitability } from "@/domain/planning"
 import type { Band, MoonConstraint, Target } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import { clearStretches, type Stretch } from "./sky-tonight"
 import type { SkyContext } from "./targets-model"
 
 export type FilterGrade = "good" | "marginal" | "poor"
 
-export const GRADE_LABEL: Record<FilterGrade, string> = { good: "Good", marginal: "Marginal", poor: "Poor" }
+/** The grade word: the timeline legend. */
+export function gradeLabel(grade: FilterGrade): string {
+  return { good: m.tonight_grade_good, marginal: m.tonight_grade_marginal, poor: m.tonight_grade_poor }[grade]()
+}
 
 /** Share of the dark time a band may lose to the Moon and still read good. */
 const MARGINAL_SHARE = 0.75
@@ -31,22 +35,39 @@ export interface FilterChip {
   grade: FilterGrade
   /** Longest Moon-clear stretch, in minutes (`filterSuitability`). */
   minutes: number
-  /** Tooltip line: "OIII good · 7h40 · Moon down". */
-  reason: string
   limit: MoonConstraint
   /** Moon-clear stretches tonight, longest first. */
   stretches: Stretch[]
+  /** What `filterReason` words: the Moon in the band's longest stretch and the night's dark time. */
+  moon: { up: boolean; separationDeg: number | null; illuminationPct: number }
+  darkMinutes: number
+  minDurationMin: number
 }
 
 export const BAND_ORDER: Band[] = ["L", "R", "G", "B", "Ha", "SII", "OIII"]
 
 /** "Moon ≥ 60° · ≤ 80%": one band's Moon limits. */
 export function limitText(limit: MoonConstraint): string {
-  return `Moon ≥ ${limit.minSeparationDeg}° · ≤ ${limit.maxIlluminationPct}%`
+  return m.tonight_limit({ separation: limit.minSeparationDeg, illumination: limit.maxIlluminationPct })
 }
 
 function hours(minutes: number): string {
   return formatHours(minutes * 60)
+}
+
+/** A chip's tooltip line, in the current language: "OIII good · 7h40 · Moon down", "L poor · Moon 58°, needs ≥ 90° · 78% lit, max 30%". */
+export function filterReason(chip: FilterChip): string {
+  const { band, limit, moon } = chip
+  if (chip.grade === "good") {
+    const where = moon.up ? m.tonight_moon_position({ separation: moon.separationDeg ?? "–", illumination: moon.illuminationPct }) : m.tonight_moon_down()
+    return m.tonight_reason_good({ band, hours: hours(chip.minutes), moon: where })
+  }
+  if (chip.grade === "marginal") return m.tonight_reason_marginal({ band, hours: hours(chip.minutes), dark: hours(chip.darkMinutes) })
+  const failing: string[] = []
+  if (moon.up && moon.separationDeg !== null && moon.separationDeg < limit.minSeparationDeg) failing.push(m.tonight_fail_separation({ separation: moon.separationDeg, min: limit.minSeparationDeg }))
+  if (moon.up && moon.illuminationPct > limit.maxIlluminationPct) failing.push(m.tonight_fail_illumination({ illumination: moon.illuminationPct, max: limit.maxIlluminationPct }))
+  if (failing.length === 0) failing.push(chip.minutes > 0 ? m.tonight_fail_duration({ hours: hours(chip.minutes), needed: hours(chip.minDurationMin) }) : m.tonight_fail_moon_up())
+  return m.tonight_reason_poor({ band, failing: failing.join(" · ") })
 }
 
 /**
@@ -66,19 +87,17 @@ export function filtersTonight(ctx: SkyContext, position: { id: string; ra: numb
   return filterSuitability(probe, ctx.site, ctx.grid.night, ctx.criteria, constraints, ordered).map((f): FilterChip => {
     const limit = constraints[f.band]
     const grade: FilterGrade = !f.good ? "poor" : f.minutes < darkMinutes * MARGINAL_SHARE ? "marginal" : "good"
-    const moon = f.moonUp ? `Moon ${f.moonSeparationDeg ?? "–"}° · ${f.moonIlluminationPct}%` : "Moon down"
-    let reason: string
-    if (grade === "good") reason = `${f.band} good · ${hours(f.minutes)} · ${moon}`
-    else if (grade === "marginal") reason = `${f.band} marginal · ${hours(f.minutes)} of ${hours(darkMinutes)} clear of the Moon`
-    else {
-      const failing: string[] = []
-      if (f.moonUp && f.moonSeparationDeg !== null && f.moonSeparationDeg < limit.minSeparationDeg) failing.push(`Moon ${f.moonSeparationDeg}°, needs ≥ ${limit.minSeparationDeg}°`)
-      if (f.moonUp && f.moonIlluminationPct > limit.maxIlluminationPct) failing.push(`${f.moonIlluminationPct}% lit, max ${limit.maxIlluminationPct}%`)
-      if (failing.length === 0) failing.push(f.minutes > 0 ? `${hours(f.minutes)} clear of the Moon, needs ${hours(ctx.criteria.minDurationMin)}` : "Moon up all window")
-      reason = `${f.band} poor · ${failing.join(" · ")}`
-    }
     const stretches = clearStretches(ctx.grid, altitudes, ra, dec, minAlt, limit).sort((a, b) => b.minutes - a.minutes)
-    return { band: f.band, grade, minutes: f.minutes, reason, limit, stretches }
+    return {
+      band: f.band,
+      grade,
+      minutes: f.minutes,
+      limit,
+      stretches,
+      moon: { up: f.moonUp, separationDeg: f.moonSeparationDeg, illuminationPct: f.moonIlluminationPct },
+      darkMinutes,
+      minDurationMin: ctx.criteria.minDurationMin,
+    }
   })
 }
 

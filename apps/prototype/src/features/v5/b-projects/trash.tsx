@@ -200,7 +200,7 @@ export function ProjectTrashPage() {
               description={null}
               action={
                 <Button size="sm" variant="outline" render={<Link to="/projects/$projectId" params={{ projectId }} />}>
-                  {m.trash_open_project({ name: project.name })}
+                  {m.activity_open_destination({ name: project.name })}
                 </Button>
               }
             />

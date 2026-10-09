@@ -109,7 +109,7 @@ export function HomePage() {
           <>
             <Button size="sm" variant="outline" render={<Link to="/plan" />}>
               <CalendarClock data-icon="inline-start" aria-hidden="true" />
-              {m.home_plan_tonight()}
+              {m.target_plan_tonight()}
             </Button>
             <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
               <FolderPlus data-icon="inline-start" aria-hidden="true" />
@@ -563,7 +563,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                           <Button
                             size="xs"
                             variant="outline"
-                            title={m.home_add_to_named_run({ name: run.name })}
+                            title={m.target_add_to_named({ name: run.name })}
                             onClick={() => {
                               const reason = runCandidates(catalog, run).find((c) => c.session.id === session.id)?.reason ?? m.home_candidate_of({ name: run.name })
                               const result = addRunSessions(run.id, [session.id], { kind: "candidate", detail: reason })
@@ -605,7 +605,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">{m.home_no_site()}</span>
           <Button size="xs" variant="outline" render={<Link to="/settings/sites" />}>
-            {m.home_add_site()}
+            {m.tonight_add_site()}
           </Button>
         </div>
       </Box>
@@ -665,8 +665,8 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
           <dd>
             {tonight.moon.phase}, {Math.round(tonight.moon.illuminationPct)}%
             <span className="text-muted-foreground">
-              {tonight.moon.rise ? ` · ${m.home_moon_rises({ time: formatTime(tonight.moon.rise, tz) })}` : ""}
-              {tonight.moon.set ? ` · ${m.home_moon_sets({ time: formatTime(tonight.moon.set, tz) })}` : ""}
+              {tonight.moon.rise ? ` · ${m.tonight_moon_rises({ time: formatTime(tonight.moon.rise, tz) })}` : ""}
+              {tonight.moon.set ? ` · ${m.tonight_moon_sets({ time: formatTime(tonight.moon.set, tz) })}` : ""}
             </span>
           </dd>
         </dl>
@@ -843,7 +843,7 @@ function WorkBox({ state, className }: { state: PrototypeState; className?: stri
       }
     >
       {ops.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{m.home_nothing_running()}</p>
+        <p className="text-sm text-muted-foreground">{m.activity_nothing_running()}</p>
       ) : (
         <ul className="space-y-2.5" data-running-work>
           {ops.map((op) => {

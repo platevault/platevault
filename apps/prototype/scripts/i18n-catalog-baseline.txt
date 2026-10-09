@@ -1,0 +1,6 @@
+# i18n catalogue lint baseline: deliberately accepted violations.
+# scripts/check-i18n-catalog.mjs fails on any code-param / dup-value
+# violation NOT listed here. Note why in the change that adds an entry.
+# Regenerate with: node scripts/check-i18n-catalog.mjs --generate
+# pt-BR agrees in gender with the noun: 'Mostrar tudo' (plan entries) vs 'Mostrar todas' (sessões).
+dup-value	plan_show_all,sessions_show_all

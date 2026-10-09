@@ -8,6 +8,7 @@
  */
 import { Activity as ActivityIcon } from "lucide-react"
 import { Fragment, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { EmptyState } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
@@ -18,6 +19,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { STEP_LABEL } from "@/domain/labels"
 import type { ActivityEvent, ActivityKind, Operation, RunStep } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
@@ -33,52 +35,52 @@ type Filter = "all" | "operation" | "refused" | "write-failed" | "saved"
 const PATH = /(\/Volumes\/\S*[^\s.,;:])/
 
 /** "Refused" covers a contract refusal and a stale write refused as changed elsewhere. */
-const FILTERS: Array<{ value: Filter; label: string; kinds: ActivityKind[] }> = [
-  { value: "all", label: "All", kinds: [] },
-  { value: "operation", label: "Operations", kinds: ["operation"] },
-  { value: "refused", label: "Refusals", kinds: ["refusal", "write-refused"] },
-  { value: "write-failed", label: "Not saved", kinds: ["write-failed"] },
-  { value: "saved", label: "Saved", kinds: ["saved"] },
+const FILTERS: Array<{ value: Filter; readonly label: string; readonly empty: string; kinds: ActivityKind[] }> = [
+  { value: "all", get label() { return m.activity_filter_all() }, get empty() { return m.activity_empty() }, kinds: [] },
+  { value: "operation", get label() { return m.activity_filter_operations() }, get empty() { return m.activity_empty_operations() }, kinds: ["operation"] },
+  { value: "refused", get label() { return m.activity_filter_refusals() }, get empty() { return m.activity_empty_refusals() }, kinds: ["refusal", "write-refused"] },
+  { value: "write-failed", get label() { return m.status_not_saved() }, get empty() { return m.activity_empty_not_saved() }, kinds: ["write-failed"] },
+  { value: "saved", get label() { return m.status_saved() }, get empty() { return m.activity_empty_saved() }, kinds: ["saved"] },
 ]
 
-const SECTION: Record<string, string> = {
-  projects: "Projects",
-  targets: "Targets",
-  plan: "Plan",
-  sessions: "Sessions",
-  calibration: "Calibration",
-  storage: "Storage",
-  activity: "Activity",
-  import: "Import",
-  setup: "Setup",
+const SECTION: Record<string, () => string> = {
+  projects: m.nav_projects,
+  targets: m.nav_targets,
+  plan: m.nav_plan,
+  sessions: m.nav_sessions,
+  calibration: m.nav_calibration,
+  storage: m.nav_storage,
+  activity: m.nav_activity,
+  import: m.shell_import,
+  setup: m.activity_destination_setup,
 }
 
-const SINGLE: Record<string, string> = { targets: "Target", sessions: "Session", projects: "Project" }
+const SINGLE: Record<string, () => string> = { targets: m.activity_destination_target, sessions: m.activity_destination_session, projects: m.activity_destination_project }
 
-const SETTINGS_AREA: Record<string, string> = {
-  appearance: "Appearance",
-  locations: "Locations",
-  equipment: "Equipment",
-  "goal-templates": "Goal templates",
-  naming: "Naming",
-  sites: "Observing sites",
-  targets: "Target lookup",
-  applications: "Applications",
-  calibration: "Calibration",
-  about: "About",
+const SETTINGS_AREA: Record<string, () => string> = {
+  appearance: m.settings_appearance,
+  locations: m.common_locations,
+  equipment: m.settings_equipment,
+  "goal-templates": m.settings_goal_templates,
+  naming: m.settings_naming,
+  sites: m.settings_sites,
+  targets: m.settings_target_lookup,
+  applications: m.settings_applications,
+  calibration: m.nav_calibration,
+  about: m.activity_destination_about,
 }
 
 /** The surface an entry opens, named on its button ("Open Equipment", "Open Calibrate"). */
 export function destinationLabel(href: string): string {
   const [first = "", second, third, fourth, fifth] = href.split(/[?#]/)[0]!.split("/").filter(Boolean)
-  if (first === "settings") return (second && SETTINGS_AREA[second]) ?? "Settings"
+  if (first === "settings") return (second && SETTINGS_AREA[second]?.()) ?? m.nav_settings()
   if (first === "projects" && second) {
-    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_LABEL ? STEP_LABEL[fifth as RunStep] : third === "runs" ? "run" : "run group"
-    if (third === "trash") return "Project Trash"
-    return "Project"
+    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_LABEL ? STEP_LABEL[fifth as RunStep] : third === "runs" ? m.activity_destination_run() : m.activity_destination_group()
+    if (third === "trash") return m.activity_destination_trash()
+    return m.activity_destination_project()
   }
-  if (second && SINGLE[first]) return SINGLE[first]!
-  return SECTION[first] ?? "page"
+  if (second && SINGLE[first]) return SINGLE[first]!()
+  return SECTION[first]?.() ?? m.activity_destination_page()
 }
 
 function Outcome({ event, operation }: { event: ActivityEvent; operation: Operation | undefined }) {
@@ -87,13 +89,13 @@ function Outcome({ event, operation }: { event: ActivityEvent; operation: Operat
       // Indexing that left part of a location unread reads Incomplete scope, not a plain success (LIB-FR-06).
       const incomplete = event.outcome === "incomplete-scope" || (operation?.kind === "index" && operation.items.some((item) => item.status === "uncertain"))
       if (incomplete) return <StatusBadge kind="scanScope" value="incomplete" />
-      return operation ? <StatusBadge kind="operation" value={operation.status} /> : <StatusBadge kind="processing" value="written" label="Recorded" />
+      return operation ? <StatusBadge kind="operation" value={operation.status} /> : <StatusBadge kind="processing" value="written" label={m.activity_recorded()} />
     }
     case "write-failed":
       return <StatusBadge kind="save" value="failed" />
     case "write-refused":
     case "refusal":
-      return <StatusBadge kind="item" value="blocked" label="Refused" />
+      return <StatusBadge kind="item" value="blocked" label={m.activity_refused()} />
     case "saved":
       return <StatusBadge kind="save" value="saved" />
   }
@@ -128,6 +130,7 @@ function Detail({ event }: { event: ActivityEvent }) {
 }
 
 function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEvent; operation: Operation | undefined; open: boolean; onToggle: () => void }) {
+  const m = useMessages()
   const panelId = `activity-${event.id}-items`
   return (
     <Fragment>
@@ -150,12 +153,12 @@ function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEven
           <div className="flex justify-end gap-1">
             {operation && operation.items.length > 0 ? (
               <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
-                {open ? "Hide items" : "Show items"}
+                {open ? m.activity_hide_items() : m.activity_show_items()}
               </Button>
             ) : null}
             {event.href ? (
               <Button size="sm" variant="outline" className="whitespace-nowrap" render={<a href={`#${event.href}`} />}>
-                Open {destinationLabel(event.href)}
+                {m.activity_open_destination({ name: destinationLabel(event.href) })}
                 <span className="sr-only">: {event.title}</span>
               </Button>
             ) : null}
@@ -174,6 +177,7 @@ function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEven
 }
 
 export function ActivityPage() {
+  const m = useMessages()
   const activity = useStore((s) => s.activity)
   const operations = useStore((s) => s.operations)
   const unsettled = Object.values(operations)
@@ -196,18 +200,18 @@ export function ActivityPage() {
     if (!event) return []
     const operation = event.operationId ? operations[event.operationId] : undefined
     return [
-      ...(event.href ? [{ label: `Open ${destinationLabel(event.href)}`, onSelect: () => void (window.location.hash = event.href!) }] : []),
-      ...(operation && operation.items.length > 0 ? [{ label: expanded.has(id) ? "Hide items" : "Show items", onSelect: () => toggle(id) }] : []),
+      ...(event.href ? [{ label: m.activity_open_destination({ name: destinationLabel(event.href) }), onSelect: () => void (window.location.hash = event.href!) }] : []),
+      ...(operation && operation.items.length > 0 ? [{ label: expanded.has(id) ? m.activity_hide_items() : m.activity_show_items(), onSelect: () => toggle(id) }] : []),
     ]
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Activity" />
+      <PageHeader title={m.nav_activity()} />
       <PageBody>
-        <Section id="in-progress" title="In progress">
+        <Section id="in-progress" title={m.activity_in_progress()}>
           {unsettled.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing running</p>
+            <p className="text-sm text-muted-foreground">{m.activity_nothing_running()}</p>
           ) : (
             <div className="space-y-3">
               {unsettled.map((op) => (
@@ -218,9 +222,9 @@ export function ActivityPage() {
         </Section>
         <Section
           id="history"
-          title="History"
+          title={m.activity_history()}
           actions={
-            <ToggleGroup aria-label="Show entries" size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setFilter(value[0] as Filter)} className="flex-wrap">
+            <ToggleGroup aria-label={m.activity_show_entries()} size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setFilter(value[0] as Filter)} className="flex-wrap">
               {FILTERS.map((f) => (
                 <ToggleGroupItem key={f.value} value={f.value}>
                   {f.label} <span className="text-muted-foreground tabular-nums">{formatCount(counts[f.value])}</span>
@@ -232,40 +236,40 @@ export function ActivityPage() {
           {activity.length === 0 ? (
             <EmptyState
               icon={ActivityIcon}
-              title="No activity"
+              title={m.activity_empty()}
               action={
                 <Button size="sm" render={<a href="#/" />}>
-                  Go to Home
+                  {m.shell_not_found_home()}
                 </Button>
               }
             />
           ) : shown.length === 0 ? (
             <EmptyState
               icon={ActivityIcon}
-              title={`No ${current.label.toLowerCase()}`}
+              title={current.empty}
               action={
                 <Button size="sm" variant="outline" onClick={() => setFilter("all")}>
-                  Show all
+                  {m.plan_show_all()}
                 </Button>
               }
             />
           ) : (
             <ContextMenuArea menu={menu} className="relative block overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
-                <caption className="sr-only">Activity history, newest first</caption>
+                <caption className="sr-only">{m.activity_caption()}</caption>
                 <thead className="text-xs text-muted-foreground">
                   <tr className="border-b">
                     <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
-                      When
+                      {m.activity_when()}
                     </th>
                     <th scope="col" className="px-3 text-left font-medium">
-                      Outcome
+                      {m.activity_outcome()}
                     </th>
                     <th scope="col" className="px-3 text-left font-medium">
-                      What
+                      {m.activity_what()}
                     </th>
                     <th scope="col" className="px-3 text-right font-medium">
-                      Open
+                      {m.verb_open()}
                     </th>
                   </tr>
                 </thead>

@@ -498,7 +498,6 @@
   "tips_note": "Note {number}",
   "page_step_done": "(done)",
   "ui_breadcrumb": "Breadcrumb",
-  "home_plan_tonight": "Plan tonight",
   "import_open": "Import…",
   "home_goal_line": "{inProject} in project / {captured} captured",
   "home_goal_line_goal": "{inProject} in project / {captured} captured · goal {goal}",
@@ -602,18 +601,14 @@
       }
     }
   ],
-  "home_add_to_named_run": "Add to {name}",
   "home_candidate_of": "Candidate of {name}",
   "session_cant_add": "Can't add",
   "home_added_to_draft": "{session} added to the {run} draft",
   "home_add_to_run": "Add to run",
   "home_tonight": "Tonight",
   "home_no_site": "No site",
-  "home_add_site": "Add site",
   "home_darkness": "Darkness",
   "home_moon": "Moon",
-  "home_moon_rises": "rises {time}",
-  "home_moon_sets": "sets {time}",
   "home_windows": "Windows",
   "home_no_subjects_or_favourites": "No subjects or favourites",
   "home_favourite": "Favourite",
@@ -662,7 +657,6 @@
   "home_unmet_goals": "Unmet goals",
   "home_all_met": "All met",
   "home_running_count": "{count} running",
-  "home_nothing_running": "Nothing running",
   "home_pause_named": "Pause {name}",
   "home_resume_named": "Resume {name}",
   "home_retry_named": "Retry {name}",
@@ -753,10 +747,8 @@
   "import_type_dark": "Dark",
   "import_type_flat": "Flat",
   "import_type_bias": "Bias",
-  "import_type_dark_flat": "Dark flat",
   "import_type_master_dark": "Master dark",
   "import_type_master_flat": "Master flat",
-  "import_type_master_bias": "Master bias",
   "import_type_master_dark_flat": "Master dark flat",
   "import_type_unclassified": "Unclassified",
   "import_route_stack": "Calibration → stack",
@@ -1885,7 +1877,6 @@
   "trash_empty_ellipsis": "Empty Trash…",
   "trash_of_project": "Trash of {name}",
   "trash_is_empty": "Trash is empty",
-  "trash_open_project": "Open {name}",
   "trash_last_empty": "Last Empty Trash",
   "trash_restore_title": "Restore {name}?",
   "trash_restore_description": "Back as it was when trashed.",
@@ -1915,7 +1906,6 @@
   "wrapup_offer_rejects": "Rejects",
   "wrapup_offer_intermediates_label": "Intermediates",
   "wrapup_offer_duplicates_label": "Duplicates",
-  "wrapup_todo": "To do",
   "wrapup_blocked": "Wrap up blocked",
   "wrapup_runs_not_complete": [
     {
@@ -2245,5 +2235,593 @@
   "mosaic_side_north": "north",
   "mosaic_side_south": "south",
   "project_lookup_sesame": "CDS Sesame (SIMBAD)",
-  "project_panel_short": "P{n}"
+  "project_panel_short": "P{n}",
+  "tonight_grade_good": "Good",
+  "tonight_grade_marginal": "Marginal",
+  "tonight_grade_poor": "Poor",
+  "tonight_limit": "Moon ≥ {separation}° · ≤ {illumination}%",
+  "tonight_moon_position": "Moon {separation}° · {illumination}%",
+  "tonight_moon_down": "Moon down",
+  "tonight_reason_good": "{band} good · {hours} · {moon}",
+  "tonight_reason_marginal": "{band} marginal · {hours} of {dark} clear of the Moon",
+  "tonight_reason_poor": "{band} poor · {failing}",
+  "tonight_fail_separation": "Moon {separation}°, needs ≥ {min}°",
+  "tonight_fail_illumination": "{illumination}% lit, max {max}%",
+  "tonight_fail_duration": "{hours} clear of the Moon, needs {needed}",
+  "tonight_fail_moon_up": "Moon up all window",
+  "tonight_moon": "Moon",
+  "tonight_moon_rises": "rises {time}",
+  "tonight_moon_no_rise": "no moonrise",
+  "tonight_moon_sets": "sets {time}",
+  "tonight_moon_no_set": "no moonset",
+  "tonight_add_site": "Add site",
+  "tonight_criteria_altitude": "altitude ≥ {altitude}°",
+  "tonight_criteria_astronomical": "astronomical darkness",
+  "tonight_criteria_nautical": "nautical darkness",
+  "tonight_criteria_duration": "at least {minutes} min",
+  "tonight_criteria_moon_illumination": "Moon ≤ {illumination}% when up",
+  "tonight_criteria_moon_separation": "Moon ≥ {separation}° away when up",
+  "tonight_no_filters": "No filters",
+  "target_project_badge": "Project {name}",
+  "tonight_limit_separation_field": "{band} minimum Moon separation",
+  "tonight_limit_illumination_field": "{band} maximum Moon illumination",
+  "tonight_moon_limits": "Moon limits",
+  "tonight_reset": "Reset",
+  "tonight_filter": "Filter",
+  "tonight_limit_separation_header": "Moon ≥",
+  "tonight_limit_illumination_header": "Lit ≤",
+  "tonight_axis": "Night, {zone}",
+  "tonight_actions": "Actions",
+  "tonight_twilight": "Twilight",
+  "tonight_moon_band": "Moon {illumination}%",
+  "tonight_summary_windows": "windows {windows}",
+  "tonight_summary_window": "{range}, peak {altitude}°",
+  "tonight_no_window": "No window tonight",
+  "tonight_filters_of": "Filters: {name}",
+  "tonight_altitude": "Altitude",
+  "tonight_window": "Window",
+  "tonight_now": "Now",
+  "tonight_method": "Method",
+  "targets_name_empty": "{label}: enter a name.",
+  "targets_name_taken": "{label}: “{name}” is already used. Choose another name.",
+  "target_plan_tonight": "Plan tonight",
+  "targets_palette_preset": "Targets: {name}",
+  "targets_source_library": "Library",
+  "tonight_zero_darkness": "Darkness: the Sun stays above {sun}° tonight",
+  "tonight_zero_low": "Altitude: stays below {altitude}° in darkness",
+  "tonight_zero_moon": "Moon: too bright or too close while it is up",
+  "tonight_zero_short": "Altitude: above {altitude}° for under {minutes} min of the darkness still ahead",
+  "tonight_zero_word_darkness": "darkness",
+  "tonight_zero_word_altitude": "altitude",
+  "tonight_zero_word_moon": "moon",
+  "targets_preset_best": "Best tonight",
+  "targets_preset_best_definition": "Img time above zero, a broadband filter ok tonight; longest first.",
+  "targets_preset_narrowband": "Narrowband (Moon up)",
+  "targets_preset_narrowband_definition": "Img time above zero, Ha, SII or OIII ok tonight, Moon up.",
+  "targets_preset_emission": "Emission nebulae Ha",
+  "targets_preset_emission_definition": "Emission nebulae, Ha ok tonight.",
+  "targets_preset_galaxies": "Galaxies dark sky",
+  "targets_preset_galaxies_definition": "Galaxies, Img time above zero, Moon down.",
+  "targets_preset_planetary": "Planetary nebulae OIII",
+  "targets_preset_planetary_definition": "Planetary nebulae, OIII ok tonight.",
+  "targets_preset_mosaic": "Mosaic candidates",
+  "targets_preset_mosaic_definition": "Targets that need 2 or more panels on a selected rig.",
+  "targets_preset_fits": "Fits nicely",
+  "targets_preset_fits_definition": "Targets that cover 25% to 90% of a selected rig's field.",
+  "targets_preset_needs_rig": "Choose a rig to use this preset",
+  "targets_preset_needs_narrowband": "The selected rig has no Ha, SII or OIII filter",
+  "targets_result_gone": "This result is no longer available. Search again.",
+  "plan_added": "{name} added to the Plan list",
+  "plan_add_search_label": "Add a target to the Plan list",
+  "plan_add_search_placeholder": "Add target",
+  "plan_matches": "Matches",
+  "plan_in_plan": "In Plan",
+  "plan_unknown_target": "Unknown Target",
+  "tonight_no_coordinates": "No catalogued coordinates",
+  "plan_title_scoped": "Plan: {name}",
+  "plan_site": "Planning site",
+  "tonight_best": "Best",
+  "tonight_img": "Img",
+  "tonight_zero_hours": "0h",
+  "plan_moon_away": "Moon {separation}° away",
+  "plan_moon_up_best": "Moon {separation}° away, up in the best window",
+  "plan_moon_down_best": "Moon {separation}° away, down in the best window",
+  "plan_moon_up": "up",
+  "plan_goals": "Goals",
+  "plan_goals_short": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} short",
+        "countPlural=*": "{count} short"
+      }
+    }
+  ],
+  "plan_favourite": "favourite",
+  "tonight_show_filters": "Show filters",
+  "tonight_hide_filters": "Hide filters",
+  "targets_add_to_plan": "Add to Plan",
+  "targets_remove_from_plan": "Remove from Plan",
+  "target_open_project": "Open Project",
+  "plan_remove_named": "Remove {name} from Plan",
+  "plan_remove": "Remove",
+  "plan_add_named": "Add {name} to Plan",
+  "plan_list": "Plan list",
+  "plan_targets_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} target",
+        "countPlural=*": "{count} targets"
+      }
+    }
+  ],
+  "plan_all_targets": "All targets",
+  "plan_rows_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} row",
+        "countPlural=*": "{count} rows"
+      }
+    }
+  ],
+  "plan_list_empty": "Plan list empty",
+  "plan_clear_scope_label": "Clear Project scope",
+  "plan_clear_scope": "Clear scope",
+  "plan_show_all": "Show all",
+  "plan_per_filter": "Per filter",
+  "plan_dark": "Dark",
+  "plan_dark_none": "none",
+  "plan_empty": "Nothing to plan",
+  "targets_browse_catalogues": "Browse catalogues",
+  "plan_caption": "Tonight at {site}",
+  "tonight_target": "Target",
+  "tonight_night": "Night",
+  "tonight_times": "Times",
+  "tonight_criteria": "Criteria",
+  "tonight_method_value": "Low-precision Sun and Moon, 10-min grid",
+  "targets_rig_lacks_filter": "The rig has no {band} filter",
+  "targets_unstar_named": "Remove {name} from favourites",
+  "targets_star_named": "Add {name} to favourites",
+  "targets_add_named": "Add {name} to targets",
+  "targets_designation": "Designation",
+  "targets_type": "Type",
+  "targets_type_unknown": "Object type unknown",
+  "tonight_max_alt": "Max alt",
+  "tonight_no_darkness": "No darkness tonight",
+  "tonight_lunar": "Lunar",
+  "tonight_img_time": "Img time",
+  "targets_filters": "Filters",
+  "targets_filters_help": "Each filter tonight under its Moon limits. Dashed: marginal. Struck: poor.",
+  "targets_fit_per_rig": "Fit per rig",
+  "targets_fit": "Fit",
+  "tonight_opposition": "Opposition",
+  "targets_source": "Source",
+  "targets_add_sr": "{name} to targets",
+  "targets_add_to_targets": "Add to targets",
+  "targets_star": "Add ★",
+  "targets_unstar": "Remove ★",
+  "targets_open_plan": "Open Plan",
+  "targets_apply": "Apply",
+  "targets_rename_menu": "Rename…",
+  "targets_delete_menu": "Delete…",
+  "targets_good_for": "Good tonight for {band}",
+  "targets_good_for_menu": "Good tonight for…",
+  "targets_good_for_heading": "Good tonight for",
+  "targets_project_rigs": "This Project's rigs ({count})",
+  "targets_no_match": "No match for “{query}”",
+  "targets_choose_catalogue": "Choose a catalogue or preset",
+  "targets_browse_messier": "Browse Messier",
+  "targets_none_good": "No target with {band} ok tonight",
+  "targets_clear_filter": "Clear filter",
+  "targets_none_match_preset": "No target matches {name}",
+  "targets_clear_preset": "Clear preset",
+  "targets_empty": "No targets yet",
+  "targets_clear_search_first": "Clear search first",
+  "targets_save_preset": "Save preset",
+  "targets_clear_project": "Clear Project",
+  "targets_show": "Show",
+  "targets_search_label": "Search targets, catalogues and SIMBAD",
+  "targets_search_placeholder": "Targets, catalogues, SIMBAD",
+  "targets_rig": "Rig",
+  "targets_moon_limits_for": "Moon limits for {band}",
+  "targets_off_while_searching": "Off while searching",
+  "targets_good_chip": "{band} ok · {limit}",
+  "targets_clear_band_filter": "Clear {band} filter",
+  "targets_catalogues": "Catalogues",
+  "targets_presets": "Presets",
+  "targets_preset_unavailable_sr": ": unavailable, {reason}",
+  "targets_more_for": "More for {name}",
+  "targets_preset_unavailable": "{name} · unavailable",
+  "targets_clear_named": "Clear {name}",
+  "targets_simbad_searching": "Searching SIMBAD…",
+  "targets_simbad_off": "SIMBAD off",
+  "targets_simbad_unreachable": "SIMBAD unreachable",
+  "targets_simbad_searched": "SIMBAD searched",
+  "targets_simbad_fixture": "Fixture data (prototype)",
+  "targets_caption_search": "Search results for {query}",
+  "targets_caption_project": "{name} subjects",
+  "targets_filters_band": "Filters ({band})",
+  "targets_favourite": "Favourite",
+  "targets_about_column": "About {name}",
+  "targets_sort_ascending": "ascending",
+  "targets_sort_descending": "descending",
+  "targets_preset_name": "Preset name",
+  "targets_rename_preset": "Rename preset",
+  "targets_rename": "Rename",
+  "targets_delete_preset_title": "Delete preset {name}?",
+  "targets_delete_preset_change": "Removes “{name}”",
+  "targets_delete_preset": "Delete preset",
+  "target_source_catalogue": "Bundled catalogue",
+  "target_source_user": "Entered by you",
+  "target_source_resolver": "Online resolver",
+  "target_find": "Find a Target",
+  "target_find_placeholder": "Name or alias",
+  "target_matching_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} matching Target",
+        "countPlural=*": "{count} matching Targets"
+      }
+    }
+  ],
+  "target_targets_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Target",
+        "countPlural=*": "{count} Targets"
+      }
+    }
+  ],
+  "target_favourite_sr": ", favourite",
+  "target_projects_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Project",
+        "countPlural=*": "{count} Projects"
+      }
+    }
+  ],
+  "target_table_link": "Targets table",
+  "target_open_targets": "Open Targets",
+  "target_finder": "Target finder",
+  "target_no_coordinates": "No coordinates",
+  "target_best_none": "None",
+  "target_caption": "{name} tonight at {site}",
+  "target_open_planner": "Open in Planner",
+  "target_open_equipment": "Open in Equipment",
+  "target_in_every_project": "In every open Project",
+  "target_tonight": "Tonight",
+  "target_identity": "Identity",
+  "target_aliases": "Aliases",
+  "target_type_unresolved": "Not catalogued or resolved",
+  "target_coordinates": "Coordinates",
+  "target_angular_size": "Angular size",
+  "target_size_unknown": "Size unknown",
+  "target_about_fit": "About Fit",
+  "target_fit_help": "Major axis against the shorter side of each rig's field.",
+  "target_field": "Field",
+  "target_fov_unknown": "Camera or focal length unknown",
+  "target_mosaic_panels": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} panel",
+        "countPlural=*": "{name} · {count} panels"
+      }
+    }
+  ],
+  "target_planner": "Planner",
+  "target_panel": "Panel {number}",
+  "target_no_sessions": "No sessions",
+  "target_sessions_caption": "Sessions of {name}",
+  "target_channel": "Channel",
+  "calibration_frames": "Frames",
+  "target_add_to_title": "Add {target} to {project}?",
+  "target_adds_subject": "Adds {name} as a subject",
+  "target_copies_goals": "Copies the goals: {goals}",
+  "target_goal_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame",
+        "countPlural=*": "{count} frames"
+      }
+    }
+  ],
+  "target_no_goals_to_copy": "No goals to copy",
+  "target_add_to_named": "Add to {name}",
+  "activity_filter_all": "All",
+  "activity_empty": "No activity",
+  "activity_filter_operations": "Operations",
+  "activity_empty_operations": "No operations",
+  "activity_filter_refusals": "Refusals",
+  "activity_empty_refusals": "No refusals",
+  "activity_empty_not_saved": "No not saved",
+  "activity_empty_saved": "No saved",
+  "activity_destination_setup": "Setup",
+  "activity_destination_target": "Target",
+  "activity_destination_session": "Session",
+  "activity_destination_project": "Project",
+  "activity_destination_about": "About",
+  "activity_destination_run": "run",
+  "activity_destination_group": "run group",
+  "activity_destination_trash": "Project Trash",
+  "activity_destination_page": "page",
+  "activity_recorded": "Recorded",
+  "activity_refused": "Refused",
+  "activity_hide_items": "Hide items",
+  "activity_show_items": "Show items",
+  "activity_open_destination": "Open {name}",
+  "activity_in_progress": "In progress",
+  "activity_nothing_running": "Nothing running",
+  "activity_history": "History",
+  "activity_show_entries": "Show entries",
+  "activity_caption": "Activity history, newest first",
+  "activity_when": "When",
+  "activity_outcome": "Outcome",
+  "activity_what": "What",
+  "storage_scan_blocked": "Scan blocked",
+  "storage_location": "Location",
+  "storage_path_of": "{name}: path",
+  "storage_path": "Path",
+  "storage_role": "Role",
+  "storage_volume": "Volume",
+  "storage_network": "Network",
+  "storage_removable": "Removable",
+  "storage_availability": "Availability",
+  "storage_free": "Free",
+  "storage_unsupported": "Unsupported",
+  "storage_action": "Action",
+  "storage_locate": "Locate",
+  "storage_open_settings": "Open in Settings",
+  "storage_unregistered": "Unregistered",
+  "storage_frame": "Frame",
+  "storage_copies": "Copies",
+  "storage_copies_of": "{name}: copies",
+  "storage_sha256": "SHA-256",
+  "storage_extra": "Extra",
+  "storage_scan_again": "Scan again",
+  "storage_transfer": "Transfer",
+  "storage_kind": "Kind",
+  "storage_status": "Status",
+  "storage_started": "Started",
+  "storage_open_activity": "Open Activity",
+  "storage_scan": "Scan for duplicates",
+  "storage_no_locations": "No locations",
+  "storage_add_location": "Add location",
+  "storage_duplicates": "Duplicates",
+  "storage_not_scanned": "Not scanned",
+  "storage_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame",
+        "countPlural=*": "{count} frames"
+      }
+    }
+  ],
+  "storage_no_duplicates": "No duplicates",
+  "storage_extra_bytes": "{bytes} extra",
+  "storage_transfers": "Transfers",
+  "storage_transfers_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} transfer",
+        "countPlural=*": "{count} transfers"
+      }
+    }
+  ],
+  "storage_no_transfers": "No transfers",
+  "calibration_action_blocked": "{action} blocked",
+  "calibration_action_not_saved": "{action} not saved",
+  "calibration_kind_dark": "Dark",
+  "calibration_kind_flat": "Flat",
+  "calibration_kind_bias": "Bias",
+  "calibration_kind_dark_flat": "Dark flat",
+  "calibration_step_stack": "Stack",
+  "calibration_step_detect": "Detect",
+  "calibration_step_import": "Import",
+  "calibration_step_register": "Register",
+  "calibration_step_raws": "Raws",
+  "calibration_status_to_stack": "To stack",
+  "calibration_status_stacking": "Stacking",
+  "calibration_status_importing": "Importing",
+  "calibration_step_todo": "To do",
+  "calibration_steps_of": "{name} steps",
+  "calibration_raws_kept": "Kept",
+  "calibration_keep_raws": "Keep raws",
+  "calibration_stack_again": "Stack again",
+  "calibration_detect_now": "Detect now",
+  "calibration_trash_raws": "Trash raws",
+  "calibration_show_master": "Show master",
+  "calibration_process": "Process",
+  "calibration_no_raw_sessions": "No raw sessions",
+  "calibration_processes_caption": "Calibration processes",
+  "calibration_session": "Session",
+  "calibration_tool": "Tool",
+  "calibration_steps": "Steps",
+  "calibration_state": "State",
+  "calibration_output": "Output",
+  "calibration_detected": "Detected",
+  "calibration_ncombine": "NCOMBINE {count}",
+  "calibration_stored": "Stored",
+  "calibration_folders_of": "{name} folders",
+  "calibration_tool_for": "Tool for {name}",
+  "calibration_heading_flats": "Flats",
+  "calibration_heading_darks": "Darks",
+  "calibration_heading_bias": "Bias",
+  "calibration_heading_dark_flats": "Dark flats",
+  "calibration_caption_flats": "Master flats",
+  "calibration_caption_darks": "Master darks",
+  "calibration_caption_bias": "Master bias",
+  "calibration_caption_dark_flats": "Master dark flats",
+  "calibration_key_train": "Train",
+  "calibration_key_camera": "Camera",
+  "calibration_key_exposure": "Exposure",
+  "calibration_key_gain": "Gain",
+  "calibration_key_offset": "Offset",
+  "calibration_key_temp": "Temp",
+  "calibration_origin_indexed": "Indexed",
+  "calibration_origin_results": "Run Results",
+  "calibration_origin_stacked": "Stacked",
+  "calibration_origin_imported": "Imported",
+  "calibration_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} run",
+        "countPlural=*": "{count} runs"
+      }
+    }
+  ],
+  "calibration_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session",
+        "countPlural=*": "{count} sessions"
+      }
+    }
+  ],
+  "calibration_open_offer": "Open offer",
+  "calibration_used_by": "Used by",
+  "calibration_open_raw_session": "Open raw session",
+  "calibration_master_storage": "{name} master: storage",
+  "calibration_origin": "Origin",
+  "calibration_offered_in": "Offered in {name}",
+  "calibration_offered": "Offered",
+  "calibration_restore": "Restore",
+  "calibration_offer_restored": "Offer restored",
+  "calibration_open_run": "Open run",
+  "calibration_dismissed": "Dismissed",
+  "calibration_no_dismissed": "No dismissed offers",
+  "calibration_dismissed_caption": "Dismissed master offers",
+  "calibration_master": "Master",
+  "calibration_run": "Run",
+  "calibration_file_of": "{name}: file",
+  "calibration_file": "File",
+  "calibration_refused_reason": "refused",
+  "calibration_import_refused_same": "{count} {reason}",
+  "calibration_masters_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "calibration_import_masters": "Import masters",
+  "calibration_masters_imported": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master imported",
+        "countPlural=*": "{count} masters imported"
+      }
+    }
+  ],
+  "calibration_masters": "Masters",
+  "calibration_filter_label": "Filter masters",
+  "calibration_filter_placeholder": "Filter",
+  "calibration_no_masters": "No masters",
+  "targets_browse_named": "Browse {catalogues}",
+  "targets_band_ok_tonight": "{band} ok tonight",
+  "targets_rig_gone": "a rig that no longer exists",
+  "targets_sorted_by": "sorted by {sort}",
+  "targets_saved_rig_gone": "Its rig is no longer in Settings › Equipment",
+  "targets_saved_needs_rig": "{name} needs a rig",
+  "targets_saved_no_narrowband": "{name} has no Ha, SII or OIII filter",
+  "targets_saved_no_band": "{name} has no {band} filter"
 }

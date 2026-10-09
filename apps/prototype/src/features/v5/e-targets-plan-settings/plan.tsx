@@ -17,6 +17,7 @@
 import { useNavigate, useSearch, Link } from "@tanstack/react-router"
 import { CalendarClock, Plus, X } from "lucide-react"
 import { useMemo, useState } from "react"
+import { useMessages, usePreferences } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { Box } from "@/components/app/box"
 import { ActionError, EmptyState } from "@/components/app/feedback"
@@ -27,9 +28,9 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Toggle } from "@/components/ui/toggle"
 import { formatHours, goalProgress, myTargets, panelLabel, planList, subjectCentre, subjectName, type GoalProgress } from "@/domain/derive"
-import { criteriaSummary } from "@/domain/planning"
 import type { Catalog, Project, Subject, Target } from "@/domain/types"
 import { save } from "@/features/t1/lib/writes"
+import { m } from "@/lib/i18n"
 import { formatNight } from "@/lib/format"
 import type { SearchParams } from "@/routes"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
@@ -37,9 +38,9 @@ import { type CommitResult, useStore } from "@/store/core"
 import { filtersTonight, limitText } from "./good-tonight"
 import { MoonLimitsButton } from "./moon-limits"
 import { type NightColumn, type NightRow, NightTable } from "./night-timeline"
-import { AddSiteButton, clockRange, MoonLine, SiteLine, siteTimeRange, useSkyContext } from "./parts"
+import { AddSiteButton, clockRange, criteriaText, MoonLine, SiteLine, siteTimeRange, useSkyContext } from "./parts"
 import { PlanAddSearch } from "./plan-add"
-import { positionSky, type RowSky, selectionBands } from "./targets-model"
+import { positionSky, type RowSky, selectionBands, zeroReasonText } from "./targets-model"
 
 /** One subject, panel or Target before tonight's values. */
 interface Seed {
@@ -65,7 +66,8 @@ interface PlanRow extends NightRow, Seed {
 function subjectSeeds(catalog: Catalog, project: Project, subject: Subject, gaps: GoalProgress[], projects: Project[]): Seed[] {
   const target = catalog.targets[subject.targetId]
   if (!subject.mosaic) {
-    return [{ key: subject.targetId, name: target?.name ?? "Unknown Target", short: target?.name ?? "Unknown Target", targetId: subject.targetId, ra: target?.ra ?? null, dec: target?.dec ?? null, projects, panel: false, gaps: gaps.filter((g) => g.goal.subjectId === subject.id), favourite: target?.favourite ?? false }]
+    const name = target?.name ?? m.plan_unknown_target()
+    return [{ key: subject.targetId, name, short: name, targetId: subject.targetId, ra: target?.ra ?? null, dec: target?.dec ?? null, projects, panel: false, gaps: gaps.filter((g) => g.goal.subjectId === subject.id), favourite: target?.favourite ?? false }]
   }
   const centre = subjectCentre(catalog, subject)
   const name = subjectName(catalog, subject)
@@ -108,6 +110,8 @@ function targetGroups(catalog: Catalog, targets: Target[]): Seed[][] {
 type ListMode = "plan" | "all" | "fallback" | "scope"
 
 export function PlanPage() {
+  const m = useMessages()
+  const { locale } = usePreferences()
   const search = useSearch({ strict: false }) as SearchParams
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
@@ -142,7 +146,7 @@ export function PlanPage() {
           indent: seed.panel,
           altitudes: sky.status === "ok" ? sky.altitudes : null,
           windows: sky.status === "ok" ? sky.windows : [],
-          note: sky.status === "no-coordinates" ? sky.reason : undefined,
+          note: sky.status === "no-coordinates" ? m.tonight_no_coordinates() : undefined,
           chips: sky.status === "ok" && ctx ? filtersTonight(ctx, { id: seed.key, ra: seed.ra, dec: seed.dec }, sky.altitudes, constraints, bands) : null,
           planned: seed.targetId !== null && !seed.panel && planned.has(seed.targetId),
           sky,
@@ -152,7 +156,8 @@ export function PlanPage() {
     // Groups with a window tonight first, by its start; the rest by name.
     const start = (r: PlanRow) => (r.sky.status === "ok" && r.sky.best ? Date.parse(r.sky.best.start) : Number.POSITIVE_INFINITY)
     return built.sort((a, b) => start(a[0]!) - start(b[0]!) || a[0]!.name.localeCompare(b[0]!.name, "en-GB", { numeric: true })).flat()
-  }, [catalog, scope, mode, plan, planned, ctx, constraints, bands])
+    // `locale`: the rows carry worded fallbacks ("Unknown Target", the no-coordinates note).
+  }, [catalog, scope, mode, plan, planned, ctx, constraints, bands, locale])
 
   function act(run: () => CommitResult) {
     const result = run()
@@ -180,12 +185,12 @@ export function PlanPage() {
 
   const header = (
     <PageHeader
-      title={scope ? `Plan: ${scope.name}` : "Plan"}
+      title={scope ? m.plan_title_scoped({ name: scope.name }) : m.nav_plan()}
       meta={ctx ? <Pill tone="muted">{formatNight(ctx.grid.night)}</Pill> : null}
       actions={
         ctx && Object.keys(sites).length > 1 ? (
           <Select items={Object.values(sites).map((s) => ({ value: s.id, label: s.name }))} value={planningSiteId ?? undefined} onValueChange={(value) => chooseSite(value as string)}>
-            <SelectTrigger size="sm" aria-label="Planning site" className="w-44">
+            <SelectTrigger size="sm" aria-label={m.plan_site()} className="w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -206,7 +211,7 @@ export function PlanPage() {
       <div className="flex min-h-0 flex-1 flex-col">
         {header}
         <div className="px-5 py-4">
-          <EmptyState icon={CalendarClock} titleAs="h2" title="No observing site" description={null} action={<AddSiteButton returnTo={scope ? `/plan?project=${scope.id}` : "/plan"} />} />
+          <EmptyState icon={CalendarClock} titleAs="h2" title={m.project_no_site()} description={null} action={<AddSiteButton returnTo={scope ? `/plan?project=${scope.id}` : "/plan"} />} />
         </div>
       </div>
     )
@@ -218,7 +223,7 @@ export function PlanPage() {
   const columns: NightColumn<PlanRow>[] = [
     {
       id: "best",
-      header: "Best",
+      header: m.tonight_best(),
       width: "w-24",
       wide: true,
       cell: (r) => (r.sky.status === "ok" && r.sky.best ? clockRange(r.sky.best.start, r.sky.best.end, site) : "–"),
@@ -226,26 +231,26 @@ export function PlanPage() {
     },
     {
       id: "img",
-      header: "Img",
+      header: m.tonight_img(),
       width: "w-12",
       align: "right",
       cell: (r) => {
         if (r.sky.status !== "ok") return "–"
-        return r.sky.imgTimeS > 0 ? formatHours(r.sky.imgTimeS) : <span title={r.sky.zeroReason ?? undefined}>0h</span>
+        return r.sky.imgTimeS > 0 ? formatHours(r.sky.imgTimeS) : <span title={r.sky.zeroReason ? zeroReasonText(r.sky.zeroReason) : undefined}>{m.tonight_zero_hours()}</span>
       },
       filterCell: (_r, chip) => (chip.minutes > 0 ? formatHours(chip.minutes * 60) : "–"),
     },
     {
       id: "moon",
-      header: "Moon",
+      header: m.tonight_moon(),
       width: "w-16",
       align: "right",
       cell: (r) => {
         if (r.sky.status !== "ok") return "–"
         const sep = Math.round(r.sky.best ? r.sky.best.moonSeparationDeg : r.sky.lunarDeg)
         return (
-          <span title={`Moon ${sep}° away${r.sky.moonUp === null ? "" : r.sky.moonUp ? ", up in the best window" : ", down in the best window"}`}>
-            {sep}°{r.sky.moonUp ? <span className="ml-0.5 text-[0.625rem] text-muted-foreground">up</span> : null}
+          <span title={r.sky.moonUp === null ? m.plan_moon_away({ separation: sep }) : r.sky.moonUp ? m.plan_moon_up_best({ separation: sep }) : m.plan_moon_down_best({ separation: sep })}>
+            {sep}°{r.sky.moonUp ? <span className="ml-0.5 text-[0.625rem] text-muted-foreground">{m.plan_moon_up()}</span> : null}
           </span>
         )
       },
@@ -255,16 +260,16 @@ export function PlanPage() {
       ? [
           {
             id: "goals",
-            header: "Goals",
+            header: m.plan_goals(),
             width: "w-20",
             cell: (r: PlanRow) =>
               r.gaps.length === 0 ? (
                 <Pill tone="success" className="h-4 px-1.5 text-[0.625rem]">
-                  Met
+                  {m.status_met()}
                 </Pill>
               ) : (
                 <Pill tone="warning" title={r.gaps.map((g) => g.line).join("\n")} className="h-4 px-1.5 text-[0.625rem]">
-                  {r.gaps.length} short
+                  {m.plan_goals_short({ count: r.gaps.length })}
                 </Pill>
               ),
           },
@@ -279,7 +284,7 @@ export function PlanPage() {
           {r.name}
         </Link>
         {r.favourite ? (
-          <span className="shrink-0 text-[0.625rem] text-muted-foreground" aria-label="favourite">
+          <span className="shrink-0 text-[0.625rem] text-muted-foreground" aria-label={m.plan_favourite()}>
             ★
           </span>
         ) : null}
@@ -293,12 +298,12 @@ export function PlanPage() {
     const r = byKey.get(key)
     if (!r) return []
     const entries: MenuEntry[] = []
-    if (r.targetId && !r.panel) entries.push({ label: "Open", onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: r.targetId! } }) })
-    if (r.chips) entries.push({ label: expanded.has(key) ? "Hide filters" : "Show filters", onSelect: () => toggle(key) })
-    if (r.targetId && !r.panel && !scope) entries.push(r.planned ? { label: "Remove from Plan", onSelect: () => act(() => removeFromPlan(r.targetId!)) } : { label: "Add to Plan", onSelect: () => act(() => addToPlan(r.targetId!)) })
+    if (r.targetId && !r.panel) entries.push({ label: m.verb_open(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: r.targetId! } }) })
+    if (r.chips) entries.push({ label: expanded.has(key) ? m.tonight_hide_filters() : m.tonight_show_filters(), onSelect: () => toggle(key) })
+    if (r.targetId && !r.panel && !scope) entries.push(r.planned ? { label: m.targets_remove_from_plan(), onSelect: () => act(() => removeFromPlan(r.targetId!)) } : { label: m.targets_add_to_plan(), onSelect: () => act(() => addToPlan(r.targetId!)) })
     if (r.projects[0] || (r.targetId && !r.panel)) entries.push({ separator: true })
-    if (r.projects[0]) entries.push({ label: "Open Project", onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: r.projects[0]!.id } }) })
-    if (r.targetId && !r.panel) entries.push({ label: "New Project…", onSelect: () => openSheet({ kind: "new-project", targetId: r.targetId! }) })
+    if (r.projects[0]) entries.push({ label: m.target_open_project(), onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: r.projects[0]!.id } }) })
+    if (r.targetId && !r.panel) entries.push({ label: m.newproject_open(), onSelect: () => openSheet({ kind: "new-project", targetId: r.targetId! }) })
     return entries
   }
 
@@ -306,11 +311,11 @@ export function PlanPage() {
     ? undefined
     : (r: PlanRow) =>
         !r.targetId || r.panel ? null : r.planned ? (
-          <Button size="icon-xs" variant="ghost" aria-label={`Remove ${r.name} from Plan`} title="Remove" onClick={() => act(() => removeFromPlan(r.targetId!))}>
+          <Button size="icon-xs" variant="ghost" aria-label={m.plan_remove_named({ name: r.name })} title={m.plan_remove()} onClick={() => act(() => removeFromPlan(r.targetId!))}>
             <X aria-hidden="true" />
           </Button>
         ) : (
-          <Button size="icon-xs" variant="ghost" aria-label={`Add ${r.name} to Plan`} title="Add to Plan" onClick={() => act(() => addToPlan(r.targetId!))}>
+          <Button size="icon-xs" variant="ghost" aria-label={m.plan_add_named({ name: r.name })} title={m.targets_add_to_plan()} onClick={() => act(() => addToPlan(r.targetId!))}>
             <Plus aria-hidden="true" />
           </Button>
         )
@@ -320,12 +325,12 @@ export function PlanPage() {
       scope!.name
     ) : mode === "plan" ? (
       <span className="inline-flex items-center gap-1.5">
-        Plan list <CountBadge count={plan.length} label="targets" />
+        {m.plan_list()} <CountBadge count={plan.length} label={m.plan_targets_count({ count: plan.length })} />
       </span>
     ) : (
       <span className="inline-flex items-center gap-1.5">
-        {mode === "fallback" ? "My targets" : "All targets"} <CountBadge count={rows.filter((r) => !r.panel).length} label="rows" />
-        {mode === "fallback" ? <Pill tone="muted" className="h-4 px-1.5 text-[0.625rem]">Plan list empty</Pill> : null}
+        {mode === "fallback" ? m.project_search_my_targets() : m.plan_all_targets()} <CountBadge count={rows.filter((r) => !r.panel).length} label={m.plan_rows_count({ count: rows.filter((r) => !r.panel).length })} />
+        {mode === "fallback" ? <Pill tone="muted" className="h-4 px-1.5 text-[0.625rem]">{m.plan_list_empty()}</Pill> : null}
       </span>
     )
 
@@ -338,27 +343,27 @@ export function PlanPage() {
             <Pill tone="info" link={{ to: "/projects/$projectId", params: { projectId: scope.id } }}>
               {scope.name}
             </Pill>
-            <Button size="icon-xs" variant="ghost" aria-label="Clear Project scope" title="Clear scope" onClick={() => setSearch({ project: undefined })}>
+            <Button size="icon-xs" variant="ghost" aria-label={m.plan_clear_scope_label()} title={m.plan_clear_scope()} onClick={() => setSearch({ project: undefined })}>
               <X aria-hidden="true" />
             </Button>
           </span>
         ) : (
           <>
-            <Toggle variant="outline" size="sm" className="h-6" pressed={mode === "all" || mode === "fallback"} disabled={mode === "fallback"} title={mode === "fallback" ? "Plan list empty" : undefined} onPressedChange={(pressed) => setSearch({ all: pressed ? "1" : undefined })}>
-              Show all
+            <Toggle variant="outline" size="sm" className="h-6" pressed={mode === "all" || mode === "fallback"} disabled={mode === "fallback"} title={mode === "fallback" ? m.plan_list_empty() : undefined} onPressedChange={(pressed) => setSearch({ all: pressed ? "1" : undefined })}>
+              {m.plan_show_all()}
             </Toggle>
             <PlanAddSearch planned={planned} />
           </>
         )}
         <Toggle variant="outline" size="sm" className="h-6" pressed={allOpen} disabled={expandable.length === 0} onPressedChange={(pressed) => setExpanded(pressed ? new Set(expandable.map((r) => r.key)) : new Set())}>
-          Per filter
+          {m.plan_per_filter()}
         </Toggle>
         <MoonLimitsButton bands={bands} />
         <div className="flex-1" />
         <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
           <MoonLine ctx={ctx} />
           <span className="text-[0.75rem] text-muted-foreground tabular-nums">
-            <span className="text-foreground">Dark</span> {tonight.darkness ? siteTimeRange(tonight.darkness.start, tonight.darkness.end, site) : "none"}
+            <span className="text-foreground">{m.plan_dark()}</span> {tonight.darkness ? siteTimeRange(tonight.darkness.start, tonight.darkness.end, site) : m.plan_dark_none()}
           </span>
           <SiteLine site={site} />
         </span>
@@ -367,14 +372,14 @@ export function PlanPage() {
         {error ? <ActionError message={error.message} onRetry={error.retry} /> : null}
         {search.project && !scope ? (
           <p className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Project not found</span>
+            <span className="text-muted-foreground">{m.startrun_project_not_found()}</span>
             <Button size="xs" variant="outline" onClick={() => setSearch({ project: undefined })}>
-              Show all
+              {m.plan_show_all()}
             </Button>
           </p>
         ) : null}
         {rows.length === 0 ? (
-          <EmptyState icon={CalendarClock} title="Nothing to plan" description={null} action={<Button size="sm" render={<Link to="/targets" search={{ mode: "browse", cat: "Messier" }} />}>Browse catalogues</Button>} />
+          <EmptyState icon={CalendarClock} title={m.plan_empty()} description={null} action={<Button size="sm" render={<Link to="/targets" search={{ mode: "browse", cat: "Messier" }} />}>{m.targets_browse_catalogues()}</Button>} />
         ) : (
           <Box title={listTitle} flush id="plan-list">
             <NightTable
@@ -382,8 +387,8 @@ export function PlanPage() {
               nowMs={ctx.nowMs}
               minAltitudeDeg={criteria.minAltitudeDeg}
               moonIlluminationPct={tonight.moon.illuminationPct}
-              caption={`Tonight at ${site.name}`}
-              labelHeader="Target"
+              caption={m.plan_caption({ site: site.name })}
+              labelHeader={m.tonight_target()}
               rows={shown}
               columns={columns}
               expanded={expanded}
@@ -391,10 +396,10 @@ export function PlanPage() {
               trailing={trailing}
               menu={menu}
               note={[
-                { label: "Night", value: formatNight(grid.night, true) },
-                { label: "Times", value: site.timeZone },
-                { label: "Criteria", value: criteriaSummary(criteria) },
-                { label: "Method", value: "Low-precision Sun and Moon, 10-min grid" },
+                { label: m.tonight_night(), value: formatNight(grid.night, true) },
+                { label: m.tonight_times(), value: site.timeZone },
+                { label: m.tonight_criteria(), value: criteriaText(m, criteria) },
+                { label: m.tonight_method(), value: m.tonight_method_value() },
               ]}
             />
           </Box>

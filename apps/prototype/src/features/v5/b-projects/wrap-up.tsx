@@ -56,7 +56,7 @@ function statePill(m: Messages, state: WrapUpStep["state"] | "next"): StepPill {
   const pills: Record<WrapUpStep["state"] | "next", StepPill> = {
     done: { label: m.status_done(), tone: "success" },
     skipped: { label: m.status_skipped(), tone: "muted" },
-    todo: { label: m.wrapup_todo(), tone: "neutral" },
+    todo: { label: m.calibration_step_todo(), tone: "neutral" },
     next: { label: m.projects_col_next(), tone: "info" },
   }
   return pills[state]

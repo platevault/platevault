@@ -7,6 +7,7 @@
 import { NARROW_BANDS } from "@/domain/labels"
 import { rigBands } from "@/domain/derive"
 import type { Catalog } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import { freshId, recordSaved } from "@/store/actions/shared"
 import { store, updateSlice } from "@/store/core"
 import type { SavedTargetPreset, TargetsViewKey } from "@/store/slices/e"
@@ -37,24 +38,24 @@ export function deletePreset(id: string) {
 
 /** One line naming what a saved preset restores. */
 export function describeView(catalog: Catalog, view: SavedTargetPreset["view"]): string {
-  const parts = [view.mode === "browse" ? `Browse ${view.cat ? view.cat.split(",").join(", ") : "catalogues"}` : "My targets"]
+  const parts: string[] = [view.mode === "browse" ? (view.cat ? m.targets_browse_named({ catalogues: view.cat.split(",").join(", ") }) : m.targets_browse_catalogues()) : m.project_search_my_targets()]
   const preset = presetById(view.preset)
   if (preset) parts.push(preset.label)
   const band = parseBand(view.good)
-  if (band) parts.push(`${band} ok tonight`)
-  if (view.rig) parts.push(catalog.opticalTrains[view.rig]?.name ?? "a rig that no longer exists")
-  if (view.sort) parts.push(`sorted by ${view.sort.replace(".", " ")}`)
+  if (band) parts.push(m.targets_band_ok_tonight({ band }))
+  if (view.rig) parts.push(catalog.opticalTrains[view.rig]?.name ?? m.targets_rig_gone())
+  if (view.sort) parts.push(m.targets_sorted_by({ sort: view.sort.replace(".", " ") }))
   return parts.join(" · ")
 }
 
 /** A saved preset follows the built-in availability rules (PLAN-TGT-FR-10); the reason, or null. */
 export function savedPresetUnavailable(catalog: Catalog, view: SavedTargetPreset["view"]): string | null {
   const rig = view.rig ? catalog.opticalTrains[view.rig] : undefined
-  if (view.rig && !rig) return "Its rig is no longer in Settings › Equipment"
+  if (view.rig && !rig) return m.targets_saved_rig_gone()
   const base = presetById(view.preset)
-  if (base?.needs === "rig" && !rig) return `${base.label} needs a rig`
-  if (base?.needs === "narrowband" && rig && !rigBands(catalog, rig).some((b) => NARROW_BANDS.includes(b))) return `${rig.name} has no Ha, SII or OIII filter`
+  if (base?.needs === "rig" && !rig) return m.targets_saved_needs_rig({ name: base.label })
+  if (base?.needs === "narrowband" && rig && !rigBands(catalog, rig).some((b) => NARROW_BANDS.includes(b))) return m.targets_saved_no_narrowband({ name: rig.name })
   const band = parseBand(view.good)
-  if (band && rig && !rigBands(catalog, rig).includes(band)) return `${rig.name} has no ${band} filter`
+  if (band && rig && !rigBands(catalog, rig).includes(band)) return m.targets_saved_no_band({ name: rig.name, band })
   return null
 }

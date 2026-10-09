@@ -498,7 +498,6 @@
   "tips_note": "Nota {number}",
   "page_step_done": "(concluído)",
   "ui_breadcrumb": "Trilha de navegação",
-  "home_plan_tonight": "Planejar a noite",
   "import_open": "Importar…",
   "home_goal_line": "{inProject} no projeto / {captured} capturado",
   "home_goal_line_goal": "{inProject} no projeto / {captured} capturado · meta {goal}",
@@ -616,18 +615,14 @@
       }
     }
   ],
-  "home_add_to_named_run": "Adicionar a {name}",
   "home_candidate_of": "Candidata de {name}",
   "session_cant_add": "Não é possível adicionar",
   "home_added_to_draft": "{session} adicionada ao rascunho de {run}",
   "home_add_to_run": "Adicionar à execução",
   "home_tonight": "Esta noite",
   "home_no_site": "Sem local",
-  "home_add_site": "Adicionar local",
   "home_darkness": "Escuridão",
   "home_moon": "Lua",
-  "home_moon_rises": "nasce {time}",
-  "home_moon_sets": "se põe {time}",
   "home_windows": "Janelas",
   "home_no_subjects_or_favourites": "Sem objetos nem favoritos",
   "home_favourite": "Favorito",
@@ -676,7 +671,6 @@
   "home_unmet_goals": "Metas não cumpridas",
   "home_all_met": "Todas cumpridas",
   "home_running_count": "{count} em execução",
-  "home_nothing_running": "Nada em execução",
   "home_pause_named": "Pausar {name}",
   "home_resume_named": "Retomar {name}",
   "home_retry_named": "Tentar de novo: {name}",
@@ -767,10 +761,8 @@
   "import_type_dark": "Dark",
   "import_type_flat": "Flat",
   "import_type_bias": "Bias",
-  "import_type_dark_flat": "Dark flat",
   "import_type_master_dark": "Master dark",
   "import_type_master_flat": "Master flat",
-  "import_type_master_bias": "Master bias",
   "import_type_master_dark_flat": "Master dark flat",
   "import_type_unclassified": "Não classificado",
   "import_route_stack": "Calibração → empilhar",
@@ -1941,7 +1933,6 @@
   "trash_empty_ellipsis": "Esvaziar Lixeira…",
   "trash_of_project": "Lixeira de {name}",
   "trash_is_empty": "A Lixeira está vazia",
-  "trash_open_project": "Abrir {name}",
   "trash_last_empty": "Último esvaziamento da Lixeira",
   "trash_restore_title": "Restaurar {name}?",
   "trash_restore_description": "De volta como estava ao ir para a Lixeira.",
@@ -1971,7 +1962,6 @@
   "wrapup_offer_rejects": "Rejeitados",
   "wrapup_offer_intermediates_label": "Intermediários",
   "wrapup_offer_duplicates_label": "Duplicatas",
-  "wrapup_todo": "A fazer",
   "wrapup_blocked": "Encerramento bloqueado",
   "wrapup_runs_not_complete": [
     {
@@ -2301,5 +2291,593 @@
   "mosaic_side_north": "norte",
   "mosaic_side_south": "sul",
   "project_lookup_sesame": "CDS Sesame (SIMBAD)",
-  "project_panel_short": "P{n}"
+  "project_panel_short": "P{n}",
+  "tonight_grade_good": "Bom",
+  "tonight_grade_marginal": "Marginal",
+  "tonight_grade_poor": "Ruim",
+  "tonight_limit": "Lua ≥ {separation}° · ≤ {illumination}%",
+  "tonight_moon_position": "Lua {separation}° · {illumination}%",
+  "tonight_moon_down": "Lua abaixo",
+  "tonight_reason_good": "{band} bom · {hours} · {moon}",
+  "tonight_reason_marginal": "{band} marginal · {hours} de {dark} livres da Lua",
+  "tonight_reason_poor": "{band} ruim · {failing}",
+  "tonight_fail_separation": "Lua a {separation}°, precisa de ≥ {min}°",
+  "tonight_fail_illumination": "{illumination}% iluminada, máx. {max}%",
+  "tonight_fail_duration": "{hours} livres da Lua, precisa de {needed}",
+  "tonight_fail_moon_up": "Lua acima a janela toda",
+  "tonight_moon": "Lua",
+  "tonight_moon_rises": "nasce {time}",
+  "tonight_moon_no_rise": "não nasce",
+  "tonight_moon_sets": "põe-se {time}",
+  "tonight_moon_no_set": "não se põe",
+  "tonight_add_site": "Adicionar local",
+  "tonight_criteria_altitude": "altitude ≥ {altitude}°",
+  "tonight_criteria_astronomical": "escuridão astronômica",
+  "tonight_criteria_nautical": "escuridão náutica",
+  "tonight_criteria_duration": "pelo menos {minutes} min",
+  "tonight_criteria_moon_illumination": "Lua ≤ {illumination}% quando acima",
+  "tonight_criteria_moon_separation": "Lua a ≥ {separation}° quando acima",
+  "tonight_no_filters": "Sem filtros",
+  "target_project_badge": "Projeto {name}",
+  "tonight_limit_separation_field": "{band} separação mínima da Lua",
+  "tonight_limit_illumination_field": "{band} iluminação máxima da Lua",
+  "tonight_moon_limits": "Limites da Lua",
+  "tonight_reset": "Redefinir",
+  "tonight_filter": "Filtro",
+  "tonight_limit_separation_header": "Lua ≥",
+  "tonight_limit_illumination_header": "Ilum. ≤",
+  "tonight_axis": "Noite, {zone}",
+  "tonight_actions": "Ações",
+  "tonight_twilight": "Crepúsculo",
+  "tonight_moon_band": "Lua {illumination}%",
+  "tonight_summary_windows": "janelas {windows}",
+  "tonight_summary_window": "{range}, pico {altitude}°",
+  "tonight_no_window": "Sem janela esta noite",
+  "tonight_filters_of": "Filtros: {name}",
+  "tonight_altitude": "Altitude",
+  "tonight_window": "Janela",
+  "tonight_now": "Agora",
+  "tonight_method": "Método",
+  "targets_name_empty": "{label}: digite um nome.",
+  "targets_name_taken": "{label}: “{name}” já está em uso. Escolha outro nome.",
+  "target_plan_tonight": "Planejar esta noite",
+  "targets_palette_preset": "Alvos: {name}",
+  "targets_source_library": "Biblioteca",
+  "tonight_zero_darkness": "Escuridão: o Sol fica acima de {sun}° esta noite",
+  "tonight_zero_low": "Altitude: fica abaixo de {altitude}° no escuro",
+  "tonight_zero_moon": "Lua: brilhante ou próxima demais enquanto está acima",
+  "tonight_zero_short": "Altitude: acima de {altitude}° por menos de {minutes} min da escuridão restante",
+  "tonight_zero_word_darkness": "escuridão",
+  "tonight_zero_word_altitude": "altitude",
+  "tonight_zero_word_moon": "lua",
+  "targets_preset_best": "Melhores esta noite",
+  "targets_preset_best_definition": "Tempo de imagem acima de zero, um filtro de banda larga ok esta noite; o mais longo primeiro.",
+  "targets_preset_narrowband": "Banda estreita (Lua acima)",
+  "targets_preset_narrowband_definition": "Tempo de imagem acima de zero, Ha, SII ou OIII ok esta noite, Lua acima.",
+  "targets_preset_emission": "Nebulosas de emissão Ha",
+  "targets_preset_emission_definition": "Nebulosas de emissão, Ha ok esta noite.",
+  "targets_preset_galaxies": "Galáxias céu escuro",
+  "targets_preset_galaxies_definition": "Galáxias, tempo de imagem acima de zero, Lua abaixo.",
+  "targets_preset_planetary": "Nebulosas planetárias OIII",
+  "targets_preset_planetary_definition": "Nebulosas planetárias, OIII ok esta noite.",
+  "targets_preset_mosaic": "Candidatos a mosaico",
+  "targets_preset_mosaic_definition": "Alvos que precisam de 2 ou mais painéis num equipamento selecionado.",
+  "targets_preset_fits": "Cabe bem",
+  "targets_preset_fits_definition": "Alvos que cobrem de 25% a 90% do campo de um equipamento selecionado.",
+  "targets_preset_needs_rig": "Escolha um equipamento para usar este preset",
+  "targets_preset_needs_narrowband": "O equipamento selecionado não tem filtro Ha, SII ou OIII",
+  "targets_result_gone": "Este resultado não está mais disponível. Pesquise de novo.",
+  "plan_added": "{name} adicionado à lista do Plano",
+  "plan_add_search_label": "Adicionar um alvo à lista do Plano",
+  "plan_add_search_placeholder": "Adicionar alvo",
+  "plan_matches": "Resultados",
+  "plan_in_plan": "No Plano",
+  "plan_unknown_target": "Alvo desconhecido",
+  "tonight_no_coordinates": "Sem coordenadas catalogadas",
+  "plan_title_scoped": "Plano: {name}",
+  "plan_site": "Local de planejamento",
+  "tonight_best": "Melhor",
+  "tonight_img": "Img",
+  "tonight_zero_hours": "0h",
+  "plan_moon_away": "Lua a {separation}°",
+  "plan_moon_up_best": "Lua a {separation}°, acima na melhor janela",
+  "plan_moon_down_best": "Lua a {separation}°, abaixo na melhor janela",
+  "plan_moon_up": "acima",
+  "plan_goals": "Metas",
+  "plan_goals_short": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} pendente",
+        "countPlural=*": "{count} pendentes"
+      }
+    }
+  ],
+  "plan_favourite": "favorito",
+  "tonight_show_filters": "Mostrar filtros",
+  "tonight_hide_filters": "Ocultar filtros",
+  "targets_add_to_plan": "Adicionar ao Plano",
+  "targets_remove_from_plan": "Remover do Plano",
+  "target_open_project": "Abrir Projeto",
+  "plan_remove_named": "Remover {name} do Plano",
+  "plan_remove": "Remover",
+  "plan_add_named": "Adicionar {name} ao Plano",
+  "plan_list": "Lista do Plano",
+  "plan_targets_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} alvo",
+        "countPlural=*": "{count} alvos"
+      }
+    }
+  ],
+  "plan_all_targets": "Todos os alvos",
+  "plan_rows_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} linha",
+        "countPlural=*": "{count} linhas"
+      }
+    }
+  ],
+  "plan_list_empty": "Lista do Plano vazia",
+  "plan_clear_scope_label": "Limpar escopo do Projeto",
+  "plan_clear_scope": "Limpar escopo",
+  "plan_show_all": "Mostrar tudo",
+  "plan_per_filter": "Por filtro",
+  "plan_dark": "Escuro",
+  "plan_dark_none": "nenhum",
+  "plan_empty": "Nada para planejar",
+  "targets_browse_catalogues": "Explorar catálogos",
+  "plan_caption": "Esta noite em {site}",
+  "tonight_target": "Alvo",
+  "tonight_night": "Noite",
+  "tonight_times": "Horários",
+  "tonight_criteria": "Critérios",
+  "tonight_method_value": "Sol e Lua de baixa precisão, grade de 10 min",
+  "targets_rig_lacks_filter": "O equipamento não tem filtro {band}",
+  "targets_unstar_named": "Remover {name} dos favoritos",
+  "targets_star_named": "Adicionar {name} aos favoritos",
+  "targets_add_named": "Adicionar {name} aos alvos",
+  "targets_designation": "Designação",
+  "targets_type": "Tipo",
+  "targets_type_unknown": "Tipo de objeto desconhecido",
+  "tonight_max_alt": "Alt. máx.",
+  "tonight_no_darkness": "Sem escuridão esta noite",
+  "tonight_lunar": "Lunar",
+  "tonight_img_time": "Tempo img",
+  "targets_filters": "Filtros",
+  "targets_filters_help": "Cada filtro esta noite sob seus limites da Lua. Tracejado: marginal. Riscado: ruim.",
+  "targets_fit_per_rig": "Enquadramento por equipamento",
+  "targets_fit": "Enquadramento",
+  "tonight_opposition": "Oposição",
+  "targets_source": "Origem",
+  "targets_add_sr": "{name} aos alvos",
+  "targets_add_to_targets": "Adicionar aos alvos",
+  "targets_star": "Adicionar ★",
+  "targets_unstar": "Remover ★",
+  "targets_open_plan": "Abrir Plano",
+  "targets_apply": "Aplicar",
+  "targets_rename_menu": "Renomear…",
+  "targets_delete_menu": "Excluir…",
+  "targets_good_for": "Bom esta noite para {band}",
+  "targets_good_for_menu": "Bom esta noite para…",
+  "targets_good_for_heading": "Bom esta noite para",
+  "targets_project_rigs": "Equipamentos deste Projeto ({count})",
+  "targets_no_match": "Nenhum resultado para “{query}”",
+  "targets_choose_catalogue": "Escolha um catálogo ou preset",
+  "targets_browse_messier": "Explorar Messier",
+  "targets_none_good": "Nenhum alvo com {band} ok esta noite",
+  "targets_clear_filter": "Limpar filtro",
+  "targets_none_match_preset": "Nenhum alvo corresponde a {name}",
+  "targets_clear_preset": "Limpar preset",
+  "targets_empty": "Nenhum alvo ainda",
+  "targets_clear_search_first": "Limpe a pesquisa primeiro",
+  "targets_save_preset": "Salvar preset",
+  "targets_clear_project": "Limpar Projeto",
+  "targets_show": "Mostrar",
+  "targets_search_label": "Pesquisar alvos, catálogos e SIMBAD",
+  "targets_search_placeholder": "Alvos, catálogos, SIMBAD",
+  "targets_rig": "Equipamento",
+  "targets_moon_limits_for": "Limites da Lua para {band}",
+  "targets_off_while_searching": "Desligado durante a pesquisa",
+  "targets_good_chip": "{band} ok · {limit}",
+  "targets_clear_band_filter": "Limpar filtro {band}",
+  "targets_catalogues": "Catálogos",
+  "targets_presets": "Presets",
+  "targets_preset_unavailable_sr": ": indisponível, {reason}",
+  "targets_more_for": "Mais para {name}",
+  "targets_preset_unavailable": "{name} · indisponível",
+  "targets_clear_named": "Limpar {name}",
+  "targets_simbad_searching": "Pesquisando no SIMBAD…",
+  "targets_simbad_off": "SIMBAD desligado",
+  "targets_simbad_unreachable": "SIMBAD inacessível",
+  "targets_simbad_searched": "SIMBAD pesquisado",
+  "targets_simbad_fixture": "Dados de exemplo (protótipo)",
+  "targets_caption_search": "Resultados da pesquisa por {query}",
+  "targets_caption_project": "Objetos de {name}",
+  "targets_filters_band": "Filtros ({band})",
+  "targets_favourite": "Favorito",
+  "targets_about_column": "Sobre {name}",
+  "targets_sort_ascending": "crescente",
+  "targets_sort_descending": "decrescente",
+  "targets_preset_name": "Nome do preset",
+  "targets_rename_preset": "Renomear preset",
+  "targets_rename": "Renomear",
+  "targets_delete_preset_title": "Excluir o preset {name}?",
+  "targets_delete_preset_change": "Remove “{name}”",
+  "targets_delete_preset": "Excluir preset",
+  "target_source_catalogue": "Catálogo incluído",
+  "target_source_user": "Inserido por você",
+  "target_source_resolver": "Resolvedor online",
+  "target_find": "Encontrar um Alvo",
+  "target_find_placeholder": "Nome ou apelido",
+  "target_matching_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Alvo correspondente",
+        "countPlural=*": "{count} Alvos correspondentes"
+      }
+    }
+  ],
+  "target_targets_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Alvo",
+        "countPlural=*": "{count} Alvos"
+      }
+    }
+  ],
+  "target_favourite_sr": ", favorito",
+  "target_projects_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Projeto",
+        "countPlural=*": "{count} Projetos"
+      }
+    }
+  ],
+  "target_table_link": "Tabela de alvos",
+  "target_open_targets": "Abrir Alvos",
+  "target_finder": "Localizador de alvos",
+  "target_no_coordinates": "Sem coordenadas",
+  "target_best_none": "Nenhuma",
+  "target_caption": "{name} esta noite em {site}",
+  "target_open_planner": "Abrir no Planejador",
+  "target_open_equipment": "Abrir em Equipamentos",
+  "target_in_every_project": "Em todos os Projetos abertos",
+  "target_tonight": "Esta noite",
+  "target_identity": "Identidade",
+  "target_aliases": "Apelidos",
+  "target_type_unresolved": "Não catalogado nem resolvido",
+  "target_coordinates": "Coordenadas",
+  "target_angular_size": "Tamanho angular",
+  "target_size_unknown": "Tamanho desconhecido",
+  "target_about_fit": "Sobre o enquadramento",
+  "target_fit_help": "Eixo maior contra o lado menor do campo de cada equipamento.",
+  "target_field": "Campo",
+  "target_fov_unknown": "Câmera ou distância focal desconhecida",
+  "target_mosaic_panels": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} painel",
+        "countPlural=*": "{name} · {count} painéis"
+      }
+    }
+  ],
+  "target_planner": "Planejador",
+  "target_panel": "Painel {number}",
+  "target_no_sessions": "Sem sessões",
+  "target_sessions_caption": "Sessões de {name}",
+  "target_channel": "Canal",
+  "calibration_frames": "Quadros",
+  "target_add_to_title": "Adicionar {target} a {project}?",
+  "target_adds_subject": "Adiciona {name} como objeto",
+  "target_copies_goals": "Copia as metas: {goals}",
+  "target_goal_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} quadro",
+        "countPlural=*": "{count} quadros"
+      }
+    }
+  ],
+  "target_no_goals_to_copy": "Nenhuma meta para copiar",
+  "target_add_to_named": "Adicionar a {name}",
+  "activity_filter_all": "Todos",
+  "activity_empty": "Nenhuma atividade",
+  "activity_filter_operations": "Operações",
+  "activity_empty_operations": "Nenhuma operação",
+  "activity_filter_refusals": "Recusas",
+  "activity_empty_refusals": "Nenhuma recusa",
+  "activity_empty_not_saved": "Nenhum não salvo",
+  "activity_empty_saved": "Nenhum salvo",
+  "activity_destination_setup": "Configuração inicial",
+  "activity_destination_target": "Alvo",
+  "activity_destination_session": "Sessão",
+  "activity_destination_project": "Projeto",
+  "activity_destination_about": "Sobre",
+  "activity_destination_run": "execução",
+  "activity_destination_group": "grupo de execuções",
+  "activity_destination_trash": "Lixeira do Projeto",
+  "activity_destination_page": "página",
+  "activity_recorded": "Registrado",
+  "activity_refused": "Recusado",
+  "activity_hide_items": "Ocultar itens",
+  "activity_show_items": "Mostrar itens",
+  "activity_open_destination": "Abrir {name}",
+  "activity_in_progress": "Em andamento",
+  "activity_nothing_running": "Nada em execução",
+  "activity_history": "Histórico",
+  "activity_show_entries": "Mostrar entradas",
+  "activity_caption": "Histórico de atividade, mais recentes primeiro",
+  "activity_when": "Quando",
+  "activity_outcome": "Resultado",
+  "activity_what": "O quê",
+  "storage_scan_blocked": "Varredura bloqueada",
+  "storage_location": "Local",
+  "storage_path_of": "{name}: caminho",
+  "storage_path": "Caminho",
+  "storage_role": "Função",
+  "storage_volume": "Volume",
+  "storage_network": "Rede",
+  "storage_removable": "Removível",
+  "storage_availability": "Disponibilidade",
+  "storage_free": "Livre",
+  "storage_unsupported": "Sem suporte",
+  "storage_action": "Ação",
+  "storage_locate": "Localizar",
+  "storage_open_settings": "Abrir em Configurações",
+  "storage_unregistered": "Não registrado",
+  "storage_frame": "Quadro",
+  "storage_copies": "Cópias",
+  "storage_copies_of": "{name}: cópias",
+  "storage_sha256": "SHA-256",
+  "storage_extra": "Extra",
+  "storage_scan_again": "Varrer de novo",
+  "storage_transfer": "Transferência",
+  "storage_kind": "Tipo",
+  "storage_status": "Status",
+  "storage_started": "Início",
+  "storage_open_activity": "Abrir Atividade",
+  "storage_scan": "Procurar duplicatas",
+  "storage_no_locations": "Nenhum local",
+  "storage_add_location": "Adicionar local",
+  "storage_duplicates": "Duplicatas",
+  "storage_not_scanned": "Não verificado",
+  "storage_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} quadro",
+        "countPlural=*": "{count} quadros"
+      }
+    }
+  ],
+  "storage_no_duplicates": "Nenhuma duplicata",
+  "storage_extra_bytes": "{bytes} a mais",
+  "storage_transfers": "Transferências",
+  "storage_transfers_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} transferência",
+        "countPlural=*": "{count} transferências"
+      }
+    }
+  ],
+  "storage_no_transfers": "Nenhuma transferência",
+  "calibration_action_blocked": "{action}: bloqueado",
+  "calibration_action_not_saved": "{action}: não salvo",
+  "calibration_kind_dark": "Dark",
+  "calibration_kind_flat": "Flat",
+  "calibration_kind_bias": "Bias",
+  "calibration_kind_dark_flat": "Dark flat",
+  "calibration_step_stack": "Empilhar",
+  "calibration_step_detect": "Detectar",
+  "calibration_step_import": "Importar",
+  "calibration_step_register": "Registrar",
+  "calibration_step_raws": "Brutos",
+  "calibration_status_to_stack": "A empilhar",
+  "calibration_status_stacking": "Empilhando",
+  "calibration_status_importing": "Importando",
+  "calibration_step_todo": "A fazer",
+  "calibration_steps_of": "Etapas de {name}",
+  "calibration_raws_kept": "Mantidos",
+  "calibration_keep_raws": "Manter brutos",
+  "calibration_stack_again": "Empilhar de novo",
+  "calibration_detect_now": "Detectar agora",
+  "calibration_trash_raws": "Descartar brutos",
+  "calibration_show_master": "Mostrar master",
+  "calibration_process": "Processo",
+  "calibration_no_raw_sessions": "Nenhuma sessão bruta",
+  "calibration_processes_caption": "Processos de calibração",
+  "calibration_session": "Sessão",
+  "calibration_tool": "Ferramenta",
+  "calibration_steps": "Etapas",
+  "calibration_state": "Estado",
+  "calibration_output": "Saída",
+  "calibration_detected": "Detectado",
+  "calibration_ncombine": "NCOMBINE {count}",
+  "calibration_stored": "Armazenado",
+  "calibration_folders_of": "Pastas de {name}",
+  "calibration_tool_for": "Ferramenta para {name}",
+  "calibration_heading_flats": "Flats",
+  "calibration_heading_darks": "Darks",
+  "calibration_heading_bias": "Bias",
+  "calibration_heading_dark_flats": "Dark flats",
+  "calibration_caption_flats": "Masters de flat",
+  "calibration_caption_darks": "Masters de dark",
+  "calibration_caption_bias": "Masters de bias",
+  "calibration_caption_dark_flats": "Masters de dark flat",
+  "calibration_key_train": "Trem óptico",
+  "calibration_key_camera": "Câmera",
+  "calibration_key_exposure": "Exposição",
+  "calibration_key_gain": "Ganho",
+  "calibration_key_offset": "Offset",
+  "calibration_key_temp": "Temp.",
+  "calibration_origin_indexed": "Indexado",
+  "calibration_origin_results": "Resultados da execução",
+  "calibration_origin_stacked": "Empilhado",
+  "calibration_origin_imported": "Importado",
+  "calibration_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução",
+        "countPlural=*": "{count} execuções"
+      }
+    }
+  ],
+  "calibration_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão",
+        "countPlural=*": "{count} sessões"
+      }
+    }
+  ],
+  "calibration_open_offer": "Abrir oferta",
+  "calibration_used_by": "Usado por",
+  "calibration_open_raw_session": "Abrir sessão bruta",
+  "calibration_master_storage": "Master {name}: armazenamento",
+  "calibration_origin": "Origem",
+  "calibration_offered_in": "Oferecido em {name}",
+  "calibration_offered": "Oferecido",
+  "calibration_restore": "Restaurar",
+  "calibration_offer_restored": "Oferta restaurada",
+  "calibration_open_run": "Abrir execução",
+  "calibration_dismissed": "Dispensados",
+  "calibration_no_dismissed": "Nenhuma oferta dispensada",
+  "calibration_dismissed_caption": "Ofertas de master dispensadas",
+  "calibration_master": "Master",
+  "calibration_run": "Execução",
+  "calibration_file_of": "{name}: arquivo",
+  "calibration_file": "Arquivo",
+  "calibration_refused_reason": "recusado",
+  "calibration_import_refused_same": "{count} {reason}",
+  "calibration_masters_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "calibration_import_masters": "Importar masters",
+  "calibration_masters_imported": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master importado",
+        "countPlural=*": "{count} masters importados"
+      }
+    }
+  ],
+  "calibration_masters": "Masters",
+  "calibration_filter_label": "Filtrar masters",
+  "calibration_filter_placeholder": "Filtrar",
+  "calibration_no_masters": "Nenhum master",
+  "targets_browse_named": "Explorar {catalogues}",
+  "targets_band_ok_tonight": "{band} ok esta noite",
+  "targets_rig_gone": "um equipamento que não existe mais",
+  "targets_sorted_by": "ordenado por {sort}",
+  "targets_saved_rig_gone": "O equipamento não está mais em Configurações › Equipamentos",
+  "targets_saved_needs_rig": "{name} precisa de um equipamento",
+  "targets_saved_no_narrowband": "{name} não tem filtro Ha, SII ou OIII",
+  "targets_saved_no_band": "{name} não tem filtro {band}"
 }
