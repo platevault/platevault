@@ -27,6 +27,8 @@ export interface PrototypeState extends SeedData {
   /** Persisted version of each slice; a mismatch resets that slice only. */
   sliceVersions: Record<SliceId, number>
   slices: SliceStates
+  /** Ids of the notifications the user has seen (`store/notifications.ts`); absent until the history is first opened. */
+  noticesRead?: string[]
 }
 
 type Listener = () => void

@@ -36,9 +36,8 @@ function groupName(m: Messages, group: IssueGroup): string {
 
 /**
  * The issue's terse label and its one action, in the chosen language:
- * "2 need a Target", "Assign". The kind decides the wording (the domain's
- * `label` and `action.label` are its en-GB templates); drift on an adopted
- * master differs from drift in a session's frames.
+ * "2 need a Target", "Assign". The kind decides the wording; drift on an
+ * adopted master differs from drift in a session's frames.
  */
 export function issueCopy(m: Messages, issue: Issue): { text: string; action: string } {
   const { count } = issue
@@ -78,7 +77,7 @@ export function IssuePill({ issue }: { issue: Issue }) {
   const m = useMessages()
   const copy = issueCopy(m, issue)
   return (
-    <Pill tone={SEVERITY_TONE[issue.severity]} icon={SEVERITY_ICON[issue.severity]} link={issue.action.link} title={`${copy.text} · ${copy.action}`}>
+    <Pill tone={SEVERITY_TONE[issue.severity]} icon={SEVERITY_ICON[issue.severity]} link={issue.link} title={`${copy.text} · ${copy.action}`}>
       {copy.text}
     </Pill>
   )
@@ -99,7 +98,7 @@ export function IssueRow({ issue, onNavigate }: { issue: Issue; onNavigate: () =
         variant="ghost"
         size="xs"
         className="shrink-0 text-link"
-        render={<Link to={issue.action.link.to as never} params={issue.action.link.params as never} search={issue.action.link.search as never} />}
+        render={<Link to={issue.link.to as never} params={issue.link.params as never} search={issue.link.search as never} />}
         onClick={onNavigate}
       >
         {copy.action}

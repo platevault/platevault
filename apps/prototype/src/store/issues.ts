@@ -1,10 +1,10 @@
 /**
  * Issues and source-list counts as hooks (foundation-owned). The toolbar's
- * Issues hub, Home's issue pills, the status bar's chips and the source-list
- * badges read the same derivations (`src/domain/issues.ts`), so their
- * numbers always agree.
+ * Issues hub, Home's issue pills, the status bar's pills and chips and the
+ * source-list badges read the same derivations (`src/domain/issues.ts`), so
+ * their numbers always agree.
  */
-import { blockedProjectCount, deriveIssues, type Issue, type IssueSeverity, sessionsNeedingAttention, type StatusChip, statusChips, worstSeverity } from "@/domain/issues"
+import { blockedProjectCount, deriveIssues, type Issue, type IssueSeverity, sessionsNeedingAttention, type StatusIssues, statusIssues, worstSeverity } from "@/domain/issues"
 import { type PrototypeState, useStore } from "./core"
 
 /** Derived once per state version: the hub, Home and the status bar all read it. */
@@ -21,11 +21,11 @@ export function useIssues(): { issues: Issue[]; worst: IssueSeverity | null } {
   return { issues, worst: worstSeverity(issues) }
 }
 
-const selectChips = (s: PrototypeState) => statusChips(selectIssues(s))
+const selectStatusIssues = (s: PrototypeState) => statusIssues(selectIssues(s))
 
-/** The status bar's issue chips: offline, blocked runs, need a Target, calibration waiting. */
-export function useStatusChips(): StatusChip[] {
-  return useStore(selectChips)
+/** The status bar's issues: each as a named pill, and grouped into chips by kind. */
+export function useStatusIssues(): StatusIssues {
+  return useStore(selectStatusIssues)
 }
 
 const selectNavCounts = (s: PrototypeState) => ({ sessions: sessionsNeedingAttention(s), projects: blockedProjectCount(s) })

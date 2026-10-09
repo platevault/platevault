@@ -497,5 +497,117 @@
   "tips_help": "Ajuda",
   "tips_note": "Nota {number}",
   "page_step_done": "(concluído)",
-  "ui_breadcrumb": "Trilha de navegação"
+  "ui_breadcrumb": "Trilha de navegação",
+  "status_bar_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} falha",
+        "countPlural=*": "{count} falhas"
+      }
+    }
+  ],
+  "status_bar_changed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} alterado",
+        "countPlural=*": "{count} alterados"
+      }
+    }
+  ],
+  "status_bar_unread": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} não lida",
+        "countPlural=*": "{count} não lidas"
+      }
+    }
+  ],
+  "notice_finished": "{name} concluída",
+  "notice_partial": "{name} parcial",
+  "notice_canceled": "{name} cancelada",
+  "notice_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame",
+        "countPlural=*": "{frames} frames"
+      }
+    }
+  ],
+  "notice_files": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} arquivo",
+        "countPlural=*": "{files} arquivos"
+      }
+    }
+  ],
+  "notice_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input entries",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{entries} entrada",
+        "countPlural=*": "{entries} entradas"
+      }
+    }
+  ],
+  "notice_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input sessions",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{sessions} sessão",
+        "countPlural=*": "{sessions} sessões"
+      }
+    }
+  ]
 }
