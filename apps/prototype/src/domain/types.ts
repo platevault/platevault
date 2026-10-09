@@ -834,8 +834,8 @@ export type MatchCriterionName =
 export interface MatchCriterion {
   name: MatchCriterionName
   result: "compatible" | "incompatible" | "unknown"
-  lightValue: string
-  calibrationValue: string
+  lightValue: MessageRef
+  calibrationValue: MessageRef
 }
 
 /** Runs are assigned masters only (P-CAL3); raw calibration frames are input to a calibration process. */
@@ -866,8 +866,8 @@ export type CalibrationStepState = "todo" | "running" | "done" | "failed" | "ski
 export interface CalibrationStepRecord {
   state: CalibrationStepState
   at: IsoDateTime | null
-  /** Why the step failed, or why it went back to todo ("Canceled"). */
-  reason: string | null
+  /** Why the step failed, or why it went back to todo ("Canceled"); worded at render. */
+  reason: MessageRef | null
 }
 
 /**

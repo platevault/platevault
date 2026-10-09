@@ -6387,5 +6387,119 @@
         "countPlural=*": "{n} execuções"
       }
     }
-  ]
+  ],
+  "domain_session_no_filter": "{night} sem filtro",
+  "domain_reason_panel_pointing": "Painel pelo apontamento",
+  "domain_reason_panel_assigned": "Painel atribuído por você",
+  "domain_reason_refresh_added": "Atualização: adicionada",
+  "domain_reason_manual": "Inclusão manual",
+  "domain_diff_session_missing": "uma sessão que não está mais na biblioteca",
+  "domain_diff_added": "Adicionadas: {sessions}",
+  "domain_diff_removed": "Removidas: {sessions}",
+  "domain_diff_excluded": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame excluído da execução",
+        "countPlural=*": "{n} frames excluídos da execução"
+      }
+    }
+  ],
+  "domain_diff_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame rejeitado",
+        "countPlural=*": "{n} frames rejeitados"
+      }
+    }
+  ],
+  "domain_diff_restored": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame restaurado na execução",
+        "countPlural=*": "{n} frames restaurados na execução"
+      }
+    }
+  ],
+  "domain_diff_frames": "{added} frames adicionados, {removed} removidos",
+  "domain_diff_none": "Nenhuma mudança na composição; apenas detalhes",
+  "domain_criterion_camera": "Câmera",
+  "domain_criterion_dimensions": "Dimensões",
+  "domain_criterion_binning": "Binning",
+  "domain_criterion_gain": "Ganho",
+  "domain_criterion_offset": "Offset",
+  "domain_criterion_image_type": "Tipo de imagem",
+  "domain_criterion_exposure": "Exposição",
+  "domain_criterion_channel": "Canal",
+  "domain_criterion_rig": "Equipamento",
+  "domain_criterion_temperature": "Temperatura",
+  "domain_not_recorded": "Não registrado",
+  "domain_criteria_all_compatible": "Todos os {count} critérios compatíveis",
+  "domain_criterion_incompatible": "{criterion} incompatível",
+  "domain_criterion_unknown": "{criterion} desconhecido",
+  "domain_process_imported": "{kind} · importado",
+  "domain_stack_not_raw": "não é uma sessão de calibração bruta",
+  "domain_stack_already_stacking": "já empilhando",
+  "domain_stack_master_registered": "master já registrado",
+  "domain_stack_no_profile": "nenhum perfil de ferramenta",
+  "domain_stack_cannot_stack": "{name} não empilha",
+  "domain_stack_not_set_up": "{name} não configurado",
+  "domain_stack_no_frames": "nenhum frame fora da Lixeira",
+  "domain_stack_no_output_folder": "nenhuma pasta de saída",
+  "store_blocked": "Bloqueado: {label}",
+  "store_cal_tool_output_not_found": "Saída da ferramenta não encontrada",
+  "store_cal_nothing_detected": "Nada detectado",
+  "store_cal_master_unreadable": "Master ilegível",
+  "store_cal_master_changed": "Master alterado após Detectar",
+  "store_cal_write_permission_removed": "Permissão de gravação removida",
+  "store_cal_copy_not_verified": "A cópia não foi verificada",
+  "store_cal_master_missing": "Master ausente do armazenamento",
+  "store_cal_not_a_master": "Não é um master",
+  "store_cal_trash_raws_title": "Brutos de {name} para a Lixeira",
+  "store_cal_failed_at": "{reason} em {step}.",
+  "store_cal_registered_from": "{file} registrado a partir de {frames}.",
+  "store_cal_process_missing": "O processo de calibração não está mais registrado.",
+  "store_cal_stack_with": "Empilhar com {name}",
+  "store_cal_stack_title": "Empilhar {name}",
+  "store_cal_process_not_found": "processo não encontrado",
+  "store_cal_stack_first": "Empilhe primeiro",
+  "store_cal_already_detected": "master já detectado",
+  "store_cal_detect_master": "Detectar master",
+  "store_cal_nothing_detected_yet": "nada detectado ainda",
+  "store_cal_import_master": "Importar master",
+  "store_cal_no_raw_frames": "sem frames brutos",
+  "store_cal_not_registered_yet": "master ainda não registrado",
+  "store_cal_already_trashing": "já indo para a Lixeira do sistema",
+  "store_cal_raws_in_trash": "brutos já na Lixeira do sistema",
+  "store_cal_path_unreadable": "{path} não pode ser lido",
+  "store_cal_not_master_imagetyp": "não é um master (IMAGETYP)",
+  "store_cal_already_in_library": "já está na biblioteca",
+  "store_cal_kind_dark_flat_lower": "dark flat",
+  "store_cal_import_kind_master": "Importar master de {kind}",
+  "store_cal_restore_offer": "Restaurar oferta",
+  "store_cal_offer_missing": "a oferta não está mais registrada",
+  "store_cal_restore_master_offer": "Restaurar oferta de master"
 }

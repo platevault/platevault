@@ -337,7 +337,7 @@ export function trashRun(runId: RunId): CommitResult {
   if (!run) return MISSING
   const blockers = trashRefusals(state, run)
   if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_move_to_trash_named", { name: run.name }) }), blockers, runHref(run))
-  return editRun(runId, msg("trash_move"), (current) => ({ ...current, trashedAt: nowIso() }))
+  return editRun(runId, msg("run_move_to_trash"), (current) => ({ ...current, trashedAt: nowIso() }))
 }
 
 /** Restore brings the run back exactly as it was: membership, preparations, Results and stage (D-W72). */

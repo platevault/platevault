@@ -242,7 +242,7 @@ export function findPanel(subject: Subject | undefined, panelId: string | null):
 
 /** "Panel 2". */
 export function panelRef(panel: MosaicPanel): MessageRef {
-  return msg("mosaic_panel", { n: panel.n })
+  return msg("review_panel_n", { n: panel.n })
 }
 
 export function panelLabel(m: Messages, panel: MosaicPanel): string {
@@ -813,7 +813,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !selectSaved ? "review" : "done",
     status:
       selected === 0
-        ? msg("target_no_sessions")
+        ? msg("run_cal_no_sessions")
         : unresolved > 0
           ? msg("domain_status_unresolved", { count: unresolved })
           : selectSaved && latest
@@ -980,7 +980,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     state: !complete ? (results.state === "done" ? "ready" : "idle") : cleaning ? "running" : cleanedUp ? "done" : "ready",
     status: !complete ? msg("status_open") : cleaning ? msg("wrapup_cleaning_up") : cleanedUp ? msg("domain_status_cleaned_up") : msg("domain_status_cleanup_available"),
     items: [
-      { label: msg("domain_gate_run_complete"), met: complete, detail: complete ? msg("domain_gate_cleanup_reviewable") : msg("domain_gate_complete_when_done") },
+      { label: msg("review_run_complete"), met: complete, detail: complete ? msg("domain_gate_cleanup_reviewable") : msg("domain_gate_complete_when_done") },
       { label: msg("domain_gate_cleanup_reviewed"), met: "advisory", detail: cleanedUp ? (lastCleanup?.summary ?? msg("domain_gate_finished")) : msg("domain_gate_cleanup_lists") },
     ],
     link: link("done"),

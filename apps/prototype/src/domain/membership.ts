@@ -28,7 +28,8 @@ import type {
   Session,
   SessionId,
 } from "./types"
-import { formatDuration, formatExposure, formatNight, plural } from "@/lib/format"
+import { formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
+import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 
 export function emptyContent(): MembershipContent {
   return { sessions: [], included: [], excluded: [], rejected: [], unresolved: [], productInputs: [] }
@@ -227,34 +228,48 @@ export function diffContent(base: MembershipContent | null, next: MembershipCont
 }
 
 /** The changes a save accepts, in words; stored with the revision (VSEL-FR-16). */
-export function describeDiff(catalog: Catalog, diff: ContentDiff): string[] {
-  const name = (id: SessionId) => {
-    const s = catalog.sessions[id]
-    return s ? sessionLabel(s) : "a session no longer in the library"
-  }
-  const lines: string[] = []
-  if (diff.sessionsAdded.length > 0) lines.push(`Added ${diff.sessionsAdded.map(name).join(", ")}`)
-  if (diff.sessionsRemoved.length > 0) lines.push(`Removed ${diff.sessionsRemoved.map(name).join(", ")}`)
-  if (diff.framesExcluded > 0) lines.push(`${plural(diff.framesExcluded, "frame")} excluded from the run`)
-  if (diff.framesRejected > 0) lines.push(`${plural(diff.framesRejected, "frame")} rejected`)
-  if (diff.framesRestored > 0) lines.push(`${plural(diff.framesRestored, "frame")} restored to the run`)
-  if (lines.length === 0 && (diff.framesAdded > 0 || diff.framesRemoved > 0)) {
-    lines.push(`${diff.framesAdded} frames added, ${diff.framesRemoved} removed`)
-  }
-  return lines.length > 0 ? lines : ["No membership change; details only"]
+export function describeDiff(catalog: Catalog, diff: ContentDiff): MessageRef[] {
+  const names = (ids: SessionId[]) =>
+    joinRefs(
+      ids.map((id) => {
+        const s = catalog.sessions[id]
+        return s ? sessionRef(s) : msg("domain_diff_session_missing")
+      }),
+      ", ",
+    )
+  const frames = (count: number) => ({ count, n: formatCount(count) })
+  const lines: MessageRef[] = []
+  if (diff.sessionsAdded.length > 0) lines.push(msg("domain_diff_added", { sessions: names(diff.sessionsAdded) }))
+  if (diff.sessionsRemoved.length > 0) lines.push(msg("domain_diff_removed", { sessions: names(diff.sessionsRemoved) }))
+  if (diff.framesExcluded > 0) lines.push(msg("domain_diff_excluded", frames(diff.framesExcluded)))
+  if (diff.framesRejected > 0) lines.push(msg("domain_diff_rejected", frames(diff.framesRejected)))
+  if (diff.framesRestored > 0) lines.push(msg("domain_diff_restored", frames(diff.framesRestored)))
+  if (lines.length === 0 && (diff.framesAdded > 0 || diff.framesRemoved > 0)) lines.push(msg("domain_diff_frames", { added: diff.framesAdded, removed: diff.framesRemoved }))
+  return lines.length > 0 ? lines : [msg("domain_diff_none")]
 }
 
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------
 
-export function sessionLabel(session: Session): string {
-  return `${formatNight(session.night)} ${session.channel ?? "no filter"}`
+/** "18 Sep Ha"; "18 Sep no filter" without a filter. */
+export function sessionRef(session: Session): MessageRef {
+  const night = formatNight(session.night)
+  return session.channel ? verbatim(`${night} ${session.channel}`) : msg("domain_session_no_filter", { night })
+}
+
+export function sessionLabel(m: Messages, session: Session): string {
+  return say(m, sessionRef(session))
 }
 
 /** "18 Sep · Ha · 300 s", the label calibration and preparation lists use. */
-export function sessionLongLabel(session: Session): string {
-  return [formatNight(session.night), session.channel ?? "No filter", formatExposure(sessionExposureS(session))].join(" · ")
+export function sessionLongRef(session: Session): MessageRef {
+  const channel = session.channel ? verbatim(session.channel) : msg("palette_session_no_filter")
+  return joinRefs([verbatim(formatNight(session.night)), channel, verbatim(formatExposure(sessionExposureS(session)))], " · ")
+}
+
+export function sessionLongLabel(m: Messages, session: Session): string {
+  return say(m, sessionLongRef(session))
 }
 
 /** The session's exposure as the catalog counts it: the latest correction, else the observed EXPTIME. */
@@ -262,12 +277,13 @@ export function sessionExposureS(session: Session): number {
   return correctedExposureS(session) ?? session.exposureS
 }
 
-export const REASON_LABEL: Record<SelectionReason["kind"], string> = {
-  candidate: "Candidate",
-  "panel-pointing": "Panel by pointing",
-  "panel-assigned": "Panel assigned by you",
-  "refresh-added": "Refresh: added",
-  manual: "Manual inclusion",
+/** Why a session is in a run, beside its detail. */
+export const REASON_NAME: Record<SelectionReason["kind"], MessageRef> = {
+  candidate: msg("status_candidate"),
+  "panel-pointing": msg("domain_reason_panel_pointing"),
+  "panel-assigned": msg("domain_reason_panel_assigned"),
+  "refresh-added": msg("domain_reason_refresh_added"),
+  manual: msg("domain_reason_manual"),
 }
 
 // ---------------------------------------------------------------------------

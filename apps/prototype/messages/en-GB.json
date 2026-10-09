@@ -6331,5 +6331,119 @@
         "countPlural=*": "{n} runs"
       }
     }
-  ]
+  ],
+  "domain_session_no_filter": "{night} no filter",
+  "domain_reason_panel_pointing": "Panel by pointing",
+  "domain_reason_panel_assigned": "Panel assigned by you",
+  "domain_reason_refresh_added": "Refresh: added",
+  "domain_reason_manual": "Manual inclusion",
+  "domain_diff_session_missing": "a session no longer in the library",
+  "domain_diff_added": "Added {sessions}",
+  "domain_diff_removed": "Removed {sessions}",
+  "domain_diff_excluded": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame excluded from the run",
+        "countPlural=*": "{n} frames excluded from the run"
+      }
+    }
+  ],
+  "domain_diff_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame rejected",
+        "countPlural=*": "{n} frames rejected"
+      }
+    }
+  ],
+  "domain_diff_restored": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame restored to the run",
+        "countPlural=*": "{n} frames restored to the run"
+      }
+    }
+  ],
+  "domain_diff_frames": "{added} frames added, {removed} removed",
+  "domain_diff_none": "No membership change; details only",
+  "domain_criterion_camera": "Camera",
+  "domain_criterion_dimensions": "Dimensions",
+  "domain_criterion_binning": "Binning",
+  "domain_criterion_gain": "Gain",
+  "domain_criterion_offset": "Offset",
+  "domain_criterion_image_type": "Image type",
+  "domain_criterion_exposure": "Exposure",
+  "domain_criterion_channel": "Channel",
+  "domain_criterion_rig": "Rig",
+  "domain_criterion_temperature": "Temperature",
+  "domain_not_recorded": "Not recorded",
+  "domain_criteria_all_compatible": "All {count} criteria compatible",
+  "domain_criterion_incompatible": "{criterion} incompatible",
+  "domain_criterion_unknown": "{criterion} unknown",
+  "domain_process_imported": "{kind} · imported",
+  "domain_stack_not_raw": "not a raw calibration session",
+  "domain_stack_already_stacking": "already stacking",
+  "domain_stack_master_registered": "master already registered",
+  "domain_stack_no_profile": "no tool profile",
+  "domain_stack_cannot_stack": "{name} cannot stack",
+  "domain_stack_not_set_up": "{name} not set up",
+  "domain_stack_no_frames": "no frames outside the Trash",
+  "domain_stack_no_output_folder": "no output folder",
+  "store_blocked": "{label} blocked",
+  "store_cal_tool_output_not_found": "Tool output not found",
+  "store_cal_nothing_detected": "Nothing detected",
+  "store_cal_master_unreadable": "Master not readable",
+  "store_cal_master_changed": "Master changed after Detect",
+  "store_cal_write_permission_removed": "Write permission removed",
+  "store_cal_copy_not_verified": "Copy did not verify",
+  "store_cal_master_missing": "Master missing from storage",
+  "store_cal_not_a_master": "Not a master",
+  "store_cal_trash_raws_title": "Trash raws of {name}",
+  "store_cal_failed_at": "{reason} at {step}.",
+  "store_cal_registered_from": "{file} registered from {frames}.",
+  "store_cal_process_missing": "The calibration process is no longer recorded.",
+  "store_cal_stack_with": "Stack with {name}",
+  "store_cal_stack_title": "Stack {name}",
+  "store_cal_process_not_found": "process not found",
+  "store_cal_stack_first": "Stack first",
+  "store_cal_already_detected": "master already detected",
+  "store_cal_detect_master": "Detect master",
+  "store_cal_nothing_detected_yet": "nothing detected yet",
+  "store_cal_import_master": "Import master",
+  "store_cal_no_raw_frames": "no raw frames",
+  "store_cal_not_registered_yet": "master not registered yet",
+  "store_cal_already_trashing": "already moving to the OS Trash",
+  "store_cal_raws_in_trash": "raws already in the OS Trash",
+  "store_cal_path_unreadable": "{path} cannot be read",
+  "store_cal_not_master_imagetyp": "not a master (IMAGETYP)",
+  "store_cal_already_in_library": "already in the library",
+  "store_cal_kind_dark_flat_lower": "dark flat",
+  "store_cal_import_kind_master": "Import {kind} master",
+  "store_cal_restore_offer": "Restore offer",
+  "store_cal_offer_missing": "the offer is no longer recorded",
+  "store_cal_restore_master_offer": "Restore master offer"
 }
