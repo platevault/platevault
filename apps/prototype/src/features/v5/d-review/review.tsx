@@ -1,35 +1,21 @@
 /**
- * S6 Review (slice D): frame review inside a run's Review step, and Review
- * all across a run group's panels (D-W13, D-W14, D-W22, D-W40, D-W42,
- * D-W53, D-W54, D-W15). v4's frame-review components are kept for this
- * slice under `src/features/t3/` (frames-area, frame-preview, raster,
- * measure, measurement-plot, csv, import-dialog), adapted to runs: see
- * `src/features/t3/frames-area.tsx`. Foundation placeholder; slice D
- * replaces this file.
+ * S6 Review (slice D): frame review inside a run's Review step, Review all
+ * across a run group's panels (D-W41), and review of a Project's candidate
+ * sessions, opened filtered to Unreviewed (PIX-FR-18). Each renders the one
+ * review workspace (`frame-review.tsx`) as a full-height flex child with its
+ * own toolbar; mount it without page padding. Route search params read:
+ * `?filter=all|picked|rejected|unreviewed`, `?panel=<panelId>`, `?assetId=`.
  */
-import { PlaceholderPage } from "@/components/app/page"
-import { SCREENS } from "@/app/screens"
-import { groupPipeline, workingContent } from "@/domain/derive"
-import { runSummary } from "@/domain/membership"
-import { useStore } from "@/store/core"
+import { FrameReview } from "./frame-review"
 
 export function ReviewStep({ runId }: { runId: string }) {
-  const state = useStore((s) => s)
-  const run = state.catalog.runs[runId]
-  const content = run ? workingContent(run) : null
-  const summary = content ? runSummary(state.disk, state.catalog, content) : null
-  return (
-    <PlaceholderPage
-      screen={SCREENS.S6}
-      level={2}
-      facts={summary ? [{ label: "Frames", value: `${summary.included.frames} included · ${summary.unreviewed} unreviewed · ${summary.rejected} rejected · ${summary.excluded} excluded` }] : []}
-    />
-  )
+  return <FrameReview key={runId} context={{ kind: "run", runId }} />
 }
 
 export function GroupReviewStep({ groupId }: { groupId: string }) {
-  const state = useStore((s) => s)
-  const group = state.catalog.runGroups[groupId]
-  const panels = group ? groupPipeline(state, group).panels.filter((p) => !p.trashed) : []
-  return <PlaceholderPage screen={{ ...SCREENS.S6, title: "Review all" }} level={2} facts={[{ label: "Panels", value: `${panels.length} outside the Trash, with a Panel column and a Panel filter` }]} />
+  return <FrameReview key={groupId} context={{ kind: "group", groupId }} />
+}
+
+export function CandidateReview({ projectId }: { projectId: string }) {
+  return <FrameReview key={projectId} context={{ kind: "candidates", projectId }} />
 }

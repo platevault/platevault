@@ -1,19 +1,15 @@
 /**
- * Slice D shell contribution (see `src/app/shell-contract.ts`): while frame
- * review is open, its frame commands appear in the palette. Slice D owns
- * this file.
+ * Slice D shell contribution (see `src/app/shell-contract.ts`): while S6
+ * Review is open, its frame commands appear in the command palette with
+ * their hotkeys. Slice D owns this file.
  */
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
-import { useFrameCommands } from "@/features/t3/shell"
+import { useReviewCommands } from "./commands"
 
 function useCommands(): PaletteCommand[] {
-  const frames = useFrameCommands()
-  if (!frames) return []
-  return [
-    { id: "d:next-frame", label: "Next frame (J)", group: "Review", keywords: "frame next j", run: frames.next },
-    { id: "d:previous-frame", label: "Previous frame (K)", group: "Review", keywords: "frame previous k", run: frames.previous },
-    { id: "d:exclude-frame", label: `${frames.excludeLabel} (X)`, group: "Review", keywords: "exclude reject restore frame x", run: frames.exclude },
-  ]
+  const commands = useReviewCommands()
+  if (!commands) return []
+  return commands.map((c) => ({ id: `d:${c.id}`, label: `${c.label} (${c.keys})`, group: "Review", keywords: `frame review ${c.keys.toLowerCase()}`, run: c.run }))
 }
 
 export const dShell: ShellContribution = { useCommands }

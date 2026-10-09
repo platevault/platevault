@@ -40,13 +40,18 @@ export function markFrames(assetIds: AssetId[], value: QualityValue, runId: RunI
 }
 
 function applyToDraft(runId: RunId, assetIds: AssetId[], reject: boolean): CommitResult {
-  const run = store.getState().catalog.runs[runId]
+  const { catalog } = store.getState()
+  const run = catalog.runs[runId]
   if (!run || run.completion === "complete" || run.trashedAt) return { ok: true }
   const content = run.draft ?? latestRevision(run)
   if (!content) return { ok: true }
-  const touches = reject ? assetIds.some((id) => !content.rejected.includes(id)) : assetIds.some((id) => content.rejected.includes(id))
+  // A frame still rejected in the other scope stays out of the draft (D-W42, D-W54): P on a Project-rejected frame, or
+  // clearing the Project reject of a library-Unusable frame, never restores it.
+  const rejections = catalog.projects[run.projectId]?.rejections ?? {}
+  const ids = reject ? assetIds : assetIds.filter((id) => catalog.assets[id]?.quality.value !== "unusable" && !(id in rejections))
+  const touches = reject ? ids.some((id) => !content.rejected.includes(id)) : ids.some((id) => content.rejected.includes(id))
   if (!touches) return { ok: true }
-  return updateRunDraft(runId, reject ? "Rejected in Review" : "Un-rejected in Review", (c, s) => (reject ? rejectInContent(c, assetIds) : unrejectInContent(s.disk, s.catalog, c, assetIds)))
+  return updateRunDraft(runId, reject ? "Rejected in Review" : "Un-rejected in Review", (c, s) => (reject ? rejectInContent(c, ids) : unrejectInContent(s.disk, s.catalog, c, ids)))
 }
 
 /**
