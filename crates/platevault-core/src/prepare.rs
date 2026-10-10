@@ -59,12 +59,12 @@ use crate::{
     GroupPreparationOutcome, GroupPreparationReview, GroupPrepareBasis, ImageFormat, InputMode,
     ItemReason, LibraryError, LifecycleBlocker, LinkKind, LocationCheck, MemberState, Membership,
     ModeOption, NativePath, OpenOutcome, PanelOutcome, PanelPreparationOutcome,
-    PanelPreparationReview, PanelResult, PlannedCorrection, PlannedEntry, PreparationFailed,
-    PreparationOutcome, PreparationReview, PreparationRevision, PreparationState, PrepareRequest,
-    PrepareStep, PreparedEntry, PreparedEntryKind, PreparedFolder, PreparedInput, Profile,
-    ReasonCode, Revision, RunCompletion, RunFolderSet, RunLocation, RunOperationKind, RunStage,
-    SourceBasis, TransferDestination, View, ViewGroup, ViewRecord, ViewRevisionHeader, Writability,
-    WrittenCopy,
+    PanelPreparationReview, PanelResult, PanelRetry, PlannedCorrection, PlannedEntry,
+    PreparationFailed, PreparationOutcome, PreparationReview, PreparationRevision,
+    PreparationState, PrepareRequest, PrepareStep, PreparedEntry, PreparedEntryKind,
+    PreparedFolder, PreparedInput, Profile, ReasonCode, Revision, RunCompletion, RunFolderSet,
+    RunLocation, RunOperationKind, RunStage, SourceBasis, TransferDestination, View, ViewGroup,
+    ViewRecord, ViewRevisionHeader, Writability, WrittenCopy,
 };
 
 /// Whether this platform makes verified clones: APFS `clonefile` on macOS and
@@ -106,10 +106,15 @@ struct SourceInput {
     size_bytes: u64,
 }
 
+/// The current selection a revision's sources are checked against (D19):
+/// each source it names with the basis its snapshot must match or, for a
+/// product input its rehash blocks (RES-FR-05), why it is blocked.
+type Anchors = HashMap<PathBuf, Result<Basis, ItemReason>>;
+
 /// A review with the anchors its inputs are snapshotted against.
 struct Planned {
     review: PreparationReview,
-    anchors: HashMap<PathBuf, Basis>,
+    anchors: Anchors,
 }
 
 impl Library {
@@ -414,10 +419,7 @@ impl Library {
     /// The anchors a revision's inputs are snapshotted against, resolved
     /// again from its run's committed membership and calibration handoff,
     /// and from its product inputs, each rehashed again (RES-FR-05).
-    async fn anchors_of(
-        &self,
-        revision: &PreparationRevision,
-    ) -> Result<HashMap<PathBuf, Basis>, LibraryError> {
+    async fn anchors_of(&self, revision: &PreparationRevision) -> Result<Anchors, LibraryError> {
         let basis = self.catalog().view_membership(revision.view_id, Membership::Committed).await?;
         let calibration =
             self.calibration_handoff(revision.view_id, revision.membership_revision).await?;
@@ -488,7 +490,7 @@ impl Library {
     async fn run_preparation(
         &self,
         record: PreparationRecord,
-        anchors: &HashMap<PathBuf, Basis>,
+        anchors: &Anchors,
         control: &dyn PrepareControl,
     ) -> Result<PreparationOutcome, LibraryError> {
         let id = record.revision.id;
@@ -509,7 +511,7 @@ impl Library {
     async fn settle_all(
         &self,
         record: PreparationRecord,
-        anchors: &HashMap<PathBuf, Basis>,
+        anchors: &Anchors,
         control: &dyn PrepareControl,
     ) -> Result<PreparationRecord, LibraryError> {
         let revision = record.revision;
@@ -576,7 +578,7 @@ impl Library {
         &self,
         revision: &PreparationRevision,
         entry: &PreparedEntry,
-        anchors: &HashMap<PathBuf, Basis>,
+        anchors: &Anchors,
         control: &dyn PrepareControl,
     ) -> Result<PreparedEntry, LibraryError> {
         let source = entry
@@ -1089,7 +1091,7 @@ fn location_refusal(check: &LocationCheck) -> Option<String> {
     }
 }
 
-type Resolved = ((Vec<SourceInput>, HashMap<PathBuf, Basis>), Vec<BlockedInput>, u64);
+type Resolved = ((Vec<SourceInput>, Anchors), Vec<BlockedInput>, u64);
 
 /// The committed membership's included members and every calibration input
 /// of an automatic, accepted or excepted assignment, each with its basis;
@@ -1142,7 +1144,7 @@ fn resolve_inputs(
         let source = root(&copy.location_id)?.join(copy.path.relative_path()?);
         anchors.insert(
             source.clone(),
-            Basis { fingerprint: recorded, origin: BasisOrigin::Membership },
+            Ok(Basis { fingerprint: recorded, origin: BasisOrigin::Membership }),
         );
         inputs.push(SourceInput {
             member_key: Some(key),
@@ -1162,10 +1164,10 @@ fn resolve_inputs(
             }
             anchors.insert(
                 source.clone(),
-                Basis {
+                Ok(Basis {
                     fingerprint: file.fingerprint.clone(),
                     origin: BasisOrigin::CalibrationAssignment,
-                },
+                }),
             );
             inputs.push(SourceInput {
                 member_key: None,
@@ -1205,7 +1207,7 @@ fn resolve_inputs(
 /// cannot be read is blocked and never prepared.
 fn resolve_products(
     products: &[RehashedProduct],
-) -> (Vec<SourceInput>, HashMap<PathBuf, Basis>, Vec<BlockedInput>) {
+) -> (Vec<SourceInput>, Anchors, Vec<BlockedInput>) {
     let mut inputs = Vec::new();
     let mut anchors = HashMap::new();
     let mut blocked = Vec::new();
@@ -1222,7 +1224,7 @@ fn resolve_products(
             Ok((source, fingerprint)) => {
                 let size_bytes = fingerprint.size_bytes;
                 let basis = Basis { fingerprint, origin: BasisOrigin::ProductAcceptance };
-                anchors.insert(source.clone(), basis);
+                anchors.insert(source.clone(), Ok(basis));
                 inputs.push(SourceInput {
                     member_key: None,
                     asset_id: None,
@@ -1233,14 +1235,21 @@ fn resolve_products(
                     size_bytes,
                 });
             }
-            Err(why) => blocked.push(BlockedInput {
-                member_key: None,
-                input: PreparedInput::Product,
-                source: Some(result.path.clone()),
-                path: None,
-                size_bytes: 0,
-                reason: why,
-            }),
+            Err(why) => {
+                // Still in the selection, blocked as its rehash read it: what
+                // Prepare and Retry name for it, never a lapsed selection.
+                if let Ok(source) = result.path.to_path_buf() {
+                    anchors.insert(source, Err(why.clone()));
+                }
+                blocked.push(BlockedInput {
+                    member_key: None,
+                    input: PreparedInput::Product,
+                    source: Some(result.path.clone()),
+                    path: None,
+                    size_bytes: 0,
+                    reason: why,
+                });
+            }
         }
     }
     (inputs, anchors, blocked)
@@ -1700,11 +1709,11 @@ fn new_entries(
     blocked: &[BlockedInput],
     kind: PreparedEntryKind,
     folder: &NativePath,
-    anchors: &HashMap<PathBuf, Basis>,
+    anchors: &Anchors,
     corrections: &[PlannedCorrection],
 ) -> Vec<NewPreparedEntry> {
     let basis_of = |source: Option<&NativePath>| {
-        source.and_then(|source| anchors.get(&source.to_path_buf().ok()?).cloned())
+        source.and_then(|source| anchors.get(&source.to_path_buf().ok()?)?.as_ref().ok().cloned())
     };
     let patched: HashMap<PathBuf, &[CorrectedField]> = corrections
         .iter()
@@ -1878,18 +1887,18 @@ fn relative_to(path: &NativePath, folder: &NativePath) -> Result<NativePath, Lib
 
 /// An entry is prepared only while the run's current selection still holds
 /// its source with the basis Prepare recorded (D19, PREP-FR-09). `anchors` is
-/// the current membership and calibration handoff: a source it no longer
-/// names, or names with another basis since review (a changed calibration
-/// assignment, a moved copy), needs a new review.
-fn still_selected(
-    entry: &PreparedEntry,
-    anchors: &HashMap<PathBuf, Basis>,
-) -> Result<(), ItemReason> {
+/// the current membership, calibration handoff and product inputs: a product
+/// input its rehash blocks keeps that reason (a drifted product names its
+/// drift), and a source it no longer names, or names with another basis
+/// since review (a changed calibration assignment, a moved copy), needs a
+/// new review.
+fn still_selected(entry: &PreparedEntry, anchors: &Anchors) -> Result<(), ItemReason> {
     let source = entry.source.as_ref().map(NativePath::display).unwrap_or_default();
     let current = entry.source.as_ref().and_then(|path| anchors.get(&path.to_path_buf().ok()?));
     match (&entry.basis, current) {
-        (Some(recorded), Some(current)) if recorded == current => Ok(()),
-        (Some(recorded), Some(_)) => Err(reason(
+        (_, Some(Err(blocked))) => Err(blocked.clone()),
+        (Some(recorded), Some(Ok(current))) if recorded == current => Ok(()),
+        (Some(recorded), Some(Ok(_))) => Err(reason(
             ReasonCode::SourceDrift,
             format!(
                 "{source}: {} changed since review, so it is no longer in the reviewed \
@@ -2263,7 +2272,7 @@ fn launch(executable: &Path, args: &[OsString], cwd: &Path, folder: NativePath) 
 /// A Prepare all review with each panel run's anchors, by run.
 struct GroupPlanned {
     review: GroupPreparationReview,
-    anchors: HashMap<Uuid, HashMap<PathBuf, Basis>>,
+    anchors: HashMap<Uuid, Anchors>,
 }
 
 /// One panel run as review resolved it, before the disk check.
@@ -2271,7 +2280,7 @@ struct PanelPlan {
     review: PanelPreparationReview,
     inputs: Vec<SourceInput>,
     results: Option<NativePath>,
-    anchors: HashMap<PathBuf, Basis>,
+    anchors: Anchors,
 }
 
 impl Library {
@@ -2523,7 +2532,7 @@ impl Library {
     async fn run_group_preparation(
         &self,
         record: GroupPreparationRecord,
-        anchors: &HashMap<Uuid, HashMap<PathBuf, Basis>>,
+        anchors: &HashMap<Uuid, Anchors>,
         control: &dyn PrepareControl,
         skipped: Vec<PanelOutcome>,
     ) -> Result<GroupPreparationOutcome, LibraryError> {
@@ -2572,16 +2581,20 @@ impl Library {
     ) -> Result<GroupPreparationOutcome, LibraryError> {
         let assembled = self.assembled_folder(&record.preparation).await?;
         let mut panels = Vec::with_capacity(record.panels.len());
+        let mut resumes = false;
         for PanelPreparationRecord { number, panel_id, record } in record.panels {
-            let stage = self.catalog().view(record.revision.view_id).await?.view.stage;
+            let view = self.catalog().view(record.revision.view_id).await?.view;
+            resumes |= GroupPreparation::panel_retry(number, record.revision.state, &view)
+                == PanelRetry::Resumes;
             panels.push(PanelPreparationOutcome {
                 number,
                 panel_id,
-                outcome: outcome(record, stage),
+                outcome: outcome(record, view.stage),
             });
         }
         let verified = GroupPreparationOutcome::every_panel_verified(&panels);
-        let offers = PreparationOutcome::offers_for(record.preparation.outcome, !verified);
+        let offers =
+            GroupPreparationOutcome::offers_for(record.preparation.outcome, verified, resumes);
         Ok(GroupPreparationOutcome {
             preparation: record.preparation,
             panels,
