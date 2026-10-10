@@ -121,23 +121,30 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
     { label: m.project_open_session(), icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
   ]
 
+  // Reason is hidden when it is the same in every row: the subject and rig it names are in the header.
+  const reasonText = (r: SelectRow) => (r.reason ? `${say(m, REASON_NAME[r.reason.kind])} · ${say(m, r.reason.detail)}` : m.run_select_not_selected({ reason: r.candidateReason ? say(m, r.candidateReason) : "" }))
+  const reasonVaries = new Set(rows.map(reasonText)).size > 1
   const columns: Column<SelectRow>[] = [
     { id: "night", header: m.run_col_night(), rowHeader: true, cell: (r) => formatNight(r.session.night, true), sortValue: (r) => r.session.night },
     { id: "channel", header: m.run_col_channel(), cell: (r) => channelName(r.session), sortValue: (r) => r.session.channel ?? "" },
     { id: "frames", header: m.run_col_frames(), align: "right", cell: (r) => (r.member ? m.run_select_frames_of({ included: r.included, total: r.frames }) : `${r.frames}`), sortValue: (r) => r.frames },
     { id: "integration", header: m.run_col_integration(), align: "right", cell: (r) => formatDuration((r.member ? r.included : r.frames) * sessionExposureS(r.session)), sortValue: (r) => r.frames * sessionExposureS(r.session) },
-    {
-      id: "reason",
-      header: m.run_col_reason(),
-      cell: (r) =>
-        r.reason ? (
-          <span>
-            <span className="text-foreground">{say(m, REASON_NAME[r.reason.kind])}</span> <span className="text-muted-foreground">· {say(m, r.reason.detail)}</span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">{m.run_select_not_selected({ reason: r.candidateReason ? say(m, r.candidateReason) : "" })}</span>
-        ),
-    },
+    ...(reasonVaries
+      ? [
+          {
+            id: "reason",
+            header: m.run_col_reason(),
+            cell: (r: SelectRow) =>
+              r.reason ? (
+                <span>
+                  <span className="text-foreground">{say(m, REASON_NAME[r.reason.kind])}</span> <span className="text-muted-foreground">· {say(m, r.reason.detail)}</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">{reasonText(r)}</span>
+              ),
+          },
+        ]
+      : []),
     {
       id: "state",
       header: m.run_col_state(),

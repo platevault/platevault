@@ -164,9 +164,11 @@ function useContextNext(): { next: NextAction | null; steps: RunStepState[] | nu
       return { next, steps: pipeline.steps, here: moved ? (pipeline.steps.find((s) => s.id === active.step) ?? null) : null }
     }
     const project = active.projectId ? state.catalog.projects[active.projectId] : undefined
-    if (project) {
+    // The mosaic editor (Start group) and Wrap up (its steps) hold their own primary action.
+    const ownsPrimary = Boolean(active.search.mosaic) || active.search.stage === "wrap-up"
+    if (project && !ownsPrimary) {
       const next = projectNext(state, project, Date.parse(nowIso()))
-      // On the screen it names (the candidate review, the Wrap up stage), the Project's Next has nothing more to open.
+      // On the screen it names (the candidate review), the Project's Next has nothing more to open.
       const search = next?.link.search ?? {}
       const onIt = Object.keys(search).length > 0 && Object.entries(search).every(([key, value]) => active.search[key] === value)
       return { next: onIt ? null : next, steps: null, here: null }
@@ -214,7 +216,7 @@ function NextActionButton() {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       {next ? (
-        <Button size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`${detail} (${MOD_LABEL}↩)`}>
+        <Button variant="outline" size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`${detail} (${MOD_LABEL}↩)`}>
           <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
           <span className="min-w-0 truncate">{m.shell_next({ label: say(m, next.label) })}</span>
         </Button>

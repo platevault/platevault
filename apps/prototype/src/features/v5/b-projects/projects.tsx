@@ -3,9 +3,10 @@
  * rigs, goal progress ("in project" / "captured"), open runs, stage and one
  * Next action (D-W1, D-W35, D-W48). Done Projects stay behind "Show done".
  * Column priority keeps Next in view from 1024 px: subjects and rigs fold
- * into the Project cell's second line, State and the unmet goal line show
- * from 64rem of table, Open runs from 52rem, and long cells truncate with
- * the whole text in their tooltip. Right click opens the row's menu.
+ * into the Project cell's second and third lines, State (only when it
+ * differs between rows) and the unmet goal line show from 64rem of table,
+ * Open runs from 52rem, and long cells truncate with the whole text in
+ * their tooltip. Right click opens the row's menu.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Eye, FolderKanban, Grid2x2Plus, PackageCheck, Play, Plus, Trash2 } from "lucide-react"
@@ -69,6 +70,8 @@ export function ProjectsPage() {
   const shown = rows.filter((r) => showDone || r.project.state === "open")
   const hiddenDone = rows.length - shown.length
 
+  // State is hidden while every shown Project has the same one (all Open until Show done adds Done ones).
+  const stateVaries = new Set(shown.map((r) => projectStatus(r.project))).size > 1
   const columns: Column<Row>[] = [
     {
       id: "name",
@@ -76,20 +79,22 @@ export function ProjectsPage() {
       rowHeader: true,
       sortValue: (r) => r.project.name,
       cell: (r) => {
-        const detail = `${r.subjects.join(", ") || m.projects_no_subjects()} · ${r.rigs.join(", ") || m.equipment_no_rigs()}`
+        const subjects = r.subjects.join(", ") || m.projects_no_subjects()
+        const rigs = r.rigs.join(", ") || m.equipment_no_rigs()
+        // Subjects, then rigs: each its own line that wraps at the column's width, so no name is cut.
+        const line = "block max-w-[12rem] text-xs whitespace-normal text-muted-foreground @min-[52rem]:max-w-[18rem]"
         return (
           <span className="block min-w-0">
             <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="font-medium underline-offset-2 hover:underline">
               {r.project.name}
             </Link>
-            <span className="block max-w-[12rem] truncate text-xs text-muted-foreground @min-[52rem]:max-w-[18rem]" title={detail}>
-              {detail}
-            </span>
+            <span className={line}>{subjects}</span>
+            <span className={line}>{rigs}</span>
           </span>
         )
       },
     },
-    { id: "state", header: m.projects_col_state(), className: "@max-[64rem]:hidden", sortValue: (r) => projectStatus(r.project), cell: (r) => <StatusBadge kind="project" value={projectStatus(r.project)} /> },
+    ...(stateVaries ? [{ id: "state", header: m.projects_col_state(), className: "@max-[64rem]:hidden", sortValue: (r: Row) => projectStatus(r.project), cell: (r: Row) => <StatusBadge kind="project" value={projectStatus(r.project)} /> }] : []),
     {
       id: "goals",
       header: m.projects_col_goals(),

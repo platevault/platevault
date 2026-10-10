@@ -869,16 +869,18 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     },
   ]
   if (offers > 0) calibrateItems.push({ label: msg("domain_gate_master_found"), met: "advisory", detail: msg("domain_gate_masters_offered", { count: offers }) })
+  // A Complete run is a recorded fact (RES-FR-06) that nothing blocks: rows that still need review read
+  // "N unresolved" as advisory, the same words the run header shows beside Complete.
   const calibrate: RunStepState = {
     ...STEP("calibrate"),
-    state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : needReview > 0 ? "blocked" : "done",
+    state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : needReview > 0 ? (complete ? "review" : "blocked") : "done",
     status:
       setup.calibrationPolicy === "off"
         ? msg("run_cal_off")
         : calibration.rows.length === 0
           ? DASH
           : needReview > 0
-            ? msg("domain_status_need_review", { count: needReview })
+            ? msg(complete ? "domain_status_unresolved" : "domain_status_need_review", { count: needReview })
             : msg("run_cal_automatic"),
     items: calibrateItems,
     link: link("calibrate"),

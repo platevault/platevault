@@ -30,7 +30,7 @@ import { fileName, formatNight } from "@/lib/format"
 import { type Messages, m, type MessageRef, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { acceptCalibration, answerMasterOffer, calibrationException, clearCalibration, deferCalibration, setCalibrationPolicy } from "./actions"
-import { type RunContext, readinessByKind, runLock, type StackOffer, stackOffers, tieOf } from "./model"
+import { groupSetupParts, type RunContext, readinessByKind, runLock, type StackOffer, stackOffers, tieOf } from "./model"
 import { OutcomeNotice, RowActions, Sha, useOutcome } from "./parts"
 
 type Act = ReturnType<typeof useOutcome>["act"]
@@ -64,6 +64,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const switchId = useId()
   const [exception, setException] = useState<ExceptionRequest | null>(null)
   const kinds = readinessByKind(plan).filter((k) => k.total > 0)
+  const groupSetup = groupSetupParts(plan.groups.map((g) => g.key))
 
   return (
     <div className="space-y-4">
@@ -95,7 +96,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
               </Pill>
             ))
           )}
-          {plan.needsReview.length > 0 ? <Pill tone="warning">{m.run_cal_to_review({ count: plan.needsReview.length })}</Pill> : null}
+          {plan.needsReview.length > 0 ? <Pill tone="warning">{run.completion === "complete" ? m.domain_status_unresolved({ count: plan.needsReview.length }) : m.run_cal_to_review({ count: plan.needsReview.length })}</Pill> : null}
           {group ? (
             <Pill tone="info" icon={Layers} link={{ to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: group.projectId, groupId: group.id, step: "calibrate" } }} title={m.run_cal_policy_shared()}>
               {group.name}
@@ -113,8 +114,13 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
           level={2}
           flush
           title={
-            <span className="flex items-center gap-1.5">
+            <span className="flex min-w-0 items-center gap-1.5">
               {m.run_cal_matches()} <CountBadge count={plan.rows.length} label={m.run_cal_requirements({ count: plan.rows.length })} />
+              {groupSetup.shared.length > 0 ? (
+                <span className="min-w-0 truncate font-normal" title={groupSetup.shared.join(" · ")}>
+                  {groupSetup.shared.join(" · ")}
+                </span>
+              ) : null}
             </span>
           }
           actions={
@@ -130,7 +136,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
             <p className="px-3 py-3 text-sm text-muted-foreground">{m.run_cal_no_sessions_saved()}</p>
           ) : expanded ? (
             <div id="cal-matches-table">
-              <RequirementTable run={run} rows={plan.rows} lock={lock} onOutcome={outcome.act} onException={setException} />
+              <RequirementTable run={run} rows={plan.rows} groupHeading={(key) => groupSetup.own(key).join(" · ")} lock={lock} onOutcome={outcome.act} onException={setException} />
             </div>
           ) : null}
         </Box>
@@ -173,7 +179,22 @@ function StackPill({ offer }: { offer: StackOffer }) {
   )
 }
 
-function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Run; rows: RequirementRow[]; lock: MessageRef | null; onOutcome: Act; onException: (v: ExceptionRequest) => void }) {
+function RequirementTable({
+  run,
+  rows,
+  groupHeading,
+  lock,
+  onOutcome,
+  onException,
+}: {
+  run: Run
+  rows: RequirementRow[]
+  /** A group's own setup parts; the parts every group shares are in the box title. */
+  groupHeading: (groupKey: string) => string
+  lock: MessageRef | null
+  onOutcome: Act
+  onException: (v: ExceptionRequest) => void
+}) {
   const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
@@ -295,7 +316,7 @@ function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Ru
       columns={columns}
       getRowId={(r) => r.key}
       scroll="none"
-      groups={{ key: (r) => r.groupLabel, label: (key, groupRows) => `${key} · ${m.run_cal_requirements({ count: groupRows.length })}` }}
+      groups={{ key: (r) => r.groupKey, label: (key, groupRows) => `${groupHeading(key)} · ${m.run_cal_requirements({ count: groupRows.length })}` }}
       rowClassName={(r) => (r.drift || r.state === "unresolved" || r.state === "deferred" ? "bg-warning/[0.05]" : undefined)}
       contextMenu={entries}
     />
