@@ -95,6 +95,8 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
     .filter((op) => op.kind === "cleanup" && op.scope.runIds?.includes(run.id))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const lastCleanup = cleanups[0]
+  // A finished Clean up needs no panel: its outcome is the one-line empty row below.
+  const cleanupFinished = lastCleanup?.status === "succeeded"
   const chosenPaths = confirm ?? selected
   const chosen = review.entries.filter((e) => chosenPaths.includes(e.path))
   const bytes = chosen.reduce((n, e) => n + e.sizeBytes, 0)
@@ -191,31 +193,38 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
             ))}
           </div>
         ) : null}
-        {lastCleanup ? (
+        {lastCleanup && !cleanupFinished ? (
           <div className="border-b border-border px-3 py-2">
             <OperationPanel operationId={lastCleanup.id} />
           </div>
         ) : null}
-        <DataTable
-          label={m.run_prepared_entries_label({ name: run.name })}
-          rows={review.entries}
-          columns={columns}
-          getRowId={(e) => e.path}
-          scroll="none"
-          groups={{ key: (e) => e.prep.folderPath, label: (folder, rows) => `${fileName(folder)}/ · ${m.run_entries_count({ count: rows.length })}` }}
-          selection={{ selected, onChange: setSelected, rowLabel: (e) => fileName(e.path), isSelectable: () => !run.trashedAt }}
-          contextMenu={entries}
-          empty={
-            <p className="flex flex-wrap items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-              {review.directSource.length > 0 && folders.length === 0 ? m.run_no_prepared_entries() : lastCleanup ? m.run_all_in_os_trash() : m.run_nothing_prepared()}
-              {lastCleanup || review.directSource.length > 0 ? null : (
+        {review.entries.length === 0 ? (
+          <p className="flex flex-wrap items-center gap-x-1.5 px-3 py-2 text-sm text-muted-foreground tabular-nums">
+            {review.directSource.length > 0 && folders.length === 0 ? (
+              m.run_no_prepared_entries()
+            ) : lastCleanup ? (
+              <span>{[m.run_all_in_os_trash(), ...(cleanupFinished ? [m.run_entries_count({ count: lastCleanup.progress.done }), formatDateTime(lastCleanup.settledAt ?? lastCleanup.updatedAt)] : [])].join(" · ")}</span>
+            ) : (
+              <>
+                <span>{m.run_nothing_prepared()}</span>
                 <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: "prepare" }} />}>
                   {m.run_open_prepare()}
                 </Button>
-              )}
-            </p>
-          }
-        />
+              </>
+            )}
+          </p>
+        ) : (
+          <DataTable
+            label={m.run_prepared_entries_label({ name: run.name })}
+            rows={review.entries}
+            columns={columns}
+            getRowId={(e) => e.path}
+            scroll="none"
+            groups={{ key: (e) => e.prep.folderPath, label: (folder, rows) => `${fileName(folder)}/ · ${m.run_entries_count({ count: rows.length })}` }}
+            selection={{ selected, onChange: setSelected, rowLabel: (e) => fileName(e.path), isSelectable: () => !run.trashedAt }}
+            contextMenu={entries}
+          />
+        )}
       </Box>
       </div>
 

@@ -8,7 +8,7 @@
  * duplicate copies go to the Trash from a Project's Wrap up (D-W74).
  */
 import { Link } from "@tanstack/react-router"
-import { ArrowRightLeft, Copy, HardDrive } from "lucide-react"
+import { Copy, HardDrive } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/app/run-ui"
@@ -34,6 +34,9 @@ import { useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
 
 const TRANSFER_KIND: Partial<Record<Operation["kind"], () => string>> = { import: m.shell_import, archive: m.status_role_archive, trash: m.session_os_trash }
+
+/** An empty list is one hairline row: the state and its one action. */
+const EMPTY_ROW = "flex min-h-9 flex-wrap items-center gap-2 rounded-md border border-border px-3 py-1 text-sm text-muted-foreground"
 
 export function StoragePage() {
   const m = useMessages()
@@ -95,7 +98,10 @@ export function StoragePage() {
       sortValue: (l) => (disk.volumes[l.volumeId]?.mounted ? freeBytes(disk, l.volumeId) : null),
       cell: (l) => (disk.volumes[l.volumeId]?.mounted ? formatBytes(freeBytes(disk, l.volumeId)) : "–"),
     },
-    { id: "trash", header: m.session_os_trash(), cell: (l) => (disk.volumes[l.volumeId]?.trash === "unsupported" ? <StatusBadge kind="trash" value="unsupported" label={m.storage_unsupported()} /> : "–") },
+    // Shown only when it tells the rows apart: a column with one value in every row is noise.
+    ...(new Set(locations.map((l) => disk.volumes[l.volumeId]?.trash === "unsupported")).size > 1
+      ? [{ id: "trash", header: m.session_os_trash(), cell: (l: Location) => (disk.volumes[l.volumeId]?.trash === "unsupported" ? <StatusBadge kind="trash" value="unsupported" label={m.storage_unsupported()} /> : "–") }]
+      : []),
     {
       id: "action",
       header: m.storage_action(),
@@ -195,7 +201,10 @@ export function StoragePage() {
         <Section id="sto-duplicates" title={m.storage_duplicates()} actions={scan ? scanButton : null}>
           {refused ? <Refusal {...refused} /> : null}
           {!scan ? (
-            <EmptyState icon={Copy} title={m.storage_not_scanned()} action={scanButton} />
+            <p className={EMPTY_ROW}>
+              {m.storage_not_scanned()}
+              {scanButton}
+            </p>
           ) : scanning ? (
             <OperationPanel operationId={scan.operation.id} />
           ) : scan.groups === null ? (
@@ -228,15 +237,16 @@ export function StoragePage() {
             </span>
           }
         >
-          <DataTable
-            label={m.storage_transfers()}
-            rows={transfers}
-            columns={transferColumns}
-            getRowId={(op) => op.id}
-            scroll="none"
-            contextMenu={transferMenu}
-            empty={<EmptyState icon={ArrowRightLeft} title={m.storage_no_transfers()} action={<Button render={<Link to="/import" />}>{m.shell_import()}</Button>} />}
-          />
+          {transfers.length === 0 ? (
+            <p className={EMPTY_ROW}>
+              {m.storage_no_transfers()}
+              <Button size="sm" variant="outline" render={<Link to="/import" />}>
+                {m.shell_import()}
+              </Button>
+            </p>
+          ) : (
+            <DataTable label={m.storage_transfers()} rows={transfers} columns={transferColumns} getRowId={(op) => op.id} scroll="none" contextMenu={transferMenu} />
+          )}
         </Section>
       </PageBody>
     </div>

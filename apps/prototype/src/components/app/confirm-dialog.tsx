@@ -4,8 +4,8 @@
  * what changes and what stays unchanged (FR-006, VSEL-FR-11, STO-FR-04).
  *
  * Harness v4: Direction B's preview-then-confirm. The scope reads as a
- * preview receipt, changes beside what stays, and says that nothing is
- * written until the confirm button, which repeats the verb and object.
+ * preview receipt, changes beside what stays; the confirm button repeats the
+ * verb and object.
  */
 import { ArrowRight, Lock } from "lucide-react"
 import { type ReactElement, type ReactNode, useRef, useState } from "react"
@@ -113,9 +113,6 @@ export function ConfirmDialog({
           <AlertDialogDescription>{shown.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-2 text-sm">
-          <p data-chrome className="text-[0.75rem] text-muted-foreground">
-            {m.confirm_preview()}
-          </p>
           <div className="divide-y divide-separator overflow-hidden rounded-[0.3125rem] border border-separator bg-background">
             <section aria-label={m.confirm_changes()} className="px-3 py-2">
               <h3 className="mb-1 text-xs font-medium text-muted-foreground">{m.confirm_changes()}</h3>

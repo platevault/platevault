@@ -417,10 +417,12 @@ export function LocationsPage() {
           busyIndex ? (
             <OperationPanel operationId={latestIndex.id} />
           ) : (
-            <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground tabular-nums">
-              {m.location_last_indexing()} <StatusBadge kind="operation" value={latestIndex.status} /> {latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : ""}
-              {latestIndex.summary ? ` · ${say(m, latestIndex.summary)}` : ""} ·{" "}
-              <Link to="/activity" className="text-link underline-offset-4 hover:underline">
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground tabular-nums">
+              <span>{m.location_last_indexing()}</span>
+              <StatusBadge kind="operation" value={latestIndex.status} />
+              {/* One unit, so a wrap never leaves a separator at a line end. */}
+              <span className="whitespace-nowrap">{[latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : "", latestIndex.summary ? say(m, latestIndex.summary) : ""].filter(Boolean).join(" · ")}</span>
+              <Link to="/activity" className="ml-auto text-link underline-offset-4 hover:underline">
                 {m.nav_activity()}
               </Link>
             </p>

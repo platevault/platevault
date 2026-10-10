@@ -302,7 +302,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
         mono
         value={text}
         onChange={setText}
-        description={m.settings_default_named({ name: DEFAULT_NAMING[type.type] })}
+        description={text !== DEFAULT_NAMING[type.type] ? m.settings_default_named({ name: DEFAULT_NAMING[type.type] }) : undefined}
         error={errors.length > 0 ? m.naming_not_saved({ errors: say(m, joinRefs(errors, ", ")) }) : undefined}
       />
       {failure ? <ActionError message={failure.message} onRetry={failure.retry} /> : null}

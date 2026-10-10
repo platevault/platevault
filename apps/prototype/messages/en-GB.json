@@ -449,7 +449,6 @@
   "folder_picker_denied_body": "PlateVault cannot list this folder. You can still choose it; indexing reports it as unreadable until access is restored.",
   "folder_picker_empty": "No folders inside {name}. Choose this folder, or go up one level.",
   "folder_picker_list": "Folders in {name}",
-  "confirm_preview": "Preview: nothing is written until you confirm.",
   "confirm_changes": "This will",
   "confirm_unchanged": "Unchanged",
   "operation_progress_label": "{title} progress",
@@ -1987,21 +1986,6 @@
       "match": {
         "countPlural=one": "{count} item kept with a reason",
         "countPlural=*": "{count} items kept with a reason"
-      }
-    }
-  ],
-  "wrapup_items_kept": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} item kept",
-        "countPlural=*": "{count} items kept"
       }
     }
   ],
@@ -4496,7 +4480,7 @@
   "setup_demo_confirm_title": "Load the demo library?",
   "setup_demo_confirm_description": "Prototype only. The demo replaces everything in this browser's prototype data.",
   "setup_demo_change_replace": "Replace locations, sessions, Projects and Views with the demo library",
-  "setup_demo_change_skip": "Skip setup and open Targets",
+  "setup_demo_change_skip": "Skip setup and open Home",
   "setup_demo_unchanged_appearance": "Theme and density",
   "setup_demo_unchanged_files": "No real files exist; nothing on your computer is touched",
   "setup_locations_title": "Choose locations",
@@ -4612,7 +4596,6 @@
   "apps_corrected_values": "Corrected values",
   "apps_corrected_through": "Through configuration",
   "apps_corrected_not_through": "Not through configuration",
-  "apps_unsupported_list": "Not supported: {list}. Renaming files never overrides header values.",
   "apps_rename_note": "Renaming files never overrides header values.",
   "apps_not_located": "No application located",
   "apps_locate_any": "Locate an application",
@@ -4626,11 +4609,7 @@
   "apps_launch_arguments": "Launch arguments",
   "apps_launch_placeholder": "e.g. --input \"{token}\"",
   "apps_save_arguments": "Save arguments",
-  "apps_edit_to_save": "Edit the arguments to save them.",
-  "apps_description": "Profiles PlateVault prepares inputs for. Capability claims come from recorded evidence only; PlateVault never runs processing.",
   "apps_back_to_task": "Back to the task",
-  "apps_fixture_title": "Prototype: fixture capability evidence",
-  "apps_fixture_body": "Evidence below is fixture data. Real capability probes for PixInsight/WBPP, Siril and SETI Astro Suite Pro are not part of this prototype.",
   "apps_controls_title": "applications on this computer",
   "apps_present": "present",
   "apps_moved_away": "moved away",
@@ -7288,5 +7267,11 @@
   "domain_device_evidence_ekos": "Ekos Light/<filter> folders",
   "domain_device_evidence_nina": "N.I.N.A. LIGHT folders",
   "domain_template_osc_broadband": "OSC broadband",
-  "domain_template_osc_dualband": "OSC dual-band"
+  "domain_template_osc_dualband": "OSC dual-band",
+  "wrapup_cant_trash": "Can't trash {n}",
+  "wrapup_reason_no_write": "no write permission",
+  "wrapup_reason_no_volume": "outside known volumes",
+  "wrapup_reason_no_trash": "volume has no OS Trash",
+  "wrapup_reason_not_found": "missing at recorded path",
+  "wrapup_reason_offline": "volume offline"
 }

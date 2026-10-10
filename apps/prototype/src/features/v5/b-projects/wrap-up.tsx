@@ -40,7 +40,7 @@ import { type CommitResult, type PrototypeState, store, updateSlice, useStore } 
 import { startCleanup } from "@/features/v5/c-runs/actions"
 import { cleanupReview } from "@/features/v5/c-runs/model"
 import { startArchiveTransfer } from "./actions"
-import { archivePlan, type OfferKind, sessionLabel, type TrashOffer, trashOffers } from "./model"
+import { archivePlan, type OfferKind, type OfferRefusal, sessionLabel, type TrashOffer, trashOffers } from "./model"
 import { CommitOutcome, useCommitError } from "./parts"
 import { rememberApproval } from "./trash"
 
@@ -49,6 +49,20 @@ const OFFER_NAME: Record<OfferKind, MessageRef> = { "rejected-frames": msg("wrap
 
 function offerLabel(m: Messages, kind: OfferKind): string {
   return say(m, OFFER_NAME[kind])
+}
+
+/** The terse reason an offer's items stay put ("no write permission"); mixed reasons read as a blocker count. */
+function trashRefusalReason(m: Messages, refusals: OfferRefusal[]): string {
+  const keys = new Set(refusals.map((r) => ("key" in r.reason ? r.reason.key : null)))
+  if (keys.size === 1) {
+    const [key] = keys
+    if (key === "domain_trash_read_only") return m.wrapup_reason_no_write()
+    if (key === "domain_trash_no_volume") return m.wrapup_reason_no_volume()
+    if (key === "domain_trash_unsupported") return m.wrapup_reason_no_trash()
+    if (key === "domain_trash_not_found") return m.wrapup_reason_not_found()
+    if (key === "run_cleanup_volume_offline") return m.wrapup_reason_offline()
+  }
+  return m.refusal_blockers({ count: keys.size })
 }
 
 type StepPill = { label: string; tone: Tone }
@@ -371,7 +385,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
                 ) : null}
               </div>
               {offer.refusals.length > 0 && !operationId && !isSkipped ? (
-                <Refusal action={m.wrapup_items_kept({ count: offer.refusals.length })} reason={m.wrapup_refused()} blockers={offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}` }))} />
+                <Refusal action={m.wrapup_cant_trash({ n: offer.refusals.length })} reason={trashRefusalReason(m, offer.refusals)} blockers={offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}` }))} />
               ) : null}
             </li>
           )

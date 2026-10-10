@@ -449,7 +449,6 @@
   "folder_picker_denied_body": "O PlateVault não consegue listar esta pasta. Você ainda pode escolhê-la; a indexação a relata como ilegível até que o acesso seja restaurado.",
   "folder_picker_empty": "Nenhuma pasta dentro de {name}. Escolha esta pasta ou suba um nível.",
   "folder_picker_list": "Pastas em {name}",
-  "confirm_preview": "Prévia: nada é gravado até você confirmar.",
   "confirm_changes": "Isto vai",
   "confirm_unchanged": "Inalterado",
   "operation_progress_label": "Progresso de {title}",
@@ -2043,21 +2042,6 @@
       "match": {
         "countPlural=one": "{count} item mantido com um motivo",
         "countPlural=*": "{count} itens mantidos com um motivo"
-      }
-    }
-  ],
-  "wrapup_items_kept": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} item mantido",
-        "countPlural=*": "{count} itens mantidos"
       }
     }
   ],
@@ -4552,7 +4536,7 @@
   "setup_demo_confirm_title": "Carregar a biblioteca de demonstração?",
   "setup_demo_confirm_description": "Só no protótipo. A demonstração substitui todos os dados do protótipo neste navegador.",
   "setup_demo_change_replace": "Substituir locais, sessões, Projetos e Views pela biblioteca de demonstração",
-  "setup_demo_change_skip": "Pular a configuração e abrir Alvos",
+  "setup_demo_change_skip": "Pular a configuração e abrir o Início",
   "setup_demo_unchanged_appearance": "Tema e densidade",
   "setup_demo_unchanged_files": "Não há arquivos reais; nada no seu computador é alterado",
   "setup_locations_title": "Escolher locais",
@@ -4668,7 +4652,6 @@
   "apps_corrected_values": "Valores corrigidos",
   "apps_corrected_through": "Pela configuração",
   "apps_corrected_not_through": "Não pela configuração",
-  "apps_unsupported_list": "Sem suporte: {list}. Renomear arquivos nunca substitui valores do cabeçalho.",
   "apps_rename_note": "Renomear arquivos nunca substitui valores do cabeçalho.",
   "apps_not_located": "Nenhum aplicativo localizado",
   "apps_locate_any": "Localizar um aplicativo",
@@ -4682,11 +4665,7 @@
   "apps_launch_arguments": "Argumentos de abertura",
   "apps_launch_placeholder": "ex.: --input \"{token}\"",
   "apps_save_arguments": "Salvar argumentos",
-  "apps_edit_to_save": "Edite os argumentos para salvá-los.",
-  "apps_description": "Perfis para os quais o PlateVault prepara entradas. As capacidades vêm só de evidências registradas; o PlateVault nunca executa processamento.",
   "apps_back_to_task": "Voltar à tarefa",
-  "apps_fixture_title": "Protótipo: evidência de capacidade simulada",
-  "apps_fixture_body": "A evidência abaixo é simulada. Testes reais de capacidade do PixInsight/WBPP, Siril e SETI Astro Suite Pro não fazem parte deste protótipo.",
   "apps_controls_title": "aplicativos neste computador",
   "apps_present": "presente",
   "apps_moved_away": "removido",
@@ -7344,5 +7323,11 @@
   "domain_device_evidence_ekos": "Pastas Light/<filtro> do Ekos",
   "domain_device_evidence_nina": "Pastas LIGHT do N.I.N.A.",
   "domain_template_osc_broadband": "OSC banda larga",
-  "domain_template_osc_dualband": "OSC banda dupla"
+  "domain_template_osc_dualband": "OSC banda dupla",
+  "wrapup_cant_trash": "Não é possível descartar {n}",
+  "wrapup_reason_no_write": "sem permissão de gravação",
+  "wrapup_reason_no_volume": "fora dos volumes conhecidos",
+  "wrapup_reason_no_trash": "volume sem Lixeira do sistema",
+  "wrapup_reason_not_found": "ausente no caminho registrado",
+  "wrapup_reason_offline": "volume offline"
 }
