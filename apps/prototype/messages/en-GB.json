@@ -7277,5 +7277,6 @@
   "wrapup_reason_no_volume": "outside known volumes",
   "wrapup_reason_no_trash": "volume has no OS Trash",
   "wrapup_reason_not_found": "missing at recorded path",
-  "wrapup_reason_offline": "volume offline"
+  "wrapup_reason_offline": "volume offline",
+  "tips_note_named": "Note {number}: {label}"
 }

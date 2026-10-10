@@ -555,12 +555,13 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const withKey = (label: string, shortcut: string) => m.shell_with_shortcut({ label, shortcut })
 
   const plateCaption = current ? (
-    <div className="flex min-w-0 items-center gap-x-3 px-1 text-xs">
+    // Wraps instead of scrolling sideways on a narrow window (WCAG 1.4.10): the controls drop below the name, then wrap.
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs">
       <span className="min-w-0 truncate font-medium" title={current.asset.copies[0]?.path}>
         {names.get(current.asset.id)}
       </span>
       <span className="shrink-0 text-muted-foreground tabular-nums">{m.review_frame_position({ index: index + 1, total: ordered.length })}</span>
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
         {field?.cfa ? (
           <Pill tone="muted" title={m.review_cfa_title()}>
             {m.review_cfa({ cfa: field.cfa })}
@@ -747,7 +748,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       </p>
       {/* Toolbar: the list's filter, panel, view and height; selection, compare, display. One row from 784 px: labels fold to icons. */}
       <div data-chrome className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator bg-[color-mix(in_oklch,var(--chrome)_45%,var(--background))] px-3 py-1">
-        <ToggleGroup value={[filter]} onValueChange={(v) => v[0] && setFilter(v[0] as QualityFilter)} variant="outline" size="sm" spacing={0} aria-label={m.review_quality_filter()}>
+        <ToggleGroup value={[filter]} onValueChange={(v) => v[0] && setFilter(v[0] as QualityFilter)} variant="outline" size="sm" spacing={0} aria-label={m.review_quality_filter()} className="flex-wrap">
           {FILTERS.map((f) => (
             <ToggleGroupItem key={f.id} value={f.id} className="h-6 gap-1 px-2 text-xs" title={`⌥${f.key}`}>
               {f.label}
@@ -997,7 +998,8 @@ export function FrameReview({ context }: { context: ReviewContext }) {
           ) : null}
         </span>
         <MeasureBar scope={scope} frames={frames} home={statusLineRef} />
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        {/* Sized by its pills, so on a narrow window it takes a line of its own rather than spilling sideways. */}
+        <span className="flex min-w-0 grow flex-wrap items-center gap-1.5">
           {pills.map((p) => (
             <span key={p.label} className="flex shrink-0 items-center gap-0.5">
               <Pill tone="muted">{p.label}</Pill>

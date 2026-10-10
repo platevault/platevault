@@ -287,7 +287,8 @@ export function FrameTable({
                     {column.header}
                     {active ? sort.direction === "asc" ? <ArrowUp aria-hidden="true" className="size-3" /> : <ArrowDown aria-hidden="true" className="size-3" /> : <ArrowUpDown aria-hidden="true" className="size-3 opacity-50" />}
                   </button>
-                  {column.note ? <NoteMarker n={column.note} label={m.review_column_source({ column: column.header })} rows={columnNote(m, column.note)} className="ml-0.5" /> : null}
+                  {/* Centred, not raised: the header's top edge would clip the raised glyph's 24 px hit area. */}
+                  {column.note ? <NoteMarker n={column.note} label={m.review_column_source({ column: column.header })} rows={columnNote(m, column.note)} className="ml-0.5 align-middle" /> : null}
                 </th>
               )
             })}
@@ -317,7 +318,8 @@ export function FrameTable({
                     onActivate(id, modeOf(event))
                   }}
                   className={cn(
-                    "h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] hover:bg-foreground/[0.05]",
+                    // The stripe skips selected rows, so the selected tint always shows.
+                    "h-(--row-h) border-b border-border/50 last:border-0 even:not-data-selected:bg-foreground/[0.022] hover:bg-foreground/[0.05]",
                     "data-selected:bg-primary/14 data-selected:hover:bg-primary/20",
                     "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
                   )}

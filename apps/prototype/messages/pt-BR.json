@@ -7333,5 +7333,6 @@
   "wrapup_reason_no_volume": "fora dos volumes conhecidos",
   "wrapup_reason_no_trash": "volume sem Lixeira do sistema",
   "wrapup_reason_not_found": "ausente no caminho registrado",
-  "wrapup_reason_offline": "volume offline"
+  "wrapup_reason_offline": "volume offline",
+  "tips_note_named": "Nota {number}: {label}"
 }
