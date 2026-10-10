@@ -187,3 +187,43 @@ The user reviewed `186686b8`. This file is the work order for round 2. Its propo
   - **Notifications inline:** the right slot shows up to three unread notifications, newest first, with dividers between them; when short of room, the oldest goes first. The history trigger has an unread count, and opening it marks them read.
   - **No issues:** a muted "No issues" with a check, rather than empty space.
   - **Check:** at 1024, 1440 and 1920 px with the demo library, nothing wraps, clips or overlaps. Below 768 px, unchanged.
+
+## Round 5 (user, 2026-10-10)
+
+The user reviewed `d6c9f1b2`. This section is the work order for round 5. Decisions marked (user) were chosen by the user; the rest are the lead's answers to the user's questions.
+
+### Shell, status bar, Home
+- **P-SB3: the status bar shows severity counters, not issue pills (user; supersedes P-SB2's pills and inline notices).** The user: "showing bubbles in the bottom bar is not great, plus I don't think it makes sense to show all of them there. Maybe just alert/warn/notify with popout."
+  - Left: locations online, then the selection count when a list has a selection.
+  - Middle: running work as plain text with a mini progress bar and Cancel on hover/focus; "Idle" when nothing runs.
+  - Right: three plain-text counters with their glyph, ⛔ errors, ⚠ warnings and ℹ info, shown only when non-zero. Each opens a popout listing those issues (IssueRow, with its action). Then the bell with the unread count, opening the notification history. No pills, no inline notifications, no named issues.
+  - With no issues: a muted ✓ and nothing else.
+- **Home has no issues strip.** The toolbar Issues button and the status-bar counters already carry them.
+- **Home rows open the Project page.** A Project row on Home links straight to `/projects/$projectId`; its row menu keeps the other actions.
+- **Navigation:** Storage and Plan leave the source list (see below). `/plan` and `/storage` redirect to their new homes.
+
+### Projects and runs
+- **Runs read as one model.** Every run shows the same step strip and status vocabulary. A mosaic Run group shows its overall status (the worst across its panels, plus "N of M panels at <step>") and, per panel, exactly the status a single run shows. The Project page's Runs section lists single runs and groups in one table: name, step, status, updated.
+- **Remove an unused rig.** A Project's rig row has Remove when no run uses it; otherwise the terse refusal "Can't remove rig · used by N runs ▸".
+
+### Targets and planning
+- **P-PLAN2: Targets and Plan merge into one Targets page (user).**
+  - A date picker in the page header (default tonight) sets the night that suitability, altitude and windows use.
+  - Views: All (catalogues and My targets, filters, presets) and Planned (the night's schedule in order, with windows).
+  - A compact altitude column (a sparkline of altitude across the night, with the dark window shaded and the target's best window marked; a tooltip states max altitude and time) appears in both views. The wide altitude timeline goes.
+  - Add to plan / Remove from plan remain row actions.
+- **Best tonight shows nothing:** a bug. The preset must list targets with a usable window on the chosen night for the selected rig, best first.
+- **Click a result to act.** In search results (adding a Target to a Project, the Targets search, the New Project subject search) and in general, clicking a result row performs its primary action. Explicit Add buttons on result rows go; the row's menu keeps the other actions.
+
+### Sessions
+- **OBJECT is a label, never evidence (HIGH-LEVEL-DESIGN.md glossary: "OBJECT: the header label; a filter, never identity or coordinates").** Every capture application writes OBJECT its own way, so target association uses pointing (RA/Dec within the target's footprint) and the user's confirmation only. Session detail shows OBJECT as a label. It is never listed as Target evidence, never preselects, and never counts towards confirmation.
+
+### Calibration
+- **Masters have details and can be dismissed.** A master row opens a details panel: kind, camera, optical train, filter, exposure, gain/offset, temperature, binning, frame count, created, source (stacked from which raw session, imported or indexed), storage path, SHA-256, and Used by. Actions: Dismiss (reversible, P-CAL2) and Restore.
+- **Used by is a popover.** A count ("Used by 6 runs") opening a scrollable list; it never expands the row.
+
+### Storage and duplicates
+- **P-STO2: the Storage tab goes (user).** Locations and disk use per location live in Settings › Locations. Transfers are Activity entries.
+- **Duplicates are scanned automatically** after each index and import, as a background operation. A non-zero result raises a ⚠ issue ("N duplicate copies · 2.1 GB"), which opens the Duplicates review.
+- **Duplicates review has clean-up:** groups of byte-identical copies, each with the copy to keep preselected (a library location over a capture card, then the oldest), Keep this copy and Move the others to the OS Trash, per group and for all. Nothing is deleted permanently.
+
