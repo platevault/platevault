@@ -786,7 +786,6 @@
   "import_none_connected": "None connected",
   "import_how_recognised": "How {name} was recognised",
   "import_layout": "Layout",
-  "import_from_named": "from {name}",
   "import_saved_sources": "Saved sources",
   "import_none_saved": "None saved",
   "import_last_import": "Last import {date}",
@@ -7277,5 +7276,6 @@
         "countPlural=*": "{count} info"
       }
     }
-  ]
+  ],
+  "session_header_label": "Label"
 }

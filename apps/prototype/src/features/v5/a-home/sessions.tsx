@@ -3,11 +3,11 @@
  * calibration frames never show here: Import and indexing route them into a
  * calibration process (P-CAL3, the Calibration library). Filters All, Needs
  * a Target, Not in any Project and Trashed, with counts (D-W25, D-W43;
- * Trashed sessions show only under Trashed); the search is clearable. Row
- * actions: Choose Target, Review (the session detail's review region,
- * `?view=review`) and Add to Project (also adds the rig, D-W59); right click
- * opens the row's menu. After an Import, `?import=<operation>` highlights the
- * sessions it filled.
+ * Trashed sessions show only under Trashed); the search is clearable. A click
+ * on a row opens the session; row actions: Review (the session detail's
+ * review region, `?view=review`) and Add to Project (also adds the rig,
+ * D-W59); right click opens the row's menu (Choose Target among them). After
+ * an Import, `?import=<operation>` highlights the sessions it filled.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Download, Eye, Layers, ListChecks, Target } from "lucide-react"
@@ -108,11 +108,6 @@ export function SessionsPage() {
         ) : (
           <span className="-my-1 flex items-center gap-2 whitespace-nowrap" title={r.session.objectLabel ? m.session_object({ name: r.session.objectLabel }) : m.session_no_object()}>
             <StatusBadge kind="association" value={r.session.target.status === "needs-review" ? "needs-review" : "unresolved"} label={m.sessions_filter_needs_target()} />
-            {r.trashed ? null : (
-              <Button size="xs" variant="outline" render={<Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} hash="target" />}>
-                {m.verb_choose()}
-              </Button>
-            )}
           </span>
         ),
     },
@@ -241,6 +236,7 @@ export function SessionsPage() {
           getRowId={(r) => r.session.id}
           stickyFirstColumn
           contextMenu={menu}
+          onRowClick={(r) => open(r)}
           initialSort={imported.size > 0 ? undefined : { columnId: "session", direction: "desc" }}
           rowClassName={(r) => (imported.has(r.session.id) ? "bg-link/[0.07]" : undefined)}
           empty={

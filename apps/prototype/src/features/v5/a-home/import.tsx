@@ -19,7 +19,7 @@
  */
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Check, ChevronRight, Download, FolderOpen, FolderSearch, Usb } from "lucide-react"
-import { type ReactNode, useEffect, useId, useState } from "react"
+import { type MouseEvent, type ReactNode, useEffect, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { closeSheet, openPanel, openSheet, useShellUi } from "@/app/ui-state"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
@@ -96,6 +96,14 @@ function defaultSource(state: PrototypeState): ImportSourceChoice | null {
 
 function selectSource(source: ImportSourceChoice, newOnly = true) {
   setDraft({ source, newOnly, typed: {} })
+}
+
+/** Click to act: a click anywhere on a source row selects it, except on the row's own controls (its note marker, its name button). */
+function rowPick(action: () => void) {
+  return (event: MouseEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest("a[href], button, input, [role=button]") || !event.currentTarget.contains(event.target as Node)) return
+    action()
+  }
 }
 
 export function ImportSheet() {
@@ -315,11 +323,18 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                     key={d.volume.id}
                     {...menuKey(`device:${d.volume.id}`)}
                     aria-current={selected || undefined}
-                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8"
+                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8 hover:bg-foreground/[0.04]"
                     data-device={d.volume.id}
+                    onClick={d.connected ? rowPick(() => selectSource(choiceAt(state, d.volume.mountPath))) : undefined}
                   >
                     <Usb aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className={d.connected ? "font-medium" : "font-medium text-muted-foreground"}>{d.volume.name}</span>
+                    {d.connected ? (
+                      <button type="button" className="rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => selectSource(choiceAt(state, d.volume.mountPath))} data-device-import>
+                        {d.volume.name}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-muted-foreground">{d.volume.name}</span>
+                    )}
                     {d.layout ? (
                       <span className="inline-flex items-center gap-0.5" data-device-layout={d.layout.layout}>
                         <Pill tone="info">{d.layout.label}</Pill>
@@ -336,14 +351,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                         <Pill tone="muted">{m.import_not_connected()}</Pill>
                       )}
                     </span>
-                    {selected ? (
-                      <SelectedPill />
-                    ) : (
-                      <Button size="xs" variant="outline" disabled={!d.connected} onClick={() => selectSource(choiceAt(state, d.volume.mountPath))} data-device-import>
-                        {m.shell_import()}
-                        <span className="sr-only"> {m.import_from_named({ name: d.volume.name })}</span>
-                      </Button>
-                    )}
+                    {selected ? <SelectedPill /> : null}
                   </li>
                 )
               })}
@@ -361,21 +369,25 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                 const connected = mounted(src.path)
                 const fresh = connected ? freshFrameCount(state, src.path) : 0
                 return (
-                  <li key={src.id} {...menuKey(`saved:${src.id}`)} aria-current={selected || undefined} className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8">
+                  <li
+                    key={src.id}
+                    {...menuKey(`saved:${src.id}`)}
+                    aria-current={selected || undefined}
+                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8 hover:bg-foreground/[0.04]"
+                    onClick={rowPick(() => selectSource({ kind: "saved", id: src.id }, true))}
+                  >
                     <FolderOpen aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="font-medium" title={src.lastImportedAt ? m.import_last_import({ date: formatDateTime(src.lastImportedAt) }) : m.import_never_imported()}>
+                    <button
+                      type="button"
+                      className="rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title={src.lastImportedAt ? m.import_last_import({ date: formatDateTime(src.lastImportedAt) }) : m.import_never_imported()}
+                      onClick={() => selectSource({ kind: "saved", id: src.id }, true)}
+                    >
                       {src.name}
-                    </span>
+                    </button>
                     <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{src.path}</span>
                     <span className="ml-auto">{connected ? <Pill tone={fresh > 0 ? "info" : "muted"}>{m.import_new_count({ count: fresh, frames: formatCount(fresh) })}</Pill> : <Pill tone="muted">{m.import_not_connected()}</Pill>}</span>
-                    {selected ? (
-                      <SelectedPill />
-                    ) : (
-                      <Button size="xs" variant="outline" onClick={() => selectSource({ kind: "saved", id: src.id }, true)}>
-                        {m.import_new()}
-                        <span className="sr-only"> {m.import_from_named({ name: src.name })}</span>
-                      </Button>
-                    )}
+                    {selected ? <SelectedPill /> : null}
                   </li>
                 )
               })}

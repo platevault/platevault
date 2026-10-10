@@ -800,7 +800,6 @@
   "import_none_connected": "Nenhum conectado",
   "import_how_recognised": "Como {name} foi reconhecido",
   "import_layout": "Layout",
-  "import_from_named": "de {name}",
   "import_saved_sources": "Origens salvas",
   "import_none_saved": "Nenhuma salva",
   "import_last_import": "Última importação {date}",
@@ -7333,5 +7332,6 @@
         "countPlural=*": "{count} informativos"
       }
     }
-  ]
+  ],
+  "session_header_label": "Rótulo"
 }
