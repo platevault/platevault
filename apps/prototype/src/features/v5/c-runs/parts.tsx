@@ -58,7 +58,7 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
                 )}
               >
                 <StepGlyph state={step.state} />
-                <span className="shrink-0 font-medium">{name}</span>
+                <span className="min-w-0 truncate font-medium">{name}</span>
                 <span className="sr-only">
                   : {gate}
                   {status ? `, ${status}` : ""}
