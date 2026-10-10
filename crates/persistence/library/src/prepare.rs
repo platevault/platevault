@@ -13,9 +13,9 @@
 
 use platevault_model::{
     CorrectedField, EntryEvidence, EntryState, GroupPreparation, InputMode, ItemReason,
-    LibraryError, LinkKind, NativePath, PanelOutcome, PanelResult, PreparationRevision,
+    LibraryError, LinkKind, NativePath, PanelOutcome, PanelResult, PanelRetry, PreparationRevision,
     PreparationState, PreparedEntry, PreparedEntryKind, PreparedInput, Profile, ProfileInput,
-    Revision, RunCompletion, SourceBasis, View, ViewGroup, WrittenCopy,
+    Revision, SourceBasis, View, ViewGroup, WrittenCopy,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -809,31 +809,20 @@ impl Catalog {
             let mut skipped = Vec::new();
             for panel in &record.panels {
                 let revision = &panel.record.revision;
-                if !matches!(revision.state, PreparationState::Partial | PreparationState::Paused) {
-                    continue;
-                }
                 let view = load_view(conn, revision.view_id).await?;
-                let skip = if view.trashed_at.is_some() {
-                    Some(format!(
-                        "Panel {} is in the Project's Trash; Retry skips it",
-                        panel.number
-                    ))
-                } else if view.completion == RunCompletion::Complete {
-                    Some(format!("Panel {} is Complete; Retry skips it", panel.number))
-                } else {
-                    None
-                };
-                if let Some(reason) = skip {
-                    skipped.push(PanelOutcome {
+                match GroupPreparation::panel_retry(panel.number, revision.state, &view) {
+                    PanelRetry::Nothing => {}
+                    PanelRetry::Skipped(reason) => skipped.push(PanelOutcome {
                         panel_id: panel.panel_id,
                         number: panel.number,
                         view_id: view.id,
                         result: PanelResult::Refused { reason },
-                    });
-                    continue;
+                    }),
+                    PanelRetry::Resumes => {
+                        resume_revision(conn, revision).await?;
+                        resumed += 1;
+                    }
                 }
-                resume_revision(conn, revision).await?;
-                resumed += 1;
             }
             if resumed == 0 {
                 let mut message = format!(

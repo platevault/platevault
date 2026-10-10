@@ -672,6 +672,8 @@ async fn group_retry_skips_trashed_and_complete_panel_runs() {
     refused(&error, "no Partial or Paused panel run to retry");
     refused(&error, "Panel 2 is in the Project's Trash");
     refused(&error, "Panel 3 is Complete");
+    let outcome = world.library.group_preparation_outcome(id).await.unwrap();
+    assert!(!outcome.offers.contains(&PreparationOffer::Retry), "{:?}", outcome.offers);
 
     world.catalog().reopen_view(world.run(3)).await.unwrap();
     let retried = world.library.retry_group_preparation(id, &Watch::quiet()).await.unwrap();
@@ -705,4 +707,41 @@ async fn canceling_one_panel_retry_leaves_the_group_partial() {
     let group = world.library.group_preparation_outcome(outcome.preparation.id).await.unwrap();
     assert_eq!(panel_states(&group), vec![Prepared, Canceled, Prepared]);
     assert_eq!(group.preparation.outcome, Partial, "{group:#?}");
+}
+
+/// PREP-FR-12: a Prepare all offers Retry only while a panel run can resume,
+/// a Partial or Paused panel revision whose run is open, by the rule Retry
+/// refuses by. A Partial group whose Partial panel run is Complete, or whose
+/// panel run's own Retry was canceled, offers no Retry, and Retry is refused.
+#[tokio::test]
+async fn partial_group_with_no_resumable_panel_offers_no_retry() {
+    use PreparationState::{Canceled, Partial, Prepared};
+    let world = group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let (watch, locked) = lock_panel2(&world);
+    let outcome = world.prepare_all(&request, &watch).await;
+    unlock(&locked);
+    assert_eq!(panel_states(&outcome), vec![Prepared, Partial, Prepared], "{outcome:#?}");
+    assert!(outcome.offers.contains(&PreparationOffer::Retry), "{:?}", outcome.offers);
+    let id = outcome.preparation.id;
+
+    world.library.mark_view_complete(world.run(2)).await.unwrap();
+    let complete = world.library.group_preparation_outcome(id).await.unwrap();
+    assert_eq!(complete.preparation.outcome, Partial, "{complete:#?}");
+    assert!(!complete.offers.contains(&PreparationOffer::Retry), "{:?}", complete.offers);
+    let error = world.library.retry_group_preparation(id, &Watch::quiet()).await.unwrap_err();
+    refused(&error, "Panel 2 is Complete");
+    world.catalog().reopen_view(world.run(2)).await.unwrap();
+    let reopened = world.library.group_preparation_outcome(id).await.unwrap();
+    assert!(reopened.offers.contains(&PreparationOffer::Retry), "{:?}", reopened.offers);
+
+    let panel2 = panel(&outcome, 2).revision.id;
+    let canceled = world.library.retry_preparation(panel2, &CancelNow).await.unwrap();
+    assert_eq!(canceled.revision.state, Canceled);
+    let group = world.library.group_preparation_outcome(id).await.unwrap();
+    assert_eq!(group.preparation.outcome, Partial, "{group:#?}");
+    assert!(!group.offers.contains(&PreparationOffer::Retry), "{:?}", group.offers);
+    let error = world.library.retry_group_preparation(id, &Watch::quiet()).await.unwrap_err();
+    refused(&error, "no Partial or Paused panel run to retry");
 }
