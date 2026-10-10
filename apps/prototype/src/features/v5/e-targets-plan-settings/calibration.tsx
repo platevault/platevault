@@ -277,7 +277,7 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
                             value={profileId ?? ""}
                             onValueChange={(value) => setPicked((prev) => ({ ...prev, [id]: String(value) as ProfileId }))}
                           >
-                            <SelectTrigger size="sm" aria-label={m.calibration_tool_for({ name })} className="w-32 text-xs">
+                            <SelectTrigger size="sm" aria-label={m.calibration_tool_for({ name })} className="w-fit max-w-48 text-xs">
                               <SelectValue className="block truncate" />
                             </SelectTrigger>
                             <SelectContent>

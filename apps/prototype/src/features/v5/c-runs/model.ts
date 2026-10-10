@@ -817,6 +817,22 @@ export function readinessByKind(plan: CalibrationPlan): KindReadiness[] {
   })
 }
 
+/**
+ * The calibration groups' setup parts (channel, rig, dimensions, binning,
+ * gain / offset; `groupKey` joins them with "|"), split into the parts every
+ * group shares, shown once, and each group's own parts. The channel always
+ * stays in the group's own parts.
+ */
+export function groupSetupParts(groupKeys: string[]): { shared: string[]; own: (groupKey: string) => string[] } {
+  const split = groupKeys.map((key) => key.split("|"))
+  const first = split[0] ?? []
+  const isShared = first.map((part, i) => i > 0 && split.every((parts) => parts[i] === part))
+  return {
+    shared: first.filter((_, i) => isShared[i]),
+    own: (groupKey) => groupKey.split("|").filter((_, i) => !isShared[i]),
+  }
+}
+
 /** Candidates the automatic choice could not tell apart: compatible masters at the same night distance. */
 export function tieOf(row: RequirementRow): RequirementRow["candidates"] {
   const [first, second] = row.candidates

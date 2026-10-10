@@ -144,6 +144,8 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
     [subject, targetId, name, pick, panels],
   )
   const panelRuns = (panelId: string) => Object.values(runs).filter((r) => r.projectId === project.id && r.subjectId === subject?.id && r.panelId === panelId)
+  // A trashed panel run still keeps its panel (Restore needs it) but is not "In a run" (D-W75).
+  const inLiveRun = (panelId: string) => panelRuns(panelId).some((r) => !r.trashedAt)
 
   const rows: SessionRow[] = useMemo(() => {
     if (!targetId) return []
@@ -341,10 +343,14 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
                     <Label htmlFor={`${panel.id}-inc`} className="w-16 font-medium">
                       {m.review_panel_n({ n: panel.n })}
                     </Label>
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums">
+                    <span className="flex-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
                       {formatRa(panel.ra)} {formatDec(panel.dec)}
                     </span>
-                    {panelRuns(panel.id).length > 0 ? <Pill tone="muted">{m.mosaic_in_a_run()}</Pill> : null}
+                    {inLiveRun(panel.id) ? (
+                      <Pill tone="muted" className="min-w-0 shrink" title={m.mosaic_in_a_run()}>
+                        {m.mosaic_in_a_run()}
+                      </Pill>
+                    ) : null}
                     <CountBadge count={countOn(panel.id)} tone={countOn(panel.id) > 0 ? "info" : "muted"} label={m.project_sessions_count({ count: countOn(panel.id) })} />
                     <Button size="icon-sm" variant="ghost" aria-label={m.project_remove_named({ name: m.review_panel_n({ n: panel.n }) })} onClick={() => removePanel(panel)}>
                       <X aria-hidden="true" />
@@ -457,7 +463,7 @@ function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: Panel
         </span>
       </div>
       <Select items={options} value={value} onValueChange={(next) => onAssign(next === PLACE_AUTO ? "auto" : next === PLACE_OUT ? null : String(next))}>
-        <SelectTrigger size="sm" aria-label={m.mosaic_panel_for({ name: label })} className="w-28">
+        <SelectTrigger size="sm" aria-label={m.mosaic_panel_for({ name: label })} className="w-fit min-w-28 shrink-0 whitespace-nowrap">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
