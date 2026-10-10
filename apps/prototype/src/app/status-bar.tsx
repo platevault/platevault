@@ -2,23 +2,26 @@
  * The status bar (foundation-owned; round 1b "Status bar", round 2c P-SB2):
  * the window's full bottom bar, terse words, pills and counts only.
  *
- * - Left: locations online, then the context slot: the selection count a
- *   list reports with `useStatusSelection` (`status-selection.ts`).
+ * - Left: locations online ("No locations" with none), then the context
+ *   slot: the selection count a list reports with `useStatusSelection`
+ *   (`status-selection.ts`).
  * - Middle: every issue in the Issues hub (`useStatusIssues`), worst first,
  *   at the densest level that fits: (1) one named pill per issue, linking to
- *   its action; (2) one chip per kind ("2 blocked"), a chip of several
- *   opening a popover of them; (3) those chips with the trailing ones under
- *   "+N". With no issues, a muted "No issues".
+ *   its action; (2) the first issues named and the rest as one chip per kind
+ *   ("2 blocked"), a chip of several opening a popover of them; (3) every
+ *   issue as a chip, the trailing ones under "+N". With no issues, a muted
+ *   "No issues".
  * - Right: running work, each with a mini progress bar and Cancel on hover
  *   or focus (more than fit collapse into "+N"); up to three unread
  *   notifications, newest first; and the history trigger with the unread
  *   count. Opening the history marks every notification read.
  *
  * An invisible ruler measures every candidate, so the row never wraps or
- * clips. The chips and the inline notifications share the room the rest
- * leaves (`fitBar`); the oldest notification shown may truncate to fit.
- * Below 768 px the bar stays as it was: chips by kind and the last
- * notification.
+ * clips. The issues, the inline notifications and the running work share
+ * the room the rest leaves (`fitBar`); the oldest notification shown may
+ * truncate to fit. Room left over widens cut-off running work, then
+ * notifications, and then names one more issue, truncated. Below 768 px the
+ * bar stays as it was: chips by kind and the last notification.
  */
 import { Link } from "@tanstack/react-router"
 import {
@@ -81,8 +84,14 @@ const CHIP_GAP_PX = 4
 const SLOT_GAP_PX = 8
 /** Unread notifications shown inline at most. */
 const INLINE_NOTICES = 3
+/** An inline notification's width until room left over widens it. */
+const NOTICE_MAX_PX = 240
 /** A notification is truncated to fit down to this width; below it, it drops. */
 const NOTICE_MIN_PX = 128
+/** One more pill (an issue named, or at level 3 a chip) shows truncated to the room left while at least half of it and this width show. */
+const PILL_MIN_PX = 64
+/** An inline operation's width until room left over widens it. */
+const OPERATION_MAX_PX = 192
 
 /** The chip's words: a count by kind ("2 blocked"). */
 function chipText(m: Messages, chip: StatusChip): string {
@@ -100,89 +109,160 @@ function chipText(m: Messages, chip: StatusChip): string {
   return text[chip.id]()
 }
 
+/** What a chip looks like: kind, tone and count. The ruler measures each look once. */
+const chipLook = (chip: StatusChip) => `${chip.id}:${chip.severity}:${chip.count}`
+
 // ---------------------------------------------------------------------------
-// Fit: how the chips and the inline notifications share the room
+// Fit: how the issues, the inline notifications and the running work share the room
 // ---------------------------------------------------------------------------
 
-/** `level` 1 names every issue, 2 groups them by kind, 3 also folds the chips from `chips` on into "+N". */
 interface BarFit {
-  level: 1 | 2 | 3
-  chips: number
-  notices: number
-  /** The width the oldest notice shown is truncated to, when it fits only truncated. */
+  /** Issues named, worst first; the rest show as the chips of `StatusIssues.chipsAfter[named]`. */
+  named: number
+  /** The width the last pill is truncated to, when it fits only truncated: the last named, or with none named the last chip shown. */
   squeezed: number | null
+  /** Those chips shown; the trailing ones fold into "+N". */
+  chips: number
+  /** The width of each inline notification shown, newest first. */
+  notices: number[]
+  /** The width of each inline operation. */
+  work: number[]
 }
 
-/** Natural widths from the ruler, in bar order; `notices` newest first. */
+/** Natural widths, in bar order; `notices` newest first. */
 interface BarWidths {
+  /** Each issue as a named pill; none below 768 px, where nothing is named. */
   pills: number[]
-  chips: number[]
+  /** The chips of `StatusIssues.chipsAfter[k]`. */
+  chipsAfter: number[][]
   more: number
   empty: number
   notices: number[]
+  work: number[]
 }
 
 const rowWidth = (widths: number[]) => widths.reduce((sum, w, i) => sum + w + (i > 0 ? CHIP_GAP_PX : 0), 0)
 
+/** The width `natural` truncates to in `room`, if at least half of it and `PILL_MIN_PX` still show. */
+const squeezeTo = (natural: number | undefined, room: number) => (natural !== undefined && room >= Math.max(PILL_MIN_PX, natural / 2) ? room : null)
+
 /**
- * The densest fit for `room`, the width the chips and the inline notices
- * share. What gives way first: the named pills (level 1), then the notices,
- * oldest first, then the trailing chips (level 3).
+ * The densest fit for `room`, the width the issues and the inline notices
+ * share with what the running work is widened by. What gives way first: the
+ * named pills, the last named first, then the notices, oldest first, then
+ * the trailing chips ("+N"). Room left over widens what is cut off (the
+ * running work, then the notices, newest first), and what is still left
+ * shows one more pill, truncated: an issue named or, at level 3, a chip.
  */
 function fitBar(widths: BarWidths, room: number): BarFit {
-  const grouped = widths.chips.length > 0 ? rowWidth(widths.chips) : widths.empty
+  const rowAt = (named: number) => {
+    const row = [...widths.pills.slice(0, named), ...(widths.chipsAfter[named] ?? [])]
+    return row.length > 0 ? rowWidth(row) : widths.empty
+  }
+  let left = room
+  const widen = (width: number, natural: number) => {
+    const extra = Math.max(0, Math.min(left, natural - width))
+    left -= extra
+    return width + extra
+  }
+  const widenWork = () => widths.work.map((natural) => widen(Math.min(natural, OPERATION_MAX_PX), natural))
+  const grouped = rowAt(0)
   if (grouped > room) {
     let used = widths.more
     let chips = 0
-    for (const width of widths.chips) {
+    for (const width of widths.chipsAfter[0] ?? []) {
       if (used + CHIP_GAP_PX + width > room) break
       used += CHIP_GAP_PX + width
       chips += 1
     }
-    return { level: 3, chips, notices: 0, squeezed: null }
+    left = room - used
+    const work = widenWork()
+    const squeezed = squeezeTo(widths.chipsAfter[0]?.[chips], left - CHIP_GAP_PX)
+    return { named: 0, squeezed, chips: squeezed === null ? chips : chips + 1, notices: [], work }
   }
-  let left = room - grouped
-  let notices = 0
-  let squeezed: number | null = null
-  for (const width of widths.notices) {
+  left = room - grouped
+  const shown: number[] = []
+  for (const natural of widths.notices) {
+    const width = Math.min(natural, NOTICE_MAX_PX)
     if (width + SLOT_GAP_PX <= left) {
       left -= width + SLOT_GAP_PX
-      notices += 1
+      shown.push(width)
       continue
     }
     if (left - SLOT_GAP_PX >= NOTICE_MIN_PX) {
-      squeezed = left - SLOT_GAP_PX
+      shown.push(left - SLOT_GAP_PX)
       left = 0
-      notices += 1
     }
     break
   }
-  const named = widths.pills.length > 0 && rowWidth(widths.pills) <= grouped + left
-  return { level: named ? 1 : 2, chips: widths.chips.length, notices, squeezed }
+  let named = widths.pills.length
+  while (named > 0 && rowAt(named) > grouped + left) named -= 1
+  left += grouped - rowAt(named)
+  const work = widenWork()
+  const notices = shown.map((width, i) => widen(width, widths.notices[i]!))
+  const next = widths.pills[named]
+  const squeezed = next === undefined ? null : squeezeTo(next, next - (rowAt(named + 1) - rowAt(named) - left))
+  if (squeezed !== null) named += 1
+  return { named, squeezed, chips: widths.chipsAfter[named]?.length ?? 0, notices, work }
 }
 
+const sameWidths = (a: number[], b: number[]) => a.length === b.length && a.every((w, i) => w === b[i])
+const sameFit = (a: BarFit, b: BarFit) => a.named === b.named && a.squeezed === b.squeezed && a.chips === b.chips && sameWidths(a.notices, b.notices) && sameWidths(a.work, b.work)
+
 /**
- * Re-fits on every resize of the chip slot, and whenever the ruler's words
- * change (issues, unread notices, the language). The room is the chip slot
- * plus the inline notices, so the slot growing as a notice drops keeps it.
+ * The fit, and the refs it measures: the chip slot (`box`), the inline
+ * notices (`list`), the running work (`work`) and the ruler. Re-fits on
+ * every resize of the chip slot, and whenever the ruler's words, the
+ * grouping or the inline work change (issues, unread notices, running work,
+ * the language). The room is the chip slot, plus the inline notices, plus
+ * what the running work is widened by, so the slot changing as they do
+ * keeps it.
  */
-function useBarFit(box: RefObject<HTMLDivElement | null>, list: RefObject<HTMLUListElement | null>, ruler: RefObject<HTMLDivElement | null>): BarFit {
-  // Every chip until the first measure, which runs before paint.
-  const [fit, setFit] = useState<BarFit>({ level: 2, chips: Number.POSITIVE_INFINITY, notices: 0, squeezed: null })
+function useBarFit(status: StatusIssues, inline: Operation[]) {
+  const box = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLUListElement>(null)
+  const work = useRef<HTMLDivElement>(null)
+  const ruler = useRef<HTMLDivElement>(null)
+  const grouping = useRef<StatusChip[][]>([])
   const words = useRef<string | null>(null)
+  // Every chip until the first measure, which runs before paint.
+  const [fit, setFit] = useState<BarFit>({ named: 0, squeezed: null, chips: Number.POSITIVE_INFINITY, notices: [], work: [] })
   const measure = useCallback(() => {
     const row = box.current
     const marks = ruler.current
     if (!row || !marks) return
-    const widths = (kind: string) => [...marks.querySelectorAll<HTMLElement>(`[data-measure="${kind}"]`)].map((el) => Math.ceil(el.getBoundingClientRect().width))
-    const inline = list.current
-    const room = Math.floor(row.getBoundingClientRect().width + (inline ? inline.getBoundingClientRect().width + SLOT_GAP_PX : 0))
-    const next = fitBar({ pills: widths("pill"), chips: widths("chip"), more: widths("more")[0] ?? 0, empty: widths("empty")[0] ?? 0, notices: widths("notice") }, room)
-    setFit((prev) => (prev.level === next.level && prev.chips === next.chips && prev.notices === next.notices && prev.squeezed === next.squeezed ? prev : next))
-  }, [box, list, ruler])
+    const width = (el: Element) => el.getBoundingClientRect().width
+    const marked = (kind: string) => [...marks.querySelectorAll(`[data-measure="${kind}"]`)]
+    const natural = (kind: string) => marked(kind).map((el) => Math.ceil(width(el)))
+    const looks = new Map(marked("chip").map((el) => [el.getAttribute("data-chip"), Math.ceil(width(el))]))
+    // An operation's natural width: its label's from the ruler, plus its progress and word as laid out.
+    const labels = natural("work")
+    const ops = work.current ? [...work.current.querySelectorAll(":scope > [data-operation]")] : []
+    const opWidths = ops.map((op, i) => Math.ceil((labels[i] ?? 0) + width(op) - width(op.querySelector("a")!)))
+    const widened = ops.reduce((sum, op, i) => sum + width(op) - Math.min(opWidths[i]!, OPERATION_MAX_PX), 0)
+    const notices = list.current
+    const room = Math.floor(width(row) + (notices ? width(notices) + SLOT_GAP_PX : 0) + widened)
+    const next = fitBar(
+      {
+        pills: natural("pill"),
+        chipsAfter: grouping.current.map((chips) => chips.map((chip) => looks.get(chipLook(chip)) ?? 0)),
+        more: natural("more")[0] ?? 0,
+        empty: natural("empty")[0] ?? 0,
+        notices: natural("notice"),
+        work: opWidths,
+      },
+      room,
+    )
+    setFit((prev) => (sameFit(prev, next) ? prev : next))
+  }, [])
   useLayoutEffect(() => {
+    grouping.current = status.chipsAfter
     const marks = ruler.current
-    const now = marks ? [...marks.children].map((c) => `${c.getAttribute("data-measure")}:${c.textContent}`).join("|") : ""
+    const now = [
+      marks ? [...marks.children].map((c) => `${c.getAttribute("data-measure")}:${c.textContent}`).join("|") : "",
+      status.chipsAfter.map((chips) => chips.map(chipLook).join(",")).join(";"),
+      inline.map((op) => `${op.status}:${op.progress.total > 0}`).join(","),
+    ].join("#")
     if (now === words.current) return
     words.current = now
     measure()
@@ -193,8 +273,8 @@ function useBarFit(box: RefObject<HTMLDivElement | null>, list: RefObject<HTMLUL
     const observer = new ResizeObserver(measure)
     observer.observe(row)
     return () => observer.disconnect()
-  }, [box, measure])
-  return fit
+  }, [measure])
+  return { fit, box, list, work, ruler }
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +289,7 @@ const selectLocations = (s: PrototypeState) => {
 function LocationsItem({ narrow }: { narrow: boolean }) {
   const m = useMessages()
   const { online, total } = useStore(selectLocations)
-  const text = m.status_bar_locations_online({ online, total })
+  const text = total === 0 ? m.storage_no_locations() : m.status_bar_locations_online({ online, total })
   return (
     <Button variant="ghost" size="xs" render={<Link to="/settings/locations" />} className="shrink-0 text-muted-foreground" title={`${m.common_locations()}: ${text}`} data-status-locations>
       <HardDrive data-icon="inline-start" aria-hidden="true" />
@@ -234,8 +314,8 @@ function SelectionItem() {
 // Middle: the issues
 // ---------------------------------------------------------------------------
 
-/** A pill straight to one issue's action, worded by the issue itself ("Cold-1 offline") or by its chip ("1 offline"). */
-function IssueLink({ issue, text }: { issue: Issue; text?: string }) {
+/** A pill straight to one issue's action, worded by the issue itself ("Cold-1 offline") or by its chip ("1 offline"); `width` truncates it to fit. */
+function IssueLink({ issue, text, width }: { issue: Issue; text?: string; width?: number }) {
   const m = useMessages()
   const copy = issueCopy(m, issue)
   const Icon = CHIP_ICON[STATUS_CHIP_OF[issue.kind]]
@@ -246,6 +326,7 @@ function IssueLink({ issue, text }: { issue: Issue; text?: string }) {
       params={issue.link.params as never}
       search={issue.link.search as never}
       className={pillClass(tone, true)}
+      style={width === undefined ? undefined : { maxWidth: width }}
       title={`${copy.text} · ${copy.action}`}
       data-pill={tone}
       data-chip-issues={1}
@@ -266,17 +347,17 @@ function ChipIssues({ chip, onNavigate }: { chip: StatusChip; onNavigate: () => 
   )
 }
 
-/** One chip: a link to the action of its one issue, or a popover listing its issues. */
-function ChipControl({ chip }: { chip: StatusChip }) {
+/** One chip: a link to the action of its one issue, or a popover listing its issues; `width` truncates it to fit. */
+function ChipControl({ chip, width }: { chip: StatusChip; width?: number }) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const text = chipText(m, chip)
-  if (chip.issues.length === 1) return <IssueLink issue={chip.issues[0]!} text={text} />
+  if (chip.issues.length === 1) return <IssueLink issue={chip.issues[0]!} text={text} width={width} />
   const Icon = CHIP_ICON[chip.id]
   const tone = SEVERITY_TONE[chip.severity]
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className={pillClass(tone, true)} title={text} data-pill={tone} data-chip-issues={chip.issues.length}>
+      <PopoverTrigger className={pillClass(tone, true)} style={width === undefined ? undefined : { maxWidth: width }} title={text} data-pill={tone} data-chip-issues={chip.issues.length}>
         <Icon aria-hidden="true" />
         <span className="truncate">{text}</span>
       </PopoverTrigger>
@@ -331,20 +412,27 @@ function NoIssues() {
   )
 }
 
+/** `data-level`: 1 names every issue, 2 the first `data-named` with the rest as chips, 3 folds the trailing chips into "+N". */
 function IssueSlot({ status, fit, box }: { status: StatusIssues; fit: BarFit; box: RefObject<HTMLDivElement | null> }) {
   const m = useMessages()
-  const empty = status.chips.length === 0
-  const hidden = status.chips.slice(fit.chips)
+  const empty = status.pills.length === 0
+  const named = Math.min(fit.named, status.pills.length)
+  const chips = status.chipsAfter[named] ?? []
+  const shown = chips.slice(0, fit.chips)
+  const hidden = chips.slice(fit.chips)
+  const squeezed = fit.squeezed ?? undefined
+  const level = empty ? "none" : named === status.pills.length ? 1 : hidden.length > 0 ? 3 : 2
   return (
-    <div ref={box} role="group" aria-label={m.issues_title()} className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden" data-status-chips data-level={empty ? "none" : fit.level}>
+    <div ref={box} role="group" aria-label={m.issues_title()} className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden" data-status-chips data-level={level} data-named={empty ? undefined : named}>
       {empty ? (
         <NoIssues />
-      ) : fit.level === 1 ? (
-        status.pills.map((issue) => <IssueLink key={issue.id} issue={issue} />)
       ) : (
         <>
-          {status.chips.slice(0, fit.chips).map((chip) => (
-            <ChipControl key={chip.id} chip={chip} />
+          {status.pills.slice(0, named).map((issue, i) => (
+            <IssueLink key={issue.id} issue={issue} width={i === named - 1 ? squeezed : undefined} />
+          ))}
+          {shown.map((chip, i) => (
+            <ChipControl key={`chip:${chip.id}`} chip={chip} width={named === 0 && i === shown.length - 1 ? squeezed : undefined} />
           ))}
           {hidden.length > 0 ? <MoreChips chips={hidden} /> : null}
         </>
@@ -366,35 +454,53 @@ function MiniProgress({ value, label }: { value: number | null; label: string })
   return <Progress value={value} aria-label={label} className="w-10 shrink-0 gap-0 [&_[data-slot=progress-track]]:bg-foreground/15" />
 }
 
-function OperationItem({ op, expanded = false }: { op: Operation; expanded?: boolean }) {
+/**
+ * One operation: its title, progress and word ("42%", "Paused"). Inline,
+ * Cancel shows on hover or focus in place of what ends the item: the word,
+ * else the pulse of work whose size is unknown. `width` caps it inline.
+ */
+function OperationItem({ op, width, expanded = false, onCancel }: { op: Operation; width?: number; expanded?: boolean; onCancel: () => void }) {
   const m = useMessages()
   const pct = op.progress.total > 0 ? Math.round((op.progress.done / op.progress.total) * 100) : null
   const word = op.status === "paused" ? m.status_paused() : pct !== null ? `${pct}%` : ""
   const title = say(m, op.title)
+  const yields = !expanded && op.canCancel && "group-focus-within/op:invisible group-hover/op:invisible"
+  const cancel = op.canCancel ? (
+    <button
+      type="button"
+      onClick={onCancel}
+      aria-label={`${m.verb_cancel()}: ${title}`}
+      title={m.verb_cancel()}
+      className={cn(
+        "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        !expanded && "absolute right-0 opacity-0 group-focus-within/op:opacity-100 group-hover/op:opacity-100",
+      )}
+      data-cancel={op.id}
+    >
+      <X aria-hidden="true" className="size-3" />
+    </button>
+  ) : null
   return (
-    <div className={cn("group/op flex min-w-0 items-center gap-1.5", expanded ? "w-full" : "max-w-48")} data-operation={op.id}>
+    <div className={cn("group/op flex min-w-0 items-center gap-1.5", expanded && "w-full")} style={width === undefined ? undefined : { maxWidth: width }} data-operation={op.id}>
       <Link to="/activity" className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={title}>
         {title}
       </Link>
-      <MiniProgress value={pct} label={title} />
-      <span className={cn("relative inline-flex h-4 shrink-0 items-center justify-end gap-1 tabular-nums", expanded ? "min-w-12" : "w-8")}>
-        <span className={cn(!expanded && op.canCancel && "group-focus-within/op:invisible group-hover/op:invisible")}>{word}</span>
-        {op.canCancel ? (
-          <button
-            type="button"
-            onClick={() => cancelOperation(op.id)}
-            aria-label={`${m.verb_cancel()}: ${title}`}
-            title={m.verb_cancel()}
-            className={cn(
-              "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              !expanded && "absolute right-0 opacity-0 group-focus-within/op:opacity-100 group-hover/op:opacity-100",
-            )}
-            data-cancel={op.id}
-          >
-            <X aria-hidden="true" className="size-3" />
-          </button>
-        ) : null}
-      </span>
+      {word || expanded ? (
+        <>
+          <MiniProgress value={pct} label={title} />
+          <span className={cn("relative inline-flex h-4 shrink-0 items-center justify-end gap-1 tabular-nums", expanded ? "min-w-12" : "min-w-8")}>
+            <span className={cn(yields)}>{word}</span>
+            {cancel}
+          </span>
+        </>
+      ) : (
+        <span className="relative inline-flex h-4 shrink-0 items-center justify-end">
+          <span className={cn("flex", yields)}>
+            <MiniProgress value={pct} label={title} />
+          </span>
+          {cancel}
+        </span>
+      )}
     </div>
   )
 }
@@ -404,20 +510,29 @@ const selectRunning = (s: PrototypeState) =>
     .filter((op) => op.status === "running" || op.status === "paused")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
-/** Running work, newest first: two inline from 1440 px, one below, the rest under "+N". */
-function RunningWork() {
+/** Running work, newest first: `inline` in the bar at the fitted `widths` (two from 1440 px, one below), the rest under "+N". */
+function RunningWork({ running, inline, widths, group }: { running: Operation[]; inline: Operation[]; widths: number[]; group: RefObject<HTMLDivElement | null> }) {
   const m = useMessages()
-  const running = useStore(selectRunning)
-  const wide = useMediaQuery(WIDE)
   const [open, setOpen] = useState(false)
+  const rows = useRef<HTMLUListElement>(null)
   if (running.length === 0) return <span className="shrink-0 px-1">{m.status_bar_idle()}</span>
-  const inline = running.slice(0, wide ? 2 : 1)
   const rest = running.length - inline.length
   const label = m.status_bar_more_running({ count: rest })
+  // Focus moves before the cancelled item unmounts (WCAG 2.4.3): to the next operation in its list, while that list stays, else to the notifications trigger.
+  const cancel = (op: Operation, listed: boolean) => {
+    const listGoes = listed && rest <= 1
+    const ops = listGoes ? [] : listed ? running : inline
+    const next = ops[ops.indexOf(op) + 1]
+    const scope = listed ? rows.current : group.current
+    const target = (next ? scope?.querySelector<HTMLElement>(`[data-operation="${next.id}"] a`) : null) ?? group.current?.closest("footer")?.querySelector<HTMLElement>("[data-status-notice]")
+    target?.focus()
+    if (listGoes) setOpen(false)
+    cancelOperation(op.id)
+  }
   return (
-    <div role="group" aria-label={m.status_running()} className="flex min-w-0 shrink items-center gap-3" data-status-work>
-      {inline.map((op) => (
-        <OperationItem key={op.id} op={op} />
+    <div ref={group} role="group" aria-label={m.status_running()} className="flex min-w-0 shrink items-center gap-3" data-status-work>
+      {inline.map((op, i) => (
+        <OperationItem key={op.id} op={op} width={widths[i]} onCancel={() => cancel(op, false)} />
       ))}
       {rest > 0 ? (
         <Popover open={open} onOpenChange={setOpen}>
@@ -425,10 +540,10 @@ function RunningWork() {
             +{rest}
           </PopoverTrigger>
           <PopoverContent side="top" align="end" className="w-80 gap-0 p-0" aria-label={m.status_running()}>
-            <ul className="py-1 text-xs">
+            <ul ref={rows} className="py-1 text-xs">
               {running.map((op) => (
                 <li key={op.id} className="flex min-h-(--row-h) items-center px-3">
-                  <OperationItem op={op} expanded />
+                  <OperationItem op={op} expanded onCancel={() => cancel(op, true)} />
                 </li>
               ))}
             </ul>
@@ -450,25 +565,30 @@ const NOTICE_GLYPH: Record<NoticeTone, { icon: LucideIcon; className: string }> 
   neutral: { icon: Info, className: "text-muted-foreground" },
 }
 
-/** One inline notification, after a divider; the ruler measures the same box. */
-const NOTICE_INLINE = "flex min-w-0 max-w-60 shrink-0 items-center gap-1 border-l border-separator pl-2"
+/** One inline notification, after a divider; the ruler measures the same box at its natural width. */
+const NOTICE_INLINE = "flex min-w-0 shrink-0 items-center gap-1 border-l border-separator pl-2"
 
 /** "21:04" today, else the day: "27 Sep". */
 function noticeTime(at: string): string {
   return at.slice(0, 10) === nowIso().slice(0, 10) ? formatTime(at) : formatNight(at.slice(0, 10))
 }
 
+/** A notification's words, and its title: the words in full plus the detail, so a truncated one reads whole on hover. */
+function noticeWords(m: Messages, notice: Notice): { words: string; title: string } {
+  const words = noticeText(m, notice)
+  return { words, title: notice.detail ? `${words} · ${say(m, notice.detail)}` : words }
+}
+
 function NoticeRow({ notice, onNavigate }: { notice: Notice; onNavigate: () => void }) {
   const m = useMessages()
   const { icon: Glyph, className } = NOTICE_GLYPH[notice.tone]
-  const words = noticeText(m, notice)
-  const detail = notice.detail ? say(m, notice.detail) : words
+  const { words, title } = noticeWords(m, notice)
   const text = notice.href ? (
-    <Link to={notice.href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={detail}>
+    <Link to={notice.href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={title}>
       {words}
     </Link>
   ) : (
-    <span className="min-w-0 flex-1 truncate" title={detail}>
+    <span className="min-w-0 flex-1 truncate" title={title}>
       {words}
     </span>
   )
@@ -483,21 +603,20 @@ function NoticeRow({ notice, onNavigate }: { notice: Notice; onNavigate: () => v
   )
 }
 
-/** An unread notification inline; following it marks it read. `width` truncates it to fit. */
-function InlineNotice({ notice, width }: { notice: Notice; width: number | null }) {
+/** An unread notification inline at the fitted `width`; following it marks it read. */
+function InlineNotice({ notice, width }: { notice: Notice; width: number }) {
   const m = useMessages()
   const { icon: Glyph, className } = NOTICE_GLYPH[notice.tone]
-  const words = noticeText(m, notice)
-  const detail = notice.detail ? say(m, notice.detail) : words
+  const { words, title } = noticeWords(m, notice)
   return (
-    <li className={NOTICE_INLINE} style={width === null ? undefined : { maxWidth: width }} data-notice-inline={notice.id}>
+    <li className={NOTICE_INLINE} style={{ maxWidth: width }} data-notice-inline={notice.id}>
       <Glyph aria-hidden="true" className={cn("size-3 shrink-0", className)} />
       {notice.href ? (
-        <Link to={notice.href as never} onClick={() => markNoticesRead(notice.id)} className="min-w-0 truncate text-foreground hover:underline" title={detail}>
+        <Link to={notice.href as never} onClick={() => markNoticesRead(notice.id)} className="min-w-0 truncate text-foreground hover:underline" title={title}>
           {words}
         </Link>
       ) : (
-        <span className="min-w-0 truncate text-foreground" title={detail}>
+        <span className="min-w-0 truncate text-foreground" title={title}>
           {words}
         </span>
       )}
@@ -505,16 +624,33 @@ function InlineNotice({ notice, width }: { notice: Notice; width: number | null 
   )
 }
 
-/** The unread notifications that fit, newest first; the last one shown takes `squeezed` when it fits only truncated. */
-function InlineNotices({ notices, squeezed, list }: { notices: Notice[]; squeezed: number | null; list: RefObject<HTMLUListElement | null> }) {
+/** The unread notifications that fit, newest first, each at its fitted width. */
+function InlineNotices({ notices, widths, list }: { notices: Notice[]; widths: number[]; list: RefObject<HTMLUListElement | null> }) {
   const m = useMessages()
   if (notices.length === 0) return null
   return (
     <ul ref={list} aria-label={m.status_bar_notifications()} className="flex shrink-0 items-center gap-2" data-status-notices>
       {notices.map((notice, i) => (
-        <InlineNotice key={notice.id} notice={notice} width={i === notices.length - 1 ? squeezed : null} />
+        <InlineNotice key={notice.id} notice={notice} width={widths[i]!} />
       ))}
     </ul>
+  )
+}
+
+/**
+ * Announces the latest notification once, as it arrives (WCAG 4.1.3). The
+ * live region stays mounted and its words are fixed per notice id, so
+ * re-wording the same notice (a language switch) announces nothing.
+ */
+function NoticeAnnouncer({ notice }: { notice: Notice | undefined }) {
+  const m = useMessages()
+  const id = notice?.id ?? null
+  const [said, setSaid] = useState({ id, text: notice ? noticeText(m, notice) : "" })
+  if (said.id !== id) setSaid({ id, text: notice ? noticeText(m, notice) : "" })
+  return (
+    <span role="status" className="sr-only">
+      {said.text}
+    </span>
   )
 }
 
@@ -536,49 +672,44 @@ function NotificationHistory({ notices, unread, narrow }: { notices: Notice[]; u
     if (next) markNoticesRead()
   }
   return (
-    <>
-      <span role="status" className="sr-only">
-        {latestText}
-      </span>
-      <Popover open={open} onOpenChange={onOpenChange}>
-        {narrow ? (
-          <PopoverTrigger
-            render={<Button variant="ghost" size="xs" className="min-w-0 max-w-48 shrink justify-start text-muted-foreground" />}
-            title={latestText}
-            aria-label={`${m.status_bar_notifications()}: ${latestText}`}
-            data-status-notice
-            data-unread={unread.length}
-          >
-            <Glyph data-icon="inline-start" aria-hidden="true" className={className} />
-            <span className="truncate">{latestText}</span>
-          </PopoverTrigger>
-        ) : (
-          <PopoverTrigger
-            render={<Button variant="ghost" size="xs" className="shrink-0 gap-1 px-1 text-muted-foreground" />}
-            title={m.status_bar_notifications()}
-            aria-label={unreadText ? `${m.status_bar_notifications()}: ${unreadText}` : m.status_bar_notifications()}
-            data-status-notice
-            data-unread={unread.length}
-          >
-            <Bell aria-hidden="true" />
-            {unread.length > 0 ? <CountBadge count={unread.length} tone="info" /> : null}
-          </PopoverTrigger>
-        )}
-        <PopoverContent side="top" align="end" className="w-96 gap-0 p-0" aria-label={m.status_bar_notifications()}>
-          <div data-chrome className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-            <h2 className="flex-1 text-sm font-semibold">{m.status_bar_notifications()}</h2>
-            <Button variant="ghost" size="xs" className="text-link" render={<Link to="/activity" />} onClick={() => setOpen(false)}>
-              {m.nav_activity()}
-            </Button>
-          </div>
-          <ul className="max-h-[min(24rem,var(--available-height))] overflow-y-auto py-1">
-            {notices.map((notice) => (
-              <NoticeRow key={notice.id} notice={notice} onNavigate={() => setOpen(false)} />
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
-    </>
+    <Popover open={open} onOpenChange={onOpenChange}>
+      {narrow ? (
+        <PopoverTrigger
+          render={<Button variant="ghost" size="xs" className="min-w-0 max-w-48 shrink justify-start text-muted-foreground" />}
+          title={latestText}
+          aria-label={`${m.status_bar_notifications()}: ${latestText}`}
+          data-status-notice
+          data-unread={unread.length}
+        >
+          <Glyph data-icon="inline-start" aria-hidden="true" className={className} />
+          <span className="truncate">{latestText}</span>
+        </PopoverTrigger>
+      ) : (
+        <PopoverTrigger
+          render={<Button variant="ghost" size="xs" className="shrink-0 gap-1 px-1 text-muted-foreground" />}
+          title={m.status_bar_notifications()}
+          aria-label={unreadText ? `${m.status_bar_notifications()}: ${unreadText}` : m.status_bar_notifications()}
+          data-status-notice
+          data-unread={unread.length}
+        >
+          <Bell aria-hidden="true" />
+          {unread.length > 0 ? <CountBadge count={unread.length} tone="info" /> : null}
+        </PopoverTrigger>
+      )}
+      <PopoverContent side="top" align="end" className="w-96 gap-0 p-0" aria-label={m.status_bar_notifications()}>
+        <div data-chrome className="flex items-center gap-2 border-b border-border px-3 py-1.5">
+          <h2 className="flex-1 text-sm font-semibold">{m.status_bar_notifications()}</h2>
+          <Button variant="ghost" size="xs" className="text-link" render={<Link to="/activity" />} onClick={() => setOpen(false)}>
+            {m.nav_activity()}
+          </Button>
+        </div>
+        <ul className="max-h-[min(24rem,var(--available-height))] overflow-y-auto py-1">
+          {notices.map((notice) => (
+            <NoticeRow key={notice.id} notice={notice} onNavigate={() => setOpen(false)} />
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -586,29 +717,34 @@ function NotificationHistory({ notices, unread, narrow }: { notices: Notice[]; u
 // The ruler and the bar
 // ---------------------------------------------------------------------------
 
-function RulerPill({ measure, icon: Icon, severity, text }: { measure: "pill" | "chip"; icon: LucideIcon; severity: IssueSeverity; text: string }) {
+function RulerPill({ measure, look, icon: Icon, severity, text }: { measure: "pill" | "chip"; look?: string; icon: LucideIcon; severity: IssueSeverity; text: string }) {
   return (
-    <span data-measure={measure} className={pillClass(SEVERITY_TONE[severity])}>
+    <span data-measure={measure} data-chip={look} className={pillClass(SEVERITY_TONE[severity])}>
       <Icon />
       <span>{text}</span>
     </span>
   )
 }
 
-/** Every candidate at its natural width, invisible and out of the layout, so a fit is chosen before paint. */
-function BarRuler({ status, notices, narrow, ruler }: { status: StatusIssues; notices: Notice[]; narrow: boolean; ruler: RefObject<HTMLDivElement | null> }) {
+/**
+ * Every candidate at its natural width, invisible and out of the layout, so a
+ * fit is chosen before paint: each named pill, each chip look of every
+ * grouping, the inline notifications and the inline operations' titles.
+ */
+function BarRuler({ status, notices, work, narrow, ruler }: { status: StatusIssues; notices: Notice[]; work: Operation[]; narrow: boolean; ruler: RefObject<HTMLDivElement | null> }) {
   const m = useMessages()
+  const looks = new Map(status.chipsAfter.flat().map((chip) => [chipLook(chip), chip]))
   return (
     <div aria-hidden="true" className="pointer-events-none invisible absolute top-0 left-0 size-0 overflow-hidden">
       <div ref={ruler} className="flex w-max items-center">
         {narrow
           ? null
           : status.pills.map((issue) => <RulerPill key={`pill:${issue.id}`} measure="pill" icon={CHIP_ICON[STATUS_CHIP_OF[issue.kind]]} severity={issue.severity} text={issueCopy(m, issue).text} />)}
-        {status.chips.map((chip) => (
-          <RulerPill key={`chip:${chip.id}`} measure="chip" icon={CHIP_ICON[chip.id]} severity={chip.severity} text={chipText(m, chip)} />
+        {[...looks].map(([look, chip]) => (
+          <RulerPill key={`chip:${look}`} measure="chip" look={look} icon={CHIP_ICON[chip.id]} severity={chip.severity} text={chipText(m, chip)} />
         ))}
         <span data-measure="more" className={pillClass("neutral")}>
-          +{status.chips.length}
+          +{status.chipsAfter[0]?.length ?? 0}
         </span>
         <span data-measure="empty" className="flex">
           <NoIssues />
@@ -622,6 +758,11 @@ function BarRuler({ status, notices, narrow, ruler }: { status: StatusIssues; no
             </span>
           )
         })}
+        {work.map((op) => (
+          <span key={op.id} data-measure="work">
+            {say(m, op.title)}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -630,22 +771,23 @@ function BarRuler({ status, notices, narrow, ruler }: { status: StatusIssues; no
 export function StatusBar() {
   const m = useMessages()
   const narrow = useMediaQuery(NARROW)
+  const wide = useMediaQuery(WIDE)
   const status = useStatusIssues()
   const { notices, unread } = useNotices()
+  const running = useStore(selectRunning)
   const candidates = narrow ? [] : unread.slice(0, INLINE_NOTICES)
-  const box = useRef<HTMLDivElement>(null)
-  const list = useRef<HTMLUListElement>(null)
-  const ruler = useRef<HTMLDivElement>(null)
-  const fit = useBarFit(box, list, ruler)
+  const inline = running.slice(0, wide ? 2 : 1)
+  const { fit, box, list, work, ruler } = useBarFit(status, inline)
   return (
     <footer data-chrome aria-label={m.status_bar()} className="relative flex h-6 shrink-0 items-center gap-2 border-t border-separator bg-chrome px-2 text-[0.6875rem] text-muted-foreground">
       <LocationsItem narrow={narrow} />
       <SelectionItem />
       <IssueSlot status={status} fit={fit} box={box} />
-      <RunningWork />
-      <InlineNotices notices={candidates.slice(0, fit.notices)} squeezed={fit.squeezed} list={list} />
+      <RunningWork running={running} inline={inline} widths={fit.work} group={work} />
+      <InlineNotices notices={candidates.slice(0, fit.notices.length)} widths={fit.notices} list={list} />
       <NotificationHistory notices={notices} unread={unread} narrow={narrow} />
-      <BarRuler status={status} notices={candidates} narrow={narrow} ruler={ruler} />
+      <NoticeAnnouncer notice={notices[0]} />
+      <BarRuler status={status} notices={candidates} work={inline} narrow={narrow} ruler={ruler} />
     </footer>
   )
 }

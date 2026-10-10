@@ -23,7 +23,7 @@ export function useIssues(): { issues: Issue[]; worst: IssueSeverity | null } {
 
 const selectStatusIssues = (s: PrototypeState) => statusIssues(selectIssues(s))
 
-/** The status bar's issues: each as a named pill, and grouped into chips by kind. */
+/** The status bar's issues: each as a named pill, and the chips left after naming the first `k` (`StatusIssues.chipsAfter`). */
 export function useStatusIssues(): StatusIssues {
   return useStore(selectStatusIssues)
 }

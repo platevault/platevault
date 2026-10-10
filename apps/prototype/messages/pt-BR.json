@@ -265,8 +265,8 @@
       }
     }
   ],
-  "status_bar_more": "Mais {count}",
-  "status_bar_more_running": "Mais {count} em execução",
+  "status_bar_more": "+{count} mais",
+  "status_bar_more_running": "+{count} em execução",
   "status_bar_working": "Trabalhando",
   "status_bar_idle": "Ocioso",
   "status_bar_notifications": "Notificações",

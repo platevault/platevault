@@ -2,8 +2,8 @@
  * S1 Home (slice A), the start page: the control-panel dashboard (D-W39).
  *
  * Top line: every issue as a clickable pill (`useIssues` / `IssuePill`), the
- * same list the toolbar's Issues hub and the status bar read. Then boxes with
- * one-word headings:
+ * same list the toolbar's Issues hub and the status bar read, in the bar's
+ * order (`inBarOrder`). Then boxes with one-word headings:
  * - Projects: goals per channel (in project / captured), stage and the one
  *   Next action (D-W35 rule order; a blocked run reads "Blocked at <step>"
  *   with its reason in the note and opens that step); Done Projects behind
@@ -58,6 +58,7 @@ import {
   targetStatus,
   type GoalProgress,
 } from "@/domain/derive"
+import { inBarOrder } from "@/domain/issues"
 import { OPERATION_UNIT_NAME } from "@/domain/labels"
 import { sessionLabel, sessionLongLabel } from "@/domain/membership"
 import { bestWindowTonight, defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
@@ -141,7 +142,7 @@ export function HomePage() {
 // Issues ----------------------------------------------------------------------
 
 function IssueStrip() {
-  const { issues } = useIssues()
+  const issues = inBarOrder(useIssues().issues)
   const m = useMessages()
   return (
     <section aria-label={m.issues_title()} data-home-top-line data-home-issues>
