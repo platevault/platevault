@@ -41,7 +41,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { openSheet } from "@/app/ui-state"
 import { formatHours, planList } from "@/domain/derive"
 import type { OpticalTrainId } from "@/domain/types"
+import { objectTypeRef } from "@/domain/labels"
 import { formatNight } from "@/lib/format"
+import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { setFavourite } from "@/store/actions/library"
@@ -271,7 +273,17 @@ export function TargetsPage() {
         </span>
       ),
     },
-    { id: "type", header: m.targets_type(), sortable: true, className: "max-w-32 truncate", cell: (v) => (v.row.objectType ? <span title={v.row.objectType}>{v.row.objectType}</span> : dash(m.targets_type_unknown())) },
+    {
+      id: "type",
+      header: m.targets_type(),
+      sortable: true,
+      className: "max-w-32 truncate",
+      cell: (v) => {
+        if (!v.row.objectType) return dash(m.targets_type_unknown())
+        const type = say(m, objectTypeRef(v.row.objectType))
+        return <span title={type}>{type}</span>
+      },
+    },
     {
       id: "maxAlt",
       header: m.tonight_max_alt(),

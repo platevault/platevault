@@ -7,6 +7,7 @@
  */
 import { volumeForPath } from "./disk"
 import type { Disk, DiskFile, Volume, VolumeId } from "./types"
+import { type MessageRef, msg } from "@/lib/i18n"
 
 export type DeviceLayout = "asiair" | "nina" | "sharpcap" | "ekos" | "sgp" | "voyager"
 
@@ -23,19 +24,19 @@ export const DEVICE_LAYOUT_LABEL: Record<DeviceLayout, string> = {
  * Layout rules, most specific first. Each reads paths relative to the
  * volume root and names the evidence it matched.
  */
-const RULES: Array<{ layout: DeviceLayout; evidence: string; test: (relative: string) => boolean }> = [
-  { layout: "sharpcap", evidence: "SharpCap Captures folder", test: (p) => p.startsWith("SharpCap Captures/") || p.endsWith(".CameraSettings.txt") },
-  { layout: "sgp", evidence: ".sgf sequence file", test: (p) => p.endsWith(".sgf") },
-  { layout: "asiair", evidence: "Autorun and Plan folders", test: (p) => /^(Autorun|Plan|Live)\//.test(p) },
-  { layout: "voyager", evidence: "Voyager file names", test: (p) => /_LIGHT_[^_/]+_\d+s_BIN\d/i.test(p) },
-  { layout: "ekos", evidence: "Ekos Light/<filter> folders", test: (p) => /_Light_[^/]*_secs_/.test(p) || /(^|\/)Light\/[^/]+\/[^/]+\.fits?$/.test(p) },
-  { layout: "nina", evidence: "N.I.N.A. LIGHT folders", test: (p) => /(^|\/)(LIGHT|FLAT|DARK|BIAS)\//.test(p) },
+const RULES: Array<{ layout: DeviceLayout; evidence: MessageRef; test: (relative: string) => boolean }> = [
+  { layout: "sharpcap", evidence: msg("domain_device_evidence_sharpcap"), test: (p) => p.startsWith("SharpCap Captures/") || p.endsWith(".CameraSettings.txt") },
+  { layout: "sgp", evidence: msg("domain_device_evidence_sgp"), test: (p) => p.endsWith(".sgf") },
+  { layout: "asiair", evidence: msg("domain_device_evidence_asiair"), test: (p) => /^(Autorun|Plan|Live)\//.test(p) },
+  { layout: "voyager", evidence: msg("domain_device_evidence_voyager"), test: (p) => /_LIGHT_[^_/]+_\d+s_BIN\d/i.test(p) },
+  { layout: "ekos", evidence: msg("domain_device_evidence_ekos"), test: (p) => /_Light_[^/]*_secs_/.test(p) || /(^|\/)Light\/[^/]+\/[^/]+\.fits?$/.test(p) },
+  { layout: "nina", evidence: msg("domain_device_evidence_nina"), test: (p) => /(^|\/)(LIGHT|FLAT|DARK|BIAS)\//.test(p) },
 ]
 
 export interface LayoutMatch {
   layout: DeviceLayout
   label: string
-  evidence: string
+  evidence: MessageRef
 }
 
 function relativeFiles(disk: Disk, volume: Volume): string[] {

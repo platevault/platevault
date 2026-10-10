@@ -421,9 +421,10 @@ export function pixelScaleFor(catalog: Catalog, session: Session | undefined): n
  * compare (tabular figures): widths and ratios at two decimals ("8.70″",
  * "0.43"), star counts and background as whole numbers.
  */
-export function formatMetricFixed(metric: Pick<Metric, "value" | "unit">): string {
-  if (metric.value === null) return "Not reported"
-  if (metric.unit === "stars" || metric.unit === "ADU") return `${Math.round(metric.value).toLocaleString("en-GB")} ${metric.unit}`
+export function formatMetricFixed(m: Messages, metric: Pick<Metric, "value" | "unit">): string {
+  if (metric.value === null) return "–"
+  if (metric.unit === "stars") return m.measure_value_stars({ value: Math.round(metric.value).toLocaleString("en-GB") })
+  if (metric.unit === "ADU") return `${Math.round(metric.value).toLocaleString("en-GB")} ADU`
   const value = metric.value.toFixed(2)
   if (metric.unit === "arcsec") return `${value}″`
   return metric.unit === "ratio" || metric.unit === "" ? value : `${value} ${metric.unit}`

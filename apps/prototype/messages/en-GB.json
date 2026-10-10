@@ -7229,5 +7229,64 @@
   "tonight_moon_phase_waxing_crescent": "Waxing crescent",
   "tonight_moon_phase_waning_crescent": "Waning crescent",
   "tonight_moon_phase_waxing_gibbous": "Waxing gibbous",
-  "tonight_moon_phase_waning_gibbous": "Waning gibbous"
+  "tonight_moon_phase_waning_gibbous": "Waning gibbous",
+  "domain_object_emission_nebula": "Emission nebula",
+  "domain_object_reflection_nebula": "Reflection nebula",
+  "domain_object_dark_nebula": "Dark nebula",
+  "domain_object_planetary_nebula": "Planetary nebula",
+  "domain_object_supernova_remnant": "Supernova remnant",
+  "domain_object_open_cluster": "Open cluster",
+  "domain_object_open_cluster_reflection": "Open cluster with reflection nebula",
+  "domain_object_globular_cluster": "Globular cluster",
+  "domain_object_spiral_galaxy": "Spiral galaxy",
+  "domain_object_edge_on_spiral": "Edge-on spiral galaxy",
+  "domain_object_starburst_galaxy": "Starburst galaxy",
+  "domain_object_interacting_galaxies": "Interacting galaxies",
+  "domain_object_galaxy_group": "Galaxy group",
+  "measure_basis_cfa": "linear, CFA {pattern} mosaic plane",
+  "measure_basis_mono": "linear, mono",
+  "measure_basis_csv_row": "{file} row {row}: {frame}",
+  "measure_warning_invalid_samples": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} invalid sample (NaN or ±∞) masked from this metric",
+        "countPlural=*": "{count} invalid samples (NaN or ±∞) masked from this metric"
+      }
+    }
+  ],
+  "measure_warning_saturated_stars": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} saturated star excluded from the fit",
+        "countPlural=*": "{count} saturated stars excluded from the fit"
+      }
+    }
+  ],
+  "measure_value_stars": "{value} stars",
+  "seed_apps_evidence_pixinsight": "Fixture evidence: WBPP 2.8 reads an exact file list and does not write to input files.",
+  "seed_apps_evidence_siril": "Fixture evidence: Siril 1.4 accepts an exact file list and opens inputs read-only.",
+  "seed_apps_evidence_seti": "No capability evidence recorded. Input-write behaviour is unknown and it consumes whole folders.",
+  "seed_apps_evidence_generic": "Generic launcher. It does not claim a verified profile.",
+  "domain_device_evidence_sharpcap": "SharpCap Captures folder",
+  "domain_device_evidence_sgp": ".sgf sequence file",
+  "domain_device_evidence_asiair": "Autorun and Plan folders",
+  "domain_device_evidence_voyager": "Voyager file names",
+  "domain_device_evidence_ekos": "Ekos Light/<filter> folders",
+  "domain_device_evidence_nina": "N.I.N.A. LIGHT folders",
+  "domain_template_osc_broadband": "OSC broadband",
+  "domain_template_osc_dualband": "OSC dual-band"
 }

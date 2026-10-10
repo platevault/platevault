@@ -16,7 +16,7 @@ import { BUILT_IN_METHOD } from "@/domain/measurement"
 import type { FrameHeader, FrameMeasurement, Metric, MetricKey } from "@/domain/types"
 import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, historyImportedMetrics, METRIC_LABEL } from "./measure"
 import { formatMetricFixed } from "@/domain/membership"
 import { type CutoutKind, renderCutout, renderWindow, type StarField, type StarRecord, type StarWarning, type Stretch, type ViewWindow } from "./raster"
@@ -84,9 +84,9 @@ export function StarDetail({ field, star, scaleArcsec }: { field: StarField; sta
     px === null ? (
       <UnknownValue label={m.measure_not_reported()} reason={m.frame_fit_failed()} />
     ) : scaleArcsec ? (
-      `${formatMetricFixed({ value: px * scaleArcsec, unit: "arcsec" })} (${formatMetricFixed({ value: px, unit: "px" })})`
+      `${formatMetricFixed(m, { value: px * scaleArcsec, unit: "arcsec" })} (${formatMetricFixed(m, { value: px, unit: "px" })})`
     ) : (
-      formatMetricFixed({ value: px, unit: "px" })
+      formatMetricFixed(m, { value: px, unit: "px" })
     )
   return (
     <section aria-labelledby={`star-${star.id}-title`} className="space-y-3 rounded-lg border p-3">
@@ -112,8 +112,8 @@ export function StarDetail({ field, star, scaleArcsec }: { field: StarField; sta
           { label: METRIC_LABEL.hfr, value: width(star.hfrPx) },
           { label: METRIC_LABEL.eccentricity, value: star.eccentricity === null ? <UnknownValue label={m.measure_not_reported()} /> : star.eccentricity.toFixed(2) },
           { label: m.frame_angle(), value: star.angleDeg === null ? <UnknownValue label={m.measure_not_reported()} /> : `${star.angleDeg}°` },
-          { label: m.frame_peak(), value: formatMetricFixed({ value: star.peakAdu, unit: "ADU" }) },
-          { label: METRIC_LABEL.background, value: formatMetricFixed({ value: star.backgroundAdu, unit: "ADU" }) },
+          { label: m.frame_peak(), value: formatMetricFixed(m, { value: star.peakAdu, unit: "ADU" }) },
+          { label: METRIC_LABEL.background, value: formatMetricFixed(m, { value: star.backgroundAdu, unit: "ADU" }) },
           { label: METRIC_LABEL.snr, value: star.snr.toFixed(1) },
         ]}
       />
@@ -151,7 +151,7 @@ export function MetricTable({ record, state, applies, sha256 }: { record: FrameM
   const builtInNote: NoteRow[] = own
     ? [
         { label: m.frame_note_method(), value: `${own.method} ${own.version}` },
-        { label: m.frame_note_basis(), value: own.basis },
+        { label: m.frame_note_basis(), value: say(m, own.basis) },
         { label: m.frame_note_input(), value: inputSha ? (inputSha === sha256 ? m.frame_input_current({ hash: inputSha.slice(0, 12) }) : m.frame_input_earlier({ hash: inputSha.slice(0, 12) })) : "–" },
         ...(record?.computedAt ? [{ label: m.status_measured(), value: formatDateTime(record.computedAt) }] : []),
       ]
@@ -197,17 +197,17 @@ export function MetricTable({ record, state, applies, sha256 }: { record: FrameM
                   {METRIC_LABEL[key]}
                 </th>
                 <td className="py-0.5 text-right">
-                  {value ? formatMetricFixed(value) : <UnknownValue label={state === "pending" ? m.status_pending() : state === "verifying" ? m.status_verifying() : m.status_not_measured()} />}
+                  {value ? formatMetricFixed(m, value) : <UnknownValue label={state === "pending" ? m.status_pending() : state === "verifying" ? m.status_verifying() : m.status_not_measured()} />}
                 </td>
                 <td className="py-0.5 text-right">
                   {other ? (
                     <>
-                      {formatMetricFixed(other)}
+                      {formatMetricFixed(m, other)}
                       <span className="sr-only"> {m.frame_value_imported_sr({ unit: other.unit })}</span>
                     </>
                   ) : past ? (
                     <span className="text-muted-foreground">
-                      {formatMetricFixed(past)}
+                      {formatMetricFixed(m, past)}
                       <span className="sr-only"> {m.frame_value_history_sr({ unit: past.unit })}</span>
                     </span>
                   ) : (
@@ -222,7 +222,7 @@ export function MetricTable({ record, state, applies, sha256 }: { record: FrameM
           })}
         </tbody>
       </table>
-      {warning ? <p className="text-xs text-warning">{warning}</p> : null}
+      {warning ? <p className="text-xs text-warning">{say(m, warning)}</p> : null}
     </div>
   )
 }

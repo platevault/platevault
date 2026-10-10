@@ -3490,7 +3490,7 @@
   "run_profile_evidence": "Evidência de {name}",
   "run_mode_link_type": "Tipo de link",
   "run_mode_symbolic_links": "Links simbólicos",
-  "run_mode_hard_links": "Hard links",
+  "run_mode_hard_links": "Links físicos",
   "run_mode_hard_links_help": "Todas as origens e a pasta da execução em um só volume.",
   "run_mode_named_blocked": "{mode} bloqueado",
   "run_metadata_hint_accept_source": "Cabeçalho como está",
@@ -3926,7 +3926,7 @@
   "run_mode_no_symlinks": "{name}: sem links simbólicos",
   "run_mode_no_hardlinks": "{name}: sem hard links",
   "run_check_mode_symlinks": "{mode} (links simbólicos)",
-  "run_check_mode_hardlinks": "{mode} (hard links)",
+  "run_check_mode_hardlinks": "{mode} (links físicos)",
   "location_role_captures_description": "Light frames para indexar. Adicione quantas pastas quiser.",
   "location_role_captures_add": "Adicionar local de capturas",
   "location_role_captures_picker": "Escolher pasta de capturas",
@@ -7285,5 +7285,64 @@
   "tonight_moon_phase_waxing_crescent": "Crescente côncava",
   "tonight_moon_phase_waning_crescent": "Minguante côncava",
   "tonight_moon_phase_waxing_gibbous": "Crescente gibosa",
-  "tonight_moon_phase_waning_gibbous": "Minguante gibosa"
+  "tonight_moon_phase_waning_gibbous": "Minguante gibosa",
+  "domain_object_emission_nebula": "Nebulosa de emissão",
+  "domain_object_reflection_nebula": "Nebulosa de reflexão",
+  "domain_object_dark_nebula": "Nebulosa escura",
+  "domain_object_planetary_nebula": "Nebulosa planetária",
+  "domain_object_supernova_remnant": "Remanescente de supernova",
+  "domain_object_open_cluster": "Aglomerado aberto",
+  "domain_object_open_cluster_reflection": "Aglomerado aberto com nebulosa de reflexão",
+  "domain_object_globular_cluster": "Aglomerado globular",
+  "domain_object_spiral_galaxy": "Galáxia espiral",
+  "domain_object_edge_on_spiral": "Galáxia espiral vista de perfil",
+  "domain_object_starburst_galaxy": "Galáxia starburst",
+  "domain_object_interacting_galaxies": "Galáxias em interação",
+  "domain_object_galaxy_group": "Grupo de galáxias",
+  "measure_basis_cfa": "linear, plano do mosaico CFA {pattern}",
+  "measure_basis_mono": "linear, mono",
+  "measure_basis_csv_row": "{file} linha {row}: {frame}",
+  "measure_warning_invalid_samples": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} amostra inválida (NaN ou ±∞) mascarada nesta métrica",
+        "countPlural=*": "{count} amostras inválidas (NaN ou ±∞) mascaradas nesta métrica"
+      }
+    }
+  ],
+  "measure_warning_saturated_stars": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} estrela saturada excluída do ajuste",
+        "countPlural=*": "{count} estrelas saturadas excluídas do ajuste"
+      }
+    }
+  ],
+  "measure_value_stars": "{value} estrelas",
+  "seed_apps_evidence_pixinsight": "Evidência de fixture: o WBPP 2.8 lê uma lista exata de arquivos e não grava nos arquivos de entrada.",
+  "seed_apps_evidence_siril": "Evidência de fixture: o Siril 1.4 aceita uma lista exata de arquivos e abre as entradas somente para leitura.",
+  "seed_apps_evidence_seti": "Nenhuma evidência de capacidade registrada. Não se sabe se grava nas entradas, e consome pastas inteiras.",
+  "seed_apps_evidence_generic": "Iniciador genérico. Não alega um perfil verificado.",
+  "domain_device_evidence_sharpcap": "Pasta SharpCap Captures",
+  "domain_device_evidence_sgp": "Arquivo de sequência .sgf",
+  "domain_device_evidence_asiair": "Pastas Autorun e Plan",
+  "domain_device_evidence_voyager": "Nomes de arquivo do Voyager",
+  "domain_device_evidence_ekos": "Pastas Light/<filtro> do Ekos",
+  "domain_device_evidence_nina": "Pastas LIGHT do N.I.N.A.",
+  "domain_template_osc_broadband": "OSC banda larga",
+  "domain_template_osc_dualband": "OSC banda dupla"
 }

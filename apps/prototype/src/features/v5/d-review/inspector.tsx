@@ -176,7 +176,7 @@ export function Inspector({
                       <span className="text-muted-foreground">
                         {s.x}, {s.y}
                       </span>
-                      <span className={s.state === "failed" ? "text-warning" : undefined}>{s.state === "failed" ? m.status_failed_fit() : formatMetricFixed({ value: s.fwhmPx, unit: "px" })}</span>
+                      <span className={s.state === "failed" ? "text-warning" : undefined}>{s.state === "failed" ? m.status_failed_fit() : formatMetricFixed(m, { value: s.fwhmPx, unit: "px" })}</span>
                     </button>
                   </li>
                 ))}

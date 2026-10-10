@@ -5,10 +5,34 @@
  * live in `components/app/status.tsx`.
  */
 import { formatCount } from "@/lib/format"
-import { type MessageRef, msg } from "@/lib/i18n"
+import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import type { Band, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, WrapUpStepId } from "./types"
 
 export const RUN_STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
+
+/**
+ * The catalogue's object types (sky.ts) in the reader's language. A type a
+ * resolver returns that is not in this list is provider data, shown as-is.
+ */
+const OBJECT_TYPE_NAME: Record<string, MessageRef> = {
+  "Emission nebula": msg("domain_object_emission_nebula"),
+  "Reflection nebula": msg("domain_object_reflection_nebula"),
+  "Dark nebula": msg("domain_object_dark_nebula"),
+  "Planetary nebula": msg("domain_object_planetary_nebula"),
+  "Supernova remnant": msg("domain_object_supernova_remnant"),
+  "Open cluster": msg("domain_object_open_cluster"),
+  "Open cluster with reflection nebula": msg("domain_object_open_cluster_reflection"),
+  "Globular cluster": msg("domain_object_globular_cluster"),
+  "Spiral galaxy": msg("domain_object_spiral_galaxy"),
+  "Edge-on spiral galaxy": msg("domain_object_edge_on_spiral"),
+  "Starburst galaxy": msg("domain_object_starburst_galaxy"),
+  "Interacting galaxies": msg("domain_object_interacting_galaxies"),
+  "Galaxy group": msg("domain_object_galaxy_group"),
+}
+
+export function objectTypeRef(objectType: string): MessageRef {
+  return OBJECT_TYPE_NAME[objectType] ?? verbatim(objectType)
+}
 
 /** A run step's name: Select, Review, Calibrate, Prepare, Results, Done (`stepName` in app/run-ui words it). */
 export const STEP_NAME: Record<RunStep, MessageRef> = {

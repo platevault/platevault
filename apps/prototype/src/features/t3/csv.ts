@@ -9,7 +9,7 @@
 import { copyAvailability, preferredCopy } from "@/domain/library"
 import { fileKey } from "@/domain/disk"
 import type { AssetId, Catalog, Disk, Metric, MetricKey } from "@/domain/types"
-import { m } from "@/lib/i18n"
+import { m, msg } from "@/lib/i18n"
 
 export const SUBFRAME_SELECTOR_PATH = "/Volumes/Astro-T7/Work/Measurements/NGC7000_30Sep_SubframeSelector.csv"
 /** As recorded in the export; the version is data, never translated. */
@@ -161,7 +161,7 @@ export function importedMetrics(row: CsvRow, csvPath: string): Metric[] {
         unit: column.unit ?? "",
         ...IMPORT_METHOD,
         source: "imported",
-        basis: `${baseName(csvPath)} row ${row.index}: ${row.file}`,
+        basis: msg("measure_basis_csv_row", { file: baseName(csvPath), row: row.index, frame: row.file }),
         state: "valid",
         warning: null,
       } satisfies Metric,

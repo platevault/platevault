@@ -30,7 +30,7 @@ export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
     <div className="space-y-2">
       <KeyValueList
         items={[
-          { label: m.apps_evidence(), value: <span className="text-pretty">{c.evidence}</span>, source: c.verified ? m.apps_prototype_fixture() : undefined },
+          { label: m.apps_evidence(), value: <span className="text-pretty">{say(m, c.evidence)}</span>, source: c.verified ? m.apps_prototype_fixture() : undefined },
           {
             label: m.apps_input_writes(),
             value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,

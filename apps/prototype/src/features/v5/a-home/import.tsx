@@ -47,7 +47,7 @@ import { namingTemplate } from "@/domain/templates"
 import type { ImageType, LocationRole, NamingFrameType } from "@/domain/types"
 import { suggestDisplayName, validateLocation } from "@/features/t1/lib/locations"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { isSettled } from "@/store/operations"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { settleGrowingFiles } from "@/store/simulation"
@@ -323,7 +323,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                     {d.layout ? (
                       <span className="inline-flex items-center gap-0.5" data-device-layout={d.layout.layout}>
                         <Pill tone="info">{d.layout.label}</Pill>
-                        <NoteMarker label={m.import_how_recognised({ name: d.volume.name })} rows={[{ label: m.import_layout(), value: d.layout.evidence }]} />
+                        <NoteMarker label={m.import_how_recognised({ name: d.volume.name })} rows={[{ label: m.import_layout(), value: say(m, d.layout.evidence) }]} />
                       </span>
                     ) : null}
                     <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">

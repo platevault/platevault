@@ -75,7 +75,7 @@ function cornerTiles(field: StarField, size: number): Tile[] {
   )
 }
 
-const fwhmText = (v: number | null) => (v === null ? "–" : formatMetricFixed({ value: v, unit: "px" }))
+const fwhmText = (m: Messages, v: number | null) => (v === null ? "–" : formatMetricFixed(m, { value: v, unit: "px" }))
 const eccText = (v: number | null) => (v === null ? "–" : v.toFixed(2))
 
 export function CornerGrid({ field, stretch, overlay, label, className }: { field: StarField; stretch: Stretch; overlay: CornerOverlay; label: string; className?: string }) {
@@ -102,7 +102,7 @@ function CornerTile({ field, stretch, tile, size, overlay, centre }: { field: St
   const m = useMessages()
   const { rect, stats } = tile
   const name = tileName(m, tile.id)
-  const fwhm = fwhmText(stats.fwhmPx)
+  const fwhm = fwhmText(m, stats.fwhmPx)
   const ecc = eccText(stats.eccentricity)
   const ratio = centre !== null && stats.fwhmPx !== null ? stats.fwhmPx / centre : null
   const soft = ratio !== null && ratio >= SOFT_RATIO

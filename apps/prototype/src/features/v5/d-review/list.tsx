@@ -79,7 +79,7 @@ function metricColumn(m: Messages, key: MetricKey, header: string): FrameColumn 
     cell: (f) => {
       const metric = f.builtIn[key]
       return metric ? (
-        formatMetricFixed(metric)
+        formatMetricFixed(m, metric)
       ) : (
         <span className="text-muted-foreground">
           –<span className="sr-only">{measureBadge(m, f.measure).label}</span>
@@ -125,7 +125,7 @@ export function frameColumns(m: Messages, names: Map<AssetId, string>): FrameCol
       cell: (f) =>
         f.imported.fwhm ? (
           <span title={m.review_imported_unverified()}>
-            {formatMetricFixed(f.imported.fwhm)}
+            {formatMetricFixed(m, f.imported.fwhm)}
             <span className="sr-only">{m.review_imported_unverified_sr()}</span>
           </span>
         ) : (

@@ -26,6 +26,7 @@ import { HelpTip, NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatHours, goalProgress, liveLightSessions, planList, projectGoalSet, projectStatus, rigFieldOfView, sessionRigId, sessionTargetId, subjectName, rigName } from "@/domain/derive"
+import { objectTypeRef } from "@/domain/labels"
 import { matchesQuery } from "@/domain/sky"
 import type { Project } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa } from "@/lib/format"
@@ -300,7 +301,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
         description={row.aliases.length > 0 ? row.aliases.slice(0, 3).join(" · ") : undefined}
         meta={
           <>
-            {row.objectType ? <Pill tone="muted">{row.objectType}</Pill> : null}
+            {row.objectType ? <Pill tone="muted">{say(m, objectTypeRef(row.objectType))}</Pill> : null}
             <Button size="xs" variant="ghost" aria-pressed={target.favourite} onClick={() => run(() => setFavourite(targetId, !target.favourite))}>
               <Star aria-hidden="true" data-icon="inline-start" className={cn(target.favourite && "fill-warning text-warning")} />
               {target.favourite ? m.targets_favourite() : m.targets_star()}
@@ -361,7 +362,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                   label: m.targets_type(),
                   value: row.objectType ? (
                     <span className="inline-flex items-center gap-1">
-                      {row.objectType}
+                      {say(m, objectTypeRef(row.objectType))}
                       <NoteMarker rows={[{ label: m.targets_source(), value: row.entry ? m.target_source_catalogue() : (target.resolver?.provider ?? m.status_unknown()) }]} />
                     </span>
                   ) : (

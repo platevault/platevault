@@ -728,10 +728,10 @@ export interface Metric {
   method: string
   version: string
   source: "built-in" | "imported"
-  /** Input basis, for example "linear, mono" or "CFA red plane". */
-  basis: string
+  /** Input basis, for example "linear, mono" or the CSV row it came from. */
+  basis: MessageRef
   state: "valid" | "failed" | "unavailable"
-  warning: string | null
+  warning: MessageRef | null
 }
 
 /** One earlier measurement of an asset, kept when its bytes or method changed. */
@@ -914,7 +914,7 @@ export type InputMode = "linked" | "direct-source" | "copy" | "clone"
 export interface ProfileCapability {
   /** Verified only with recorded capability evidence (D04). */
   verified: boolean
-  evidence: string
+  evidence: MessageRef
   inputWrite: "read-only" | "unknown" | "write-prone"
   inputModes: InputMode[]
   /** How Direct source passes inputs; "whole-folder" cannot honour exclusions. */

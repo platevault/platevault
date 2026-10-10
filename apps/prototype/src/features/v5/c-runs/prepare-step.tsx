@@ -205,7 +205,7 @@ export function ProfileSection({ profileId, locked, onPick }: { profileId: strin
                   <Pill tone={p.capability.inputWrite === "read-only" ? "success" : p.capability.inputWrite === "write-prone" ? "warning" : "muted"}>
                     {p.capability.inputWrite === "read-only" ? m.run_profile_read_only() : p.capability.inputWrite === "write-prone" ? m.run_profile_write_prone() : m.run_profile_writes_unknown()}
                   </Pill>
-                  <NoteMarker label={m.run_profile_evidence({ name: o.label })}>{p.capability.evidence}</NoteMarker>
+                  <NoteMarker label={m.run_profile_evidence({ name: o.label })}>{say(m, p.capability.evidence)}</NoteMarker>
                 </span>
               </OptionCard>
             )

@@ -386,7 +386,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
       launchArgs: "",
       capability: {
         verified: true,
-        evidence: "Fixture evidence: WBPP 2.8 reads an exact file list and does not write to input files.",
+        evidence: msg("seed_apps_evidence_pixinsight"),
         inputWrite: "read-only",
         inputModes: ["linked", "direct-source", "copy", "clone"],
         directSource: "file-list",
@@ -404,7 +404,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
       launchArgs: "",
       capability: {
         verified: true,
-        evidence: "Fixture evidence: Siril 1.4 accepts an exact file list and opens inputs read-only.",
+        evidence: msg("seed_apps_evidence_siril"),
         inputWrite: "read-only",
         inputModes: ["linked", "direct-source", "copy", "clone"],
         directSource: "file-list",
@@ -422,7 +422,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
       launchArgs: "",
       capability: {
         verified: false,
-        evidence: "No capability evidence recorded. Input-write behaviour is unknown and it consumes whole folders.",
+        evidence: msg("seed_apps_evidence_seti"),
         inputWrite: "unknown",
         inputModes: ["copy", "clone"],
         directSource: "whole-folder",
@@ -440,7 +440,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
       launchArgs: "",
       capability: {
         verified: false,
-        evidence: "Generic launcher. It does not claim a verified profile.",
+        evidence: msg("seed_apps_evidence_generic"),
         inputWrite: "unknown",
         inputModes: ["copy"],
         directSource: "none",

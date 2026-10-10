@@ -15,10 +15,11 @@ import { type Blocker, Refusal, refusalFrom } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { myTargets } from "@/domain/derive"
+import { objectTypeRef } from "@/domain/labels"
 import { BUNDLED_CATALOGUE, type CatalogueEntry, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Catalog, TargetId } from "@/domain/types"
 import { formatDec, formatRa } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
 import { store, useStore } from "@/store/core"
 
@@ -240,7 +241,7 @@ function ResultGroup({ title, rows, taken, onPick, empty }: { title: string; row
                 <span className="font-medium">{row.pick.name}</span>
                 {row.aliases[0] ? <span className="ml-2 text-muted-foreground">{row.aliases[0]}</span> : null}
                 <span className="block text-xs text-muted-foreground tabular-nums">
-                  {row.type ? `${row.type} · ` : ""}
+                  {row.type ? `${say(m, objectTypeRef(row.type))} · ` : ""}
                   {row.pick.ra !== null && row.pick.dec !== null ? `${formatRa(row.pick.ra)} ${formatDec(row.pick.dec)}` : m.project_search_position_unknown()}
                   {row.pick.kind === "new" ? ` · ${row.pick.resolver ? m.project_search_new_from({ source: row.pick.resolver }) : m.project_search_new_from_catalogue()}` : ""}
                 </span>

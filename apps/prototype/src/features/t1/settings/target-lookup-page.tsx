@@ -19,7 +19,8 @@ import { Switch } from "@/components/ui/switch"
 import { BUNDLED_CATALOGUE, resolverEntryFor } from "@/domain/sky"
 import type { AppSettings } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatRa } from "@/lib/format"
-import { type Messages, msg } from "@/lib/i18n"
+import { type Messages, msg, say } from "@/lib/i18n"
+import { objectTypeRef } from "@/domain/labels"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import type { TargetLookupTest } from "@/store/slices/e"
 import { TextField } from "../components/form-field"
@@ -212,7 +213,7 @@ export function TargetLookupPage() {
                     items={[
                       { label: m.settings_lookup_name(), value: last.result.name, source: PROVIDER_LABEL[last.provider] },
                       { label: m.settings_lookup_coordinates(), value: `${formatRa(last.result.ra)} ${formatDec(last.result.dec)}`, source: PROVIDER_LABEL[last.provider] },
-                      { label: m.settings_lookup_object_type(), value: last.result.objectType, source: PROVIDER_LABEL[last.provider] },
+                      { label: m.settings_lookup_object_type(), value: say(m, objectTypeRef(last.result.objectType)), source: PROVIDER_LABEL[last.provider] },
                       { label: m.settings_lookup_aliases(), value: last.result.aliases.join(", "), source: PROVIDER_LABEL[last.provider] },
                     ]}
                   />

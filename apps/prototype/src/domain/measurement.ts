@@ -8,6 +8,7 @@
  * (`inputSha256`), so a changed file never reuses it (PIX-AC-10).
  */
 import type { Asset, DiskFile, FrameMeasurement, IsoDateTime, Metric } from "./types"
+import { joinRefs, type MessageRef, msg } from "@/lib/i18n"
 
 export const BUILT_IN_METHOD = { method: "PlateVault PSF (Moffat β=4)", version: "proto-0.1" } as const
 
@@ -20,8 +21,8 @@ export function simulateMeasurement(
 ): FrameMeasurement {
   const truth = file?.pixelTruth
   if (!file || !truth) return { assetId: asset.id, state: "unavailable", inputSha256: null, metrics: [], computedAt: null, history: [] }
-  const basis = asset.observed.bayerPattern ? `linear, CFA ${asset.observed.bayerPattern} mosaic plane` : "linear, mono"
-  const metric = (key: Metric["key"], value: number | null, unit: string, state: Metric["state"] = "valid", warning: string | null = null): Metric => ({
+  const basis = asset.observed.bayerPattern ? msg("measure_basis_cfa", { pattern: asset.observed.bayerPattern }) : msg("measure_basis_mono")
+  const metric = (key: Metric["key"], value: number | null, unit: string, state: Metric["state"] = "valid", warning: MessageRef | null = null): Metric => ({
     key,
     value,
     unit,
@@ -42,11 +43,11 @@ export function simulateMeasurement(
     metric("snr", Number((truth.starCount / 60).toFixed(1)), "ratio"),
   ]
   const warnings = [
-    truth.invalidSamples > 0 ? `${truth.invalidSamples} invalid samples (NaN or ±∞) masked from this metric` : null,
-    truth.saturatedStars > 0 ? `${truth.saturatedStars} saturated stars excluded from the fit` : null,
-  ].filter((w): w is string => w !== null)
+    truth.invalidSamples > 0 ? msg("measure_warning_invalid_samples", { count: truth.invalidSamples }) : null,
+    truth.saturatedStars > 0 ? msg("measure_warning_saturated_stars", { count: truth.saturatedStars }) : null,
+  ].filter((w): w is MessageRef => w !== null)
   if (warnings.length > 0) {
-    for (const m of metrics) m.warning = warnings.join("; ")
+    for (const m of metrics) m.warning = joinRefs(warnings, "; ")
   }
   return { assetId: asset.id, state: "valid", inputSha256: file.sha256, metrics, computedAt: now, history: [] }
 }
