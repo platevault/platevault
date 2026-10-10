@@ -28,7 +28,7 @@ import type {
   Session,
   SessionId,
 } from "./types"
-import { formatCount, formatDecimal, formatDuration, formatExposure, formatNight } from "@/lib/format"
+import { formatCount, formatDecimal, formatDuration, formatExposure } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 export function emptyContent(): MembershipContent {
