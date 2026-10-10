@@ -1,10 +1,10 @@
 /**
  * The Issues hub (foundation-owned): every issue across the app, grouped and
  * each with one action. The toolbar's Issues button counts them and takes the
- * worst severity's tint; Home renders the same list as pills, and the status
- * bar shows them as named pills or as chips by kind (`statusIssues`). Read it
- * through `useIssues()` and `useStatusIssues()` (src/store/issues.ts).
- * Nothing here writes state.
+ * worst severity's tint; Home renders them as pills in bar order
+ * (`inBarOrder`), and the status bar shows them as named pills or as chips
+ * by kind (`statusIssues`). Read it through `useIssues()` and
+ * `useStatusIssues()` (src/store/issues.ts). Nothing here writes state.
  *
  * The domain carries no copy: the hub, Home and the status bar word each
  * issue by its `kind`, `count` and `name` from the message catalogue
@@ -62,6 +62,11 @@ export function worstSeverity(issues: Issue[]): IssueSeverity | null {
 /** Worst first; stable, so equal severities keep their order (the hub's group order). */
 export function bySeverity(a: { severity: IssueSeverity }, b: { severity: IssueSeverity }): number {
   return SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)
+}
+
+/** Bar order, shared by the status bar and Home: worst first, then hub group order. `issues` is in hub order, as `deriveIssues` returns it. */
+export function inBarOrder(issues: Issue[]): Issue[] {
+  return [...issues].sort(bySeverity)
 }
 
 /** Every issue, in group order and worst first within a group. */
@@ -157,37 +162,37 @@ export const STATUS_CHIP_OF: Record<IssueKind, StatusChipId> = {
   "location-offline": "offline",
   "work-failed": "failed",
   "work-interrupted": "failed",
+  "calibration-failed": "failed",
   "calibration-review": "blocked",
   "run-blocked": "blocked",
   "master-offer": "master-offer",
   "calibration-waiting": "calibration",
-  "calibration-failed": "calibration",
   drift: "drift",
 }
 
 export interface StatusChip {
   id: StatusChipId
-  /** What the chip counts: locations, failed work, blocked runs, sessions, processes, offers, changed frames and masters. */
+  /** What the chip counts: locations, failed work and calibrations, blocked runs, sessions, processes, offers, changed frames and masters. */
   count: number
   severity: IssueSeverity
   /** In hub order. */
   issues: Issue[]
 }
 
-/** The status bar's issues at both densities, each in bar order: worst first, then hub group order. */
+/** The status bar's issues at every density, each in bar order: worst first, then hub group order. */
 export interface StatusIssues {
-  /** Each issue as its own named pill (the bar's first density). */
+  /** Each issue as its own named pill. */
   pills: Issue[]
-  /** The issues grouped by `STATUS_CHIP_OF`; a chip with no issue is left out. */
-  chips: StatusChip[]
+  /**
+   * The chips left when the first `k` pills are named: `chipsAfter[k]` groups
+   * the other issues by `STATUS_CHIP_OF`, a chip with no issue left out.
+   * `chipsAfter[0]` groups every issue; `chipsAfter[pills.length]` is empty.
+   */
+  chipsAfter: StatusChip[][]
 }
 
-/**
- * The status bar's issues, from the same derivation as the hub, so their
- * numbers agree. A blocked run counts once even when it is held at Calibrate
- * and blocked elsewhere.
- */
-export function statusIssues(issues: Issue[]): StatusIssues {
+/** `issues` (in hub order) grouped by `STATUS_CHIP_OF`. A blocked run counts once even when it is held at Calibrate and blocked elsewhere. */
+function groupByChip(issues: Issue[]): StatusChip[] {
   const grouped = new Map<StatusChipId, Issue[]>()
   for (const issue of issues) {
     const id = STATUS_CHIP_OF[issue.kind]
@@ -200,7 +205,17 @@ export function statusIssues(issues: Issue[]): StatusIssues {
     severity: worstSeverity(mine)!,
     issues: mine,
   }))
-  return { pills: [...issues].sort(bySeverity), chips: chips.sort(bySeverity) }
+  return chips.sort(bySeverity)
+}
+
+/** The status bar's issues, from the same derivation as the hub, so their numbers agree. */
+export function statusIssues(issues: Issue[]): StatusIssues {
+  const pills = inBarOrder(issues)
+  const chipsAfter = pills.map((_, k) => {
+    const named = new Set(pills.slice(0, k))
+    return groupByChip(issues.filter((issue) => !named.has(issue)))
+  })
+  return { pills, chipsAfter: [...chipsAfter, []] }
 }
 
 /** Open Projects with a blocked run: the Projects source-list badge. */

@@ -265,8 +265,8 @@
       }
     }
   ],
-  "status_bar_more": "{count} more",
-  "status_bar_more_running": "{count} more running",
+  "status_bar_more": "+{count} more",
+  "status_bar_more_running": "+{count} more running",
   "status_bar_working": "Working",
   "status_bar_idle": "Idle",
   "status_bar_notifications": "Notifications",
