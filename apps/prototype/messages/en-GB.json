@@ -234,38 +234,6 @@
     }
   ],
   "status_bar_selected_of": "{count} of {total} selected",
-  "status_bar_offline": "{count} offline",
-  "status_bar_runs_blocked": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} blocked",
-        "countPlural=*": "{count} blocked"
-      }
-    }
-  ],
-  "status_bar_calibration_waiting": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} calibration waiting",
-        "countPlural=*": "{count} calibrations waiting"
-      }
-    }
-  ],
-  "status_bar_more": "+{count} more",
   "status_bar_more_running": "+{count} more running",
   "status_bar_working": "Working",
   "status_bar_idle": "Idle",
@@ -2778,36 +2746,6 @@
   "targets_saved_needs_rig": "{name} needs a rig",
   "targets_saved_no_narrowband": "{name} has no Ha, SII or OIII filter",
   "targets_saved_no_band": "{name} has no {band} filter",
-  "status_bar_failed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} failed",
-        "countPlural=*": "{count} failed"
-      }
-    }
-  ],
-  "status_bar_changed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} changed",
-        "countPlural=*": "{count} changed"
-      }
-    }
-  ],
   "status_bar_unread": [
     {
       "declarations": [
@@ -7278,5 +7216,66 @@
   "wrapup_reason_no_trash": "volume has no OS Trash",
   "wrapup_reason_not_found": "missing at recorded path",
   "wrapup_reason_offline": "volume offline",
-  "tips_note_named": "Note {number}: {label}"
+  "tips_note_named": "Note {number}: {label}",
+  "issue_duplicates": [
+    {
+      "declarations": [
+        "input count",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} duplicate copy · {bytes}",
+        "countPlural=*": "{count} duplicate copies · {bytes}"
+      }
+    }
+  ],
+  "status_bar_errors": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} error",
+        "countPlural=*": "{count} errors"
+      }
+    }
+  ],
+  "status_bar_warnings": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} warning",
+        "countPlural=*": "{count} warnings"
+      }
+    }
+  ],
+  "status_bar_info": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} info",
+        "countPlural=*": "{count} info"
+      }
+    }
+  ]
 }

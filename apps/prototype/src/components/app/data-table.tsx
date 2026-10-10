@@ -16,6 +16,9 @@
  *   right click, Shift+F10 or the Menu key on a row opens that row's items,
  *   in a menu named after the row.
  *   Return `MenuEntry[]` (row-menu.tsx) or ready-made menu items.
+ * - Click to act (opt-in `onRowClick`): a click on the row outside its
+ *   controls (links, buttons, inputs, menus) runs the row's primary action,
+ *   as does Enter on the focused row. Controls keep their own action.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
@@ -28,6 +31,9 @@ import { ClearableInput } from "./clearable-input"
 import { type MenuEntry, type MenuRow, menuContent, menuRowAt, openMenuFromKeyboard } from "./row-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+
+/** Controls inside a row that keep their own click; a click on them never runs `onRowClick`. */
+const ROW_CONTROLS = "a[href], button, input, select, textarea, label, summary, [role=button], [role=link], [role=checkbox], [role=switch], [role=combobox], [role=menuitem], [role=option], [contenteditable=true]"
 
 export interface Column<T> {
   id: string
@@ -91,6 +97,8 @@ export interface DataTableProps<T> {
   stickyFirstColumn?: boolean
   /** The row's context menu: entries (`MenuEntry[]`) or menu items; every item must also be reachable from the row itself. */
   contextMenu?: (row: T) => MenuEntry[] | ReactNode
+  /** The row's primary action (open, select): a click outside the row's controls, or Enter on the focused row. */
+  onRowClick?: (row: T) => void
 }
 
 export function DataTable<T>({
@@ -109,6 +117,7 @@ export function DataTable<T>({
   groups,
   stickyFirstColumn = false,
   contextMenu,
+  onRowClick,
 }: DataTableProps<T>) {
   const m = useMessages()
   const [sort, setSort] = useState(initialSort ?? null)
@@ -181,8 +190,9 @@ export function DataTable<T>({
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
     const target = event.target as HTMLElement
     if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
-    const cell = target.closest("td, th")
-    const row = cell?.closest<HTMLElement>("tr[data-row]")
+    const row = target.closest<HTMLElement>("tr[data-row]")
+    // A focused row (click to act) moves to the adjacent row's first control, or the row itself.
+    const cell = target === row ? row.children[0] : target.closest("td, th")
     if (!cell || !row) return
     // Data rows of the whole table, so ↑/↓ also cross group boundaries.
     const allRows = Array.from(row.closest("table")?.querySelectorAll<HTMLElement>("tbody tr[data-row]") ?? [])
@@ -190,11 +200,24 @@ export function DataTable<T>({
     if (!sibling) return
     const index = Array.from(row.children).indexOf(cell)
     const focusable = "a[href], button:not([disabled]), [role=checkbox], input:not([disabled])"
-    const next = sibling.children[index]?.querySelector<HTMLElement>(focusable) ?? sibling.querySelector<HTMLElement>(focusable)
+    const next = sibling.children[index]?.querySelector<HTMLElement>(focusable) ?? sibling.querySelector<HTMLElement>(focusable) ?? (onRowClick ? sibling : null)
     if (next) {
       event.preventDefault()
       next.focus()
     }
+  }
+
+  // Only clicks on the row's own DOM count: portalled menus and dialogs opened from a row bubble here through React.
+  const rowClick = (row: T) => (event: MouseEvent<HTMLTableRowElement>) => {
+    const target = event.target as HTMLElement
+    if (!event.currentTarget.contains(target) || target.closest(ROW_CONTROLS)) return
+    if (window.getSelection()?.isCollapsed === false) return
+    onRowClick?.(row)
+  }
+  const rowKey = (row: T) => (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key !== "Enter" || event.target !== event.currentTarget) return
+    event.preventDefault()
+    onRowClick?.(row)
   }
 
   const columnCount = columns.length + (selection ? 1 : 0)
@@ -329,6 +352,9 @@ export function DataTable<T>({
                     data-row
                     data-row-id={contextMenu ? id : undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
+                    tabIndex={onRowClick ? -1 : undefined}
+                    onClick={onRowClick ? rowClick(row) : undefined}
+                    onKeyDown={onRowClick ? rowKey(row) : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
                       // The stripe skips selected rows, so the selected tint always shows.
@@ -339,6 +365,7 @@ export function DataTable<T>({
                       "[--row-bg:transparent] even:not-data-selected:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_6%,transparent)]",
                       "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_22%,transparent)]",
                       "aria-[current=true]:[--row-bg:var(--accent)]",
+                      onRowClick && "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
                       rowClassName?.(row),
                     )}
                   >
