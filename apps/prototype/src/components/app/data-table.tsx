@@ -13,7 +13,8 @@
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
  *   and the first column stay in view while a wide table scrolls sideways.
  * - Context menu (opt-in `contextMenu`): one native-style menu for the table;
- *   right click, Shift+F10 or the Menu key on a row opens that row's items.
+ *   right click, Shift+F10 or the Menu key on a row opens that row's items,
+ *   in a menu named after the row.
  *   Return `MenuEntry[]` (row-menu.tsx) or ready-made menu items.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
@@ -24,7 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { ClearableInput } from "./clearable-input"
-import { type MenuEntry, menuContent } from "./row-menu"
+import { type MenuEntry, type MenuRow, menuContent, menuRowAt, openMenuFromKeyboard } from "./row-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -111,7 +112,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const m = useMessages()
   const [sort, setSort] = useState(initialSort ?? null)
-  const [menuRowId, setMenuRowId] = useState<string | null>(null)
+  const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
   useStatusSelection(selection?.selected.length ?? 0)
@@ -214,11 +215,11 @@ export function DataTable<T>({
   // The row under the pointer (or the focused row for Shift+F10) picks the
   // menu's items; outside a row the browser's own menu stays.
   const onContextMenu = (event: MouseEvent) => {
-    const id = (event.target as HTMLElement).closest("tr[data-row-id]")?.getAttribute("data-row-id") ?? null
-    if (id === null) event.stopPropagation()
-    else setMenuRowId(id)
+    const found = menuRowAt(event.target, "data-row-id")
+    if (found === null) event.stopPropagation()
+    else setMenuTarget(found)
   }
-  const menuRow = contextMenu && menuRowId !== null ? rows.find((row) => getRowId(row) === menuRowId) : undefined
+  const menuRow = contextMenu && menuTarget !== null ? rows.find((row) => getRowId(row) === menuTarget.key) : undefined
   const frameClass = cn(
     // The frame is the scroll container in both axes so the header row
     // stays pinned while long tables scroll inside it. Scroll padding the
@@ -229,7 +230,7 @@ export function DataTable<T>({
     className,
   )
   const table = (
-      <table className="w-full text-sm" onContextMenu={contextMenu ? onContextMenu : undefined}>
+      <table className="w-full text-sm" onContextMenu={contextMenu ? onContextMenu : undefined} onKeyDown={contextMenu ? (event) => openMenuFromKeyboard(event, "data-row-id") : undefined}>
         <caption className="sr-only">{loading ? m.table_loading({ name: label }) : label}</caption>
         <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
           <tr>
@@ -330,11 +331,12 @@ export function DataTable<T>({
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
-                      "group/row h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] hover:bg-foreground/[0.06]",
+                      // The stripe skips selected rows, so the selected tint always shows.
+                      "group/row h-(--row-h) border-b border-border/50 last:border-0 even:not-data-selected:bg-foreground/[0.022] hover:bg-foreground/[0.06]",
                       "data-selected:bg-primary/16 data-selected:hover:bg-primary/22",
                       "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
                       // The same tints as a variable, for pinned cells that paint over the row.
-                      "[--row-bg:transparent] even:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_6%,transparent)]",
+                      "[--row-bg:transparent] even:not-data-selected:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_6%,transparent)]",
                       "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_22%,transparent)]",
                       "aria-[current=true]:[--row-bg:var(--accent)]",
                       rowClassName?.(row),
@@ -389,7 +391,7 @@ export function DataTable<T>({
       <ContextMenuTrigger ref={frame} className={frameClass} aria-busy={busy}>
         {table}
       </ContextMenuTrigger>
-      <ContextMenuContent>{menuRow ? menuContent(contextMenu(menuRow)) : null}</ContextMenuContent>
+      <ContextMenuContent aria-label={menuTarget?.name}>{menuRow ? menuContent(contextMenu(menuRow)) : null}</ContextMenuContent>
     </ContextMenu>
   )
 }

@@ -9,10 +9,11 @@
  *   `<ContextMenuArea menu={(key) => [...]}>` and spread `menuKey(id)` on
  *   each row. Outside a row the browser's own menu stays.
  *
- * Right click, long press, Shift+F10 and the Menu key open it.
+ * Right click, long press, Shift+F10 and the Menu key open it; the menu is
+ * named after its row.
  */
 import type { LucideIcon } from "lucide-react"
-import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
+import { Fragment, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
 
@@ -83,26 +84,65 @@ export function menuKey(key: string): { "data-menu-key": string } {
   return { "data-menu-key": key }
 }
 
+/** The row a menu opens for: its key, and its name for the menu's accessible name. */
+export interface MenuRow {
+  key: string
+  name: string
+}
+
+/** A row's name: its own label, else its row header, else its first link or button, else its text. */
+function rowName(row: HTMLElement): string {
+  const named = row.hasAttribute("aria-label") ? row : (row.querySelector<HTMLElement>("th[scope=row]") ?? row.querySelector<HTMLElement>("a[href], button:not([role=checkbox])") ?? row)
+  const label = named.getAttribute("aria-label")
+  if (label) return label
+  // Its visible words only: a note's glyph number and screen-reader-only text are no part of the name.
+  const words = named.cloneNode(true) as HTMLElement
+  for (const extra of words.querySelectorAll(".sr-only, [aria-hidden=true]")) extra.remove()
+  return (words.textContent ?? "").replace(/\s+/g, " ").trim()
+}
+
+/** The row an event comes from, marked by `keyAttribute` (`data-menu-key`, `data-row-id`); null outside a row. */
+export function menuRowAt(target: EventTarget | null, keyAttribute: string): MenuRow | null {
+  const row = target instanceof Element ? target.closest<HTMLElement>(`[${keyAttribute}]`) : null
+  const key = row?.getAttribute(keyAttribute)
+  return row && key != null ? { key, name: rowName(row) } : null
+}
+
+/**
+ * Shift+F10 or the Menu key on a focused row opens its menu (WCAG 2.1.1).
+ * macOS browsers fire no `contextmenu` for either, so the focused element
+ * gets one at its lower-left corner: the menu opens anchored there, through
+ * the same path as a right click.
+ */
+export function openMenuFromKeyboard(event: KeyboardEvent, keyAttribute: string): void {
+  if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return
+  const target = event.target
+  if (!(target instanceof HTMLElement) || !target.closest(`[${keyAttribute}]`)) return
+  event.preventDefault()
+  const box = target.getBoundingClientRect()
+  target.dispatchEvent(new globalThis.MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: box.left, clientY: box.bottom }))
+}
+
 /**
  * One menu for a whole list: the row under the pointer (or the focused row
  * for Shift+F10) picks the entries. Outside a row the browser's menu stays.
  */
 export function ContextMenuArea({ menu, children, className }: { menu: (key: string) => MenuEntry[]; children: ReactNode; className?: string }) {
-  const [key, setKey] = useState<string | null>(null)
+  const [row, setRow] = useState<MenuRow | null>(null)
   const onContextMenu = (event: MouseEvent) => {
-    const found = (event.target as HTMLElement).closest("[data-menu-key]")?.getAttribute("data-menu-key") ?? null
+    const found = menuRowAt(event.target, "data-menu-key")
     if (found === null) event.stopPropagation()
-    else setKey(found)
+    else setRow(found)
   }
   return (
     <ContextMenu>
       <ContextMenuTrigger className={className}>
         {/* The row lookup runs before the trigger, so outside a row the browser's menu stays (as in DataTable). */}
-        <div className="contents" onContextMenu={onContextMenu}>
+        <div className="contents" onContextMenu={onContextMenu} onKeyDown={(event) => openMenuFromKeyboard(event, "data-menu-key")}>
           {children}
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>{key !== null ? <MenuEntries entries={menu(key)} /> : null}</ContextMenuContent>
+      <ContextMenuContent aria-label={row?.name}>{row !== null ? <MenuEntries entries={menu(row.key)} /> : null}</ContextMenuContent>
     </ContextMenu>
   )
 }

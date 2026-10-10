@@ -7344,5 +7344,6 @@
   "domain_device_evidence_ekos": "Pastas Light/<filtro> do Ekos",
   "domain_device_evidence_nina": "Pastas LIGHT do N.I.N.A.",
   "domain_template_osc_broadband": "OSC banda larga",
-  "domain_template_osc_dualband": "OSC banda dupla"
+  "domain_template_osc_dualband": "OSC banda dupla",
+  "tips_note_named": "Nota {number}: {label}"
 }
