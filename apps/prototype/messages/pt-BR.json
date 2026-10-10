@@ -6650,7 +6650,7 @@
   "store_label_add_master_to_library": "Adicionar master à biblioteca de calibração",
   "store_saved_added_to_library": "{name} adicionado à biblioteca de calibração",
   "store_reason_every_input_unreadable": "Todas as entradas ilegíveis",
-  "store_label_prepare_named": "Preparar {name}",
+  "store_label_prepare_named": "Preparação de {name}",
   "op_prepare_title_rev": "Preparação de {name} (rev {revision})",
   "store_label_prepare_all_named": "Preparar tudo de {name}",
   "store_saved_prepare_all": "Preparar tudo: {name}",

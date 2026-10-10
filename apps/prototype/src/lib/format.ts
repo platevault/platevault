@@ -5,7 +5,7 @@
  * `useMessages()` re-renders in the new language's digits and month names.
  * 24-hour clock in every locale.
  */
-import { getLocale, type Locale } from "./i18n"
+import { getLocale, type Locale } from "@/paraglide/runtime"
 
 const numberFormats = new Map<string, Intl.NumberFormat>()
 

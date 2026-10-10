@@ -29,7 +29,7 @@ import type {
   SessionId,
 } from "./types"
 import { formatCount, formatDecimal, formatDuration, formatExposure, formatNight } from "@/lib/format"
-import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
+import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 export function emptyContent(): MembershipContent {
   return { sessions: [], included: [], excluded: [], rejected: [], unresolved: [], productInputs: [] }
@@ -254,8 +254,8 @@ export function describeDiff(catalog: Catalog, diff: ContentDiff): MessageRef[] 
 
 /** "18 Sep Ha"; "18 Sep no filter" without a filter. */
 export function sessionRef(session: Session): MessageRef {
-  const night = formatNight(session.night)
-  return session.channel ? verbatim(`${night} ${session.channel}`) : msg("domain_session_no_filter", { night })
+  const night = nightRef(session.night)
+  return session.channel ? joinRefs([night, verbatim(session.channel)], " ") : msg("domain_session_no_filter", { night })
 }
 
 export function sessionLabel(m: Messages, session: Session): string {
@@ -265,7 +265,7 @@ export function sessionLabel(m: Messages, session: Session): string {
 /** "18 Sep · Ha · 300 s", the label calibration and preparation lists use. */
 export function sessionLongRef(session: Session): MessageRef {
   const channel = session.channel ? verbatim(session.channel) : msg("palette_session_no_filter")
-  return joinRefs([verbatim(formatNight(session.night)), channel, verbatim(formatExposure(sessionExposureS(session)))], " · ")
+  return joinRefs([nightRef(session.night), channel, verbatim(formatExposure(sessionExposureS(session)))], " · ")
 }
 
 export function sessionLongLabel(m: Messages, session: Session): string {

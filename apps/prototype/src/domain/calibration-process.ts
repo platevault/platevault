@@ -44,8 +44,8 @@ import type {
   Session,
   SessionId,
 } from "./types"
-import { fileName, formatExposure, formatNight } from "@/lib/format"
-import { joinRefs, m, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
+import { fileName, formatExposure } from "@/lib/format"
+import { joinRefs, m, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 export const CALIBRATION_STEPS: CalibrationStepId[] = ["stack", "detect", "import", "register", "raws"]
 
@@ -140,7 +140,7 @@ export function processRef(catalog: Catalog, process: CalibrationProcess): Messa
   const session = process.sessionId ? catalog.sessions[process.sessionId] : undefined
   if (!session) return process.detected ? joinRefs([kind, verbatim(fileName(process.detected.path))], " · ") : msg("domain_process_imported", { kind })
   const detail = process.kind === "flat" ? session.channel : process.kind === "bias" ? null : formatExposure(session.exposureS)
-  return joinRefs([detail ? joinRefs([kind, verbatim(detail)], " ") : kind, verbatim(formatNight(session.night))], " · ")
+  return joinRefs([detail ? joinRefs([kind, verbatim(detail)], " ") : kind, nightRef(session.night)], " · ")
 }
 
 export function processName(m: Messages, catalog: Catalog, process: CalibrationProcess): string {

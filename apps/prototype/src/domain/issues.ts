@@ -14,7 +14,7 @@ import { inputDrift } from "./calibration"
 import { calibrationProcesses } from "./calibration-process"
 import { runPipeline, runStepLink, type StepLink, sessionsNeedingWork, type World } from "./derive"
 import { locationAvailability, qualityApplicability } from "./library"
-import { formatNight } from "@/lib/format"
+import { sessionRef } from "./membership"
 import type { MessageRef } from "@/lib/i18n"
 
 export type IssueSeverity = "info" | "warning" | "danger"
@@ -135,7 +135,7 @@ export function deriveIssues(world: World): Issue[] {
   for (const [sessionId, frames] of drifted) {
     const session = catalog.sessions[sessionId]
     if (!session) continue
-    out.push({ id: `drift:session:${sessionId}`, group: "drift", kind: "drift", severity: "warning", count: frames, name: `${formatNight(session.night)} ${session.channel ?? ""}`.trim(), about: sessionId, link: { to: "/sessions/$sessionId", params: { sessionId } } })
+    out.push({ id: `drift:session:${sessionId}`, group: "drift", kind: "drift", severity: "warning", count: frames, name: sessionRef(session), about: sessionId, link: { to: "/sessions/$sessionId", params: { sessionId } } })
   }
   for (const master of Object.values(catalog.masters)) {
     if (master.state !== "adopted" || !inputDrift(catalog, disk, { type: "master", masterId: master.id })) continue

@@ -17,6 +17,7 @@
  */
 import { m as generated } from "@/paraglide/messages"
 import type { Locale } from "@/paraglide/runtime"
+import { formatNight } from "./format"
 
 export { baseLocale as DEFAULT_LOCALE, getLocale, isLocale, locales as LOCALES, type Locale } from "@/paraglide/runtime"
 
@@ -52,10 +53,11 @@ interface KeyedRef {
  * (Activity, operations) and derived domain objects (gates, warnings, Fit)
  * carry instead of a finished string, so a language switch re-words them.
  * A param may itself be a ref (a step name, a rig), worded first. `text` is
- * data shown as-is (names, paths), never English; `list` joins finished
- * pieces with punctuation only.
+ * data shown as-is (names, paths), never English; `night` is an observing
+ * night (`YYYY-MM-DD`), formatted in the reader's locale; `list` joins
+ * finished pieces with punctuation only.
  */
-export type MessageRef = KeyedRef | { text: string } | { list: MessageRef[]; separator: string }
+export type MessageRef = KeyedRef | { text: string } | { night: string } | { list: MessageRef[]; separator: string }
 
 type ParamArgs<K extends MessageKey> = {} extends MessageInputs<K> ? [params?: MessageInputs<K>] : [params: MessageInputs<K>]
 
@@ -69,18 +71,24 @@ export function verbatim(text: string): MessageRef {
   return { text }
 }
 
+/** An observing night (`YYYY-MM-DD`), worded "18 Sep" or "18 set" when read. */
+export function nightRef(night: string): MessageRef {
+  return { night }
+}
+
 /** Finished pieces joined by punctuation: refusal reasons by "; ". */
 export function joinRefs(list: MessageRef[], separator: string): MessageRef {
   return { list, separator }
 }
 
 function isRef(value: unknown): value is MessageRef {
-  return typeof value === "object" && value !== null && ("key" in value || "text" in value || "list" in value)
+  return typeof value === "object" && value !== null && ("key" in value || "text" in value || "night" in value || "list" in value)
 }
 
 /** Word a ref with the caller's catalogue (`useMessages()` in a component, so it re-renders on a language switch). */
 export function say(m: Messages, ref: MessageRef): string {
   if ("text" in ref) return ref.text
+  if ("night" in ref) return formatNight(ref.night)
   if ("list" in ref) return ref.list.map((item) => say(m, item)).join(ref.separator)
   const params: Record<string, unknown> = {}
   for (const [name, value] of Object.entries(ref.params)) params[name] = isRef(value) ? say(m, value) : value
