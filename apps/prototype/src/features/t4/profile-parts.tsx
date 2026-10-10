@@ -1,24 +1,42 @@
 /**
  * Profile parts shared by Prepare and Settings › Applications: capability
- * evidence (D04, PREP-FR-01), the executable state, and the simulated
- * application chooser.
+ * claims as label and value rows with their evidence in a note (D04,
+ * PREP-FR-01), the executable state, and the simulated application chooser.
  */
 import { useEffect, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { KeyValueList, PathText } from "@/components/app/data"
+import { type KeyValueItem, PathText } from "@/components/app/data"
 import { ActionError } from "@/components/app/feedback"
+import { NoteMarker, type NoteRow } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import type { ApplicationProfile } from "@/domain/types"
-import { say } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { locateExecutable } from "@/store/actions/settings"
 import { T4Badge } from "./badges"
 import { MODE_NAME, PRODUCT_KIND_NAME } from "@/domain/labels"
 
-export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
+/** The profile's capability claims as label and value rows; the evidence behind them is in `CapabilityNote`. */
+export function capabilityItems(m: Messages, profile: ApplicationProfile): KeyValueItem[] {
+  const c = profile.capability
+  return [
+    {
+      label: m.apps_input_writes(),
+      value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,
+    },
+    { label: m.apps_input_modes(), value: c.inputModes.length ? c.inputModes.map((mode) => say(m, MODE_NAME[mode])).join(", ") : m.apps_none_recorded() },
+    {
+      label: m.apps_direct_source(),
+      value: c.directSource === "file-list" ? m.apps_direct_file_list() : c.directSource === "whole-folder" ? m.apps_direct_whole_folders() : m.location_links_none(),
+    },
+  ]
+}
+
+/** ① beside the profile name: the recorded evidence, product inputs, corrected values and what the profile does not support. */
+export function CapabilityNote({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
   const c = profile.capability
   const unsupported: string[] = []
@@ -26,31 +44,21 @@ export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
   if (c.directSource === "none") unsupported.push(m.apps_unsupported_paths())
   if (c.directSource === "whole-folder") unsupported.push(m.apps_unsupported_file_list())
   if (c.productInputKinds.length === 0) unsupported.push(m.apps_unsupported_products())
-  return (
-    <div className="space-y-2">
-      <KeyValueList
-        items={[
-          { label: m.apps_evidence(), value: <span className="text-pretty">{say(m, c.evidence)}</span>, source: c.verified ? m.apps_prototype_fixture() : undefined },
-          {
-            label: m.apps_input_writes(),
-            value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,
-          },
-          { label: m.apps_input_modes(), value: c.inputModes.length ? c.inputModes.map((mode) => say(m, MODE_NAME[mode])).join(", ") : m.apps_none_recorded() },
-          {
-            label: m.apps_direct_source(),
-            value: c.directSource === "file-list" ? m.apps_direct_file_list() : c.directSource === "whole-folder" ? m.apps_direct_whole_folders() : m.location_links_none(),
-          },
-          { label: m.apps_product_inputs(), value: c.productInputKinds.length ? c.productInputKinds.map((k) => say(m, PRODUCT_KIND_NAME[k])).join(", ") : m.apps_none_recorded() },
-          { label: m.apps_corrected_values(), value: c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through() },
-        ]}
-      />
-      {unsupported.length > 0 ? (
-        <p className="text-xs text-pretty text-muted-foreground">{m.apps_unsupported_list({ list: unsupported.join("; ") })}</p>
-      ) : (
-        <p className="text-xs text-muted-foreground">{m.apps_rename_note()}</p>
-      )}
-    </div>
-  )
+  const rows: NoteRow[] = [
+    { label: m.apps_evidence(), value: c.verified ? `${say(m, c.evidence)} · ${m.apps_prototype_fixture()}` : say(m, c.evidence) },
+    { label: m.apps_product_inputs(), value: c.productInputKinds.length ? c.productInputKinds.map((k) => say(m, PRODUCT_KIND_NAME[k])).join(", ") : m.apps_none_recorded() },
+    {
+      label: m.apps_corrected_values(),
+      value: (
+        <>
+          <span className="block">{c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()}</span>
+          <span className="block opacity-75">{m.apps_rename_note()}</span>
+        </>
+      ),
+    },
+  ]
+  if (unsupported.length > 0) rows.push({ label: m.location_links_none(), value: unsupported.map((u) => <span key={u} className="block">{u}</span>) })
+  return <NoteMarker label={m.run_profile_evidence({ name: profile.name })} rows={rows} />
 }
 
 export function ExecutableState({ profile }: { profile: ApplicationProfile }) {

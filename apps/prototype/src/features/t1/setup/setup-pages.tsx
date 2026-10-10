@@ -111,7 +111,7 @@ export function WelcomePage() {
               aria-describedby={laterId}
               onClick={() => {
                 completeOnboarding()
-                void navigate({ to: "/targets" })
+                void navigate({ to: "/" })
               }}
             >
               {m.setup_later()}
@@ -146,7 +146,7 @@ export function WelcomePage() {
         confirmLabel={m.setup_demo_load()}
         onConfirm={() => {
           resetPrototype("demo")
-          void navigate({ to: "/targets" })
+          void navigate({ to: "/" })
         }}
       />
     </div>

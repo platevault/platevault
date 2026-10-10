@@ -51,6 +51,8 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
   const [confirm, setConfirm] = useState(false)
   const target = group ? { groupId: group.id } : { runId: run.id }
   const count = (kind: "light" | "calibration" | "product") => plan.entries.filter((e) => e.kind === kind).length
+  // A prepared current preparation makes Open (in PreparationOutcome) the step's next action, so Prepare… steps down.
+  const openable = currentPreparation(run, runPreparations(state.catalog, run.id))?.state === "prepared"
   return (
     <div className="space-y-4">
       <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} linkFor={(label) => planBlockerLink(run, label)} />
@@ -106,14 +108,15 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
                 { label: m.run_proto_source_drift(), detail: m.run_proto_source_drift_detail(), run: () => outcome.act(simulateSourceDrift(run.id), { blocked: m.run_proto_blocked() }) },
               ]}
             />
-            <Button size="sm" disabled={locked !== null} onClick={() => (plan.ready ? setConfirm(true) : outcome.act(startPrepare(run.id, choices), { blocked: m.run_prepare_blocked() }))}>
+            <Button size="sm" variant={openable ? "outline" : "default"} disabled={locked !== null} onClick={() => (plan.ready ? setConfirm(true) : outcome.act(startPrepare(run.id, choices), { blocked: m.run_prepare_blocked() }))}>
               <Play aria-hidden="true" data-icon="inline-start" />
               {m.run_prepare_ellipsis()}
             </Button>
           </>
         }
       >
-        <ChecksList checks={plan.checks} />
+        {/* The read-only pill above already names the lock. */}
+        <ChecksList checks={lock ? plan.checks.filter((c) => c.id !== "lock") : plan.checks} />
       </Box>
       <ConfirmDialog
         open={confirm}
