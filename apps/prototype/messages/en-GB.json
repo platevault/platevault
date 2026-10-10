@@ -7289,5 +7289,8 @@
   "domain_device_evidence_nina": "N.I.N.A. LIGHT folders",
   "domain_template_osc_broadband": "OSC broadband",
   "domain_template_osc_dualband": "OSC dual-band",
-  "op_measure_title": "Measure frames"
+  "op_measure_title": "Measure frames",
+  "domain_cal_group_rig_unknown": "Rig unknown · {camera}",
+  "domain_cal_group_size_unknown": "Dimensions unknown",
+  "domain_cal_group_gain_offset": "gain {gain} / offset {offset}"
 }

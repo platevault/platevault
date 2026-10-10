@@ -7345,5 +7345,8 @@
   "domain_device_evidence_nina": "Pastas LIGHT do N.I.N.A.",
   "domain_template_osc_broadband": "OSC banda larga",
   "domain_template_osc_dualband": "OSC banda dupla",
-  "op_measure_title": "Medição de frames"
+  "op_measure_title": "Medição de frames",
+  "domain_cal_group_rig_unknown": "Setup desconhecido · {camera}",
+  "domain_cal_group_size_unknown": "Dimensões desconhecidas",
+  "domain_cal_group_gain_offset": "ganho {gain} / offset {offset}"
 }

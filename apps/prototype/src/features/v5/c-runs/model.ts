@@ -35,7 +35,7 @@ import type {
   Volume,
 } from "@/domain/types"
 import { fileName, formatBytes } from "@/lib/format"
-import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { joinRefs, m, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
 // ---------------------------------------------------------------------------
@@ -819,17 +819,16 @@ export function readinessByKind(plan: CalibrationPlan): KindReadiness[] {
 
 /**
  * The calibration groups' setup parts (channel, rig, dimensions, binning,
- * gain / offset; `groupKey` joins them with "|"), split into the parts every
- * group shares, shown once, and each group's own parts. The channel always
- * stays in the group's own parts.
+ * gain / offset), split into the parts every group shares, shown once, and
+ * each group's own parts. The channel always stays in the group's own parts.
  */
-export function groupSetupParts(groupKeys: string[]): { shared: string[]; own: (groupKey: string) => string[] } {
-  const split = groupKeys.map((key) => key.split("|"))
-  const first = split[0] ?? []
-  const isShared = first.map((part, i) => i > 0 && split.every((parts) => parts[i] === part))
+export function groupSetupParts(m: Messages, groups: CalibrationPlan["groups"]): { shared: string[]; own: (groupKey: string) => string[] } {
+  const worded = new Map(groups.map((g) => [g.key, g.parts.map((part) => say(m, part))]))
+  const first = groups[0] ? worded.get(groups[0].key)! : []
+  const isShared = first.map((part, i) => i > 0 && [...worded.values()].every((parts) => parts[i] === part))
   return {
     shared: first.filter((_, i) => isShared[i]),
-    own: (groupKey) => groupKey.split("|").filter((_, i) => !isShared[i]),
+    own: (groupKey) => (worded.get(groupKey) ?? []).filter((_, i) => !isShared[i]),
   }
 }
 

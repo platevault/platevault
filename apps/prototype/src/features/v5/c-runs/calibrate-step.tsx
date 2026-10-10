@@ -64,7 +64,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const switchId = useId()
   const [exception, setException] = useState<ExceptionRequest | null>(null)
   const kinds = readinessByKind(plan).filter((k) => k.total > 0)
-  const groupSetup = groupSetupParts(plan.groups.map((g) => g.key))
+  const groupSetup = groupSetupParts(m, plan.groups)
 
   return (
     <div className="space-y-4">

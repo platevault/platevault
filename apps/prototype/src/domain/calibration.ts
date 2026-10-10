@@ -339,31 +339,35 @@ export interface RequirementRow {
   criteria: MatchCriterion[]
   /** The handed-off input's bytes no longer match its basis; the row needs review (CAL-FR-08). */
   drift: string | null
+  /** Identifies the setup group: the same lights' channel, rig, size, binning, gain and offset. */
   groupKey: string
-  groupLabel: string
+  /** The group's setup, one ref per part, in the order of `groupKey`. */
+  groupParts: MessageRef[]
 }
 
 export function assignmentId(runId: string, sessionId: string, kind: CalibrationKind): string {
   return `cal_${runId}_${sessionId}_${kind}`
 }
 
-function groupOf(catalog: Catalog, session: Session): { key: string; label: string } {
+function groupOf(catalog: Catalog, session: Session): { key: string; parts: MessageRef[] } {
   const g = lightGeometry(catalog, session)
   const train = trainName(catalog, g.opticalTrainId)
+  const unknown = msg("status_unknown")
+  const values = [session.channel, train ?? g.cameraName, g.widthPx && g.heightPx ? `${g.widthPx}\u00a0×\u00a0${g.heightPx}` : null, String(g.binning), `${g.gain ?? "?"}/${g.offset ?? "?"}`]
   const parts = [
-    session.channel ?? "No filter",
-    train ?? `Rig unknown · ${g.cameraName ?? "camera unknown"}`,
-    g.widthPx && g.heightPx ? `${g.widthPx}\u00a0×\u00a0${g.heightPx}` : "Dimensions unknown",
-    `bin ${g.binning}`,
-    `gain ${g.gain ?? "unknown"} / offset ${g.offset ?? "unknown"}`,
+    session.channel ? verbatim(session.channel) : msg("palette_session_no_filter"),
+    train ? verbatim(train) : msg("domain_cal_group_rig_unknown", { camera: g.cameraName ? verbatim(g.cameraName) : msg("newproject_camera_unknown") }),
+    g.widthPx && g.heightPx ? verbatim(`${g.widthPx}\u00a0×\u00a0${g.heightPx}`) : msg("domain_cal_group_size_unknown"),
+    msg("run_cal_bin", { binning: g.binning }),
+    msg("domain_cal_group_gain_offset", { gain: g.gain ?? unknown, offset: g.offset ?? unknown }),
   ]
-  return { key: parts.join("|"), label: parts.join(" · ") }
+  return { key: values.join("|"), parts }
 }
 
 export interface CalibrationPlan {
   policy: CalibrationPolicy
   rows: RequirementRow[]
-  groups: Array<{ key: string; label: string; rows: RequirementRow[] }>
+  groups: Array<{ key: string; parts: MessageRef[]; rows: RequirementRow[] }>
   counts: Record<RowState, number>
   /** Rows that need the user: no compatible input, deferred, or a drifted input (CAL-AC-06). */
   needsReview: RequirementRow[]
@@ -422,7 +426,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
         criteria,
         drift,
         groupKey: group.key,
-        groupLabel: group.label,
+        groupParts: group.parts,
       })
     }
   }
@@ -430,7 +434,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
   for (const row of rows) {
     const g = groups.find((x) => x.key === row.groupKey)
     if (g) g.rows.push(row)
-    else groups.push({ key: row.groupKey, label: row.groupLabel, rows: [row] })
+    else groups.push({ key: row.groupKey, parts: row.groupParts, rows: [row] })
   }
   for (const row of rows) counts[row.state] += 1
   const needsReview = rows.filter((r) => r.state === "suggested" || r.state === "deferred" || r.state === "unresolved" || r.drift !== null)
