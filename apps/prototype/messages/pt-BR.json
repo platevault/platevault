@@ -234,38 +234,6 @@
     }
   ],
   "status_bar_selected_of": "{count} de {total} selecionados",
-  "status_bar_offline": "{count} offline",
-  "status_bar_runs_blocked": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} bloqueada",
-        "countPlural=*": "{count} bloqueadas"
-      }
-    }
-  ],
-  "status_bar_calibration_waiting": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} calibração aguardando",
-        "countPlural=*": "{count} calibrações aguardando"
-      }
-    }
-  ],
-  "status_bar_more": "+{count} mais",
   "status_bar_more_running": "+{count} em execução",
   "status_bar_working": "Trabalhando",
   "status_bar_idle": "Ocioso",
@@ -2834,36 +2802,6 @@
   "targets_saved_needs_rig": "{name} precisa de um equipamento",
   "targets_saved_no_narrowband": "{name} não tem filtro Ha, SII ou OIII",
   "targets_saved_no_band": "{name} não tem filtro {band}",
-  "status_bar_failed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} falha",
-        "countPlural=*": "{count} falhas"
-      }
-    }
-  ],
-  "status_bar_changed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} alterado",
-        "countPlural=*": "{count} alterados"
-      }
-    }
-  ],
   "status_bar_unread": [
     {
       "declarations": [
@@ -7334,5 +7272,66 @@
   "wrapup_reason_no_trash": "volume sem Lixeira do sistema",
   "wrapup_reason_not_found": "ausente no caminho registrado",
   "wrapup_reason_offline": "volume offline",
-  "tips_note_named": "Nota {number}: {label}"
+  "tips_note_named": "Nota {number}: {label}",
+  "issue_duplicates": [
+    {
+      "declarations": [
+        "input count",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} cópia duplicada · {bytes}",
+        "countPlural=*": "{count} cópias duplicadas · {bytes}"
+      }
+    }
+  ],
+  "status_bar_errors": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} erro",
+        "countPlural=*": "{count} erros"
+      }
+    }
+  ],
+  "status_bar_warnings": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} aviso",
+        "countPlural=*": "{count} avisos"
+      }
+    }
+  ],
+  "status_bar_info": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} informativo",
+        "countPlural=*": "{count} informativos"
+      }
+    }
+  ]
 }

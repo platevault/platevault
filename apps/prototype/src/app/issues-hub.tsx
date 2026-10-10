@@ -1,26 +1,26 @@
 /**
  * The Issues hub (foundation-owned): a toolbar button with a count badge,
  * tinted by the worst severity, opening a panel that lists every issue
- * grouped, each with its one action. `IssuePill` renders one issue as a
- * clickable pill, so Home's top line shows the same issues; `IssueRow` is
- * one issue with its action, shared with the status bar's chip popovers.
+ * grouped, each with its one action. `IssueRow` is one issue with its
+ * action, shared with the status bar's severity popouts.
  */
 import { Link } from "@tanstack/react-router"
 import { CircleAlert, CircleCheck, Info, type LucideIcon, OctagonX, TriangleAlert } from "lucide-react"
 import { useState } from "react"
-import { CountBadge, Pill } from "@/components/app/pill"
+import { CountBadge } from "@/components/app/pill"
 import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ISSUE_GROUPS, type Issue, type IssueGroup, type IssueSeverity } from "@/domain/issues"
+import { formatBytes } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useIssues } from "@/store/issues"
 import { useMessages } from "./preferences"
 
-export const SEVERITY_TONE: Record<IssueSeverity, Tone> = { danger: "danger", warning: "warning", info: "info" }
+const SEVERITY_TONE: Record<IssueSeverity, Tone> = { danger: "danger", warning: "warning", info: "info" }
 export const SEVERITY_ICON: Record<IssueSeverity, LucideIcon> = { danger: OctagonX, warning: TriangleAlert, info: Info }
-const SEVERITY_TEXT: Record<IssueSeverity, string> = { danger: "text-destructive", warning: "text-warning", info: "text-info" }
+export const SEVERITY_TEXT: Record<IssueSeverity, string> = { danger: "text-destructive", warning: "text-warning", info: "text-info" }
 
 function groupName(m: Messages, group: IssueGroup): string {
   const name: Record<IssueGroup, () => string> = {
@@ -69,18 +69,9 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
       return issue.id.startsWith("drift:master:")
         ? { text: m.issue_master_changed({ name }), action: m.nav_calibration() }
         : { text: m.issue_frames_changed({ count, name }), action: m.verb_review() }
+    case "duplicates":
+      return { text: m.issue_duplicates({ count, bytes: formatBytes(issue.bytes ?? 0) }), action: m.verb_review() }
   }
-}
-
-/** One issue as a clickable pill (Home's top line). */
-export function IssuePill({ issue }: { issue: Issue }) {
-  const m = useMessages()
-  const copy = issueCopy(m, issue)
-  return (
-    <Pill tone={SEVERITY_TONE[issue.severity]} icon={SEVERITY_ICON[issue.severity]} link={issue.link} title={`${copy.text} · ${copy.action}`}>
-      {copy.text}
-    </Pill>
-  )
 }
 
 /** One issue with its action, as a list row; `onNavigate` closes the popover that holds it. */

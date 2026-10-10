@@ -4,16 +4,17 @@
  * paths follow HARNESS-V5-IA.md § Source list and § Screens; every route is
  * registered in `src/routes.tsx`.
  *
- * Harness v5 source list: Home (the start page), Projects, Targets and Plan
- * as primary destinations; an optional Recent group (up to three Projects,
- * no children); one Library group (Sessions, Calibration, Storage); Import in
- * the toolbar; Activity and Settings in the footer. Navigation only: the
- * Project page owns its runs and stages, a run its six steps.
+ * Harness v5 source list: Home (the start page), Projects and Targets as
+ * primary destinations; an optional Recent group (up to three Projects, no
+ * children); one Library group (Sessions, Calibration); Import in the
+ * toolbar; Activity and Settings in the footer. Plan is the Targets page's
+ * Planned view and Storage lives in Settings › Locations (round 5). Navigation
+ * only: the Project page owns its runs and stages, a run its six steps.
  *
  * Labels are getters over the message catalogue, so reading `item.label`
  * always gives the chosen language. Search keywords stay en-GB.
  */
-import { Activity, CalendarClock, Crosshair, FolderKanban, HardDrive, House, Layers, type LucideIcon, Settings, SlidersHorizontal } from "lucide-react"
+import { Activity, Crosshair, FolderKanban, House, Layers, type LucideIcon, Settings, SlidersHorizontal } from "lucide-react"
 import { m } from "@/lib/i18n"
 
 export interface NavItem {
@@ -33,7 +34,6 @@ export const PRIMARY_ITEMS: NavItem[] = [
   { to: "/", get label() { return m.nav_home() }, icon: House, goKey: "h" },
   { to: "/projects", get label() { return m.nav_projects() }, icon: FolderKanban, goKey: "p" },
   { to: "/targets", get label() { return m.nav_targets() }, icon: Crosshair, goKey: "t" },
-  { to: "/plan", get label() { return m.nav_plan() }, icon: CalendarClock, goKey: "l" },
 ]
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -42,7 +42,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/sessions", get label() { return m.nav_sessions() }, icon: Layers, goKey: "s" },
       { to: "/calibration", get label() { return m.nav_calibration() }, icon: SlidersHorizontal, goKey: "c" },
-      { to: "/storage", get label() { return m.nav_storage() }, icon: HardDrive, goKey: "o" },
     ],
   },
 ]

@@ -1,13 +1,13 @@
 /**
  * S1 Home (slice A), the start page: the control-panel dashboard (D-W39).
  *
- * Top line: every issue as a clickable pill (`useIssues` / `IssuePill`), the
- * same list the toolbar's Issues hub and the status bar read, in the bar's
- * order (`inBarOrder`). Then boxes with one-word headings:
+ * No issues strip: the toolbar's Issues button and the status bar's counters
+ * carry the issues (P-SB3). Boxes with one-word headings:
  * - Projects: goals per channel (in project / captured), stage and the one
  *   Next action (D-W35 rule order; a blocked run reads "Blocked at <step>"
  *   with its reason in the note and opens that step); Done Projects behind
- *   Show done (D-W48).
+ *   Show done (D-W48). Clicking a row opens the Project; its row menu holds
+ *   the other actions.
  * - Sessions: sessions that need work, each with one action. An Unreviewed
  *   session is reviewed in place: `?review=<sessionId>` opens `SessionReview`
  *   in a sheet over Home (library marks only).
@@ -17,9 +17,8 @@
  * - Work: running operations.
  */
 import { Link, useLocation, useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarClock, CircleCheck, Download, Eye, FolderPlus, ListChecks, Pause, Play, Target, X } from "lucide-react"
+import { CalendarClock, Download, Eye, FolderPlus, ListChecks, Pause, Play, Target, X } from "lucide-react"
 import { type ReactNode, useId, useState } from "react"
-import { IssuePill } from "@/app/issues-hub"
 import { useMessages } from "@/app/preferences"
 import { GateLabel, StepGlyph, stepName, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
@@ -58,7 +57,6 @@ import {
   targetStatus,
   type GoalProgress,
 } from "@/domain/derive"
-import { inBarOrder } from "@/domain/issues"
 import { OPERATION_UNIT_NAME } from "@/domain/labels"
 import { sessionLabel, sessionLongLabel } from "@/domain/membership"
 import { bestWindowTonight, defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
@@ -69,7 +67,6 @@ import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { addRunSessions } from "@/store/actions/runs"
 import { confirmTarget } from "@/store/actions/library"
-import { useIssues } from "@/store/issues"
 import { nowIso, type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { cancelOperation, pauseOperation, resumeOperation } from "@/store/operations"
 import { SessionReview } from "../d-review/review"
@@ -109,7 +106,7 @@ export function HomePage() {
         title={m.nav_home()}
         actions={
           <>
-            <Button size="sm" variant="outline" render={<Link to="/plan" />}>
+            <Button size="sm" variant="outline" render={<Link to="/targets" search={{ view: "planned" }} />}>
               <CalendarClock data-icon="inline-start" aria-hidden="true" />
               {m.target_plan_tonight()}
             </Button>
@@ -125,7 +122,6 @@ export function HomePage() {
         }
       />
       <PageBody className="space-y-4">
-        <IssueStrip />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ProjectsBox state={state} className="xl:col-start-1 xl:row-start-1" />
           <SessionsBox state={state} onReview={review.open} className="xl:col-start-1 xl:row-start-2" />
@@ -136,30 +132,6 @@ export function HomePage() {
       </PageBody>
       <ReviewSheet sessionId={review.sessionId} onClose={review.close} />
     </div>
-  )
-}
-
-// Issues ----------------------------------------------------------------------
-
-function IssueStrip() {
-  const issues = inBarOrder(useIssues().issues)
-  const m = useMessages()
-  return (
-    <section aria-label={m.issues_title()} data-home-top-line data-home-issues>
-      {issues.length === 0 ? (
-        <Pill tone="success" icon={CircleCheck}>
-          {m.issues_none()}
-        </Pill>
-      ) : (
-        <ul className="flex flex-wrap gap-1.5">
-          {issues.map((issue) => (
-            <li key={issue.id}>
-              <IssuePill issue={issue} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   )
 }
 
@@ -332,13 +304,12 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
     const next = projectNext(state, p, Date.parse(nowIso()))
     return [
       { heading: p.name },
-      { label: m.verb_open(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
       ...(next ? [{ label: say(m, next.label), onSelect: () => follow(next.link) }] : []),
       ...(p.state === "open"
         ? [
             { separator: true } as const,
             { label: m.startrun_open(), icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: p.id }) },
-            { label: m.nav_plan(), icon: CalendarClock, onSelect: () => void navigate({ to: "/plan", search: { project: p.id } }) },
+            { label: m.nav_plan(), icon: CalendarClock, onSelect: () => void navigate({ to: "/targets", search: { project: p.id } }) },
           ]
         : []),
     ]
@@ -385,6 +356,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
           scroll="none"
           className="rounded-none border-0"
           contextMenu={menu}
+          onRowClick={(p) => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } })}
           empty={
             <div className="flex items-center gap-2 px-3 py-2 text-sm">
               <span className="text-muted-foreground">{m.home_all_done()}</span>
@@ -654,7 +626,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
           <Pill tone="muted" title={tz}>
             {site.name}
           </Pill>
-          <Button size="xs" variant="ghost" render={<Link to="/plan" />}>
+          <Button size="xs" variant="ghost" render={<Link to="/targets" search={{ view: "planned" }} />}>
             {m.nav_plan()}
           </Button>
         </>
@@ -819,7 +791,7 @@ function operationHref(state: PrototypeState, op: Operation): string {
   const runId = op.scope.runIds?.[0]
   const run = runId ? state.catalog.runs[runId] : undefined
   if (op.kind === "import") return `/sessions?import=${op.id}`
-  if (op.kind === "index") return "/storage"
+  if (op.kind === "index") return "/settings/locations"
   if (op.kind === "stack-master") return "/calibration"
   if (run) return runHref(run, runPipeline(state, run).current.id)
   if (op.scope.projectId) return `/projects/${op.scope.projectId}`
