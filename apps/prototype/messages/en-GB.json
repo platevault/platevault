@@ -7288,5 +7288,6 @@
   "domain_device_evidence_ekos": "Ekos Light/<filter> folders",
   "domain_device_evidence_nina": "N.I.N.A. LIGHT folders",
   "domain_template_osc_broadband": "OSC broadband",
-  "domain_template_osc_dualband": "OSC dual-band"
+  "domain_template_osc_dualband": "OSC dual-band",
+  "op_measure_title": "Measure frames"
 }

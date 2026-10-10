@@ -18,7 +18,7 @@
 import { m as generated } from "@/paraglide/messages"
 import type { Locale } from "@/paraglide/runtime"
 
-export { baseLocale as DEFAULT_LOCALE, isLocale, locales as LOCALES, type Locale } from "@/paraglide/runtime"
+export { baseLocale as DEFAULT_LOCALE, getLocale, isLocale, locales as LOCALES, type Locale } from "@/paraglide/runtime"
 
 type Generated = typeof generated
 

@@ -128,7 +128,7 @@ export function startMeasurement(runId: RunId, assetIds: AssetId[]): OperationId
   const payload: MeasurePayload = { runId, verify, queue, skipped: [], measured: 0, reused: 0, total, perSession }
   return startOperation({
     kind: "measure",
-    title: msg("measure_frames_action"),
+    title: msg("op_measure_title"),
     scope: {},
     total,
     unit: "frames",

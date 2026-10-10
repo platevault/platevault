@@ -6205,8 +6205,8 @@
       }
     }
   ],
-  "op_index_title_one": "Indexando {name}",
-  "op_index_title_many": "Indexando {count} locais",
+  "op_index_title_one": "Indexação de {name}",
+  "op_index_title_many": "Indexação de {count} locais",
   "op_settled_succeeded": "concluída",
   "op_settled_partial": "parcial",
   "op_settled_failed": "falhou",
@@ -6463,7 +6463,7 @@
   "store_cal_registered_from": "{file} registrado a partir de {frames}.",
   "store_cal_process_missing": "O processo de calibração não está mais registrado.",
   "store_cal_stack_with": "Empilhar com {name}",
-  "store_cal_stack_title": "Empilhar {name}",
+  "store_cal_stack_title": "Empilhamento de {name}",
   "store_cal_process_not_found": "processo não encontrado",
   "store_cal_stack_first": "Empilhe primeiro",
   "store_cal_already_detected": "master já detectado",
@@ -6672,7 +6672,7 @@
   "store_saved_added_to_library": "{name} adicionado à biblioteca de calibração",
   "store_reason_every_input_unreadable": "Todas as entradas ilegíveis",
   "store_label_prepare_named": "Preparar {name}",
-  "op_prepare_title_rev": "Preparar {name} (rev {revision})",
+  "op_prepare_title_rev": "Preparação de {name} (rev {revision})",
   "store_label_prepare_all_named": "Preparar tudo de {name}",
   "store_saved_prepare_all": "Preparar tudo: {name}",
   "store_prepare_all_detail": [
@@ -6856,7 +6856,7 @@
   "store_label_result_kind": "Tipo de Resultado",
   "store_reason_not_accepted": "Não aceito",
   "store_reason_mosaic_subject": "Objeto de mosaico",
-  "store_label_clean_up_named": "Limpar {name}",
+  "store_label_clean_up_named": "Limpeza de {name}",
   "store_reason_not_complete_short": "Não Concluída",
   "store_reason_nothing_selected": "Nada selecionado",
   "store_label_complete_all_named": "Concluir todos de {name}",
@@ -6923,8 +6923,8 @@
     }
   ],
   "op_prep_partial_open_waits": "Abrir aguarda até que todas as entradas estejam preparadas; as origens não foram tocadas.",
-  "op_archive_title": "Arquivar {name}",
-  "op_restore_title": "Restaurar sessões arquivadas de {name}",
+  "op_archive_title": "Arquivamento de {name}",
+  "op_restore_title": "Restauração das sessões arquivadas de {name}",
   "op_archive_went_offline": "{name} ficou offline",
   "op_archive_changed": "{path} mudou desde a revisão (o SHA-256 difere)",
   "op_archive_destination_volume": "O volume de destino",
@@ -7020,7 +7020,7 @@
   "op_import_failed_kept": "{count} com falha, mantidos",
   "op_import_sources_to_trash": "origens → Lixeira do sistema",
   "op_import_no_source_moved": "nenhuma origem movida",
-  "op_import_move_sources_title": "Mover origens da importação para a Lixeira do sistema",
+  "op_import_move_sources_title": "Movimentação das origens da importação para a Lixeira do sistema",
   "op_import_frames_to_copy": [
     {
       "declarations": [
@@ -7037,8 +7037,8 @@
       }
     }
   ],
-  "op_import_move_from": "Mover de {name}",
-  "op_import_from": "Importar de {name}",
+  "op_import_move_from": "Movimentação de {name}",
+  "op_import_from": "Importação de {name}",
   "store_import_source_name_needed": "Nome necessário",
   "store_reason_no_name": "sem nome",
   "store_label_save_import_source": "Salvar origem de importação {name}",
@@ -7344,5 +7344,6 @@
   "domain_device_evidence_ekos": "Pastas Light/<filtro> do Ekos",
   "domain_device_evidence_nina": "Pastas LIGHT do N.I.N.A.",
   "domain_template_osc_broadband": "OSC banda larga",
-  "domain_template_osc_dualband": "OSC banda dupla"
+  "domain_template_osc_dualband": "OSC banda dupla",
+  "op_measure_title": "Medição de frames"
 }

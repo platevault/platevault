@@ -10,3 +10,5 @@ dup-value	run_wrap_up,wrapup_action
 dup-value	mosaic_left_out,run_metadata_hint_excluded
 # pt-BR differs by position: mid-sentence possessive vs sentence-initial article.
 dup-value	run_entry_its_volume,wrapup_its_volume
+# 'Measure frames' is a button (pt-BR verb 'Medir frames') and an operation title (noun 'Medição de frames').
+dup-value	measure_frames_action,op_measure_title

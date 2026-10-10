@@ -28,7 +28,7 @@ import type {
   Session,
   SessionId,
 } from "./types"
-import { formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
+import { formatCount, formatDecimal, formatDuration, formatExposure, formatNight } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 
 export function emptyContent(): MembershipContent {
@@ -423,9 +423,9 @@ export function pixelScaleFor(catalog: Catalog, session: Session | undefined): n
  */
 export function formatMetricFixed(m: Messages, metric: Pick<Metric, "value" | "unit">): string {
   if (metric.value === null) return "–"
-  if (metric.unit === "stars") return m.measure_value_stars({ value: Math.round(metric.value).toLocaleString("en-GB") })
-  if (metric.unit === "ADU") return `${Math.round(metric.value).toLocaleString("en-GB")} ADU`
-  const value = metric.value.toFixed(2)
+  if (metric.unit === "stars") return m.measure_value_stars({ value: formatCount(Math.round(metric.value)) })
+  if (metric.unit === "ADU") return `${formatCount(Math.round(metric.value))} ADU`
+  const value = formatDecimal(metric.value, 2)
   if (metric.unit === "arcsec") return `${value}″`
   return metric.unit === "ratio" || metric.unit === "" ? value : `${value} ${metric.unit}`
 }
