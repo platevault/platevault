@@ -818,7 +818,6 @@
   "import_none_connected": "None connected",
   "import_how_recognised": "How {name} was recognised",
   "import_layout": "Layout",
-  "import_from_named": "from {name}",
   "import_saved_sources": "Saved sources",
   "import_none_saved": "None saved",
   "import_last_import": "Last import {date}",
@@ -7278,5 +7277,6 @@
   "wrapup_reason_no_trash": "volume has no OS Trash",
   "wrapup_reason_not_found": "missing at recorded path",
   "wrapup_reason_offline": "volume offline",
-  "tips_note_named": "Note {number}: {label}"
+  "tips_note_named": "Note {number}: {label}",
+  "session_header_label": "Label"
 }

@@ -339,7 +339,7 @@ export function DesignSystemPage() {
             <EmptyState
               icon={Inbox}
               title="No Targets yet"
-              description="Targets appear when indexing finds OBJECT or pointing evidence. Index a capture location to begin."
+              description="Targets appear when indexing finds pointing evidence. Index a capture location to begin."
               action={<Button size="sm">Add capture location</Button>}
             />
             <div className="space-y-3">

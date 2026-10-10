@@ -186,51 +186,24 @@ function objectAtPointing(ra: number, dec: number) {
 }
 
 /**
- * LIB-FR-05: agreeing evidence permits association; unknown or conflicting
- * evidence is Needs review; a missing OBJECT with no other evidence stays
- * unresolved. OBJECT never supplies coordinates.
+ * LIB-FR-05: the pointing inside a Target's footprint associates it; the
+ * user's confirmation settles it. Without such a pointing the Target stays
+ * unresolved. OBJECT is a label and filter only: it is never evidence, never
+ * preselects and never counts towards confirmation.
  */
 export function associateTarget(catalog: Catalog, session: Session, now: IsoDateTime): Association<TargetId> {
-  const evidence: Evidence[] = []
-  const object = session.objectLabel
-  const pointed = session.pointing ? objectAtPointing(session.pointing.ra, session.pointing.dec) : null
-  const objectTarget = object ? ensureTargetFor(catalog, object, now) : null
-  const pointedTarget = pointed ? ensureTargetFor(catalog, pointed.name, now) : null
+  const label = msg("evidence_source_pointing")
+  if (!session.pointing) return { value: null, status: "unresolved", evidence: [{ source: "pointing", label, value: msg("indexing_pointing_none"), agrees: null }], confirmedAt: null }
+  const pointed = objectAtPointing(session.pointing.ra, session.pointing.dec)
+  const target = pointed ? ensureTargetFor(catalog, pointed.name, now) : null
+  if (!pointed || !target) return { value: null, status: "unresolved", evidence: [{ source: "pointing", label, value: msg("indexing_pointing_outside_targets"), agrees: false }], confirmedAt: null }
+  const evidence: Evidence[] = [{ source: "pointing", label, value: msg("indexing_pointing_from_centre", { angle: formatDegrees(pointed.separation, 2), name: pointed.name }), agrees: true }]
+  return { value: target.id, status: "associated", evidence, confirmedAt: null }
+}
 
-  if (object) {
-    evidence.push({
-      source: "header",
-      label: verbatim("OBJECT"),
-      value: verbatim(object),
-      agrees: pointedTarget ? objectTarget?.id === pointedTarget.id : objectTarget ? null : false,
-    })
-  } else {
-    evidence.push({ source: "header", label: verbatim("OBJECT"), value: msg("status_missing"), agrees: null })
-  }
-  const pointingLabel = msg("evidence_source_pointing")
-  if (session.pointing && pointed) {
-    evidence.push({
-      source: "pointing",
-      label: pointingLabel,
-      value: msg("indexing_pointing_from_centre", { angle: formatDegrees(pointed.separation, 2), name: pointed.name }),
-      agrees: true,
-    })
-  } else if (session.pointing) {
-    evidence.push({ source: "pointing", label: pointingLabel, value: msg("indexing_pointing_outside_targets"), agrees: false })
-  } else {
-    evidence.push({ source: "pointing", label: pointingLabel, value: msg("indexing_pointing_none"), agrees: null })
-  }
-
-  if (pointedTarget && (!object || objectTarget?.id === pointedTarget.id)) {
-    return { value: pointedTarget.id, status: "associated", evidence, confirmedAt: null }
-  }
-  if (pointedTarget && object) {
-    return { value: pointedTarget.id, status: "needs-review", evidence, confirmedAt: null }
-  }
-  if (objectTarget) {
-    return { value: objectTarget.id, status: "needs-review", evidence, confirmedAt: null }
-  }
-  return { value: null, status: "unresolved", evidence, confirmedAt: null }
+/** Observed evidence stays as read; the confirmation is a separate user row. */
+export function confirmedEvidence(evidence: Evidence[], label: MessageRef, value: MessageRef): Evidence[] {
+  return [...evidence.filter((e) => e.source !== "user"), { source: "user", label, value, agrees: true }]
 }
 
 function findOrDetectCamera(catalog: Catalog, header: NonNullable<DiskFile["header"]>): Camera | null {

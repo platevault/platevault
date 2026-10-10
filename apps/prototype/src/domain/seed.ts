@@ -36,7 +36,7 @@ import { joinRefs, msg, verbatim } from "@/lib/i18n"
 import { CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
 import { DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
 import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
-import { indexLocationsSync, stableHash } from "./indexing"
+import { confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
 import { addSessions, describeDiff, diffContent, emptyContent } from "./membership"
 import { simulateMeasurement } from "./measurement"
 import { pixelScaleArcsec } from "./sky"
@@ -276,8 +276,8 @@ function baseFiles(): DiskFile[] {
     ...light(VOLUME_IDS.cold, "Captures/NGC7000/2026-09-12/OIII", "Light_NGC7000_300s_OIII", 24, "2026-09-12T21:30:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     ...light(A, "Captures/NGC7000/2026-09-18/Ha", "Light_NGC7000_300s_Ha", 55, "2026-09-18T20:40:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     ...light(A, "Captures/NGC7000/2026-09-24/OIII", "Light_NGC7000_300s_OIII", 20, "2026-09-24T20:10:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
-    // OBJECT disagrees with the pointing: the Target needs review.
-    ...light(A, "Captures/NGC7000/2026-09-26/OIII", "Light_Cygnus_300s_OIII", 35, "2026-09-26T19:55:00Z", 300, "OIII", "Cygnus field", { ra: 314.8, dec: 44.6, rotationDeg: rot }),
+    // OBJECT names NGC 7000 but the capture wrote no RA/DEC: the Target stays unresolved (OBJECT is a label, never evidence).
+    ...light(A, "Captures/NGC7000/2026-09-26/OIII", "Light_Cygnus_300s_OIII", 35, "2026-09-26T19:55:00Z", 300, "OIII", "NGC 7000", null),
     // No telescope or focal-length keywords: the rig needs review.
     ...light(A, "Captures/NGC7000/2026-09-28/Ha", "Light_NGC7000_300s_Ha", 56, "2026-09-28T19:50:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }, { overrides: { telescope: null, focalLengthMm: null } }),
     ...light(A, "Captures/NGC7000/2026-09-30/OIII", "Light_NGC7000_300s_OIII", 48, "2026-09-30T19:45:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }, { truth: (i) => (i >= 12 && i <= 17 ? { trailed: true, eccentricity: 0.78, fwhmPx: 4.1 } : {}) }),
@@ -287,7 +287,8 @@ function baseFiles(): DiskFile[] {
     // NGC 7000 on Esprit 100 / ASI533MC (OSC, L-eXtreme): 180 s lights have no 180 s dark.
     ...osc("Captures/NGC7000/2026-09-21/OSC", "Light_NGC7000_180s_LeX", 40, "2026-09-21T20:30:00Z"),
     ...osc("Captures/NGC7000/2026-10-01/OSC", "Light_NGC7000_180s_LeX", 30, "2026-10-01T20:00:00Z"),
-    // IC 5070 mosaic panels on RedCat; one session points between panels 1 and 2.
+    // IC 5070 mosaic panels on RedCat; one session points between panels 1 and 2. Only Panel 2 points inside IC 5070 itself:
+    // the others stay unresolved by pointing until the user confirms them.
     ...panel("Captures/IC5070/2026-09-13/Ha", "Light_IC5070_P1_300s_Ha", 30, "2026-09-13T20:30:00Z", "Ha", 0),
     ...panel("Captures/IC5070/2026-09-14/OIII", "Light_IC5070_P1_300s_OIII", 30, "2026-09-14T21:30:00Z", "OIII", 0),
     ...panel("Captures/IC5070/2026-09-16/Ha", "Light_IC5070_P2_300s_Ha", 30, "2026-09-16T20:30:00Z", "Ha", 1, VOLUME_IDS.cold),
@@ -611,11 +612,15 @@ function equipment(catalog: Catalog) {
 
 const decided = (asset: Asset, value: "usable" | "unusable", at = "2026-09-29T10:00:00.000Z"): Asset => ({ ...asset, quality: { value, decidedAt: at, basisSha256: asset.sha256 } })
 
+/** The user's confirmation, recorded as the store's Confirm Target / Confirm rig record it: a separate user row. */
 function confirm(catalog: Catalog, session: Session, targetId: string | null, rigId: string | null) {
+  const at = "2026-09-29T09:00:00.000Z"
+  const target = targetId ? catalog.targets[targetId] : undefined
+  const rig = rigId ? catalog.opticalTrains[rigId] : undefined
   catalog.sessions[session.id] = {
     ...session,
-    target: targetId ? { ...session.target, value: targetId, status: "confirmed", confirmedAt: "2026-09-29T09:00:00.000Z" } : session.target,
-    equipment: rigId ? { ...session.equipment, value: rigId, status: "confirmed", confirmedAt: "2026-09-29T09:00:00.000Z" } : session.equipment,
+    target: target ? { value: target.id, status: "confirmed", evidence: confirmedEvidence(session.target.evidence, msg("session_confirm_target"), verbatim(target.name)), confirmedAt: at } : session.target,
+    equipment: rig ? { value: rig.id, status: "confirmed", evidence: confirmedEvidence(session.equipment.evidence, msg("session_confirm_rig"), verbatim(rig.name)), confirmedAt: at } : session.equipment,
   }
 }
 

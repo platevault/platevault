@@ -20,8 +20,8 @@ import type { ActivityEvent, Catalog } from "@/domain/types"
 import { type MessageRef, m, msg, say } from "@/lib/i18n"
 import type { SliceId, SliceStates } from "./slices"
 
-/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. */
-export const SCHEMA_VERSION = 9
+/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. 10: Target evidence is pointing and user rows only (OBJECT is a label). */
+export const SCHEMA_VERSION = 10
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number
