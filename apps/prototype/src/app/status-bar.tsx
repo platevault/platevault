@@ -119,7 +119,7 @@ const chipLook = (chip: StatusChip) => `${chip.id}:${chip.severity}:${chip.count
 interface BarFit {
   /** Issues named, worst first; the rest show as the chips of `StatusIssues.chipsAfter[named]`. */
   named: number
-  /** The width the last pill is truncated to, when it fits only truncated: the last named, or with none named the last chip shown. */
+  /** The width the last named pill is truncated to, when it fits only truncated. */
   squeezed: number | null
   /** Those chips shown; the trailing ones fold into "+N". */
   chips: number
@@ -152,7 +152,8 @@ const squeezeTo = (natural: number | undefined, room: number) => (natural !== un
  * named pills, the last named first, then the notices, oldest first, then
  * the trailing chips ("+N"). Room left over widens what is cut off (the
  * running work, then the notices, newest first), and what is still left
- * shows one more pill, truncated: an issue named or, at level 3, a chip.
+ * shows one more named issue, truncated. A chip never truncates: its count
+ * is the point, so at level 3 a chip that does not fit folds into "+N".
  */
 function fitBar(widths: BarWidths, room: number): BarFit {
   const rowAt = (named: number) => {
@@ -177,8 +178,7 @@ function fitBar(widths: BarWidths, room: number): BarFit {
     }
     left = room - used
     const work = widenWork()
-    const squeezed = squeezeTo(widths.chipsAfter[0]?.[chips], left - CHIP_GAP_PX)
-    return { named: 0, squeezed, chips: squeezed === null ? chips : chips + 1, notices: [], work }
+    return { named: 0, squeezed: null, chips, notices: [], work }
   }
   left = room - grouped
   const shown: number[] = []
@@ -347,17 +347,17 @@ function ChipIssues({ chip, onNavigate }: { chip: StatusChip; onNavigate: () => 
   )
 }
 
-/** One chip: a link to the action of its one issue, or a popover listing its issues; `width` truncates it to fit. */
-function ChipControl({ chip, width }: { chip: StatusChip; width?: number }) {
+/** One chip: a link to the action of its one issue, or a popover listing its issues. A chip never truncates. */
+function ChipControl({ chip }: { chip: StatusChip }) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const text = chipText(m, chip)
-  if (chip.issues.length === 1) return <IssueLink issue={chip.issues[0]!} text={text} width={width} />
+  if (chip.issues.length === 1) return <IssueLink issue={chip.issues[0]!} text={text} />
   const Icon = CHIP_ICON[chip.id]
   const tone = SEVERITY_TONE[chip.severity]
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className={pillClass(tone, true)} style={width === undefined ? undefined : { maxWidth: width }} title={text} data-pill={tone} data-chip-issues={chip.issues.length}>
+      <PopoverTrigger className={pillClass(tone, true)} title={text} data-pill={tone} data-chip-issues={chip.issues.length}>
         <Icon aria-hidden="true" />
         <span className="truncate">{text}</span>
       </PopoverTrigger>
@@ -431,8 +431,8 @@ function IssueSlot({ status, fit, box }: { status: StatusIssues; fit: BarFit; bo
           {status.pills.slice(0, named).map((issue, i) => (
             <IssueLink key={issue.id} issue={issue} width={i === named - 1 ? squeezed : undefined} />
           ))}
-          {shown.map((chip, i) => (
-            <ChipControl key={`chip:${chip.id}`} chip={chip} width={named === 0 && i === shown.length - 1 ? squeezed : undefined} />
+          {shown.map((chip) => (
+            <ChipControl key={`chip:${chip.id}`} chip={chip} />
           ))}
           {hidden.length > 0 ? <MoreChips chips={hidden} /> : null}
         </>
