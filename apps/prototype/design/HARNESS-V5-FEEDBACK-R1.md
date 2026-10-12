@@ -321,3 +321,20 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **Linux is a supported platform.**
 - **Xcode** is not installed for now; the Flutter spike reports what it can without it.
 - **Add a Slint spike** (Rust-native UI with Fluent/Cupertino styles) next to the Tauri and Flutter spikes.
+
+### Components and flow, grilling round 2 (user, 2026-10-12; plan R9-COMPOSITION-PLAN.md §9)
+- **C1 Dialog buttons:** Cancel, then the action, on every OS (one shared DialogFooter decides).
+- **C2 Renames accepted:** Complete → Finish run (state Finished); the run's Done step goes; the final Mark done → Close project; Wrap up's first Mark done goes (Proceed replaces it); masters Dismiss → Hide / Show hidden; one Edit… verb; Tonight → Planning; About this prototype → About. "Good tonight for" → **Suitable filters**. **Move to Trash uses the destructive (red) style.**
+- **C3 Wrap up order is strict:** Clean up → Trash → Archive; later steps stay read-only until earlier ones are finished or skipped; earlier steps reopen until Close.
+- **C4 Step footer:** "Proceed" on every step; the last step names its action (Finish run…, Close project…, Finish review).
+- **C5 Site map:** Leaflet + OpenStreetMap tiles (new dependency approved), plus a place search and "Use my location"; the number fields stay the source of truth, with a "map unavailable" fallback.
+- **C6 Moon:** one Moon-avoidance curve per filter (required separation shrinks as the Moon dims); grades and Img time both use it. Verify the ACP / N.I.N.A. convention against a source before building.
+- **C7 Goals:** each goal is time **or** frames. Extra conditions wanted: a quality bar on counted frames, channel balance, mosaic coverage, and a deadline or season window (set-up proposal pending the user's confirmation).
+- **C8 Home:** not settled; the user asked for a further round on a dashboard that adds value without duplicating pages.
+- **C9 Calibration:** Import masters selects **files** (multi-select; FITS/XISF filters), then a preview table with each file's match (New / Replaces {master} / Duplicate). Replace… on a master uses the same matching step and re-points unfinished runs after a confirm listing them; finished runs keep their recorded calibration. Darks, bias and dark-flats older than N days (default 90; flats exempt) get an "Old · {n} d" badge, with an issue only when an old master is assigned to an unfinished run.
+- **C10 Fully reviewed:** every frame is Usable or Unusable, with "Mark rest usable" and "Select by threshold…". A session used by an unfinished run's prepared view is **locked**: reopening its review is refused until the run finishes or its view is removed (the user: a tool such as PixInsight may be using it). Before a run is prepared, changes show as "Inputs changed · Refresh ▸".
+- **C11 Density: dropped** (one density; the setting goes).
+- **C12 Test tooling:** Vitest + Testing Library **and** Storybook (dev dependencies approved).
+- **C13 Typeface:** system font until the stack is decided.
+- **C14 Review at ingestion:** the Sessions list's "Needs review" filter is the queue; each session has a review step page; "Finish review" opens the next one; Import ends by opening the first session that needs review.
+- **C15 Metadata corrections** move to ingestion (a recorded vs corrected table in the session's review flow); Prepare applies them and shows "N corrected values".
