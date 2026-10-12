@@ -14,6 +14,10 @@ export interface PaletteCommand {
   /** Hash route to open, or an action to run. */
   to?: string
   run?: () => void
+  /** The key equivalent, shown trailing: "⌘E". */
+  shortcut?: string
+  /** Why the command cannot run now: the palette lists it dimmed with this reason and does not run it. */
+  unavailable?: string
 }
 
 export interface ShellContribution {

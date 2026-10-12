@@ -7621,5 +7621,23 @@
   "theme_picker_mode": "Modo",
   "theme_picker_light": "Claro",
   "theme_picker_dark": "Escuro",
-  "theme_picker_theme": "Tema"
+  "theme_picker_theme": "Tema",
+  "actions_blocked": "{action}: bloqueado",
+  "actions_for": "Ações de {name}",
+  "actions_confirm_group": [
+    {
+      "declarations": [
+        "input label",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{label} · {count} arquivo",
+        "countPlural=*": "{label} · {count} arquivos"
+      }
+    }
+  ]
 }
