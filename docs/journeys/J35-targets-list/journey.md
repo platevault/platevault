@@ -1,28 +1,30 @@
 ---
 id: J35
 title: Find, favourite and narrow Targets on the Targets page's All view with search, presets, a rig selector and Fit
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [targets, planning, equipment, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
+trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
 ---
 
 ## Goal
 
-The user opens the Targets page, sees their own Targets on the All view with the
-night's planning columns and a compact altitude sparkline, finds and adds new
-Targets through search, browses the bundled catalogues, and narrows the list with
-presets and a rig. Done means: My targets lists exactly the ★ favourites plus
-every open Project subject with its Project badge. Search names each result's
-source, and clicking a result adds that Target; no result row carries an Add
-button. Browse catalogues lists nothing until a catalogue or preset is chosen.
-Best tonight lists only Targets with a usable window, best first. A saved preset
-survives a restart. With a rig selected, the Filters strip shows only that rig's
-bands, narrowband presets follow its filters, and Fit reads per rig. Nothing on
-the page writes library data except ★ and adding a Target from a result.
+The user opens the Targets page, which opens on My targets in the All view with
+the night's planning columns and a compact altitude sparkline, finds and adds new
+Targets through search, browses the bundled catalogues through the Browse
+catalogues toggle, and narrows the list with presets and a rig. Done means: My
+targets lists exactly the ★ favourites plus every open Project subject with its
+Project badge. Search names each result's source. Clicking a catalogue result
+adds that Target, clicking a result already in My targets opens its Target
+detail, and no result row carries an Add button. Browse catalogues lists nothing
+until a catalogue or preset is chosen. Best tonight lists only Targets with a
+usable window, best first. A saved preset survives a restart. With a rig
+selected, the Filters strip shows only that rig's bands, narrowband presets
+follow its filters, and Fit reads per rig. Nothing on the page writes library
+data except ★ and adding a Target from a catalogue result.
 
 ## Preconditions
 
@@ -37,9 +39,9 @@ the page writes library data except ★ and adding a Target from a result.
 ### S1 — Open the Targets page {#S1}
 
 - **Do:** Open the Targets page from main navigation, then hover or focus the altitude sparkline of the NGC 7000 row.
-- **Expect:** The All view is selected, showing My targets, and the header date picker reads tonight. My targets lists exactly NGC 7000, with a `NGC 7000 HOO` badge, and IC 1396, with a `Summer nebulae` badge. The columns are ★, Designation, Type, the altitude sparkline, Max alt, Lunar, Img time, Filters, Opposition, Sessions and Captured, sorted by Designation ascending. Each sparkline plots altitude across tonight with the dark window shaded and the row's best window marked; NGC 7000's tooltip states a maximum altitude equal to its Max alt and the time it is reached. Moon illumination and phase appear once, in the toolbar, for tonight at Backyard.
-- **Expect (negative):** No catalogue object that is neither ★ nor a Project subject is listed. No row repeats the Moon illumination. The page shows no wide altitude timeline.
-- **Trace:** Targets page, All view · PLAN-TGT-FR-01, PLAN-TGT-FR-04, PLAN-TGT-FR-07 · PLAN-TGT-AC-01, PLAN-TGT-AC-05, PLAN-TGT-AC-16 · D-W17, D-W18, D-W60 · HARNESS-V5-IA.md S10 · Round 5 P-PLAN2
+- **Expect:** The All view is selected and opens on My targets, with a toggle to Browse catalogues, and the header date picker reads tonight. My targets lists exactly NGC 7000, with a `NGC 7000 HOO` badge, and IC 1396, with a `Summer nebulae` badge. The columns are ★, Designation, Type, the altitude sparkline, Max alt, Lunar, Img time, Filters, Opposition, Sessions and Captured, sorted by Designation ascending. Each sparkline plots altitude across tonight with the dark window shaded and the row's best window marked; NGC 7000's tooltip states a maximum altitude equal to its Max alt and the time it is reached. Moon illumination and phase appear once, in the toolbar, for tonight at Backyard.
+- **Expect (negative):** The page does not open on Browse catalogues. No catalogue object that is neither ★ nor a Project subject is listed. No row repeats the Moon illumination. The page shows no wide altitude timeline.
+- **Trace:** Targets page, All view · PLAN-TGT-FR-01, PLAN-TGT-FR-04, PLAN-TGT-FR-07 · PLAN-TGT-AC-01, PLAN-TGT-AC-05, PLAN-TGT-AC-16 · D-W17, D-W18, D-W60 · HARNESS-V5-IA.md S10 · Round 5 P-PLAN2 · Round 6 "Targets opens on My targets" · messages targets_browse_catalogues @ 4f470775
 
 ### S2 — Read Sessions and Captured, and sort {#S2}
 
@@ -62,12 +64,12 @@ the page writes library data except ★ and adding a Target from a result.
 - **Expect (negative):** Toggling ★ changes no subject of `Summer nebulae` and no Project record.
 - **Trace:** Targets list · PLAN-TGT-FR-01 · PLAN-TGT-AC-16 · D-W60
 
-### S5 — Search and add a Target by clicking its result {#S5}
+### S5 — Search and add a Target by clicking its catalogue result {#S5}
 
 - **Do:** Search `m 31`, then `M31` and `m31`. Click the Messier M 31 result row. Then search `ngc 5139`, click the NGC 5139 result the same way, and clear the search.
 - **Expect:** All three queries return the same M 31 matches, from the bundled catalogues and from SIMBAD, each naming its source in the Source column. Clicking the M 31 result adds it: the search stays open, and the result shows it is in My targets. My targets then lists M 31 and NGC 5139 with ★ set, beside NGC 7000 and IC 1396.
 - **Expect (negative):** No result row shows an **Add to targets** button; the row's menu keeps the other actions. Before a result is clicked, My targets is unchanged: typing a query writes nothing.
-- **Trace:** Targets list · PLAN-TGT-FR-03 · PLAN-TGT-AC-03 · D-W17 · Round 5 "Click a result to act"
+- **Trace:** Targets list · PLAN-TGT-FR-03 · PLAN-TGT-AC-03 · D-W17 · Round 5 "Click a result to act" · Round 6 "Clicking a result" (a catalogue result is added)
 
 ### S5a — Read a zero imaging time {#S5a}
 
@@ -75,6 +77,13 @@ the page writes library data except ★ and adding a Target from a result.
 - **Expect:** Img time reads 0 with the altitude reason, and its sparkline marks no best window.
 - **Expect (negative):** NGC 5139's Max alt, Img time and Opposition are not left blank without a reason.
 - **Trace:** Targets list · PLAN-TGT-FR-05 · PLAN-TGT-AC-06 · D-W18
+
+### S5b — Open a result that is already in My targets {#S5b}
+
+- **Do:** Search `ngc 7000` and click the NGC 7000 result row, read the page, then go back. Search `m 31`, click the Messier M 31 result row, read the page, then go back and clear the search.
+- **Expect:** The NGC 7000 result shows that it is in My targets. Clicking it opens NGC 7000's Target detail, with the Project `NGC 7000 HOO` and its goal lines as S3 reads them. The M 31 result, in My targets since S5, shows the same, and clicking it opens M 31's Target detail.
+- **Expect (negative):** Neither click adds, duplicates or ★-toggles a Target: My targets still lists exactly NGC 7000, IC 1396, M 31 and NGC 5139, one row each, and NGC 7000 still has no ★. Neither click writes a plan, Project or session record.
+- **Trace:** Targets list, Target detail · PLAN-TGT-FR-03, PLAN-TGT-FR-14 · D-W17 · Round 5 "Click a result to act" · Round 6 "Clicking a result" (a Target in My targets opens)
 
 ### S6 — Search without SIMBAD {#S6}
 
@@ -85,10 +94,10 @@ the page writes library data except ★ and adding a Target from a result.
 
 ### S7 — Browse the catalogues {#S7}
 
-- **Do:** On the All view, switch to Browse catalogues with no catalogue and no preset chosen, then choose Messier.
+- **Do:** On the All view, use the toggle to switch from My targets to Browse catalogues with no catalogue and no preset chosen, then choose Messier.
 - **Expect:** With nothing chosen, no rows are listed and the page asks the user to choose a catalogue or a preset. After choosing Messier, the Messier objects M 1 to M 110 are listed, and M 31 and M 57 show ★.
 - **Expect (negative):** Browsing writes nothing to My targets.
-- **Trace:** Targets list · PLAN-TGT-FR-02 · PLAN-TGT-AC-02 · PV-PLAN-SC-05 · D-W17 · HARNESS-V5-IA.md S10 (Browse needs a catalogue or a preset)
+- **Trace:** Targets list · PLAN-TGT-FR-02 · PLAN-TGT-AC-02 · PV-PLAN-SC-05 · D-W17 · HARNESS-V5-IA.md S10 (Browse needs a catalogue or a preset) · Round 6 "Targets opens on My targets" (a toggle switches to Browse catalogues)
 
 ### S8 — Apply a built-in preset {#S8}
 
@@ -149,20 +158,24 @@ the page writes library data except ★ and adding a Target from a result.
 - SC6: 0 narrowband presets are offered for `Esprit` before S13 (S11).
 - SC7: NGC 7000's Max alt and Img time equal its Target detail's values for the same site, night and criteria (S3), and its sparkline tooltip's maximum altitude equals its Max alt (S1).
 - SC8: Best tonight lists at least 1 row and 0 rows with Img time 0, in descending Img time order, with no rig and with `RedCat` (S8a, S10).
+- SC9: Each catalogue result click adds exactly 1 Target (M 31 and NGC 5139 at S5, M 57 at S6). Clicking a result already in My targets opens its Target detail and adds 0: My targets holds exactly 4 rows before and after S5b.
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S10, S3 and S16; HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2, "Best tonight shows nothing" and "Click a result to act", at ui-harness-v5 b5e813a5), the specs, and the workflow decisions D-W16 to D-W19, D-W23, D-W31, D-W37 and D-W60 to D-W62. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S10, S3 and S16; HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2, "Best tonight shows nothing" and "Click a result to act", at ui-harness-v5 b5e813a5, and Round 6 at 4f470775), the specs, and the workflow decisions D-W16 to D-W19, D-W23, D-W31, D-W37 and D-W60 to D-W62. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: no network control yet blocks SIMBAD alone (P3), and no fault control fails adding a Target from a result to exercise its Retry (PLAN-TGT-FR-03). S6 depends on the first. Blocks readiness.
 - G3: Out of scope for this journey: the Moon and darkness reasons for a zero Img time (PLAN-TGT-AC-06) and a Target without catalogued coordinates (PLAN-TGT-AC-07) need fixture nights and Targets that are not specified. Blocks readiness until covered by a step or a journey.
 - G4: Out of scope for this journey: Fit's "Size unknown" and "Field of view unknown" reasons (072 edge cases, PLAN-EQ-FR-05) are not exercised. Blocks readiness until covered by a step or a journey. J19/S6a covers the Targets page with no saved planning site (PLAN-TGT-AC-15).
 - G5: Out of scope for this journey: no session is Trashed here. J34/S7 covers trashed frames leaving Sessions and the Captured column of Target NGC 7000 (PLAN-TGT-FR-08, D-W43). A wholly Trashed session (PLAN-TGT-AC-08) is not exercised. Blocks readiness until covered by a step or a journey.
 - G6: Unresolved implementation qualification: the bundled catalogue's angular sizes for NGC 7000, IC 1396 and M 57 are assumed to place them as S10, S11 and S12 state for the J15 fields of view. A different catalogue value changes the expected Fit readings. Blocks readiness.
-- G7: Unresolved product question: Round 5 P-PLAN2 describes the All view as "catalogues and My targets, filters, presets" without saying whether the IA S10 choice between My targets (the default) and Browse catalogues stays inside it. S1, S7, S10 and S12 assume it stays. Blocks readiness.
-- G8: Unresolved product question: Round 5 "Click a result to act" removes the Add button from result rows, but it does not say what clicking a result that is already in My targets does (open its Target detail, or nothing). S5 does not click such a result. Blocks readiness.
+- G7: (dissolved 2026-10-12): answered by Round 6 "Targets opens on My targets"; S1 now asserts that the page opens on My targets with a toggle to Browse catalogues, and S7 and S10 switch with that toggle.
+- G8: (dissolved 2026-10-12): answered by Round 6 "Clicking a result"; S5 and S6 assert that a catalogue result is added, and S5b asserts that a result already in My targets opens its Target detail and adds nothing.
 
 ## Delta log
 
+- **Δ3** 2026-10-12 · S1, S5, S7, +S5b · behavior-change
+  The Targets page opens on My targets, and a toggle switches to Browse catalogues. Clicking a catalogue result adds it; clicking a result already in My targets opens its Target detail (new S5b).
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Targets opens on My targets", "Clicking a result" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6F (intent-gated)
 - **Δ2** 2026-10-12 · S1, S3, S5, S5a, S6, S7, S8, S10, S12, S13, +S8a · behavior-change
   Targets and Plan are one Targets page: the All view opens with a header date picker on tonight and a compact altitude sparkline column; a row opens its Target detail. Clicking a search result adds the Target, with no Add button on result rows.
   Best tonight lists only Targets with a usable window, best first, for the selected rig. Fit reads "fits (N%)", the Project scope reads "This Project's rigs (2)", and filters are added with **Add filter**.

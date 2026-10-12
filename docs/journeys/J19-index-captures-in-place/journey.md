@@ -1,33 +1,35 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [onboarding, locations, indexing, home, sessions, targets, planning, status-bar, issues, calibration-process, duplicates]
+surfaces: [onboarding, locations, indexing, home, sessions, targets, planning, status-bar, issues, calibration-process, duplicates, equipment]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 072-observing-plans, D01, D08, D11, D15, D18, D-W7, D-W12, D-W17, D-W33, D-W35, D-W37, D-W39, D-W43, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-a-first-use-and-indexing, HARNESS-V5-IA.md#source-list, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S11, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HIGH-LEVEL-DESIGN.md#glossary, P-SB3, P-STO2, P-PLAN2, P-CAL3, apps/prototype/src/features/t1/setup/setup-pages.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 072-observing-plans, D01, D08, D11, D15, D18, D-W7, D-W12, D-W17, D-W33, D-W35, D-W37, D-W39, D-W43, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-a-first-use-and-indexing, HARNESS-V5-IA.md#source-list, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S11, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HIGH-LEVEL-DESIGN.md#glossary, P-SB3, P-STO2, P-PLAN2, P-CAL3, apps/prototype/src/features/t1/setup/setup-pages.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-equipment.tsx @4f470775, apps/prototype/src/domain/indexing.ts @4f470775, apps/prototype/messages/en-GB.json @4f470775]
 ---
 
 ## Goal
 
 The user registers folders that already hold captures and calibration frames,
-indexes them where they are, and inspects sessions and the evidence behind each
-Target and rig association. No Project, processing application, account,
-network connection, workspace root, or file reorganization is required. After
-onboarding the app opens on Home, the control-panel dashboard. Done means:
+indexes them where they are, inspects sessions and the evidence behind each
+Target and rig association, and names and completes the rigs that indexing
+detected. No Project, processing application, account, network connection,
+workspace root, or file reorganization is required. After onboarding the app
+opens on Home, the control-panel dashboard. Done means:
 
 - Sessions lists the seven fixture light sessions as separate metadata-homogeneous sessions.
 - A session whose pointing lies within a Target's footprint reads that Target as Associated. A session without such pointing reads Needs a Target instead of a guess, and the Needs a Target filter lists it. OBJECT shows only as a label.
 - Raw calibration frames wait as calibration processes awaiting Stack, and no light session holds them.
+- Indexing detects one rig per camera and telescope pair. The user renames them `RedCat` and `Esprit` and adds their missing pixel size in Settings › Equipment, so each has a field of view.
 - An unreadable or offline location reads as uncertain rather than Missing, in the status bar and in Settings › Locations.
 - Every file in the registered folders is byte-identical to the pre-run manifest.
 
 ## Preconditions
 
 - P1: A clean development build of the rebuilt PlateVault (D17) with no catalog, no saved observing site and no network connection. First launch shows onboarding.
-- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session. The five dated sessions use mono 300 s lights from rig `RedCat` (RedCat 51 + ASI2600MM) at one gain, offset, temperature and 1x1 binning, captured at the Backyard coordinates. The `other camera` session holds 300 s lights from rig `Esprit` (Esprit 100 + ASI533MC). A plain-text note is an unsupported item. The 30 Sep session also carries the frame-review properties of J22/P2. Every pointing in the table lies within NGC 7000's footprint.
+- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session. The five dated sessions use mono 300 s lights from rig `RedCat` (RedCat 51 + ASI2600MM) at one gain, offset, temperature and 1x1 binning, captured at the Backyard coordinates. The `other camera` session holds 300 s lights from rig `Esprit` (Esprit 100 + ASI533MC). A plain-text note is an unsupported item. The 30 Sep session also carries the frame-review properties of J22/P2. Every pointing in the table lies within NGC 7000's footprint. RedCat lights (here and in P3) carry INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51` and FOCALLEN `250` at 6248 × 4176 pixels, except that 28 Sep lacks TELESCOP and FOCALLEN. Other-camera lights carry INSTRUME `ZWO ASI533MC Pro`, TELESCOP `Esprit 100`, FOCALLEN `550` and a Bayer pattern at 3008 × 3008 pixels. No light carries a pixel size (XPIXSZ); both cameras have 3.76 µm pixels (J15/P2).
 
   | Session | Channel | Lights | OBJECT | Pointing | Orientation | Optics keywords |
   | --- | --- | --- | --- | --- | --- | --- |
@@ -86,17 +88,17 @@ onboarding the app opens on Home, the control-panel dashboard. Done means:
 
 ### S6 — Browse while indexing runs {#S6}
 
-- **Do:** Before indexing finishes, click **Open library**. Read Home, the source list and the status bar, then open Sessions.
-- **Expect:** Home opens, not the Targets list. Its header offers **Plan tonight**, **New Project** and **Import**. Its boxes are Projects, which reads `No Projects`, Sessions, Tonight, Goals and Work. Work lists the indexing operation with its progress. The source list offers Home, Projects, Targets, Sessions and Calibration, with Activity and Settings in its footer, and the toolbar offers Import. The status bar shows the indexing operation as running work with a mini progress bar. Its ⛔ errors counter opens a popout that lists `Astro-T7 calibration unreadable`, with its action leading to Settings › Locations. In Sessions, the sessions read so far can be inspected. Totals name the locations they cover and read Provisional.
+- **Do:** Before indexing finishes, click **Open library**. The orientation walk opens on its own after setup (J18/S1); skip or finish it (J18/S2, S3). Read Home, the source list and the status bar, then open Sessions.
+- **Expect:** Home opens, not the Targets list. Its header offers **Plan tonight**, **New Project** and **Import**. Its boxes are Projects, which reads `No Projects`, Sessions, Tonight, Goals and Work. Home shows the Getting started checklist (J18/S6). Work lists the indexing operation with its progress. The source list offers Home, Projects, Targets, Sessions and Calibration, with Activity and Settings in its footer, and the toolbar offers Import. The status bar shows the indexing operation as running work with a mini progress bar. Its ⛔ errors counter opens a popout that lists `Astro-T7 calibration unreadable`, with its action leading to Settings › Locations. In Sessions, the sessions read so far can be inspected. Totals name the locations they cover and read Provisional.
 - **Expect (negative):** Home shows no issues strip or top line. The source list has no Storage or Plan entry. No total implies that unscanned folders or data outside the registered locations are included. No screen asks for an account or a network connection.
-- **Trace:** flow A4 · LIB-FR-03, LIB-FR-10 · LIB-AC-07, LIB-AC-09 · PRJ-FR-17 · D-W7, D-W39 · HARNESS-V5-IA.md §Source list, §Screens S1, §Round 2b (Status bar) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip, Navigation, P-STO2, P-PLAN2) · G5
+- **Trace:** flow A4 · LIB-FR-03, LIB-FR-10 · LIB-AC-07, LIB-AC-09 · PRJ-FR-17 · D-W7, D-W39 · HARNESS-V5-IA.md §Source list, §Screens S1, §Round 2b (Status bar) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip, Navigation, P-STO2, P-PLAN2), §Round 6 "Onboarding: walk plus checklist" · J18/G4 (the page setup hands over to) · G5
 
 ### S6a — Read planning before any site exists {#S6a}
 
 - **Do:** On Home, read Tonight. Open Targets and search for `NGC 7000`.
-- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens with tonight in its header date picker. My targets holds no Target, the altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source. The row's primary action, on a click, is Add to targets, and the row shows no separate Add button. The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
+- **Expect:** Tonight reads `No site` and offers **Add site**, which leads to Settings › Observing sites. Targets opens on My targets, with tonight in its header date picker and a toggle to Browse catalogues. My targets holds no Target, the altitude column draws no sparkline and the page offers **Add site**. The search lists NGC 7000 from the bundled catalogues with its source. The row's primary action, on a click, is Add to targets, and the row shows no separate Add button. The results read `SIMBAD off` or `SIMBAD unreachable`, never `SIMBAD searched`.
 - **Expect (negative):** No window, altitude or Img time is computed for an assumed location. Searching writes nothing: this step clicks no result row, and My targets stays empty.
-- **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-PLAN2, Click a result to act)
+- **Trace:** PLAN-FR-11 · PLAN-AC-12 · PLAN-TGT-FR-01, PLAN-TGT-FR-03 · PLAN-TGT-AC-04, PLAN-TGT-AC-15 · D-W17, D-W39 · HARNESS-V5-IA.md §Screens S1 (Tonight), S10, S11 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-PLAN2, Click a result to act), §Round 6 "Targets opens on My targets", "Clicking a result" · G10
 
 ### S7 — Recover the denied location {#S7}
 
@@ -123,12 +125,12 @@ onboarding the app opens on Home, the control-panel dashboard. Done means:
 
 - **Do:** Open the session detail of 30 Sep, 24 Sep, 26 Sep and 28 Sep.
 - **Expect:** Each detail shows its Target evidence and its rig evidence, with observed and confirmed evidence shown separately. It shows OBJECT only as a label beside the frame count, such as `OBJECT NGC 7000` or `No OBJECT`.
-  - 30 Sep reads Target NGC 7000 Associated from its pointing evidence.
+  - 30 Sep reads Target NGC 7000 Associated from its pointing evidence. Its rig evidence lists INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51` and FOCALLEN `250 mm`, and names the rig detected from them, marked `(detected)`.
   - 24 Sep has no Target: its Target box reads `Unsettled`, and its pointing evidence reads `No pointing in header`.
   - 26 Sep reads Target NGC 7000 Associated from its pointing. Its label reads `OBJECT Cygnus field`.
   - 28 Sep reads Target NGC 7000 Associated from its pointing, and its rig evidence reads Needs review.
 - **Expect (negative):** No evidence list names OBJECT as Target evidence. No OBJECT label agrees with, conflicts with, preselects or settles a Target. 24 Sep is not assigned a guessed Target. No `Cygnus field` Target exists, and no OBJECT supplies coordinates.
-- **Trace:** flow A3 · LIB-FR-05 · LIB-AC-03 · D01, D11 · HARNESS-V5-IA.md §Screens S12 (session detail) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (OBJECT is a label, never evidence) · HIGH-LEVEL-DESIGN.md §10 Glossary (OBJECT)
+- **Trace:** flow A3 · LIB-FR-05 · LIB-AC-03 · D01, D11 · HARNESS-V5-IA.md §Screens S12 (session detail) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (OBJECT is a label, never evidence), §Round 6 "Rigs: detection plus manual add" · HIGH-LEVEL-DESIGN.md §10 Glossary (OBJECT) · messages indexing_train_detected @ 4f470775
 
 ### S9a — Read the new-session filters, Home's Sessions box and the status bar {#S9a}
 
@@ -143,12 +145,22 @@ onboarding the app opens on Home, the control-panel dashboard. Done means:
 - **Expect (negative):** Neither filter assigns a session to a Project or a processing run. No session is a candidate of any Project, because no Project exists. Home shows no issues strip or top line.
 - **Trace:** cross-flow "Missing OBJECT" · LIB-FR-17 · LIB-AC-18 · PRJ-FR-19 · PRJ-AC-20 · D-W33, D-W43 · HARNESS-V5-IA.md §Screens S1 (Sessions box), S12 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip)
 
+### S9b — Name and complete the detected rigs {#S9b}
+
+- **Do:** Open Settings › Equipment and read its rigs. On the rig detected from the RedCat lights choose **Rename**, enter `RedCat` and save. Rename the rig detected from the other-camera lights to `Esprit` the same way. Then choose **Edit optics** on each rig, enter the pixel size 3.76 µm and save. Reopen the 30 Sep session detail.
+- **Expect:**
+  - Before any change, Settings › Equipment lists exactly two rigs, each named from its TELESCOP and INSTRUME values. One has telescope `RedCat 51`, camera `ZWO ASI2600MM Pro` (Mono, 6248 × 4176) and 250 mm. The other has `Esprit 100`, `ZWO ASI533MC Pro` (OSC, 3008 × 3008) and 550 mm. Each reads `Field of view unknown`, because no light carries a pixel size.
+  - After the renames the rigs read `RedCat` and `Esprit`. After Edit optics, `RedCat`'s field of view reads about 5.4° × 3.6° and `Esprit`'s about 1.2° × 1.2°.
+  - 30 Sep's rig evidence now names `RedCat`, still Associated and not Confirmed.
+- **Expect (negative):** Renaming and editing change no source byte (P5), no folder name and no session's Target, frame count or association status. No third rig appears, and 28 Sep's rig evidence still reads Needs review. No session's rig reads Confirmed before S10.
+- **Trace:** LIB-FR-05 · PLAN-EQ-FR-02, PLAN-EQ-FR-05 · D11 · HARNESS-V5-IA.md §Screens S16 (Equipment) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" (renaming and editing detected ones) · settings-equipment.tsx (Rename, Edit optics), indexing.ts trainFor, messages equipment_rename, equipment_edit_optics, domain_fov_unknown @ 4f470775
+
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
 - **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep.
 - **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label, and 28 Sep's rig no longer reads Needs review. Each of the six sessions reads rig `RedCat` Confirmed. A grouping revision created by a confirmation keeps the previous session identity traceable. **Needs a Target** now reads 0 with `None need a Target`, and **Not in any Project** lists all seven. The status bar's ⚠ counter disappears.
 - **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label.
-- **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · G2
+- **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs)
 
 ### S11 — See a failed catalog write {#S11}
 
@@ -180,9 +192,9 @@ onboarding the app opens on Home, the control-panel dashboard. Done means:
 ### S15 — Take Cold-1 offline {#S15}
 
 - **Do:** Eject `Cold-1`. Read the status bar, then open Settings › Locations.
-- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ popout lists `Cold-1 captures offline`, with its action leading to Settings › Locations. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
+- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ popout lists `Cold-1 captures offline`, with its action leading to Settings › Locations. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
 - **Expect (negative):** No 12 Sep frame reads Missing and the session is not removed.
-- **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07 · LIB-AC-05 · D11 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2)
+- **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07 · LIB-AC-05 · D11 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
 
 ## Success criteria
 
@@ -197,15 +209,18 @@ onboarding the app opens on Home, the control-panel dashboard. Done means:
 - SC9: With no saved site, 0 windows and 0 Img time values are computed (S6a).
 - SC10: 0 Targets are taken from an OBJECT label: no evidence list names OBJECT at S9, and 24 Sep's picker opens with no Target chosen at S10.
 - SC11: At S15 the status bar reads `2 of 3 online`, and 0 duplicate-copies issues are raised after indexing (S8).
+- SC12: After S9b exactly 2 rigs exist, `RedCat` at about 5.4° × 3.6° and `Esprit` at about 1.2° × 1.2°, 0 of them created by hand, and 0 source bytes differ from P5 (S9b, S14).
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs, the defaults that the authorized autonomous run set in decisions D01, D08, D11, D15, and D18, and the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, `apps/prototype/` on ui-harness-v5 @ b5e813a5). No implementation has been validated against them.
-- G2: Unresolved implementation qualification: S10 and S11 confirm the rigs `RedCat` and `Esprit`. J15/S1 to S4 covers the Settings > Equipment controls that create them (S3 and S3a compose the trains), but this journey starts with no rig (P1) and names no point where that setup runs. Same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs, the defaults that the authorized autonomous run set in decisions D01, D08, D11, D15, and D18, and the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, `apps/prototype/` on ui-harness-v5 @ b5e813a5, and HARNESS-V5-FEEDBACK-R1.md Round 6 @ 4f470775). No implementation has been validated against them.
+- G2: (dissolved 2026-10-12): answered by Round 6 "Rigs: detection plus manual add"; S9 and S9b now assert that indexing detects one rig per camera and telescope pair, which the user renames `RedCat` and `Esprit` and completes with Edit optics before S10 and S11 confirm them. The unanswered locate/remap remainder moves unchanged to G9.
 - G3: Unresolved implementation qualification: no fault-injection mechanism exists yet for the S11 catalog-write failure (P6). Blocks readiness.
 - G5: Unresolved implementation qualification: S6 needs indexing to run long enough to observe. Fixture sizing or a slow volume is unspecified. Blocks readiness.
 - G6: Out of scope for this journey: the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised. Blocks readiness until covered by a step or a journey.
 - G7: Out of scope for this journey: the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes. Release-build verification evidence is required. Blocks readiness until it exists.
+- G9: Unresolved implementation qualification (carried from G2 unchanged): same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
+- G10: Unresolved product question: Round 6 defines My targets as "yours plus favourites", while HARNESS-V5-IA.md S10 says "the ★ favourites plus open-Project subjects". Neither says whether a Target that only has indexed sessions (NGC 7000 at S6a, associated by pointing, with no ★ and no Project) is "yours". S6a keeps the IA reading: My targets holds no Target, and NGC 7000's search result is added on a click. Blocks readiness.
 
 ## Delta log
 
@@ -217,3 +232,7 @@ onboarding the app opens on Home, the control-panel dashboard. Done means:
   OBJECT is only a label. Pointing within NGC 7000's footprint associates 12, 18, 26, 28 and 30 Sep and the other-camera session, so only 24 Sep needs a Target, and the S9a filters read 1 and 6. This retires G8 (answered) and G4 (Rescan exists).
   New S7a: raw calibration frames wait as calibration processes awaiting Stack. A duplicate scan follows indexing (S8). P2 and P3 place every pointing within NGC 7000's footprint, and S3 and S4 name `Cold-1 captures` and `Astro-T7 calibration`.
   Evidence: HARNESS-V5-IA.md §Source list, §Screens S1, S10, S11, S12, S14, §Round 2b (Status bar, P-CAL3); HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3, §Round 5 (P-SB3, Home has no issues strip, Navigation, P-PLAN2, Click a result to act, OBJECT is a label never evidence, P-STO2, Duplicates are scanned automatically); HIGH-LEVEL-DESIGN.md §10 Glossary (OBJECT); prototype src/features/t1/setup/setup-pages.tsx, src/features/t1/settings/locations-page.tsx (Rescan), src/domain/derive.ts (sessionTargetId), src/domain/issues.ts (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U1Intake (intent-gated)
+- **Δ4** 2026-10-12 · S6, S6a, S9, +S9b, S10, S15 · behavior-change
+  Indexing detects the rigs; new S9b renames them `RedCat` and `Esprit` and adds their pixel size with Edit optics (P2 now names the optics headers and has no XPIXSZ). The orientation walk opens after setup and Home shows the Getting started checklist (J18).
+  Targets opens on My targets with a toggle to Browse catalogues, and disk use per location is the catalogued bytes plus the volume's free space.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Rigs: detection plus manual add", "Onboarding: walk plus checklist", "Targets opens on My targets", "Clicking a result", "Disk use per location" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6F (intent-gated)
