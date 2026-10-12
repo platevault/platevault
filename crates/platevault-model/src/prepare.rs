@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::{
     CalibrationHandoff, CalibrationNeedsReview, CalibrationPolicy, EntryEvidence, InputKind,
     InputMode, ItemReason, LibraryError, NativePath, ObservationFingerprint, PanelOutcome,
-    ResultKind, Revision, RunStage, Writability, WrittenCopy,
+    ResultKind, Revision, RunCompletion, RunStage, View, Writability, WrittenCopy,
 };
 
 fn invalid(message: impl Into<String>) -> LibraryError {
@@ -953,6 +953,36 @@ impl GroupPreparation {
             None => PreparationState::Partial,
         }
     }
+
+    /// What Retry of a Prepare all does with Panel `number`, whose revision
+    /// reads `state`, of run `run` (D-W75, PREP-FR-12): a Partial or Paused
+    /// revision resumes unless its run is in the Project's Trash or Complete,
+    /// which Retry skips and names; any other revision has nothing to retry.
+    #[must_use]
+    pub fn panel_retry(number: u32, state: PreparationState, run: &View) -> PanelRetry {
+        if !matches!(state, PreparationState::Partial | PreparationState::Paused) {
+            return PanelRetry::Nothing;
+        }
+        if run.trashed_at.is_some() {
+            PanelRetry::Skipped(format!("Panel {number} is in the Project's Trash; Retry skips it"))
+        } else if run.completion == RunCompletion::Complete {
+            PanelRetry::Skipped(format!("Panel {number} is Complete; Retry skips it"))
+        } else {
+            PanelRetry::Resumes
+        }
+    }
+}
+
+/// What Retry of a Prepare all does with one panel run (PREP-FR-12).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PanelRetry {
+    /// Its Partial or Paused revision runs again.
+    Resumes,
+    /// Partial or Paused, but its run is in the Project's Trash or Complete:
+    /// why Retry skips it.
+    Skipped(String),
+    /// Its revision is neither Partial nor Paused: nothing to retry.
+    Nothing,
 }
 
 /// One panel run's outcome of a group preparation revision.
@@ -991,5 +1021,22 @@ impl GroupPreparationOutcome {
     pub fn every_panel_verified(panels: &[PanelPreparationOutcome]) -> bool {
         !panels.is_empty()
             && panels.iter().all(|panel| panel.outcome.offers.contains(&PreparationOffer::Open))
+    }
+
+    /// What a Prepare all in `outcome` offers (PREP-FR-12/13): Open only when
+    /// every panel run is `verified`, and Retry only when a panel run
+    /// `resumes` ([`PanelRetry::Resumes`]); with none, a new Prepare all is
+    /// the way on, never a Retry that is refused.
+    #[must_use]
+    pub fn offers_for(
+        outcome: PreparationState,
+        verified: bool,
+        resumes: bool,
+    ) -> Vec<PreparationOffer> {
+        let mut offers = PreparationOutcome::offers_for(outcome, !verified);
+        if !resumes {
+            offers.retain(|offer| *offer != PreparationOffer::Retry);
+        }
+        offers
     }
 }

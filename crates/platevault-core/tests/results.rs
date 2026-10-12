@@ -853,6 +853,47 @@ async fn product_run_prepared_only_with_product_input_support() {
     assert_eq!(blocked.collect::<Vec<_>>(), vec![Some(oiii)]);
 }
 
+/// RES-FR-05, D19: a product input whose rehash drifted from its acceptance
+/// is blocked by Prepare, and by Retry, with its drift named and how to
+/// reuse it, never as a source that left the reviewed selection.
+#[tokio::test]
+async fn prepare_names_a_drifted_product_inputs_drift() {
+    let world = world().await;
+    prepared(&world).await;
+    let kind = ResultKind::LinearIntegration;
+    let ha = results_dir(&world).join("Ha_linear.fit");
+    stack(&ha, &[("FILTER", "'Ha'")]);
+    let oiii = results_dir(&world).join("OIII_linear.fit");
+    stack(&oiii, &[("FILTER", "'OIII'")]);
+    let ha_id = accept(&world.library, run(&world), &ha, kind.clone()).await;
+    let oiii_id = accept(&world.library, run(&world), &oiii, kind.clone()).await;
+    let view = world.view().await;
+    let combine =
+        world.library.create_view_with_products(&combine_input(&view), &[ha_id, oiii_id]).await;
+    let combine = combine.unwrap().view.id;
+    world.catalog().save_view(combine, 0, 1).await.unwrap();
+    let reads = world.siril_reading("exit 0", vec![kind]).await;
+    let request = world.request(&reads, InputMode::Copy, None);
+    overwrite_in_place(&oiii);
+
+    let drift = |entries: &[PreparedEntry]| {
+        let [entry] = entries else { panic!("one blocked entry: {entries:#?}") };
+        assert_eq!(entry.source.as_ref().map(native), Some(oiii.clone()));
+        let reason = entry.reason.clone().expect("a blocked entry names its reason");
+        assert_eq!(reason.code, ReasonCode::SourceDrift);
+        assert!(reason.detail.contains("Result 'OIII_linear.fit' drifted"), "{reason:?}");
+        assert!(reason.detail.contains("restore the accepted bytes"), "{reason:?}");
+        assert!(!reason.detail.contains("no longer in the reviewed selection"), "{reason:?}");
+    };
+    let outcome = world.library.prepare_run(combine, &request, 1, &Watch::quiet()).await.unwrap();
+    assert_eq!(outcome.revision.state, PreparationState::Partial, "{outcome:#?}");
+    drift(&outcome.blocked);
+    let retried =
+        world.library.retry_preparation(outcome.revision.id, &Watch::quiet()).await.unwrap();
+    assert_eq!(retried.revision.state, PreparationState::Partial, "{retried:#?}");
+    drift(&retried.blocked);
+}
+
 /// RES-FR-05, RES-AC-05: Prepare all reads each panel run's product inputs
 /// too. Panel 1, holding raw frames and an accepted Panel 2 product, is
 /// refused by a profile that reads neither products nor both kinds of input
