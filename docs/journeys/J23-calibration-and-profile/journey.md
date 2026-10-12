@@ -1,13 +1,13 @@
 ---
 id: J23
 title: Calibrate a processing run automatically, resolve an exception and choose an application profile
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [calibration, view-review, preparation, projects, applications]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/features/v5/c-runs/calibrate-step.tsx, apps/prototype/src/features/v5/c-runs/prepare-step.tsx, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36]
+trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/features/v5/c-runs/calibrate-step.tsx, apps/prototype/src/features/v5/c-runs/prepare-step.tsx, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, P-PREP2]
 ---
 
 ## Goal
@@ -95,17 +95,22 @@ correction reaches the application. Done means:
 
 ### S7 — Confirm the exception is run-scoped {#S7}
 
-- **Do:** In Project `NGC 7000 HOO`, start a processing run `24 Sep flat check` on subject NGC 7000 and rig RedCat (G5). The session picker starts with every candidate selected. Leave only 24 Sep selected, save the run, and move to Calibrate.
-- **Expect:** The readiness line reads Dark ✓, Flat ✓ and Bias ✓. The 24 Sep flat row reads Automatic with `MasterFlat_2026-09-30.xisf`. Its row menu offers the 26 Sep master only as `Use MasterFlat_2026-09-26.xisf as exception…`, with its rig unknown and no exception attached.
-- **Expect (negative):** The S6 exception does not appear in this run.
+- **Do:** In Project `NGC 7000 HOO`, click **Start run…**, choose subject NGC 7000 and rig RedCat, leave **Profile (optional)** at None, and start the run. On the run header choose **Rename** and enter `24 Sep flat check`. The session picker starts with every candidate selected. Leave only 24 Sep selected, save the run, and move to Calibrate.
+- **Expect:**
+  - The run opens at Select, and its header reads the automatic name `NGC 7000 RedCat` with subject NGC 7000 and rig RedCat. After Rename the run header and the Project's Runs table read `24 Sep flat check`.
+  - The readiness line reads Dark ✓, Flat ✓ and Bias ✓. The 24 Sep flat row reads Automatic with `MasterFlat_2026-09-30.xisf`. Its row menu offers the 26 Sep master only as `Use MasterFlat_2026-09-26.xisf as exception…`, with its rig unknown and no exception attached.
+- **Expect (negative):** Start run asks for no run name. Rename changes neither the run's subject, rig nor session selection. The S6 exception does not appear in this run.
 - **Trace:** flow E2 · VSEL-FR-03 · CAL-FR-02, CAL-FR-05 · CAL-AC-01, CAL-AC-03 · D-W49, D-W50
 
 ### S7a — Turn automatic assignment off {#S7a}
 
-- **Do:** In `24 Sep flat check`, turn **Auto-assign** off. Read Matches, then accept the suggested `MasterFlat_2026-09-30.xisf` for 24 Sep's flat.
-- **Expect:** With **Auto-assign** off, every compatible master reads Suggested, none is assigned, and the readiness line counts them to review. After acceptance the flat row reads Accepted, distinct from Automatic and Suggested, and its criteria stay available.
-- **Expect (negative):** No suggestion is treated as a handoff input before it is accepted.
-- **Trace:** flow E1 · CAL-FR-02, CAL-FR-08, CAL-FR-09 · CAL-AC-11 · D-W5, D-W55 · G4
+- **Do:** In `24 Sep flat check`, turn **Auto-assign** off. Read Matches, then accept the suggested `MasterFlat_2026-09-30.xisf` for 24 Sep's flat. Open the Prepare step and read its calibration check.
+- **Expect:**
+  - With **Auto-assign** off, each of the 3 requirements of 24 Sep reads Suggested with the master automatic assignment would choose: `MasterDark_2026-09-20.xisf`, `MasterFlat_2026-09-30.xisf` and `MasterBias_2026-09-20.xisf`. None is assigned, and the readiness line counts the 3 suggestions to review.
+  - After acceptance the flat row reads Accepted, distinct from Automatic and Suggested, its criteria stay available, and the readiness line counts 2 to review.
+  - Prepare's calibration check counts the dark and the bias as waiting for acceptance.
+- **Expect (negative):** No row reads Automatic while **Auto-assign** is off, and the 26 Sep master is not suggested. No suggestion is treated as a handoff input before it is accepted: Prepare lists neither the dark nor the bias suggestion as a calibration input.
+- **Trace:** flow E1 · CAL-FR-02, CAL-FR-08, CAL-FR-09 · CAL-AC-11 · D-W5, D-W55 · HARNESS-V5-FEEDBACK-R1.md §Round 6 Calibration ("Calibration Off")
 
 ### S7b — See which runs use each master {#S7b}
 
@@ -117,6 +122,13 @@ correction reaches the application. Done means:
 - **Expect (negative):** Opening Used by does not expand the master row, and reading it changes no assignment.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Calibration (master details; Used by is a popover) · HARNESS-V5-IA.md §Screens S14 · CAL-FR-08
 
+### S7c — Try to dismiss a master that runs use {#S7c}
+
+- **Do:** In the Calibration library, open the details of `MasterFlat_2026-09-30.xisf` and click **Dismiss**. Open the refusal's disclosure.
+- **Expect:** Dismiss is refused with `Can't dismiss · used by 2 runs ▸`. Its disclosure names `NGC7000-HOO-Siril` and `24 Sep flat check`, and each entry opens that run's Calibrate step.
+- **Expect (negative):** The master stays listed under Flats with its storage path and SHA-256, and the Dismissed filter does not list it. Both runs keep their assignment of it, and no file moves.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 Calibration ("Dismiss is refused while a run uses the master") · P-CAL2 · HARNESS-V5-IA.md §Screens S14
+
 ### S8 — Choose the Siril profile {#S8}
 
 - **Do:** In the Prepare step of `NGC7000-HOO-Siril`, choose **Siril** under Application. Its executable state reads not found, so locate the executable in Settings › Applications (J41) and return.
@@ -127,13 +139,14 @@ correction reaches the application. Done means:
 ### S9 — See the generic alternative {#S9}
 
 - **Do:** In the Prepare step of `24 Sep flat check`, choose **Other app** under Application.
-- **Expect:** It reads `Not verified` and `Writes unknown`, and its executable and launch arguments are set in Settings › Applications (J41). Because its input-write behavior is unknown, `Linked run` and `Direct source` read blocked with their blockers named, and isolated `Copy` or supported `Clone` is offered.
-- **Trace:** flow E3 alternative · PREP-FR-02, PREP-FR-04 · PREP-AC-11 · D04 · HARNESS-V5-IA.md §Screens S5 (Prepare: mode)
+- **Expect:** It reads `Not verified` and `Writes unknown`, and its executable and launch arguments are set in Settings › Applications (J41). Under Input mode, **Automatic** is chosen and picks **Independent copy**, and **Independent copy** and **Link to originals** are offered.
+- **Expect (negative):** **Give PixInsight the file list** is not offered, because Other app is not WBPP. No `Linked run`, `Direct source`, separate `Clone` or hard-link mode is offered.
+- **Trace:** flow E3 alternative · PREP-FR-02, PREP-FR-04 · PREP-AC-11 · D04 · HARNESS-V5-IA.md §Screens S5 (Prepare: mode) · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 · G7
 
 ### S10 — See a corrected value {#S10}
 
 - **Do:** In `NGC7000-HOO-Siril`, open **Review preparation** and open the 28 Sep entry.
-- **Expect:** The review shows the catalog's effective focal length from the confirmed equipment (J19/S10) next to the value Siril will read from the header (absent). The options are: supported application configuration, isolated patched copies or clones, accept the source-header value, or exclude the inputs.
+- **Expect:** The review shows the catalog's effective focal length from the confirmed equipment (J19/S10) next to the value Siril will read from the header (absent). The options are: supported application configuration, patched independent copies, accept the source-header value, or exclude the inputs.
 - **Trace:** flow E4 · PREP-FR-03 · D15
 
 ### S11 — Accept the source value for this handoff {#S11}
@@ -147,23 +160,25 @@ correction reaches the application. Done means:
 
 - SC1: At S1 all 15 requirements read Automatic with 0 user actions. No assignment with an unknown or incompatible criterion is ever Automatic (S1, S5).
 - SC2: 24 Sep's flat reads Deferred from S5 until S6. Its exception record shows both the unknown criterion and the reason. The 30 Sep master is reassigned 0 times without the user's choice.
-- SC3: The 26 Sep master's evidence is unchanged, and `24 Sep flat check` shows it with its rig unknown and no exception (S7).
-- SC4: With **Auto-assign** off, 0 masters are assigned until one is accepted (S7a).
+- SC3: The 26 Sep master's evidence is unchanged, and `24 Sep flat check`, which starts as `NGC 7000 RedCat` until it is renamed, shows it with its rig unknown and no exception (S7).
+- SC4: With **Auto-assign** off, 3 requirements read Suggested and 0 masters are assigned until one is accepted; after acceptance 2 still wait (S7a).
 - SC5: The P3 masters are assigned 0 times (S2), and they are used by 0 runs (S7b).
 - SC6: 100% of calibration inputs are masters, and the kept raw bias frames are listed as an input or candidate 0 times (S4a).
 - SC7: `MasterFlat_2026-09-30.xisf` is used by exactly 2 runs and `MasterFlat_2026-09-26.xisf` by exactly 1 (S7b).
 - SC8: PlateVault creates 0 calibration files, and the manifest equals P5 at S11.
-- SC9: The Siril profile shows its capability evidence (S8). **Other app** reads Not verified, with `Linked run` and `Direct source` blocked (S9).
+- SC9: The Siril profile shows its capability evidence (S8). **Other app** reads Not verified, with **Automatic** picking **Independent copy** and **Give PixInsight the file list** not offered (S9).
 - SC10: For 28 Sep the review names the header value as effective and claims no delivered correction (S11).
+- SC11: Dismissing a master that 2 runs use is refused with both runs named, and 0 assignments change (S7c).
 
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe: `HARNESS-V5-IA.md` §Screens S5, S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3 and §Round 5 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5). It also follows the specs, the decisions D04, D13, D15 and D19 set by the authorized autonomous run, and the workflow decisions D-W3 to D-W55 cited above. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. The PixInsight/WBPP and SETI Astro Suite Pro profiles are not exercised in this journey. Blocks readiness.
 - G3: Out of scope for this journey: per-panel calibration in a mosaic run group (CAL-FR-11, CAL-AC-13) is covered by J33/S7.
-- G4: Unresolved product question: what **Auto-assign** off does. CAL-FR-02 and CAL-AC-11 keep every compatible match as a Suggested input until it is accepted, which S7a asserts. The v5 prototype (`calibrationPlan` in `src/domain/calibration.ts`, `calibrate-step.tsx`) instead hands off no calibration when the policy is off: the readiness line reads `Off`, Matches is hidden and Prepare's calibration check passes. Blocks readiness.
-- G5: Unresolved product question (raised once by the lead for every journey): S7 creates the run `24 Sep flat check`, but v5 names a new run `<subject> <rig>` (`NGC 7000 RedCat`) and offers no Rename. The fixture name is kept until that is decided. Blocks readiness.
+- G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
+- G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
 - G6: Out of scope for this journey: when no master matches a requirement and a raw session that would stack into one awaits Stack, the row offers `Stack from <session>`, which opens that calibration process at `/calibration?process=` (P-CAL3; prototype `stackOffers`). No J36 fixture leaves a requirement without a master. Blocks readiness until covered by a step or a journey.
+- G7: Unresolved product question: P-PREP2 makes **Link to originals** opt-in with a warning and re-hashes the originals after the run, but does not say whether it stays blocked for a profile whose input-write behavior is unknown or write-prone, as PREP-AC-11 and D04 blocked linked modes. S9 asserts only that it is offered beside **Independent copy**, not whether choosing it is refused. Blocks readiness.
 
 ## Delta log
 
@@ -174,3 +189,7 @@ correction reaches the application. Done means:
   Runs are assigned masters only: the fixture is J36's masters, raw flats are no longer handed to the application (retired old step 4), and Matches offers masters only. Readiness reads per kind (Dark, Flat, Bias); the user defers a flat, then uses the unknown-train master as an exception from the row menu.
   A master's Used by lists the runs that use it. Profiles are picked in Prepare (**Other app**, `Linked run`), and executables are set in Settings › Applications.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3, §Round 5 Calibration; HARNESS-V5-IA.md §Screens S5, S14, S16, §Round 2b foundation (P-CAL3: masters only); prototype src/features/v5/c-runs/calibrate-step.tsx, prepare-step.tsx, messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U4Calibration (intent-gated)
+- **Δ4** 2026-10-12 · S7, S7a, +S7c, S9, S10 · behavior-change
+  A new run starts auto-named `NGC 7000 RedCat` and is renamed on the run header. With **Auto-assign** off, compatible masters read Suggested and wait for acceptance. Dismissing a master that runs use is refused with the runs named.
+  Prepare's input modes are **Automatic**, **Independent copy**, **Link to originals** and **Give PixInsight the file list** (WBPP only); `Linked run`, `Direct source` and `Clone` are gone.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Calibration Off", "Rename runs and Projects", "Dismiss is refused while a run uses the master" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); §Input modes (user, 2026-10-10) P-PREP2 (@ d609ff55); user answers to the PR #1788 journey questions · by: JourneysV5.R6D (intent-gated)
