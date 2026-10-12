@@ -281,7 +281,7 @@ Every decision below was made by the user while answering the v5 journeys' open 
 
 ## Round 7 (user, 2026-10-12): run views (research: design/RUN-VIEWS-OPTIONS.md)
 
-- **P-PREP3: two view modes, Symlinks by default (user; supersedes P-PREP2).** A run view is a projection of catalogue frames and masters; tools never write to their inputs (RUN-VIEWS-OPTIONS.md).
+- **P-PREP3: two view modes, Symlinks by default (user; supersedes P-PREP2).** A run view is a projection of catalogue frames and masters. Siril, WBPP and DSS never write to FITS, camera RAW or TIFF inputs. The exception is Siril SER video: it opens SER read-write and can rewrite the header (RUN-VIEWS-OPTIONS.md).
   - **Symlinks (default):** the run folder holds symlinks to the catalogue originals. Footprint "Linked · 0 B".
   - **Copies:** the run folder holds temporary copies. Footprint "N frames copied · X GB". Copies are removed when the run completes.
   - The mode is chosen per run in Prepare, with a default in Settings. There is no Automatic, no file-list mode, and no hard links or junctions.
@@ -290,3 +290,4 @@ Every decision below was made by the user while answering the v5 journeys' open 
 - **No verification of originals after a run (user).** P-PREP2's re-hash of linked originals is dropped. Since PlateVault no longer records cloned vs copied, the per-item accounting that P-PREP2's "Footprint is real" required goes too.
 - **Intermediates cleanup stays (user).** Wrap up offers it, and the run's Complete confirmation offers it next to removing the view, both through the OS Trash.
 - **Locking originals: open.** No locking until the user decides.
+- **SER inputs: open.** A symlinked SER file could be written through. The options are to copy SER files in Symlinks mode, or to refuse Symlinks for a run that holds SER files.
