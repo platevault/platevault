@@ -702,6 +702,9 @@ export interface StepLink {
   focusId?: string
 }
 
+/** The Prepare step's Prepare… button, which a ready run's Next focuses. */
+export const PREPARE_BUTTON_ID = "prepare-start"
+
 /** A run step's gate; its name is `stepName(m, id)`. */
 export interface RunStepState {
   id: RunStep
@@ -807,7 +810,7 @@ export function runPreparations(catalog: Catalog, runId: RunId): Preparation[] {
     .sort((a, b) => a.prepRevision - b.prepRevision || a.createdAt.localeCompare(b.createdAt))
 }
 
-/** Results of a run outside the Trash: candidates and accepted products, intermediates apart. */
+/** Results of a run outside the Trash: candidate, accepted and rejected products, intermediates apart. */
 export function runResults(catalog: Catalog, runId: RunId): { products: ResultRecord[]; intermediates: ResultRecord[] } {
   const all = Object.values(catalog.results).filter((r) => r.runId === runId && !r.trashed)
   return { products: all.filter((r) => !r.intermediate), intermediates: all.filter((r) => r.intermediate) }
@@ -1002,7 +1005,8 @@ export function runPipeline(world: World, run: Run): RunPipeline {
             },
           ]
         : prepareItems,
-    link: link("prepare"),
+    // Ready: the step's own Prepare… button is the action, so Next focuses it on every page (the same Next everywhere).
+    link: link("prepare", prepState === "ready" ? PREPARE_BUTTON_ID : undefined),
     nextLabel:
       prepState === "done"
         ? msg("domain_next_open_in_application")
@@ -1010,23 +1014,29 @@ export function runPipeline(world: World, run: Run): RunPipeline {
           ? msg("domain_next_resolve_preparation")
           : prepState === "running"
             ? msg("domain_next_watch_preparation")
-            : msg("domain_next_review_preparation"),
+            : prepState === "ready"
+              ? msg("domain_next_prepare_run")
+              : msg("domain_next_review_preparation"),
   }
 
-  // 5 Results: discovered in the recorded Results folder, then accepted (D-W4).
+  // 5 Results: discovered in the recorded Results folder, then accepted or rejected (D-W4).
   const { products } = runResults(catalog, run.id)
   const accepted = products.filter((r) => r.acceptance === "accepted").length
-  const candidates = products.length - accepted
+  const rejected = products.filter((r) => r.acceptance === "rejected").length
+  const candidates = products.length - accepted - rejected
   const results: RunStepState = {
     ...STEP("results"),
-    state: complete ? "done" : prepState !== "done" ? "idle" : candidates > 0 ? "review" : accepted > 0 ? "done" : "ready",
+    state: complete ? "done" : prepState !== "done" ? "idle" : candidates > 0 ? "review" : accepted + rejected > 0 ? "done" : "ready",
     status: products.length === 0 ? (prepState === "done" ? msg("domain_status_awaiting_outputs") : DASH) : msg("domain_status_accepted_of", { accepted, total: products.length }),
     items: [
       { label: msg("domain_gate_run_prepared"), met: prepState === "done", detail: prepState === "done" ? msg("domain_gate_results_folder") : msg("domain_gate_prepare_first") },
       {
         label: msg("domain_gate_results_accepted"),
         met: "advisory",
-        detail: products.length === 0 ? msg("domain_gate_no_outputs") : joinRefs([msg("rungroup_accepted_count", { count: accepted }), msg("rungroup_candidates_count", { count: candidates })], " · "),
+        detail:
+          products.length === 0
+            ? msg("domain_gate_no_outputs")
+            : joinRefs([msg("rungroup_accepted_count", { count: accepted }), ...(rejected > 0 ? [msg("rungroup_rejected_count", { count: rejected })] : []), msg("rungroup_candidates_count", { count: candidates })], " · "),
       },
     ],
     link: link("results"),
@@ -1074,13 +1084,14 @@ function stepAction(step: RunStepState): NextAction {
 
 /**
  * The toolbar's Next while the user is on `here`. A Next on another step stands. A Next on this step that
- * focuses a control (Save run) stands too. Otherwise Next never points at the screen it is on: a step whose
- * gate blocks is resolved here, so Next is null (the caption names what blocks); an advisory step (Review)
- * moves on to the first later step that is not done; null when nothing later waits.
+ * focuses a control (Save run, Prepare…) stands too. Otherwise Next never points at the screen it is on: a step
+ * whose gate blocks, or whose own action is still to do (no advisory item to move past), is resolved here, so
+ * Next is null (the caption names the gate); an advisory step (Review) moves on to the first later step that is
+ * not done; null when nothing later waits.
  */
 export function nextFrom(steps: RunStepState[], next: NextAction | null, here: RunStep | null): NextAction | null {
   if (!next?.step || next.step.id !== here || next.link.focusId) return next
-  if (blocks(next.step.items)) return null
+  if (blocks(next.step.items) || !next.step.items.some((i) => i.met === "advisory")) return null
   const later = steps.slice(steps.findIndex((s) => s.id === here) + 1).filter((s) => s.state !== "done")
   const following = later.find((s) => s.state !== "idle") ?? later[0]
   return following ? stepAction(following) : null
@@ -1097,7 +1108,7 @@ function draftOwner(run: Run): "select" | "review" | null {
     d.sessions.map((s) => s.sessionId),
     latest.sessions.map((s) => s.sessionId),
   )
-  return sessionsSame && same(d.excluded, latest.excluded) && same(d.unresolved, latest.unresolved) && same(d.productInputs, latest.productInputs) ? "review" : "select"
+  return sessionsSame && same(d.excluded, latest.excluded) && same(d.unresolved, latest.unresolved) ? "review" : "select"
 }
 
 /** "2 rejected, unsaved": what a Review draft changed against the latest revision. */
@@ -1143,16 +1154,9 @@ function operationHolds(op: Operation): MessageRef {
   return msg("domain_operation_running", { title: op.title })
 }
 
-/** Why Move to Trash is refused (RES-FR-10): running operations and runs that use one of its accepted Results. */
+/** Why Move to Trash is refused (RES-FR-10): running operations affecting the run. */
 export function trashRefusals(world: World, run: Run): MessageRef[] {
-  const reasons = runOperations(world.operations, run.id).map(operationHolds)
-  const accepted = new Set(runResults(world.catalog, run.id).products.filter((r) => r.acceptance === "accepted").map((r) => r.id))
-  for (const other of Object.values(world.catalog.runs)) {
-    if (other.id === run.id || other.trashedAt) continue
-    const inputs = workingContent(other)?.productInputs ?? []
-    if (inputs.some((id) => accepted.has(id))) reasons.push(msg("domain_refusal_uses_result", { name: other.name }))
-  }
-  return reasons
+  return runOperations(world.operations, run.id).map(operationHolds)
 }
 
 /** Why Complete is refused (RES-FR-07): a running preparation or storage operation affecting the run. */

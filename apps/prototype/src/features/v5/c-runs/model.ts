@@ -11,7 +11,7 @@ import { latestCorrection } from "@/domain/corrections"
 import { findPanel, findSubject, latestRevision, runPreparations, runSetup, savedContent, workingContent } from "@/domain/derive"
 import { fileAt, filesUnder, freeBytes, volumeForPath } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
-import { MODE_NAME, PRODUCT_KIND_NAME } from "@/domain/labels"
+import { MODE_NAME } from "@/domain/labels"
 import { assetAvailability, copyAvailability, preferredCopy } from "@/domain/library"
 import { memberSessions, type MemberSession } from "@/domain/membership"
 import type {
@@ -250,7 +250,7 @@ export interface ModeOption {
   allowed: boolean
   reasons: MessageRef[]
   semantics: MessageRef
-  /** Frames and Results the view writes (masters are not counted) and the bytes it adds: copies for Copies, 0 B for Symlinks. */
+  /** Files the view writes (frames and calibration masters) and the bytes it adds: copies for Copies, 0 B for Symlinks. */
   entries: number
   footprintBytes: number
   /** Symlinks only: refused because Windows Developer Mode was off at the last check. */
@@ -265,7 +265,7 @@ const SEMANTICS: Record<InputMode, MessageRef> = {
   copy: msg("run_mode_semantics_copy"),
 }
 
-/** "Linked · 0 B" or "18 frames copied · 3.4 GB". */
+/** "Linked · 0 B" or "21 files copied · 3.4 GB": frames and masters both count. */
 export function viewFootprintRef(mode: InputMode, entries: number, bytes: number): MessageRef {
   return mode === "symlink" ? msg("run_view_linked", { bytes: formatBytes(0) }) : msg("run_view_copied", { count: entries, n: formatCount(entries), bytes: formatBytes(bytes) })
 }
@@ -276,9 +276,8 @@ export function viewFootprintRef(mode: InputMode, entries: number, bytes: number
 
 export interface PrepareEntry {
   id: string
-  kind: "light" | "calibration" | "product"
+  kind: "light" | "calibration"
   assetId: string | null
-  resultId: string | null
   /** The file name, as data (`verbatim`). */
   label: MessageRef
   sourcePath: string
@@ -291,7 +290,7 @@ export interface PrepareEntry {
   unavailable: MessageRef | null
 }
 
-export type PlanCheckId = "lock" | "membership" | "calibration" | "profile" | "products" | "metadata" | "mode" | "destination" | "space" | "sources" | "entries"
+export type PlanCheckId = "lock" | "membership" | "calibration" | "profile" | "metadata" | "mode" | "destination" | "space" | "sources" | "entries"
 
 /** A Prepare check's name: "Saved membership", "Run folder". */
 export const CHECK_NAME: Record<PlanCheckId, MessageRef> = {
@@ -299,7 +298,6 @@ export const CHECK_NAME: Record<PlanCheckId, MessageRef> = {
   membership: msg("run_check_membership"),
   calibration: msg("nav_calibration"),
   profile: msg("run_check_profile"),
-  products: msg("apps_product_inputs"),
   metadata: msg("run_check_metadata"),
   mode: msg("run_check_mode"),
   destination: msg("run_check_destination"),
@@ -365,7 +363,6 @@ function entryFromAsset(state: PrototypeState, asset: Asset, folder: string, kin
     id: `${kind === "calibration" ? "c" : "a"}:${asset.id}`,
     kind,
     assetId: asset.id,
-    resultId: null,
     label: verbatim(asset.fileName),
     sourcePath: copy.path,
     destPath: `${folder}/${sub}/${asset.fileName}`,
@@ -411,24 +408,6 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     const asset = catalog.assets[id]
     if (asset) entries.push({ ...entryFromAsset(state, asset, folder, "light", []), unavailable: entryFromAsset(state, asset, folder, "light", []).unavailable ?? msg("run_entry_unresolved") })
   }
-  for (const resultId of content?.productInputs ?? []) {
-    const result = catalog.results[resultId]
-    if (!result) continue
-    const file = fileAt(disk, result.path)
-    entries.push({
-      id: `r:${result.id}`,
-      kind: "product",
-      assetId: null,
-      resultId: result.id,
-      label: verbatim(fileName(result.path)),
-      sourcePath: result.path,
-      destPath: `${folder}/products/${fileName(result.path)}`,
-      fileName: fileName(result.path),
-      sizeBytes: file?.sizeBytes ?? 0,
-      patches: [],
-      unavailable: file ? null : msg("run_entry_not_readable", { path: result.path }),
-    })
-  }
   for (const source of handoffCalibration(catalog, calibration)) {
     for (const f of source.files) {
       const asset = f.assetId ? catalog.assets[f.assetId] : undefined
@@ -441,7 +420,6 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
         id: `f:${f.path}`,
         kind: "calibration",
         assetId: null,
-        resultId: null,
         label: verbatim(f.fileName),
         sourcePath: f.path,
         destPath: `${folder}/calibration/${f.fileName}`,
@@ -454,8 +432,6 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   }
   const copied = entries.filter((e) => e.unavailable === null)
   const copiedBytes = copied.reduce((n, e) => n + e.sizeBytes, 0)
-  // "N frames copied" counts the frames and Results; masters ride along in the bytes.
-  const copiedFrames = copied.filter((e) => e.kind !== "calibration").length
   const developerModeOff = state.settings.developerModeCheck === "off"
   const modes: ModeOption[] = MODES.map((option) => {
     const reasons: MessageRef[] = []
@@ -467,7 +443,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
       allowed: reasons.length === 0,
       reasons,
       semantics: SEMANTICS[option],
-      entries: copiedFrames,
+      entries: copied.length,
       footprintBytes: option === "copy" ? copiedBytes : 0,
       developerModeOff: option === "symlink" && developerModeOff,
     }
@@ -478,7 +454,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   const checks: PlanCheck[] = []
   checks.push({ id: "membership", label: CHECK_NAME.membership, ok: revision !== null, blocking: true, detail: revision ? msg("run_select_revision", { revision: revision.revision }) : run.draft ? msg("status_unsaved_changes") : msg("status_not_saved") })
   const off = calibration.policy === "off"
-  const calOk = calibration.needsReview.length === 0 && (off || calibration.rows.length > 0 || (members.length === 0 && (content?.productInputs.length ?? 0) > 0))
+  const calOk = calibration.needsReview.length === 0 && (off || calibration.rows.length > 0)
   const handedOff = msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length })
   checks.push({
     id: "calibration",
@@ -488,20 +464,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     detail: !calOk ? msg("run_check_requirements_to_review", { count: calibration.needsReview.length }) : off ? joinRefs([msg("run_cal_off"), handedOff], " · ") : handedOff,
   })
   checks.push({ id: "profile", label: CHECK_NAME.profile, ok: profile !== null, blocking: true, detail: profile ? verbatim(profile.name) : msg("run_layout_not_chosen") })
-  const products = (content?.productInputs ?? []).map((id) => catalog.results[id]).filter((r): r is ResultRecord => r !== undefined)
-  if (products.length > 0 && profile) {
-    const unsupported = products.filter((r) => r.kind === null || !profile.capability.productInputKinds.includes(r.kind))
-    checks.push({
-      id: "products",
-      label: CHECK_NAME.products,
-      ok: unsupported.length === 0,
-      blocking: true,
-      detail:
-        unsupported.length === 0
-          ? msg("run_check_products_reads", { name: profile.name, kinds: joinRefs([...new Set(products.map((r) => r.kind))].map((kind) => (kind ? PRODUCT_KIND_NAME[kind] : msg("run_unknown_kind"))), ", ") })
-          : msg("run_check_products_unsupported", { files: unsupported.map((r) => fileName(r.path)).join(", ") }),
-    })
-  }
+  const footprintBytes = chosen.footprintBytes
   const undecided = diffs.filter((d) => !metadata[d.key])
   const badPatch = diffs.filter((d) => metadata[d.key] === "patched-copy" && !isolated)
   const badConfig = diffs.filter((d) => metadata[d.key] === "configuration" && profile?.capability.correctedMetadata !== "configuration")
@@ -536,8 +499,8 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     blocking: true,
     detail: parentIssue ? parentIssue.message : folderTaken ? msg("run_check_folder_exists", { name: fileName(layout.folderPath ?? "") }) : verbatim(layout.folderPath ?? ""),
   })
-  const footprintBytes = chosen.footprintBytes
-  checks.push({ id: "space", label: CHECK_NAME.space, ok: free === null || footprintBytes <= free, blocking: true, detail: free === null ? verbatim("–") : msg("run_check_space_of", { bytes: formatBytes(footprintBytes), free: formatBytes(free) }) })
+  // The volume's free bytes beside what this view adds: excluding inputs lowers the need, never the free space.
+  checks.push({ id: "space", label: CHECK_NAME.space, ok: free === null || footprintBytes <= free, blocking: true, detail: free === null ? verbatim("–") : msg("run_mode_needs_space", { bytes: formatBytes(footprintBytes), free: formatBytes(free) }) })
   const unavailable = entries.filter((e) => e.unavailable !== null)
   checks.push({
     id: "sources",
@@ -546,7 +509,8 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     blocking: false,
     detail: unavailable.length === 0 ? msg("run_check_sources_readable", { count: entries.length }) : msg("run_check_sources_unreadable", { count: unavailable.length }),
   })
-  if (entries.length === 0) checks.push({ id: "entries", label: CHECK_NAME.entries, ok: false, blocking: true, detail: msg("run_check_no_frames") })
+  // Masters alone are not a run: with every frame excluded nothing is prepared.
+  if (!entries.some((e) => e.kind === "light")) checks.push({ id: "entries", label: CHECK_NAME.entries, ok: false, blocking: true, detail: msg("run_check_no_frames") })
   const lock = runLock(run)
   if (lock) checks.unshift({ id: "lock", label: CHECK_NAME.lock, ok: false, blocking: true, detail: lock })
   return {
@@ -598,7 +562,7 @@ export function verifyPreparation(state: PrototypeState, prep: Preparation): Ver
     let checked = 0
     for (const [id, entry] of Object.entries(journal.entries)) {
       const snapshot = journal.snapshots[id]
-      const prepared = entry.resultId ? prep.preparedResultIds.includes(entry.resultId) : entry.kind === "calibration" ? Boolean(snapshot) : entry.assetId !== null && prep.preparedAssetIds.includes(entry.assetId)
+      const prepared = entry.kind === "calibration" ? Boolean(snapshot) : entry.assetId !== null && prep.preparedAssetIds.includes(entry.assetId)
       if (!prepared || !snapshot) continue
       checked += 1
       const written = fileAt(state.disk, entry.destPath)
@@ -659,6 +623,18 @@ const MASTER_CAL = /master(Dark|Flat|Bias|DarkFlat)/i
 
 export type DiscoveredKind = { type: "product"; kind: ResultKind | null; channel: string | null; intermediate: boolean } | { type: "master"; kind: CalibrationKind; channel: string | null } | { type: "ignored" }
 
+/** Kinds made per channel: a stack of one filter's frames ("L stack"). A final image or a mosaic has no channel. */
+const PER_CHANNEL_KINDS: ReadonlySet<ResultKind> = new Set(["linear-integration", "channel-product"])
+
+export function carriesChannel(kind: ResultKind): boolean {
+  return PER_CHANNEL_KINDS.has(kind)
+}
+
+/** The channel a product keeps: only a per-channel kind keeps one; an unknown kind keeps the evidence until a kind is chosen. */
+export function resultChannel(kind: ResultKind | null, channel: string | null): string | null {
+  return kind === null || carriesChannel(kind) ? channel : null
+}
+
 /** How a file in a Results folder is recognized; nothing is ever treated as accepted. */
 export function recognize(file: DiskFile, assembled: boolean): DiscoveredKind {
   if (file.kind === "log" || file.kind === "text" || file.kind === "csv" || file.kind === "other") return { type: "ignored" }
@@ -672,10 +648,11 @@ export function recognize(file: DiskFile, assembled: boolean): DiscoveredKind {
   const segments = file.path.split("/")
   const intermediate = segments.some((s) => INTERMEDIATE_DIRS.includes(s)) || INTERMEDIATE_SUFFIX.test(name)
   if (intermediate) return { type: "product", kind: null, channel, intermediate: true }
-  if (assembled) return { type: "product", kind: "assembled-mosaic", channel, intermediate: false }
-  if (/masterLight/i.test(name)) return { type: "product", kind: "linear-integration", channel, intermediate: false }
-  if (file.kind === "tiff" || /\.(tiff?|jpe?g|png)$/i.test(name)) return { type: "product", kind: "final-image", channel, intermediate: false }
-  return { type: "product", kind: null, channel, intermediate: false }
+  const product = (kind: ResultKind | null): DiscoveredKind => ({ type: "product", kind, channel: resultChannel(kind, channel), intermediate: false })
+  if (assembled) return product("assembled-mosaic")
+  if (/masterLight/i.test(name)) return product("linear-integration")
+  if (file.kind === "tiff" || /\.(tiff?|jpe?g|png)$/i.test(name)) return product("final-image")
+  return product(null)
 }
 
 export interface Attribution {

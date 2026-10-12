@@ -23,7 +23,7 @@ import { StatusBadge } from "@/components/app/status"
 import { HelpTip, NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { RadioGroup } from "@/components/ui/radio-group"
-import { runOperations, runPreparations, runStepLink, type StepLink } from "@/domain/derive"
+import { PREPARE_BUTTON_ID, runOperations, runPreparations, runStepLink, type StepLink } from "@/domain/derive"
 import { MODE_NAME } from "@/domain/labels"
 import { runFootprint } from "@/domain/storage"
 import type { InputMode, Preparation, Run } from "@/domain/types"
@@ -52,7 +52,7 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
   const locked = lock ? say(m, lock) : running ? m.run_prepare_running({ title: say(m, running.title) }) : null
   const [confirm, setConfirm] = useState(false)
   const target = group ? { groupId: group.id } : { runId: run.id }
-  const count = (kind: "light" | "calibration" | "product") => plan.entries.filter((e) => e.kind === kind).length
+  const count = (kind: "light" | "calibration") => plan.entries.filter((e) => e.kind === kind).length
   // A prepared current preparation makes Open (in PreparationOutcome) the step's next action, so Prepare… steps down.
   const openable = currentPreparation(run, runPreparations(state.catalog, run.id))?.state === "prepared"
   return (
@@ -99,7 +99,6 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
             {m.step_review()}
             <Pill tone="muted">{m.run_frames_count({ count: count("light") })}</Pill>
             {count("calibration") > 0 ? <Pill tone="muted">{m.run_cal_masters_count({ count: count("calibration") })}</Pill> : null}
-            {count("product") > 0 ? <Pill tone="muted">{m.run_results_products_count({ count: count("product") })}</Pill> : null}
           </span>
         }
         actions={
@@ -110,7 +109,7 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
                 { label: m.run_proto_source_drift(), detail: m.run_proto_source_drift_detail(), run: () => outcome.act(simulateSourceDrift(run.id), { blocked: m.run_proto_blocked() }) },
               ]}
             />
-            <Button size="sm" variant={openable ? "outline" : "default"} disabled={locked !== null} onClick={() => (plan.ready ? setConfirm(true) : outcome.act(startPrepare(run.id, choices), { blocked: m.run_prepare_blocked() }))}>
+            <Button id={PREPARE_BUTTON_ID} size="sm" variant={openable ? "outline" : "default"} disabled={locked !== null} onClick={() => (plan.ready ? setConfirm(true) : outcome.act(startPrepare(run.id, choices), { blocked: m.run_prepare_blocked() }))}>
               <Play aria-hidden="true" data-icon="inline-start" />
               {m.run_prepare_ellipsis()}
             </Button>
@@ -148,7 +147,7 @@ function parentNote(l: RunLayout): string {
 export function planBlockerLink(run: Run, blocker: string): StepLink | undefined {
   const label = blocker.slice(0, Math.max(0, blocker.indexOf(":")))
   const named = (id: PlanCheck["id"]) => label.endsWith(say(m, CHECK_NAME[id]))
-  const step = named("calibration") ? "calibrate" : named("membership") || named("products") ? "select" : null
+  const step = named("calibration") ? "calibrate" : named("membership") ? "select" : null
   return step ? (runStepLink(run, step) as StepLink) : undefined
 }
 
@@ -424,7 +423,7 @@ export function PreparationOutcome({ run, onOutcome, compact = false }: { run: R
             {fileName(prep.folderPath)}/
           </span>
           <Pill tone="neutral">
-            {say(m, MODE_NAME[prep.mode])} · {say(m, viewFootprintRef(prep.mode, prep.preparedAssetIds.length + prep.preparedResultIds.length, prep.footprintBytes))}
+            {say(m, MODE_NAME[prep.mode])} · {say(m, viewFootprintRef(prep.mode, prep.preparedAssetIds.length + prep.preparedCalibrationCount, prep.footprintBytes))}
           </Pill>
           <Pill tone="muted">{m.run_revision_short({ revision: prep.membershipRevision })}</Pill>
           <span>{formatDateTime(prep.createdAt)}</span>
@@ -452,15 +451,14 @@ function latestRevisionNumber(run: Run): number {
 export function PrepStateBadge({ prep }: { prep: Preparation }) {
   const m = useMessages()
   if (prep.unverified) return <StatusBadge kind="view" value="unverified" />
-  if (prep.state === "partial") return <StatusBadge kind="preparation" value="partial" label={m.run_partial_count({ done: prep.preparedAssetIds.length + prep.preparedResultIds.length, total: prep.entryCount })} />
+  if (prep.state === "partial") return <StatusBadge kind="preparation" value="partial" label={m.run_partial_count({ done: prep.preparedAssetIds.length, total: prep.entryCount })} />
   return <StatusBadge kind="preparation" value={prep.state} />
 }
 
 function PreparedLists({ prep }: { prep: Preparation }) {
   const m = useMessages()
   const assets = useStore((s) => s.catalog.assets)
-  const results = useStore((s) => s.catalog.results)
-  const prepared = [...prep.preparedAssetIds.map((id) => assets[id]?.fileName ?? id), ...prep.preparedResultIds.map((id) => (results[id] ? fileName(results[id]!.path) : id))]
+  const prepared = prep.preparedAssetIds.map((id) => assets[id]?.fileName ?? id)
   return (
     <div className="grid gap-2 lg:grid-cols-2">
       <details className="rounded-md border px-3 py-1.5 text-[0.75rem]">

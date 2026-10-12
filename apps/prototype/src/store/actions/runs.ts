@@ -25,7 +25,6 @@ import type {
   MembershipContent,
   OpticalTrainId,
   ProjectId,
-  ResultId,
   Run,
   RunGroup,
   RunGroupId,
@@ -231,11 +230,6 @@ export function addRunSessions(runId: RunId, sessionIds: SessionId[], reason: Se
 
 export function removeRunSessions(runId: RunId, sessionIds: SessionId[]): CommitResult {
   return updateRunDraft(runId, msg("store_label_remove_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) }), (content, s) => removeSessions(content, s.catalog, sessionIds))
-}
-
-/** Accepted Results of other runs as inputs, any Project and any rig (D-W4, D-W56). */
-export function setProductInputs(runId: RunId, resultIds: ResultId[]): CommitResult {
-  return updateRunDraft(runId, msg("store_label_product_inputs", { count: resultIds.length }), (content) => ({ ...content, productInputs: [...new Set(resultIds)] }))
 }
 
 /** Save run: commit the draft as the next membership revision, with the changes it accepted (VSEL-FR-12, VSEL-FR-16). */

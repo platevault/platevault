@@ -633,8 +633,6 @@ export interface MembershipContent {
   rejected: AssetId[]
   /** Selected members that are unavailable; never omitted silently. */
   unresolved: AssetId[]
-  /** Accepted Results of other runs used as inputs, any Project and any rig (D-W4, D-W56). */
-  productInputs: ResultId[]
 }
 
 export interface MembershipRevision extends MembershipContent {
@@ -929,7 +927,6 @@ export interface ProfileCapability {
   verified: boolean
   evidence: MessageRef
   inputWrite: "read-only" | "unknown" | "write-prone"
-  productInputKinds: ResultKind[]
   /** Can the application read a corrected value through configuration? */
   correctedMetadata: "configuration" | "none"
   /** Stack: the application stacks a raw calibration session into a master (P-CAL3). */
@@ -947,9 +944,6 @@ export interface ApplicationProfile {
 }
 
 export type PreparationState = "running" | "prepared" | "partial" | "failed" | "canceled" | "paused"
-
-/** A prepared or blocked input: a frame, or an accepted Result used as an input (D-W4). */
-export type PreparationInput = { kind: "asset"; assetId: AssetId } | { kind: "result"; resultId: ResultId }
 
 /**
  * How a corrected metadata value reaches the application for one input
@@ -990,10 +984,10 @@ export interface Preparation {
   state: PreparationState
   operationId: OperationId | null
   preparedAssetIds: AssetId[]
-  /** Accepted Result inputs written into the folder (D-W4). */
-  preparedResultIds: ResultId[]
-  /** Why each input was not prepared; worded at render. */
-  blocked: Array<{ input: PreparationInput; path: string; reason: MessageRef }>
+  /** Calibration masters written into the folder; with `preparedAssetIds`, what a Copies view copied. */
+  preparedCalibrationCount: number
+  /** Why each input was not prepared (a frame, or a master by its entry id); worded at render. */
+  blocked: Array<{ assetId: AssetId; path: string; reason: MessageRef }>
   metadataDecisions: MetadataDecision[]
   launches: Array<{ at: IsoDateTime; outcome: "opened" | "missing-executable" | "launch-failed" }>
   /**
@@ -1035,7 +1029,8 @@ export interface ResultRecord {
   /** Run association (attribution), separate from input-frame lineage (RES-FR-03). */
   association: "tool-recorded" | "user-linked"
   lineage: "tool-recorded" | "unknown"
-  acceptance: "candidate" | "accepted"
+  /** "rejected": the user set the product aside; Results settles once every product is accepted or rejected. */
+  acceptance: "candidate" | "accepted" | "rejected"
   acceptedAt: IsoDateTime | null
   sha256: string
   /** "drifted" when bytes changed outside PlateVault after acceptance. */

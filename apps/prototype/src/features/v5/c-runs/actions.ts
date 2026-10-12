@@ -1,7 +1,7 @@
 /**
  * Slice C store actions: calibration decisions and master offers, the run
  * folder parent, Prepare and Prepare all, Open (re-verifies first), Results
- * discovery, attach, inspect and accept, "Use as input to a new run", Clean
+ * discovery, attach, inspect, accept and reject, Clean
  * up and the group's Complete all. Every write goes through `commit()`; a
  * contract refusal names each blocker and records it in Activity. A few
  * clearly labelled prototype controls make the simulated disk change (an
@@ -38,13 +38,13 @@ import type {
 import { fileName, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, updateSlice, withCatalog } from "@/store/core"
-import { completeRun, editRun, setGroupSetup, setProductInputs, setRunSetup, startRun } from "@/store/actions/runs"
+import { completeRun, editRun, setGroupSetup, setRunSetup } from "@/store/actions/runs"
 import { pinAutomaticChoices } from "@/store/actions/calibration"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { runIntermediatesOffer } from "@/features/v5/b-projects/model"
 import { startOperation } from "@/store/operations"
-import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultsFolders, runLock, scanResultsFolders, type VerifyOutcome, verifyPreparation } from "./model"
+import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultChannel, resultsFolders, runLock, scanResultsFolders, type VerifyOutcome, verifyPreparation } from "./model"
 import type { PreparePayload } from "./operations"
 
 // ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     state: "running",
     operationId: null,
     preparedAssetIds: [],
-    preparedResultIds: [],
+    preparedCalibrationCount: 0,
     blocked: [],
     metadataDecisions: decisions,
     launches: [],
@@ -464,7 +464,7 @@ export function openGroupFolder(groupId: string): CommitResult {
 }
 
 // ---------------------------------------------------------------------------
-// Results (RES-FR-01 to RES-FR-05, RES-FR-08, D-W4, D-W55, D-W56)
+// Results (RES-FR-01 to RES-FR-04, RES-FR-08, D-W4, D-W55)
 // ---------------------------------------------------------------------------
 
 function newRecord(owner: { runId: string | null; groupId: string | null }, file: DiskFile, kind: ResultKind | null, channel: string | null, intermediate: boolean, discovered: ResultRecord["discovered"]): ResultRecord {
@@ -583,7 +583,7 @@ export function attachResult(target: { runId?: string; groupId?: string }, path:
   if (recognize(file, false).type === "ignored") return refuse(title, [msg("store_reason_not_image")], href)
   if (kind === "assembled-mosaic" && !group) return refuse(title, [msg("store_reason_run_group_only")], href)
   const owner = run ? { runId: run.id, groupId: run.groupId } : { runId: null, groupId: group!.id }
-  const record = newRecord(owner, file, kind, channel?.trim() || null, false, "attached")
+  const record = newRecord(owner, file, kind, resultChannel(kind, channel?.trim() || null), false, "attached")
   const result = commit(msg("store_label_attach_result"), (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [record.id]: record } })), { href })
   if (result.ok) recordSaved(msg("store_saved_attached", { name: fileName(trimmed) }), msg("store_attached_detail", { kind: RESULT_KIND_NAME[kind], name: run?.name ?? group!.name }), href)
   return result
@@ -632,30 +632,23 @@ export function acceptResult(resultId: string): CommitResult {
   return result
 }
 
+/** Reject: the product is set aside; it is never used and Results settles without it. */
+export function rejectResult(resultId: string): CommitResult {
+  const state = store.getState()
+  const record = state.catalog.results[resultId]
+  if (!record) return MISSING
+  const href = resultHref(state, record)
+  if (record.intermediate) return refuse(msg("store_refused", { label: msg("run_results_reject_named", { name: fileName(record.path) }) }), [msg("wrapup_intermediate")], href)
+  const result = editResult(resultId, msg("store_label_reject_result"), (r) => ({ ...r, acceptance: "rejected", acceptedAt: null }), href)
+  if (result.ok) recordSaved(msg("store_saved_rejected", { name: fileName(record.path) }), verbatim(record.path), href)
+  return result
+}
+
 export function setResultKind(resultId: string, kind: ResultKind): CommitResult {
   const state = store.getState()
   const record = state.catalog.results[resultId]
   if (!record) return MISSING
-  return editResult(resultId, msg("store_label_result_kind"), (r) => ({ ...r, kind }), resultHref(state, record))
-}
-
-/** "Use as input to a new run": a new run of any open Project gets the accepted product as an input (D-W4, D-W56). */
-export function startRunWithResult(resultId: string, projectId: string, subjectId: string, rigId: string): { result: CommitResult; runId: string | null } {
-  const state = store.getState()
-  const record = state.catalog.results[resultId]
-  const project = state.catalog.projects[projectId]
-  if (!record || !project) return { result: MISSING, runId: null }
-  const href = resultHref(state, record)
-  const title = msg("store_refused", { label: msg("run_use_named", { name: fileName(record.path) }) })
-  if (record.acceptance !== "accepted" || record.intermediate) return { result: refuse(title, [msg("store_reason_not_accepted")], href), runId: null }
-  const subject = project.subjects.find((s) => s.id === subjectId)
-  if (subject?.mosaic) return { result: refuse(title, [msg("store_reason_mosaic_subject")], href), runId: null }
-  const started = startRun(projectId, subjectId, rigId)
-  if (!started.result.ok || !started.runId) return { result: started.result, runId: null }
-  const run = store.getState().catalog.runs[started.runId]
-  const existing = run ? (workingContent(run)?.productInputs ?? []) : []
-  const result = setProductInputs(started.runId, [...existing, resultId])
-  return { result, runId: started.runId }
+  return editResult(resultId, msg("store_label_result_kind"), (r) => ({ ...r, kind, channel: resultChannel(kind, r.channel) }), resultHref(state, record))
 }
 
 // ---------------------------------------------------------------------------

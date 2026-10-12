@@ -169,6 +169,7 @@ export const STATUS = {
   acceptance: {
     candidate: s(m.status_candidate, "muted", CircleDashed),
     accepted: s(m.status_accepted, "success", Check),
+    rejected: s(m.status_rejected, "neutral", Ban),
   },
   processing: {
     pending: s(m.status_pending, "muted", Clock),

@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { locateExecutable } from "@/store/actions/settings"
 import { T4Badge } from "./badges"
-import { PRODUCT_KIND_NAME } from "@/domain/labels"
 
 /** The profile's capability claims as label and value rows; the evidence behind them is in `CapabilityNote`. */
 export function capabilityItems(m: Messages, profile: ApplicationProfile): KeyValueItem[] {
@@ -30,16 +29,14 @@ export function capabilityItems(m: Messages, profile: ApplicationProfile): KeyVa
   ]
 }
 
-/** ① beside the profile name: the recorded evidence, product inputs, corrected values and what the profile does not support. */
+/** ① beside the profile name: the recorded evidence, corrected values and what the profile does not support. */
 export function CapabilityNote({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
   const c = profile.capability
   const unsupported: string[] = []
   if (c.correctedMetadata === "none") unsupported.push(m.apps_unsupported_corrected())
-  if (c.productInputKinds.length === 0) unsupported.push(m.apps_unsupported_products())
   const rows: NoteRow[] = [
     { label: m.apps_evidence(), value: c.verified ? `${say(m, c.evidence)} · ${m.apps_prototype_fixture()}` : say(m, c.evidence) },
-    { label: m.apps_product_inputs(), value: c.productInputKinds.length ? c.productInputKinds.map((k) => say(m, PRODUCT_KIND_NAME[k])).join(", ") : m.apps_none_recorded() },
     {
       label: m.apps_corrected_values(),
       value: (

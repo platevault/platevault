@@ -58,15 +58,6 @@ export const RESULT_KIND_NAME: Record<ResultKind, MessageRef> = {
   "assembled-mosaic": msg("domain_result_assembled_mosaic"),
 }
 
-/** Plural product-input kinds, as a profile's capability names them. */
-export const PRODUCT_KIND_NAME: Record<ResultKind, MessageRef> = {
-  "final-image": msg("domain_products_final_image"),
-  "linear-integration": msg("domain_products_linear_integration"),
-  "channel-product": msg("domain_products_channel_product"),
-  "mosaic-panel": msg("domain_products_mosaic_panel"),
-  "assembled-mosaic": msg("domain_products_assembled_mosaic"),
-}
-
 /** Strip order of the Targets Filters column (PLAN-TGT-FR-06). */
 export const BANDS: Band[] = ["L", "R", "G", "B", "Ha", "SII", "OIII"]
 

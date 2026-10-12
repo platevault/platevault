@@ -4,35 +4,32 @@
  * no longer matches its subject, with Remove (D-W45); the spec 066 tools:
  * sky coverage and distance from the Target, geometry ordering, filters
  * (channel, night, exposure, rig, quality) and the count of selected
- * sessions the filters hide, with Show (round 6); accepted Results of other
- * runs as product inputs, shown with their rig (D-W4, D-W56); Save makes the
- * next membership revision. Rows have a right-click menu.
+ * sessions the filters hide, with Show (round 6); Save makes the next
+ * membership revision. Rows have a right-click menu.
  */
 import { useNavigate } from "@tanstack/react-router"
-import { Copy, Eye, ListChecks, ListX, Plus, X } from "lucide-react"
-import { useMemo, useState } from "react"
+import { Eye, ListChecks, ListX, Plus } from "lucide-react"
+import { useMemo } from "react"
 import { useMessages } from "@/app/preferences"
 import { Box } from "@/components/app/box"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { CountBadge, Pill } from "@/components/app/pill"
 import type { MenuEntry } from "@/components/app/row-menu"
-import { HelpTip, NoteMarker } from "@/components/app/tips"
+import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, runSessionGeometry, sessionRigId, workingContent } from "@/domain/derive"
-import { RESULT_KIND_NAME } from "@/domain/labels"
 import { describeDiff, diffContent, REASON_NAME, sessionExposureS } from "@/domain/membership"
-import type { ResultRecord, Run, SelectionReason, Session } from "@/domain/types"
-import { fileName, formatCount, formatDateTime, formatDegrees, formatDuration, formatExposure, formatNight } from "@/lib/format"
-import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
-import { addRunSessions, discardRunDraft, removeRunSessions, saveRun, setProductInputs } from "@/store/actions/runs"
-import { type PrototypeState, updateSlice, useStore } from "@/store/core"
+import type { SelectionReason, Session } from "@/domain/types"
+import { formatCount, formatDateTime, formatDegrees, formatDuration, formatExposure, formatNight } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, say } from "@/lib/i18n"
+import { addRunSessions, discardRunDraft, removeRunSessions, saveRun } from "@/store/actions/runs"
+import { updateSlice, useStore } from "@/store/core"
 import type { SelectFilter } from "@/store/slices/c"
 import { SelectField } from "@/features/t3/fields"
 import { type RunContext, runLock } from "./model"
-import { OutcomeNotice, RowActions, Sha, useOutcome } from "./parts"
+import { OutcomeNotice, RowActions, useOutcome } from "./parts"
 
 interface SelectRow {
   session: Session
@@ -293,8 +290,6 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
         />
       </Box>
 
-      <ProductInputs run={run} lock={lock} onOutcome={outcome.act} />
-
       <div className="sticky bottom-0 -mx-5 flex flex-wrap items-center justify-between gap-3 border-t border-separator bg-background px-5 py-2" data-chrome>
         <p className="min-w-0 text-[0.75rem] text-muted-foreground">
           {run.draft ? (
@@ -321,132 +316,5 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
         </div>
       </div>
     </div>
-  )
-}
-
-interface ProductRow {
-  record: ResultRecord
-  origin: string
-  rigId: string | null
-}
-
-function productRow(state: PrototypeState, record: ResultRecord): ProductRow {
-  const owner = record.runId ? state.catalog.runs[record.runId] : undefined
-  const group = record.groupId ? state.catalog.runGroups[record.groupId] : undefined
-  const projectId = owner?.projectId ?? group?.projectId
-  const project = projectId ? state.catalog.projects[projectId] : undefined
-  return { record, origin: `${owner?.name ?? group?.name ?? m.run_unknown_run()} · ${project?.name ?? m.run_unknown_project()}`, rigId: owner?.rigId ?? group?.rigId ?? null }
-}
-
-/** Accepted products of runs outside the Trash, any Project and any rig (RES-FR-05). */
-export function pickableProducts(state: PrototypeState, run: Run): ProductRow[] {
-  return Object.values(state.catalog.results)
-    .filter((r) => r.acceptance === "accepted" && !r.intermediate && !r.trashed && r.runId !== run.id)
-    .filter((r) => {
-      const owner = r.runId ? state.catalog.runs[r.runId] : undefined
-      return r.runId ? owner !== undefined && !owner.trashedAt : r.groupId !== null
-    })
-    .map((r) => productRow(state, r))
-}
-
-function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: MessageRef | null; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
-  const m = useMessages()
-  const state = useStore((s) => s)
-  const content = workingContent(run)
-  const ids = content?.productInputs ?? []
-  const rows = ids.map((id) => state.catalog.results[id]).filter((r): r is ResultRecord => r !== undefined).map((r) => productRow(state, r))
-  const [open, setOpen] = useState(false)
-  const [picked, setPicked] = useState<string[]>([])
-  const pickable = pickableProducts(state, run)
-  const productsBlocked = { blocked: m.run_products_blocked() }
-  const remove = (r: ProductRow) => onOutcome(setProductInputs(run.id, ids.filter((x) => x !== r.record.id)), productsBlocked)
-  const entries = (r: ProductRow): MenuEntry[] => [
-    { heading: fileName(r.record.path) },
-    ...(lock ? [] : [{ label: m.run_remove(), icon: X, onSelect: () => remove(r) }]),
-    { label: m.session_copy_path(), icon: Copy, onSelect: () => void navigator.clipboard?.writeText(r.record.path).catch(() => {}) },
-  ]
-  const columns: Column<ProductRow>[] = [
-    { id: "file", header: m.run_col_product(), rowHeader: true, truncate: true, cell: (r) => <span title={r.record.path}>{fileName(r.record.path)}</span> },
-    { id: "kind", header: m.run_col_kind(), cell: (r) => (r.record.kind ? say(m, RESULT_KIND_NAME[r.record.kind]) : m.run_unknown_kind()) },
-    { id: "from", header: m.run_col_from(), cell: (r) => r.origin },
-    {
-      id: "rig",
-      header: m.run_col_rig(),
-      cell: (r) => (
-        <span className="flex flex-wrap items-center gap-1">
-          {rigName(m, state.catalog, r.rigId)}
-          {r.rigId && r.rigId !== run.rigId ? <Pill tone="info">{m.run_another_rig()}</Pill> : null}
-        </span>
-      ),
-    },
-    { id: "sha", header: m.run_col_accepted_bytes(), cell: (r) => <Sha value={r.record.sha256} /> },
-    { id: "actions", header: "", cell: (r) => <RowActions entries={entries(r)} label={m.run_actions_for({ name: fileName(r.record.path) })} /> },
-  ]
-  return (
-    <Box
-      id="select-products"
-      level={2}
-      flush
-      title={
-        <span className="flex items-center gap-1.5">
-          {m.apps_product_inputs()} <CountBadge count={rows.length} label={m.run_product_inputs_count({ count: rows.length })} />
-          <HelpTip label={m.apps_product_inputs()}>{m.run_product_inputs_help()}</HelpTip>
-        </span>
-      }
-      actions={
-        <Button
-          size="xs"
-          variant="outline"
-          onClick={() => {
-            if (lock) {
-              const reason = say(m, lock)
-              onOutcome({ ok: false, reason: "refused", message: `${m.run_products_blocked()}: ${reason}`, reasons: [reason] }, productsBlocked)
-              return
-            }
-            setPicked(ids)
-            setOpen(true)
-          }}
-        >
-          <Plus aria-hidden="true" data-icon="inline-start" />
-          {m.run_products_add()}
-        </Button>
-      }
-    >
-      <DataTable label={m.apps_product_inputs()} rows={rows} columns={columns} getRowId={(r) => r.record.id} scroll="none" contextMenu={entries} empty={<p className="px-3 py-3 text-sm text-muted-foreground">{m.run_none()}</p>} />
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{m.run_products_add_title()}</DialogTitle>
-          </DialogHeader>
-          <ul className="max-h-80 space-y-1 overflow-y-auto">
-            {pickable.length === 0 ? <li className="text-sm text-muted-foreground">{m.run_products_none()}</li> : null}
-            {pickable.map((p) => (
-              <li key={p.record.id}>
-                <label className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60">
-                  <Checkbox className="mt-0.5" checked={picked.includes(p.record.id)} onCheckedChange={(checked) => setPicked((cur) => (checked ? [...cur, p.record.id] : cur.filter((x) => x !== p.record.id)))} />
-                  <span className="min-w-0">
-                    <span className="block font-medium">{fileName(p.record.path)}</span>
-                    <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                      {p.record.kind ? say(m, RESULT_KIND_NAME[p.record.kind]) : m.run_unknown_kind()} · {p.origin} · {rigName(m, state.catalog, p.rigId)}
-                      {p.rigId !== run.rigId ? <Pill tone="info">{m.run_another_rig()}</Pill> : null}
-                    </span>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>{m.verb_cancel()}</DialogClose>
-            <Button
-              onClick={() => {
-                if (onOutcome(setProductInputs(run.id, picked), productsBlocked)) setOpen(false)
-              }}
-            >
-              {m.run_products_use({ count: picked.length })}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Box>
   )
 }

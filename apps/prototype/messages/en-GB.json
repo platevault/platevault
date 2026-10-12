@@ -303,6 +303,7 @@
   "status_trashed": "Trashed",
   "status_suggested": "Suggested",
   "status_accepted": "Accepted",
+  "status_rejected": "Rejected",
   "status_exception": "Exception",
   "status_deferred": "Deferred",
   "status_compatible": "Compatible",
@@ -2703,21 +2704,15 @@
   "run_actions_for": "Actions for {name}",
   "run_remove": "Remove",
   "run_none": "None",
-  "run_unknown_run": "Unknown run",
-  "run_unknown_project": "Unknown Project",
   "run_unknown_kind": "Unknown kind",
-  "run_another_rig": "Another rig",
   "run_col_night": "Night",
   "run_col_channel": "Channel",
   "run_col_frames": "Frames",
   "run_col_integration": "Integration",
   "run_col_reason": "Reason",
   "run_col_state": "State",
-  "run_col_product": "Product",
   "run_col_kind": "Kind",
-  "run_col_from": "From",
   "run_col_rig": "Rig",
-  "run_col_accepted_bytes": "Accepted bytes",
   "run_select_pointing_inside_panel": "Pointing inside the panel",
   "run_selection_blocked": "Selection change blocked",
   "run_select_remove_from_run": "Remove from run",
@@ -2785,41 +2780,6 @@
   "run_save_revision": "Save revision {revision}",
   "run_saved_revision": "Saved revision {revision}",
   "run_save_blocked": "Save blocked",
-  "run_products_blocked": "Product inputs blocked",
-  "run_product_inputs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} product input",
-        "countPlural=*": "{count} product inputs"
-      }
-    }
-  ],
-  "run_product_inputs_help": "Accepted Results, any Project and rig. The one-rig rule covers raw frames only.",
-  "run_products_add": "Add products…",
-  "run_products_add_title": "Add products",
-  "run_products_none": "No accepted products",
-  "run_products_use": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Use {count} product",
-        "countPlural=*": "Use {count} products"
-      }
-    }
-  ],
   "run_complete": "Complete",
   "run_completed": "{name} Complete",
   "run_complete_blocked": "Complete blocked",
@@ -3047,6 +3007,7 @@
   "run_cal_bin": "bin {binning}",
   "run_wrap_up": "Wrap up",
   "run_accept": "Accept",
+  "run_reject": "Reject",
   "run_not_prepared": "Not prepared",
   "run_files_count": [
     {
@@ -3066,7 +3027,6 @@
   "run_col_file": "File",
   "run_col_revision": "Revision",
   "run_col_project": "Project",
-  "run_col_subject": "Subject",
   "run_proto_blocked": "Simulation blocked",
   "run_proto_app_writes_outputs": "The application writes outputs",
   "run_proto_app_writes_outputs_detail": "A stack per channel, a file still being written, two intermediates and a master dark.",
@@ -3129,7 +3089,6 @@
   "run_results_attached_no_evidence": "Attached · no evidence",
   "run_results_attribution_for": "{name} attribution",
   "run_results_accept_blocked": "Accept blocked",
-  "run_results_use_as_input": "Use as input…",
   "run_results_inspect_again": "Inspect again",
   "run_results_inspect_blocked": "Inspect blocked",
   "run_results_kind_option": "Kind: {kind}",
@@ -3137,6 +3096,7 @@
   "run_results_kind_missing": "Kind?",
   "run_results_changed": "Changed",
   "run_results_accept_named": "Accept {name}",
+  "run_results_reject_named": "Reject {name}",
   "run_results_no_products": "No products yet",
   "run_results_attach_title": "Attach a Result",
   "run_results_attached": "Attached",
@@ -3146,9 +3106,6 @@
   "run_results_channel_optional": "Channel (optional)",
   "run_results_channel_placeholder": "Ha",
   "run_results_run_group": "Run group",
-  "run_results_start_blocked": "Start blocked",
-  "run_results_mosaic_subjects_only": "mosaic subjects only",
-  "run_one_rig_rule_help": "The one-rig rule covers raw frames only.",
   "run_prepare_running": "{title} running",
   "run_read_only_because": "Read-only · {reason}",
   "run_prepare_shared_title": "Profile, mode and policy shared by every panel",
@@ -3337,8 +3294,6 @@
       }
     }
   ],
-  "run_check_products_reads": "{name} reads {kinds}",
-  "run_check_products_unsupported": "Unsupported: {files}",
   "run_check_corrections_to_decide": [
     {
       "declarations": [
@@ -3372,7 +3327,6 @@
     }
   ],
   "run_check_folder_exists": "{name} exists",
-  "run_check_space_of": "{bytes} of {free} free",
   "run_check_sources_readable": [
     {
       "declarations": [
@@ -3642,6 +3596,21 @@
       "match": {
         "countPlural=one": "{count} accepted",
         "countPlural=*": "{count} accepted"
+      }
+    }
+  ],
+  "rungroup_rejected_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} rejected",
+        "countPlural=*": "{count} rejected"
       }
     }
   ],
@@ -4374,12 +4343,10 @@
   "apps_badge_writes_unknown": "Input writes unknown",
   "apps_badge_write_prone": "Writes into inputs",
   "apps_unsupported_corrected": "reading corrected values through configuration",
-  "apps_unsupported_products": "accepted Results as inputs",
   "apps_evidence": "Evidence",
   "apps_prototype_fixture": "Prototype fixture",
   "apps_input_writes": "Input writes",
   "apps_none_recorded": "None recorded",
-  "apps_product_inputs": "Product inputs",
   "apps_corrected_values": "Corrected values",
   "apps_corrected_through": "Through configuration",
   "apps_corrected_not_through": "Not through configuration",
@@ -5366,11 +5333,6 @@
   "domain_result_channel_product": "Channel product",
   "domain_result_mosaic_panel": "Mosaic panel",
   "domain_result_assembled_mosaic": "Assembled mosaic",
-  "domain_products_final_image": "final images",
-  "domain_products_linear_integration": "linear integrations",
-  "domain_products_channel_product": "channel products",
-  "domain_products_mosaic_panel": "mosaic panels",
-  "domain_products_assembled_mosaic": "assembled mosaics",
   "domain_quality_any": "Any quality",
   "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
   "domain_quality_usable_max_fwhm": "Usable, FWHM ≤ {arcsec}″",
@@ -5616,6 +5578,7 @@
   "domain_next_resolve_preparation": "Resolve preparation",
   "domain_next_watch_preparation": "Watch preparation",
   "domain_next_review_preparation": "Review preparation",
+  "domain_next_prepare_run": "Prepare run",
   "domain_status_awaiting_outputs": "Awaiting outputs",
   "domain_status_accepted_of": "{accepted} of {total} accepted",
   "domain_gate_results_folder": "Results are looked for in the Results folder.",
@@ -5683,7 +5646,6 @@
   "domain_operation_running": "{title} is running",
   "domain_operation_paused": "{title} is paused",
   "domain_operation_interrupted": "{title} is interrupted",
-  "domain_refusal_uses_result": "{name} uses one of its Results as an input",
   "domain_panels_done": [
     {
       "declarations": [
@@ -5989,7 +5951,6 @@
       }
     }
   ],
-  "store_label_product_inputs": "Product inputs ({count})",
   "store_label_discard": "Discard changes",
   "store_label_rename_run": "Rename run",
   "store_label_run_setup": "Run setup",
@@ -6495,11 +6456,11 @@
   "store_reason_changed_since_inspection": "Changed since inspection",
   "store_reason_no_kind": "No kind",
   "store_label_accept_result": "Accept Result",
+  "store_label_reject_result": "Reject Result",
   "store_saved_accepted": "Accepted {name}",
+  "store_saved_rejected": "Rejected {name}",
   "store_sha_short": "SHA-256 {hash}…",
   "store_label_result_kind": "Result kind",
-  "store_reason_not_accepted": "Not accepted",
-  "store_reason_mosaic_subject": "Mosaic subject",
   "store_label_clean_up_named": "Clean up {name}",
   "store_reason_not_complete_short": "Not Complete",
   "store_reason_nothing_selected": "Nothing selected",
@@ -7506,8 +7467,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame copied · {bytes}",
-        "countPlural=*": "{n} frames copied · {bytes}"
+        "countPlural=one": "{n} file copied · {bytes}",
+        "countPlural=*": "{n} files copied · {bytes}"
       }
     }
   ],
