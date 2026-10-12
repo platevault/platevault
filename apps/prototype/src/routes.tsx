@@ -11,14 +11,17 @@
  * `/projects/$projectId/runs/$runId/review?filter=unreviewed`;
  * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
  * planning values use; tonight when absent or past), `?project=`;
- * `/settings/locations?duplicates=review` (the Duplicates review sheet).
+ * `/settings/locations?duplicates=review` (the Duplicates review sheet);
+ * `/import?step=` and `/sessions/$sessionId?step=` (the staged Import and
+ * intake flows; without `step` the plain view shows).
  */
-import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
+import { createHashHistory, createRootRoute, createRoute, createRouter, redirect, useSearch } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { DesignSystemPage } from "@/app/design-system-page"
 import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
 import { isLibraryEmpty } from "@/domain/library"
 import { AboutPage } from "@/features/t1/settings/about-page"
+import { HelpPage } from "@/features/t1/settings/help-page"
 import { AppearancePage } from "@/features/t1/settings/appearance-page"
 import { LocationsPage } from "@/features/t1/settings/locations-page"
 import { SettingsLayout } from "@/features/t1/settings/settings-layout"
@@ -28,7 +31,9 @@ import { SetupIndexingPage, SetupLocationsPage, WelcomePage } from "@/features/t
 import { SettingsApplicationsPage } from "@/features/t4/applications"
 import { HomePage } from "@/features/v5/a-home/home"
 import { ImportRoute } from "@/features/v5/a-home/import"
+import { ImportFlowPage } from "@/features/v5/a-home/import-flow"
 import { SessionPage } from "@/features/v5/a-home/session"
+import { SessionIntakePage } from "@/features/v5/a-home/session-intake"
 import { SessionsPage } from "@/features/v5/a-home/sessions"
 import { ProjectPage } from "@/features/v5/b-projects/project"
 import { ProjectsPage } from "@/features/v5/b-projects/projects"
@@ -37,6 +42,7 @@ import { RunGroupPage } from "@/features/v5/c-runs/group"
 import { RunPage } from "@/features/v5/c-runs/run"
 import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
 import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
+import { CalibrationProcessPage } from "@/features/v5/e-targets-plan-settings/calibration-process"
 import { CalibrationSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-calibration"
 import { EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
 import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-goal-templates"
@@ -78,14 +84,22 @@ function page<TPath extends string>(path: TPath, component: () => ReactNode) {
   return createRoute({ getParentRoute: () => appLayout, path, component, validateSearch: looseSearch })
 }
 
+/** A route whose `?step=` shows its staged flow (a StepPage) in place of the plain view. */
+function stepFlowOr(Plain: () => ReactNode, Flow: () => ReactNode) {
+  return function StepFlowRoute() {
+    const { step } = useSearch({ strict: false }) as SearchParams
+    return step ? <Flow /> : <Plain />
+  }
+}
+
 // Onboarding (v4, minimal shell).
 const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/welcome", component: WelcomePage, validateSearch: looseSearch })
 const setupLocationsRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/locations", component: SetupLocationsPage, validateSearch: looseSearch })
 const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/indexing", component: SetupIndexingPage, validateSearch: looseSearch })
 
-// S1 Home is the start page (D-W39); S13 Import is a sheet over `/import`.
+// S1 Home is the start page (D-W39); S13 Import is a sheet over `/import`, and `/import?step=` its staged flow.
 const homeRoute = page("/", HomePage)
-const importRoute = page("/import", ImportRoute)
+const importRoute = page("/import", stepFlowOr(ImportRoute, ImportFlowPage))
 
 // S2, S3, S8: Projects. S4 New Project is a sheet; Wrap up is S3's `?stage=wrap-up`.
 const projectsRoute = page("/projects", ProjectsPage)
@@ -125,10 +139,11 @@ const planRoute = createRoute({
   },
 })
 
-// Library: S12 Sessions, S14 Calibration; `/storage` (S15, P-STO2) redirects to Settings › Locations. Footer: S17 Activity.
+// Library: S12 Sessions (`?step=` is a session's intake flow), S14 Calibration with its process flows; `/storage` (S15, P-STO2) redirects to Settings › Locations. Footer: S17 Activity.
 const sessionsRoute = page("/sessions", SessionsPage)
-const sessionRoute = page("/sessions/$sessionId", SessionPage)
+const sessionRoute = page("/sessions/$sessionId", stepFlowOr(SessionPage, SessionIntakePage))
 const calibrationRoute = page("/calibration", CalibrationPage)
+const calibrationProcessRoute = page("/calibration/processes/$processId/$step", CalibrationProcessPage)
 const storageRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/storage",
@@ -138,7 +153,7 @@ const storageRoute = createRoute({
 })
 const activityRoute = page("/activity", ActivityPage)
 
-// S16 Settings: v4's settled sections plus Equipment, Goal templates and Naming.
+// S16 Settings: v4's settled sections plus Equipment, Goal templates, Naming and Help.
 const settingsRoute = page("/settings", SettingsLayout)
 const settingsIndexRoute = createRoute({
   getParentRoute: () => settingsRoute,
@@ -161,6 +176,7 @@ const settingsChildren = [
   settingsChild("targets", TargetLookupPage),
   settingsChild("applications", SettingsApplicationsPage),
   settingsChild("about", AboutPage),
+  settingsChild("help", HelpPage),
 ]
 
 // Foundation: design-system reference (not in the source list; palette only).
@@ -184,6 +200,7 @@ const routeTree = rootRoute.addChildren([
     sessionsRoute,
     sessionRoute,
     calibrationRoute,
+    calibrationProcessRoute,
     storageRoute,
     activityRoute,
     settingsRoute.addChildren([settingsIndexRoute, ...settingsChildren]),
