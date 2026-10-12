@@ -7527,5 +7527,23 @@
   "import_flow_title": "Import",
   "session_intake_title": "Session",
   "calibration_process_title": "Process",
-  "settings_help": "Help"
+  "settings_help": "Help",
+  "actions_blocked": "{action} blocked",
+  "actions_for": "Actions for {name}",
+  "actions_confirm_group": [
+    {
+      "declarations": [
+        "input label",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{label} · {count} file",
+        "countPlural=*": "{label} · {count} files"
+      }
+    }
+  ]
 }

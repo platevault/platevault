@@ -118,6 +118,8 @@ export function CommandPalette() {
   const highlighted = useRef<PaletteCommand | undefined>(undefined)
 
   function run(command: PaletteCommand) {
+    // An unavailable command stays listed with its reason, and Enter or a click does nothing.
+    if (command.unavailable !== undefined) return
     if (command.to) {
       // Navigate first, then close, so focus can land on the new page.
       router.history.push(command.to)
@@ -173,10 +175,22 @@ export function CommandPalette() {
                       key={item.id}
                       value={item}
                       onClick={() => run(item)}
-                      className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-highlighted:shadow-[inset_2px_0_0_var(--primary)]"
+                      aria-disabled={item.unavailable !== undefined || undefined}
+                      // The name is the label alone; the reason is its description and the shortcut stays visual.
+                      aria-label={item.shortcut !== undefined || item.unavailable !== undefined ? item.label : undefined}
+                      aria-describedby={item.unavailable !== undefined ? `palette-reason-${item.id}` : undefined}
+                      className="flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-highlighted:shadow-[inset_2px_0_0_var(--primary)]"
                     >
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      <CornerDownLeft aria-hidden="true" className="size-3.5 text-muted-foreground opacity-0 in-data-highlighted:opacity-100" />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate in-aria-disabled:opacity-50">{item.label}</span>
+                        {item.unavailable !== undefined ? (
+                          <span id={`palette-reason-${item.id}`} className="truncate text-xs text-muted-foreground">
+                            {item.unavailable}
+                          </span>
+                        ) : null}
+                      </span>
+                      {item.shortcut ? <Kbd className="in-aria-disabled:opacity-50">{item.shortcut}</Kbd> : null}
+                      {item.unavailable === undefined ? <CornerDownLeft aria-hidden="true" className="size-3.5 text-muted-foreground opacity-0 in-data-highlighted:opacity-100" /> : null}
                     </Autocomplete.Item>
                   )}
                 </Autocomplete.Collection>
