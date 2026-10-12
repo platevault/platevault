@@ -302,3 +302,11 @@ Every decision below was made by the user while answering the v5 journeys' open 
 - **P-TRASH2: a frame linked by an unfinished run can't go to the Trash (user; resolves J34/G8, J44/G5).**
   - Every move to the OS Trash (Wrap up rejects, the Unusable purge, duplicates clean-up) refuses a frame or master that the view of a run that is not Complete links to: "Can't trash · linked by {run} ▸", leading to that run. Refreshing the run's view drops the link (rejected frames have already left its membership), and then the frame can go.
   - Completed runs: Complete removes the view by default. If the user kept it, the Trash review says "Also removes N links in kept run views", and the move takes those links with the frame.
+
+## Round 9 (user, 2026-10-12)
+
+Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANSWERS.md, R9-HOME-DEBATE.md, R9-PIXINSIGHT-STATS.md, R9-PREV-PRODUCT-PATTERNS.md, R9-UX-AUDIT-A/B/C.md. Proposed answers wait on the composition plan (astro-plan-blbjw) and the standards decision (astro-plan-42eka).
+
+- **P-REV2: review happens at session ingestion (user; supersedes run-time review).** A session's frames must be fully reviewed before the session can be used in a Project or run. Runs no longer review unreviewed frames.
+- **P-REJ2: Reject is library-wide only (user; supersedes "Reject for this Project only").** Project-only rejections are dropped.
+- **Components (user):** only standard components, composed; no page-local look-alikes; reuse before rebuilding; one flow for staged work across the product. A single owner plans the rebuild (astro-plan-blbjw).
