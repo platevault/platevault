@@ -6,7 +6,7 @@
  * the last saved value stays in effect.
  */
 import { validateNamingTemplate } from "@/domain/templates"
-import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
+import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, InputMode, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
@@ -152,4 +152,26 @@ export function setLaunchArgs(profileId: ProfileId, launchArgs: string): CommitR
 /** Prototype control: move an application bundle away or arm a launch failure. Never writes the catalog. */
 export function updateApp(id: string, patch: Partial<SimulatedApp>) {
   store.setState((s) => ({ ...s, disk: { ...s.disk, apps: s.disk.apps.map((app) => (app.id === id ? { ...app, ...patch } : app)) } }))
+}
+
+// ---------------------------------------------------------------------------
+// Run views (P-PREP3)
+// ---------------------------------------------------------------------------
+
+/** The run view a run uses until it picks one in Prepare. */
+export function setDefaultRunView(mode: InputMode): CommitResult {
+  return commit(msg("settings_default_run_view"), (s) => ({ ...s, settings: { ...s.settings, defaultRunView: mode } }), { href: "/settings/applications" })
+}
+
+/** Check again: PlateVault reads the computer's Windows Developer Mode now. */
+export function checkDeveloperMode(): CommitResult {
+  return commit(msg("store_label_check_named", { name: msg("settings_developer_mode") }), (s) => ({ ...s, settings: { ...s.settings, developerModeCheck: s.faults.developerMode } }), { href: "/settings/applications" })
+}
+
+/**
+ * Open Windows settings at For developers. The prototype simulates the user
+ * turning Developer Mode on there; PlateVault sees it at its next check.
+ */
+export function openWindowsDeveloperSettings() {
+  store.setState((s) => (s.faults.developerMode === "off" ? { ...s, faults: { ...s.faults, developerMode: "on" } } : s))
 }

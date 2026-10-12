@@ -8,12 +8,11 @@
  * writes state.
  */
 import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
-import { isUnder } from "./indexing"
 import { runPreparations, type World } from "./derive"
 import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, LocationRole, Operation, Preparation, RunId } from "./types"
 
 export interface Footprint {
-  /** Bytes the prepared folder holds itself; links count zero, and so do clones and hard links that share their original's bytes. */
+  /** Bytes the prepared folder holds itself: a Copies view's copies; symlinks count zero. */
   preparedBytes: number
   /** Bytes in the Results folder. */
   resultsBytes: number
@@ -21,18 +20,12 @@ export interface Footprint {
   online: boolean
 }
 
-/** `volumeId:inode` of every file outside `folder`: a file inside that shares one (a clone, P-PREP2, or a hard link) frees nothing when removed. */
-export function inodesHeldOutside(disk: Disk, folder: string): Set<string> {
-  return new Set(Object.values(disk.files).flatMap((f) => (f.linkTarget || isUnder(f.path, folder) ? [] : [`${f.volumeId}:${f.inode}`])))
-}
-
 export function preparationFootprint(disk: Disk, preparation: Preparation): Footprint {
   const volumeId = volumeForPath(disk, preparation.folderPath)
   const online = Boolean(volumeId && disk.volumes[volumeId]?.mounted)
   if (!online) return { preparedBytes: 0, resultsBytes: 0, online }
-  const held = inodesHeldOutside(disk, preparation.folderPath)
   return {
-    preparedBytes: filesUnder(disk, preparation.folderPath).reduce((sum, f) => sum + (f.linkTarget || held.has(`${f.volumeId}:${f.inode}`) ? 0 : f.sizeBytes), 0),
+    preparedBytes: filesUnder(disk, preparation.folderPath).reduce((sum, f) => sum + (f.linkTarget ? 0 : f.sizeBytes), 0),
     resultsBytes: filesUnder(disk, preparation.resultsPath).reduce((sum, f) => sum + f.sizeBytes, 0),
     online,
   }

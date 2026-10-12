@@ -44,13 +44,10 @@ export const STEP_NAME: Record<RunStep, MessageRef> = {
   done: msg("step_done"),
 }
 
-/** Prepare input modes (P-PREP2): Automatic, Independent copy, Link to originals, Give PixInsight the file list. */
+/** Run views (P-PREP3): Symlinks, Copies. */
 export const MODE_NAME: Record<InputMode, MessageRef> = {
-  automatic: msg("domain_mode_automatic"),
-  linked: msg("domain_mode_linked"),
-  "direct-source": msg("domain_mode_file_list"),
+  symlink: msg("domain_mode_symlink"),
   copy: msg("domain_mode_copy"),
-  clone: msg("domain_mode_clone"),
 }
 
 export const RESULT_KIND_NAME: Record<ResultKind, MessageRef> = {

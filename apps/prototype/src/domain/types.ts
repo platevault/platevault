@@ -71,7 +71,8 @@ export interface Volume {
   /** "unsupported" covers locations whose OS removal deletes immediately. */
   trash: "supported" | "unsupported"
   capacityBytes: number
-  links: { symlink: boolean; hardlink: boolean; clone: boolean }
+  /** The file system can hold symlinks, so a Symlinks run view can be written onto it (P-PREP3). */
+  symlinks: boolean
   /** An OS-mounted network share: hashed resumably with progress, Offline when unmounted (D-W12). */
   network: boolean
   /** A USB or SD device: detected when connected and offered by Import (`removableDevices`). */
@@ -170,7 +171,7 @@ export interface DiskFile {
   sha256: string
   /** Bytes before the last external overwrite, so the prototype can restore them (J22 S15b, LIB-AC-14). */
   previousSha256: string | null
-  /** Files sharing an inode share bytes (hardlinks). */
+  /** Files sharing an inode share bytes. */
   inode: number
   kind: DiskFileKind
   header: FrameHeader | null
@@ -655,6 +656,7 @@ export type CalibrationPolicy = "automatic" | "off"
 /** Setup a run group shares with every panel run (D-W38); a single run holds its own. */
 export interface RunSetup {
   profileId: ProfileId | null
+  /** The run view; null uses Settings' default run view (P-PREP3). */
   inputMode: InputMode | null
   calibrationPolicy: CalibrationPolicy
 }
@@ -914,22 +916,19 @@ export interface CalibrationProcess {
 export type ApplicationKind = "pixinsight-wbpp" | "siril" | "seti-astro" | "generic"
 
 /**
- * Prepare input modes (P-PREP2): "automatic" picks per entry (an independent
- * copy while space allows); "copy" is Independent copy (a clone on the same
- * clone-capable volume, else a copy); "linked" is Link to originals (opt-in);
- * "direct-source" gives PixInsight the file list. "clone" is no longer offered:
- * Independent copy clones by itself.
+ * Run views (P-PREP3): "symlink" links each input to its catalogue original;
+ * "copy" writes temporary copies, removed when the run completes.
  */
-export type InputMode = "automatic" | "linked" | "direct-source" | "copy" | "clone"
+export type InputMode = "symlink" | "copy"
+
+/** Windows Developer Mode, which symlinks need on Windows (P-PREP3); "not-windows" needs no check. */
+export type DeveloperMode = "not-windows" | "off" | "on"
 
 export interface ProfileCapability {
   /** Verified only with recorded capability evidence (D04). */
   verified: boolean
   evidence: MessageRef
   inputWrite: "read-only" | "unknown" | "write-prone"
-  inputModes: InputMode[]
-  /** How Direct source passes inputs; "whole-folder" cannot honour exclusions. */
-  directSource: "file-list" | "whole-folder" | "none"
   productInputKinds: ResultKind[]
   /** Can the application read a corrected value through configuration? */
   correctedMetadata: "configuration" | "none"
@@ -981,15 +980,13 @@ export interface Preparation {
   membershipRevision: number
   profileId: ProfileId
   mode: InputMode
-  linkType: "symlink" | "hardlink" | null
   /** The prepared folder: `<output>/<Project>/<Run>/` or a group's `Panel N/`. */
   folderPath: string
   /** The Results folder shared by every revision: `<Run> Results/` or `<Mosaic> Results/Panel N/` (D-W51, D-W73). */
   resultsPath: string
   entryCount: number
+  /** Bytes the run view's copies hold; 0 for Symlinks. */
   footprintBytes: number
-  /** Independent copy (P-PREP2): entries placed as clones (no extra space) and as copies. Absent on links and file lists. */
-  placed?: { cloned: number; copied: number }
   state: PreparationState
   operationId: OperationId | null
   preparedAssetIds: AssetId[]
@@ -1299,6 +1296,10 @@ export interface AppSettings {
     enabled: boolean
     provider: "cds-sesame" | "simbad"
   }
+  /** The run view a run uses until it picks one in Prepare (P-PREP3). */
+  defaultRunView: InputMode
+  /** Windows Developer Mode as PlateVault last checked it: at launch, in setup, Settings and at Prepare (P-PREP3). */
+  developerModeCheck: DeveloperMode
 }
 
 export interface SimulationFaults {
@@ -1318,6 +1319,8 @@ export interface SimulationFaults {
   clockOffsetMs: number
   /** Planning sees no saved site: Tonight and the Planner show "Add an observing site in Settings" (PLAN-TGT-AC-15). */
   noSite: boolean
+  /** The simulated computer's Windows Developer Mode; PlateVault sees a change at its next check. */
+  developerMode: DeveloperMode
 }
 
 export interface Catalog {

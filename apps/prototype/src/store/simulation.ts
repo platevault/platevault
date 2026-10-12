@@ -182,7 +182,7 @@ export function createExternalFile(path: string) {
   })
 }
 
-/** Delete a file outside PlateVault, bypassing Trash (e.g. the original behind a hardlink). */
+/** Delete a file outside PlateVault, bypassing Trash (e.g. the original behind a symlink). */
 export function deleteFileExternally(path: string) {
   store.setState((s) => {
     const file = fileAt(s.disk, path)
@@ -202,4 +202,14 @@ export function resetClock() {
 
 export function setFault<K extends keyof SimulationFaults>(key: K, value: SimulationFaults[K]) {
   store.setState((s) => ({ ...s, faults: { ...s.faults, [key]: value } }))
+}
+
+/**
+ * Windows without Developer Mode (P-PREP3): on, the computer is Windows with
+ * Developer Mode off; off, it is not Windows. PlateVault checks at once, as
+ * it does at launch.
+ */
+export function setWindowsWithoutDeveloperMode(on: boolean) {
+  const developerMode = on ? "off" : "not-windows"
+  store.setState((s) => ({ ...s, faults: { ...s.faults, developerMode }, settings: { ...s.settings, developerModeCheck: developerMode } }))
 }

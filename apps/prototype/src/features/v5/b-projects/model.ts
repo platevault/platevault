@@ -28,7 +28,7 @@ import { qualityApplicability } from "@/domain/library"
 import { keptCopy } from "@/domain/storage"
 import { GOAL_CHANNELS, NARROW_BANDS } from "@/domain/labels"
 import { namingTemplate, resolveNamingTemplate } from "@/domain/templates"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Session, SessionId, Subject, Volume } from "@/domain/types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Run, Session, SessionId, Subject, Volume } from "@/domain/types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, nightRef, say, verbatim } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
@@ -237,9 +237,17 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
  * library copy. Accepted Results and library masters are never offered.
  */
 export function intermediatesOffer(state: PrototypeState, project: Project): TrashOffer {
+  const { catalog } = state
+  return intermediatesOf(state, new Set(projectRuns(catalog, project.id).map((r) => r.id)), new Set(projectGroups(catalog, project.id).map((g) => g.id)))
+}
+
+/** The same offer for one run's own Results, which its Complete confirmation makes next to removing the run view (P-PREP3). */
+export function runIntermediatesOffer(state: PrototypeState, run: Run): TrashOffer {
+  return intermediatesOf(state, new Set([run.id]), new Set())
+}
+
+function intermediatesOf(state: PrototypeState, runIds: ReadonlySet<string>, groupIds: ReadonlySet<string>): TrashOffer {
   const { catalog, disk } = state
-  const runIds = new Set(projectRuns(catalog, project.id).map((r) => r.id))
-  const groupIds = new Set(projectGroups(catalog, project.id).map((g) => g.id))
   const entries: OfferEntry[] = []
   const refusals: OfferRefusal[] = []
   const items: TrashItem[] = []
@@ -287,11 +295,8 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
   for (const prep of Object.values(catalog.preparations)) {
     const run = catalog.runs[prep.runId]
     if (!run || run.completion === "complete") continue
-    // A Direct-source run reads its frames where they are; a linked run points at one copy of each.
-    const used =
-      prep.mode === "direct-source"
-        ? prep.preparedAssetIds.flatMap((id) => catalog.assets[id]?.copies.map((c) => c.path) ?? [])
-        : Object.values(disk.files).flatMap((f) => (f.linkTarget && isUnder(f.path, prep.folderPath) ? [f.linkTarget] : []))
+    // A run view's symlinks point at one copy of each frame.
+    const used = Object.values(disk.files).flatMap((f) => (f.linkTarget && isUnder(f.path, prep.folderPath) ? [f.linkTarget] : []))
     for (const path of used) if (!linkedBy.has(path)) linkedBy.set(path, run.name)
   }
   const entries: OfferEntry[] = []

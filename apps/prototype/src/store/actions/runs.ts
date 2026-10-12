@@ -16,12 +16,11 @@ import {
   rigRef,
   runHref,
   runPipeline,
-  runPreparations,
   runSetup,
   subjectRef,
   trashRefusals,
 } from "@/domain/derive"
-import { addSessions, contentEquals, contentOf, currentFile, describeDiff, diffContent, emptyContent, removeSessions } from "@/domain/membership"
+import { addSessions, contentEquals, contentOf, describeDiff, diffContent, emptyContent, removeSessions } from "@/domain/membership"
 import type {
   MembershipContent,
   OpticalTrainId,
@@ -281,7 +280,7 @@ export function renameRun(runId: RunId, name: string): CommitResult {
 }
 
 /**
- * Setup (profile, input mode, calibration policy). For a panel run the
+ * Setup (profile, run view, calibration policy). For a panel run the
  * group's shared setup changes, and with it every panel run (D-W38).
  */
 export function setRunSetup(runId: RunId, patch: Partial<RunSetup>): CommitResult {
@@ -308,9 +307,7 @@ export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): Co
 /**
  * Complete (RES-FR-06, RES-FR-07): records completion even with no accepted
  * Result and removes nothing. Refused only while an operation affecting the
- * run is Running. The current step is kept so Reopen returns there. A run
- * prepared with Link to originals has every original re-hashed once it is
- * Complete, and Activity names any that changed (P-PREP2).
+ * run is Running. The current step is kept so Reopen returns there.
  */
 export function completeRun(runId: RunId): CommitResult {
   const state = store.getState()
@@ -320,23 +317,7 @@ export function completeRun(runId: RunId): CommitResult {
   const blockers = completeRefusals(state, run)
   if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_complete_named", { name: run.name }) }), blockers, runHref(run, "done"))
   const stage = runPipeline(state, run).current.id
-  const result = editRun(runId, msg("run_complete"), (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
-  if (result.ok) recheckLinkedOriginals(run)
-  return result
-}
-
-/** Link to originals (P-PREP2): re-hash every original a linked preparation pointed at; a tool that wrote in place changed it. */
-function recheckLinkedOriginals(run: Run) {
-  const { catalog, disk } = store.getState()
-  const ids = new Set(runPreparations(catalog, run.id).flatMap((p) => (p.mode === "linked" ? p.preparedAssetIds : [])))
-  if (ids.size === 0) return
-  const changed = [...ids].flatMap((id) => {
-    const asset = catalog.assets[id]
-    const file = asset ? currentFile(disk, catalog, asset) : undefined
-    return asset && file && file.sha256 !== asset.sha256 ? [verbatim(asset.fileName)] : []
-  })
-  const counts = { count: ids.size, n: formatCount(ids.size), changed: changed.length }
-  recordSaved(msg("store_saved_originals_rechecked", { name: run.name, ...counts }), changed.length > 0 ? joinRefs(changed, ", ") : null, runHref(run, "done"))
+  return editRun(runId, msg("run_complete"), (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
 }
 
 /** Reopen returns the run to the step it was in (D-W71 as kept by D-W72); returns that step. */

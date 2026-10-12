@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { locateExecutable } from "@/store/actions/settings"
 import { T4Badge } from "./badges"
-import { MODE_NAME, PRODUCT_KIND_NAME } from "@/domain/labels"
+import { PRODUCT_KIND_NAME } from "@/domain/labels"
 
 /** The profile's capability claims as label and value rows; the evidence behind them is in `CapabilityNote`. */
 export function capabilityItems(m: Messages, profile: ApplicationProfile): KeyValueItem[] {
@@ -26,11 +26,6 @@ export function capabilityItems(m: Messages, profile: ApplicationProfile): KeyVa
     {
       label: m.apps_input_writes(),
       value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,
-    },
-    { label: m.apps_input_modes(), value: c.inputModes.length ? c.inputModes.map((mode) => say(m, MODE_NAME[mode])).join(", ") : m.apps_none_recorded() },
-    {
-      label: m.apps_direct_source(),
-      value: c.directSource === "file-list" ? m.apps_direct_file_list() : c.directSource === "whole-folder" ? m.apps_direct_whole_folders() : m.location_links_none(),
     },
   ]
 }
@@ -41,8 +36,6 @@ export function CapabilityNote({ profile }: { profile: ApplicationProfile }) {
   const c = profile.capability
   const unsupported: string[] = []
   if (c.correctedMetadata === "none") unsupported.push(m.apps_unsupported_corrected())
-  if (c.directSource === "none") unsupported.push(m.apps_unsupported_paths())
-  if (c.directSource === "whole-folder") unsupported.push(m.apps_unsupported_file_list())
   if (c.productInputKinds.length === 0) unsupported.push(m.apps_unsupported_products())
   const rows: NoteRow[] = [
     { label: m.apps_evidence(), value: c.verified ? `${say(m, c.evidence)} · ${m.apps_prototype_fixture()}` : say(m, c.evidence) },

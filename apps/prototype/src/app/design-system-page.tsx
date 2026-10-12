@@ -349,8 +349,8 @@ export function DesignSystemPage() {
               <Notice tone="warning" title="Scan scope is incomplete">
                 Access denied: /Volumes/Astro-T7/Imaging/M33/2026-08-30. Files there are unknown, not missing.
               </Notice>
-              <Notice tone="refusal" title="Direct source refused" actions={<Button size="sm" variant="outline">Review Copy or Clone</Button>}>
-                SETI Astro Suite Pro consumes the whole folder, which contains 6 excluded frames.
+              <Notice tone="refusal" title="Can't prepare" actions={<Button size="sm" variant="outline">Use copies for this run</Button>}>
+                Symlinks need Windows Developer Mode.
               </Notice>
               <Notice tone="info" title="Totals are provisional">Indexing is still running; totals cover Astro-T7 captures only.</Notice>
             </div>

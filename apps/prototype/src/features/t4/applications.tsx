@@ -2,12 +2,14 @@
  * `/settings/applications` — Applications (PREP-FR-01, PREP-FR-02; J23 S8).
  * One list of profiles: each names its capability claims as label and value
  * rows (the evidence sits in a note), the located executable, and, for the
- * generic Open in…, the launch arguments. A `return` search param links back
- * to the task that sent the user here.
+ * generic Open in…, the launch arguments. Run view holds the default run view
+ * and, on Windows, the Developer Mode check symlinks need (P-PREP3). A
+ * `return` search param links back to the task that sent the user here.
  */
 import { Link, useSearch } from "@tanstack/react-router"
 import { ArrowLeft } from "lucide-react"
 import { useId, useState } from "react"
+import { DeveloperModeStatus } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
 import { Box } from "@/components/app/box"
 import { ActionError } from "@/components/app/feedback"
@@ -16,9 +18,12 @@ import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { ApplicationProfile } from "@/domain/types"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { MODE_NAME } from "@/domain/labels"
+import type { ApplicationProfile, InputMode } from "@/domain/types"
+import { say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
-import { checkExecutable, setLaunchArgs, updateApp } from "@/store/actions/settings"
+import { checkExecutable, setDefaultRunView, setLaunchArgs, updateApp } from "@/store/actions/settings"
 import { ProfileBadge } from "./badges"
 import { CapabilityNote, capabilityItems, ExecutableState, LocateApplicationDialog } from "./profile-parts"
 import { PrototypeControls } from "./prototype-controls"
@@ -106,6 +111,35 @@ function ProfileRow({ profile, onLocate }: { profile: ApplicationProfile; onLoca
   )
 }
 
+const RUN_VIEWS: InputMode[] = ["symlink", "copy"]
+
+/** The default run view and, on Windows, the Developer Mode check (P-PREP3). */
+function RunViewSettings() {
+  const m = useMessages()
+  const view = useStore((s) => s.settings.defaultRunView)
+  const id = useId()
+  return (
+    <Box title={m.run_check_mode()} id="settings-run-view">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span id={id} className="text-sm font-medium">
+            {m.settings_default_run_view()}
+          </span>
+          <RadioGroup aria-labelledby={id} value={view} onValueChange={(value) => setDefaultRunView(String(value) as InputMode)} className="flex flex-wrap gap-4">
+            {RUN_VIEWS.map((mode) => (
+              <Label key={mode} className="flex items-center gap-2 font-normal">
+                <RadioGroupItem value={mode} />
+                {say(m, MODE_NAME[mode])}
+              </Label>
+            ))}
+          </RadioGroup>
+        </div>
+        <DeveloperModeStatus />
+      </div>
+    </Box>
+  )
+}
+
 export function SettingsApplicationsPage() {
   const m = useMessages()
   const search = useSearch({ strict: false }) as { return?: string }
@@ -129,6 +163,7 @@ export function SettingsApplicationsPage() {
         }
       />
       <PageBody>
+        <RunViewSettings />
         <Box flush>
           <ul className="divide-y divide-separator">
             {list.map((profile) => (

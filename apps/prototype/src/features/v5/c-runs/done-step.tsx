@@ -1,18 +1,18 @@
 /**
  * S5 Done: Complete (it needs no Result and removes nothing by itself) and
  * the Clean up review: only the entries the run's preparations created,
- * every one preselected, with the run's footprint. A Direct-source
- * preparation creates no entries, so its list is empty. Clean up moves the
- * chosen entries to the OS Trash as an operation (D-W26, PREP-FR-14,
- * RES-FR-06). Complete always confirms when the run has prepared entries,
- * offering Clean up prepared copies (on by default, with the footprint;
- * clones read "frees no space", P-PREP2), and previews the open steps of a
- * run that is not Done throughout (`CompleteButton`). The Project's Wrap up
- * takes over once every run is Complete (P-WRAP1).
+ * every one preselected, with the run's footprint. Clean up moves the chosen
+ * entries to the OS Trash as an operation (D-W26, PREP-FR-14, RES-FR-06).
+ * Complete confirms when the run has a run view or intermediates, offering
+ * Remove run view (frees a Copies view's bytes; a Symlinks view is links
+ * only) and Move intermediates to Trash, both on by default (P-PREP3), and
+ * previews the open steps of a run that is not Done throughout
+ * (`CompleteButton`). The Project's Wrap up takes over once every run is
+ * Complete (P-WRAP1).
  */
 import { Link, useNavigate } from "@tanstack/react-router"
 import { CircleCheck, Copy, ListChecks, ListX, RotateCcw, ShieldCheck, Trash2, Wand2 } from "lucide-react"
-import { useEffect, useId, useMemo, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { GateLabel, gateWord, stepName } from "@/app/run-ui"
 import { Box } from "@/components/app/box"
@@ -25,47 +25,58 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { runPipeline } from "@/domain/derive"
-import { fileName, formatBytes, formatDateTime } from "@/lib/format"
+import { fileName, formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { completeRun, reopenRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
-import { startCleanup } from "./actions"
+import { runIntermediatesOffer } from "@/features/v5/b-projects/model"
+import { startCleanup, startRunIntermediatesCleanup } from "./actions"
 import { type CleanupEntry, cleanupReview, type RunContext } from "./model"
 import type { useOutcome } from "./parts"
 import { FootprintPill } from "./prepare-step"
 import { WrapUpLink } from "./results-step"
 
-/** "12.4 GB", or "frees no space" when every entry is a link or a clone. */
-function freesText(m: Messages, entries: CleanupEntry[]): string {
+/** "frees 12.4 GB", or "links only" when the run view holds no bytes of its own. */
+function viewFreesText(m: Messages, entries: CleanupEntry[]): string {
   const bytes = entries.reduce((n, e) => n + e.sizeBytes, 0)
-  return bytes === 0 && entries.some((e) => e.kind === "clone" || e.kind === "link") ? m.run_frees_no_space() : formatBytes(bytes)
+  return bytes > 0 ? m.run_complete_frees({ bytes: formatBytes(bytes) }) : m.run_complete_links_only()
 }
 
 /**
- * Complete, from the run header or the Done step. A run with prepared entries confirms first, with Clean up prepared copies
- * offered and on by default (P-PREP2); a run whose earlier steps are not all Done (Blocked at Calibrate, Partial at Prepare)
- * names each open step in the same preview before it is recorded as Complete.
+ * Complete, from the run header or the Done step. A run with a run view or intermediates confirms first, offering Remove run
+ * view and Move intermediates to Trash, both on by default (P-PREP3); a run whose earlier steps are not all Done (Blocked at
+ * Calibrate, Partial at Prepare) names each open step in the same preview before it is recorded as Complete.
  */
 export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: RunContext; onOutcome: ReturnType<typeof useOutcome>["act"]; variant?: "default" | "outline" }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const { run } = ctx
   const [preview, setPreview] = useState(false)
-  const [cleanUp, setCleanUp] = useState(true)
-  const cleanId = useId()
+  const [removeView, setRemoveView] = useState(true)
+  const [trashIntermediates, setTrashIntermediates] = useState(true)
+  const viewId = useId()
+  const intermediatesId = useId()
   const open = runPipeline(state, run)
     .steps.slice(0, 5)
     .filter((s) => s.state !== "done")
   const prepared = cleanupReview(state, run).entries
+  const intermediates = runIntermediatesOffer(state, run)
   const options = { blocked: m.run_complete_blocked(), success: { title: m.run_completed({ name: run.name }), tone: "info" as const } }
-  const ask = open.length > 0 || prepared.length > 0
+  const offers = prepared.length > 0 || intermediates.count > 0
+  const ask = open.length > 0 || offers
+  const intermediatesSize = formatBytes(intermediates.sizeBytes)
+  const kept = [
+    ...(prepared.length > 0 && !removeView ? [m.run_complete_keeps_prepared({ count: prepared.length })] : []),
+    ...(intermediates.count > 0 && !trashIntermediates ? [m.run_complete_keeps_intermediates({ count: intermediates.count, n: formatCount(intermediates.count) })] : []),
+  ]
   return (
     <>
       <Button
         size="sm"
         variant={variant}
         onClick={() => {
-          setCleanUp(true)
+          setRemoveView(true)
+          setTrashIntermediates(true)
           if (ask) setPreview(true)
           else onOutcome(completeRun(run.id), options)
         }}
@@ -79,12 +90,24 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
         onOpenChange={setPreview}
         title={open.length > 0 ? m.run_complete_title({ name: run.name, count: open.length }) : m.project_run_complete_title({ name: run.name })}
         description={
-          prepared.length > 0 ? (
-            <span className="flex items-center gap-2 text-foreground" data-complete-cleanup>
-              <Checkbox id={cleanId} checked={cleanUp} onCheckedChange={(checked) => setCleanUp(checked === true)} />
-              <Label htmlFor={cleanId} className="font-normal">
-                {m.run_complete_clean_up({ frees: freesText(m, prepared) })}
-              </Label>
+          offers ? (
+            <span className="flex flex-col gap-1.5 text-foreground" data-complete-cleanup>
+              {prepared.length > 0 ? (
+                <span className="flex items-center gap-2" data-complete-view>
+                  <Checkbox id={viewId} checked={removeView} onCheckedChange={(checked) => setRemoveView(checked === true)} />
+                  <Label htmlFor={viewId} className="font-normal">
+                    {m.run_complete_remove_view({ frees: viewFreesText(m, prepared) })}
+                  </Label>
+                </span>
+              ) : null}
+              {intermediates.count > 0 ? (
+                <span className="flex items-center gap-2" data-complete-intermediates>
+                  <Checkbox id={intermediatesId} checked={trashIntermediates} onCheckedChange={(checked) => setTrashIntermediates(checked === true)} />
+                  <Label htmlFor={intermediatesId} className="font-normal">
+                    {m.run_complete_intermediates({ count: intermediates.count, n: formatCount(intermediates.count), size: intermediatesSize })}
+                  </Label>
+                </span>
+              ) : null}
             </span>
           ) : (
             m.run_complete_description()
@@ -93,15 +116,16 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
         changes={[
           m.run_reopen_returns_to({ step: stepName(m, runPipeline(state, run).current.id) }),
           ...open.map((s) => `${m.run_complete_step_stays({ step: stepName(m, s.id), gate: gateWord(m, s.state) })} · ${say(m, s.items.find((i) => i.met === false)?.detail ?? s.status)}`),
-          ...(prepared.length > 0 && cleanUp ? [m.run_clean_up_moves({ count: prepared.length, bytes: freesText(m, prepared) })] : []),
+          ...(prepared.length > 0 && removeView ? [m.run_clean_up_moves({ count: prepared.length, bytes: formatBytes(prepared.reduce((n, e) => n + e.sizeBytes, 0)) })] : []),
+          ...(intermediates.count > 0 && trashIntermediates ? [m.run_complete_moves_intermediates({ count: intermediates.count, n: formatCount(intermediates.count), size: intermediatesSize })] : []),
         ]}
-        unchanged={prepared.length > 0 && !cleanUp ? [m.run_complete_keeps_prepared({ count: prepared.length })] : undefined}
+        unchanged={kept.length > 0 ? kept : undefined}
         confirmLabel={m.run_complete()}
         onConfirm={() => {
           const result = completeRun(run.id)
-          if (!onOutcome(result, options) || !cleanUp || prepared.length === 0) return result
-          const cleaned = startCleanup(run.id, prepared.map((e) => e.path))
-          onOutcome(cleaned, { blocked: m.run_clean_up_blocked(), success: options.success })
+          if (!onOutcome(result, options)) return result
+          if (removeView && prepared.length > 0) onOutcome(startCleanup(run.id, prepared.map((e) => e.path)), { blocked: m.run_clean_up_blocked(), success: options.success })
+          if (trashIntermediates && intermediates.count > 0) onOutcome(startRunIntermediatesCleanup(run.id), { blocked: m.run_clean_up_blocked(), success: options.success })
           return result
         }}
       />
@@ -112,7 +136,6 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
 function kindWord(m: Messages, kind: CleanupEntry["kind"]): string {
   if (kind === "link") return m.run_cleanup_kind_link()
   if (kind === "list") return m.run_cleanup_kind_list()
-  if (kind === "clone") return m.run_cleanup_kind_clone()
   return m.run_cleanup_kind_copy()
 }
 
@@ -142,8 +165,7 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
   const cleanupFinished = lastCleanup?.status === "succeeded"
   const chosenPaths = confirm ?? selected
   const chosen = review.entries.filter((e) => chosenPaths.includes(e.path))
-  const bytes = freesText(m, chosen)
-  const folders = useMemo(() => [...new Set(review.entries.map((e) => e.prep.folderPath))], [review.entries])
+  const bytes = formatBytes(chosen.reduce((n, e) => n + e.sizeBytes, 0))
   const complete = run.completion === "complete"
   const canClean = complete && !run.trashedAt
   const entries = (e: CleanupEntry): MenuEntry[] => {
@@ -225,10 +247,9 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
           </>
         }
       >
-        {(!complete && !run.trashedAt) || review.directSource.length > 0 || review.refused.length > 0 ? (
+        {(!complete && !run.trashedAt) || review.refused.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
             {!complete && !run.trashedAt ? <Pill tone="muted">{m.run_after_complete()}</Pill> : null}
-            {review.directSource.length > 0 ? <Pill tone="muted">{m.run_direct_source_nothing_to_clean({ count: review.directSource.length })}</Pill> : null}
             {review.refused.map((r) => (
               <Pill key={r.path} tone="warning" title={r.path}>
                 {fileName(r.path)} · {say(m, r.reason)}
@@ -243,9 +264,7 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
         ) : null}
         {review.entries.length === 0 ? (
           <p className="flex flex-wrap items-center gap-x-1.5 px-3 py-2 text-sm text-muted-foreground tabular-nums">
-            {review.directSource.length > 0 && folders.length === 0 ? (
-              m.run_no_prepared_entries()
-            ) : lastCleanup ? (
+            {lastCleanup ? (
               <span>{[m.run_all_in_os_trash(), ...(cleanupFinished ? [m.run_entries_count({ count: lastCleanup.progress.done }), formatDateTime(lastCleanup.settledAt ?? lastCleanup.updatedAt)] : [])].join(" · ")}</span>
             ) : (
               <>

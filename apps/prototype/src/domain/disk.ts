@@ -50,7 +50,7 @@ export function makeFile(spec: NewFile): DiskFile {
     sizeBytes: spec.sizeBytes,
     sha256: spec.sha256 ?? fakeSha256(spec.path),
     previousSha256: null,
-    // A path-derived inode stays unique across reloads; hardlinks pass the source inode.
+    // A path-derived inode stays unique across reloads; a caller may pass one so two paths share bytes.
     inode: spec.inode ?? Number.parseInt(stableHash(spec.path), 36),
     kind: spec.kind,
     header: spec.header ?? null,

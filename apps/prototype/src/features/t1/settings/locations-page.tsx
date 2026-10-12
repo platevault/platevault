@@ -169,14 +169,7 @@ function LocationDetail({ location, onClose, actions }: { location: Location | n
                   { label: m.location_indexed_frames(), value: count(m.location_frames, framesInLocation(catalog, location.id)) },
                   { label: m.nav_sessions(), value: count(m.location_sessions_count, sessionsInLocation(catalog, location.id)) },
                   { label: m.session_os_trash(), value: volume ? <StatusBadge kind="trash" value={volume.trash} /> : m.status_unknown() },
-                  {
-                    label: m.location_links(),
-                    value: volume
-                      ? [volume.links.symlink && m.location_link_symlinks(), volume.links.hardlink && m.location_link_hardlinks(), volume.links.clone && m.location_link_clones()]
-                          .filter(Boolean)
-                          .join(", ") || m.location_links_none()
-                      : m.status_unknown(),
-                  },
+                  { label: m.location_link_symlinks(), value: volume ? (volume.symlinks ? m.location_symlinks_supported() : m.location_links_none()) : m.status_unknown() },
                 ]}
               />
               {location.unreadablePaths.length > 0 ? (

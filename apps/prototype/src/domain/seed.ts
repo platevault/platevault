@@ -92,20 +92,19 @@ export const VOLUME_IDS = {
 const TB = 1_000_000_000_000
 
 function buildVolumes(coldMounted: boolean): Record<VolumeId, Volume> {
-  const allLinks = { symlink: true, hardlink: true, clone: true }
   const fixed = { network: false, removable: false }
   const list: Volume[] = [
-    { id: VOLUME_IDS.astro, name: "Astro-T7", mountPath: "/Volumes/Astro-T7", volumeUuid: "5E1F-T7-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 2 * TB, links: allLinks, ...fixed },
-    { id: VOLUME_IDS.cold, name: "Cold-1", mountPath: "/Volumes/Cold-1", volumeUuid: "C01D-0001", mounted: coldMounted, writable: true, trash: "supported", capacityBytes: 4 * TB, links: allLinks, ...fixed },
-    { id: VOLUME_IDS.scratch, name: "Scratch", mountPath: "/Volumes/Scratch", volumeUuid: "5C7A-0001", mounted: true, writable: true, trash: "unsupported", capacityBytes: 0.5 * TB, links: { symlink: false, hardlink: false, clone: false }, ...fixed },
-    { id: VOLUME_IDS.archive, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 8 * TB, links: { symlink: true, hardlink: true, clone: false }, ...fixed },
-    { id: VOLUME_IDS.impostor, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-9999", mounted: false, writable: true, trash: "supported", capacityBytes: 1 * TB, links: { symlink: true, hardlink: true, clone: false }, ...fixed },
-    { id: VOLUME_IDS.spare, name: "Spare", mountPath: "/Volumes/Spare", volumeUuid: "5BA2-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 1 * TB, links: allLinks, ...fixed },
+    { id: VOLUME_IDS.astro, name: "Astro-T7", mountPath: "/Volumes/Astro-T7", volumeUuid: "5E1F-T7-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 2 * TB, symlinks: true, ...fixed },
+    { id: VOLUME_IDS.cold, name: "Cold-1", mountPath: "/Volumes/Cold-1", volumeUuid: "C01D-0001", mounted: coldMounted, writable: true, trash: "supported", capacityBytes: 4 * TB, symlinks: true, ...fixed },
+    { id: VOLUME_IDS.scratch, name: "Scratch", mountPath: "/Volumes/Scratch", volumeUuid: "5C7A-0001", mounted: true, writable: true, trash: "unsupported", capacityBytes: 0.5 * TB, symlinks: false, ...fixed },
+    { id: VOLUME_IDS.archive, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 8 * TB, symlinks: true, ...fixed },
+    { id: VOLUME_IDS.impostor, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-9999", mounted: false, writable: true, trash: "supported", capacityBytes: 1 * TB, symlinks: true, ...fixed },
+    { id: VOLUME_IDS.spare, name: "Spare", mountPath: "/Volumes/Spare", volumeUuid: "5BA2-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 1 * TB, symlinks: true, ...fixed },
     // D-W12: an OS-mounted network share, hashed resumably with progress.
-    { id: VOLUME_IDS.nas, name: "NAS", mountPath: "/Volumes/NAS", volumeUuid: "4A5E-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 12 * TB, links: { symlink: true, hardlink: false, clone: false }, network: true, removable: false },
+    { id: VOLUME_IDS.nas, name: "NAS", mountPath: "/Volumes/NAS", volumeUuid: "4A5E-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 12 * TB, symlinks: true, network: true, removable: false },
     // Removable devices: not connected until the demo (or Prototype › Connect) mounts them.
-    { id: VOLUME_IDS.asiair, name: "ASIAIR", mountPath: "/Volumes/ASIAIR", volumeUuid: "A51A-0001", mounted: false, writable: true, trash: "supported", capacityBytes: 128_000_000_000, links: { symlink: false, hardlink: false, clone: false }, network: false, removable: true },
-    { id: VOLUME_IDS.usb, name: "USB DISK", mountPath: "/Volumes/USB DISK", volumeUuid: "U5B0-0001", mounted: false, writable: true, trash: "unsupported", capacityBytes: 64_000_000_000, links: { symlink: false, hardlink: false, clone: false }, network: false, removable: true },
+    { id: VOLUME_IDS.asiair, name: "ASIAIR", mountPath: "/Volumes/ASIAIR", volumeUuid: "A51A-0001", mounted: false, writable: true, trash: "supported", capacityBytes: 128_000_000_000, symlinks: false, network: false, removable: true },
+    { id: VOLUME_IDS.usb, name: "USB DISK", mountPath: "/Volumes/USB DISK", volumeUuid: "U5B0-0001", mounted: false, writable: true, trash: "unsupported", capacityBytes: 64_000_000_000, symlinks: false, network: false, removable: true },
   ]
   return Object.fromEntries(list.map((v) => [v.id, v]))
 }
@@ -390,8 +389,6 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         verified: true,
         evidence: msg("seed_apps_evidence_pixinsight"),
         inputWrite: "read-only",
-        inputModes: ["automatic", "copy", "linked", "direct-source"],
-        directSource: "file-list",
         productInputKinds: ["linear-integration", "channel-product", "mosaic-panel"],
         correctedMetadata: "none",
         masterStacking: true,
@@ -408,8 +405,6 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         verified: true,
         evidence: msg("seed_apps_evidence_siril"),
         inputWrite: "read-only",
-        inputModes: ["automatic", "copy", "linked"],
-        directSource: "none",
         productInputKinds: ["linear-integration", "channel-product"],
         correctedMetadata: "none",
         masterStacking: true,
@@ -426,8 +421,6 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         verified: false,
         evidence: msg("seed_apps_evidence_seti"),
         inputWrite: "unknown",
-        inputModes: ["automatic", "copy"],
-        directSource: "whole-folder",
         productInputKinds: [],
         correctedMetadata: "none",
         masterStacking: false,
@@ -444,8 +437,6 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         verified: false,
         evidence: msg("seed_apps_evidence_generic"),
         inputWrite: "unknown",
-        inputModes: ["automatic", "copy"],
-        directSource: "none",
         productInputKinds: [],
         correctedMetadata: "none",
         masterStacking: false,
@@ -505,6 +496,8 @@ export function defaultSettings(): AppSettings {
     naming: {},
     keepRawCalibration: false,
     targetLookup: { enabled: true, provider: "cds-sesame" },
+    defaultRunView: "symlink",
+    developerModeCheck: "not-windows",
   }
 }
 
@@ -518,6 +511,7 @@ export function defaultFaults(): SimulationFaults {
     slowIndexing: false,
     clockOffsetMs: 0,
     noSite: false,
+    developerMode: "not-windows",
   }
 }
 
@@ -634,7 +628,7 @@ function run(fields: Pick<Run, "id" | "name" | "projectId" | "subjectId" | "rigI
   return {
     panelId: null,
     groupId: null,
-    setup: { profileId: PROFILE_IDS.pixinsight, inputMode: "automatic", calibrationPolicy: "automatic" },
+    setup: { profileId: PROFILE_IDS.pixinsight, inputMode: null, calibrationPolicy: "automatic" },
     revisions: [],
     draft: null,
     calibration: [],
@@ -656,8 +650,8 @@ interface Prepared {
   files: DiskFile[]
 }
 
-/** A linked preparation: one symlink per included frame under `<folder>/lights/` (PREP-FR-04). */
-function linkedPreparation(catalog: Catalog, r: Run, folderPath: string, resultsPath: string, assetIds: AssetId[], at: string, extra: Partial<Preparation> = {}): Prepared {
+/** A Symlinks preparation: one symlink per included frame under `<folder>/lights/` (PREP-FR-04, P-PREP3). */
+function symlinkPreparation(catalog: Catalog, r: Run, folderPath: string, resultsPath: string, assetIds: AssetId[], at: string, extra: Partial<Preparation> = {}): Prepared {
   const files = assetIds.map((id) => {
     const asset = catalog.assets[id]!
     return makeFile({ path: `${folderPath}/lights/${asset.fileName}`, volumeId: A, sizeBytes: 0, kind: "fits", linkTarget: asset.copies[0]!.path, modifiedAt: at })
@@ -669,8 +663,7 @@ function linkedPreparation(catalog: Catalog, r: Run, folderPath: string, results
     prepRevision: 1,
     membershipRevision: 1,
     profileId: PROFILE_IDS.pixinsight,
-    mode: "linked",
-    linkType: "symlink",
+    mode: "symlink",
     folderPath,
     resultsPath,
     entryCount: assetIds.length,
@@ -917,7 +910,7 @@ function demoSeed(): SeedData {
     projectId: PROJECT.cygnus,
     subjectId: ngcSubject.id,
     rigId: RIG.esprit,
-    setup: { profileId: PROFILE_IDS.siril, inputMode: "automatic", calibrationPolicy: "automatic" },
+    setup: { profileId: PROFILE_IDS.siril, inputMode: null, calibrationPolicy: "automatic" },
     revisions: [revision(catalog, content([candidate(s.osc0921, RIG.esprit, "NGC 7000")]), "2026-09-30T20:00:00.000Z")],
     createdAt: "2026-09-30T19:40:00.000Z",
   })
@@ -938,7 +931,7 @@ function demoSeed(): SeedData {
     subjectId: mosaicSubject.id,
     rigId: RIG.redcat,
     runIds: ["run_ic5070_p1", "run_ic5070_p2", "run_ic5070_p3"],
-    setup: { profileId: PROFILE_IDS.pixinsight, inputMode: "automatic", calibrationPolicy: "automatic" },
+    setup: { profileId: PROFILE_IDS.pixinsight, inputMode: null, calibrationPolicy: "automatic" },
     outputParent: PROCESSING,
     createdAt: "2026-09-27T18:00:00.000Z",
     revision: 1,
@@ -975,21 +968,21 @@ function demoSeed(): SeedData {
 
   // Preparations and Results on disk.
   const cygnus = `${PROCESSING}/Cygnus HOO 2026`
-  const prepA = linkedPreparation(catalog, runA, `${cygnus}/${runA.name}`, `${cygnus}/${runA.name} Results`, runA.revisions[0]!.included, "2026-09-29T13:00:00.000Z")
-  const prepD = linkedPreparation(catalog, runD, `${cygnus}/${runD.name}`, `${cygnus}/${runD.name} Results`, runD.revisions[0]!.included, "2026-09-25T20:30:00.000Z")
-  const prepP1 = linkedPreparation(catalog, p1, `${cygnus}/IC 5070 mosaic/Panel 1`, `${cygnus}/IC 5070 mosaic Results/Panel 1`, p1.revisions[0]!.included, "2026-09-27T19:00:00.000Z")
+  const prepA = symlinkPreparation(catalog, runA, `${cygnus}/${runA.name}`, `${cygnus}/${runA.name} Results`, runA.revisions[0]!.included, "2026-09-29T13:00:00.000Z")
+  const prepD = symlinkPreparation(catalog, runD, `${cygnus}/${runD.name}`, `${cygnus}/${runD.name} Results`, runD.revisions[0]!.included, "2026-09-25T20:30:00.000Z")
+  const prepP1 = symlinkPreparation(catalog, p1, `${cygnus}/IC 5070 mosaic/Panel 1`, `${cygnus}/IC 5070 mosaic Results/Panel 1`, p1.revisions[0]!.included, "2026-09-27T19:00:00.000Z")
   // Panel 2: the Ha frames on Cold-1 could not be read: the preparation is Partial.
   const p2Included = p2.revisions[0]!.included
   const p2Offline = p2Included.filter((id) => catalog.assets[id]!.copies[0]!.volumeId === VOLUME_IDS.cold)
   const p2Ready = p2Included.filter((id) => !p2Offline.includes(id))
-  const prepP2 = linkedPreparation(catalog, p2, `${cygnus}/IC 5070 mosaic/Panel 2`, `${cygnus}/IC 5070 mosaic Results/Panel 2`, p2Ready, "2026-09-27T19:05:00.000Z", {
+  const prepP2 = symlinkPreparation(catalog, p2, `${cygnus}/IC 5070 mosaic/Panel 2`, `${cygnus}/IC 5070 mosaic Results/Panel 2`, p2Ready, "2026-09-27T19:05:00.000Z", {
     entryCount: p2Included.length,
     state: "partial",
     launches: [],
     blocked: p2Offline.map((id) => ({ input: { kind: "asset" as const, assetId: id }, path: catalog.assets[id]!.copies[0]!.path, reason: msg("run_entry_offline", { name: "Cold-1" }) })),
   })
   const m31Path = `${PROCESSING}/M 31 LRGB/${m31Run.name}`
-  const prepM31 = linkedPreparation(catalog, m31Run, m31Path, `${m31Path} Results`, m31Run.revisions[0]!.included, "2026-09-07T18:00:00.000Z")
+  const prepM31 = symlinkPreparation(catalog, m31Run, m31Path, `${m31Path} Results`, m31Run.revisions[0]!.included, "2026-09-07T18:00:00.000Z")
   catalog.preparations = Object.fromEntries([prepA, prepD, prepP1, prepP2, prepM31].map((p) => [p.record.id, p.record]))
 
   const resultsA = `${cygnus}/${runA.name} Results`
