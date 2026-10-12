@@ -29,6 +29,7 @@ export interface TextFieldProps {
   action?: ReactNode
 }
 
+/** @deprecated Use `TextField` from `@/components/app/fields` (plan §3.3 P6); removed in W4. */
 export function TextField({ id, label, value, onChange, error, description, placeholder, inputMode, mono, className, autoFocus, readOnly, action }: TextFieldProps) {
   const describedBy = [description ? `${id}-description` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined
   const input = (
@@ -68,7 +69,10 @@ export function TextField({ id, label, value, onChange, error, description, plac
   )
 }
 
-/** Field-level error text; rendered only when there is a message. */
+/**
+ * Field-level error text; rendered only when there is a message.
+ * @deprecated The `@/components/app/fields` Field family renders its own error (plan §3.3 P6); removed in W4.
+ */
 export function FieldMessage({ id, message }: { id: string; message?: string }) {
   if (!message) return null
   return (

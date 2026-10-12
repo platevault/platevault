@@ -13,7 +13,10 @@ export interface Option {
   label: string
 }
 
-/** Select with a visible label. `value` is a string; use a sentinel such as "any" for "no choice". */
+/**
+ * Select with a visible label. `value` is a string; use a sentinel such as "any" for "no choice".
+ * @deprecated Use `SelectField` from `@/components/app/fields` (plan §3.3 P6); removed in W4.
+ */
 export function SelectField({
   label,
   value,
@@ -59,7 +62,10 @@ export function SelectField({
   )
 }
 
-/** Number input that reports null when empty. */
+/**
+ * Number input that reports null when empty.
+ * @deprecated Use `NumberField` from `@/components/app/fields` (plan §3.3 P6); removed in W4.
+ */
 export function NumberField({
   label,
   value,
