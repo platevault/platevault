@@ -21,7 +21,7 @@
  *   as does Enter on the focused row. Controls keep their own action.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
@@ -249,7 +249,8 @@ export function DataTable<T>({
     // height of that header keeps a focused row out from under it (WCAG 2.4.11).
     "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
     stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
-    scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
+    // A shown SelectionBar's height is left free (`--selection-bar-h`), so the bar never covers a row.
+    scroll === "frame" && "max-h-[calc(100dvh-14rem-var(--selection-bar-h,0px))]",
     className,
   )
   const table = (
@@ -450,6 +451,31 @@ export function TableToolbar({
 }
 
 /**
+ * Room a shown SelectionBar takes at the bottom of the pane: its height
+ * plus its 8 px float and the gap to its table. Table frames shorten by it
+ * and the pane's scroll padding (shell `MainArea`) keeps it clear, so no row
+ * hides behind the bar and a focused row scrolls into view above it.
+ */
+const SELECTION_BAR_VAR = "--selection-bar-h"
+const SELECTION_BAR_CLEARANCE_PX = 16
+
+function useReservedBarHeight(bar: RefObject<HTMLElement | null>, shown: boolean) {
+  useLayoutEffect(() => {
+    const element = bar.current
+    if (!shown || !element) return
+    const root = document.documentElement
+    const apply = () => root.style.setProperty(SELECTION_BAR_VAR, `${element.offsetHeight + SELECTION_BAR_CLEARANCE_PX}px`)
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty(SELECTION_BAR_VAR)
+    }
+  }, [bar, shown])
+}
+
+/**
  * Selection summary for multi-select tables (VSEL-FR-06): how many are
  * selected, how many of those are hidden by the current filters, and the
  * bulk actions that apply, with any standing refusal of those actions
@@ -483,6 +509,8 @@ export function SelectionBar({
 }) {
   const m = useMessages()
   const clearReasonId = useId()
+  const bar = useRef<HTMLDivElement>(null)
+  useReservedBarHeight(bar, count > 0)
   const live = (
     <span className={count === 0 ? undefined : "font-medium tabular-nums"} aria-live="polite">
       {count === 0 ? null : (
@@ -496,7 +524,7 @@ export function SelectionBar({
   // Out of the layout flow, so an empty bar adds no gap between its siblings.
   if (count === 0) return <div className="sr-only">{live}</div>
   return (
-    <div role="region" aria-label={m.selection_region()} className="sticky bottom-2 z-10 rounded-lg bg-background">
+    <div ref={bar} role="region" aria-label={m.selection_region()} className="sticky bottom-2 z-10 rounded-lg bg-background">
       <div className="space-y-1.5 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {live}

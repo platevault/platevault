@@ -543,11 +543,11 @@ function routeFocusTarget(anchorId: string | null): HTMLElement | null {
   return target
 }
 
-/** The single scroll container; the skip link targets it. */
+/** The single scroll container; the skip link targets it. Its scroll padding leaves a shown SelectionBar's height free (`--selection-bar-h`). */
 function MainArea({ children }: { children: ReactNode }) {
   const announcement = useRouteFocus()
   return (
-    <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
+    <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col scroll-pb-(--selection-bar-h) overflow-y-auto outline-none">
       <p className="sr-only" aria-live="polite" data-route-announcer="">
         {announcement}
       </p>
