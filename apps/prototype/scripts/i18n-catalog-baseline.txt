@@ -15,3 +15,5 @@ dup-value	measure_frames_action,op_measure_title
 # actions_* belong to the L2 action components (actions.tsx, row-actions.tsx); the feature copies go when W3 moves those pages onto RowActions and useAction (W8: patterns own their keys).
 dup-value	actions_blocked,calibration_action_blocked
 dup-value	actions_for,run_actions_for
+# pt-BR differs by position: a sentence-initial toggle label ('Sem local de observação') vs a mid-sentence fragment ('nenhum local de observação').
+dup-value	project_no_site,simulation_no_site

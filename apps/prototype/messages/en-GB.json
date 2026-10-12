@@ -7721,5 +7721,364 @@
   "catalogue_actions_context_name": "Context menu sample",
   "catalogue_actions_rows_heading": "RowActions · RowContextMenu",
   "catalogue_actions_rows_caption": "Each row has a ⋯ in the Tab order, and the same items on right click, Shift+F10 or the Menu key, on the row or its ⋯. One runner per list, so its feedback shows under the list.",
-  "catalogue_actions_rows_none": "Row without actions: no ⋯"
+  "catalogue_actions_rows_none": "Row without actions: no ⋯",
+  "catalogue_feedback_refusal_desc": "Beside the refused control. The reason opens the blockers in a hover card (hover, focus, or press to move into it; Escape closes). Nothing is inserted, nothing moves.",
+  "catalogue_feedback_refused_blockers": "refused · blockers",
+  "catalogue_feedback_refused_blockers_actions": "refused · blockers + actions",
+  "catalogue_feedback_standing": "standing (no alert role)",
+  "catalogue_feedback_no_blockers": "no blockers (no card)",
+  "catalogue_feedback_action_error_desc": "Under the field or beside the control that failed; alert role.",
+  "catalogue_feedback_with_retry": "with retry",
+  "catalogue_feedback_message_only": "message only",
+  "catalogue_feedback_notice_slot_desc": "The template notice slot: one standing page state under the header. Tones info, offline, warning; null renders nothing.",
+  "catalogue_feedback_toast_desc": "Off-screen outcomes, bottom trailing, announced by the polite viewport region. One follow-up action at most; pauses on hover or focus.",
+  "catalogue_feedback_with_undo": "with Undo",
+  "catalogue_status_badge_desc": "Glyph plus word from the one STATUS registry. gate replaces GateLabel; profile, executable, check, write and preparation:unverified replace T4Badge.",
+  "catalogue_status_label_override": "label override",
+  "catalogue_status_pill_desc": "An inert tag (channel, band, kind): no link, no button, no hover. Tone text over its own tint.",
+  "catalogue_status_tones": "tones",
+  "catalogue_status_icon": "icon",
+  "catalogue_status_truncated": "truncated (title = full text)",
+  "catalogue_status_count_desc": "A small number, capped at 99+, with an optional screen-reader label.",
+  "catalogue_status_count_caption": "tones · cap · label",
+  "catalogue_previews_blockers_desc": "Why an action is unavailable. Wrapping a focusable-disabled control, the card restates the control's description; without a control it renders the 'reason ▸' trigger of a Refusal (press moves focus into the card).",
+  "catalogue_previews_disabled_control": "disabled control (hover, focus)",
+  "catalogue_previews_own_trigger": "own trigger + actions",
+  "catalogue_previews_empty_reason": "empty (plain reason, no card)",
+  "catalogue_previews_used_by_desc": "'Used by N ▸' is a link to the full list; hover or focus previews the users.",
+  "catalogue_previews_with_users": "with users",
+  "catalogue_previews_empty_link": "empty (link only)",
+  "catalogue_previews_preview_desc": "Preview is the L2 host the previews share; HoverCard is the L1 primitive on Base UI preview-card.",
+  "catalogue_previews_with_title": "Preview with title",
+  "catalogue_fields_text_caption": "Filled with help · empty with an error (aria-invalid, described by the message) · read-only · disabled · with an action beside the input.",
+  "catalogue_fields_choice_caption": "Number with a unit · number empty with an error · select (one option disabled) · disabled select · grouped combobox, empty · segmented with a disabled option.",
+  "catalogue_fields_switch_caption": "Switch on · switch disabled · folder, file (.fits, .xisf) and application modes: each opens the OS chooser; file mode empty with an error; disabled.",
+  "catalogue_fields_template_caption": "Valid template with the Omit option (the filter token omitted), preview with values and with them missing · unknown token and stray brace as inline errors, no Omit option · arguments valid and with an unknown token.",
+  "catalogue_fields_title": "Fields and settings rows",
+  "catalogue_fields_settings_caption": "Fields placed directly in a SettingsSection render as rows (label column, then the control); SettingsRow holds buttons, with optional help.",
+  "catalogue_shell_goal": "{target} · {channel} {hours} h",
+  "catalogue_shell_nav_desc": "One source list for the sidebar and Settings. Current row: selected fill and aria-current. Holds: a leading bar and semibold. Menu rows open a named menu beside the list. Collapsed: an icon rail with tooltips and badge dots.",
+  "catalogue_shell_checklist_desc": "Sidebar footer, above Activity and Settings. Opens a non-modal checklist to the right: the page stays usable; Escape or an outside click closes it. An unavailable step shows its reason under the label.",
+  "catalogue_shell_issue_desc": "One issue with its one action and Dismiss ×. A run's next step (blocked run, calibration to review) has no ×. Dismissed rows are muted with Restore. Focus stays in the list as a row leaves.",
+  "catalogue_shell_theme_desc": "Mode first (Light, Dark, Match system), then the themes of that mode. Applies at once to the whole app. The menu form goes in a toolbar menu's Theme submenu.",
+  "catalogue_shell_sidebar_current": "sidebar · current Sessions",
+  "catalogue_shell_sidebar_recent": "sidebar · recent Project open (Recent › Projects holds)",
+  "catalogue_shell_rail_current": "rail · current Home",
+  "catalogue_shell_content_settings": "content · Settings, current Appearance",
+  "catalogue_shell_expanded": "expanded · with Dismiss",
+  "catalogue_shell_rail": "rail",
+  "catalogue_shell_form": "form (Settings › Appearance)",
+  "catalogue_shell_menu_items": "menu items",
+  "ds_color_background": "Page canvas",
+  "ds_color_card": "Raised surface, tables",
+  "ds_color_popover": "Menus, dialogs",
+  "ds_color_muted": "Quiet fill, skeletons",
+  "ds_color_secondary": "Neutral badges, chips",
+  "ds_color_accent": "Hover and highlight surface",
+  "ds_color_primary": "The one accent: primary action, selection, focus",
+  "ds_color_success": "Usable, verified, prepared",
+  "ds_color_warning": "Needs review, offline, partial",
+  "ds_color_destructive": "Failed, refused, blocked, destructive action",
+  "ds_color_border": "Dividers and outlines",
+  "ds_type_page_title": "Page title (h1) · 18/28",
+  "ds_type_section_title": "Section title (h2) · 16/24",
+  "ds_type_sub_section": "Sub-section (h3) · 14/20",
+  "ds_type_body": "Body and controls · 14/20",
+  "ds_type_meta": "Meta, captions, table headers · 12/16",
+  "ds_type_mono": "{path} · paths, hashes",
+  "ds_type_numerals": "208 lights · 17h 20m · 300 s (tabular numerals)",
+  "ds_z_page": "Page content",
+  "ds_z_pinned_column": "Pinned table column (under the sticky header row)",
+  "ds_z_sticky_headers": "Sticky table headers",
+  "ds_z_shell": "Shell chrome (header)",
+  "ds_z_flyouts": "Non-modal flyouts anchored to the shell",
+  "ds_z_portalled": "Portalled layers: dialogs, sheets, menus, popovers, tooltips (DOM order decides)",
+  "ds_col_gain_offset": "Gain / offset",
+  "ds_filter_placeholder": "Filter by channel, OBJECT or night",
+  "ds_table_label": "Light sessions (design-system sample)",
+  "ds_row_label": "{night} {channel} session",
+  "ds_empty_title": "No sessions match these filters",
+  "ds_empty_description": "Filters change the list, not the selection. Clear them to see every session.",
+  "ds_deselect": "Deselect",
+  "ds_selection_locked": "Selection is locked while the View is being prepared.",
+  "ds_op_location": "Location to index (indexing never changes files)",
+  "ds_op_choose_location": "Choose a location",
+  "ds_op_choose_first": "Choose a location first.",
+  "ds_op_no_locations": "Register a location first; this library has none.",
+  "ds_op_none": "No operation has run yet.",
+  "ds_choose_folder_ellipsis": "Choose a folder…",
+  "ds_no_folder": "No folder chosen yet.",
+  "ds_chip_channel": "Channel: {channel}",
+  "ds_chip_quality": "Quality: {quality}",
+  "ds_description": "Tokens and shared components in their states. Foundation-owned; tracks compose these instead of styling ad hoc.",
+  "prototype_ds_eyebrow": "Foundation · prototype reference",
+  "ds_colour_title": "Colour roles",
+  "ds_colour_description": "Neutral base, one accent. Switch the theme from the header to check both.",
+  "ds_type_title": "Type, spacing, radius, density, layers",
+  "ds_spacing": "Spacing uses the Tailwind 4 px scale: control gap 2, card padding 4, page padding 6 × 5, section gap 6.",
+  "ds_row_height": "Row height token --row-h: compact 24 px, comfortable 26 px (default), spacious 32 px; row cells pad with --row-py (Settings › Appearance).",
+  "ds_z_caption": "Z-index scale",
+  "ds_buttons_title": "Buttons",
+  "ds_buttons_description": "Default, focus-visible (Tab to a button), active (press), disabled with a reason, loading, and toggles (pressed shows a fill and an accent bar).",
+  "ds_inspect_session": "Inspect session",
+  "ds_send_files_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Send {count} file to Trash",
+        "countPlural=*": "Send {count} files to Trash"
+      }
+    }
+  ],
+  "ds_reveal_location": "Reveal location",
+  "ds_prepare_view": "Prepare View",
+  "ds_prepare_disabled": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Disabled: accept or resolve {count} calibration suggestion first.",
+        "countPlural=*": "Disabled: accept or resolve {count} calibration suggestions first."
+      }
+    }
+  ],
+  "ds_loading_vs_disabled": "Loading: full opacity with a spinner and aria-busy; disabled: 50% opacity with its reason beside it.",
+  "ds_status_title": "Status vocabulary",
+  "ds_status_description": "Every domain state: icon plus label, never colour alone.",
+  "ds_feedback_title": "Feedback states",
+  "ds_targets_empty_description": "Targets appear when indexing finds pointing evidence. Index a capture location to begin.",
+  "ds_reconnect": "Reconnect",
+  "ds_offline_body": "{night} counts in captured integration with last-observed values. It is not offered as an available input.",
+  "ds_scan_incomplete_title": "Scan scope is incomplete",
+  "ds_scan_incomplete_body": "Access denied: {path}. Files there are unknown, not missing.",
+  "ds_symlinks_body": "Symlinks need Windows Developer Mode.",
+  "ds_provisional_title": "Totals are provisional",
+  "ds_provisional_body": "Indexing is still running; totals cover {volume} captures only.",
+  "ds_target_correction": "Target correction",
+  "ds_save_failed": "The catalog write failed. The edit is still on screen.",
+  "ds_save_stale": "This Project changed since you opened it (revision {from} → {to}).",
+  "ds_loading_sessions": "Loading sessions",
+  "ds_loading_session_detail": "Loading session detail",
+  "ds_data_title": "Data display",
+  "ds_pixel_scale": "Pixel scale",
+  "ds_fov_unknown": "FOV unknown",
+  "ds_equipment_not_confirmed": "Equipment not confirmed",
+  "ds_lights_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} light",
+        "countPlural=*": "{count} lights"
+      }
+    }
+  ],
+  "ds_files_stay": "Files stay on disk",
+  "ds_evidence_caption": "Target association evidence",
+  "ds_matching_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} matching session",
+        "countPlural=*": "{count} matching sessions"
+      }
+    }
+  ],
+  "ds_cleanup_steps": "Cleanup steps",
+  "ds_cleanup_choose": "Choose files",
+  "ds_cleanup_review": "Review cleanup",
+  "ds_cleanup_trash": "Send to Trash",
+  "ds_table_title": "Data table",
+  "ds_table_description": "Sort, select, ↑/↓ between rows. Selection is controlled by the caller and survives filtering. Groups are header rows in one table, so columns line up across groups.",
+  "ds_table_loading": "Loading state",
+  "ds_table_empty": "Empty state",
+  "ds_table_grouped": "Group by channel",
+  "ds_table_pinned": "Wide, pinned first column",
+  "ds_table_lock": "Lock selection",
+  "ds_confirm_title": "Confirmation",
+  "ds_confirm_description": "Destructive or scope-changing actions always confirm in an AlertDialog that names the scope.",
+  "ds_confirm_trigger": "Mark included frames usable",
+  "ds_confirm_dialog_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mark {count} included frame Usable in the library?",
+        "countPlural=*": "Mark {count} included frames Usable in the library?"
+      }
+    }
+  ],
+  "ds_confirm_dialog_description": "This is a library-scope quality decision.",
+  "ds_confirm_change_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame becomes Usable in the library",
+        "countPlural=*": "{count} frames become Usable in the library"
+      }
+    }
+  ],
+  "ds_confirm_change_integration": "{target} usable integration rises by {duration}",
+  "ds_confirm_unchanged_files": "Source files and headers",
+  "ds_confirm_unchanged_views": "Other Views and their membership",
+  "ds_confirm_unchanged_rejections": "Project rejections",
+  "ds_confirm_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mark {count} frame usable",
+        "countPlural=*": "Mark {count} frames usable"
+      }
+    }
+  ],
+  "ds_folder_picker_title": "Folder picker",
+  "simulation_ds_folder_picker_description": "Simulated OS folder chooser. Volumes and folders, including empty ones, come from the simulated disk; offline volumes and denied folders show why.",
+  "ds_operation_title": "Operation",
+  "ds_operation_description": "Running with progress, per-item outcomes and one settled status. Uses a real indexing run.",
+  "simulation_copy_nothing": "Nothing to copy: no file or folder with files at {path}.",
+  "simulation_copy_no_volume": "Cannot copy to {path}: no mounted volume holds that path.",
+  "simulation_copy_read_only": "Cannot copy to {path}: write permission is removed.",
+  "simulation_copy_collision": "Not copied: {path} already exists. Nothing was overwritten.",
+  "simulation_volumes_description": "Unmount to make a location offline. Two volumes cannot share a mount path.",
+  "simulation_volume_impostor": "{name} (different volume, same name)",
+  "simulation_no_trash": "no Trash",
+  "simulation_folder_access_title": "Folder access",
+  "simulation_folder_access_description": "Deny access to make a folder unreadable at the next scan or operation.",
+  "simulation_filter_folders": "Filter folders",
+  "simulation_filter_folders_placeholder": "e.g. {example}",
+  "simulation_not_registered": "not registered",
+  "simulation_on_denied": "On = access denied.",
+  "simulation_outside_title": "Outside PlateVault",
+  "simulation_outside_description": "Changes another application or the user makes on disk.",
+  "simulation_copy_new_captures": "Copy {night} {target} captures to {volume}",
+  "simulation_already_copied": "Already copied. Rescan to index them.",
+  "simulation_device_connected": "{name} connected",
+  "simulation_device_layout": "{label} layout",
+  "simulation_generic_device": "Generic device",
+  "simulation_tool_finished": "Tool finished stacking",
+  "simulation_path_label": "File or folder path",
+  "simulation_no_file_at": "No file at {path}. Enter the full path of an existing file.",
+  "simulation_enter_file_path": "Enter a file path first.",
+  "simulation_enter_path": "Enter a folder or file path first.",
+  "simulation_overwrote": "Overwrote {path} with new bytes. Restore original bytes puts them back.",
+  "simulation_overwrite": "Overwrite existing file",
+  "simulation_restored": "Restored the original bytes of {path}.",
+  "simulation_nothing_to_restore": "{path} has not been overwritten, so there is nothing to restore.",
+  "simulation_restore_bytes": "Restore original bytes",
+  "simulation_file_exists": "A file already exists at {path}.",
+  "simulation_created": "Created {path}.",
+  "simulation_create_no_volume": "Could not create {path}: no mounted volume holds that path.",
+  "simulation_create_file": "Create unrelated file",
+  "simulation_deleted": "Deleted {path} outside PlateVault. It is not in the OS Trash.",
+  "simulation_delete_outside": "Delete outside PlateVault",
+  "simulation_access_denied": "Access denied: {path}.",
+  "simulation_access_restored": "Access restored: {path}.",
+  "simulation_restore_read": "Restore read access",
+  "simulation_deny_read": "Deny read access",
+  "simulation_write_removed": "Write permission removed: {path}.",
+  "simulation_write_restored": "Write permission restored: {path}.",
+  "simulation_restore_write": "Restore write permission",
+  "simulation_remove_write": "Remove write permission",
+  "simulation_copy_into_label": "Copy into folder",
+  "simulation_copy_enter_source": "Enter the file or folder to copy in File or folder path.",
+  "simulation_copy_enter_destination": "Enter the folder to copy into in Copy into folder.",
+  "simulation_copied": [
+    {
+      "declarations": [
+        "input count",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Copied {count} file byte for byte to {path}.",
+        "countPlural=*": "Copied {count} files byte for byte to {path}."
+      }
+    }
+  ],
+  "simulation_copy_bytes": "Copy byte for byte",
+  "simulation_faults_title": "Faults",
+  "simulation_fail_catalog_write": "Fail the next catalog write",
+  "simulation_notification_answer": "Next notification permission answer",
+  "simulation_allow": "Allow",
+  "simulation_deny": "Deny",
+  "simulation_fail_hash": "Fail the next hash verification",
+  "simulation_fail_hash_detail": "Archive transfer or master adoption",
+  "simulation_stale_save": "Next revision-checked save is stale",
+  "simulation_stale_save_detail": "Another writer changes the record first",
+  "simulation_fail_resolver": "Fail the next Target resolver lookup",
+  "simulation_fail_resolver_detail": "As if the network were unavailable",
+  "simulation_slow_index": "Index slowly",
+  "simulation_slow_index_detail": "Reads 2 files at a time instead of 14, so partial results can be browsed while indexing runs",
+  "simulation_no_site": "No observing site",
+  "simulation_no_site_detail": "Planning sees no saved site: Home Tonight, Plan and Targets show \"Add an observing site in Settings\"",
+  "simulation_no_developer_mode": "Windows without Developer Mode",
+  "simulation_developer_mode_on": "Developer Mode turned on in Windows settings; PlateVault sees it at its next check",
+  "simulation_developer_mode_off": "Symlinks need Developer Mode: Prepare refuses Symlinks, Settings › Applications and Home show the check",
+  "simulation_clock_title": "Clock",
+  "simulation_clock_set": "PlateVault time: {time} (set by this control; kept after reload).",
+  "simulation_clock_system": "PlateVault time: {time} (system clock).",
+  "simulation_clock_label": "Set PlateVault time in {zone}",
+  "simulation_clock_enter": "Enter a date and time first.",
+  "simulation_clock_set_to": "PlateVault time set to {time}. It keeps running from there.",
+  "simulation_set_time": "Set time",
+  "simulation_clock_reset": "PlateVault uses the system clock again.",
+  "simulation_use_system_clock": "Use system clock",
+  "simulation_data_title": "Prototype data",
+  "simulation_data_demo": "Current seed: demo library. Theme and density are kept.",
+  "simulation_data_empty": "Current seed: empty library (first run). Theme and density are kept.",
+  "simulation_reset_empty": "Reset to empty library",
+  "simulation_confirm_empty_title": "Reset to an empty library?",
+  "simulation_confirm_description": "This replaces all prototype data in this browser. It cannot be undone.",
+  "simulation_confirm_demo_change": "Replace the catalog with the demo library ({projects})",
+  "simulation_confirm_empty_change": "Remove every location, session, Project and run; onboarding starts again",
+  "simulation_confirm_discard": "Discard running operations and Activity",
+  "simulation_sheet_description": "Prototype controls. They change the simulated disk outside PlateVault; PlateVault notices on its next read.",
+  "prototype_controls_title": "Prototype: {title}",
+  "prototype_controls_note": "Simulates changes outside PlateVault for review. Not part of the product.",
+  "seed_project_cygnus_notes": "Wide HOO of the North America and Pelican region; the OSC rig adds dual-band data.",
+  "seed_project_m31_notes": "Broadband first; narrowband blend later.",
+  "seed_project_heart_notes": "Ha first; OIII when the Moon allows.",
+  "seed_dark_exception_reason": "Darks stacked in PixInsight"
 }

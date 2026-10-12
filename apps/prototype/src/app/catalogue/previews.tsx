@@ -6,25 +6,21 @@
  */
 import { Archive } from "lucide-react"
 import { useMessages } from "@/app/preferences"
-import { Section } from "@/components/app/page"
 import { BlockersPreview, Preview, UsedByPreview } from "@/components/app/previews"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
-import { Specimen } from "./specimen"
+import { ComponentSection, Specimen } from "./specimen"
 
-const RUNS = [
-  { label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" } },
-  { label: "NGC 7000 · OIII · 2026-09-02", link: { to: "/projects" } },
-  { label: "IC 1396 · SII · 2026-08-28" },
-]
+// eslint-disable-next-line alm/no-user-string -- sample runs: target and filter names with a night
+const RUNS = [{ label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" } }, { label: "NGC 7000 · OIII · 2026-09-02", link: { to: "/projects" } }, { label: "IC 1396 · SII · 2026-08-28" }]
 
 export function PreviewsCatalogue() {
   const m = useMessages()
   return (
     <>
-      <Section title="BlockersPreview" description="Why an action is unavailable. Wrapping a focusable-disabled control, the card restates the control's description; without a control it renders the 'reason ▸' trigger of a Refusal (press moves focus into the card).">
+      <ComponentSection components={["BlockersPreview"]} description={m.catalogue_previews_blockers_desc()}>
         <div className="space-y-3">
-          <Specimen caption="disabled control (hover, focus)">
+          <Specimen caption={m.catalogue_previews_disabled_control()}>
             <BlockersPreview action={m.sessions_cant_archive()} reason={m.refusal_blockers({ count: 2 })} blockers={RUNS.slice(0, 2)}>
               <Button variant="outline" size="sm" disabled focusableWhenDisabled>
                 <Archive aria-hidden="true" data-icon="inline-start" />
@@ -32,7 +28,7 @@ export function PreviewsCatalogue() {
               </Button>
             </BlockersPreview>
           </Specimen>
-          <Specimen caption="own trigger + actions">
+          <Specimen caption={m.catalogue_previews_own_trigger()}>
             <BlockersPreview
               action={m.project_refusal_remove_rig()}
               reason={m.project_used_by_runs({ count: 3 })}
@@ -44,26 +40,26 @@ export function PreviewsCatalogue() {
               }
             />
           </Specimen>
-          <Specimen caption="empty (plain reason, no card)">
+          <Specimen caption={m.catalogue_previews_empty_reason()}>
             <BlockersPreview action={m.trash_cant()} reason={m.wrapup_used_by_other_reason()} blockers={[]} />
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="UsedByPreview" description="'Used by N ▸' is a link to the full list; hover or focus previews the users.">
+      <ComponentSection components={["UsedByPreview"]} description={m.catalogue_previews_used_by_desc()}>
         <div className="space-y-3">
-          <Specimen caption="with users">
+          <Specimen caption={m.catalogue_previews_with_users()}>
             <UsedByPreview label={m.calibration_used_by_runs({ count: RUNS.length })} link={{ to: "/projects" }} items={RUNS} />
           </Specimen>
-          <Specimen caption="empty (link only)">
+          <Specimen caption={m.catalogue_previews_empty_link()}>
             <UsedByPreview label={m.calibration_used_by_runs({ count: 0 })} link={{ to: "/projects" }} items={[]} />
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="Preview · HoverCard" description="Preview is the L2 host the previews share; HoverCard is the L1 primitive on Base UI preview-card.">
+      <ComponentSection components={["Preview", "HoverCard"]} description={m.catalogue_previews_preview_desc()}>
         <div className="space-y-3">
-          <Specimen caption="Preview with title">
+          <Specimen caption={m.catalogue_previews_with_title()}>
             <Preview title={m.calibration_used_by()} trigger={<Button variant="outline" size="sm">{m.calibration_used_by()}</Button>}>
               <p className="text-muted-foreground">{m.op_trash_moved()}</p>
             </Preview>
@@ -75,7 +71,7 @@ export function PreviewsCatalogue() {
             </HoverCard>
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
     </>
   )
 }

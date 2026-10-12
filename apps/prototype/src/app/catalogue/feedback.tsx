@@ -7,27 +7,22 @@
 import { Archive, Trash2 } from "lucide-react"
 import { useMessages } from "@/app/preferences"
 import { ActionError, NoticeSlot, toast } from "@/components/app/feedback"
-import { Section } from "@/components/app/page"
 import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
-import { Specimen } from "./specimen"
-
+import { ComponentSection, Specimen } from "./specimen"
 
 export function FeedbackCatalogue() {
   const m = useMessages()
-  const blockers = [
-    { label: "M 42 · Ha", link: { to: "/projects" } },
-    { label: "NGC 7000 · OIII", link: { to: "/sessions" } },
-    { label: "Cold-1" },
-  ]
+  // eslint-disable-next-line alm/no-user-string -- sample blockers: target and filter names, a volume name
+  const blockers = [{ label: "M 42 · Ha", link: { to: "/projects" } }, { label: "NGC 7000 · OIII", link: { to: "/sessions" } }, { label: "Cold-1" }]
   return (
     <>
-      <Section title="Refusal" description="Beside the refused control. The reason opens the blockers in a hover card (hover, focus, or press to move into it; Escape closes). Nothing is inserted, nothing moves.">
+      <ComponentSection components={["Refusal"]} description={m.catalogue_feedback_refusal_desc()}>
         <div className="space-y-3">
-          <Specimen caption="refused · blockers">
+          <Specimen caption={m.catalogue_feedback_refused_blockers()}>
             <Refusal action={m.sessions_cant_archive()} reason={m.refusal_blockers({ count: blockers.length })} blockers={blockers} />
           </Specimen>
-          <Specimen caption="refused · blockers + actions">
+          <Specimen caption={m.catalogue_feedback_refused_blockers_actions()}>
             <Refusal
               action={m.project_refusal_remove_rig()}
               reason={m.project_used_by_runs({ count: 2 })}
@@ -39,27 +34,27 @@ export function FeedbackCatalogue() {
               }
             />
           </Specimen>
-          <Specimen caption="standing (no alert role)">
+          <Specimen caption={m.catalogue_feedback_standing()}>
             <Refusal standing action={m.run_trash_blocked()} reason={m.refusal_blockers({ count: 1 })} blockers={blockers.slice(2)} />
           </Specimen>
-          <Specimen caption="no blockers (no card)">
+          <Specimen caption={m.catalogue_feedback_no_blockers()}>
             <Refusal action={m.trash_cant()} reason={m.wrapup_used_by_other_reason()} blockers={[]} />
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="ActionError" description="Under the field or beside the control that failed; alert role.">
+      <ComponentSection components={["ActionError"]} description={m.catalogue_feedback_action_error_desc()}>
         <div className="space-y-3">
-          <Specimen caption="with retry">
+          <Specimen caption={m.catalogue_feedback_with_retry()}>
             <ActionError message={m.op_index_offline()} onRetry={() => undefined} />
           </Specimen>
-          <Specimen caption="message only">
+          <Specimen caption={m.catalogue_feedback_message_only()}>
             <ActionError message={m.importdlg_blocked_unsupported()} />
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="NoticeSlot" description="The template notice slot: one standing page state under the header. Tones info, offline, warning; null renders nothing.">
+      <ComponentSection components={["NoticeSlot"]} description={m.catalogue_feedback_notice_slot_desc()}>
         <div className="space-y-3">
           <NoticeSlot notice={{ tone: "offline", title: m.run_entry_offline({ name: "Cold-1" }), actions: <Button size="sm" variant="outline">{m.location_rescan()}</Button> }} />
           <NoticeSlot notice={{ tone: "warning", title: m.run_read_only_because({ reason: m.status_archived() }) }} />
@@ -68,13 +63,13 @@ export function FeedbackCatalogue() {
             <NoticeSlot notice={null} />
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="toast" description="Off-screen outcomes, bottom trailing, announced by the polite viewport region. One follow-up action at most; pauses on hover or focus.">
+      <ComponentSection components={["toast"]} description={m.catalogue_feedback_toast_desc()}>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => toast({ message: m.op_trash_moved() })}>
             <Trash2 aria-hidden="true" data-icon="inline-start" />
-            message only
+            {m.catalogue_feedback_message_only()}
           </Button>
           <Button
             size="sm"
@@ -82,10 +77,10 @@ export function FeedbackCatalogue() {
             onClick={() => toast({ message: m.op_archived_to({ folder: "/Volumes/Cold-1/Archive", frames: "214" }), action: { id: "undo", label: m.wrapup_undo(), run: () => toast({ message: m.status_archived() }) } })}
           >
             <Archive aria-hidden="true" data-icon="inline-start" />
-            with Undo
+            {m.catalogue_feedback_with_undo()}
           </Button>
         </div>
-      </Section>
+      </ComponentSection>
     </>
   )
 }

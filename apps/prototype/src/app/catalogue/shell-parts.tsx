@@ -12,12 +12,12 @@ import { useMessages } from "@/app/preferences"
 import { type ChecklistSection, ChecklistRing } from "@/components/app/checklist"
 import { IssueRow } from "@/components/app/issue-row"
 import { type NavListGroup, NavList } from "@/components/app/nav-list"
-import { Section } from "@/components/app/page"
 import { ThemeMenuItems, ThemePicker } from "@/components/app/theme-picker"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Issue } from "@/domain/issues"
 import { useStore } from "@/store/core"
+import { ComponentSection } from "./specimen"
 
 function Row({ caption, children }: { caption: string; children: ReactNode }) {
   return (
@@ -120,8 +120,8 @@ function useChecklist(): ChecklistSection[] {
       id: "goals",
       title: m.home_goals(),
       items: [
-        { id: "goal-ha", label: "NGC 7000 · Ha 10 h", done: true },
-        { id: "goal-oiii", label: "NGC 7000 · OIII 10 h", done: false },
+        { id: "goal-ha", label: m.catalogue_shell_goal({ target: "NGC 7000", channel: "Ha", hours: 10 }), done: true },
+        { id: "goal-oiii", label: m.catalogue_shell_goal({ target: "NGC 7000", channel: "OIII", hours: 10 }), done: false },
       ],
     },
   ]
@@ -130,8 +130,8 @@ function useChecklist(): ChecklistSection[] {
 const SAMPLE_ISSUES: Issue[] = [
   { id: "cat:needs-target", group: "sessions", kind: "needs-target", severity: "warning", count: 2, name: null, about: null, link: { to: "/sessions" } },
   { id: "cat:location-denied", group: "storage", kind: "location-denied", severity: "danger", count: 1, name: "Captures SSD", about: "loc", link: { to: "/settings/locations" } },
-  { id: "cat:run-blocked", group: "runs", kind: "run-blocked", severity: "warning", count: 1, name: "M 42 · run 1", about: "run", link: { to: "/projects" } },
-  { id: "cat:calibration-review", group: "calibration", kind: "calibration-review", severity: "warning", count: 3, name: "M 42 · run 1", about: "run", link: { to: "/calibration" } },
+  { id: "cat:run-blocked", group: "runs", kind: "run-blocked", severity: "warning", count: 1, name: "NGC 7000 HOO RedCat", about: "run", link: { to: "/projects" } },
+  { id: "cat:calibration-review", group: "calibration", kind: "calibration-review", severity: "warning", count: 3, name: "M 31 LRGB FRA400", about: "run", link: { to: "/calibration" } },
   { id: "cat:duplicates", group: "storage", kind: "duplicates", severity: "info", count: 4, bytes: 1_200_000_000, name: null, about: null, link: { to: "/settings/locations" } },
 ]
 
@@ -170,34 +170,34 @@ export function ShellPartsCatalogue() {
   const [dismissedChecklist, setDismissedChecklist] = useState(false)
   return (
     <>
-      <Section title="NavList" description="One source list for the sidebar and Settings. Current row: selected fill and aria-current. Holds: a leading bar and semibold. Menu rows open a named menu beside the list. Collapsed: an icon rail with tooltips and badge dots.">
+      <ComponentSection components={["NavList"]} description={m.catalogue_shell_nav_desc()}>
         <div className="space-y-3">
-          <Row caption="sidebar · current Sessions">
+          <Row caption={m.catalogue_shell_sidebar_current()}>
             <Sidebar>
               <NavList label={m.shell_nav_main()} groups={navGroups} current="sessions" />
             </Sidebar>
           </Row>
-          <Row caption="sidebar · recent Project open (Recent › Projects holds)">
+          <Row caption={m.catalogue_shell_sidebar_recent()}>
             <Sidebar>
               <NavList label={m.shell_nav_main()} groups={navGroups} current={recentId} holds={["projects"]} />
             </Sidebar>
           </Row>
-          <Row caption="rail · current Home">
+          <Row caption={m.catalogue_shell_rail_current()}>
             <Sidebar collapsed>
               <NavList label={m.shell_nav_main()} groups={navGroups} current="home" collapsed />
             </Sidebar>
           </Row>
-          <Row caption="content · Settings, current Appearance">
+          <Row caption={m.catalogue_shell_content_settings()}>
             <div className="w-56 rounded-lg border border-border">
               <NavList label={m.settings_sections()} groups={settingsGroups} current="appearance" surface="content" />
             </div>
           </Row>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="ChecklistRing" description="Sidebar footer, above Activity and Settings. Opens a non-modal checklist to the right: the page stays usable; Escape or an outside click closes it. An unavailable step shows its reason under the label.">
+      <ComponentSection components={["ChecklistRing"]} description={m.catalogue_shell_checklist_desc()}>
         <div className="space-y-3">
-          <Row caption="expanded · with Dismiss">
+          <Row caption={m.catalogue_shell_expanded()}>
             <Sidebar>
               <div className="flex flex-col gap-px p-2">
                 {dismissedChecklist ? (
@@ -211,7 +211,7 @@ export function ShellPartsCatalogue() {
               <NavList label={m.shell_nav_utilities()} groups={utilityGroups} current={null} />
             </Sidebar>
           </Row>
-          <Row caption="rail">
+          <Row caption={m.catalogue_shell_rail()}>
             <Sidebar collapsed>
               <div className="flex flex-col gap-px p-2">
                 <ChecklistRing title={m.onboarding_getting_started()} sections={checklist} collapsed />
@@ -220,20 +220,20 @@ export function ShellPartsCatalogue() {
             </Sidebar>
           </Row>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="IssueRow" description="One issue with its one action and Dismiss ×. A run's next step (blocked run, calibration to review) has no ×. Dismissed rows are muted with Restore. Focus stays in the list as a row leaves.">
+      <ComponentSection components={["IssueRow"]} description={m.catalogue_shell_issue_desc()}>
         <IssueRows />
-      </Section>
+      </ComponentSection>
 
-      <Section title="ThemePicker" description="Mode first (Light, Dark, Match system), then the themes of that mode. Applies at once to the whole app. The menu form goes in a toolbar menu's Theme submenu.">
+      <ComponentSection components={["ThemePicker"]} description={m.catalogue_shell_theme_desc()}>
         <div className="space-y-3">
-          <Row caption="form (Settings › Appearance)">
+          <Row caption={m.catalogue_shell_form()}>
             <div className="w-full max-w-3xl">
               <ThemePicker />
             </div>
           </Row>
-          <Row caption="menu items">
+          <Row caption={m.catalogue_shell_menu_items()}>
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
                 <Palette aria-hidden="true" data-icon="inline-start" />
@@ -245,7 +245,7 @@ export function ShellPartsCatalogue() {
             </DropdownMenu>
           </Row>
         </div>
-      </Section>
+      </ComponentSection>
     </>
   )
 }
