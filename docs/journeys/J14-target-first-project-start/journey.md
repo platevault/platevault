@@ -104,7 +104,7 @@ filter. Done means:
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, apps/prototype/design/ on ui-harness-v5 @ b5e813a5), on top of specs 063 to 072 at d45a22ad and the workflow decisions of 2026-10-06. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, apps/prototype/design/ on ui-harness-v5 @ b5e813a5, and Round 6 (user, 2026-10-10) @ 4f470775, which the prototype does not implement yet), on top of specs 063 to 072 at d45a22ad and the workflow decisions of 2026-10-06. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: S1 assumes NGC 7000's catalogued major axis is about 2°. The bundled catalogue's size value has not been checked, so the exact coverage behind "fits" is unverified. Blocks readiness.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S2b now asserts that Start run auto-names the run `NGC 7000 RedCat` and that Rename on the run header renames it to `NGC7000-HOO-Siril` without touching a file or the selection.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S6 now asserts Edit details (name, notes) on the Project header and in the Projects row menu, and that both renames keep the Project–Target link and the run's name.

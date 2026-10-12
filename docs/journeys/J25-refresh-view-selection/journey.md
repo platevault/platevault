@@ -1,13 +1,13 @@
 ---
 id: J25
 title: Add new sessions to a prepared processing run without disturbing its prepared inputs
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [view-review, indexing, sessions, locations, results, projects, duplicates, issues, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#round-5, P-STO2, P-SB3]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#round-5, P-STO2, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes, P-PREP2]
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ warning without any file being moved.
 
 ## Preconditions
 
-- P1: J24 completed: `NGC7000-HOO-Siril` reads Prepared, not Complete, at `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` with 208 hardlink entries from saved membership revision 2 (J22). Every source is readable. A listing of its entries (path, inode, size) is recorded outside PlateVault.
+- P1: J24 completed: `NGC7000-HOO-Siril` reads Prepared, not Complete, at `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` with 208 cloned frame entries (Independent copy on `Astro-T7`, J24/S9) from saved membership revision 2 (J22). Every source is readable. A listing of its entries (path, inode, size, SHA-256) is recorded outside PlateVault.
 - P2: Two new RedCat NGC 7000 sessions with OBJECT NGC 7000, pointing and orientation evidence and RedCat equipment headers, not yet in `Astro-T7/Captures`: one Ha 300 s session and one OIII 300 s session, each of 10 frames, dated after 30 Sep.
 - P3: The J19/P5 manifest is available.
 - P4: A disposable writable volume `Spare` holding an empty `Captures/` folder.
@@ -53,16 +53,16 @@ warning without any file being moved.
 ### S2a — Re-confirm a member's Target {#S2a}
 
 - **Do:** In Sessions, choose **Confirm Target** IC 5070 for 26 Sep.
-- **Expect:** 26 Sep reads Target IC 5070 (user-confirmed) next to its original evidence, and it is no longer a candidate of subject NGC 7000. Its OBJECT still shows as a label only. The Project's in-project and captured OIII values are unchanged, because 26 Sep is still a member of `NGC7000-HOO-Siril`.
+- **Expect:** 26 Sep reads Target IC 5070 (user-confirmed) next to its original evidence, and it is no longer a candidate of subject NGC 7000. Its Target box shows a mismatch warning, because its pointing lies within NGC 7000's footprint and not IC 5070's. Its OBJECT still shows as a label only. The Project's in-project and captured OIII values are unchanged, because 26 Sep is still a member of `NGC7000-HOO-Siril`.
 - **Expect (negative):** The run's membership and prepared entries do not change. Source bytes still match P3, including the 26 Sep OBJECT keyword.
-- **Trace:** flow G · VSEL-FR-12 · VSEL-AC-24 · D-W45, D-W66
+- **Trace:** flow G · VSEL-FR-12 · VSEL-AC-24 · D-W45, D-W66 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Confirming a Target the pointing disagrees with"
 
 ### S2b — Meet a read-only Select on a Complete run {#S2b}
 
 - **Do:** In `NGC7000-HOO-Siril`, click **Complete** in the run header, read the confirmation and confirm. Open the Select step.
-- **Expect:** The confirmation reads "Nothing is removed." and names each step that stays open. Afterwards the header reads Complete and offers **Reopen** and **Clean up** in place of Complete. Select still reads "2 new candidates", but offers no **Add 2**, no **Add to run** or **Remove**, and its checkboxes cannot change; Prepare reads "Read-only · Complete · Reopen to change". The run keeps saved membership revision 2.
-- **Expect (negative):** Completing removes no file and claims no external success. No control on the Complete run opens a membership change or creates a draft. The prepared entries equal the P1 listing.
-- **Trace:** flow G, I1 · VSEL-FR-17, RES-FR-06, RES-FR-07 · VSEL-AC-20, RES-AC-08 · D-W34 · HARNESS-V5-IA.md S5 (header Complete / Reopen / Clean up) · prototype c-runs/model.ts runLock, select-step.tsx
+- **Expect:** The confirmation reads "Nothing is removed." and names each step that stays open. Afterwards the header reads Complete and offers **Reopen** and **Clean up** in place of Complete, and Clean up of the prepared copies is offered with the run's footprint, "0 B extra · cloned", saying that it frees no space. The user leaves the offer. Select still reads "2 new candidates", but offers no **Add 2**, no **Add to run** or **Remove**, and its checkboxes cannot change; Prepare reads "Read-only · Complete · Reopen to change". The run keeps saved membership revision 2.
+- **Expect (negative):** Completing removes no file and claims no external success, and leaving the Clean up offer sends nothing to the OS Trash. No control on the Complete run opens a membership change or creates a draft. The prepared entries equal the P1 listing.
+- **Trace:** flow G, I1 · VSEL-FR-17, RES-FR-06, RES-FR-07 · VSEL-AC-20, RES-AC-08 · D-W34 · HARNESS-V5-IA.md S5 (header Complete / Reopen / Clean up) · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("Prepared copies are cleaned up when a run is done") · prototype c-runs/model.ts runLock, select-step.tsx
 
 ### S3 — Reopen and compare against the saved membership {#S3}
 
@@ -116,7 +116,7 @@ warning without any file being moved.
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (`apps/prototype/design/HARNESS-V5-IA.md` S5 and S12, `HARNESS-V5-FEEDBACK-R1.md` Round 5, on `ui-harness-v5` @ b5e813a5), the specs and the defaults set in decisions D02, D08, D09, D16 and D19 and workflow decisions D-W34, D-W45 and D-W66. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (`apps/prototype/design/HARNESS-V5-IA.md` S5 and S12, `HARNESS-V5-FEEDBACK-R1.md` Round 5, on `ui-harness-v5` @ b5e813a5, and Round 6 @ 4f470775 and §Input modes P-PREP2 @ d609ff55, which the prototype does not implement yet), the specs and the defaults set in decisions D02, D08, D09, D16 and D19 and workflow decisions D-W34, D-W45 and D-W66. No implementation has been validated against them.
 - G2: Out of scope for this journey: preparing revision 3 into `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril (rev 2)/`, with both revisions sending their Results to `NGC7000-HOO-Siril Results/` (D09, PREP-FR-07, PREP-AC-21), and cleanup of the replaced entries before the run is Complete (STO-FR-10) are not exercised. Blocks readiness until covered by a step or a journey.
 - G3: Out of scope for this journey: path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 - G4: Out of scope for this journey: Refresh while the external application is running on the prepared revision (VSEL-AC-12) is not exercised, and no member is a manual inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
@@ -131,3 +131,6 @@ warning without any file being moved.
   The refresh lives in Select: "2 new candidates" with Add 2 or per-row Add to run, and "No longer matches" with Remove, in place of a separate refresh diff with accept/decline. A Complete run's Select is read-only until Reopen in the header, which returns the run to Prepare.
   Indexing a byte-identical copy raises an automatic "10 duplicate copies" warning in the status bar, and nothing is moved.
   Evidence: HARNESS-V5-IA.md §Screens S5 (header Complete / Reopen; Select "refresh flags") and S12 (Confirm rig); HARNESS-V5-FEEDBACK-R1.md §Round 5 "Duplicates are scanned automatically", "Duplicates review has clean-up", P-STO2 and P-SB3; prototype src/features/v5/c-runs/select-step.tsx, run.tsx, model.ts and messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U3Runs (intent-gated)
+- **Δ4** 2026-10-12 · S2a, S2b · behavior-change
+  P1 now reads the run as 208 cloned frame entries (Independent copy) instead of hard links. Completing the run in S2b offers Clean up of its prepared copies with the footprint "0 B extra · cloned", which frees no space, and the user leaves the offer. Confirming IC 5070 against NGC 7000 pointing in S2a shows a mismatch warning in the session's Target box.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Confirming a Target the pointing disagrees with" (@ 4f470775); §Input modes (user, 2026-10-10) P-PREP2 "Independent copy", "Footprint is real", "Prepared copies are cleaned up when a run is done" (@ d609ff55) (apps/prototype/design/ on ui-harness-v5); user answers to the PR #1788 journey questions · by: JourneysV5 (lead, intent-gated)

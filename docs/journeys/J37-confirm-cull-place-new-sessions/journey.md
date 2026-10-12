@@ -32,7 +32,7 @@ on disk changes except the one reviewed move. Done means:
 
 ## Preconditions
 
-- P1: J31 completed through S9. `Astro-T7 captures`, `Cold-1 captures` and `Astro-T7 calibration` are registered and online. Rigs `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC) exist, as J15/S3 and S3a create them (J19 G2). No Project and no processing run exist. No `NGC 7000/Ha/2026-10-04/` folder exists.
+- P1: J31 completed through S9. `Astro-T7 captures`, `Cold-1 captures` and `Astro-T7 calibration` are registered and online. Rigs `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC) exist, detected by indexing and renamed at J19/S9b. No Project and no processing run exist. No `NGC 7000/Ha/2026-10-04/` folder exists.
 - P2: The catalog holds 10 light sessions:
 
   | Session | Frames | Target | Rig | OBJECT | Pointing |
@@ -157,7 +157,7 @@ on disk changes except the one reviewed move. Done means:
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 6, `apps/prototype/` on ui-harness-v5 @ b5e813a5; the prototype at 4f470775 does not yet implement Round 6) and specs 064, 065 and 067. No implementation has been validated against it.
-- G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G2, G3 and G5; J31 G2). No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
+- G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2). No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
 - G3: Unresolved implementation qualification: P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05). The v5 design does not state the equipment-matching rule for a session whose TELESCOP and FOCALLEN match an existing rig. Blocks readiness.
 - G4: Out of scope for this journey, covered elsewhere: run-scoped frame review and **Reject for this Project** (J22), Unusable frames as purge candidates that a library clean-up and Wrap up offer to move to the OS Trash (J44, J34), the Issues hub's grouping and actions (J38), Home's Projects box and Next actions (J32), creating rigs and filter lists (J15), starting a run and adding Ready to add sessions to it (J14, J21, J25), and a failed catalog write while confirming (J19/S11).
 - G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, Create Project from a session with no Target, which opens unprefilled, and canceling the S3 move review. Blocks readiness until covered by a step or a journey.

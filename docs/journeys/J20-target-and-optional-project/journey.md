@@ -108,7 +108,7 @@ inside the Project. Done means:
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, apps/prototype/design/ on ui-harness-v5 @ b5e813a5), the specs at d45a22ad and the defaults set in decisions D07, D10, D12, D18 and the 2026-10-06 workflow decisions. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, apps/prototype/design/ on ui-harness-v5 @ b5e813a5, and Round 6 (user, 2026-10-10) @ 4f470775, which the prototype does not implement yet), the specs at d45a22ad and the defaults set in decisions D07, D10, D12, D18 and the 2026-10-06 workflow decisions. No implementation has been validated against them.
 - G2: Out of scope for this journey: mosaic subjects (the mosaic editor, run groups) are covered by J33, not here.
 - G4: Out of scope for this journey: external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised. Blocks readiness until covered by a step or a journey.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Target library facts"; S1 now asserts usable, Unreviewed and Offline integration per channel, library-wide, on the Target page, and S6 reads each candidate's capture site in the Candidates **Capture site** column.
