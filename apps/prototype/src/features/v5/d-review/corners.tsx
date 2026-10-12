@@ -88,7 +88,8 @@ export function CornerGrid({ field, stretch, overlay, label, className }: { fiel
   return (
     <div ref={ref} className={cn("relative min-h-0 min-w-0 flex-1 rounded-[3px] bg-mount shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_oklch(0_0_0/0.22)]", className)}>
       {tiles.length > 0 ? (
-        <div role="group" aria-label={m.review_corners_group({ label })} data-corners className="absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 grid-cols-3" style={{ gap: GAP }}>
+        // Centred by auto margins over the whole box: a left-50% offset would cap the grid at half the width and squeeze its columns under the tiles in Compare.
+        <div role="group" aria-label={m.review_corners_group({ label })} data-corners className="absolute inset-0 m-auto grid size-fit grid-cols-3" style={{ gap: GAP }}>
           {tiles.map((t) => (
             <CornerTile key={t.id} field={field} stretch={stretch} tile={t} size={tile} overlay={overlay} centre={t.id === "middle-centre" ? null : centre} />
           ))}
@@ -141,7 +142,8 @@ function CornerTile({ field, stretch, tile, size, overlay, centre }: { field: St
         </svg>
       ) : null}
       <figcaption className="pointer-events-none absolute inset-0.5 flex flex-col justify-between text-[0.625rem] leading-4 whitespace-nowrap tabular-nums">
-        <span className="self-start rounded-sm bg-background/80 px-1 text-foreground">{name}</span>
+        {/* Clipped by CSS only: the full name stays in the text, the tile's title and the raster's label. */}
+        <span className="max-w-full self-start truncate rounded-sm bg-background/80 px-1 text-foreground">{name}</span>
         {shown ? (
           <span className="flex flex-col items-start gap-px">
             {overlay.fwhm ? (
