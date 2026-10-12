@@ -289,5 +289,16 @@ Every decision below was made by the user while answering the v5 journeys' open 
 - **Import still copies** frames into the catalogue (unchanged).
 - **No verification of originals after a run (user).** P-PREP2's re-hash of linked originals is dropped. Since PlateVault no longer records cloned vs copied, the per-item accounting that P-PREP2's "Footprint is real" required goes too.
 - **Intermediates cleanup stays (user).** Wrap up offers it, and the run's Complete confirmation offers it next to removing the view, both through the OS Trash.
-- **Locking originals: open.** No locking until the user decides.
-- **SER inputs: open.** A symlinked SER file could be written through. The options are to copy SER files in Symlinks mode, or to refuse Symlinks for a run that holds SER files.
+- **Locking originals: skipped (user, 2026-10-12).**
+- **SER: out of scope (user, 2026-10-12).** Runs take FITS, XISF, DNG and camera RAW (CR2, CR3, NEF, ARW, …) only. SER handling is a future constraint (bead).
+
+## Round 8 (user, 2026-10-12)
+
+- **P-ISS1: issues can be dismissed (user).** Each issue in the issues hub and in the status-bar popouts has an × (Dismiss).
+  - A dismissed issue stays hidden until it changes: the same kind, the same subject, and the same count and bytes. A new failure, another duplicate or a location going offline again brings it back.
+  - The hub ends with "Dismissed (N)" and Restore. The counters and badges count only issues that are not dismissed.
+  - Dismiss hides the issue only; the state behind it is unchanged, and its page still shows it.
+  - **No × on issues that are a run's next step** (`run-blocked`, `calibration-review`): the run is waiting on the user, and the issue is how they find it.
+- **P-TRASH2: a frame linked by an unfinished run can't go to the Trash (user; resolves J34/G8, J44/G5).**
+  - Every move to the OS Trash (Wrap up rejects, the Unusable purge, duplicates clean-up) refuses a frame or master that the view of a run that is not Complete links to: "Can't trash · linked by {run} ▸", leading to that run. Refreshing the run's view drops the link (rejected frames have already left its membership), and then the frame can go.
+  - Completed runs: Complete removes the view by default. If the user kept it, the Trash review says "Also removes N links in kept run views", and the move takes those links with the frame.
