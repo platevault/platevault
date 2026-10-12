@@ -1,21 +1,22 @@
 /**
  * Slice C UI parts shared by the run and run group pages: the step bar (the
- * pane's gate bar, glyph plus word), the inline outcome of an action (a
- * refusal is the foundation's terse `Refusal` with its blockers as chips; a
- * success is one status line), radio option cards, the Prototype menu for
- * simulated-disk controls, and small read-outs. The run status is the shared
- * `StatusBadge kind="run"`.
+ * pane's gate bar, glyph plus word), the run status (`RunStatusLabel`, the one
+ * run vocabulary the Project's Runs table shows too), the inline outcome of an
+ * action (a refusal is the foundation's terse `Refusal` with its blockers as
+ * chips; a success is one status line), radio option cards, the Prototype menu
+ * for simulated-disk controls, and small read-outs.
  */
 import { CircleCheck, FlaskConical, MoreHorizontal, X } from "lucide-react"
 import { type ReactNode, useCallback, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { CurrentLink, gateWord, StepGlyph, stepName } from "@/app/run-ui"
+import { CurrentLink, GateLabel, gateWord, StepGlyph, stepName } from "@/app/run-ui"
 import { Refusal } from "@/components/app/refusal"
+import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import type { MenuEntry } from "@/components/app/row-menu"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RadioGroupItem } from "@/components/ui/radio-group"
-import type { RunStepState, StepLink } from "@/domain/derive"
+import type { GroupStatus, RunStatus, RunStepState, StepLink } from "@/domain/derive"
 import type { Catalog, RunStep } from "@/domain/types"
 import { profileOptions } from "@/features/v5/b-projects/start-run"
 import { m, say } from "@/lib/i18n"
@@ -75,6 +76,29 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
         })}
       </ol>
     </nav>
+  )
+}
+
+/**
+ * A run's status (`runStatus`): Complete, Trashed, else the gate word of the
+ * step it is at. `at` adds the step ("Blocked at Calibrate") where no step
+ * column sits beside it.
+ */
+export function RunStatusLabel({ status, at = false, className }: { status: RunStatus; at?: boolean; className?: string }) {
+  const m = useMessages()
+  if (status.state === "complete") return <StatusBadge kind="run" value="complete" label={m.run_status_complete()} className={className} />
+  if (status.state === "trashed") return <StatusBadge kind="run" value="trashed" className={className} />
+  return <GateLabel state={status.state} label={at ? m.project_held_at({ state: gateWord(m, status.state), step: stepName(m, status.step) }) : undefined} className={className} />
+}
+
+/** A group's overall status: the worst panel status, then "· 1 of 2 panels at Prepare" (left out once every panel is Complete). */
+export function GroupStatusLabel({ status, className }: { status: GroupStatus; className?: string }) {
+  const m = useMessages()
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-x-1.5", className)} data-group-status>
+      <RunStatusLabel status={status} />
+      {status.of > 0 && status.state !== "complete" ? <span className="text-xs text-muted-foreground">· {m.rungroup_panels_at({ at: status.at, count: status.of, step: stepName(m, status.step) })}</span> : null}
+    </span>
   )
 }
 

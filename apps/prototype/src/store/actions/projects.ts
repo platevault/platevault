@@ -6,7 +6,7 @@
 import { markDoneBlockers, projectGoalSet, rigName, rigRef, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
 import { WRAP_UP_NAME } from "@/domain/labels"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
-import type { Goal, GoalTemplate, GoalTemplateId, GoalTemplateValue, LocationId, OpticalTrainId, Project, ProjectId, Run, SessionId, Subject, TargetId, WrapUpStepId, WrapUpStepRecord } from "@/domain/types"
+import type { Catalog, Goal, GoalTemplate, GoalTemplateId, GoalTemplateValue, LocationId, OpticalTrainId, Project, ProjectId, Run, SessionId, Subject, TargetId, WrapUpStepId, WrapUpStepRecord } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
@@ -149,12 +149,18 @@ export function addRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevisi
   return editProject(projectId, msg("project_add_rig"), expectRevision, (p) => (p.rigIds.includes(rigId) ? p : { ...p, rigIds: [...p.rigIds, rigId] }))
 }
 
-/** Refused while any run uses the rig; the refusal names each run (D-W65, PRJ-FR-02). */
+/** Runs of the Project on the rig, the Trash included (a restored run needs its rig): while any exist the rig cannot be removed. */
+export function rigRuns(catalog: Catalog, projectId: ProjectId, rigId: OpticalTrainId): Run[] {
+  return Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.rigId === rigId)
+}
+
+/** Refused while any run uses the rig (`rigRuns`); the refusal names each run (D-W65, PRJ-FR-02). Candidates change, no file or run does. */
 export function removeRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevision: number): CommitResult {
   const { catalog } = store.getState()
-  const users = Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.rigId === rigId)
-  if (users.length > 0) return refuse(msg("store_refused", { label: msg("project_remove_named", { name: rigRef(catalog, rigId) }) }), usesIt(users), projectHref(projectId))
-  return editProject(projectId, msg("store_label_remove_rig"), expectRevision, (p) => ({ ...p, rigIds: p.rigIds.filter((id) => id !== rigId) }))
+  const label = msg("project_remove_named", { name: rigRef(catalog, rigId) })
+  const users = rigRuns(catalog, projectId, rigId)
+  if (users.length > 0) return refuse(msg("store_refused", { label }), usesIt(users), projectHref(projectId))
+  return editProject(projectId, label, expectRevision, (p) => ({ ...p, rigIds: p.rigIds.filter((id) => id !== rigId) }))
 }
 
 /** Replace the goal rows; goals never block a run and never mark the Project Done (PRJ-FR-04). */

@@ -3581,7 +3581,6 @@
       }
     }
   ],
-  "rungroup_status": "Group {status}",
   "rungroup_mosaic_fixed": "Mosaic (fixed)",
   "rungroup_panels_count": [
     {
@@ -7277,5 +7276,26 @@
       }
     }
   ],
-  "session_header_label": "Label"
+  "session_header_label": "Label",
+  "run_status_complete": "Complete",
+  "rungroup_panels_at": [
+    {
+      "declarations": [
+        "input count",
+        "input at",
+        "input step",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{at} of {count} panel at {step}",
+        "countPlural=*": "{at} of {count} panels at {step}"
+      }
+    }
+  ],
+  "project_col_step": "Step",
+  "project_col_updated": "Updated",
+  "project_runs_of": "Runs of {name}"
 }
