@@ -371,8 +371,10 @@ No letter-spacing changes. Headings `text-balance`, paragraphs `text-pretty`.
   padding `px-6 py-5`, section gap `space-y-6`, page header `py-4`.
 - Radius: `--radius: 0.375rem` (instrument-grade, tighter than shadcn): `rounded-sm`
   3.6 px, `rounded-md` 4.8 px, `rounded-lg` 6 px, `rounded-xl` 8.4 px.
-- Density (dial 7): `--row-h` 28 / **32** / 40 px for compact / comfortable /
-  spacious, set by `html[data-density]` (Settings › Appearance). Controls are
+- Density (dial 7; harness v4 values): `--row-h` 24 / **26** / 32 px for compact /
+  comfortable / spacious, set by `[data-density]` (Settings › Appearance). Row
+  cells pad with `--row-py`, the room `--row-h` leaves around a 24 px in-row
+  control, so every table and list follows the choice. Controls are
   32 px (`h-8`, base-nova), small controls 28 px, icon-xs 24 px minimum.
 - Z-index (fixed scale, no arbitrary values): `z-1` pinned table cells (under
   the header row), `z-10` sticky table headers,

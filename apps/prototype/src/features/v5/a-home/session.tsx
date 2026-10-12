@@ -242,7 +242,7 @@ function DetailBody({
           {row && row.candidateOf.length > 0 ? (
             <ul className="divide-y divide-border/60 text-sm">
               {row.candidateOf.map(({ project, candidate }) => (
-                <li key={project.id} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-2 px-3 py-1">
+                <li key={project.id} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-2 px-3 py-(--row-py)">
                   <Link to="/projects/$projectId" params={{ projectId: project.id }} className="font-medium underline-offset-2 hover:underline">
                     {project.name}
                   </Link>
@@ -310,7 +310,7 @@ function RunsList({ state, runs }: { state: PrototypeState; runs: ReturnType<typ
         const link = runStepLink(run, pipeline.current.id)
         const project = state.catalog.projects[run.projectId]
         return (
-          <li key={run.id} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-2 px-3 py-1">
+          <li key={run.id} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-2 px-3 py-(--row-py)">
             <span className="flex min-w-0 items-center gap-2">
               <Link to={link.to as never} params={link.params as never} className="font-medium underline-offset-2 hover:underline">
                 {run.name}

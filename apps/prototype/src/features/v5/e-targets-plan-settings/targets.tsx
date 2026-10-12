@@ -972,7 +972,7 @@ export function TargetsPage() {
                       {columns.map((c) => {
                         const Cell = c.id === "designation" ? "th" : "td"
                         return (
-                          <Cell key={c.id} scope={c.id === "designation" ? "row" : undefined} className={cn("px-2 py-0.5 font-normal whitespace-nowrap tabular-nums", c.align === "right" ? "text-right" : "text-left", c.className)}>
+                          <Cell key={c.id} scope={c.id === "designation" ? "row" : undefined} className={cn("px-2 py-(--row-py) font-normal whitespace-nowrap tabular-nums", c.align === "right" ? "text-right" : "text-left", c.className)}>
                             {v.row.panelOf && !c.panel ? null : c.cell(v)}
                           </Cell>
                         )

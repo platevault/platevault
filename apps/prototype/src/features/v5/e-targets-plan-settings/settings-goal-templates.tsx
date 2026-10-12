@@ -158,13 +158,13 @@ function TemplateBox({ id, title, templates, actions }: { id: string; title: str
             <tbody>
               {templates.map((t) => (
                 <tr key={t.id} {...menuKey(t.id)} data-template={t.id} className="h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
-                  <th scope="row" className="px-3 py-1 text-left font-medium whitespace-nowrap">
+                  <th scope="row" className="px-3 py-(--row-py) text-left font-medium whitespace-nowrap">
                     {t.name}
                   </th>
-                  <td className="px-3 py-1">
+                  <td className="px-3 py-(--row-py)">
                     <GoalsCell values={t.values} />
                   </td>
-                  <td className="px-3 py-0.5 text-right whitespace-nowrap">
+                  <td className="px-3 py-(--row-py) text-right whitespace-nowrap">
                     {actions(t).map((a) => (
                       <Button key={a.label} size="xs" variant="ghost" onClick={a.run}>
                         <a.icon aria-hidden="true" data-icon="inline-start" />

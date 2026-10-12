@@ -256,7 +256,7 @@ export function DesignSystemPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-muted-foreground">Row height token --row-h: compact 28 px, comfortable 32 px (default), spacious 40 px (Settings › Appearance).</p>
+              <p className="text-muted-foreground">Row height token --row-h: compact 24 px, comfortable 26 px (default), spacious 32 px; row cells pad with --row-py (Settings › Appearance).</p>
               <table className="w-full text-xs">
                 <caption className="sr-only">Z-index scale</caption>
                 <tbody>

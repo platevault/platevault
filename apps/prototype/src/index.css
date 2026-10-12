@@ -89,18 +89,36 @@
 :root {
   /* Controls 5 px, popovers 8 px; panes and lists are square. */
   --radius: 0.3125rem;
-  /* Density: table and list row height. Set by html[data-density]. */
+}
+
+/*
+ * Density: table and list row height. html carries the saved choice; a
+ * nested [data-density] (the Appearance preview) shows another. Rows never
+ * drop below the 24 px target minimum (WCAG 2.5.8).
+ */
+:root,
+[data-density="comfortable"] {
   --row-h: 1.625rem;
 }
 
-/* Rows never drop below the 24 px target minimum (WCAG 2.5.8). */
-html[data-density="compact"] {
+[data-density="compact"] {
   --row-h: 1.5rem;
 }
 
-html[data-density="spacious"] {
+[data-density="spacious"] {
   --row-h: 2rem;
 }
+
+/*
+ * Row cell padding: whatever --row-h leaves around a 24 px in-row control, so
+ * single-line rows are exactly --row-h tall and taller rows still follow the
+ * density. Declared per scope so the calc reads that scope's --row-h.
+ */
+:root,
+[data-density] {
+  --row-py: calc((var(--row-h) - 1.5rem) / 2);
+}
+
 @layer base {
   * {
     /* Full-strength ring as the resting outline colour, so `transition-all` never animates the focus indicator through a low-contrast colour. */

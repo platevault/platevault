@@ -99,7 +99,7 @@ export function IssueRow({ issue, onNavigate, refocus }: { issue: Issue; onNavig
     target?.focus()
   }
   return (
-    <li ref={row} className="flex min-h-(--row-h) items-center gap-2 py-0.5 pr-1.5 pl-3 text-sm" data-issue={issue.id}>
+    <li ref={row} className="flex min-h-(--row-h) items-center gap-2 py-(--row-py) pr-1.5 pl-3 text-sm" data-issue={issue.id}>
       <Glyph aria-hidden="true" className={cn("size-3.5 shrink-0", SEVERITY_TEXT[issue.severity])} />
       <span className="min-w-0 flex-1 truncate" title={copy.text}>
         {copy.text}
@@ -162,7 +162,7 @@ function DismissedIssues({ issues }: { issues: Issue[] }) {
             const copy = issueCopy(m, issue)
             const Glyph = SEVERITY_ICON[issue.severity]
             return (
-              <li key={issue.id} className="flex min-h-(--row-h) items-center gap-2 py-0.5 pr-1.5 pl-3 text-sm text-muted-foreground" data-issue-dismissed={issue.id}>
+              <li key={issue.id} className="flex min-h-(--row-h) items-center gap-2 py-(--row-py) pr-1.5 pl-3 text-sm text-muted-foreground" data-issue-dismissed={issue.id}>
                 <Glyph aria-hidden="true" className={cn("size-3.5 shrink-0", SEVERITY_TEXT[issue.severity])} />
                 <span className="min-w-0 flex-1 truncate" title={copy.text}>
                   {copy.text}

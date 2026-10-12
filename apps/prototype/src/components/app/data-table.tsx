@@ -7,7 +7,7 @@
  *   here, so callers can report "Selected outside current filters: N". The
  *   count also shows in the status bar's context slot (`useStatusSelection`).
  * - Keyboard: ↑/↓ move focus to the same column in the adjacent row, across
- *   groups; Tab order stays natural. Row height follows the density token `--row-h`.
+ *   groups; Tab order stays natural. Row height and cell padding follow the density tokens `--row-h` and `--row-py`.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
@@ -387,7 +387,7 @@ export function DataTable<T>({
                           key={column.id}
                           scope={column.rowHeader ? "row" : undefined}
                           className={cn(
-                            "px-3 py-1 font-normal tabular-nums",
+                            "px-3 py-(--row-py) font-normal tabular-nums",
                             column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
                             column.align === "right" ? "text-right" : "text-left",
                             column.className,

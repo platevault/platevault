@@ -4165,7 +4165,6 @@
     }
   ],
   "settings_remove": "Remover",
-  "location_last_indexing": "Última indexação",
   "settings_default": "Padrão",
   "settings_remove_title": "Remover {name}?",
   "location_remove_change": "Cancelar o registro de {path}",
@@ -4509,9 +4508,6 @@
   "equipment_error_whole_pixels": "Pixels inteiros > 0",
   "equipment_error_microns": "µm > 0",
   "equipment_error_mm": "mm > 0",
-  "equipment_optics_title": "Óptica de {name}",
-  "equipment_shared_camera": "Câmera compartilhada",
-  "equipment_shared_camera_help": "Os valores da câmera mudam para {rigs}.",
   "equipment_camera_kind": "Tipo de câmera",
   "equipment_mono": "Mono",
   "equipment_osc": "OSC",
@@ -4522,7 +4518,6 @@
   "equipment_focal_length": "Distância focal efetiva (mm)",
   "equipment_field_of_view": "Campo de visão",
   "equipment_rename": "Renomear",
-  "equipment_edit_optics": "Editar óptica",
   "equipment_unknown_filter": [
     {
       "declarations": [
@@ -6858,8 +6853,6 @@
   ],
   "op_measure_not_measured": "{count} não medidos: nenhuma cópia legível",
   "op_measure_summary": "{parts}.",
-  "store_optics_camera": "{kind}, {width} × {height} px, {pixel} µm",
-  "store_saved_optics": "Óptica salva: {name}",
   "store_saved_preset": "Predefinição de Alvos salva: {name}",
   "store_saved_preset_renamed": "Predefinição de Alvos renomeada: {name}",
   "store_preset_was": "Era “{name}”.",

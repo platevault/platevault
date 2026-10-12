@@ -1,12 +1,12 @@
 /**
  * Slice-local Settings writes that the foundation's `store/actions/settings.ts`
- * does not provide (foundation candidates): a rig's optics, and cameras,
- * telescopes and rigs added by hand (Round 6: gear not yet imaged with is
- * "manual") or edited. Each goes through `commit()`, so a failed write stays
- * unsaved with Retry and the saved value stays in effect.
+ * does not provide (foundation candidates): cameras, telescopes and rigs added
+ * by hand (Round 6: gear not yet imaged with is "manual") or edited. Each goes
+ * through `commit()`, so a failed write stays unsaved with Retry and the saved
+ * value stays in effect.
  */
-import type { Camera, CameraId, CameraKind, OpticalTrainId, Telescope, TelescopeId } from "@/domain/types"
-import { joinRefs, msg, verbatim } from "@/lib/i18n"
+import type { Camera, CameraId, OpticalTrain, OpticalTrainId, Telescope, TelescopeId } from "@/domain/types"
+import { msg, verbatim } from "@/lib/i18n"
 import { freshId, MISSING, recordSaved } from "@/store/actions/shared"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 
@@ -56,48 +56,20 @@ export interface RigInput {
   reducer: number
 }
 
-/** Add a rig by hand: a camera on a telescope, with a focal length and reducer. It is Manual and has no filters yet. */
-export function addRig(input: RigInput): { result: CommitResult; id: OpticalTrainId } {
-  const id = freshId("rig", input.name)
+/**
+ * Add a rig by hand (`id` null; it is Manual, with no filters yet) or change
+ * what an existing rig is made of: its camera, telescope, focal length and
+ * reducer. The camera and telescope records themselves never change here.
+ */
+export function saveRig(id: OpticalTrainId | null, input: RigInput): { result: CommitResult; id: OpticalTrainId } {
+  const previous = id ? store.getState().catalog.opticalTrains[id] : undefined
+  const rigId = id ?? freshId("rig", input.name)
+  if (id && !previous) return { result: MISSING, id: rigId }
   const effectiveFocalLengthMm = Math.round(input.focalLengthMm * input.reducer * 10) / 10
-  const result = commit(
-    msg("project_add_rig"),
-    (s) =>
-      withCatalog(s, (c) => ({
-        ...c,
-        opticalTrains: { ...c.opticalTrains, [id]: { id, name: input.name, source: "manual", cameraId: input.cameraId, telescopeId: input.telescopeId, effectiveFocalLengthMm, reducer: input.reducer, notes: "", filters: [] } },
-      })),
-    { href: `${HREF}?rig=${id}` },
-  )
-  if (result.ok) recordSaved(msg("equipment_saved_named", { name: input.name }), verbatim(`${effectiveFocalLengthMm} mm`), `${HREF}?rig=${id}`)
-  return { result, id }
-}
-
-export interface OpticsInput {
-  focalLengthMm: number
-  /** Camera values; they apply to every rig that uses the camera. Null when the rig has no camera. */
-  camera: { kind: CameraKind; widthPx: number; heightPx: number; pixelSizeUm: number } | null
-}
-
-/** Edit a rig's optics (PLAN-EQ-FR-05): its effective focal length and its camera's kind, sensor and pixel size. */
-export function updateRigOptics(rigId: OpticalTrainId, input: OpticsInput): CommitResult {
-  const { catalog } = store.getState()
-  const rig = catalog.opticalTrains[rigId]
-  if (!rig) return MISSING
-  const cameraId = rig.cameraId
-  const href = HREF
-  const result = commit(
-    msg("equipment_optics_title", { name: rig.name }),
-    (s) =>
-      withCatalog(s, (c) => {
-        const cameras = cameraId && input.camera && c.cameras[cameraId] ? { ...c.cameras, [cameraId]: { ...c.cameras[cameraId]!, ...input.camera } } : c.cameras
-        return { ...c, cameras, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, effectiveFocalLengthMm: input.focalLengthMm } } }
-      }),
-    { href },
-  )
-  if (result.ok) {
-    const camera = input.camera ? msg("store_optics_camera", { kind: input.camera.kind === "osc" ? msg("equipment_osc") : msg("equipment_mono"), width: input.camera.widthPx, height: input.camera.heightPx, pixel: input.camera.pixelSizeUm }) : null
-    recordSaved(msg("store_saved_optics", { name: rig.name }), joinRefs([verbatim(`${input.focalLengthMm} mm`), ...(camera ? [camera] : [])], " · "), href)
-  }
-  return result
+  const composition = { name: input.name, cameraId: input.cameraId, telescopeId: input.telescopeId, effectiveFocalLengthMm, reducer: input.reducer }
+  const rig: OpticalTrain = previous ? { ...previous, ...composition } : { id: rigId, source: "manual", notes: "", filters: [], ...composition }
+  const href = `${HREF}?rig=${rigId}`
+  const result = commit(previous ? msg("settings_edit_title", { name: previous.name }) : msg("project_add_rig"), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: rig } })), { href })
+  if (result.ok) recordSaved(msg("equipment_saved_named", { name: rig.name }), verbatim(`${effectiveFocalLengthMm} mm`), href)
+  return { result, id: rigId }
 }

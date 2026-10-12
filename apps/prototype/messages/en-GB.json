@@ -4109,7 +4109,6 @@
     }
   ],
   "settings_remove": "Remove",
-  "location_last_indexing": "Last indexing",
   "settings_default": "Default",
   "settings_remove_title": "Remove {name}?",
   "location_remove_change": "Unregister {path}",
@@ -4453,9 +4452,6 @@
   "equipment_error_whole_pixels": "Whole pixels > 0",
   "equipment_error_microns": "µm > 0",
   "equipment_error_mm": "mm > 0",
-  "equipment_optics_title": "Optics of {name}",
-  "equipment_shared_camera": "Shared camera",
-  "equipment_shared_camera_help": "Camera values change for {rigs}.",
   "equipment_camera_kind": "Camera kind",
   "equipment_mono": "Mono",
   "equipment_osc": "OSC",
@@ -4466,7 +4462,6 @@
   "equipment_focal_length": "Effective focal length (mm)",
   "equipment_field_of_view": "Field of view",
   "equipment_rename": "Rename",
-  "equipment_edit_optics": "Edit optics",
   "equipment_unknown_filter": [
     {
       "declarations": [
@@ -6802,8 +6797,6 @@
   ],
   "op_measure_not_measured": "{count} not measured: no readable copy",
   "op_measure_summary": "{parts}.",
-  "store_optics_camera": "{kind}, {width} × {height} px, {pixel} µm",
-  "store_saved_optics": "Optics saved: {name}",
   "store_saved_preset": "Targets preset saved: {name}",
   "store_saved_preset_renamed": "Targets preset renamed: {name}",
   "store_preset_was": "Was “{name}”.",

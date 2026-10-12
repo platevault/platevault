@@ -11,14 +11,14 @@
  * location, `?add=<role>` starts adding one, `?duplicates=review` opens the
  * Duplicates review, `?return=` links back.
  */
-import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import { useNavigate, useSearch } from "@tanstack/react-router"
 import { MoreHorizontal, Play, Plus, RotateCw } from "lucide-react"
 import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { ActionError, Notice } from "@/components/app/feedback"
-import { OperationPanel } from "@/components/app/operation-panel"
+import { OperationLine } from "@/components/app/operation-panel"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
 import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
@@ -35,7 +35,6 @@ import { locationAvailability } from "@/domain/library"
 import { duplicateFindings } from "@/domain/storage"
 import type { Location, LocationRole } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
-import { say } from "@/lib/i18n"
 import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
@@ -403,7 +402,6 @@ export function LocationsPage() {
     )
   }
 
-  const busyIndex = latestIndex && !isSettled(latestIndex.status)
   const detailActions = detail ? rowActions(detail) : null
   const menu = (id: string) => {
     const location = catalog.locations[id]
@@ -412,24 +410,14 @@ export function LocationsPage() {
 
   return (
     <div>
-      <PageHeader level={2} title={m.common_locations()} />
+      <PageHeader
+        level={2}
+        title={m.common_locations()}
+        // The latest index sits in the header's free space at one fixed height and a width that never wraps the header, so starting or finishing a Rescan never moves the page.
+        actions={<div className="flex h-6 w-64 max-w-full justify-end xl:w-md">{latestIndex ? <OperationLine operationId={latestIndex.id} /> : null}</div>}
+      />
       <PageBody>
         <ReturnNotice />
-        {latestIndex ? (
-          busyIndex ? (
-            <OperationPanel operationId={latestIndex.id} />
-          ) : (
-            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground tabular-nums">
-              <span>{m.location_last_indexing()}</span>
-              <StatusBadge kind="operation" value={latestIndex.status} />
-              {/* One unit, so a wrap never leaves a separator at a line end. */}
-              <span className="whitespace-nowrap">{[latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : "", latestIndex.summary ? say(m, latestIndex.summary) : ""].filter(Boolean).join(" · ")}</span>
-              <Link to="/activity" className="ml-auto text-link underline-offset-4 hover:underline">
-                {m.nav_activity()}
-              </Link>
-            </p>
-          )
-        ) : null}
         {defaultRefusal ? <Refusal {...defaultRefusal} /> : null}
         {duplicates && duplicates.copies > 0 ? (
           <p className="flex flex-wrap items-center gap-2 text-sm" data-duplicates-line>

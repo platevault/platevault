@@ -400,7 +400,7 @@ function WorkGroup({ title, count, filter, children }: { title: string; count: n
 function WorkRow({ session, detail, action }: { session: Session; detail: ReactNode; action: ReactNode }) {
   const m = useMessages()
   return (
-    <li {...menuKey(session.id)} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1 text-sm">
+    <li {...menuKey(session.id)} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-x-3 gap-y-1 py-(--row-py) text-sm">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="truncate font-medium underline-offset-2 hover:underline">
           {sessionLongLabel(m, session)}
@@ -661,7 +661,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
         ) : (
           <ul className="divide-y divide-border/60 text-sm" data-tonight-windows>
             {withWindow.map((r) => (
-              <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1">
+              <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-(--row-py)">
                 <span className="min-w-0 truncate" title={r.projects.join(", ") || m.project_search_favourite()}>
                   {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
                   {r.name}
@@ -673,7 +673,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
               </li>
             ))}
             {without.map((r) => (
-              <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1 text-muted-foreground">
+              <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-(--row-py) text-muted-foreground">
                 <span className="min-w-0 truncate">
                   {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
                   {r.name}
