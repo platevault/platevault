@@ -170,10 +170,10 @@ Planning changes no library, Project or session data and starts no indexing.
 
 ## Delta log
 
-- **Δ3** 2026-10-10 · S1, S2, S3, +S3a, S4, S5, S8, S10, S11, S12, S13, +S14 · behavior-change
+- **Δ3** 2026-10-12 · S1, S2, S3, +S3a, S4, S5, S8, S10, S11, S12, S13, +S14 · behavior-change
   The Plan area and Plan page are gone: Targets are added to the plan from their row and read on the Targets page's Planned view, for the night a header date picker sets (default tonight), with a site picker, sparklines and Per filter grades under editable Moon limits. Altitude and darkness come from the site.
   Home's Tonight follows the picked planning site, and making a site default while reminders are on asks first.
-  Evidence: HARNESS-V5-IA.md §Screens S1, S3, S10, S11, S16; HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Sites, Planning), §Round 5 P-PLAN2, "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype home.tsx TonightBox, sites-page.tsx, planning.ts defaultCriteria @ b5e813a5; user instruction 2026-10-10 · by: JourneysV5.U6Targets (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S1, S3, S10, S11, S16; HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Sites, Planning), §Round 5 P-PLAN2, "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype home.tsx TonightBox, sites-page.tsx, planning.ts defaultCriteria @ b5e813a5; user instruction 2026-10-12 · by: JourneysV5.U6Targets (intent-gated)
 - **Δ2** 2026-10-06 · S1, S3, S5, S6, +S11, +S12, +S13 · behavior-change
   The Plan area opens from a Targets row and shows the Project goal gap as "in project" and "captured". A Target outside any Project is planned without a Project. The Project page plans its own subjects and opens the Planner in its context. Home's Tonight lists the best windows at the default site.
   Evidence: D-W16, D-W36, D-W37, D-W39, D-W60 (workflow decisions, settled 2026-10-06); 072 PLAN-FR-02, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-AC-09, PLAN-AC-10, PLAN-AC-11 at e4476231; D-W66, 065 PRJ-FR-04, PRJ-FR-21 at d45a22ad · by: agent (intent-gated, user instruction)

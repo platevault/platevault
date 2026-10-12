@@ -3,7 +3,7 @@ id: J42
 title: Work from launch to a culled, saved run with the keyboard only
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [keyboard, shell, status-bar, home, projects, sessions, import, locations, settings, appearance, view-review, frame-review, activity]
 interfaces: [desktop-ui, desktop-ui-macos]

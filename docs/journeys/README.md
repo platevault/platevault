@@ -32,11 +32,13 @@ instead of being repeated per journey:
 
 ## Clean rebuild validation
 
-J14, J15, J18 to J29 and J31 to J35 describe the rebuild contract in specs 063 through 072, as amended by the workflow decisions D-W1 to D-W74. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired with status deprecated, because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no rebuild execution evidence. J01 to J13, J16 and J17 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to formal journey steps and owning requirements: the 44 product-flow steps, the redesign surfaces and the cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the rebuild successor of each legacy journey and the readiness blockers of each rebuild journey.
+J14, J15, J18 to J29 and J31 to J43 describe the rebuild contract in specs 063 through 072, as amended by the workflow decisions D-W1 to D-W75. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired with status deprecated, because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no rebuild execution evidence. J01 to J13, J16 and J17 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to formal journey steps and owning requirements: the 44 product-flow steps, the redesign surfaces and the cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the rebuild successor of each legacy journey and the readiness blockers of each rebuild journey.
+
+The rebuild journeys follow the **harness v5** design, the clickable prototype the production frontend is built to: `apps/prototype/design/HARNESS-V5-IA.md`, `HARNESS-V5-FEEDBACK-R1.md` (every round through Round 5, 2026-10-10), `HIGH-LEVEL-DESIGN.md` and `I18N.md` on the `ui-harness-v5` branch (user instruction, 2026-10-12). Where a user-decided v5 item (Round 1b, 2c and 5, and the accepted P- items) changes a contract interaction, the journey states the v5 behavior and its Δ entry cites the v5 section; the spec text, and the interaction map's paraphrase of it, waits for the contract amendment (D-W28 order). J36 to J43 were authored from the v5 design. J18's orientation walk and Getting-started checklist do not appear in v5; J18 stays unchanged until the user decides its future.
 
 Both desktop MCP profiles apply to development rebuild validation. A functional Tauri MCP bridge is mandatory, binds only to loopback, and drives the actual Tauri backend and webview. Mock IPC is never validation evidence. Production MCP shipping is optional future work.
 
-New rebuild surfaces are `locations`, `indexing`, `home`, `import`, `view-review`, `frame-review`, `preparation`, `results`, `storage`, `done-archive-sheet` and `planning`. `view-review` is the processing-run workspace that hosts the Select, Review, Calibrate and Prepare steps. `filing` belongs only to the retired J30. Their implementation paths are assigned by each active feature plan before changed-path validation. Existing surface keys retain their legacy mappings until a new path is implemented; validators explicitly choose rebuild journey IDs rather than treating old runs as current proof.
+New rebuild surfaces are `locations`, `indexing`, `home`, `import`, `view-review`, `frame-review`, `preparation`, `results` and `planning`. `view-review` is the processing-run workspace that hosts the Select, Review, Calibrate, Prepare, Results and Done steps. Harness v5 adds `issues` (Issues hub, severity counters and their popouts), `status-bar` (locations online, selection count, running work, notification history), `wrap-up` (the Project's Wrap up stage), `project-trash`, `mosaic-editor`, `calibration-process` (stacking raw calibration frames into masters), `duplicates` (automatic duplicate scan and the Duplicates review), `appearance`, `i18n`, `naming`, `goal-templates`, `applications` and `keyboard`. `wrap-up` replaces `done-archive-sheet`, and the Storage page is gone in v5 (P-STO2), so `storage` and `filing` belong only to the retired J30. Their implementation paths are assigned by each active feature plan before changed-path validation; until then the "Harness v5 design map" below routes prototype changes. Existing surface keys retain their legacy mappings until a new path is implemented; validators explicitly choose rebuild journey IDs rather than treating old runs as current proof.
 
 Fixture permissions, disconnects, Trash, archive and header-patch checks operate only on generated or public sample files. The user authorized resetting existing application databases for this run; originals, credentials and unrelated work remain protected. Each authored journey's unqualified fixture or capability prerequisite remains an implementation acceptance obligation, not a waived verification gap.
 
@@ -246,6 +248,60 @@ file-prefix globs that refine the broader `settings` row. The library rows
 follow `specs/064-library-inventory/plan.md` and the paths on the
 `064-library-backend` branch at 0462f5b0. Validators should
 still trust the repo over this table and propose corrections.)
+
+### Harness v5 design map
+
+The rebuild journeys follow the harness v5 design (see "Clean rebuild
+validation"). Until the production frontend exists, a change to the v5
+prototype or its design docs is the signal that a journey may need a behavior
+delta. These globs live on the `ui-harness-v5` branch, under
+`apps/prototype/`; prefix each with that directory. A change to
+`design/HARNESS-V5-IA.md` or `design/HARNESS-V5-FEEDBACK-R1.md` touches every
+journey whose surfaces its changed section names.
+
+| path glob (under `apps/prototype/`) | surfaces |
+|---|---|
+| `src/features/t1/setup/**` | onboarding, locations, indexing |
+| `src/features/t1/settings/locations-page.tsx` | locations, settings |
+| `src/features/t1/settings/sites-page.tsx`, `src/domain/sites.ts` | observing-sites, planning, settings |
+| `src/features/t1/settings/appearance-page.tsx`, `src/app/appearance.tsx`, `src/app/themes.ts`, `src/themes.css` | appearance, settings |
+| `src/features/t1/settings/target-lookup-page.tsx` | targets, settings |
+| `src/features/t4/applications.tsx`, `src/features/t4/profile-parts.tsx` | applications, preparation, settings |
+| `src/lib/i18n.ts`, `messages/**` | i18n, appearance |
+| `src/app/shell.tsx`, `src/app/navigation.ts`, `src/app/history.tsx` | shell, keyboard |
+| `src/app/command-palette.tsx`, `src/app/shortcuts.tsx`, `src/components/app/row-menu.tsx`, `src/components/app/data-table.tsx` | keyboard, shell |
+| `src/app/issues-hub.tsx`, `src/store/issues.ts`, `src/domain/issues.ts` | issues, status-bar |
+| `src/app/status-bar.tsx`, `src/app/status-selection.ts`, `src/store/notifications.ts`, `src/store/operations.ts` | status-bar, activity |
+| `src/components/app/refusal.tsx` | shell, issues |
+| `src/features/v5/a-home/home.tsx` | home |
+| `src/features/v5/a-home/import*`, `src/domain/devices.ts` | import, locations |
+| `src/features/v5/a-home/session*`, `src/features/v5/a-home/sessions.tsx`, `src/domain/corrections.ts` | sessions |
+| `src/domain/indexing.ts` | indexing, sessions, locations |
+| `src/features/v5/b-projects/**` | projects |
+| `src/features/v5/b-projects/goals.tsx`, `src/features/v5/b-projects/new-project.tsx` | projects, goal-templates |
+| `src/features/v5/b-projects/mosaic-editor.tsx` | mosaic-editor, projects |
+| `src/features/v5/b-projects/wrap-up.tsx` | wrap-up, projects |
+| `src/features/v5/b-projects/trash.tsx` | project-trash, projects |
+| `src/features/v5/c-runs/**`, `src/domain/membership.ts` | view-review |
+| `src/features/v5/c-runs/calibrate-step.tsx`, `src/domain/calibration.ts` | calibration, view-review |
+| `src/features/v5/c-runs/prepare-step.tsx`, `src/domain/verification.ts` | preparation, view-review |
+| `src/features/v5/c-runs/results-step.tsx` | results, view-review |
+| `src/features/v5/c-runs/done-step.tsx` | cleanup, view-review |
+| `src/features/v5/d-review/**`, `src/domain/measurement.ts` | frame-review |
+| `src/features/v5/e-targets-plan-settings/target*`, `src/domain/sky.ts` | targets |
+| `src/features/v5/e-targets-plan-settings/plan*`, `src/features/v5/e-targets-plan-settings/good-tonight.ts`, `src/features/v5/e-targets-plan-settings/moon-limits.tsx`, `src/features/v5/e-targets-plan-settings/sky-tonight.ts`, `src/features/v5/e-targets-plan-settings/night-timeline.tsx`, `src/domain/planning.ts`, `src/store/actions/planning.ts` | planning, targets |
+| `src/features/v5/e-targets-plan-settings/calibration*`, `src/domain/calibration-library.ts`, `src/domain/calibration-process.ts`, `src/store/actions/calibration.ts` | calibration, calibration-process |
+| `src/features/v5/e-targets-plan-settings/settings-calibration.tsx` | calibration-process, settings |
+| `src/features/v5/e-targets-plan-settings/settings-equipment.tsx` | equipment, settings |
+| `src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx` | goal-templates, settings |
+| `src/features/v5/e-targets-plan-settings/settings-naming.tsx`, `src/domain/templates.ts` | naming, settings |
+| `src/features/v5/e-targets-plan-settings/storage.tsx`, `src/domain/storage.ts`, `src/store/actions/storage.ts` | duplicates, locations |
+| `src/store/actions/trash.ts` | project-trash, wrap-up, cleanup, duplicates |
+| `src/features/v5/e-targets-plan-settings/activity.tsx` | activity |
+
+(Globs verified against `ui-harness-v5` at b5e813a5. Round 5 work in progress
+moves Plan into Targets and removes the Storage page; keep the surface keys and
+correct the globs when those files move.)
 
 ## Intent-evidence sources
 

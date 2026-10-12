@@ -163,7 +163,7 @@ the page writes library data except ★ and adding a Target from a result.
 
 ## Delta log
 
-- **Δ2** 2026-10-10 · S1, S3, S5, S5a, S6, S7, S8, S10, S12, S13, +S8a · behavior-change
+- **Δ2** 2026-10-12 · S1, S3, S5, S5a, S6, S7, S8, S10, S12, S13, +S8a · behavior-change
   Targets and Plan are one Targets page: the All view opens with a header date picker on tonight and a compact altitude sparkline column; a row opens its Target detail. Clicking a search result adds the Target, with no Add button on result rows.
   Best tonight lists only Targets with a usable window, best first, for the selected rig. Fit reads "fits (N%)", the Project scope reads "This Project's rigs (2)", and filters are added with **Add filter**.
-  Evidence: HARNESS-V5-IA.md §Screens S10, S3, S16; HARNESS-V5-FEEDBACK-R1.md §Round 5 P-PLAN2, "Best tonight shows nothing", "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); messages/en-GB.json fit_fits, targets_project_rigs, equipment_add_filter @ b5e813a5; user instruction 2026-10-10 · by: JourneysV5.U6Targets (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S10, S3, S16; HARNESS-V5-FEEDBACK-R1.md §Round 5 P-PLAN2, "Best tonight shows nothing", "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); messages/en-GB.json fit_fits, targets_project_rigs, equipment_add_filter @ b5e813a5; user instruction 2026-10-12 · by: JourneysV5.U6Targets (intent-gated)

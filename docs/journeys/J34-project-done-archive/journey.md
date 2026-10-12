@@ -243,7 +243,7 @@ Done means:
 
 ## Delta log
 
-- **Δ2** 2026-10-10 · S1, S2, S3, S3a, +S3b, S4, S5, S6, S9, S9a, S11, +S11a, S12, S12a · behavior-change
+- **Δ2** 2026-10-12 · S1, S2, S3, S3a, +S3b, S4, S5, S6, S9, S9a, S11, +S11a, S12, S12a · behavior-change
   The Done / Archive sheet is replaced by the Project's Wrap up stage, available once every run is Complete: Clean up runs, Trash (three approvals), Archive to the chosen archive location, then Done, each with its size and skippable with Undo (new S3b).
   Archive now precedes Mark Done, so the Project stays open until the new S11a marks it Done. The Project Trash is emptied from its own page, not from Wrap up, and a Reopened Project lists its Archived sessions on the Project page with Restore.
-  Evidence: HARNESS-V5-IA.md §Screens S1, S2, S3, S5, S8, S9, S16; HARNESS-V5-FEEDBACK-R1.md §Copy rules, §Domain and seed (P-WRAP1, P-ARC1), §Screens B, §Round 5 (runs read as one model) (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-10 · by: JourneysV5.U5WrapUp (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S1, S2, S3, S5, S8, S9, S16; HARNESS-V5-FEEDBACK-R1.md §Copy rules, §Domain and seed (P-WRAP1, P-ARC1), §Screens B, §Round 5 (runs read as one model) (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U5WrapUp (intent-gated)

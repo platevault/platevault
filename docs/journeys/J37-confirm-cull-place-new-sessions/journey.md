@@ -3,7 +3,7 @@ id: J37
 title: Confirm, cull and place a new night's sessions after an import
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [status-bar, issues, home, sessions, frame-review, projects]
 interfaces: [desktop-ui, desktop-ui-macos]

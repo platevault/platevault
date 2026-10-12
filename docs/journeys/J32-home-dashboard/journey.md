@@ -171,7 +171,7 @@ that need work, tonight's windows, unmet goals and running work. Done means:
 
 ## Delta log
 
-- **Δ2** 2026-10-10 · S1, S2, +S2a, S3, S4, S5, S6, S7, S8, S9, S10 · behavior-change
+- **Δ2** 2026-10-12 · S1, S2, +S2a, S3, S4, S5, S6, S7, S8, S9, S10 · behavior-change
   Home is the harness v5 dashboard: header actions Plan tonight, New Project and Import over the boxes Projects, Sessions, Tonight, Goals and Work, with no issues strip (the top line is gone). A Project row opens its Project page, an Unreviewed session is reviewed in a sheet over Home, and Next follows the v5 rule order, so `IC 1396 Ha` now reads Wrap up.
   Plan tonight opens the merged Targets page, and the rescan runs from Settings › Locations, followed by the automatic duplicate scan. Gaps G3 (no rescan control) and G4 (where Plan tonight opens) are resolved and retired.
-  Evidence: HARNESS-V5-IA.md §Screens S1, S3, S9, S10; HARNESS-V5-FEEDBACK-R1.md §Round 5 "Home has no issues strip", "Home rows open the Project page", P-PLAN2, P-STO2, "Duplicates are scanned automatically", "OBJECT is a label, never evidence" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype src/domain/derive.ts projectNext and src/features/t1/settings/locations-page.tsx Rescan; user instruction 2026-10-10 · by: JourneysV5.U2Projects (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S1, S3, S9, S10; HARNESS-V5-FEEDBACK-R1.md §Round 5 "Home has no issues strip", "Home rows open the Project page", P-PLAN2, P-STO2, "Duplicates are scanned automatically", "OBJECT is a label, never evidence" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype src/domain/derive.ts projectNext and src/features/t1/settings/locations-page.tsx Rescan; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)

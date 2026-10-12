@@ -3,7 +3,7 @@ id: J39
 title: Clean up duplicate copies found by the automatic scan
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [duplicates, issues, status-bar, locations, indexing, activity, sessions]
 interfaces: [desktop-ui, desktop-ui-macos]

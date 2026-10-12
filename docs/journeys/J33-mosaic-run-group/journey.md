@@ -215,7 +215,7 @@ the group Result.
 
 ## Delta log
 
-- **Δ2** 2026-10-10 · S1, +S1a, +S1b, +S1c, S2, S3, S5, +S5a, S7, S8 · behavior-change
+- **Δ2** 2026-10-12 · S1, +S1a, +S1b, +S1c, S2, S3, S5, +S5a, S7, S8 · behavior-change
   The mosaic is laid out in the one-frame mosaic editor: the panel grid comes from the rig's field of view, panels are added and excluded, sessions are placed by pointing or by the user, and Start group creates the group with only the included panels. The New Project sheet no longer takes a mosaic, and old step 4 (resolve flagged sessions after the group exists) is retired into S1c.
   The group reads as one run model in the Project's Runs table, a trashed panel leaves the counts until restored (S5a), and calibration assigns masters only (P4, S7).
-  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S7, S8, §Round 2b foundation (structured calibration storage); HARNESS-V5-FEEDBACK-R1.md §B "Mosaic flow (one frame)", §Round 1b P-CAL3, §Round 5 "Runs read as one model"; D-W75 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J36 calibration process; user instruction 2026-10-10 · by: JourneysV5.U2Projects (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S7, S8, §Round 2b foundation (structured calibration storage); HARNESS-V5-FEEDBACK-R1.md §B "Mosaic flow (one frame)", §Round 1b P-CAL3, §Round 5 "Runs read as one model"; D-W75 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J36 calibration process; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)

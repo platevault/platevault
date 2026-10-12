@@ -3,7 +3,7 @@ id: J43
 title: Recover from routine mistakes and failures: retry interrupted work, change a wrong Target, act on a refusal, undo marks and discard a draft
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [locations, indexing, status-bar, issues, home, activity, sessions, targets, projects, view-review, frame-review, project-trash, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]

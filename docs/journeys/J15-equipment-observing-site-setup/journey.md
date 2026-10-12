@@ -164,9 +164,9 @@ designated.
 - G3: (dissolved 2026-10-06): the fixed per-band moon-avoidance table and the separate Filters list are not part of the rebuild contract. Each rig's filter list drives the Targets band strip and presets (PLAN-EQ-FR-03, D-W31).
 - G4: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S16 and HARNESS-V5-FEEDBACK-R1.md Domain and seed, Sites, at ui-harness-v5 b5e813a5, with its prototype's Settings → Equipment and Observing sites), the specs and the workflow decisions D-W23, D-W30, D-W31 and D-W37. No implementation has been validated against them.
 - G5: Unresolved implementation qualification: no fault control yet fails a filter-list save (P4). S4a depends on it. Blocks readiness.
-- G6: (dissolved 2026-10-10): removing a site and how the default site moves when the default is removed are covered by S5c and S5d.
+- G6: (dissolved 2026-10-12): removing a site and how the default site moves when the default is removed are covered by S5c and S5d.
 - G7: Out of scope for this journey: the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here. J35 covers the strip. Blocks readiness until the Import prompt is covered by a step or a journey.
-- G8: (dissolved 2026-10-10): the pane is Settings → Observing sites, and the first saved site does not become the default (S5a, S6).
+- G8: (dissolved 2026-10-12): the pane is Settings → Observing sites, and the first saved site does not become the default (S5a, S6).
 - G9: Unresolved product question: the v5 prototype's Settings → Equipment shows one section per rig (Rename, Edit optics with camera kind Mono or OSC (colour), sensor size, pixel size and focal length) and no Cameras or Telescopes sections and no way to add a camera, telescope or rig; its empty state "No rigs" links to Add location, so rigs come only from indexed headers. Its session detail also offers no "Add {value} to {rig}". The v5 design (HARNESS-V5-IA.md S16) does not say either way, so S1 to S3a and S4b keep the contract text (PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-05, D11, LIB-FR-10). Blocks readiness.
 
 ## Delta log
@@ -174,7 +174,7 @@ designated.
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S6, S7, +S3a, +S4a, +S4b, +S4c, +S4d, +S4e · behavior-change
   Filters now belong to each rig as a plain list, with Mono or OSC taken from the camera and a field of view per rig. A FILTER value the rig does not list prompts "Add {value} to {rig}". Goal templates ignore the rig. Steps 5, 8 and 9 (audit rows, site removal, the moon-avoidance table) and the separate Filters list are retired.
   Evidence: D-W23, D-W30, D-W31, D-W37 (workflow decisions, settled 2026-10-06); 072 PLAN-EQ-FR-01 to PLAN-EQ-FR-06, PLAN-EQ-AC-01 to PLAN-EQ-AC-06; 064 LIB-FR-05 at e4476231 · by: agent (intent-gated, user instruction)
-- **Δ3** 2026-10-10 · S4, S4c, S4d, S6, S7, +S5a, +S5b, +S5c, +S5d · behavior-change
+- **Δ3** 2026-10-12 · S4, S4c, S4d, S6, S7, +S5a, +S5b, +S5c, +S5d · behavior-change
   Filters are added with **Add filter** (name, Matches FILTER, bands). Settings shows an unknown FILTER value as "Unknown FILTER “Halpha” · 1 session" with **Add filter** and **Not now**, which hides it until **Show**.
   Sites live in Settings → Observing sites with at most one Default pill set by **Make default**; removing the default site makes the first remaining site by name the default, after a confirmation.
-  Evidence: HARNESS-V5-IA.md §Screens S16; HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Sites) (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype settings-equipment.tsx, sites-page.tsx, lib/sites.ts, domain/sites.ts removeSite, messages/en-GB.json @ b5e813a5; user instruction 2026-10-10 · by: JourneysV5.U6Targets (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S16; HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Sites) (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype settings-equipment.tsx, sites-page.tsx, lib/sites.ts, domain/sites.ts removeSite, messages/en-GB.json @ b5e813a5; user instruction 2026-10-12 · by: JourneysV5.U6Targets (intent-gated)

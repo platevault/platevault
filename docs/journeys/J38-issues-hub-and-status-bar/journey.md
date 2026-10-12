@@ -3,7 +3,7 @@ id: J38
 title: Handle issues from the status bar and the Issues hub
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [issues, status-bar, shell, home, sessions, projects, preparation, calibration, calibration-process, locations, import, indexing, activity, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]

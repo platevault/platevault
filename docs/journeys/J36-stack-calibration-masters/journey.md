@@ -3,7 +3,7 @@ id: J36
 title: Stack raw calibration frames into masters and keep the master library
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [calibration, calibration-process, settings, applications, issues, status-bar, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
@@ -177,7 +177,7 @@ Runs are later assigned these masters only (J23). Done means:
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Behavior follows the harness v5 design, which the user instructed on 2026-10-10 that journeys describe. Its sources are `HARNESS-V5-IA.md` §Screens S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3, §Domain and seed P-CAL2 and §Round 5 Calibration (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), plus the prototype's calibration process. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe. Its sources are `HARNESS-V5-IA.md` §Screens S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3, §Domain and seed P-CAL2 and §Round 5 Calibration (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), plus the prototype's calibration process. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the P5 stand-in does not exist. The design also does not say how PlateVault hands raw frames to a profile (a script, launch arguments or a watched folder), so S3 asserts only the output folder and the running watch. A real PixInsight or Siril stack is not exercised. Blocks readiness.
 - G3: Unresolved product question: the design does not say what Dismiss does to a library master beyond listing it under Dismissed with Restore. It is open whether a dismissed master leaves All, whether it stops being a candidate for runs, and whether a master that runs use can be dismissed. S12 dismisses a master that no run uses and asserts only the listing and the unchanged file. Blocks readiness.
 - G4: Out of scope for this journey: dark flats; Import routing raw calibration frames into a process awaiting Stack (J31); a run's `Stack from <session>` offer and the `?process=` highlight it opens (J23/G6); Import failures for offline storage, `Copy did not verify` and `Write permission removed`; a Raws failure that keeps refused frames; **Trash raws** on kept raws; and a profile that cannot stack. Blocks readiness until covered by a step or a journey.

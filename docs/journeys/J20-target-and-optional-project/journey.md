@@ -28,7 +28,7 @@ inside the Project. Done means:
 ## Preconditions
 
 - P1: J19 completed through S15 (`Cold-1` is offline). All seven light sessions have their Target settled as NGC 7000: 24 and 26 Sep are Confirmed, and 12, 18, 28 and 30 Sep and the other-camera session are Associated by pointing within NGC 7000's footprint (OBJECT never counts). The six RedCat sessions read rig `RedCat`, and the other-camera session reads rig `Esprit`.
-- P2: Settings › Sites holds two saved sites: Backyard, the Default, and `Remote site` (J15/S6, J15/S7), at least 15° of longitude and one time zone away from Backyard.
+- P2: Settings › Observing sites holds two saved sites, Backyard and `Remote site` (J15/S6, J15/S7), at least 15° of longitude and one time zone away from Backyard. No site carries the Default pill (J15 ends that way; J29/S5 sets it).
 - P3: No Project and no processing run exist.
 - P4: The J19/P5 manifest is available.
 
@@ -77,9 +77,9 @@ inside the Project. Done means:
 
 ### S7 — Compare planning sites on the Targets page {#S7}
 
-- **Do:** Read the Project page's Planning box. Click **Planner**. On the Targets page, choose Backyard, then `Remote site` as the site, and read the list. Then clear the Project scope.
-- **Expect:** Planning shows tonight at Backyard, the Default site: the Moon's illumination, the dark window, and NGC 7000's best window with its goal gaps. **Planner** opens the Targets page scoped to the Project (`?project=`) with its night set to tonight. It lists NGC 7000 only, with its unmet goals, and its rig selector reads this Project's rigs. Fit shows one value per rig labelled with the rig's name, and the Filters column shows one chip per filter of both rigs, graded good tonight. Each change of site recalculates the windows and the altitude column and names that site and its time zone. Clearing the scope returns the list to My targets.
-- **Expect (negative):** Candidates, their capture sites and the Project's subjects and rigs are identical before and after. Choosing a site on the Targets page leaves Backyard the Default site. Notifications stay disabled and no reminder is scheduled.
+- **Do:** Click **Planner** on the Project page. On the Targets page, choose Backyard, then `Remote site` as the site, and read the list. Choose Backyard again, then clear the Project scope. Return to the Project page and read its Planning box.
+- **Expect:** **Planner** opens the Targets page scoped to the Project (`?project=`) with its night set to tonight. It lists NGC 7000 only, with its unmet goals, and its rig selector reads this Project's rigs. Fit shows one value per rig labelled with the rig's name, and the Filters column shows one chip per filter of both rigs, graded good tonight. Each change of site recalculates the windows and the altitude column and names that site and its time zone. Clearing the scope returns the list to My targets. Back on the Project page, Planning shows tonight at Backyard, the picked planning site: the Moon's illumination, the dark window, and NGC 7000's best window with its goal gaps.
+- **Expect (negative):** Candidates, their capture sites and the Project's subjects and rigs are identical before and after. Picking a site on the Targets page makes no site the default: Settings › Observing sites still shows no Default pill. Notifications stay disabled and no reminder is scheduled.
 - **Trace:** flow B3 · HARNESS-V5-IA.md S3 Planning, S10, S11 · HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2, §Domain and seed Sites · PLAN-FR-01, PLAN-FR-09, PLAN-FR-10 · PLAN-AC-01, PLAN-AC-10, PLAN-TGT-AC-14 · D07, D-W16, D-W62
 
 ### S8 — Start a processing run from the Project {#S8}
@@ -101,7 +101,7 @@ inside the Project. Done means:
 - SC1: At S1, usable reads 0h 00m per channel, Unreviewed equals captured per channel, 12 Sep reads Offline and unavailable, and the Target page offers 0 Start run controls.
 - SC2: The Project has exactly 6 candidates and 0 runs at S3, and 7 candidates after S4. Ha reads 0h00 in project and 12h35 captured after S4.
 - SC3: Zero file or quality-state changes and zero runs exist through S5.
-- SC4: The S7 windows differ between the two sites, while candidates and capture sites are identical (S6, S7), and Backyard is still the Default site.
+- SC4: The S7 windows differ between the two sites, while candidates and capture sites are identical (S6, S7), and no site carries the Default pill after S7.
 - SC5: Exactly 1 run exists after S8 and the Runs table lists it once, at Select. Its picker lists 6 sessions with 5 selected and 0 Esprit sessions, and every goal is unmet.
 - SC6: The S9 removals of `RedCat` and of subject NGC 7000 are each refused with `used by 1 run` and name `NGC7000-HOO-Siril`. The Project ends S9 with 2 rigs and subject NGC 7000.
 
@@ -119,7 +119,7 @@ inside the Project. Done means:
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S6, S7, S8, +S9 · behavior-change
   A Project is now required for every processing run and holds subjects, rigs and goals from templates. Candidates are derived from confirmed Target and rig, so S3 reads them instead of linking sessions. Goals read "in project" and "captured" (candidates plus run members), and the exposure preference is dropped. Home opens first, Open in Planner uses the Project's rigs, S8 starts the run `NGC7000-HOO-Siril`, and S9 checks that a rig or subject that any run uses cannot be removed.
   Evidence: D-W1, D-W3, D-W9, D-W16, D-W29, D-W30, D-W33, D-W34, D-W36, D-W37, D-W39, D-W50. 065 PRJ-FR-01 to PRJ-FR-12, PRJ-FR-20. 066 VSEL-FR-01. 072 PLAN-FR-10 at e4476231. D-W65 and D-W66 as narrowed by D-W72. 065 PRJ-FR-02, PRJ-FR-04, PRJ-FR-20, PRJ-FR-21, PRJ-AC-25. Root FR-023. Rig names `RedCat`, `Esprit` and site `Remote site` from J15 · by: agent (intent-gated, user instruction)
-- **Δ3** 2026-10-10 · S1, S2, S3, S4, S7, S8, S9 · behavior-change
-  The Target page offers Add to Plan, Add to Project and New Project, never a run; search results act on click. The New Project sheet copies a template's values in for editing and leaves mosaics to the Project page, whose sections, stage strip and toolbar Next follow v5. Planner opens the merged Targets page scoped to the Project, Backyard is the Default site (P2), G3 is retired because Settings › Sites exists, and P1 follows J19 v3 (Targets Confirmed or Associated by pointing).
+- **Δ3** 2026-10-12 · S1, S2, S3, S4, S7, S8, S9 · behavior-change
+  The Target page offers Add to Plan, Add to Project and New Project, never a run; search results act on click. The New Project sheet copies a template's values in for editing and leaves mosaics to the Project page, whose sections, stage strip and toolbar Next follow v5. Planner opens the merged Targets page scoped to the Project, where the site is picked; the Project's Planning box follows the picked planning site. G3 is retired because Settings › Observing sites exists, and P1 follows J19 v3 (Targets Confirmed or Associated by pointing).
   The run starts from the Start run sheet (subject, rig, optional profile) and appears in the Runs table. Refusals read `Can't remove rig · used by 1 run ▸`, and an unused rig offers Remove.
-  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S10, S16; HARNESS-V5-FEEDBACK-R1.md §B "Start run sheet", §Copy rules, §Domain and seed Goals and Sites, §Round 5 "Runs read as one model", "Remove an unused rig", P-PLAN2, "Click a result to act", "OBJECT is a label, never evidence" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J19 v3; user instruction 2026-10-10 · by: JourneysV5.U2Projects (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S10, S16; HARNESS-V5-FEEDBACK-R1.md §B "Start run sheet", §Copy rules, §Domain and seed Goals and Sites, §Round 5 "Runs read as one model", "Remove an unused rig", P-PLAN2, "Click a result to act", "OBJECT is a label, never evidence" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J19 v3; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)

@@ -3,7 +3,7 @@ id: J41
 title: Set library conventions in Settings: naming templates, goal templates, locations and applications
 version: 1
 status: draft
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [settings, naming, goal-templates, locations, applications, import, projects, wrap-up, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
