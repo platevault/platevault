@@ -849,8 +849,8 @@ export interface CalibrationAssignment {
   lightSessionId: SessionId
   kind: CalibrationKind
   input: CalibrationInput | null
-  /** Suggestions never enter a verified handoff until accepted. */
-  state: "suggested" | "accepted" | "exception" | "deferred" | "unresolved"
+  /** Suggestions never enter a verified handoff until accepted. "automatic" records the automatic policy's choice once another master could outrank it, so a run keeps its masters (no silent re-rank). */
+  state: "suggested" | "accepted" | "exception" | "deferred" | "unresolved" | "automatic"
   criteria: MatchCriterion[]
   /** Run-scoped; never rewrites master evidence. */
   exception: { reason: string; at: IsoDateTime } | null
@@ -911,7 +911,14 @@ export interface CalibrationProcess {
 
 export type ApplicationKind = "pixinsight-wbpp" | "siril" | "seti-astro" | "generic"
 
-export type InputMode = "linked" | "direct-source" | "copy" | "clone"
+/**
+ * Prepare input modes (P-PREP2): "automatic" picks per entry (an independent
+ * copy while space allows); "copy" is Independent copy (a clone on the same
+ * clone-capable volume, else a copy); "linked" is Link to originals (opt-in);
+ * "direct-source" gives PixInsight the file list. "clone" is no longer offered:
+ * Independent copy clones by itself.
+ */
+export type InputMode = "automatic" | "linked" | "direct-source" | "copy" | "clone"
 
 export interface ProfileCapability {
   /** Verified only with recorded capability evidence (D04). */
@@ -979,6 +986,8 @@ export interface Preparation {
   resultsPath: string
   entryCount: number
   footprintBytes: number
+  /** Independent copy (P-PREP2): entries placed as clones (no extra space) and as copies. Absent on links and file lists. */
+  placed?: { cloned: number; copied: number }
   state: PreparationState
   operationId: OperationId | null
   preparedAssetIds: AssetId[]

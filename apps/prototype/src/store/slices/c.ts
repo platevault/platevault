@@ -11,9 +11,20 @@ import { cOperationHandlers } from "@/features/v5/c-runs/operations"
 import type { PrepareChoices } from "@/features/v5/c-runs/model"
 import type { SliceDefinition } from "./index"
 
+/** Select's browsing scope (spec 066 tools): filters and the order never change the selected ids (VSEL-FR-06). */
+export interface SelectFilter {
+  channel: string | null
+  selectedOnly: boolean
+  night?: string | null
+  exposureS?: number | null
+  rigId?: string | null
+  quality?: "unreviewed" | "usable" | "unusable" | null
+  order?: "night" | "distance" | "coverage"
+}
+
 export interface CState {
   /** Select: candidate list scope per run, so filters never change the selected ids (VSEL-FR-06). */
-  selectFilter: Record<RunId, { channel: string | null; selectedOnly: boolean }>
+  selectFilter: Record<RunId, SelectFilter>
   /** Prepare review choices, keyed by run id (or group id for Prepare all). */
   prepare: Record<string, PrepareChoices>
 }

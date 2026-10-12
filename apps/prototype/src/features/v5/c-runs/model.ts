@@ -5,7 +5,7 @@
  * list and the calibration readiness line. Nothing here writes; the slice's
  * actions and operation handlers in `actions.ts` and `operations.ts` do.
  */
-import { calibrationPlan, type CalibrationPlan, handoffCalibration, KIND_NAME, KINDS, lightGeometry, matchCriteria, type RequirementRow, summarize } from "@/domain/calibration"
+import { calibrationPlan, type CalibrationPlan, compareCandidates, handoffCalibration, KIND_NAME, KINDS, lightGeometry, matchCriteria, type RequirementRow, summarize } from "@/domain/calibration"
 import { calibrationProcesses, type ProcessView } from "@/domain/calibration-process"
 import { latestCorrection } from "@/domain/corrections"
 import { findPanel, findSubject, latestRevision, runPreparations, runSetup, savedContent, workingContent } from "@/domain/derive"
@@ -14,11 +14,13 @@ import { deniedAncestor, isUnder } from "@/domain/indexing"
 import { MODE_NAME, PRODUCT_KIND_NAME } from "@/domain/labels"
 import { assetAvailability, copyAvailability, preferredCopy } from "@/domain/library"
 import { memberSessions, type MemberSession } from "@/domain/membership"
+import { inodesHeldOutside } from "@/domain/storage"
 import type {
   ApplicationProfile,
   Asset,
   CalibrationKind,
   CorrectionField,
+  Disk,
   DiskFile,
   InputMode,
   MembershipRevision,
@@ -34,7 +36,7 @@ import type {
   Subject,
   Volume,
 } from "@/domain/types"
-import { fileName, formatBytes } from "@/lib/format"
+import { fileName, formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
@@ -242,10 +244,17 @@ export function metadataDiffs(members: MemberSession[]): MetadataDiff[] {
 }
 
 // ---------------------------------------------------------------------------
-// Input modes (PREP-FR-04, PREP-FR-05, D04)
+// Input modes (PREP-FR-04, PREP-FR-05, D04, P-PREP2)
 // ---------------------------------------------------------------------------
 
 export type LinkType = "symlink" | "hardlink"
+
+/** How Automatic and Independent copy place the entries: clones (no extra space) and copies (P-PREP2). */
+export interface Placement {
+  cloned: number
+  copied: number
+  copiedBytes: number
+}
 
 export interface ModeOption {
   mode: InputMode
@@ -253,21 +262,38 @@ export interface ModeOption {
   reasons: MessageRef[]
   semantics: MessageRef
   footprintBytes: number
+  /** Automatic and Independent copy: what is cloned and what is copied. */
+  placement: Placement | null
+  /** Link to originals: symbolic links, or hard links on one volume without symbolic links; null when the volume has neither. */
+  linkType: LinkType | null
 }
 
-const MODES: InputMode[] = ["linked", "copy", "clone", "direct-source"]
+/** The modes Prepare offers, in order; Give PixInsight the file list only with a PixInsight profile. Clone is no longer a mode: Independent copy clones by itself. */
+const MODES: InputMode[] = ["automatic", "copy", "linked", "direct-source"]
 
-function modeSemantics(mode: InputMode, linkType: LinkType): MessageRef {
-  switch (mode) {
-    case "linked":
-      return linkType === "symlink" ? msg("run_mode_semantics_symlink") : msg("run_mode_semantics_hardlink")
-    case "direct-source":
-      return msg("run_mode_semantics_direct_source")
-    case "copy":
-      return msg("run_mode_semantics_copy")
-    case "clone":
-      return msg("run_mode_semantics_clone")
-  }
+const SEMANTICS: Record<InputMode, MessageRef> = {
+  automatic: msg("run_mode_semantics_automatic"),
+  copy: msg("run_mode_semantics_copy"),
+  linked: msg("run_mode_semantics_linked"),
+  "direct-source": msg("run_mode_semantics_direct_source"),
+  clone: msg("run_mode_semantics_copy"),
+}
+
+/** What a mode places: Automatic (an independent copy while space allows) and Independent copy place copies or clones, Link to originals links, the file list places nothing. */
+export function placementKind(mode: InputMode): "copy" | "linked" | "direct-source" {
+  return mode === "linked" || mode === "direct-source" ? mode : "copy"
+}
+
+/** An entry is cloned when its source is on the run folder's volume, that volume clones, and no corrected header is written into it; otherwise it is copied. */
+export function clonesOnto(disk: Disk, sourcePath: string, patched: boolean, destinationId: string | null): boolean {
+  return !patched && destinationId !== null && disk.volumes[destinationId]?.links.clone === true && volumeForPath(disk, sourcePath) === destinationId
+}
+
+/** "0 B extra · cloned", "12.4 GB copied", or "212 cloned · 18 copied · 3.4 GB". */
+export function placementRef(placement: Placement): MessageRef {
+  if (placement.copied === 0) return msg("run_placed_cloned", { bytes: formatBytes(0) })
+  if (placement.cloned === 0) return msg("run_placed_copied", { bytes: formatBytes(placement.copiedBytes) })
+  return msg("run_placed_mixed", { cloned: formatCount(placement.cloned), copied: formatCount(placement.copied), bytes: formatBytes(placement.copiedBytes) })
 }
 
 // ---------------------------------------------------------------------------
@@ -318,18 +344,18 @@ export interface PlanCheck {
 }
 
 export interface PrepareChoices {
-  linkType: LinkType
   metadata: Record<string, MetadataChoice>
 }
 
-export const DEFAULT_CHOICES: PrepareChoices = { linkType: "symlink", metadata: {} }
+export const DEFAULT_CHOICES: PrepareChoices = { metadata: {} }
 
 export interface PreparePlan {
   run: Run
   revision: MembershipRevision | null
   profile: ApplicationProfile | null
   mode: InputMode | null
-  linkType: LinkType
+  /** Link to originals: the link it would make. */
+  linkType: LinkType | null
   modes: ModeOption[]
   layout: RunLayout
   destination: Volume | null
@@ -453,46 +479,56 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
       })
     }
   }
-  const totalBytes = entries.reduce((n, e) => n + e.sizeBytes, 0)
   const sourceVolumes = new Set(entries.map((e) => volumeForPath(disk, e.sourcePath)).filter((v): v is string => v !== null))
   const destName = destination?.name ?? msg("run_mode_output_volume")
   const readOnlyProfile = profile?.capability.verified === true && profile.capability.inputWrite === "read-only"
-  const hardlink = choices.linkType === "hardlink"
-  const modes: ModeOption[] = MODES.map((option) => {
+  const placement: Placement = { cloned: 0, copied: 0, copiedBytes: 0 }
+  for (const e of entries) {
+    if (clonesOnto(disk, e.sourcePath, e.patches.length > 0, destination?.id ?? null)) placement.cloned += 1
+    else {
+      placement.copied += 1
+      placement.copiedBytes += e.sizeBytes
+    }
+  }
+  const linkType: LinkType | null = !destination ? "symlink" : destination.links.symlink ? "symlink" : destination.links.hardlink && [...sourceVolumes].every((v) => v === destination.id) ? "hardlink" : null
+  const offered = MODES.filter((option) => option !== "direct-source" || profile?.application === "pixinsight-wbpp")
+  const modes: ModeOption[] = offered.map((option) => {
     const reasons: MessageRef[] = []
+    const kind = placementKind(option)
     if (profile && !profile.capability.inputModes.includes(option)) reasons.push(msg("run_metadata_not_supported", { name: profile.name }))
-    if ((option === "linked" || option === "direct-source") && profile && !readOnlyProfile) {
+    if (kind !== "copy" && profile && !readOnlyProfile) {
       reasons.push(profile.capability.inputWrite === "write-prone" ? msg("run_mode_write_prone", { name: profile.name }) : msg("run_mode_writes_unknown", { name: profile.name }))
     }
-    if (option === "linked" && destination) {
-      const can = choices.linkType === "hardlink" ? destination.links.hardlink : destination.links.symlink
-      if (!can) reasons.push(hardlink ? msg("run_mode_no_hardlinks", { name: destName }) : msg("run_mode_no_symlinks", { name: destName }))
-      else if (choices.linkType === "hardlink" && [...sourceVolumes].some((v) => v !== destination.id)) reasons.push(msg("run_mode_other_volume"))
-    }
-    if (option === "direct-source" && profile?.capability.directSource === "whole-folder" && (content?.excluded.length ?? 0) > 0) {
+    if (kind === "linked" && linkType === null) reasons.push(msg("run_mode_no_symlinks", { name: destName }))
+    if (kind === "direct-source" && profile?.capability.directSource === "whole-folder" && (content?.excluded.length ?? 0) > 0) {
       reasons.push(msg("run_mode_whole_folders", { count: content!.excluded.length }))
     }
-    if (option === "direct-source" && profile?.capability.directSource === "none") reasons.push(msg("run_mode_no_source_paths", { name: profile.name }))
-    if (option === "clone" && destination) {
-      if (!destination.links.clone) reasons.push(msg("run_mode_no_clones", { name: destName }))
-      else if ([...sourceVolumes].some((v) => v !== destination.id)) reasons.push(msg("run_mode_other_volume"))
+    if (kind === "direct-source" && profile?.capability.directSource === "none") reasons.push(msg("run_mode_no_source_paths", { name: profile.name }))
+    if (kind === "copy" && free !== null && placement.copiedBytes > free) reasons.push(msg("run_mode_needs_space", { bytes: formatBytes(placement.copiedBytes), free: formatBytes(free) }))
+    return {
+      mode: option,
+      allowed: reasons.length === 0,
+      reasons,
+      semantics: SEMANTICS[option],
+      footprintBytes: kind === "copy" ? placement.copiedBytes : 0,
+      placement: kind === "copy" ? placement : null,
+      linkType: kind === "linked" ? linkType : null,
     }
-    if (option === "copy" && free !== null && totalBytes > free) reasons.push(msg("run_mode_needs_space", { bytes: formatBytes(totalBytes), free: formatBytes(free) }))
-    const footprintBytes = option === "copy" ? totalBytes : option === "clone" ? Math.round(totalBytes * 0.001) : 0
-    return { mode: option, allowed: reasons.length === 0, reasons, semantics: modeSemantics(option, choices.linkType), footprintBytes }
   })
   const mode = setup.inputMode
-  const chosen = mode ? modes.find((o) => o.mode === mode)! : null
-  const isolated = mode === "copy" || mode === "clone"
+  const chosen = mode ? (modes.find((o) => o.mode === mode) ?? null) : null
+  const isolated = mode !== null && placementKind(mode) === "copy"
   const checks: PlanCheck[] = []
   checks.push({ id: "membership", label: CHECK_NAME.membership, ok: revision !== null, blocking: true, detail: revision ? msg("run_select_revision", { revision: revision.revision }) : run.draft ? msg("status_unsaved_changes") : msg("status_not_saved") })
-  const calOk = calibration.policy === "off" || (calibration.rows.length > 0 && calibration.needsReview.length === 0) || (members.length === 0 && (content?.productInputs.length ?? 0) > 0)
+  const off = calibration.policy === "off"
+  const calOk = calibration.needsReview.length === 0 && (off || calibration.rows.length > 0 || (members.length === 0 && (content?.productInputs.length ?? 0) > 0))
+  const handedOff = msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length })
   checks.push({
     id: "calibration",
     label: CHECK_NAME.calibration,
     ok: calOk,
     blocking: true,
-    detail: calibration.policy === "off" ? msg("run_cal_off") : calOk ? msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length }) : msg("run_check_requirements_to_review", { count: calibration.needsReview.length }),
+    detail: !calOk ? msg("run_check_requirements_to_review", { count: calibration.needsReview.length }) : off ? joinRefs([msg("run_cal_off"), handedOff], " · ") : handedOff,
   })
   checks.push({ id: "profile", label: CHECK_NAME.profile, ok: profile !== null, blocking: true, detail: profile ? verbatim(profile.name) : msg("run_layout_not_chosen") })
   const products = (content?.productInputs ?? []).map((id) => catalog.results[id]).filter((r): r is ResultRecord => r !== undefined)
@@ -533,7 +569,15 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     label: CHECK_NAME.mode,
     ok: chosen?.allowed === true,
     blocking: true,
-    detail: !chosen ? msg("run_layout_not_chosen") : chosen.allowed ? (chosen.mode === "linked" ? (hardlink ? msg("run_check_mode_hardlinks", { mode: MODE_NAME[chosen.mode] }) : msg("run_check_mode_symlinks", { mode: MODE_NAME[chosen.mode] })) : MODE_NAME[chosen.mode]) : joinRefs(chosen.reasons, " · "),
+    detail: !chosen
+      ? msg("run_layout_not_chosen")
+      : !chosen.allowed
+        ? joinRefs(chosen.reasons, " · ")
+        : chosen.linkType === "hardlink"
+          ? msg("run_check_mode_hardlinks", { mode: MODE_NAME[chosen.mode] })
+          : chosen.linkType === "symlink"
+            ? msg("run_check_mode_symlinks", { mode: MODE_NAME[chosen.mode] })
+            : MODE_NAME[chosen.mode],
   })
   const folderTaken = layout.folderPath ? pathOccupied(state, layout.folderPath) : false
   checks.push({
@@ -561,7 +605,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     revision,
     profile,
     mode,
-    linkType: choices.linkType,
+    linkType: chosen?.linkType ?? null,
     modes,
     layout,
     destination,
@@ -688,23 +732,19 @@ export function recognize(file: DiskFile, assembled: boolean): DiscoveredKind {
 
 export interface Attribution {
   label: MessageRef
-  basis: "tool" | "window" | "unknown"
+  /** "tool": a header or recorded input list names the revision; "inferred": the revision current when the file appeared. */
+  basis: "tool" | "inferred" | "unknown"
 }
 
-/** Revision attribution: tool evidence, else the time window as an inference, else Unknown (D-W67). */
+/** Revision attribution (round 6): tool evidence decides; without it, the revision current when the file appeared, marked Inferred; else Unknown (D-W67). */
 export function attribution(record: ResultRecord, file: DiskFile | undefined, preps: Preparation[]): Attribution {
   if (record.fromPrepRevision !== null && record.lineage === "tool-recorded") return { label: msg("run_rev", { revision: record.fromPrepRevision }), basis: "tool" }
-  if (!file || preps.length === 0) return { label: msg("status_unknown"), basis: "unknown" }
-  const ordered = [...preps].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-  const at = file.modifiedAt
-  for (let i = ordered.length - 1; i >= 0; i -= 1) {
-    const prep = ordered[i]!
-    const next = ordered[i + 1]
-    const after = (prep.settledAt ?? prep.createdAt) <= at
-    const before = !next || at < next.createdAt
-    if (after && before) return { label: msg("run_rev", { revision: prep.prepRevision }), basis: "window" }
-  }
-  return { label: msg("status_unknown"), basis: "unknown" }
+  if (!file) return { label: msg("status_unknown"), basis: "unknown" }
+  const current = preps
+    .filter((p) => (p.settledAt ?? p.createdAt) <= file.modifiedAt)
+    .sort((a, b) => (a.settledAt ?? a.createdAt).localeCompare(b.settledAt ?? b.createdAt))
+    .at(-1)
+  return current ? { label: msg("run_rev", { revision: current.prepRevision }), basis: "inferred" } : { label: msg("status_unknown"), basis: "unknown" }
 }
 
 export interface ResultRow {
@@ -762,8 +802,9 @@ export function scanResultsFolders(state: PrototypeState, folders: string[], opt
 
 export interface CleanupEntry {
   path: string
+  /** What Clean up frees: zero for a link, and for a clone or hard link that shares its original's bytes. */
   sizeBytes: number
-  kind: "link" | "copy" | "list"
+  kind: "link" | "clone" | "copy" | "list"
   prep: Preparation
 }
 
@@ -775,7 +816,7 @@ export interface CleanupReview {
   directSource: Preparation[]
 }
 
-/** Only the entries the run's preparation revisions created: links, clones and copies. */
+/** Only the entries the run's preparation revisions created: links, clones and copies. A clone or hard link shares its original's bytes, so it frees no space. */
 export function cleanupReview(state: PrototypeState, run: Run): CleanupReview {
   const out: CleanupReview = { entries: [], refused: [], directSource: [] }
   for (const prep of runPreparations(state.catalog, run.id)) {
@@ -789,8 +830,11 @@ export function cleanupReview(state: PrototypeState, run: Run): CleanupReview {
       out.refused.push({ path: prep.folderPath, reason: msg("run_cleanup_volume_offline", { name: volume?.name ?? msg("run_entry_its_volume") }) })
       continue
     }
+    const held = inodesHeldOutside(state.disk, prep.folderPath)
     for (const file of filesUnder(state.disk, prep.folderPath)) {
-      out.entries.push({ path: file.path, sizeBytes: file.linkTarget ? 0 : file.sizeBytes, kind: file.linkTarget ? "link" : file.kind === "text" ? "list" : "copy", prep })
+      const shared = held.has(`${file.volumeId}:${file.inode}`)
+      const kind: CleanupEntry["kind"] = file.linkTarget || (shared && prep.mode === "linked") ? "link" : file.kind === "text" ? "list" : shared ? "clone" : "copy"
+      out.entries.push({ path: file.path, sizeBytes: file.linkTarget || shared ? 0 : file.sizeBytes, kind, prep })
     }
   }
   return out
@@ -832,13 +876,11 @@ export function groupSetupParts(m: Messages, groups: CalibrationPlan["groups"]):
   }
 }
 
-/** Candidates the automatic choice could not tell apart: compatible masters at the same night distance. */
+/** Candidates the automatic choice could not tell apart: compatible masters the matching rule ranks equal (same night distance and frame count). */
 export function tieOf(row: RequirementRow): RequirementRow["candidates"] {
   const [first, second] = row.candidates
   if (!first || !second || !first.summary.allCompatible || !second.summary.allCompatible) return []
-  const night = row.member.session.night
-  const distance = (n: string | null) => (n ? Math.abs(new Date(n).getTime() - new Date(night).getTime()) : Number.POSITIVE_INFINITY)
-  const tied = row.candidates.filter((c) => c.summary.allCompatible && distance(c.source.night) === distance(first.source.night))
+  const tied = row.candidates.filter((c) => compareCandidates(row.member.session.night, c, first) === 0)
   return tied.length > 1 ? tied : []
 }
 

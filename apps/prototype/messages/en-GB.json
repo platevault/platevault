@@ -3141,7 +3141,6 @@
     }
   ],
   "run_results_basis_tool": "Tool evidence",
-  "run_results_basis_window": "Inferred from the time window",
   "run_results_attached_no_evidence": "Attached · no evidence",
   "run_results_attribution_for": "{name} attribution",
   "run_results_accept_blocked": "Accept blocked",
@@ -3264,10 +3263,6 @@
   "run_profile_write_prone": "Write-prone",
   "run_profile_writes_unknown": "Writes unknown",
   "run_profile_evidence": "{name} evidence",
-  "run_mode_link_type": "Link type",
-  "run_mode_symbolic_links": "Symbolic links",
-  "run_mode_hard_links": "Hard links",
-  "run_mode_hard_links_help": "Every source and the run folder on one volume.",
   "run_mode_named_blocked": "{mode} blocked",
   "run_metadata_hint_accept_source": "Header as is",
   "run_metadata_hint_excluded": "Left out",
@@ -3326,11 +3321,8 @@
   "run_metadata_choice_patched_copy": "Patched copy",
   "run_metadata_choice_accept_source": "Accept the source value",
   "run_metadata_choice_excluded": "Exclude these inputs",
-  "run_mode_semantics_symlink": "A run folder of symbolic links to the originals. References, not backups: a writing application alters the source.",
-  "run_mode_semantics_hardlink": "A run folder of hard links. Same volume only; the link and the original are the same file.",
-  "run_mode_semantics_direct_source": "No run folder entries: the profile gets the exact original paths in a file list. Nothing is linked or copied.",
-  "run_mode_semantics_copy": "Isolated full copies of every input. Needs storage for every byte; originals are never touched.",
-  "run_mode_semantics_clone": "Isolated copy-on-write clones on the same volume. Near-zero storage until either side changes.",
+  "run_mode_semantics_direct_source": "Nothing is placed in the run folder. PixInsight reads each frame where it is.",
+  "run_mode_semantics_copy": "Tools work on their own copy, so your originals can't be changed. No extra space when the drive clones; otherwise the files are copied.",
   "run_check_lock": "Run state",
   "run_check_membership": "Saved membership",
   "run_check_profile": "Application profile",
@@ -3351,7 +3343,6 @@
   "run_mode_output_volume": "the output volume",
   "run_mode_write_prone": "{name}: write-prone",
   "run_mode_writes_unknown": "{name}: input writes unknown",
-  "run_mode_other_volume": "Sources on another volume",
   "run_mode_whole_folders": [
     {
       "declarations": [
@@ -3368,7 +3359,6 @@
     }
   ],
   "run_mode_no_source_paths": "{name}: no source paths",
-  "run_mode_no_clones": "{name}: no clones",
   "run_mode_needs_space": "Needs {bytes} · {free} free",
   "run_check_requirements_to_review": [
     {
@@ -3699,7 +3689,6 @@
   "rungroup_open_done": "Open Done",
   "run_revision_short": "r{revision}",
   "run_mode_no_symlinks": "{name}: no symbolic links",
-  "run_mode_no_hardlinks": "{name}: no hard links",
   "run_check_mode_symlinks": "{mode} (symbolic links)",
   "run_check_mode_hardlinks": "{mode} (hard links)",
   "location_role_captures_description": "Light frames to index. Add as many folders as you like.",
@@ -5435,8 +5424,8 @@
   "importdlg_note_eccentricity": "Shown next to built-in eccentricity",
   "importdlg_note_stars": "Shown next to built-in star count",
   "importdlg_note_psf_signal_weight": "No units and no PlateVault equivalent; never shown as FWHM or HFR.",
-  "domain_mode_linked": "Linked run",
-  "domain_mode_copy": "Copy",
+  "domain_mode_linked": "Link to originals",
+  "domain_mode_copy": "Independent copy",
   "domain_mode_clone": "Clone",
   "domain_result_final_image": "Final image",
   "domain_result_linear_integration": "Linear integration",
@@ -6063,38 +6052,6 @@
       "match": {
         "countPlural=one": "Remove {n} session",
         "countPlural=*": "Remove {n} sessions"
-      }
-    }
-  ],
-  "store_label_exclude_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Exclude {n} frame",
-        "countPlural=*": "Exclude {n} frames"
-      }
-    }
-  ],
-  "store_label_restore_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Restore {n} frame",
-        "countPlural=*": "Restore {n} frames"
       }
     }
   ],
@@ -7244,5 +7201,124 @@
       }
     }
   ],
-  "duplicates_trash_title": "Move duplicate copies to the OS Trash"
+  "duplicates_trash_title": "Move duplicate copies to the OS Trash",
+  "domain_mode_automatic": "Automatic",
+  "domain_mode_file_list": "Give PixInsight the file list",
+  "run_mode_semantics_automatic": "PlateVault picks the safest option that fits. Your originals are never changed.",
+  "run_mode_semantics_linked": "No extra space. The run folder points at your originals, so the drive must stay connected, and a tool that edits a frame edits the original. PlateVault re-checks every original after the run.",
+  "run_placed_cloned": "{bytes} extra · cloned",
+  "run_placed_copied": "{bytes} copied",
+  "run_placed_mixed": "{cloned} cloned · {copied} copied · {bytes}",
+  "run_frees_no_space": "frees no space",
+  "run_link_confirm_title": "Link to the originals?",
+  "run_link_confirm_description": "The drive must stay connected while the run uses it.",
+  "run_link_confirm_writes": "A tool that writes in place changes the originals",
+  "run_link_confirm_recheck": "PlateVault re-hashes every original after the run",
+  "run_complete_clean_up": "Clean up prepared copies · {frees}",
+  "run_complete_keeps_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} prepared entry stays",
+        "countPlural=*": "{count} prepared entries stay"
+      }
+    }
+  ],
+  "run_cleanup_kind_clone": "Clone",
+  "run_cal_master_changed": "master changed",
+  "run_cal_add_to_library_ellipsis": "Add to library…",
+  "run_cal_add_title": "Add {name} to the calibration library?",
+  "run_cal_add_destination": "Destination path",
+  "run_cal_add_copies": "Copies {name} into calibration storage",
+  "run_cal_add_reverifies": "Re-verifies the SHA-256 before copying",
+  "run_cal_add_source_stays": "The file in the Results folder stays",
+  "run_cal_suggested_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} suggested",
+        "countPlural=*": "{count} suggested"
+      }
+    }
+  ],
+  "run_cal_better_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} better match",
+        "countPlural=*": "{count} better matches"
+      }
+    }
+  ],
+  "run_cal_better_match": "Better match available",
+  "run_cal_use_it": "Use it",
+  "run_proto_better_master": "Newer compatible master",
+  "run_proto_better_master_detail": "A closer-night master with more frames joins the library",
+  "run_results_inferred": "Inferred",
+  "run_results_basis_inferred": "No tool evidence · the revision current when the file appeared",
+  "run_rename": "Rename",
+  "run_rename_ellipsis": "Rename…",
+  "run_name_label": "Run name",
+  "run_col_coverage": "Coverage",
+  "run_col_distance": "Distance",
+  "run_select_order": "Order",
+  "run_select_hidden_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} selected hidden by filters",
+        "countPlural=*": "{count} selected hidden by filters"
+      }
+    }
+  ],
+  "project_edit_details": "Edit details…",
+  "project_edit_details_title": "Edit {name} details",
+  "store_reason_name_empty": "Name is empty",
+  "store_reason_run_name_taken": "{name} is already a run in this Project",
+  "store_saved_run_renamed": "Renamed {from} to {to}",
+  "store_saved_originals_rechecked": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input n",
+        "input changed",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {n} original re-hashed · {changed} changed",
+        "countPlural=*": "{name}: {n} originals re-hashed · {changed} changed"
+      }
+    }
+  ],
+  "store_reason_sha_now": "SHA-256 now {hash}…",
+  "store_label_proto_better_master": "Prototype: newer compatible master",
+  "store_reason_no_master_assigned": "No master assigned yet"
 }

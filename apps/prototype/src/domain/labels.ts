@@ -44,10 +44,11 @@ export const STEP_NAME: Record<RunStep, MessageRef> = {
   done: msg("step_done"),
 }
 
-/** "Linked run": the run folder holds links to the reviewed inputs (PREP-FR-04). */
+/** Prepare input modes (P-PREP2): Automatic, Independent copy, Link to originals, Give PixInsight the file list. */
 export const MODE_NAME: Record<InputMode, MessageRef> = {
+  automatic: msg("domain_mode_automatic"),
   linked: msg("domain_mode_linked"),
-  "direct-source": msg("apps_direct_source"),
+  "direct-source": msg("domain_mode_file_list"),
   copy: msg("domain_mode_copy"),
   clone: msg("domain_mode_clone"),
 }

@@ -287,9 +287,21 @@ function nightDistance(a: string, b: string | null): number {
 }
 
 /**
- * Candidates for one requirement: compatible first, then the nearest night.
- * Night orders only; it is never a criterion.
+ * The matching rule's order: compatible first, then fewer incompatible and
+ * unknown criteria, then the nearest night, then more frames. Night and frame
+ * count only order; neither is ever a criterion. Negative when `a` ranks first.
  */
+export function compareCandidates(night: string, a: Candidate, b: Candidate): number {
+  return (
+    Number(b.summary.allCompatible) - Number(a.summary.allCompatible) ||
+    a.summary.incompatible - b.summary.incompatible ||
+    a.summary.unknown - b.summary.unknown ||
+    nightDistance(night, a.source.night) - nightDistance(night, b.source.night) ||
+    (b.source.frameCount ?? 0) - (a.source.frameCount ?? 0)
+  )
+}
+
+/** Candidates for one requirement, in the matching rule's order (`compareCandidates`). */
 export function candidatesFor(catalog: Catalog, session: Session, kind: CalibrationKind, sources: CalSource[]): Candidate[] {
   const light = lightGeometry(catalog, session)
   return sources
@@ -298,13 +310,7 @@ export function candidatesFor(catalog: Catalog, session: Session, kind: Calibrat
       const criteria = matchCriteria(catalog, light, source)
       return { source, criteria, summary: summarize(criteria) }
     })
-    .sort(
-      (a, b) =>
-        Number(b.summary.allCompatible) - Number(a.summary.allCompatible) ||
-        a.summary.incompatible - b.summary.incompatible ||
-        a.summary.unknown - b.summary.unknown ||
-        nightDistance(session.night, a.source.night) - nightDistance(session.night, b.source.night),
-    )
+    .sort((a, b) => compareCandidates(session.night, a, b))
 }
 
 export function sameInput(a: CalibrationInput | null, b: CalibrationInput | null): boolean {
@@ -316,10 +322,11 @@ export function inputKey(input: CalibrationInput): string {
 }
 
 /**
- * Row state. "automatic" is a compatible suggestion the automatic policy
- * assigns without a click (D-W5, D-W55); the stored states override it.
+ * Row state. "automatic" is a compatible master the automatic policy assigns
+ * without a click (D-W5, D-W55); once stored it stays the run's choice. With
+ * the policy off a compatible master is "suggested" and waits for Accept.
  */
-export type RowState = CalibrationAssignment["state"] | "automatic"
+export type RowState = CalibrationAssignment["state"]
 
 export interface RequirementRow {
   key: string
@@ -327,7 +334,7 @@ export interface RequirementRow {
   kind: CalibrationKind
   /** Stored decision for this run, if any. */
   assignment: CalibrationAssignment | null
-  /** The best compatible candidate (never stored until accepted). */
+  /** The best compatible candidate. */
   suggestion: Candidate | null
   /** Best candidate when nothing is fully compatible; named, not preselected. */
   closest: Candidate | null
@@ -339,6 +346,8 @@ export interface RequirementRow {
   criteria: MatchCriterion[]
   /** The handed-off input's bytes no longer match its basis; the row needs review (CAL-FR-08). */
   drift: string | null
+  /** A compatible master the matching rule ranks above the assigned one: offered as "Better match available", never switched to by itself. */
+  better: Candidate | null
   /** Identifies the setup group: the same lights' channel, rig, size, binning, gain and offset. */
   groupKey: string
   /** The group's setup, one ref per part, in the order of `groupKey`. */
@@ -369,19 +378,22 @@ export interface CalibrationPlan {
   rows: RequirementRow[]
   groups: Array<{ key: string; parts: MessageRef[]; rows: RequirementRow[] }>
   counts: Record<RowState, number>
-  /** Rows that need the user: no compatible input, deferred, or a drifted input (CAL-AC-06). */
+  /** Rows that need the user: no compatible input, deferred, or a drifted input (CAL-AC-06). With the policy off, drifted inputs only. */
   needsReview: RequirementRow[]
 }
 
+const HANDED_OFF = new Set<RowState>(["automatic", "accepted", "exception"])
+
 /**
  * The run's calibration requirements. With the automatic policy every row
- * with a compatible candidate is assigned without a click; only rows with no
- * compatible input, deferred rows and drifted inputs need review. With the
- * policy off nothing is handed off and nothing needs review (D-W55).
+ * with a compatible candidate is assigned without a click, and a stored
+ * assignment keeps its master when a better one appears (no silent re-rank);
+ * rows with no compatible input, deferred rows and drifted inputs need
+ * review. With the policy off compatible masters are Suggested and nothing is
+ * handed off until accepted (D-W55, round 6).
  */
 export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: CalibrationPolicy, content: MembershipContent | null): CalibrationPlan {
   const counts: Record<RowState, number> = { automatic: 0, suggested: 0, accepted: 0, exception: 0, deferred: 0, unresolved: 0 }
-  if (policy === "off") return { policy, rows: [], groups: [], counts, needsReview: [] }
   const members = content ? memberSessions(catalog, content) : []
   const sources = reusableSources(catalog, disk)
   const rows: RequirementRow[] = []
@@ -391,22 +403,28 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
       const candidates = candidatesFor(catalog, member.session, kind, sources)
       const suggestion = candidates[0]?.summary.allCompatible ? candidates[0] : null
       const closest = suggestion ? null : (candidates[0] ?? null)
-      const assignment = run.calibration.find((a) => a.lightSessionId === member.session.id && a.kind === kind) ?? null
+      const stored = run.calibration.find((a) => a.lightSessionId === member.session.id && a.kind === kind) ?? null
+      // Off assigns nothing by itself: a stored automatic choice waits for Accept like any suggestion.
+      const assignment = policy === "off" && stored?.state === "automatic" ? null : stored
       let state: RowState
       let input: CalibrationInput | null
       let criteria: MatchCriterion[]
       let drift: string | null = null
+      let better: Candidate | null = null
       if (assignment) {
         state = assignment.state
         input = assignment.input
         const live = assignment.input ? candidates.find((c) => sameInput(c.source.input, assignment.input)) : undefined
         criteria = assignment.criteria.length > 0 ? assignment.criteria : (live?.criteria ?? [])
-        if (assignment.input && (state === "accepted" || state === "exception")) drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, assignment)
+        if (assignment.input && HANDED_OFF.has(state)) {
+          drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, assignment)
+          if (suggestion && !sameInput(suggestion.source.input, assignment.input) && (!live || compareCandidates(member.session.night, suggestion, live) < 0)) better = suggestion
+        }
       } else if (suggestion) {
-        state = "automatic"
+        state = policy === "automatic" ? "automatic" : "suggested"
         input = suggestion.source.input
         criteria = suggestion.criteria
-        drift = inputDrift(catalog, disk, suggestion.source.input)
+        if (policy === "automatic") drift = inputDrift(catalog, disk, suggestion.source.input)
       } else {
         state = "unresolved"
         input = null
@@ -425,6 +443,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
         source: input ? sourceFor(catalog, input) : null,
         criteria,
         drift,
+        better,
         groupKey: group.key,
         groupParts: group.parts,
       })
@@ -437,7 +456,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
     else groups.push({ key: row.groupKey, parts: row.groupParts, rows: [row] })
   }
   for (const row of rows) counts[row.state] += 1
-  const needsReview = rows.filter((r) => r.state === "suggested" || r.state === "deferred" || r.state === "unresolved" || r.drift !== null)
+  const needsReview = rows.filter((r) => r.drift !== null || (policy === "automatic" && (r.state === "suggested" || r.state === "deferred" || r.state === "unresolved")))
   return { policy, rows, groups, counts, needsReview }
 }
 
@@ -445,7 +464,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
 export function handoffCalibration(catalog: Catalog, plan: CalibrationPlan): CalSource[] {
   const out: CalSource[] = []
   for (const row of plan.rows) {
-    if ((row.state !== "automatic" && row.state !== "accepted" && row.state !== "exception") || !row.input || row.drift) continue
+    if (!HANDED_OFF.has(row.state) || !row.input || row.drift) continue
     if (out.some((s) => sameInput(s.input, row.input))) continue
     const source = sourceFor(catalog, row.input)
     if (source) out.push(source)

@@ -1,13 +1,14 @@
 /**
  * S5 Run (slice C): the run header (subject and rig as pills, fixed at
- * creation; the run status, e.g. "Blocked at Calibrate"; Complete, Reopen, Move to Trash,
- * Restore and Clean up), the step bar, and the Select, Calibrate, Prepare,
- * Results and Done steps. The Review step is slice D's `ReviewStep`, mounted
- * here as the last child of the pane's flex column (D-W3, D-W50, D-W49,
- * D-W54, D-W5, D-W55, D-W51, D-W4, D-W56, D-W26, D-W72).
+ * creation; the run status, e.g. "Blocked at Calibrate"; Rename, unique
+ * within the Project; Complete, Reopen, Move to Trash, Restore and Clean up),
+ * the step bar, and the Select, Calibrate, Prepare, Results and Done steps.
+ * The Review step is slice D's `ReviewStep`, mounted here as the last child
+ * of the pane's flex column (D-W3, D-W50, D-W49, D-W54, D-W5, D-W55, D-W51,
+ * D-W4, D-W56, D-W26, D-W72).
  */
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ChevronRight, Lock, RotateCcw, Telescope, Trash2, Undo2, Wand2 } from "lucide-react"
+import { ChevronRight, Lock, Pencil, RotateCcw, Telescope, Trash2, Undo2, Wand2 } from "lucide-react"
 import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
@@ -20,8 +21,9 @@ import { nextFrom, panelLabel, rigName, runPipeline, runStatus, runStepLink, sub
 import { RUN_STEPS } from "@/domain/labels"
 import type { RunStep } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
-import { reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
+import { renameRun, reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
+import { NameDialog } from "../e-targets-plan-settings/dialogs"
 import { ReviewStep } from "../d-review/review"
 import { CalibrateStep } from "./calibrate-step"
 import { CompleteButton, DoneStep } from "./done-step"
@@ -133,6 +135,7 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
   const navigate = useNavigate()
   const { run, project } = ctx
   const [confirmTrash, setConfirmTrash] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const goTo = (step: RunStep) => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step } })
   if (run.trashedAt) {
     return (
@@ -173,10 +176,28 @@ function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: Run
       ) : (
         <CompleteButton ctx={ctx} onOutcome={onOutcome} variant="outline" />
       )}
+      <Button size="sm" variant="ghost" onClick={() => setRenaming(true)}>
+        <Pencil aria-hidden="true" data-icon="inline-start" />
+        {m.run_rename_ellipsis()}
+      </Button>
       <Button size="sm" variant="ghost" onClick={requestTrash}>
         <Trash2 aria-hidden="true" data-icon="inline-start" />
         {m.run_move_to_trash()}
       </Button>
+      <NameDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        title={m.equipment_rename_title({ name: run.name })}
+        description=""
+        label={m.run_name_label()}
+        initial={run.name}
+        confirmLabel={m.run_rename()}
+        taken={[...Object.values(state.catalog.runs), ...Object.values(state.catalog.runGroups)].filter((r) => r.projectId === run.projectId && r.id !== run.id).map((r) => r.name)}
+        onSubmit={(name) => {
+          const result = renameRun(run.id, name)
+          return result.ok ? null : result.reason === "refused" ? result.reasons.join(" · ") : result.message
+        }}
+      />
       <ConfirmDialog
         open={confirmTrash}
         onOpenChange={setConfirmTrash}

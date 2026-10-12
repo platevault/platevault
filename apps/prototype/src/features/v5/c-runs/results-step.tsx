@@ -2,8 +2,8 @@
  * S5 Results: candidates discovered only in the recorded Results folder,
  * Pending while a file is still being written, intermediates listed apart
  * (they reach the OS Trash in the Project's Wrap up); attribution to a
- * prepared revision (tool evidence, the time window as an inference, or
- * Unknown); Attach (User-linked); Accept, bound to the current bytes; and
+ * prepared revision (tool evidence, else the revision current when the
+ * file appeared, marked Inferred, else Unknown); Attach (User-linked); Accept, bound to the current bytes; and
  * "Use as input to a new run" with the product's rig (D-W4, D-W55, D-W56,
  * D-W67, RES-FR-01 to RES-FR-05). Rows have a right-click menu.
  */
@@ -157,14 +157,16 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
 
 function basisNote(m: Messages, basis: ResultRow["attribution"]["basis"]): string {
   if (basis === "tool") return m.run_results_basis_tool()
-  if (basis === "window") return m.run_results_basis_window()
+  if (basis === "inferred") return m.run_results_basis_inferred()
   return m.session_no_evidence()
 }
 
+/** The result's revision: tool evidence, or the revision current when the file appeared marked Inferred (round 6), or Unknown; the NoteMarker names the basis. */
 export function attributionCell(r: ResultRow) {
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1" data-attribution={r.attribution.basis}>
       <span>{say(m, r.attribution.label)}</span>
+      {r.attribution.basis === "inferred" ? <Pill tone="muted">{m.run_results_inferred()}</Pill> : null}
       <NoteMarker label={m.run_results_attribution_for({ name: fileName(r.record.path) })}>{r.record.discovered === "attached" && r.attribution.basis === "unknown" ? m.run_results_attached_no_evidence() : basisNote(m, r.attribution.basis)}</NoteMarker>
     </span>
   )

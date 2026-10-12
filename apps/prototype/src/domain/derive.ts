@@ -12,14 +12,17 @@ import { calibrationPlan, type CalibrationPlan, candidatesFor, reusableSources }
 import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import {
   assetAvailability,
+  coverageFraction,
   effectiveExposureS,
+  type Footprint,
   type FrameTotals,
   measurementApplies,
   qualityApplicability,
+  sessionFootprint,
 } from "./library"
 import { runSummary, sessionExposureS } from "./membership"
 import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight } from "./planning"
-import { type FieldOfView, fieldOfView } from "./sky"
+import { angularSeparationDeg, type FieldOfView, fieldOfView } from "./sky"
 import { type NamingValues, namingValues } from "./templates"
 import type {
   AppSettings,
@@ -390,6 +393,33 @@ export function runCandidates(catalog: Catalog, run: Run): Candidate[] {
     if (!run.panelId) return true
     return panelForSession(catalog, c.subject, c.session, run.rigId).panelId === run.panelId
   })
+}
+
+export interface SessionGeometry {
+  /** Separation of the session's pointing from the Target (a panel run: its panel's centre); null without pointing. */
+  distanceDeg: number | null
+  /** Fraction (0-1) of the framing the session's footprint covers: the panel, else the Target's extent, else the rig's field centred on the Target. Null without a qualified footprint (D01). */
+  coverage: number | null
+}
+
+/** Select's sky tools (spec 066): distance from the Target and footprint coverage, from qualified geometry only. */
+export function runSessionGeometry(catalog: Catalog, run: Run, session: Session): SessionGeometry {
+  const project = catalog.projects[run.projectId]
+  const subject = project ? findSubject(project, run.subjectId) : undefined
+  const panel = findPanel(subject, run.panelId)
+  const centre = panel ?? (subject ? subjectCentre(catalog, subject) : null)
+  if (!centre || !session.pointing) return { distanceDeg: null, coverage: null }
+  const distanceDeg = angularSeparationDeg(session.pointing.ra, session.pointing.dec, centre.ra, centre.dec)
+  const rig = catalog.opticalTrains[run.rigId]
+  const fov = rig ? rigFieldOfView(catalog, rig) : null
+  const target = subject ? subjectTarget(catalog, subject) : undefined
+  const region: Footprint | null = panel
+    ? fov && { ra: panel.ra, dec: panel.dec, widthDeg: fov.widthDeg, heightDeg: fov.heightDeg, rotationDeg: panel.rotationDeg }
+    : target?.sizeDeg
+      ? { ra: centre.ra, dec: centre.dec, widthDeg: target.sizeDeg.width, heightDeg: target.sizeDeg.height, rotationDeg: 0 }
+      : fov && { ra: centre.ra, dec: centre.dec, widthDeg: fov.widthDeg, heightDeg: fov.heightDeg, rotationDeg: 0 }
+  const footprint = sessionFootprint(catalog, session)
+  return { distanceDeg, coverage: region && footprint ? coverageFraction(region, [footprint]) : null }
 }
 
 export interface RunRefresh {
@@ -881,22 +911,24 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     nextLabel: draftNote ? msg("domain_next_save_run") : msg("session_review_frames"),
   }
 
-  // 3 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55).
+  // 3 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55). With the
+  // policy off compatible masters wait as Suggested and hold nothing back; a drifted accepted input still does.
   const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, savedContent(run) ?? content)
+  const off = setup.calibrationPolicy === "off"
   const offers = run.masterOffers.filter((o) => o.state === "pending").length
   const needReview = calibration.needsReview.length
   const calibrateItems: GateItem[] = [
     {
       label: msg("domain_gate_calibration_matched"),
-      met: setup.calibrationPolicy === "off" || (calibration.rows.length > 0 && needReview === 0),
+      met: needReview === 0 && (off || calibration.rows.length > 0),
       detail:
-        setup.calibrationPolicy === "off"
-          ? msg("domain_gate_policy_off")
-          : calibration.rows.length === 0
-            ? msg("domain_gate_select_first")
-            : needReview === 0
-              ? msg("domain_gate_requirements_matched", { count: calibration.rows.length })
-              : msg("domain_gate_requirements_need_review", { count: needReview }),
+        needReview > 0
+          ? msg("domain_gate_requirements_need_review", { count: needReview })
+          : off
+            ? msg("domain_gate_policy_off")
+            : calibration.rows.length === 0
+              ? msg("domain_gate_select_first")
+              : msg("domain_gate_requirements_matched", { count: calibration.rows.length }),
     },
   ]
   if (offers > 0) calibrateItems.push({ label: msg("domain_gate_master_found"), met: "advisory", detail: msg("domain_gate_masters_offered", { count: offers }) })
@@ -904,14 +936,14 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   // "N unresolved" as advisory, the same words the run header shows beside Complete.
   const calibrate: RunStepState = {
     ...STEP("calibrate"),
-    state: setup.calibrationPolicy === "off" ? "done" : calibration.rows.length === 0 ? "idle" : needReview > 0 ? (complete ? "review" : "blocked") : "done",
+    state: needReview > 0 ? (complete ? "review" : "blocked") : off ? "done" : calibration.rows.length === 0 ? "idle" : "done",
     status:
-      setup.calibrationPolicy === "off"
-        ? msg("run_cal_off")
-        : calibration.rows.length === 0
-          ? DASH
-          : needReview > 0
-            ? msg(complete ? "domain_status_unresolved" : "domain_status_need_review", { count: needReview })
+      needReview > 0
+        ? msg(complete ? "domain_status_unresolved" : "domain_status_need_review", { count: needReview })
+        : off
+          ? msg("run_cal_off")
+          : calibration.rows.length === 0
+            ? DASH
             : msg("run_cal_automatic"),
     items: calibrateItems,
     link: link("calibrate"),

@@ -1,21 +1,26 @@
 /**
  * S5 Calibrate (masters only, P-CAL3): readiness per kind as pills, the
- * automatic policy (on by default, D-W55), masters found in Results with a
- * reversible Dismiss (P-CAL2), and Matches: the requirement table with its
- * criteria, the master each requirement hands off with its SHA-256, ties and
- * exceptions (D-W5, CAL-FR-08). A requirement no master matches offers
- * "Stack from <calibration session>", which opens that session's
- * calibration process in the Calibration library.
+ * automatic policy (on by default, D-W55), masters found in Results (Add to
+ * library confirms path and SHA-256 and re-verifies; a reversible Dismiss,
+ * P-CAL2), and Matches: the requirement table with its criteria, the master
+ * each requirement hands off with its SHA-256, ties and exceptions (D-W5,
+ * CAL-FR-08). With the policy off, compatible masters are Suggested and wait
+ * for Accept. A run keeps the masters it has: a better compatible master
+ * shows "Better match available" with Use it, never a silent switch. A
+ * requirement no master matches offers "Stack from <calibration session>",
+ * which opens that session's calibration process in the Calibration library.
  */
 import { useNavigate } from "@tanstack/react-router"
-import { ChevronDown, CircleSlash, Layers, ListRestart, PauseCircle, RotateCcw, Sparkles } from "lucide-react"
+import { ChevronDown, CircleSlash, Layers, ListRestart, PauseCircle, RotateCcw, Sparkles, X } from "lucide-react"
 import { useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Box } from "@/components/app/box"
+import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { CountBadge, Pill } from "@/components/app/pill"
 import type { MenuEntry } from "@/components/app/row-menu"
 import { RowContextMenu } from "@/components/app/row-menu"
+import { Refusal } from "@/components/app/refusal"
 import { StatusBadge } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
@@ -23,15 +28,15 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { basisFiles, type CalSource, calibrationPlan, CRITERION_NAME, KIND_NAME, type RequirementRow, summaryRef } from "@/domain/calibration"
+import { basisFiles, type CalSource, type Candidate, calibrationPlan, CRITERION_NAME, KIND_NAME, type RequirementRow, summaryRef } from "@/domain/calibration"
 import { runSetup, workingContent } from "@/domain/derive"
 import type { CalibrationKind, MatchCriterion, Run } from "@/domain/types"
 import { fileName, formatNight } from "@/lib/format"
 import { type Messages, m, type MessageRef, say } from "@/lib/i18n"
-import { useStore } from "@/store/core"
-import { acceptCalibration, answerMasterOffer, calibrationException, clearCalibration, deferCalibration, setCalibrationPolicy } from "./actions"
+import { type CommitResult, useStore } from "@/store/core"
+import { acceptCalibration, adoptionPreview, adoptMasterOffer, calibrationException, clearCalibration, deferCalibration, dismissMasterOffer, setCalibrationPolicy, simulateBetterMaster } from "./actions"
 import { groupSetupParts, type RunContext, readinessByKind, runLock, type StackOffer, stackOffers, tieOf } from "./model"
-import { OutcomeNotice, RowActions, Sha, useOutcome } from "./parts"
+import { OutcomeNotice, PrototypeMenu, RowActions, Sha, useOutcome } from "./parts"
 
 type Act = ReturnType<typeof useOutcome>["act"]
 type ExceptionRequest = { row: RequirementRow; source: CalSource | null; criteria: MatchCriterion[] }
@@ -59,7 +64,8 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const setup = runSetup(state.catalog, run)
   const plan = calibrationPlan(state.catalog, state.disk, run, setup.calibrationPolicy, workingContent(run))
   const [open, setOpen] = useState<boolean | null>(null)
-  const expanded = open ?? plan.needsReview.length > 0
+  const better = plan.rows.filter((r) => r.better !== null).length
+  const expanded = open ?? (plan.needsReview.length > 0 || plan.counts.suggested > 0 || better > 0)
   const lock = runLock(run)
   const switchId = useId()
   const [exception, setException] = useState<ExceptionRequest | null>(null)
@@ -96,6 +102,8 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
               </Pill>
             ))
           )}
+          {plan.policy === "off" && plan.counts.suggested > 0 ? <Pill tone="info">{m.run_cal_suggested_count({ count: plan.counts.suggested })}</Pill> : null}
+          {better > 0 ? <Pill tone="info">{m.run_cal_better_count({ count: better })}</Pill> : null}
           {plan.needsReview.length > 0 ? <Pill tone="warning">{run.completion === "complete" ? m.domain_status_unresolved({ count: plan.needsReview.length }) : m.run_cal_to_review({ count: plan.needsReview.length })}</Pill> : null}
           {group ? (
             <Pill tone="info" icon={Layers} link={{ to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: group.projectId, groupId: group.id, step: "calibrate" } }} title={m.run_cal_policy_shared()}>
@@ -108,8 +116,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
 
       <MasterOffers run={run} onOutcome={outcome.act} />
 
-      {plan.policy === "automatic" ? (
-        <Box
+      <Box
           id="cal-matches"
           level={2}
           flush
@@ -124,12 +131,19 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
             </span>
           }
           actions={
-            plan.rows.length > 0 ? (
-              <Button size="xs" variant="ghost" aria-expanded={expanded} aria-controls="cal-matches-table" onClick={() => setOpen(!expanded)}>
-                <ChevronDown aria-hidden="true" data-icon="inline-start" className={expanded ? "rotate-180" : undefined} />
-                {expanded ? m.run_hide() : m.run_show()}
-              </Button>
-            ) : null
+            <>
+              {lock ? null : (
+                <PrototypeMenu
+                  actions={[{ label: m.run_proto_better_master(), detail: m.run_proto_better_master_detail(), run: () => outcome.act(simulateBetterMaster(run.id), { blocked: m.run_proto_blocked() }) }]}
+                />
+              )}
+              {plan.rows.length > 0 ? (
+                <Button size="xs" variant="ghost" aria-expanded={expanded} aria-controls="cal-matches-table" onClick={() => setOpen(!expanded)}>
+                  <ChevronDown aria-hidden="true" data-icon="inline-start" className={expanded ? "rotate-180" : undefined} />
+                  {expanded ? m.run_hide() : m.run_show()}
+                </Button>
+              ) : null}
+            </>
           }
         >
           {plan.rows.length === 0 ? (
@@ -139,8 +153,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
               <RequirementTable run={run} rows={plan.rows} groupHeading={(key) => groupSetup.own(key).join(" · ")} lock={lock} onOutcome={outcome.act} onException={setException} />
             </div>
           ) : null}
-        </Box>
-      ) : null}
+      </Box>
 
       <ExceptionDialog
         value={exception}
@@ -158,6 +171,24 @@ function stateBadge(row: RequirementRow) {
   if (row.drift) return <StatusBadge kind="content" value="drifted" label={m.status_drifted()} />
   if (row.state === "automatic") return <StatusBadge kind="assignment" value="accepted" label={m.run_cal_automatic()} />
   return <StatusBadge kind="assignment" value={row.state} />
+}
+
+/** No silent re-rank: a compatible master the matching rule ranks above the assigned one (closer night or more frames), with Use it. */
+function BetterMatch({ row, better, locked, onUse }: { row: RequirementRow; better: Candidate; locked: boolean; onUse: (c: Candidate) => void }) {
+  const m = useMessages()
+  const facts = [better.source.name, better.source.night ? formatNight(better.source.night) : null, better.source.frameCount !== null ? m.run_frames_count({ count: better.source.frameCount }) : null].filter((x) => x !== null).join(" · ")
+  return (
+    <span className="flex flex-wrap items-center gap-1" data-better-match={row.key}>
+      <Pill tone="info" icon={Sparkles} title={facts}>
+        {m.run_cal_better_match()}
+      </Pill>
+      {locked ? null : (
+        <Button size="xs" variant="outline" aria-label={m.run_use_named({ name: better.source.name })} title={facts} onClick={() => onUse(better)}>
+          {m.run_cal_use_it()}
+        </Button>
+      )}
+    </span>
+  )
 }
 
 /** The note behind a row's state: drift, an exception's reason, or a tie. */
@@ -263,6 +294,8 @@ function RequirementTable({
       header: m.run_cal_col_master(),
       cell: (r) => {
         const offers = r.source ? [] : stackOffers(state, r)
+        const accept = r.state === "suggested" && !lock ? r.candidates.find((c) => c.source.input.masterId === r.input?.masterId) : undefined
+        const use = (c: Candidate) => onOutcome(acceptCalibration(run.id, r.member.session.id, r.kind, c.source, c.criteria), assignBlocked)
         return (
           <span className="flex max-w-[18rem] flex-col items-start gap-0.5">
             {r.source ? (
@@ -281,6 +314,12 @@ function RequirementTable({
               <span className="text-muted-foreground">{m.run_cal_no_master()}</span>
             )}
             {r.input ? <Sha value={shaOf(r)} /> : null}
+            {accept ? (
+              <Button size="xs" variant="outline" aria-label={m.run_results_accept_named({ name: accept.source.name })} onClick={() => use(accept)}>
+                {m.run_accept()}
+              </Button>
+            ) : null}
+            {r.better ? <BetterMatch row={r} better={r.better} locked={lock !== null} onUse={use} /> : null}
           </span>
         )
       },
@@ -363,18 +402,32 @@ function ExceptionDialog({ value, onClose, onConfirm }: { value: ExceptionReques
 }
 
 /**
- * Masters found in this run's Results: Add files a copy into structured
- * calibration storage; Dismiss is reversible from the Calibration library's
- * Dismissed filter (P-CAL2). Candidates never match until they are added.
+ * Masters found in this run's Results: Add to library confirms the
+ * destination path and SHA-256 first, then files a copy into structured
+ * calibration storage after re-verifying the bytes (round 6); a master that
+ * changed meanwhile is refused "Can't add · master changed". Dismiss is
+ * reversible from the Calibration library's Dismissed filter (P-CAL2).
+ * Candidates never match until they are added.
  */
 export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
   const m = useMessages()
   const state = useStore((s) => s)
+  const [adopting, setAdopting] = useState<{ masterId: string; name: string; destinationPath: string; sha256: string } | null>(null)
+  const [refusal, setRefusal] = useState<string[] | null>(null)
   const pending = run.masterOffers.filter((o) => o.state === "pending").map((o) => state.catalog.masters[o.masterId]).filter((x) => x !== undefined)
   const dismissed = run.masterOffers.filter((o) => o.state === "dismissed").length
   if (pending.length === 0 && dismissed === 0) return null
-  const add = (masterId: string, name: string) => onOutcome(answerMasterOffer(run.id, masterId, "adopt"), { blocked: m.run_cal_add_blocked(), success: { title: m.run_cal_master_added({ name }), tone: "info" } })
-  const dismiss = (masterId: string, name: string) => onOutcome(answerMasterOffer(run.id, masterId, "dismiss"), { blocked: m.run_cal_dismiss_blocked(), success: { title: m.run_cal_master_dismissed({ name }), tone: "info" } })
+  const refused = (result: CommitResult) => {
+    if (result.ok) return setRefusal(null)
+    setRefusal(result.reason === "refused" ? result.reasons : [result.message])
+  }
+  const add = (masterId: string, name: string) => {
+    const preview = adoptionPreview(state, masterId)
+    if (!preview.ok) return setRefusal(preview.reasons.map((r) => say(m, r)))
+    setRefusal(null)
+    setAdopting({ masterId, name, destinationPath: preview.destinationPath, sha256: preview.sha256 })
+  }
+  const dismiss = (masterId: string, name: string) => onOutcome(dismissMasterOffer(run.id, masterId), { blocked: m.run_cal_dismiss_blocked(), success: { title: m.run_cal_master_dismissed({ name }), tone: "info" } })
   return (
     <Box
       id={`offers-${run.id}`}
@@ -393,6 +446,14 @@ export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
         ) : null
       }
     >
+      {refusal ? (
+        <div className="flex items-start gap-1.5 border-b border-separator px-3 py-2" data-adopt-refusal>
+          <Refusal className="min-w-0 flex-1" action={m.session_cant_add()} reason={refusal[0] ?? m.run_try_again()} blockers={refusal.slice(1).map((label) => ({ label }))} />
+          <Button size="icon-xs" variant="ghost" onClick={() => setRefusal(null)} aria-label={m.run_dismiss()} title={m.run_dismiss()}>
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+      ) : null}
       {pending.length === 0 ? (
         <p className="px-3 py-2 text-sm text-muted-foreground">{m.run_cal_none_pending()}</p>
       ) : (
@@ -404,7 +465,7 @@ export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
                 key={master.id}
                 entries={[
                   { heading: name },
-                  { label: m.run_cal_add_to_library(), onSelect: () => add(master.id, name) },
+                  { label: m.run_cal_add_to_library_ellipsis(), onSelect: () => add(master.id, name) },
                   { label: m.run_dismiss(), onSelect: () => dismiss(master.id, name) },
                 ]}
               >
@@ -424,7 +485,7 @@ export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
                   </span>
                   <span className="flex gap-1.5">
                     <Button size="xs" onClick={() => add(master.id, name)}>
-                      {m.run_cal_add_to_library()}
+                      {m.run_cal_add_to_library_ellipsis()}
                     </Button>
                     <Button size="xs" variant="outline" onClick={() => dismiss(master.id, name)}>
                       {m.run_dismiss()}
@@ -436,6 +497,32 @@ export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
           })}
         </ul>
       )}
+      <ConfirmDialog
+        open={adopting !== null}
+        onOpenChange={(open) => !open && setAdopting(null)}
+        title={m.run_cal_add_title({ name: adopting?.name ?? "" })}
+        description={
+          <span className="grid gap-1 text-foreground" data-adopt-confirm>
+            <span className="text-xs text-muted-foreground">{m.run_cal_add_destination()}</span>
+            <span className="font-mono text-xs [overflow-wrap:anywhere]" data-adopt-path>
+              {adopting?.destinationPath}
+            </span>
+            <span className="text-xs text-muted-foreground">{m.run_sha256()}</span>
+            <span className="font-mono text-xs [overflow-wrap:anywhere]" data-adopt-sha>
+              {adopting?.sha256}
+            </span>
+          </span>
+        }
+        changes={[m.run_cal_add_copies({ name: adopting?.name ?? "" }), m.run_cal_add_reverifies()]}
+        unchanged={[m.run_cal_add_source_stays()]}
+        confirmLabel={m.run_cal_add_to_library()}
+        onConfirm={() => {
+          if (!adopting) return
+          const result = adoptMasterOffer(run.id, adopting.masterId, adopting.sha256)
+          refused(result)
+          if (result.ok) onOutcome(result, { success: { title: m.run_cal_master_added({ name: adopting.name }), tone: "info" } })
+        }}
+      />
     </Box>
   )
 }
