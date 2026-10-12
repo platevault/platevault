@@ -83,6 +83,42 @@ export function nightAt(ms: number, site: ObservingSite): string {
   return new Date(local).toISOString().slice(0, 10)
 }
 
+/** `night` moved by `days`: "2026-10-10" and 1 give "2026-10-11". */
+export function shiftNight(night: string, days: number): string {
+  return new Date(Date.parse(`${night}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** The first sample of a night's grid: local noon at the site, snapped to `SAMPLE_MIN` so window identities stay stable across clock changes. */
+function nightStartMs(site: ObservingSite, night: string): number {
+  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
+  return Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+}
+
+/**
+ * "Tonight" at a site: the night that holds `ms` until its darkness is over
+ * (its Sun, on a night without darkness), then the next night. `nightAt`
+ * alone turns over at local noon, so a morning would still read the night
+ * that has just ended, with no window left in it.
+ */
+export function upcomingNight(site: ObservingSite, ms: number): string {
+  const night = nightAt(ms, site)
+  const sunLimit = site.twilight === "astronomical" ? -18 : -12
+  const start0 = nightStartMs(site, night)
+  const step = SAMPLE_MIN * 60_000
+  let darkEnd: number | null = null
+  let sunrise: number | null = null
+  for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
+    const t = start0 + i * step
+    const jd = julianDay(t)
+    const sun = sunPosition(jd)
+    const alt = altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd)
+    if (alt <= sunLimit) darkEnd = t + step
+    if (alt < 0) sunrise = t + step
+  }
+  const end = darkEnd ?? sunrise
+  return end !== null && ms >= end ? shiftNight(night, 1) : night
+}
+
 export function windowKey(targetId: TargetId, siteId: SiteId, start: string): string {
   return `${targetId}/${siteId}/${start}`
 }
@@ -97,18 +133,17 @@ export function reminderKey(window: ObservingWindow, site: ObservingSite): strin
 }
 
 /**
- * Windows for one Target at one site over the next nights. Every listed window
- * meets every criterion at each sample it covers.
+ * Windows for one Target at one site over the next nights, from `firstNight`
+ * (the night that holds `nowMs` by default); a window must end after
+ * `nowMs`. Every listed window meets every criterion at each sample it
+ * covers.
  */
-export function computeWindows(target: Target, site: ObservingSite, criteria: PlanCriteria, nowMs: number, nights = PLAN_NIGHTS): ObservingWindow[] {
+export function computeWindows(target: Target, site: ObservingSite, criteria: PlanCriteria, nowMs: number, nights = PLAN_NIGHTS, firstNight = nightAt(nowMs, site)): ObservingWindow[] {
   if (target.ra === null || target.dec === null) return []
   const sunLimit = criteria.darkness === "astronomical" ? -18 : -12
-  const firstNight = nightAt(nowMs, site)
   const windows: ObservingWindow[] = []
   for (let n = 0; n < nights; n += 1) {
-    const base = Date.parse(`${firstNight}T12:00:00Z`) + n * 86_400_000 - (site.longitude / 15) * 3_600_000
-    // Snap the grid so window identities stay stable across clock changes.
-    const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+    const start0 = nightStartMs(site, firstNight) + n * 86_400_000
     let run: { start: number; samples: Array<{ alt: number; illum: number; sep: number }> } | null = null
     const flush = (endMs: number) => {
       if (!run) return
@@ -185,11 +220,14 @@ function phaseName(elongationDeg: number, waxing: boolean): MessageRef {
   return msg(waxing ? "tonight_moon_phase_waxing_gibbous" : "tonight_moon_phase_waning_gibbous")
 }
 
-/** Tonight at a site: the Moon and the darkness window, on the same grid as `computeWindows`. */
+/** Tonight at a site (`upcomingNight`): the Moon and the darkness window. */
 export function tonightAt(site: ObservingSite, nowMs: number): Tonight {
-  const night = nightAt(nowMs, site)
-  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
-  const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+  return nightSummary(site, upcomingNight(site, nowMs))
+}
+
+/** One night at a site: the Moon and the darkness window, on the same grid as `computeWindows`. */
+export function nightSummary(site: ObservingSite, night: string): Tonight {
+  const start0 = nightStartMs(site, night)
   const sunLimit = site.twilight === "astronomical" ? -18 : -12
   let darkStart: number | null = null
   let darkEnd: number | null = null
@@ -227,11 +265,14 @@ export function tonightAt(site: ObservingSite, nowMs: number): Tonight {
   }
 }
 
-/** The best window tonight (highest peak altitude) for a Target, or null when it has none tonight. */
+/** The best window tonight (`upcomingNight`, highest peak altitude) for a Target, or null when it has none tonight. */
 export function bestWindowTonight(target: Target, site: ObservingSite, criteria: PlanCriteria, nowMs: number): ObservingWindow | null {
-  const night = nightAt(nowMs, site)
-  const windows = computeWindows(target, site, criteria, nowMs, 1).filter((w) => nightAt(Date.parse(w.start), site) === night)
-  return windows.sort((a, b) => b.maxAltitudeDeg - a.maxAltitudeDeg)[0] ?? null
+  return windowsOnNight(target, site, criteria, upcomingNight(site, nowMs), nowMs).sort((a, b) => b.maxAltitudeDeg - a.maxAltitudeDeg)[0] ?? null
+}
+
+/** A Target's windows on one night that end after `nowMs`: none on a night already past. */
+export function windowsOnNight(target: Target, site: ObservingSite, criteria: PlanCriteria, night: string, nowMs: number): ObservingWindow[] {
+  return computeWindows(target, site, criteria, nowMs, 1, night)
 }
 
 /** One sample of a night on the `computeWindows` grid: the Sun and the Moon at that instant. */
@@ -253,8 +294,7 @@ export interface SkyNight {
 
 /** One night at a site: local noon to noon in `SAMPLE_MIN` samples, dark under `darkness`. */
 export function skyNight(site: ObservingSite, night: string, darkness: PlanCriteria["darkness"]): SkyNight {
-  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
-  const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+  const start0 = nightStartMs(site, night)
   const samples: SkySample[] = []
   for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
     const ms = start0 + i * SAMPLE_MIN * 60_000

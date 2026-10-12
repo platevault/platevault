@@ -1,9 +1,9 @@
 /**
- * Moon limits per filter (slice E: Plan and the Targets good-tonight
- * filter): each band's minimum Moon separation and maximum illumination,
- * the constraint behind "good tonight". Writes go through the foundation's
- * `setMoonConstraint` when a field is left or Enter is pressed; a failed
- * write keeps its message beside the fields.
+ * Moon limits per filter (slice E: the Targets Planned view and the
+ * good-tonight filter): each band's minimum Moon separation and maximum
+ * illumination, the constraint behind "good tonight". Writes go through the
+ * foundation's `setMoonConstraint` when a field is left or Enter is pressed;
+ * a failed write keeps its message beside the fields.
  */
 import { MoonStar } from "lucide-react"
 import { type KeyboardEvent, useId, useState } from "react"
