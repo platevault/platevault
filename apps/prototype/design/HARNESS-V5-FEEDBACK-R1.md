@@ -310,3 +310,14 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **P-REV2: review happens at session ingestion (user; supersedes run-time review).** A session's frames must be fully reviewed before the session can be used in a Project or run. Runs no longer review unreviewed frames.
 - **P-REJ2: Reject is library-wide only (user; supersedes "Reject for this Project only").** Project-only rejections are dropped.
 - **Components (user):** only standard components, composed; no page-local look-alikes; reuse before rebuilding; one flow for staged work across the product. A single owner plans the rebuild (astro-plan-blbjw).
+
+### UI stack, grilling round 1 (user, 2026-10-12; research R9-NATIVE-UI-KITS.md, R9-FLUTTER-MIGRATION.md, R9-BACKEND-SERVICES.md)
+- **"Native" means:** (a) OS-drawn surfaces and platform conventions (menu bar, context menus, dialogs, notifications, tray, window chrome, button order, shortcuts) **and** (b) per-OS control looks (Fluent on Windows, macOS controls on a Mac). (c) Speed is nice to have.
+- **No dual web component kits** inside the webview (Fluent + a macOS kit behind one API): dropped.
+- **WCAG 2.2 AA is a target, not a hard gate.** It does not by itself rule out Flutter.
+- **Flutter: wait** for the spike results before deciding.
+- **Backend services crate: yes, now.** A framework-agnostic Rust crate owns update, notifications, single instance, autostart, open/reveal, trash, file watching and logging; the window owner keeps menus, tray, dialogs and window state.
+- **Updater:** switch away from tauri-plugin-updater now if another option offers better functionality and usability; compare the options first.
+- **Linux is a supported platform.**
+- **Xcode** is not installed for now; the Flutter spike reports what it can without it.
+- **Add a Slint spike** (Rust-native UI with Fluent/Cupertino styles) next to the Tauri and Flutter spikes.
