@@ -7,6 +7,7 @@
 
 use audit::bus::EventBus;
 use audit::stale_propagator::{resolve_project_dependents_hook, StalePropagator};
+use desktop_services::notifications::Notifier;
 use sqlx::SqlitePool;
 
 /// Spawn the spec 002 FR-003 (#713) stale-dependent propagator.
@@ -36,9 +37,11 @@ pub fn spawn_stale_dependent_propagator(
 /// Failures are logged, never fatal — the next pass retries.
 ///
 /// A pass that resolved at least one queued target raises an OS notification
-/// (spec 051 US8); the common empty tick stays silent.
+/// (spec 051 US8) unless the main window is focused; the common empty tick
+/// stays silent.
 pub fn spawn_ingest_resolution_drain(
     app: tauri::AppHandle,
+    notifier: Notifier,
     pool: SqlitePool,
     bus: EventBus,
     resolve_cache: targeting_resolver::simbad::ResolveCache,
@@ -50,7 +53,10 @@ pub fn spawn_ingest_resolution_drain(
             let summary =
                 app_core::ingest_resolution::drain_and_backfill_once(&pool, &bus, &resolve_cache)
                     .await;
-            crate::bootstrap::notify::ingest_drain_completed(&app, &summary);
+            notifier.ingest_drain_completed(
+                crate::bootstrap::notify::main_window_focused(&app),
+                &summary,
+            );
         }
     });
 }

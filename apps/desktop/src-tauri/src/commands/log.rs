@@ -9,27 +9,23 @@
 //! - `log.export` — write a filtered window of log entries to a JSON file.
 //!
 //! ## Live streaming
-//! The bus→frontend forwarding is implemented via `start_log_forwarder`, which
-//! is called from app setup and subscribes to the `EventBus` broadcast channel,
-//! projecting each event to a `LogEntry` and emitting it as a `log:entry` Tauri
-//! event. The frontend subscribes with `listen("log:entry", ...)`.
-//!
-//! **Startup seam note (deferred)**: the forwarder needs `AppHandle` (for
-//! `emit`) and the `EventBus` (for `subscribe`). The current setup wires both
-//! in `run_app`; see `start_log_forwarder` below. If the handle is not yet
-//! available at state-init time, callers can defer the spawn until the first
-//! window is created (`RunEvent::WindowEvent`). The pull path (`log.recent`)
-//! is always real and delivers durable entries at any time.
+//! `desktop_services::log_stream::LogFeed` projects each durable event to a
+//! `LogEntry`; `run_app` forwards that feed as the [`LOG_ENTRY_EVENT`] Tauri
+//! event. The frontend subscribes with `listen("log:entry", ...)`. The pull
+//! path (`log.recent`) is always real and delivers durable entries at any
+//! time.
 
 use app_core::log_stream::{self, ExportOptions, RecentOptions};
 use contracts_core::log::{
-    LogEntry, LogEntrySource, LogExportResponse, LogLevel, LogRecentResponse,
-    LOG_ENTRY_CONTRACT_VERSION,
+    LogEntrySource, LogExportResponse, LogLevel, LogRecentResponse, LOG_ENTRY_CONTRACT_VERSION,
 };
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
 use contracts_core::ContractError;
+
+/// Tauri event carrying one live `LogEntry`.
+pub const LOG_ENTRY_EVENT: &str = "log:entry";
 
 // ── log.recent ────────────────────────────────────────────────────────────────
 
@@ -142,141 +138,5 @@ pub async fn log_export(
         file_path: out_path,
         count,
         bytes: Some(bytes),
-    })
-}
-
-// ── Live bus→frontend forwarder ───────────────────────────────────────────────
-
-/// Emit every `events` row newer than `cursor` as a `log:entry`, returning the
-/// advanced cursor.
-///
-/// A query failure leaves the cursor untouched so the next call retries the same
-/// range rather than skipping it.
-async fn drain_since<R: tauri::Runtime>(
-    pool: &sqlx::SqlitePool,
-    app_handle: &tauri::AppHandle<R>,
-    log_level: LogLevel,
-    cursor: i64,
-) -> i64 {
-    let rows = match persistence_lifecycle::repositories::events::list_since(pool, cursor).await {
-        Ok(rows) => rows,
-        Err(e) => {
-            tracing::warn!("log forwarder: db query failed: {e}");
-            return cursor;
-        }
-    };
-
-    let mut cursor = cursor;
-    for row in rows {
-        cursor = cursor.max(row.event_id);
-        let entry = app_core::log_stream::project_event(
-            row.event_id,
-            &row.topic,
-            &row.emitted_at,
-            &row.payload,
-        );
-
-        if entry.level.rank() >= log_level.rank() {
-            let _ = tauri::Emitter::emit(app_handle, "log:entry", &entry);
-        }
-    }
-    cursor
-}
-
-/// Spawn a background task that subscribes to the `EventBus` broadcast channel
-/// and emits each new event as a `log:entry` Tauri event.
-///
-/// On each broadcast signal the forwarder queries the `events` table for all
-/// rows since its last-seen cursor, projecting them to `LogEntry` and emitting
-/// them. This guarantees the correct `event_id` (and thus the correct `aud:<n>`
-/// id) for every entry, matching what `log.recent` returns.
-///
-/// **Startup seam**: call this from `run_app` after both `AppHandle` and
-/// `EventBus` are ready. Rows committed before this task starts are replayed
-/// immediately, without waiting for a broadcast, bounded to the newest
-/// [`log_stream::LOG_BUFFER_SIZE`] events — the frontend ring buffer's capacity,
-/// so a wider replay could only evict the rows it just delivered. Rows older
-/// than that window are the same set `log.recent` declines to return, and stay
-/// reachable through `log.export`, which is uncapped.
-///
-/// That startup replay does NOT consume its rows: the cursor stays at the seed
-/// until a broadcast-driven drain, because the pre-window emit runs before any
-/// webview listener exists and an advanced cursor would make those rows
-/// unreachable to every later drain. Reaching the panel is guaranteed by the
-/// durable `log.recent` pull, not by this push.
-///
-/// **Cursor-init failure**: if the rewound cursor cannot be determined the
-/// forwarder stops. It must not fall back to cursor `0`, which would replay the
-/// whole `events` table and defeat the bound. The failure is recorded through
-/// `tracing` rather than a `log:entry`: this task starts before any webview
-/// exists (`create_main_window` runs last in `run_app`) and Tauri drops events
-/// that have no listener, so an emit here reaches nobody.
-///
-/// The returned handle is how tests observe that stop; production callers ignore
-/// it, since a detached forwarder needs no supervision.
-pub fn start_log_forwarder<R: tauri::Runtime>(
-    app_handle: tauri::AppHandle<R>,
-    bus: &audit::bus::EventBus,
-    log_level: LogLevel,
-    pool: sqlx::SqlitePool,
-) -> tokio::task::JoinHandle<()> {
-    let mut rx = bus.subscribe();
-
-    tokio::spawn(async move {
-        let mut diag_seq: u64 = 0;
-
-        // Rewind rather than jumping to the table maximum: a jump discards every
-        // row committed between app start and forwarder start.
-        let window = i64::try_from(log_stream::LOG_BUFFER_SIZE).unwrap_or(i64::MAX);
-        let mut cursor = match persistence_lifecycle::repositories::events::rewound_cursor(
-            &pool, window,
-        )
-        .await
-        {
-            Ok(seed) => seed,
-            Err(e) => {
-                // No retry here: `persistence_core::BUSY_TIMEOUT` already gives
-                // sqlx a 5s window for lock contention, so an error past it is
-                // not transient. Stopping keeps the bound intact; `log.recent`
-                // still serves the durable history.
-                tracing::error!("log forwarder: cursor init failed, not streaming: {e}");
-                return;
-            }
-        };
-
-        // Catch up before the first broadcast, and DISCARD the advanced cursor:
-        // `create_main_window` runs last in `run_app`, so this emit usually
-        // reaches no listener, and consuming the rows would put them beyond every
-        // later drain. Holding the seed re-sends the window on the next
-        // broadcast, by which time a listener normally exists; the frontend
-        // dedupes by entry id, so the one-time overlap is invisible.
-        drain_since(&pool, &app_handle, log_level, cursor).await;
-
-        loop {
-            match rx.recv().await {
-                Ok(_envelope) => {
-                    cursor = drain_since(&pool, &app_handle, log_level, cursor).await;
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                    tracing::debug!("log forwarder: broadcast channel closed");
-                    break;
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!("log forwarder: lagged by {n} events");
-                    // Point at export, not refresh: a refresh re-pulls the newest
-                    // 500 via `log.recent`, which cannot reach rows outside that
-                    // window. `log.export` is uncapped and can.
-                    diag_seq += 1;
-                    let diag = LogEntry::diagnostic(
-                        diag_seq,
-                        LogLevel::Warn,
-                        format!(
-                            "Log stream lagged: {n} events not shown live. Export the log to see them."
-                        ),
-                    );
-                    let _ = tauri::Emitter::emit(&app_handle, "log:entry", &diag);
-                }
-            }
-        }
     })
 }

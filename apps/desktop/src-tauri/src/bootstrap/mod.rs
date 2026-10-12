@@ -3,8 +3,9 @@
 
 //! Composition-root helpers for `build_app`/`run_app` (issue #981), split by
 //! why each part changes: window geometry restoration, the native
-//! application menu, and the background task spawners. Not part of the
-//! crate's public API.
+//! application menu, the background task spawners, and the adapters from
+//! `desktop_services` to Tauri (feed forwarding, window focus). Not part of
+//! the crate's public API.
 //!
 //! The `specta`/`invoke_handler` builder pair (`bootstrap/specta.rs`) is grouped
 //! here conceptually but is `include!`d from `lib.rs`'s crate-root scope
@@ -12,6 +13,7 @@
 //! comment for why a real module boundary breaks it.
 
 pub mod background;
+pub mod feeds;
 pub mod menu;
 pub mod notify;
 pub mod window;

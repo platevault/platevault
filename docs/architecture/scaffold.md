@@ -29,6 +29,12 @@ Filesystem grouping follows domain ownership where a family is expected to grow:
   as `workflow/pixinsight` or `workflow/planetary` if the plan justifies them.
 - `crates/calibration/core` keeps reusable calibration policy separate from
   future heavier matching or statistics crates.
+- `crates/desktop/services` holds the desktop backend services that need no
+  UI framework: OS notifications, process logging, the log viewer stream and
+  job-progress feeds. The desktop shell only adapts them (Tauri events, window
+  focus). Its dependency graph admits no Tauri framework crate,
+  `flutter_rust_bridge` or `raw-window-handle`, which
+  `crates/desktop/services/tests/dependency_boundary.rs` enforces.
 
 This document records scaffold intent only. Product and technical decisions
 belong in `specs/001-astro-library-manager/plan.md` and supporting SpecKit

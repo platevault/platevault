@@ -4,37 +4,10 @@
 // Hide the Windows console window on release builds; harmless elsewhere.
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
+use desktop_services::{AppIdentity, Config, Services};
 use desktop_shell::{build_app, run_app};
 
 use tauri::Manager;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
-
-/// Delete rotated log files older than `max_age_days` (spec 051 US7, T042 —
-/// the log directory must never grow unbounded, SC-006). Best-effort: a
-/// failure to read the directory or remove a given file is logged and
-/// otherwise ignored, never fatal to startup.
-fn prune_old_logs(log_dir: &std::path::Path, max_age_days: u64) {
-    let Ok(entries) = std::fs::read_dir(log_dir) else { return };
-    let max_age = std::time::Duration::from_secs(max_age_days * 24 * 60 * 60);
-    let now = std::time::SystemTime::now();
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Ok(metadata) = entry.metadata() else { continue };
-        if !metadata.is_file() {
-            continue;
-        }
-        let Ok(modified) = metadata.modified() else { continue };
-        let Ok(age) = now.duration_since(modified) else { continue };
-        if age > max_age {
-            if let Err(e) = std::fs::remove_file(&path) {
-                tracing::warn!(path = %path.display(), "failed to prune old log file: {e:?}");
-            }
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() {
@@ -44,56 +17,31 @@ async fn main() {
     // that happens in `run_app`.
     let app = build_app();
 
-    // Spec 051 US7 (T041/T042): structured logging with both a stderr target
-    // (unchanged behavior, FR-021) and a rotating daily file target
-    // alongside it (FR-022). `tracing_subscriber` owns the single global
-    // `tracing`/`log`-facade logger slot for the whole process — see the
-    // `tauri_plugin_log::Builder::new().skip_logger()` comment in
+    // Spec 051 US7 (T041/T042): structured logging to stdout and a rotating
+    // daily file, installed by `desktop_services`. That subscriber owns the
+    // single global `tracing`/`log`-facade logger slot for the whole process;
+    // see the `tauri_plugin_log::Builder::new().skip_logger()` comment in
     // `build_app()` for why the plugin does not also try to install one.
-    {
-        // `PV_DATA_DIR` (issue #1204) relocates the whole app-data root, logs
-        // included — otherwise concurrent E2E instances on Windows interleave
-        // their lines into one shared daily log file, which is exactly the
-        // evidence trail those runs exist to produce.
-        let log_dir = desktop_shell::data_dir::resolve().map_or_else(
-            || {
-                app.path()
-                    .app_log_dir()
-                    .unwrap_or_else(|_| std::env::temp_dir().join("plate-vault-logs"))
-            },
-            |root| root.join("logs"),
-        );
-        let _ = std::fs::create_dir_all(&log_dir);
-
-        // Prune before creating today's writer so a just-rotated file from a
-        // prior run doesn't briefly exist alongside an already-stale one.
-        prune_old_logs(&log_dir, 14);
-
-        let file_appender = tracing_appender::rolling::daily(&log_dir, "plate-vault.log");
-        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-        // Leak the guard so the background writer thread lives for the
-        // entire process (dropping it would stop flushing to the file).
-        std::mem::forget(guard);
-
-        let env_filter = || {
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
-        };
-
-        // `try_init` (via `try_init()` below) so a pre-existing subscriber
-        // (e.g. a test harness) does not cause a panic.
-        let _ = tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer().with_filter(env_filter()))
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .with_ansi(false)
-                    .with_writer(non_blocking)
-                    .with_filter(env_filter()),
-            )
-            .try_init();
-
-        tracing::info!(log_dir = %log_dir.display(), "diagnostics log file initialised");
-    }
+    //
+    // `PV_DATA_DIR` (issue #1204) relocates the whole app-data root, logs
+    // included — otherwise concurrent E2E instances on Windows interleave
+    // their lines into one shared daily log file, which is exactly the
+    // evidence trail those runs exist to produce.
+    let log_dir = desktop_shell::data_dir::resolve().map_or_else(
+        || {
+            app.path()
+                .app_log_dir()
+                .unwrap_or_else(|_| std::env::temp_dir().join("plate-vault-logs"))
+        },
+        |root| root.join("logs"),
+    );
+    let services = Services::start(&Config {
+        identity: AppIdentity {
+            identifier: app.config().identifier.clone(),
+            development: tauri::is_dev(),
+        },
+        log_dir,
+    });
 
     // Resolve the platform app-data directory once: it backs both the SQLite
     // URL default (unless `PV_DB_URL` overrides it) and the spec 052 P1
@@ -125,5 +73,5 @@ async fn main() {
     // during `app.run()` rather than `.build()`, so doing that work here left
     // a long migration with no window on screen at all — not a blank window,
     // no window.
-    run_app(app, db_url, data_dir);
+    run_app(app, db_url, data_dir, services);
 }

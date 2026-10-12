@@ -1469,6 +1469,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "desktop_services"
+version = "0.1.0"
+dependencies = [
+ "app_core",
+ "audit",
+ "contracts_core",
+ "notify-rust",
+ "persistence_core",
+ "persistence_lifecycle",
+ "platevault_core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "desktop_shell"
 version = "0.6.0"
 dependencies = [
@@ -1476,6 +1498,7 @@ dependencies = [
  "audit",
  "camino",
  "contracts_core",
+ "desktop_services",
  "domain_core",
  "fs_inventory",
  "fs_pathsafe",
@@ -1503,7 +1526,6 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-plugin-mcp-bridge",
- "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
@@ -1515,7 +1537,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "tracing-appender",
  "tracing-subscriber",
  "uuid",
  "workflow_artifacts",
@@ -6950,25 +6971,6 @@ dependencies = [
  "webview2-com",
  "windows 0.61.3",
  "windows-core 0.61.2",
-]
-
-[[package]]
-name = "tauri-plugin-notification"
-version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01fc2c5ff41105bd1f7242d8201fdf3efd70749b82fa013a17f2126357d194cc"
-dependencies = [
- "log",
- "notify-rust",
- "rand 0.9.5",
- "serde",
- "serde_json",
- "serde_repr",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.19",
- "time",
- "url",
 ]
 
 [[package]]
