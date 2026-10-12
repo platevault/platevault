@@ -5,14 +5,16 @@
  * still live, one group per frame. The scan covers registered library
  * locations only, never a capture card (Round 6), and the copy to keep is
  * preselected (`keepChoice`: the one in the earliest-registered location; a
- * copy that cannot go to the OS Trash is kept, so the others can). Per group:
- * Move others to Trash; for every group: Move all to Trash. Each move is
- * confirmed with its count and bytes and runs through the shared OS Trash
+ * copy that cannot go to the OS Trash is kept, so the others can). A copy
+ * linked by an unfinished run's view can't go (`trashBlock`, P-TRASH2) and
+ * leads to that run. Per group: Move others to Trash; for every group: Move
+ * all to Trash. Each move is confirmed with its count and bytes, plus the
+ * kept-view links that go with it, and runs through the shared OS Trash
  * engine: nothing is deleted permanently, and the issue clears as the copies
  * leave. Scan again lives here, the scan otherwise runs by itself.
  */
 import { Copy } from "lucide-react"
-import { useId, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Box } from "@/components/app/box"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
@@ -24,9 +26,8 @@ import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { trashRefusal } from "@/domain/disk"
 import { unitCount } from "@/domain/labels"
-import { type DuplicateGroup, duplicateFindings, keepChoice, runningDuplicateScan } from "@/domain/storage"
+import { type DuplicateGroup, duplicateFindings, keepChoice, keptViewLinks, runningDuplicateScan, runViewLinks, type TrashBlock, trashBlock } from "@/domain/storage"
 import type { AssetCopy, Catalog, OperationId } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
@@ -53,6 +54,7 @@ function ReviewBody() {
   const scanning = useStore((s) => runningDuplicateScan(s.operations))
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
+  const links = useMemo(() => runViewLinks(catalog, disk), [catalog, disk])
   // The copy to keep per frame, once the user picks one; the preselection otherwise.
   const [picked, setPicked] = useState<Record<string, string>>({})
   const [confirming, setConfirming] = useState<DuplicateGroup[] | null>(null)
@@ -60,10 +62,10 @@ function ReviewBody() {
   const [refused, setRefused] = useState<RefusalProps | null>(null)
   const groups = findings?.groups ?? []
 
-  const keptPath = (g: DuplicateGroup) => (g.copies.some((c) => c.path === picked[g.assetId]) ? picked[g.assetId]! : keepChoice(disk, g).path)
+  const keptPath = (g: DuplicateGroup) => (g.copies.some((c) => c.path === picked[g.assetId]) ? picked[g.assetId]! : keepChoice(disk, links, g).path)
   const leaving = (g: DuplicateGroup) => g.copies.filter((c) => c.path !== keptPath(g))
   // Copies of one frame move together or not at all (D-W57): one copy that cannot go holds back its group.
-  const blocked = (g: DuplicateGroup) => leaving(g).map((c) => trashRefusal(disk, c.path)).find((r) => r !== null) ?? null
+  const blocked = (g: DuplicateGroup) => leaving(g).map((c) => trashBlock(disk, links, c.path)).find((b) => b !== null) ?? null
   const movable = groups.filter((g) => blocked(g) === null)
 
   function scanAgain() {
@@ -73,6 +75,10 @@ function ReviewBody() {
   const confirmed = confirming ?? []
   const confirmCopies = confirmed.reduce((n, g) => n + leaving(g).length, 0)
   const confirmBytes = confirmed.reduce((n, g) => n + leaving(g).length * g.sizeBytes, 0)
+  const confirmLinks = keptViewLinks(
+    links,
+    confirmed.flatMap((g) => leaving(g).map((c) => c.path)),
+  ).length
   const byLocation = new Map<string, { copies: number; bytes: number }>()
   for (const g of confirmed) {
     for (const copy of leaving(g)) {
@@ -120,7 +126,7 @@ function ReviewBody() {
               blocked={blocked(g)}
               onKeep={(path) => setPicked((prev) => ({ ...prev, [g.assetId]: path }))}
               onMove={() => setConfirming([g])}
-              refusalOf={(copy) => trashRefusal(disk, copy.path)}
+              refusalOf={(copy) => trashBlock(disk, links, copy.path)}
             />
           ))
         )}
@@ -140,7 +146,10 @@ function ReviewBody() {
         onOpenChange={(next) => !next && setConfirming(null)}
         title={m.wrapup_offer_duplicates({ count: confirmCopies, n: formatCount(confirmCopies), size: formatBytes(confirmBytes) })}
         description={null}
-        changes={[...byLocation.entries()].map(([location, sum]) => m.duplicates_change_location({ location, files: say(m, unitCount("files", sum.copies)), bytes: formatBytes(sum.bytes) }))}
+        changes={[
+          ...[...byLocation.entries()].map(([location, sum]) => m.duplicates_change_location({ location, files: say(m, unitCount("files", sum.copies)), bytes: formatBytes(sum.bytes) })),
+          ...(confirmLinks > 0 ? [m.trash_also_removes_links({ count: confirmLinks })] : []),
+        ]}
         unchanged={[m.duplicates_frames_keep_copy({ count: confirmed.length, n: formatCount(confirmed.length) })]}
         confirmLabel={m.run_move_to_trash()}
         tone="destructive"
@@ -159,10 +168,10 @@ interface DuplicateGroupBoxProps {
   catalog: Catalog
   keptPath: string
   /** Why the copies leaving cannot go, or null. */
-  blocked: ReturnType<typeof trashRefusal>
+  blocked: TrashBlock | null
   onKeep: (path: string) => void
   onMove: () => void
-  refusalOf: (copy: AssetCopy) => ReturnType<typeof trashRefusal>
+  refusalOf: (copy: AssetCopy) => TrashBlock | null
 }
 
 /** One frame's byte-identical copies: Keep this copy (a radio per copy), then Move others to Trash. */
@@ -180,7 +189,7 @@ function DuplicateGroupBox({ group, catalog, keptPath, blocked, onKeep, onMove, 
         </span>
       }
       actions={
-        <Button size="xs" variant="outline" disabled={blocked !== null} title={blocked ? say(m, blocked) : undefined} onClick={onMove} data-move-others={group.assetId}>
+        <Button size="xs" variant="outline" disabled={blocked !== null} title={blocked ? say(m, blocked.reason) : undefined} onClick={onMove} data-move-others={group.assetId}>
           {m.duplicates_move_others()}
         </Button>
       }
@@ -192,7 +201,7 @@ function DuplicateGroupBox({ group, catalog, keptPath, blocked, onKeep, onMove, 
           const refusal = kept ? null : refusalOf(copy)
           const itemId = `${id}-${index}`
           return (
-            <div key={copy.path} className="flex min-h-(--row-h) items-center gap-2 border-b border-border/50 px-3 py-1 last:border-0" data-copy-kept={kept || undefined}>
+            <div key={copy.path} className="flex min-h-(--row-h) min-w-0 items-center gap-2 border-b border-border/50 px-3 py-1 last:border-0" data-copy-kept={kept || undefined}>
               <RadioGroupItem id={itemId} value={copy.path} />
               <label htmlFor={itemId} className="flex min-w-0 flex-1 items-center gap-2">
                 <Pill tone="muted">{locationName(catalog, copy)}</Pill>
@@ -202,9 +211,13 @@ function DuplicateGroupBox({ group, catalog, keptPath, blocked, onKeep, onMove, 
               </label>
               {kept ? (
                 <Pill tone="success">{m.status_keep()}</Pill>
+              ) : refusal?.link ? (
+                <Pill tone="warning" link={refusal.link} className="shrink-0">
+                  {m.trash_cant()} · {say(m, refusal.reason)} ▸
+                </Pill>
               ) : refusal ? (
                 <span className="shrink-0 text-xs text-warning">
-                  {m.import_cant_move()} · {say(m, refusal)}
+                  {m.trash_cant()} · {say(m, refusal.reason)}
                 </span>
               ) : (
                 <span className="shrink-0 text-xs text-muted-foreground">{m.session_os_trash()}</span>

@@ -1169,8 +1169,6 @@
     }
   ],
   "wrapup_offer_duplicates_none": "Move duplicate copies to Trash: none left",
-  "wrapup_where_in_trash": "{where}, in its Project's Trash",
-  "wrapup_refusal_in_open_run": "in {where}, not Complete",
   "wrapup_refusal_result_input": "input of {name}",
   "wrapup_refusal_archive_moving": "archive moving",
   "wrapup_refusal_outside_captures": "copy outside Captures",
@@ -1195,7 +1193,6 @@
   "wrapup_master_source_duplicate": "Generated master source: verified duplicate; keeps the library copy {path}",
   "wrapup_copy_on": "{name} on {location}",
   "wrapup_unknown_location": "an unknown location",
-  "wrapup_refusal_linked_source": "source of {name}, not Complete",
   "wrapup_refusal_kept_copy_unverified": "kept copy on {name} unverified",
   "wrapup_keeps_copy_on": "Keeps the copy on {name}: {path}",
   "wrapup_refusal_space": "{name}: {free} free of {size}",
@@ -6997,6 +6994,23 @@
   "wrapup_reason_no_trash": "volume has no OS Trash",
   "wrapup_reason_not_found": "missing at recorded path",
   "wrapup_reason_offline": "volume offline",
+  "trash_cant": "Can't trash",
+  "domain_trash_linked_by": "linked by {name}",
+  "trash_also_removes_links": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Also removes {count} link in kept run views",
+        "countPlural=*": "Also removes {count} links in kept run views"
+      }
+    }
+  ],
   "tips_note_named": "Note {number}: {label}",
   "issue_duplicates": [
     {

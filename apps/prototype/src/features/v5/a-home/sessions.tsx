@@ -33,6 +33,7 @@ import { formatHours } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
 import { startArchiveTransfer } from "@/features/v5/b-projects/actions"
 import { type ArchivePlan, sessionsArchivePlan, unusableFramesOffer } from "@/features/v5/b-projects/model"
+import { OfferRefusals, offerChanges } from "@/features/v5/b-projects/parts"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
@@ -279,6 +280,7 @@ export function SessionsPage() {
             ) : null
           }
         />
+        {unusableOffer ? <OfferRefusals refusals={unusableOffer.refusals} /> : null}
         {selectedRows.length > 0 ? (
           <div className="space-y-1.5">
             <SelectionBar
@@ -354,7 +356,7 @@ export function SessionsPage() {
           onOpenChange={setTrashing}
           title={m.sessions_trash_unusable_title({ count: unusableOffer.count, n: formatCount(unusableOffer.count) })}
           description={m.wrapup_trash_offer_description()}
-          changes={[m.wrapup_items_to_trash({ count: unusableOffer.count, size: formatBytes(unusableOffer.sizeBytes) }), ...(unusableOffer.refusals.length > 0 ? [m.wrapup_items_kept_reason({ count: unusableOffer.refusals.length })] : [])]}
+          changes={offerChanges(m, unusableOffer)}
           confirmLabel={m.run_move_to_trash()}
           tone="destructive"
           onConfirm={() => {
