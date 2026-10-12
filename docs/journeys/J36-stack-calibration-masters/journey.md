@@ -28,8 +28,8 @@ Runs are later assigned these masters only (J23). Done means:
 
 ## Preconditions
 
-- P1: J19 completed, and nothing after it: no Project or run exists, and no run has chosen an output folder. `Astro-T7/Calibration` is the registered Calibration location. Settings › Calibration › **Keep raw calibration frames** is off, the default.
-- P2: The raw calibration fixture that J19 indexed in `Astro-T7/Calibration` (J19/P4, J23/P2). Every frame has INSTRUME `ZWO ASI2600MM Pro` and the dimensions, 1x1 binning, gain, offset and set temperature of the J19/P2 RedCat lights. This fixture fixes those values as gain 100, offset 50 and −10 °C:
+- P1: J19 completed, and nothing after it: no Project or run exists, and no run has chosen an output folder. `Astro-T7/Calibration` is the registered Calibration location, and J19/S7a made each P2 raw session a calibration process awaiting Stack. Settings › Calibration › **Keep raw calibration frames** is off, the default.
+- P2: The raw calibration fixture that J19 indexed in `Astro-T7/Calibration` (J19/P4, J23/P2). Every frame has INSTRUME `ZWO ASI2600MM Pro`, the J15 alias of camera ASI2600MM, so the `{camera}` folder token reads `ASI2600MM` as in J31. Every frame also has the dimensions, 1x1 binning, gain, offset and set temperature of the J19/P2 RedCat lights. This fixture fixes those values as gain 100, offset 50 and −10 °C:
   - `Raw/Darks/300s/2026-09-20/`: 20 darks of 300 s.
   - `Raw/Bias/2026-09-20/`: 50 bias frames.
   - `Raw/Flats/Ha/2026-09-18/`: 30 Ha flats with TELESCOP `RedCat 51`, the RedCat optical-train evidence.
@@ -76,7 +76,7 @@ Runs are later assigned these masters only (J23). Done means:
 
 ### S4 — Meet an occupied master path at Import {#S4}
 
-- **Do:** Outside PlateVault, create an unrelated file at `Astro-T7/Calibration/Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C/MasterDark_2026-09-20.xisf` and record its SHA-256. Then make the P5 stand-in write the dark master into the S3 output folder, and wait without acting.
+- **Do:** Outside PlateVault, create an unrelated file at `Astro-T7/Calibration/Darks/ASI2600MM/300s_g100_o50_-10C/MasterDark_2026-09-20.xisf` and record its SHA-256. Then make the P5 stand-in write the dark master into the S3 output folder, and wait without acting.
 - **Expect:**
   - Detect reads Done with no user action, and the row's ① note reads Detected `masterDark_BIN-1_EXPOSURE-300.00s.xisf · NCOMBINE 20`.
   - Import reads Failed. The row reads Failed, shows `Import failed · Name taken` and offers **Retry**.
@@ -92,7 +92,7 @@ Runs are later assigned these masters only (J23). Done means:
 - **Do:** Outside PlateVault, move the S4 file to `Astro-T7/Holding/`. Click **Retry** on `Dark 300 s · 20 Sep`.
 - **Expect:**
   - Import, Register and Raws read Done in that order, and the row reads `Done`. The Raws step's tooltip reads Trashed.
-  - The master is stored at `Astro-T7/Calibration/Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C/MasterDark_2026-09-20.xisf` with the detected master's SHA-256. Masters lists it under Darks with 20 frames.
+  - The master is stored at `Astro-T7/Calibration/Darks/ASI2600MM/300s_g100_o50_-10C/MasterDark_2026-09-20.xisf` with the detected master's SHA-256. Masters lists it under Darks with 20 frames.
   - The 20 raw darks are in the OS Trash, and Activity records `Trash raws of Dark 300 s · 20 Sep`.
   - The error issue is gone, and the info issue reads `3 to stack`.
 - **Expect (negative):** No raw dark reached the OS Trash before Register read Done. None is permanently deleted: each can be put back from the OS Trash. The moved S4 file keeps its SHA-256.
@@ -124,7 +124,7 @@ Runs are later assigned these masters only (J23). Done means:
 - **Do:** Open Settings › Calibration and turn **Keep raw calibration frames** on. In the Calibration library, click **Stack** on `Bias · 20 Sep` with PixInsight, and make the stand-in write the bias master. Then turn the setting off again.
 - **Expect:**
   - Settings › Calibration first shows the switch off, with the ⓘ help `Off: raws go to the OS Trash once their master registers.` It names the Calibration location, the master layout templates and the stacking tools, linked to Locations, Naming and Applications.
-  - The bias master is stored at `Astro-T7/Calibration/Bias/ZWO ASI2600MM Pro/g100_o50/MasterBias_2026-09-20.xisf` and listed under Bias with 50 frames. Raws reads Done with `Kept`, and the row offers **Trash raws**.
+  - The bias master is stored at `Astro-T7/Calibration/Bias/ASI2600MM/g100_o50/MasterBias_2026-09-20.xisf` and listed under Bias with 50 frames. Raws reads Done with `Kept`, and the row offers **Trash raws**.
   - With the setting off again, Raws still reads Kept and **Trash raws** is still offered. The Issues hub lists no calibration issue.
 - **Expect (negative):** The 50 raw bias frames stay in `Raw/Bias/2026-09-20/`, also after the setting is turned off, and nothing goes to the OS Trash.
 - **Trace:** HARNESS-V5-IA.md §Screens S16 (Calibration: Keep raw calibration frames, off by default) and §Round 2b foundation (`setKeepRawCalibration`, `keepRaws`) · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 step 6
@@ -144,8 +144,8 @@ Runs are later assigned these masters only (J23). Done means:
 - **Do:** In Masters, with the All filter, read each kind's box.
 - **Expect:**
   - Flats lists 4 masters by train, filter and night: RedCat Ha 18 Sep (30 frames), RedCat OIII 30 Sep (30), Esprit OIII 22 Sep (20), and OIII 26 Sep with its train `–` (25).
-  - Darks lists 2 masters by camera, exposure, gain, offset and temperature: ZWO ASI2600MM Pro 300 s, gain 100, offset 50, −10 °C (20 frames), and ZWO ASI294MM Pro 300 s (30).
-  - Bias lists 1 master by camera, gain and offset: ZWO ASI2600MM Pro, gain 100, offset 50 (50 frames).
+  - Darks lists 2 masters by camera, exposure, gain, offset and temperature: ASI2600MM 300 s, gain 100, offset 50, −10 °C (20 frames), and ZWO ASI294MM Pro 300 s (30).
+  - Bias lists 1 master by camera, gain and offset: ASI2600MM, gain 100, offset 50 (50 frames).
 - **Expect (negative):** No raw frame or raw session is listed among the masters, including the 50 kept raw bias frames. No master is listed twice.
 - **Trace:** HARNESS-V5-IA.md §Screens S14 (masters grouped by kind in their structured-storage keys) · HARNESS-V5-FEEDBACK-R1.md §Round 1b P-CAL3 step 4
 
@@ -153,7 +153,7 @@ Runs are later assigned these masters only (J23). Done means:
 
 - **Do:** Open the details of the master dark `MasterDark_2026-09-20.xisf`, then those of the imported OIII flat `MasterFlat_2026-09-26.xisf`.
 - **Expect:**
-  - The dark's details read: kind Dark, camera ZWO ASI2600MM Pro, optical train –, filter –, exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the source (stacked from `Dark 300 s · 20 Sep`), its storage path and the SHA-256 recorded in S5. Used by counts no run (J23/S7b reads it with runs), and the panel offers **Dismiss**.
+  - The dark's details read: kind Dark, camera ASI2600MM, optical train –, filter –, exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the source (stacked from `Dark 300 s · 20 Sep`), its storage path and the SHA-256 recorded in S5. Used by counts no run (J23/S7b reads it with runs), and the panel offers **Dismiss**.
   - The OIII flat's details read optical train –, filter OIII and frame count 25, with the source imported from `Astro-T7/Stacked elsewhere/MasterFlat_OIII_2026-09-26.xisf`.
 - **Expect (negative):** Opening details changes no master and no file, and Used by never expands the master row.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Calibration (master details panel; Used by is a popover)
