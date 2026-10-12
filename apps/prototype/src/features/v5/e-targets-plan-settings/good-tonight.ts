@@ -1,8 +1,8 @@
 /**
- * Per-filter "good tonight" (slice E: Targets, Target detail and Plan). Each
- * band is graded from the foundation's `filterSuitability` under that band's
- * Moon constraint (`settings.moonConstraints`), with a one-line reason for
- * its tooltip and the night's Moon-clear stretches for the timeline:
+ * Per-filter "good tonight" (slice E: Targets and Target detail). Each band
+ * is graded from the foundation's `filterSuitability` under that band's
+ * Moon constraint (`settings.moonConstraints`), on the chosen night, with a
+ * one-line reason for its tooltip:
  *
  * - good: a stretch of the minimum duration clears the band's Moon limits
  *   and keeps at least three quarters of the dark time above the altitude
@@ -10,21 +10,16 @@
  * - marginal: such a stretch exists, but the Moon takes more than a quarter;
  * - poor: no stretch of the minimum duration clears the limits.
  *
- * A position without a window tonight (altitude or darkness) gets no chips:
- * that is not a filter's verdict.
+ * A position without a window that night (altitude or darkness) gets no
+ * chips: that is not a filter's verdict.
  */
 import { formatHours } from "@/domain/derive"
-import { clearStretches, filterSuitability, type Stretch } from "@/domain/planning"
+import { clearStretches, filterSuitability } from "@/domain/planning"
 import type { Band, MoonConstraint, Target } from "@/domain/types"
 import { m } from "@/lib/i18n"
 import type { SkyContext } from "./targets-model"
 
 export type FilterGrade = "good" | "marginal" | "poor"
-
-/** The grade word: the timeline legend. */
-export function gradeLabel(grade: FilterGrade): string {
-  return { good: m.tonight_grade_good, marginal: m.tonight_grade_marginal, poor: m.tonight_grade_poor }[grade]()
-}
 
 /** Share of the dark time a band may lose to the Moon and still read good. */
 const MARGINAL_SHARE = 0.75
@@ -35,8 +30,6 @@ export interface FilterChip {
   /** Longest Moon-clear stretch, in minutes (`filterSuitability`). */
   minutes: number
   limit: MoonConstraint
-  /** Moon-clear stretches tonight, longest first. */
-  stretches: Stretch[]
   /** What `filterReason` words: the Moon in the band's longest stretch and the night's dark time. */
   moon: { up: boolean; separationDeg: number | null; illuminationPct: number }
   darkMinutes: number
@@ -70,9 +63,9 @@ export function filterReason(chip: FilterChip): string {
 }
 
 /**
- * The chips of one position tonight, one per band in strip order, or null
- * when it has no window of the minimum duration in darkness above the
- * altitude limit.
+ * The chips of one position on the chosen night, one per band in strip
+ * order, or null when it has no window of the minimum duration in darkness
+ * above the altitude limit.
  */
 export function filtersTonight(ctx: SkyContext, position: { id: string; ra: number | null; dec: number | null }, altitudes: number[], constraints: Record<Band, MoonConstraint>, bands: Band[]): FilterChip[] | null {
   const { ra, dec } = position
@@ -86,13 +79,11 @@ export function filtersTonight(ctx: SkyContext, position: { id: string; ra: numb
   return filterSuitability(probe, ctx.site, ctx.grid.night, ctx.criteria, constraints, ordered).map((f): FilterChip => {
     const limit = constraints[f.band]
     const grade: FilterGrade = !f.good ? "poor" : f.minutes < darkMinutes * MARGINAL_SHARE ? "marginal" : "good"
-    const stretches = f.stretches.sort((a, b) => b.minutes - a.minutes)
     return {
       band: f.band,
       grade,
       minutes: f.minutes,
       limit,
-      stretches,
       moon: { up: f.moonUp, separationDeg: f.moonSeparationDeg, illuminationPct: f.moonIlluminationPct },
       darkMinutes,
       minDurationMin: ctx.criteria.minDurationMin,

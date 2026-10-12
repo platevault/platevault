@@ -8,7 +8,9 @@
  * foundation change. Documented keys: `/projects/$projectId?start=run`
  * (open Start a run), `?stage=wrap-up` (the Wrap up stage),
  * `?candidates=unreviewed`, `?mosaic=new|<subjectId>` (the mosaic editor);
- * `/projects/$projectId/runs/$runId/review?filter=unreviewed`; `/plan?project=`.
+ * `/projects/$projectId/runs/$runId/review?filter=unreviewed`;
+ * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
+ * planning values use; tonight when absent or past), `?project=`.
  */
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 import type { ReactNode } from "react"
