@@ -1,10 +1,10 @@
 /**
  * Slice-local derivations for S1 Home and S12 Sessions: one row model per
- * library light session, the filter buckets (D-W24, D-W25, D-W43), the runs
- * that use a session, the session review's search, and the run a ready
- * candidate can join. Every bucket comes from the foundation
- * `sessionsNeedingWork`, so Home, the Issues hub and the Sessions filters
- * always agree. Nothing here writes state.
+ * library light session, the filter buckets (D-W24, D-W25, D-W43; Unusable,
+ * round 6), the runs that use a session, the session review's search, and
+ * the run a ready candidate can join. The Target and Project buckets come
+ * from the foundation `sessionsNeedingWork`, so Home, the Issues hub and the
+ * Sessions filters always agree. Nothing here writes state.
  */
 import {
   type Candidate,
@@ -19,24 +19,25 @@ import {
   sessionTargetId,
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
-import type { Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
+import type { AssetId, Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
 import type { MessageRef, Messages } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
-export type SessionFilter = "all" | "needs-target" | "not-in-project" | "trashed"
+export type SessionFilter = "all" | "needs-target" | "not-in-project" | "unusable" | "trashed"
 
 export function filterLabel(m: Messages, filter: SessionFilter): string {
   const label: Record<SessionFilter, () => string> = {
     all: m.sessions_filter_all,
     "needs-target": m.sessions_filter_needs_target,
     "not-in-project": m.sessions_filter_not_in_project,
+    unusable: m.status_unusable,
     trashed: m.status_trashed,
   }
   return label[filter]()
 }
 
 export function parseFilter(value: string | undefined): SessionFilter {
-  return value === "needs-target" || value === "not-in-project" || value === "trashed" ? value : "all"
+  return value === "needs-target" || value === "not-in-project" || value === "unusable" || value === "trashed" ? value : "all"
 }
 
 export interface SessionRow {
@@ -47,6 +48,8 @@ export interface SessionRow {
   frames: number
   seconds: number
   unreviewed: number
+  /** Live frames whose library quality is Unusable for their current bytes: purge candidates (round 6). */
+  unusable: AssetId[]
   candidateOf: Array<{ project: Project; candidate: Candidate }>
   runs: Run[]
   needsTarget: boolean
@@ -66,6 +69,13 @@ function unreviewedCount(catalog: Catalog, session: Session): number {
     const asset = catalog.assets[id]!
     return asset.quality.value === "unreviewed" || qualityApplicability(asset) !== "applicable"
   }).length
+}
+
+function unusableIds(catalog: Catalog, session: Session): AssetId[] {
+  return liveAssetIds(catalog, session).filter((id) => {
+    const asset = catalog.assets[id]!
+    return asset.quality.value === "unusable" && qualityApplicability(asset) === "applicable"
+  })
 }
 
 /** Every current light session, Trashed ones included (only the Trashed filter shows those). */
@@ -94,6 +104,7 @@ export function sessionRows(state: PrototypeState): SessionRow[] {
         frames: ids.length,
         seconds: ids.reduce((n, id) => n + (catalog.assets[id] ? effectiveExposureS(catalog, catalog.assets[id]!) : 0), 0),
         unreviewed: trashed ? 0 : unreviewedCount(catalog, session),
+        unusable: trashed ? [] : unusableIds(catalog, session),
         candidateOf: candidates.get(session.id) ?? [],
         runs: runsUsingSession(catalog, session.id),
         needsTarget: needsTarget.has(session.id),
@@ -109,6 +120,7 @@ export function matchesFilter(row: SessionRow, filter: SessionFilter): boolean {
   if (row.trashed) return false
   if (filter === "needs-target") return row.needsTarget
   if (filter === "not-in-project") return row.notInProject
+  if (filter === "unusable") return row.unusable.length > 0
   return true
 }
 
@@ -117,8 +129,14 @@ export function filterCounts(rows: SessionRow[]): Record<SessionFilter, number> 
     all: rows.filter((r) => matchesFilter(r, "all")).length,
     "needs-target": rows.filter((r) => matchesFilter(r, "needs-target")).length,
     "not-in-project": rows.filter((r) => matchesFilter(r, "not-in-project")).length,
+    unusable: rows.filter((r) => matchesFilter(r, "unusable")).length,
     trashed: rows.filter((r) => matchesFilter(r, "trashed")).length,
   }
+}
+
+/** A session in a Project: a candidate of one, or held by one of its runs. Archive… from Sessions refuses it (round 6); Wrap up archives it. */
+export function inProject(row: SessionRow): boolean {
+  return row.candidateOf.length > 0 || row.runs.length > 0
 }
 
 /** The session detail's review region (`/sessions/$sessionId?view=review`), opened on Unreviewed while any frame is. */

@@ -51,7 +51,7 @@ export const BUILT_IN_GOAL_TEMPLATES: GoalTemplate[] = [
 
 /** Token order in the chip editor, each with the fallback used when metadata lacks it. */
 export const NAMING_TOKENS: Array<{ token: NamingToken; fallback: string; label: MessageRef }> = [
-  { token: "target", fallback: "unclassified", label: msg("domain_token_target") },
+  { token: "target", fallback: "Unclassified", label: msg("domain_token_target") },
   { token: "filter", fallback: "nofilter", label: msg("session_filter") },
   { token: "date", fallback: "undated", label: msg("session_observing_night") },
   { token: "frame_type", fallback: "unknown", label: msg("session_frame_type") },
@@ -130,11 +130,12 @@ export function namingValues(facts: NamingFacts): NamingValues {
 
 /**
  * Token values from a file's observed header, before indexing associates it
- * (Import); the Target is its OBJECT and the optical train its TELESCOP.
+ * (Import); the optical train is its TELESCOP. `{target}` is the Target the
+ * user confirmed (P-IMP2), never OBJECT: without one it reads "Unclassified".
  */
-export function headerNamingValues(header: FrameHeader, frameType: string): NamingValues {
+export function headerNamingValues(header: FrameHeader, frameType: string, target: string | null = null): NamingValues {
   return namingValues({
-    target: header.object,
+    target,
     filter: header.filter,
     night: header.dateObs ? nightOf(header.dateObs) : null,
     frameType,

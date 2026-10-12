@@ -3,7 +3,9 @@
  * with its plots and inspector, the two quality levels and the review
  * hotkeys (D-W13, D-W14, D-W15, D-W22, D-W40, D-W41, D-W42, D-W53, D-W54;
  * spec 067 PIX-FR-01 to PIX-FR-18). Contexts: a run, a group, a Project's
- * candidates, or one library session (library marks only).
+ * candidates, or one library session (library marks only). Round 6: X marks
+ * a frame Unusable library-wide; "Reject for this Project only" is in the
+ * frame menu; a mark on more than 20 frames asks first.
  *
  * Layout (D-W22): the frame table spans the full width at the top; T cycles
  * it through about 8 rows (resizable, the height is remembered), a one-line
@@ -52,6 +54,7 @@ import { useSize } from "@/features/t3/frame-preview"
 import { ImportDialog, ImportReview } from "@/features/t3/import-dialog"
 import { METRIC_LABEL } from "@/features/t3/measure"
 import { frameField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
+import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { discardRunDraft, saveRun } from "@/store/actions/runs"
@@ -80,6 +83,12 @@ const STAGE_MIN_PX = 416
 /** Review's own chrome around the table and the stage: toolbar, table handle and status line. */
 const REVIEW_CHROME_PX = 66
 const ARROW_OWNERS = "[role=tablist],[data-slot=toggle-group],[role=separator],[role=slider],[role=radiogroup],[role=menu]"
+/** A mark on more frames than this asks first (round 6: ⌘A then X on 120 frames). */
+const BULK_MARK_CONFIRM_OVER = 20
+/** The library word of each mark, for the bulk confirmation: "Mark 120 frames Unusable?". */
+function libraryWord(m: Messages, value: QualityValue): string {
+  return value === "usable" ? m.status_usable() : value === "unusable" ? m.status_unusable() : m.status_unreviewed()
+}
 
 /** Text entry only: a Select trigger (role combobox) is not typing, and the capture-phase handler keeps its typeahead from firing. */
 function isTyping(target: EventTarget | null) {
@@ -137,6 +146,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const [threshold, setThreshold] = useState<Threshold | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [projectConfirm, setProjectConfirm] = useState<ReviewFrame[] | null>(null)
+  const [bulkMark, setBulkMark] = useState<{ list: ReviewFrame[]; value: QualityValue } | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [announcement, setAnnouncement] = useState("")
   const [error, setError] = useState<RefusalProps | null>(null)
@@ -224,8 +234,9 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     announce(`${action}: ${result.message}`)
   }
 
-  function mark(value: QualityValue, always = false, list: ReviewFrame[] = targets) {
+  function mark(value: QualityValue, always = false, list: ReviewFrame[] = targets, confirmed = false) {
     if (!scope || !current) return
+    if (list.length > BULK_MARK_CONFIRM_OVER && !confirmed) return setBulkMark({ list, value })
     const result = markLibrary(scope, list, value)
     if (!result.ok) return refuse(result, m.review_refusal_mark())
     setError(null)
@@ -708,7 +719,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         tab={tab}
         onTab={setTab}
         targets={targets.length}
-        actions={{ mark: (v) => mark(v), projectReject: () => confirmProjectReject(targets), clearProjectReject: () => clearProjectReject([current]) }}
+        actions={{ mark: (v) => mark(v) }}
         overlay={inspectorOverlay}
         onClose={inspectorOverlay ? () => setInspectorShown(false) : undefined}
       />
@@ -716,6 +727,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
 
   const project = scope.project
   const confirmFrames = projectConfirm ?? []
+  const bulkWords = { count: bulkMark?.list.length ?? 0, n: formatCount(bulkMark?.list.length ?? 0), quality: libraryWord(m, bulkMark?.value ?? "unreviewed") }
   const confirmRuns = [...new Set(confirmFrames.flatMap((f) => (f.run && f.run.completion === "open" ? [f.run.name] : [])))]
   // Unsaved run drafts this review made: Review's status line offers Save run (the toolbar's Next focuses it).
   const drafts = scope.runs.filter((r) => r.draft && r.completion === "open" && !r.trashedAt)
@@ -1038,6 +1050,17 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       </footer>
 
       <ReviewShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <ConfirmDialog
+        open={bulkMark !== null}
+        onOpenChange={(open) => !open && setBulkMark(null)}
+        title={m.review_bulk_mark_title(bulkWords)}
+        description={m.store_library_scope_detail()}
+        changes={[m.store_saved_frames_marked(bulkWords)]}
+        confirmLabel={m.store_label_mark_frames(bulkWords)}
+        onConfirm={() => {
+          if (bulkMark) mark(bulkMark.value, false, bulkMark.list, true)
+        }}
+      />
       {context.kind === "run" ? (
         <ImportDialog viewId={scope.key} viewAssetIds={new Set(frames.map((f) => f.asset.id))} open={importOpen} onOpenChange={setImportOpen} />
       ) : null}

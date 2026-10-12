@@ -26,6 +26,7 @@ import type {
   Disk,
   DiskFile,
   Evidence,
+  FrameHeader,
   IsoDateTime,
   Location,
   OpticalTrain,
@@ -94,9 +95,8 @@ export function assetIdForPath(path: string): AssetId {
   return `ast_${stableHash(path)}`
 }
 
-/** Session identity: metadata only, never the location, so copies elsewhere join the same session. */
-function groupingKey(file: DiskFile): string {
-  const h = file.header!
+/** Session identity: metadata only, never the location, so copies elsewhere join the same session. Import groups incoming files the same way. */
+export function sessionGroupingKey(h: FrameHeader): string {
   return [
     h.imageType,
     nightOf(h.dateObs),
@@ -164,14 +164,32 @@ function matchesName(name: string, candidates: string[]): boolean {
 // Associations
 // ---------------------------------------------------------------------------
 
-function ensureTargetFor(catalog: Catalog, name: string, now: IsoDateTime): Target | null {
-  const existing = Object.values(catalog.targets).find((t) => matchesName(name, [t.name, ...t.aliases]))
-  if (existing) return existing
+/** The deterministic id of the Target a bundled designation becomes, so a preview can name it before indexing writes it. */
+function bundledTargetId(designation: string): TargetId {
+  return `tgt_${stableHash(designation)}`
+}
+
+function libraryTargetNamed(catalog: Catalog, name: string): Target | undefined {
+  return Object.values(catalog.targets).find((t) => matchesName(name, [t.name, ...t.aliases]))
+}
+
+/** A new Target record for a bundled catalogue object, or null when the catalogue has no such object. */
+export function bundledTarget(name: string, now: IsoDateTime): Target | null {
   const entry = bundledEntryFor(name)
-  if (!entry) return null
-  const target = targetFromEntry(entry, { id: `tgt_${stableHash(entry.designation)}`, at: now, resolver: null, favourite: false })
-  catalog.targets[target.id] = target
+  return entry ? targetFromEntry(entry, { id: bundledTargetId(entry.designation), at: now, resolver: null, favourite: false }) : null
+}
+
+function ensureTargetFor(catalog: Catalog, name: string, now: IsoDateTime): Target | null {
+  const existing = libraryTargetNamed(catalog, name)
+  if (existing) return existing
+  const target = bundledTarget(name, now)
+  if (target) catalog.targets[target.id] = target
   return target
+}
+
+/** How far from its centre a footprint reaches: half its larger side plus 0.5°, or 0.5° without a known size. */
+function footprintReachDeg(sizeDeg: { width: number; height: number } | null): number {
+  return (sizeDeg ? Math.max(sizeDeg.width, sizeDeg.height) / 2 : 0) + 0.5
 }
 
 /** The bundled object whose extent contains the pointing, nearest first. */
@@ -179,10 +197,32 @@ function objectAtPointing(ra: number, dec: number) {
   let best: { name: string; separation: number } | null = null
   for (const entry of BUNDLED_CATALOGUE) {
     const separation = angularSeparationDeg(ra, dec, entry.ra, entry.dec)
-    const reach = Math.max(entry.sizeDeg.width, entry.sizeDeg.height) / 2 + 0.5
-    if (separation <= reach && (!best || separation < best.separation)) best = { name: entry.designation, separation }
+    if (separation <= footprintReachDeg(entry.sizeDeg) && (!best || separation < best.separation)) best = { name: entry.designation, separation }
   }
   return best
+}
+
+/**
+ * The Target a pointing associates (LIB-FR-05), without writing: the library
+ * record of the object whose footprint contains it (nearest centre wins), or
+ * the record indexing adds for it. Import prefills its Target choice with it.
+ */
+export function targetAtPointing(catalog: Catalog, ra: number, dec: number): { id: TargetId; name: string } | null {
+  const pointed = objectAtPointing(ra, dec)
+  if (!pointed) return null
+  const existing = libraryTargetNamed(catalog, pointed.name)
+  return existing ? { id: existing.id, name: existing.name } : { id: bundledTargetId(pointed.name), name: pointed.name }
+}
+
+/**
+ * Where a pointing sits against a Target's footprint: its distance from the
+ * centre and whether the footprint contains it. Null without the Target's
+ * coordinates or a pointing: unknown is never a mismatch.
+ */
+export function pointingAgainst(target: Target, pointing: Session["pointing"]): { separationDeg: number; inside: boolean } | null {
+  if (!pointing || target.ra === null || target.dec === null) return null
+  const separationDeg = angularSeparationDeg(pointing.ra, pointing.dec, target.ra, target.dec)
+  return { separationDeg, inside: separationDeg <= footprintReachDeg(target.sizeDeg) }
 }
 
 /**
@@ -447,7 +487,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         adoption: null,
       }
     }
-    const key = groupingKey(file)
+    const key = sessionGroupingKey(header)
     let sessionId = isMaster ? undefined : keyToSession.get(key)
     if (!sessionId && !isMaster) {
       sessionId = freshSessionId(key, takenSessionIds)

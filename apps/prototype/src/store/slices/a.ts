@@ -1,11 +1,12 @@
 /**
  * Slice A: S1 Home, S12 Sessions, S13 Import. Owned by the slice A screen
  * agent. Holds Home's Show done filter (D-W48), the Import draft (source,
- * Copy or Move, destinations and the frame types typed for Unclassified
- * holds) and the last started Import or Add folder operation, and registers
- * the "import" operation handler (D-W11, D-W24).
+ * Copy or Move, destinations, the frame types typed for Unclassified holds
+ * and the Target chosen per incoming session, P-IMP2) and the last started
+ * Import or Add folder operation, and registers the "import" operation
+ * handler (D-W11, D-W24).
  */
-import type { ImageType, ImportSourceId, LocationId, OperationId } from "@/domain/types"
+import type { ImageType, ImportSourceId, LocationId, OperationId, TargetId } from "@/domain/types"
 import { importHandler } from "@/features/v5/a-home/import-run"
 import type { SliceDefinition } from "./index"
 
@@ -21,10 +22,12 @@ export interface ImportDraft {
   calibrationLocationId: LocationId | null
   /** Frame type typed for an Unclassified hold, by source path; typing releases it (D-W24). */
   typed: Record<string, ImageType>
+  /** Target chosen per incoming light session, by its grouping key; null is Unclassified, absent takes the pointing's Target (P-IMP2). */
+  targets: Record<string, TargetId | null>
 }
 
 export function emptyImportDraft(): ImportDraft {
-  return { source: null, newOnly: true, mode: "copy", capturesLocationId: null, calibrationLocationId: null, typed: {} }
+  return { source: null, newOnly: true, mode: "copy", capturesLocationId: null, calibrationLocationId: null, typed: {}, targets: {} }
 }
 
 export interface AState {
@@ -37,7 +40,7 @@ export interface AState {
 
 export const aSlice: SliceDefinition<AState> = {
   id: "a",
-  version: 2,
+  version: 3,
   initial: () => ({ showDone: false, importDraft: emptyImportDraft(), lastImport: null }),
   operations: [importHandler],
 }

@@ -1,8 +1,8 @@
 /**
  * Frame-review writes kept from v4 for slice D: imported measurements
  * (PIX-FR-06, PIX-FR-07) and the frame-review UI state in slice D. Quality
- * marks (P/X/U, Reject for this Project only) and Exclude from run are the
- * shared actions in `src/store/actions/library.ts` and `runs.ts`.
+ * marks (P/X/U, Reject for this Project only) are the shared actions in
+ * `src/store/actions/library.ts`.
  */
 import { runHref } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"

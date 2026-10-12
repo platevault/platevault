@@ -1,8 +1,9 @@
 /**
  * Slice A shared pieces: Add to Project with its preview (D-W59: it also adds
  * the session's rig), the same choice as context-menu entries, Create Project
- * prefilled from a session, Confirm Target / Confirm rig, and the terse
- * refusal for a failed write. Used by Home, Sessions and the session detail.
+ * prefilled from a session, the Target picker (Confirm Target, File into
+ * Target and Import's Target column), Confirm rig, and the terse refusal for
+ * a failed write. Used by Home, Sessions, Import and the session detail.
  */
 import { ChevronDown, FolderInput, FolderPlus } from "lucide-react"
 import { useId, useState } from "react"
@@ -16,12 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { projectCandidates, rigName, sessionRigId, sessionTargetId } from "@/domain/derive"
+import { targetAtPointing } from "@/domain/indexing"
 import { sessionLabel } from "@/domain/membership"
 import type { Catalog, OpticalTrainId, Project, ProjectId, SessionId, TargetId } from "@/domain/types"
+import { formatBytes, formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 import { addSessionToProject } from "@/store/actions/projects"
-import { confirmRig, confirmTarget } from "@/store/actions/library"
+import { confirmRig, confirmTarget, fileIntoTarget, filingMoves } from "@/store/actions/library"
 import { type CommitResult, useStore } from "@/store/core"
+import type { TargetChoice } from "./import-model"
 
 /** "Added 2 Oct Ha to Heart and Soul", with the added rig when there is one. */
 export type AddedNotice = { title: string; note: string | null }
@@ -149,6 +154,53 @@ export function CreateProjectButton({ sessionId, size = "sm" }: { sessionId: Ses
   )
 }
 
+/** The Select value standing for Unclassified; Target ids all start with "tgt_". */
+const UNCLASSIFIED = "unclassified"
+
+/**
+ * The Target picker: library Targets by name, plus `extra` choices (the
+ * pointing's Target before indexing adds it) and, for Import, Unclassified
+ * (null). Without Unclassified, null reads "Choose a Target".
+ */
+export function TargetSelect({
+  value,
+  onChange,
+  labelledBy,
+  label,
+  extra = [],
+  unclassified = false,
+  className,
+}: {
+  value: TargetId | null
+  onChange: (id: TargetId | null) => void
+  labelledBy?: string
+  label?: string
+  extra?: TargetChoice[]
+  unclassified?: boolean
+  className?: string
+}) {
+  const targets = useStore((s) => s.catalog.targets)
+  const m = useMessages()
+  const items = [
+    ...(unclassified ? [{ value: UNCLASSIFIED, label: m.import_type_unclassified() }] : []),
+    ...[...Object.values(targets), ...extra.filter((t) => !targets[t.id])].sort((a, b) => a.name.localeCompare(b.name)).map((t) => ({ value: t.id, label: t.name })),
+  ]
+  return (
+    <Select items={items} value={value ?? (unclassified ? UNCLASSIFIED : null)} onValueChange={(next) => onChange(next === UNCLASSIFIED || !next ? null : String(next))}>
+      <SelectTrigger size="sm" aria-labelledby={labelledBy} aria-label={label} className={cn("w-48", className)}>
+        <SelectValue placeholder={m.session_choose_a_target()} />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 /**
  * Confirm Target (LIB-FR-05): pick a Target and confirm it. The suggestion
  * from evidence is preselected; confirming moves the session out of
@@ -158,16 +210,13 @@ export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { s
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const targets = useStore((s) => s.catalog.targets)
   const m = useMessages()
-  const [choice, setChoice] = useState<string | null>(session?.target.value ?? null)
+  const [choice, setChoice] = useState<TargetId | null>(session?.target.value ?? null)
   const [refusal, setRefusal] = useState<RefusalProps | null>(null)
   const id = useId()
   if (!session) return null
-  const items = Object.values(targets)
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((t) => ({ value: t.id, label: t.name }))
   const confirm = () => {
     if (!choice) return setRefusal({ action: m.session_cant_confirm(), reason: m.session_no_target_chosen(), blockers: [] })
-    const result = confirmTarget(sessionId, choice as TargetId, session.revision)
+    const result = confirmTarget(sessionId, choice, session.revision)
     setRefusal(refusalOf(result, m.session_cant_confirm()))
     if (!result.ok) return
     onDone?.(m.session_target_value({ name: targets[choice]?.name ?? choice }))
@@ -179,23 +228,70 @@ export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { s
         <span id={id} className="sr-only">
           {m.session_target_for({ name: sessionLabel(m, session) })}
         </span>
-        <Select items={items} value={choice} onValueChange={(next) => setChoice(next as string)}>
-          <SelectTrigger size="sm" aria-labelledby={id} className={compact ? "w-36" : "w-48"}>
-            <SelectValue placeholder={m.session_choose_a_target()} />
-          </SelectTrigger>
-          <SelectContent>
-            {items.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <TargetSelect value={choice} onChange={setChoice} labelledBy={id} className={compact ? "w-36" : undefined} />
         <Button size="sm" variant="outline" onClick={confirm}>
           {m.session_confirm_target()}
         </Button>
       </div>
       {refusal ? <Refusal {...refusal} /> : null}
+    </div>
+  )
+}
+
+/**
+ * File into Target (P-IMP2): a session imported as Unclassified picks its
+ * Target (the pointing's preselected), then one reviewed move files its
+ * frames under `{target}/…` and confirms the Target.
+ */
+export function FileIntoTargetControl({ sessionId, onDone }: { sessionId: SessionId; onDone?: (message: string) => void }) {
+  const state = useStore((s) => s)
+  const session = state.catalog.sessions[sessionId]
+  const m = useMessages()
+  const pointed = session?.pointing ? targetAtPointing(state.catalog, session.pointing.ra, session.pointing.dec) : null
+  const [choice, setChoice] = useState<TargetId | null>(session?.target.value ?? (pointed && state.catalog.targets[pointed.id] ? pointed.id : null))
+  const [open, setOpen] = useState(false)
+  const [refusal, setRefusal] = useState<RefusalProps | null>(null)
+  const id = useId()
+  if (!session) return null
+  const target = choice ? state.catalog.targets[choice] : undefined
+  const moves = target ? filingMoves(state, session, target.name) : []
+  const count = { count: moves.length, n: formatCount(moves.length) }
+  const folder = moves[0] ? moves[0].to.slice(0, moves[0].to.lastIndexOf("/")) : ""
+  const review = () => {
+    if (!target) return setRefusal({ action: m.session_cant_file(), reason: m.session_no_target_chosen(), blockers: [] })
+    setRefusal(null)
+    setOpen(true)
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span id={id} className="sr-only">
+          {m.session_target_for({ name: sessionLabel(m, session) })}
+        </span>
+        <TargetSelect value={choice} onChange={setChoice} labelledBy={id} />
+        <Button size="sm" variant="outline" onClick={review} data-file-into-target>
+          {m.session_file_into_target_ellipsis()}
+        </Button>
+      </div>
+      {refusal ? <Refusal {...refusal} /> : null}
+      {target ? (
+        <ConfirmDialog
+          open={open}
+          onOpenChange={setOpen}
+          title={m.session_file_into_title({ ...count, name: target.name })}
+          description={folder}
+          changes={[m.session_file_moves({ ...count, size: formatBytes(moves.reduce((n, mv) => n + mv.sizeBytes, 0)) }), m.session_confirms_target({ name: target.name }), m.wrapup_archive_links_follow()]}
+          confirmLabel={m.session_file_into({ name: target.name })}
+          onConfirm={() => {
+            const result = fileIntoTarget(sessionId, target.id, session.revision)
+            if (result.ok) {
+              onDone?.(m.session_target_value({ name: target.name }))
+              announce(m.session_target_confirmed({ name: target.name }))
+            }
+            return result
+          }}
+        />
+      ) : null}
     </div>
   )
 }

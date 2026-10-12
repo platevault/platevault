@@ -9,13 +9,16 @@
  * connected, its capture layout recognised: ASIAIR, N.I.N.A., SharpCap,
  * Ekos, SGP or Voyager; a generic device has no layout), a saved source
  * (Import new skips what it imported before) or Choose folder. Then see each
- * file's destination and where it ends up: lights become sessions, raw
- * calibration frames go to the calibration process (Calibration → stack,
- * P-CAL3), and masters go straight to structured calibration storage. Holds
- * (Unclassified until typed, still being written until it settles), skips
- * (SHA-256 duplicates), writability and free space, and Copy or Move. Import
- * runs as an operation, then lists what it filled. A second tab adds an
- * existing library folder and indexes it in place.
+ * file's destination and where it ends up: lights become sessions, each
+ * with its Target (P-IMP2: prefilled from pointing, OBJECT as a hint,
+ * Unclassified files it under the Unclassified folder), raw calibration
+ * frames go to the calibration process (Calibration → stack, P-CAL3), and
+ * masters go straight to structured calibration storage. Holds (Unclassified
+ * until typed, still being written until it settles), skips (SHA-256
+ * duplicates), writability and free space, and Copy or Move. Import runs as
+ * an operation, then lists what it filled; a source that vanishes pauses it
+ * as Interrupted until Retry. A second tab adds an existing library folder
+ * and indexes it in place.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Check, ChevronRight, Download, FolderOpen, FolderSearch, Usb } from "lucide-react"
@@ -42,12 +45,14 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isRemovablePath, removableDevices } from "@/domain/devices"
 import { filesUnder } from "@/domain/disk"
+import { nightOf } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { namingTemplate } from "@/domain/templates"
-import type { ImageType, LocationRole, NamingFrameType } from "@/domain/types"
+import type { ImageType, LocationRole, NamingFrameType, TargetId } from "@/domain/types"
 import { suggestDisplayName, validateLocation } from "@/features/t1/lib/locations"
-import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
+import { formatBytes, formatCount, formatDateTime, formatExposure, formatNight } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
+import { filedUnclassified } from "@/store/actions/library"
 import { isSettled } from "@/store/operations"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { settleGrowingFiles } from "@/store/simulation"
@@ -68,7 +73,7 @@ import {
   typeLabel,
 } from "./import-model"
 import { addLibraryFolder, type ImportPayload, saveImportSource, startImport } from "./import-run"
-import { refusalOf } from "./parts"
+import { refusalOf, TargetSelect } from "./parts"
 
 /** Simulated time the capture device needs to finish writing a held file. */
 const SETTLE_MS = 6000
@@ -95,7 +100,12 @@ function defaultSource(state: PrototypeState): ImportSourceChoice | null {
 }
 
 function selectSource(source: ImportSourceChoice, newOnly = true) {
-  setDraft({ source, newOnly, typed: {} })
+  setDraft({ source, newOnly, typed: {}, targets: {} })
+}
+
+/** The Target an incoming session files under (P-IMP2); null is Unclassified. */
+function chooseTarget(sessionKey: string, targetId: TargetId | null) {
+  updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, targets: { ...a.importDraft.targets, [sessionKey]: targetId } } }))
 }
 
 /** Click to act: a click anywhere on a source row selects it, except on the row's own controls (its note marker, its name button). */
@@ -464,6 +474,12 @@ function RoutePill({ route }: { route: Route }) {
   return <Pill tone={ROUTE_TONE[route]}>{routeLabel(m, route)}</Pill>
 }
 
+/** An incoming light session in words: "1 Oct · Ha · 300 s". */
+function incomingLabel(m: Messages, g: DestinationGroup): string {
+  const header = g.items[0]!.file.header!
+  return [formatNight(nightOf(header.dateObs), true), header.filter ?? m.palette_session_no_filter(), formatExposure(header.exposureS)].join(" · ")
+}
+
 function PreviewPart({ plan }: { plan: ImportPlan }) {
   const m = useMessages()
   const columns: Column<DestinationGroup>[] = [
@@ -475,7 +491,7 @@ function PreviewPart({ plan }: { plan: ImportPlan }) {
       cell: (g) => (
         <span className="flex min-w-0 flex-col">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate font-mono text-xs" title={`${g.location.path}/${g.relative}`}>
+            <span className="truncate font-mono text-xs" title={`${g.location.path}/${g.relative}`} data-import-folder>
               {g.relative}
             </span>
             {g.fallbacks.length > 0 ? (
@@ -484,9 +500,30 @@ function PreviewPart({ plan }: { plan: ImportPlan }) {
               </Pill>
             ) : null}
           </span>
-          <span className="text-xs text-muted-foreground">{g.location.displayName}</span>
+          <span className="text-xs text-muted-foreground">{g.session ? `${g.location.displayName} · ${incomingLabel(m, g)}` : g.location.displayName}</span>
         </span>
       ),
+    },
+    {
+      id: "target",
+      header: m.sessions_column_target(),
+      sortValue: (g) => (g.session ? (g.session.target?.name ?? "") : null),
+      cell: (g) =>
+        g.session ? (
+          <span className="flex min-w-0 flex-col gap-0.5" data-import-target={g.session.key}>
+            <TargetSelect
+              value={g.session.target?.id ?? null}
+              onChange={(id) => chooseTarget(g.session!.key, id)}
+              label={m.session_target_for({ name: incomingLabel(m, g) })}
+              extra={g.session.suggested ? [g.session.suggested] : []}
+              unclassified
+              className="w-40"
+            />
+            {g.session.objectLabel ? <span className="truncate text-xs text-muted-foreground">{m.session_object({ name: g.session.objectLabel })}</span> : null}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">–</span>
+        ),
     },
     { id: "type", header: m.import_column_type(), cell: (g) => (g.items.some((i) => i.typed) ? m.import_type_typed({ type: typeLabel(m, g.type) }) : typeLabel(m, g.type)) },
     { id: "frames", header: m.sessions_column_frames(), align: "right", sortValue: (g) => g.items.length, cell: (g) => formatCount(g.items.length) },
@@ -746,7 +783,8 @@ function ModePart({ plan, draft }: { plan: ImportPlan; draft: ImportDraft }) {
 function ProgressView({ operationId, kind }: { operationId: string; kind: "import" | "index" }) {
   const navigate = useNavigate()
   const op = useStore((s) => s.operations[operationId])
-  const sessions = useStore((s) => s.catalog.sessions)
+  const state = useStore((s) => s)
+  const sessions = state.catalog.sessions
   const m = useMessages()
   const reset = () => updateSlice("a", (a) => ({ ...a, lastImport: null }))
   const go = (to: string) => {
@@ -797,7 +835,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
                       s.target.status === "confirmed" || s.target.status === "associated" ? (
                         <Pill tone="success">{m.import_target_set()}</Pill>
                       ) : (
-                        <Pill tone="warning">{m.sessions_filter_needs_target()}</Pill>
+                        <Pill tone="warning">{filedUnclassified(state, s) ? m.import_type_unclassified() : m.sessions_filter_needs_target()}</Pill>
                       )
                     ) : (
                       <Pill tone="info" onClick={() => go("/calibration")}>
