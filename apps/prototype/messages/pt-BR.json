@@ -7615,5 +7615,11 @@
   "import_flow_title": "Importar",
   "session_intake_title": "Sessão",
   "calibration_process_title": "Processo",
-  "settings_help": "Ajuda"
+  "settings_help": "Ajuda",
+  "checklist_ring_name": "{title}, {done} de {total} feitos",
+  "checklist_dismiss": "Dispensar {title}",
+  "theme_picker_mode": "Modo",
+  "theme_picker_light": "Claro",
+  "theme_picker_dark": "Escuro",
+  "theme_picker_theme": "Tema"
 }

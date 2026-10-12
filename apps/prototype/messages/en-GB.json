@@ -7559,5 +7559,11 @@
   "import_flow_title": "Import",
   "session_intake_title": "Session",
   "calibration_process_title": "Process",
-  "settings_help": "Help"
+  "settings_help": "Help",
+  "checklist_ring_name": "{title}, {done} of {total} done",
+  "checklist_dismiss": "Dismiss {title}",
+  "theme_picker_mode": "Mode",
+  "theme_picker_light": "Light",
+  "theme_picker_dark": "Dark",
+  "theme_picker_theme": "Theme"
 }
