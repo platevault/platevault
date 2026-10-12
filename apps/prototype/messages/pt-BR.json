@@ -2590,6 +2590,7 @@
   "calibration_step_todo": "A fazer",
   "calibration_steps_of": "Etapas de {name}",
   "calibration_raws_kept": "Mantidos",
+  "calibration_raws_restore": "Na Lixeira do sistema. Restaure-os e reescaneie para recuperá-los.",
   "calibration_keep_raws": "Manter brutos",
   "calibration_stack_again": "Empilhar de novo",
   "calibration_detect_now": "Detectar agora",

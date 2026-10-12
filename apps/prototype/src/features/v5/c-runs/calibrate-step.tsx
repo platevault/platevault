@@ -28,7 +28,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { basisFiles, type CalSource, type Candidate, calibrationPlan, CRITERION_NAME, KIND_NAME, type RequirementRow, summaryRef } from "@/domain/calibration"
+import { basisFiles, type CalSource, type Candidate, calibrationPlan, CRITERION_NAME, KIND_NAME, type RequirementRow, sessionIdsOf, summaryRef } from "@/domain/calibration"
 import { runSetup, workingContent } from "@/domain/derive"
 import type { CalibrationKind, MatchCriterion, Run } from "@/domain/types"
 import { fileName, formatNight } from "@/lib/format"
@@ -63,9 +63,9 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const outcome = useOutcome()
   const setup = runSetup(state.catalog, run)
   const plan = calibrationPlan(state.catalog, state.disk, run, setup.calibrationPolicy, workingContent(run))
-  const [open, setOpen] = useState<boolean | null>(null)
   const better = plan.rows.filter((r) => r.better !== null).length
-  const expanded = open ?? (plan.needsReview.length > 0 || plan.counts.suggested > 0 || better > 0)
+  // Open by default when something waits on the user; then only Show / Hide changes it, so resolving the last row keeps the table in view.
+  const [expanded, setOpen] = useState(() => plan.needsReview.length > 0 || plan.counts.suggested > 0 || better > 0)
   const lock = runLock(run)
   const switchId = useId()
   const [exception, setException] = useState<ExceptionRequest | null>(null)
@@ -160,11 +160,20 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
         onClose={() => setException(null)}
         onConfirm={(reason) => {
           if (!exception) return false
-          return outcome.act(calibrationException(run.id, exception.row.member.session.id, exception.row.kind, exception.source, exception.criteria, reason), { blocked: m.run_cal_exception_blocked() })
+          return outcome.act(calibrationException(run.id, sessionIdsOf(exception.row), exception.row.kind, exception.source, exception.criteria, reason), { blocked: m.run_cal_exception_blocked() })
         }}
       />
     </div>
   )
+}
+
+/** The light sessions a row covers: "18 Sep · Ha", or "2 Sep – 5 Sep · L, R, G, B" for a dark or bias shared across channels. */
+function coveredSessions(m: Messages, row: RequirementRow): string {
+  const nights = [...new Set(row.members.map((x) => x.session.night))].sort()
+  const first = formatNight(nights[0]!)
+  const night = nights.length > 1 ? `${first} – ${formatNight(nights[nights.length - 1]!)}` : first
+  const channels = [...new Set(row.members.map((x) => x.session.channel ?? m.palette_session_no_filter()))]
+  return `${night} · ${channels.join(", ")}`
 }
 
 function stateBadge(row: RequirementRow) {
@@ -233,7 +242,7 @@ function RequirementTable({
     if (row.assignment?.basis?.files[0]) return row.assignment.basis.files[0].sha256
     return row.input ? (basisFiles(state.catalog, state.disk, row.input)[0]?.sha256 ?? null) : null
   }
-  const rowName = (r: RequirementRow) => `${say(m, KIND_NAME[r.kind])} · ${formatNight(r.member.session.night)} ${r.member.session.channel ?? m.palette_session_no_filter()}`
+  const rowName = (r: RequirementRow) => `${say(m, KIND_NAME[r.kind])} · ${coveredSessions(m, r)}`
   const assignBlocked = { blocked: m.run_cal_assign_blocked() }
   const entries = (r: RequirementRow): MenuEntry[] => {
     const offers = stackOffers(state, r)
@@ -248,7 +257,7 @@ function RequirementTable({
     const masters: MenuEntry[] = r.candidates.slice(0, 6).map((c) => ({
       label: unique(c.summary.allCompatible ? m.run_use_named({ name: c.source.name }) : m.run_cal_use_as_exception({ name: c.source.name }), c.source.cameraName),
       icon: c.summary.allCompatible ? undefined : CircleSlash,
-      onSelect: () => (c.summary.allCompatible ? onOutcome(acceptCalibration(run.id, r.member.session.id, r.kind, c.source, c.criteria), assignBlocked) : onException({ row: r, source: c.source, criteria: c.criteria })),
+      onSelect: () => (c.summary.allCompatible ? onOutcome(acceptCalibration(run.id, sessionIdsOf(r), r.kind, c.source, c.criteria), assignBlocked) : onException({ row: r, source: c.source, criteria: c.criteria })),
     }))
     const stack: MenuEntry[] = offers.map((o) => ({ label: o.waiting ? m.run_cal_stack_from({ name: say(m, o.view.name) }) : m.activity_open_destination({ name: say(m, o.view.name) }), icon: Sparkles, onSelect: () => void navigate(processLink(o.view.process.id) as never) }))
     const decisions: MenuEntry[] = lock
@@ -256,8 +265,8 @@ function RequirementTable({
       : [
           { separator: true },
           { label: m.run_cal_process_without({ kind }), icon: CircleSlash, onSelect: () => onException({ row: r, source: null, criteria: [] }) },
-          { label: m.run_cal_defer(), icon: PauseCircle, onSelect: () => onOutcome(deferCalibration(run.id, r.member.session.id, r.kind), assignBlocked) },
-          ...(r.assignment ? [{ label: m.run_cal_use_automatic(), icon: RotateCcw, onSelect: () => onOutcome(clearCalibration(run.id, r.member.session.id, r.kind), assignBlocked) }] : []),
+          { label: m.run_cal_defer(), icon: PauseCircle, onSelect: () => onOutcome(deferCalibration(run.id, sessionIdsOf(r), r.kind), assignBlocked) },
+          ...(r.assignment ? [{ label: m.run_cal_use_automatic(), icon: RotateCcw, onSelect: () => onOutcome(clearCalibration(run.id, sessionIdsOf(r), r.kind), assignBlocked) }] : []),
         ]
     return [{ heading: rowName(r) }, ...(lock ? [] : masters), ...(lock || masters.length === 0 ? [] : stack.length > 0 ? [{ separator: true } as const] : []), ...stack, ...decisions, ...(r.candidates.length === 0 && stack.length === 0 ? [{ label: m.run_cal_no_master(), disabled: true, onSelect: () => {} }] : [])]
   }
@@ -269,9 +278,9 @@ function RequirementTable({
       cell: (r) => (
         <span className="flex flex-col">
           <span>
-            {formatNight(r.member.session.night)} · {r.member.session.channel ?? m.palette_session_no_filter()} · {say(m, KIND_NAME[r.kind])}
+            {coveredSessions(m, r)} · {say(m, KIND_NAME[r.kind])}
           </span>
-          <span className="text-[0.6875rem] text-muted-foreground">{m.run_frames_count({ count: r.member.included.length })}</span>
+          <span className="text-[0.6875rem] text-muted-foreground">{m.run_frames_count({ count: r.members.reduce((sum, x) => sum + x.included.length, 0) })}</span>
         </span>
       ),
       sortValue: (r) => r.member.session.night,
@@ -295,7 +304,7 @@ function RequirementTable({
       cell: (r) => {
         const offers = r.source ? [] : stackOffers(state, r)
         const accept = r.state === "suggested" && !lock ? r.candidates.find((c) => c.source.input.masterId === r.input?.masterId) : undefined
-        const use = (c: Candidate) => onOutcome(acceptCalibration(run.id, r.member.session.id, r.kind, c.source, c.criteria), assignBlocked)
+        const use = (c: Candidate) => onOutcome(acceptCalibration(run.id, sessionIdsOf(r), r.kind, c.source, c.criteria), assignBlocked)
         return (
           <span className="flex max-w-[18rem] flex-col items-start gap-0.5">
             {r.source ? (
@@ -383,7 +392,7 @@ function ExceptionDialog({ value, onClose, onConfirm }: { value: ExceptionReques
         >
           <DialogHeader>
             <DialogTitle>{value.source ? m.run_cal_exception_title({ name: value.source.name }) : m.run_cal_without({ kind })}</DialogTitle>
-            <DialogDescription>{value.source ? say(m, summaryRef(value.criteria)) : `${formatNight(value.row.member.session.night)} ${value.row.member.session.channel ?? ""} · ${m.run_cal_this_run_only()}`}</DialogDescription>
+            <DialogDescription>{value.source ? say(m, summaryRef(value.criteria)) : `${coveredSessions(m, value.row)} · ${m.run_cal_this_run_only()}`}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
             <Label htmlFor={id}>{m.run_col_reason()}</Label>

@@ -8,7 +8,7 @@
  * application writing outputs, a source frame changing) so the review can
  * exercise discovery and re-verification.
  */
-import { basisFiles, type CalSource, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
+import { assignmentId, basisFiles, type CalSource, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
 import { calibrationStorage, masterStoragePath } from "@/domain/calibration-process"
 import { completeRefusals, groupHref, groupPipeline, latestRevision, runHref, runPreparations, runSetup, workingContent } from "@/domain/derive"
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
@@ -123,19 +123,20 @@ export function setOutputParent(target: { runId?: string; groupId?: string }, pa
 // Calibration decisions (CAL-FR-08, D-W5, D-W55)
 // ---------------------------------------------------------------------------
 
-function decide(runId: string, sessionId: string, kind: CalibrationKind, next: Omit<CalibrationAssignment, "id" | "lightSessionId" | "kind"> | null, label: MessageRef): CommitResult {
+/** One decision for a requirement row, stored for every light session the row covers (`RequirementRow.members`). */
+function decide(runId: string, sessionIds: readonly string[], kind: CalibrationKind, next: Omit<CalibrationAssignment, "id" | "lightSessionId" | "kind"> | null, label: MessageRef): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
   const lock = runLock(run)
   if (lock) return refuse(msg("store_refused", { label }), [lock], runHref(run, "calibrate"))
-  const id = `cal_${runId}_${sessionId}_${kind}`
+  const covered = new Set(sessionIds)
   return editRun(
     run.id,
     label,
     (r) => {
-      const rest = r.calibration.filter((a) => !(a.lightSessionId === sessionId && a.kind === kind))
-      return { ...r, calibration: next ? [...rest, { id, lightSessionId: sessionId, kind, ...next }] : rest }
+      const rest = r.calibration.filter((a) => !(covered.has(a.lightSessionId) && a.kind === kind))
+      return { ...r, calibration: next ? [...rest, ...sessionIds.map((sessionId) => ({ id: assignmentId(runId, sessionId, kind), lightSessionId: sessionId, kind, ...next }))] : rest }
     },
     { step: "calibrate" },
   )
@@ -147,27 +148,27 @@ function basisOf(input: CalibrationInput | null) {
 }
 
 /** Accept a compatible input: it records the basis, the SHA-256 each handed-off file has now. */
-export function acceptCalibration(runId: string, sessionId: string, kind: CalibrationKind, source: CalSource, criteria: MatchCriterion[]): CommitResult {
-  return decide(runId, sessionId, kind, { input: source.input, state: "accepted", criteria, exception: null, basis: basisOf(source.input) }, msg("run_use_named", { name: source.name }))
+export function acceptCalibration(runId: string, sessionIds: readonly string[], kind: CalibrationKind, source: CalSource, criteria: MatchCriterion[]): CommitResult {
+  return decide(runId, sessionIds, kind, { input: source.input, state: "accepted", criteria, exception: null, basis: basisOf(source.input) }, msg("run_use_named", { name: source.name }))
 }
 
 /** An exception: an incompatible input, or no input of this kind, with the user's reason (CAL-FR-08). */
-export function calibrationException(runId: string, sessionId: string, kind: CalibrationKind, source: CalSource | null, criteria: MatchCriterion[], reason: string): CommitResult {
+export function calibrationException(runId: string, sessionIds: readonly string[], kind: CalibrationKind, source: CalSource | null, criteria: MatchCriterion[], reason: string): CommitResult {
   const trimmed = reason.trim()
   if (!trimmed) {
     const run = store.getState().catalog.runs[runId]
     return refuse(msg("store_refused", { label: msg("status_exception") }), [msg("store_reason_no_reason")], run ? runHref(run, "calibrate") : null)
   }
-  return decide(runId, sessionId, kind, { input: source?.input ?? null, state: "exception", criteria, exception: { reason: trimmed, at: nowIso() }, basis: basisOf(source?.input ?? null) }, source ? msg("run_cal_exception_title", { name: source.name }) : msg("store_label_exception_no_kind", { kind: KIND_NOUN[kind] }))
+  return decide(runId, sessionIds, kind, { input: source?.input ?? null, state: "exception", criteria, exception: { reason: trimmed, at: nowIso() }, basis: basisOf(source?.input ?? null) }, source ? msg("run_cal_exception_title", { name: source.name }) : msg("store_label_exception_no_kind", { kind: KIND_NOUN[kind] }))
 }
 
-export function deferCalibration(runId: string, sessionId: string, kind: CalibrationKind): CommitResult {
-  return decide(runId, sessionId, kind, { input: null, state: "deferred", criteria: [], exception: null, basis: null }, msg("store_label_defer_kind", { kind: KIND_NOUN[kind] }))
+export function deferCalibration(runId: string, sessionIds: readonly string[], kind: CalibrationKind): CommitResult {
+  return decide(runId, sessionIds, kind, { input: null, state: "deferred", criteria: [], exception: null, basis: null }, msg("store_label_defer_kind", { kind: KIND_NOUN[kind] }))
 }
 
 /** Back to the automatic choice: the stored decision is removed. */
-export function clearCalibration(runId: string, sessionId: string, kind: CalibrationKind): CommitResult {
-  return decide(runId, sessionId, kind, null, msg("store_label_automatic_kind", { kind: KIND_NOUN[kind] }))
+export function clearCalibration(runId: string, sessionIds: readonly string[], kind: CalibrationKind): CommitResult {
+  return decide(runId, sessionIds, kind, null, msg("store_label_automatic_kind", { kind: KIND_NOUN[kind] }))
 }
 
 /** Adopting a master: where it would be filed and the SHA-256 it holds now, shown for confirmation; or why it cannot be added. */
