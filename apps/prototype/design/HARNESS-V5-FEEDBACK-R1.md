@@ -316,7 +316,7 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **No dual web component kits** inside the webview (Fluent + a macOS kit behind one API): dropped.
 - **WCAG 2.2 AA is a target, not a hard gate.** It does not by itself rule out Flutter.
 - **Flutter: wait** for the spike results before deciding.
-- **Backend services crate: yes, now.** A framework-agnostic Rust crate owns update, notifications, single instance, autostart, open/reveal, trash, file watching and logging; the window owner keeps menus, tray, dialogs and window state.
+- **Backend services crate: approved in principle (user); scope under review.** Research candidates (R9-BACKEND-SERVICES.md): update and relaunch, notifications, single instance, autostart, open/reveal, trash, file watching, logging. The research itself recommends moving only the updater into Rust while Tauri is the only host, and extracting a crate once a second host exists. The window owner keeps menus, tray, dialogs and window state either way.
 - **Updater:** switch away from tauri-plugin-updater now if another option offers better functionality and usability; compare the options first.
 - **Linux is a supported platform.**
 - **Xcode** is not installed for now; the Flutter spike reports what it can without it.
