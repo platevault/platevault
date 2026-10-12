@@ -14,7 +14,8 @@ use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
-    LibraryError, MeasurementProgress, NativePath, Revision, ScanOperation, ScanProgress, ScanState,
+    LibraryError, MeasurementProgress, MeasurementRun, NativePath, Revision, ScanOperation,
+    ScanProgress, ScanState,
 };
 use serde::Serialize;
 use tokio::sync::broadcast::{self, error::RecvError};
@@ -42,6 +43,14 @@ pub struct ScanProgressEvent {
     incomplete_scopes: Vec<NativePath>,
 }
 
+impl ScanProgressEvent {
+    /// The scan operation this snapshot belongs to.
+    #[must_use]
+    pub const fn operation_id(&self) -> Uuid {
+        self.operation_id
+    }
+}
+
 impl From<ScanOperation> for ScanProgressEvent {
     fn from(operation: ScanOperation) -> Self {
         Self {
@@ -64,7 +73,7 @@ pub struct ScanProgressFeed {
     events: broadcast::Receiver<ScanOperation>,
     emitted: Emitted,
     /// Snapshots a resync admitted, yielded before the channel resumes.
-    recovered: VecDeque<ScanOperation>,
+    pending: VecDeque<ScanOperation>,
 }
 
 impl ScanProgressFeed {
@@ -72,7 +81,7 @@ impl ScanProgressFeed {
     #[must_use]
     pub fn subscribe(library: Arc<Library>) -> Self {
         let events = library.subscribe_scan_progress();
-        Self { library, events, emitted: Emitted::default(), recovered: VecDeque::new() }
+        Self { library, events, emitted: Emitted::default(), pending: VecDeque::new() }
     }
 
     /// Queue durable status of every tracked operation and of Running ones
@@ -96,7 +105,7 @@ impl ScanProgressFeed {
 
     fn recover(&mut self, operation: ScanOperation) {
         if self.emitted.admit(&operation, false) {
-            self.recovered.push_back(operation);
+            self.pending.push_back(operation);
         }
     }
 }
@@ -106,7 +115,7 @@ impl Feed for ScanProgressFeed {
 
     async fn next(&mut self) -> Option<ScanProgressEvent> {
         loop {
-            if let Some(operation) = self.recovered.pop_front() {
+            if let Some(operation) = self.pending.pop_front() {
                 return Some(operation.into());
             }
             match self.events.recv().await {
@@ -218,16 +227,7 @@ impl Feed for MeasurementProgressFeed {
                         "measurement progress lagged; re-reading durable status"
                     );
                     match self.library.frame_review().running_run().await {
-                        Ok(Some(run)) => {
-                            return Some(MeasurementProgress {
-                                operation_id: run.operation_id,
-                                revision: run.revision,
-                                state: run.state,
-                                counters: run.counters,
-                                asset_id: None,
-                                frame_state: None,
-                            })
-                        }
+                        Ok(Some(run)) => return Some(frameless(&run)),
                         Ok(None) => {}
                         Err(error) => tracing::error!(
                             %error,
@@ -238,6 +238,18 @@ impl Feed for MeasurementProgressFeed {
                 Err(RecvError::Closed) => return None,
             }
         }
+    }
+}
+
+/// The durable status of `run` as a progress snapshot that settles no frame.
+fn frameless(run: &MeasurementRun) -> MeasurementProgress {
+    MeasurementProgress {
+        operation_id: run.operation_id,
+        revision: run.revision,
+        state: run.state,
+        counters: run.counters,
+        asset_id: None,
+        frame_state: None,
     }
 }
 

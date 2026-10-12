@@ -11,11 +11,10 @@ use std::process::Command;
 
 use serde_json::Value;
 
-/// `tauri*` crates that are not part of the Tauri framework. notify-rust's
+/// `tauri*` crates that are not part of the Tauri framework: notify-rust's
 /// Windows backend is a standalone toast wrapper over the Windows Runtime that
-/// the Tauri team publishes; it depends only on `windows`, `windows-version`
-/// and `thiserror`.
-/// The walk still checks everything it reaches.
+/// the Tauri team publishes. Only the name is exempt; its dependencies are
+/// walked like any other.
 const STANDALONE: [&str; 1] = ["tauri-winrt-notification"];
 
 fn banned(name: &str) -> bool {

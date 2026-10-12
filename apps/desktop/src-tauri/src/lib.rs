@@ -731,6 +731,8 @@ async fn boot(
         &bus,
         resolve_cache.clone(),
     );
+    // A `log:entry` the webview cannot take is logged at debug only: the
+    // durable `log.recent` pull serves the same rows.
     drop(tokio::spawn(crate::bootstrap::feeds::forward(
         app.clone(),
         crate::commands::log::LOG_ENTRY_EVENT,
@@ -739,6 +741,7 @@ async fn boot(
             pool.clone(),
             contracts_core::log::LogLevel::Debug,
         ),
+        |entry, error| tracing::debug!(entry = %entry.id, %error, "log entry event not delivered"),
     )));
     drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
     // spec 051 US8: OS notifications for the `plan.applying.completed` and

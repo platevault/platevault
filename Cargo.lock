@@ -1479,6 +1479,7 @@ dependencies = [
  "persistence_core",
  "persistence_lifecycle",
  "platevault_core",
+ "platevault_pixels",
  "serde",
  "serde_json",
  "sqlx",

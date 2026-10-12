@@ -6,6 +6,7 @@
 //! (FR-022), both filtered by `RUST_LOG` with `info` as the default.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
 use tracing_appender::non_blocking::WorkerGuard;
@@ -19,13 +20,27 @@ const LOG_FILE_PREFIX: &str = "plate-vault.log";
 /// never grows unbounded (SC-006).
 const RETENTION_DAYS: u64 = 14;
 
+/// Set by the first [`init`]; process logging is installed once per process.
+static STARTED: AtomicBool = AtomicBool::new(false);
+
 /// Install the process-wide subscriber, writing the file through a background
 /// thread that flushes until the returned guard drops.
+///
+/// Only the first call in a process does anything: a later one returns `None`
+/// without pruning, opening a file or starting a writer thread, and the first
+/// call's log directory stays in use.
 ///
 /// `try_init` leaves a subscriber something else installed first (a test
 /// harness, say) in place instead of panicking. It also installs the
 /// `log`-facade bridge, so `log` records reach both outputs.
-pub fn init(log_dir: &Path) -> WorkerGuard {
+pub fn init(log_dir: &Path) -> Option<WorkerGuard> {
+    if STARTED.swap(true, Ordering::AcqRel) {
+        tracing::warn!(
+            log_dir = %log_dir.display(),
+            "process logging already started; keeping its log directory"
+        );
+        return None;
+    }
     let _ = std::fs::create_dir_all(log_dir);
 
     // Prune before creating today's writer so a just-rotated file from a
@@ -49,7 +64,7 @@ pub fn init(log_dir: &Path) -> WorkerGuard {
         .try_init();
 
     tracing::info!(log_dir = %log_dir.display(), "diagnostics log file initialised");
-    guard
+    Some(guard)
 }
 
 /// Delete files in `log_dir` last modified more than `max_age_days` ago.

@@ -16,9 +16,7 @@ audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
 persistence_lifecycle = { path = "../../persistence/lifecycle" }
 platevault_core = { path = "../../platevault-core" }
-# OS notification delivery: notification center on macOS, toast on Windows,
-# the D-Bus notification daemon on Linux.
-notify-rust = "4.18.0"
+notify-rust = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
@@ -30,6 +28,8 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 persistence_core = { path = "../../persistence/core" }
+# Real FITS frames for the measurement feed tests.
+platevault_pixels = { path = "../../platevault-pixels", features = ["fixtures"] }
 tokio = { workspace = true, features = ["time"] }
 tempfile = { workspace = true }
 

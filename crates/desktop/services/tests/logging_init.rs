@@ -3,7 +3,8 @@
 
 //! `Services::start` installs the process logging: stale rotated files are
 //! pruned, and `tracing` events reach the daily file, which `shutdown`
-//! flushes. Its own test binary, because the subscriber is process-global.
+//! flushes. A later start installs nothing. Its own test binary with one test,
+//! because the subscriber and the once-per-process guard are process-global.
 
 use std::fs::File;
 use std::time::{Duration, SystemTime};
@@ -42,4 +43,13 @@ fn start_prunes_stale_logs_and_writes_the_daily_file() {
     let contents = std::fs::read_to_string(log_dir.join(&daily[0])).expect("read daily log");
     assert!(contents.contains("logging-init-marker"), "event written and flushed: {contents}");
     assert!(!contents.contains('\u{1b}'), "the file carries no ANSI colour codes");
+
+    // A second start in the same process opens no log directory of its own.
+    let second_dir = dir.path().join("second-logs");
+    let second = Services::start(&Config {
+        identity: AppIdentity { identifier: "dev.example.app".to_owned(), development: true },
+        log_dir: second_dir.clone(),
+    });
+    second.shutdown();
+    assert!(!second_dir.exists(), "a later start creates no log directory or writer");
 }

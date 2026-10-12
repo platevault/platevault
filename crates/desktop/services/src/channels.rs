@@ -9,7 +9,8 @@
 //! - **Latest-value state**, over `tokio::sync::watch` and read through
 //!   [`Latest`]: for state the UI must never miss. A subscriber that arrives
 //!   late or falls behind skips intermediate values but always receives the
-//!   current one.
+//!   current one. First consumer: the updater's update status
+//!   (astro-plan-5wcib).
 //! - **Transient events**, over `tokio::sync::broadcast`: a subscriber that
 //!   falls behind is told how many it missed, and each feed decides what that
 //!   means. The [`crate::jobs`] feeds re-read durable status; the
@@ -20,6 +21,11 @@ use std::future::Future;
 use tokio::sync::watch;
 
 /// An ordered source of values for a host to show.
+///
+/// A host polls each [`Feed::next`] call to completion, one call at a time.
+/// The method is not cancel-safe: dropping a pending call, for example as the
+/// losing branch of a `select!`, can lose a value or the durable resync that
+/// follows a lagged channel.
 pub trait Feed: Send {
     type Item: Send;
 
@@ -28,7 +34,8 @@ pub trait Feed: Send {
 }
 
 /// Latest-value state from a `watch` channel: the current value first, then
-/// each change, ending when the sender is dropped.
+/// each change, ending when the sender is dropped. Its first producer is the
+/// updater (astro-plan-5wcib), which publishes its update status through it.
 pub struct Latest<T> {
     receiver: watch::Receiver<T>,
 }

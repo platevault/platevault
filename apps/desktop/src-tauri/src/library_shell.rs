@@ -314,11 +314,25 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         app.handle().clone(),
         SCAN_PROGRESS_EVENT,
         ScanProgressFeed::subscribe(Arc::clone(&library)),
+        |event, error| {
+            tracing::error!(
+                operation = %event.operation_id(),
+                %error,
+                "scan progress event not delivered"
+            );
+        },
     ));
     tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
         app.handle().clone(),
         crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
         MeasurementProgressFeed::subscribe(Arc::clone(&library)),
+        |progress, error| {
+            tracing::error!(
+                run = %progress.operation_id,
+                %error,
+                "measurement progress event not delivered"
+            );
+        },
     ));
     app.manage(library);
     app.run(|_, _| {});

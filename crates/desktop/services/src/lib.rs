@@ -75,7 +75,8 @@ pub struct Config {
 /// The running services of one process.
 pub struct Services {
     notifier: Notifier,
-    /// Flushes the log file when dropped.
+    /// Flushes the log file when dropped; `None` when an earlier start in this
+    /// process installed the logging.
     log: Mutex<Option<WorkerGuard>>,
     tasks: Mutex<Vec<AbortHandle>>,
 }
@@ -83,15 +84,15 @@ pub struct Services {
 impl Services {
     /// Install process logging and prepare notification delivery.
     ///
-    /// Call once, before anything else logs: the first call installs the
-    /// process-wide `tracing` subscriber and its `log`-facade bridge, and a
-    /// later call leaves that subscriber in place.
+    /// Call once, before anything else logs. Process logging is installed by
+    /// the first call only: a later call neither opens its own log directory
+    /// nor replaces the process-wide `tracing` subscriber and its `log`-facade
+    /// bridge.
     #[must_use]
     pub fn start(config: &Config) -> Self {
-        let log = logging::init(&config.log_dir);
         Self {
             notifier: Notifier::new(&config.identity),
-            log: Mutex::new(Some(log)),
+            log: Mutex::new(logging::init(&config.log_dir)),
             tasks: Mutex::default(),
         }
     }
