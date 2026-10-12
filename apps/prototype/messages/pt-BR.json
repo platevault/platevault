@@ -397,6 +397,84 @@
   "selection_region": "Seleção",
   "selection_show": "Mostrar selecionados",
   "selection_clear": "Limpar seleção",
+  "table_actions_column": "Ações",
+  "table_selected_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} selecionado",
+        "countPlural=*": "{n} selecionados"
+      }
+    }
+  ],
+  "table_selection_hidden": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} oculto pelos filtros",
+        "countPlural=*": "{n} ocultos pelos filtros"
+      }
+    }
+  ],
+  "table_selection_show": "Mostrar",
+  "table_row_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} linha",
+        "countPlural=*": "{n} linhas"
+      }
+    }
+  ],
+  "table_row_details": "Detalhes de {name}",
+  "filter_bar_label": "Filtros",
+  "filter_bar_all": "Todos",
+  "filter_bar_facet_value": "{label}: {value}",
+  "filter_bar_matches": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} resultado",
+        "countPlural=*": "{n} resultados"
+      }
+    }
+  ],
+  "filter_bar_presets": "Presets",
+  "filter_bar_presets_saved": "Salvos",
+  "filter_bar_preset_save_ellipsis": "Salvar atual…",
+  "filter_bar_preset_delete": "Excluir",
+  "filter_bar_preset_new_title": "Novo preset",
+  "filter_bar_preset_name": "Nome",
+  "filter_bar_preset_create": "Criar preset",
+  "filter_bar_preset_name_taken": "Nome já em uso",
   "save_review_current": "Ver a revisão atual",
   "folder_picker_description": "Seletor de pastas do protótipo: volumes e pastas vêm do disco simulado.",
   "folder_picker_volumes": "Volumes",

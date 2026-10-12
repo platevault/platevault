@@ -397,6 +397,84 @@
   "selection_region": "Selection",
   "selection_show": "Show selected",
   "selection_clear": "Clear selection",
+  "table_actions_column": "Actions",
+  "table_selected_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} selected",
+        "countPlural=*": "{n} selected"
+      }
+    }
+  ],
+  "table_selection_hidden": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} hidden by filters",
+        "countPlural=*": "{n} hidden by filters"
+      }
+    }
+  ],
+  "table_selection_show": "Show",
+  "table_row_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} row",
+        "countPlural=*": "{n} rows"
+      }
+    }
+  ],
+  "table_row_details": "Details for {name}",
+  "filter_bar_label": "Filters",
+  "filter_bar_all": "All",
+  "filter_bar_facet_value": "{label}: {value}",
+  "filter_bar_matches": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} match",
+        "countPlural=*": "{n} matches"
+      }
+    }
+  ],
+  "filter_bar_presets": "Presets",
+  "filter_bar_presets_saved": "Saved",
+  "filter_bar_preset_save_ellipsis": "Save current…",
+  "filter_bar_preset_delete": "Delete",
+  "filter_bar_preset_new_title": "New preset",
+  "filter_bar_preset_name": "Name",
+  "filter_bar_preset_create": "Create preset",
+  "filter_bar_preset_name_taken": "Name already in use",
   "save_review_current": "Review current revision",
   "folder_picker_description": "Prototype folder chooser: volumes and folders come from the simulated disk.",
   "folder_picker_volumes": "Volumes",

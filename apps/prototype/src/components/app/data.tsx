@@ -214,24 +214,25 @@ export interface FilterChip {
   label: string
 }
 
-/**
- * Active filters with remove buttons and the match count (VSEL-FR-05). The
- * group stays mounted so its live count is announced, and removing a chip
- * moves focus to the next chip, the previous one, the page search, or the
- * group itself.
- */
-export function FilterChips({
-  chips,
-  onRemove,
-  onClear,
-  matchLabel,
-}: {
+export interface FilterChipsProps {
   chips: FilterChip[]
   onRemove: (id: string) => void
   onClear: () => void
-  /** e.g. "12 matching sessions". */
+  /** e.g. "12 matches"; FilterBar passes its match count. */
   matchLabel: string
-}) {
+  /** A filter is on even without a chip (a search query); default: any chip. */
+  active?: boolean
+}
+
+/**
+ * Active filters with remove buttons, the match count and Clear filters
+ * (VSEL-FR-05): the chip line of FilterBar (filter-bar.tsx). The group stays
+ * mounted, out of the layout while no filter is on, so its live count is
+ * announced; removing a chip moves focus to the next chip, the previous one,
+ * the page search, or the group itself. Not the Targets grade strip, which
+ * plan P5 renames GradeBadges.
+ */
+export function FilterChips({ chips, onRemove, onClear, matchLabel, active = chips.length > 0 }: FilterChipsProps) {
   const m = useMessages()
   const group = useRef<HTMLDivElement>(null)
   function moveFocusAfterRemoval(index: number) {
@@ -243,7 +244,7 @@ export function FilterChips({
     })
   }
   return (
-    <div ref={group} tabIndex={-1} className="flex flex-wrap items-center gap-2 text-sm outline-none" role="group" aria-label={m.filters_active()}>
+    <div ref={group} tabIndex={-1} className={cn("flex flex-wrap items-center gap-2 text-sm outline-none", !active && "sr-only")} role="group" aria-label={m.filters_active()}>
       {chips.map((chip, index) => (
         <span key={chip.id} className="inline-flex h-6 items-center gap-1 rounded-md bg-secondary pr-0.5 pl-2 text-xs text-secondary-foreground">
           {chip.label}
@@ -262,9 +263,9 @@ export function FilterChips({
         </span>
       ))}
       <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-        {chips.length > 0 ? matchLabel : <span className="sr-only">{m.filters_none()}</span>}
+        {active ? matchLabel : <span className="sr-only">{m.filters_none()}</span>}
       </span>
-      {chips.length > 0 ? (
+      {active ? (
         <Button
           size="sm"
           variant="ghost"
