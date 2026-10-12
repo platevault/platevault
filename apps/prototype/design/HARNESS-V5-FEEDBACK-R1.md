@@ -278,4 +278,3 @@ Every decision below was made by the user while answering the v5 journeys' open 
   - **Footprint is real:** each prepared item records whether it was cloned or copied, and Prepare and Done show the actual extra space ("0 B extra · cloned" vs "12.4 GB copied").
 - **Prepared copies are cleaned up when a run is done (user).** Copies cost real space on volumes that can't clone. Completing a run offers Clean up prepared copies by default, showing the footprint; they go to the OS Trash after review. Wrap up's Clean up runs step covers any that are left. A run whose entries are all clones says so ("frees no space").
 - **Archiving with links (Q-ARCHIVE-LINKS):** a symlinked entry is repointed when its session moves. Hard-linked entries no longer exist as a mode.
-

@@ -21,6 +21,7 @@ extend-exclude = [
     "assets/seed/",
     # non-English UI catalogue (Portuguese text trips the English checker)
     "apps/desktop/messages/pt-BR.json",
+    "apps/prototype/messages/pt-BR.json",
 ]
 
 [default.extend-words]
@@ -28,6 +29,10 @@ extend-exclude = [
 typ = "typ"
 # SER astrophotography video format
 ser = "ser"
+# NASA/IPAC Extragalactic Database (catalogue name)
+NED = "NED"
+# Windows SHFileOperation flag prefix (FOF_NO_UI, FOF_ALLOWUNDO)
+FOF = "FOF"
 # abbreviation for strategy (variable names)
 strat = "strat"
 # RGBA PNG abbreviation context
