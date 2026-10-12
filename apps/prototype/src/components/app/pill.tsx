@@ -1,14 +1,16 @@
 /**
  * Pills and count badges (foundation primitives): the shared bubble
- * vocabulary for issues, channels, filters and blockers.
+ * vocabulary for channels, bands, kinds and counts.
  *
- * - Pill: a tone-tinted rounded label, a link or button when given `link`
- *   or `onClick`. Tone text over its own 12% tint (16% on hover) keeps
- *   4.5:1 on every surface of every theme (design/themes-contrast.md).
+ * - Pill: an inert, tone-tinted rounded tag (C-9). It is never a control:
+ *   navigation is a link button or a tab, an action is a Button, and data
+ *   behind a pill goes in a HoverCard preview (components/app/previews.tsx).
+ *   Tone text over its own 12% tint keeps 4.5:1 on every surface of every
+ *   theme (design/themes-contrast.md).
  * - CountBadge: a small number, capped at 99+, with an optional
  *   screen-reader label so the count is part of the parent's name.
  *
- * State is never colour alone: a status pill carries its words.
+ * State is never colour alone: a status reads through StatusBadge.
  */
 import { Link } from "@tanstack/react-router"
 import type { LucideIcon } from "lucide-react"
@@ -37,31 +39,48 @@ const PILL_HOVER: Record<Tone, string> = {
   danger: "hover:bg-destructive/16",
 }
 
-export interface PillProps {
+/** The Pill API: an inert tag, no interactive props. */
+export interface TagProps {
   tone?: Tone
   icon?: LucideIcon
   children: ReactNode
-  /** Renders a router link. */
-  link?: StepLink
-  /** Renders a button. */
-  onClick?: () => void
+  /** The full text when the label truncates; not a tooltip for extra data. */
   title?: string
   className?: string
 }
 
-/** The pill's classes, for a control that renders its own element (a popover trigger). */
-export function pillClass(tone: Tone = "neutral", interactive = false, className?: string): string {
+/** @deprecated The interactive Pill props, removed in W4 (R9-COMPOSITION-PLAN P10). */
+interface InteractivePillProps {
+  /** @deprecated A pill is a tag, not a link. Use a link Button, Tabs, or UsedByPreview. */
+  link?: StepLink
+  /** @deprecated A pill is a tag, not a button. Use a Button or an Action. */
+  onClick?: () => void
+}
+
+export type PillProps = TagProps & InteractivePillProps
+
+function classesOf(tone: Tone, interactive: boolean, className?: string): string {
   return cn(PILL, PILL_TONE[tone], interactive && PILL_HOVER[tone], className)
 }
 
-export function Pill({ tone = "neutral", icon: Icon, children, link, onClick, title, className }: PillProps) {
-  const classes = pillClass(tone, Boolean(link || onClick), className)
+/**
+ * The pill's classes, for a control that renders its own element (a popover trigger).
+ * @deprecated Removed in W4 with its `interactive` flag: a control is a Button, a preview is a HoverCard (previews.tsx).
+ */
+export function pillClass(tone: Tone = "neutral", interactive = false, className?: string): string {
+  return classesOf(tone, interactive, className)
+}
+
+export function Pill({ tone = "neutral", icon: Icon, children, title, className, ...legacy }: PillProps) {
+  const { link, onClick } = legacy
+  const classes = classesOf(tone, Boolean(link || onClick), className)
   const body = (
     <>
       {Icon ? <Icon aria-hidden="true" /> : null}
       <span className="truncate">{children}</span>
     </>
   )
+  // Legacy control forms, until W3 migrates their call sites.
   if (link) {
     return (
       <Link to={link.to as never} params={link.params as never} search={link.search as never} className={classes} title={title} data-pill={tone}>

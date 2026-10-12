@@ -431,8 +431,6 @@
   "operation_show_all": "Mostrar todos os {count} itens",
   "operation_started": "Iniciado em {date}",
   "operation_settled": "concluído em {date}",
-  "refusal_details": "Detalhes",
-  "refusal_hide_details": "Ocultar detalhes",
   "refusal_blockers": [
     {
       "declarations": [

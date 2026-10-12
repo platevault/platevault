@@ -1,7 +1,16 @@
 /**
  * Feedback states (foundation-owned): empty, notices (offline, uncertain,
- * partial, refusal), errors next to the action, save state, unknown values
+ * partial), errors next to the action, toasts, save state, unknown values
  * and structural skeletons. Conventions are in HIGH-LEVEL-DESIGN.md §9.
+ *
+ * One route per situation (R9-COMPOSITION-PLAN P7, C-5):
+ * - action unavailable now: a focusable-disabled control in a BlockersPreview (previews.tsx);
+ * - action refused on click: `Refusal` beside the control (refusal.tsx);
+ * - field invalid: `ActionError` under the field;
+ * - finished with an off-screen effect (trash, archive, rescan, import): `toast`;
+ * - standing page state (offline location, closed project, read-only): a
+ *   `PageNotice` in the template's notice slot, rendered by `NoticeSlot`.
+ * Nothing is inserted above a list.
  */
 import { CircleAlert, CircleHelp, Info, type LucideIcon, OctagonX, RotateCw, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useRef } from "react"
@@ -10,8 +19,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { showToast } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import type { Action } from "./contracts"
 import { StatusBadge, type StatusValue, statusMeta } from "./status"
 
 let liveRegion: HTMLElement | null = null
@@ -81,6 +92,7 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
   )
 }
 
+/** `refusal` is deprecated (W4 removes it): a refused action shows a `Refusal` beside its control, never a notice. */
 export type NoticeTone = "info" | "offline" | "warning" | "refusal"
 
 // Harness v4: an inline info bar (as in Xcode or Mail), tinted by tone, hairline edge, 5 px radius.
@@ -116,6 +128,42 @@ export function Notice({ tone, title, children, actions, className }: NoticeProp
       {actions ? <div className="flex flex-wrap gap-2 pt-1.5 group-has-[>svg]/alert:col-start-2">{actions}</div> : null}
     </Alert>
   )
+}
+
+/** The standing tones a page notice may take. */
+export type PageNoticeTone = Exclude<NoticeTone, "refusal">
+
+/**
+ * The template notice slot's contract: one standing page state, fixed under
+ * the header (P7). Never the outcome of a click (toast), a refusal (Refusal)
+ * or a field error (ActionError).
+ */
+export interface PageNotice {
+  tone: PageNoticeTone
+  /** "Location offline". */
+  title: string
+  detail?: ReactNode
+  /** Recovery: Reconnect, Reopen project. */
+  actions?: ReactNode
+}
+
+/** Renders a template's notice slot; nothing when the page has no standing state. */
+export function NoticeSlot({ notice }: { notice?: PageNotice | null }) {
+  if (!notice) return null
+  return (
+    <Notice tone={notice.tone} title={notice.title} actions={notice.actions}>
+      {notice.detail}
+    </Notice>
+  )
+}
+
+/**
+ * Toast for an operation that finished with an off-screen effect (trash,
+ * archive, rescan, import), bottom trailing, announced politely. `action` is
+ * the one follow-up (Undo, Show); the history lives in Activity.
+ */
+export function toast({ message, action }: { message: string; action?: Action }): void {
+  showToast({ title: message, action: action ? { label: action.label, onClick: () => void action.run() } : undefined })
 }
 
 export interface ActionErrorProps {

@@ -431,8 +431,6 @@
   "operation_show_all": "Show all {count} items",
   "operation_started": "Started {date}",
   "operation_settled": "settled {date}",
-  "refusal_details": "Details",
-  "refusal_hide_details": "Hide details",
   "refusal_blockers": [
     {
       "declarations": [
