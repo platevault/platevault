@@ -7579,5 +7579,9 @@
   "settings_developer_mode_off": "Desligado",
   "settings_open_windows_settings": "Abrir configurações do Windows",
   "onboarding_check_developer_mode": "Ative o Modo de Desenvolvedor do Windows",
-  "location_symlinks_supported": "Com suporte"
+  "location_symlinks_supported": "Com suporte",
+  "import_flow_title": "Importar",
+  "session_intake_title": "Sessão",
+  "calibration_process_title": "Processo",
+  "settings_help": "Ajuda"
 }

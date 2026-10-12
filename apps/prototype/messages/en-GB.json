@@ -7523,5 +7523,9 @@
   "settings_developer_mode_off": "Off",
   "settings_open_windows_settings": "Open Windows settings",
   "onboarding_check_developer_mode": "Turn on Windows Developer Mode",
-  "location_symlinks_supported": "Supported"
+  "location_symlinks_supported": "Supported",
+  "import_flow_title": "Import",
+  "session_intake_title": "Session",
+  "calibration_process_title": "Process",
+  "settings_help": "Help"
 }

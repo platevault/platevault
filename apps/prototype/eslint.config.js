@@ -14,7 +14,8 @@ import alm from "./eslint-rules/no-user-string.js"
 //     component stories: its labels describe states shown to a reviewer;
 //   - the simulation controls are the prototype's dev surface (the legacy
 //     src/dev/**): they fake the outside world and never ship in a product.
-const I18N_IGNORES = [
+// The composition rules exempt the same files (eslint.composition.config.js).
+export const I18N_IGNORES = [
   "**/*.test.{ts,tsx}",
   "**/*.spec.{ts,tsx}",
   "**/__fixtures__/**",
