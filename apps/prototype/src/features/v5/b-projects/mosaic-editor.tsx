@@ -273,7 +273,7 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
         }
       />
       <div className="space-y-3 px-5 pt-3">
-        {problems.length > 0 ? <Refusal action={m.mosaic_refusal_start_group()} reason={m.mosaic_items_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
+        {problems.length > 0 ? <Refusal standing action={m.mosaic_refusal_start_group()} reason={m.mosaic_items_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
         <CommitOutcome result={outcome} action={m.mosaic_refusal_start_group()} />
       </div>
       <div className="grid min-h-0 flex-1 gap-4 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_20rem]">

@@ -510,7 +510,7 @@ export function CandidatesSection({ project }: { project: Project }) {
     >
       {flagged.length > 0 ? (
         <div className="border-b border-border px-3 py-2">
-          <Refusal
+          <Refusal standing
             action={m.project_members_no_longer_match({ count: flagged.length })}
             reason={m.project_subject_changed()}
             blockers={flagged.map(({ run, session }) => ({ label: `${session ? sessionLabel(catalog, session) : m.project_col_session()} · ${run.name}`, link: runStepLink(run, "select") }))}
@@ -908,7 +908,7 @@ export function RigsSection({ project }: { project: Project }) {
                   // The refusal reads under its rig, full width, so its run chips have room.
                   <tr data-rig-refusal={id} className="bg-transparent!">
                     <td colSpan={6} className="pb-1.5">
-                      <Refusal action={m.project_refusal_remove_rig()} reason={m.project_used_by_runs({ count: users.length })} blockers={users.map((r) => runChip(state, project, r))} />
+                      <Refusal standing action={m.project_refusal_remove_rig()} reason={m.project_used_by_runs({ count: users.length })} blockers={users.map((r) => runChip(state, project, r))} />
                     </td>
                   </tr>
                 ) : null}
@@ -968,7 +968,7 @@ export function PlanningSection({ project }: { project: Project }) {
     >
       {!site || !tonight ? (
         <div className="border-b border-border px-3 py-2">
-          <Refusal action={m.project_no_windows()} reason={m.project_no_site()} blockers={[{ label: `${m.nav_settings()} › ${m.settings_sites()}`, link: { to: "/settings/sites" } }]} />
+          <Refusal standing action={m.project_no_windows()} reason={m.project_no_site()} blockers={[{ label: `${m.nav_settings()} › ${m.settings_sites()}`, link: { to: "/settings/sites" } }]} />
         </div>
       ) : null}
       <SimpleTable caption={m.project_planning_of({ name: project.name })} headers={[m.project_col_subject(), m.project_col_best_window(), m.project_col_to_go()]}>

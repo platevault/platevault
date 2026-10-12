@@ -28,15 +28,17 @@ export interface RefusalProps {
   reason: string
   blockers: Blocker[]
   className?: string
+  /** A refusal shown as standing state (an action that is unavailable while it renders), not the outcome of a click: no alert role, so it is not announced on load. */
+  standing?: boolean
 }
 
-export function Refusal({ action, reason, blockers, className }: RefusalProps) {
+export function Refusal({ action, reason, blockers, className, standing = false }: RefusalProps) {
   // The same catalogue as the module `m`, subscribed so the words follow a language change.
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const panel = useId()
   return (
-    <div role="alert" className={cn("space-y-1.5 text-sm", className)} data-refusal>
+    <div role={standing ? undefined : "alert"} className={cn("space-y-1.5 text-sm", className)} data-refusal>
       <div className="flex min-w-0 flex-wrap items-center gap-x-1.5">
         <OctagonX aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
         <span className="font-medium">{action}</span>

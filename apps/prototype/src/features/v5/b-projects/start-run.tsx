@@ -102,7 +102,7 @@ function StartRunForm({ project }: { project: Project }) {
         <SheetTitle>{m.startrun_title()}</SheetTitle>
       </SheetHeader>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm">
-        {blockers.length > 0 ? <Refusal action={m.startrun_refusal()} reason={m.refusal_blockers({ count: blockers.length })} blockers={blockers} /> : null}
+        {blockers.length > 0 ? <Refusal standing action={m.startrun_refusal()} reason={m.refusal_blockers({ count: blockers.length })} blockers={blockers} /> : null}
         <fieldset className="space-y-2">
           <legend id={ids.subject} className="text-sm font-semibold">
             {m.project_col_subject()}
