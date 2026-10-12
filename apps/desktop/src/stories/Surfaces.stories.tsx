@@ -14,6 +14,7 @@ import { AppAt } from '@/stories/AppAt';
  * one proves the surface is live rather than a picture of one.
  */
 const meta = {
+  // eslint-disable-next-line alm/no-user-string -- Storybook meta title is the story ID path; the CSF indexer requires a static literal
   title: 'Surfaces/Working surfaces',
   component: AppAt,
   parameters: {

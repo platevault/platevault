@@ -50,7 +50,7 @@ describe('StepTheme', () => {
       const accessibleName =
         theme.id === 'observatory-cool-light'
           ? 'Observatory Cool · light'
-          : `${theme.label} · ${theme.mode}`;
+          : `${theme.label()} · ${theme.mode}`;
       expect(
         within(picker).getByRole('button', {
           name: accessibleName,

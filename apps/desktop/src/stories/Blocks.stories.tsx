@@ -12,6 +12,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { m } from '@/lib/i18n';
 import { Frame, Matrix, Row, Stack } from '@/stories/StoryFrame';
 import {
   Banner,
@@ -29,7 +30,23 @@ import {
 } from '@/ui';
 import { Btn } from '@/ui/Btn';
 
+/**
+ * Sample library records the states are shown against: catalogue
+ * designations, filter bands, folder paths and file names. They are data, not
+ * prose, so they stay as written in every locale.
+ */
+const SAMPLE = {
+  originalsFolder: '2026-04-12/NGC7000',
+  darkMaster: 'masterDark_300s_-10C.xisf',
+  finalOutput: 'NGC7000_HOO_final.xisf',
+  deepPath:
+    '/Volumes/AstroArchive/astro/raw/2026-04-12/NGC7000_North_America_Nebula_Cygnus_Wall_mosaic_panel_03_of_09/Ha_300s_gain100_offset30_-10C/NGC7000_Ha_300s_0041.fits',
+  longPath:
+    '/astro/raw/2026-03-28/IC1396_Elephant_Trunk_Nebula_reprocessed_after_gradient_correction/SII_600s/IC1396_SII_600s_0012.fits',
+} as const;
+
 const meta = {
+  // eslint-disable-next-line alm/no-user-string -- Storybook meta title is the story ID path; the CSF indexer requires a static literal
   title: 'Primitives/States',
   parameters: {
     layout: 'fullscreen',
@@ -56,42 +73,45 @@ export const Status: Story = {
     },
   },
   render: () => (
-    <Frame note="Each mark states its meaning in words, so it survives being read in greyscale or by a screen reader.">
+    <Frame note={m.story_frame_status_note()}>
       <Matrix
         entries={[
-          ['Observed on disk', <Pill key="p">Observed</Pill>],
           [
-            'Confirmed',
+            m.story_status_row_observed(),
+            <Pill key="p">{m.story_status_observed()}</Pill>,
+          ],
+          [
+            m.story_status_confirmed(),
             <Pill key="p" variant="ok">
-              Confirmed
+              {m.story_status_confirmed()}
             </Pill>,
           ],
           [
-            'Needs review',
+            m.inbox_state_needs_review(),
             <Pill key="p" variant="warn">
-              Needs review
+              {m.inbox_state_needs_review()}
             </Pill>,
           ],
           [
-            'Refused',
+            m.story_status_row_refused(),
             <Pill key="p" variant="danger">
-              Destination conflict
+              {m.story_status_destination_conflict()}
             </Pill>,
           ],
           [
-            'Inferred',
+            m.cmp_source_inferred(),
             <Pill key="p" variant="info">
-              Inferred · 0.71
+              {m.story_status_inferred_confidence({ confidence: '0.71' })}
             </Pill>,
           ],
           [
-            'Planned, not applied',
+            m.story_status_row_planned(),
             <Pill key="p" variant="accent">
-              Planned
+              {m.story_status_planned()}
             </Pill>,
           ],
           [
-            'Not applicable',
+            m.story_status_row_not_applicable(),
             <Pill key="p" variant="ghost">
               —
             </Pill>,
@@ -115,19 +135,9 @@ export const Warnings: Story = {
   render: () => (
     <Frame>
       <Stack>
-        <Banner variant="info">
-          Online target lookup is off. Unfamiliar designations stay unresolved
-          until you turn it on in Settings → Target Resolution.
-        </Banner>
-        <Banner variant="warn">
-          AstroArchive is not attached. Its 1 root and 4 sessions are listed
-          from the last scan and cannot be opened, moved or cleaned up right
-          now.
-        </Banner>
-        <Banner variant="danger">
-          This plan was drafted against a source that has since changed. Draft
-          it again before approving — nothing has been moved.
-        </Banner>
+        <Banner variant="info">{m.story_warning_lookup_off()}</Banner>
+        <Banner variant="warn">{m.story_warning_drive_detached()}</Banner>
+        <Banner variant="danger">{m.story_warning_plan_stale()}</Banner>
       </Stack>
     </Frame>
   ),
@@ -144,46 +154,49 @@ export const Actions: Story = {
     },
   },
   render: () => (
-    <Frame note="An unavailable action stays visible and says what it is waiting for, rather than disappearing.">
+    <Frame note={m.story_frame_actions_note()}>
       <Matrix
         entries={[
           [
-            'Primary',
+            m.story_action_row_primary(),
             <Btn key="b" variant="primary">
-              Confirm 3 folders
+              {m.story_action_confirm_folders()}
             </Btn>,
           ],
-          ['Secondary', <Btn key="b">Rescan</Btn>],
           [
-            'Quiet',
+            m.story_action_row_secondary(),
+            <Btn key="b">{m.common_rescan()}</Btn>,
+          ],
+          [
+            m.story_action_row_quiet(),
             <Btn key="b" variant="ghost">
-              Cancel
+              {m.common_cancel()}
             </Btn>,
           ],
           [
-            'Reversible',
+            m.story_action_row_reversible(),
             <Btn key="b" variant="danger">
-              Discard plan
+              {m.plans_review_discard_btn()}
             </Btn>,
           ],
           [
-            'Irreversible',
+            m.story_action_row_irreversible(),
             <Btn key="b" variant="destructive">
-              Delete permanently
+              {m.archive_delete_permanently_btn()}
             </Btn>,
           ],
           [
-            'Waiting on something',
+            m.story_action_row_waiting(),
             <Btn key="b" variant="primary" disabled>
-              Confirm (choose a frame type first)
+              {m.story_action_confirm_needs_frame_type()}
             </Btn>,
           ],
           [
-            'Sizes',
+            m.story_action_row_sizes(),
             <Row key="r">
-              <Btn size="xs">Extra small</Btn>
-              <Btn size="sm">Small</Btn>
-              <Btn size="md">Medium</Btn>
+              <Btn size="xs">{m.story_size_xs()}</Btn>
+              <Btn size="sm">{m.story_size_sm()}</Btn>
+              <Btn size="md">{m.story_size_md()}</Btn>
             </Row>,
           ],
         ]}
@@ -207,52 +220,59 @@ export const Reading: Story = {
       <Matrix
         entries={[
           [
-            'Read from the file',
+            m.story_reading_row_from_file(),
             <KV
               key="k"
-              label="Target"
+              label={m.projects_dim_target()}
               value="NGC 7000"
-              provenance="From the file header"
+              provenance={m.story_provenance_file_header()}
             />,
           ],
           [
-            'Corrected by a reviewer',
+            m.story_reading_row_corrected(),
             <KV
               key="k"
-              label="Filter"
+              label={m.common_filter()}
               value="Ha"
-              provenance="Corrected 2026-05-18"
+              provenance={m.story_provenance_corrected_on({
+                date: '2026-05-18',
+              })}
             />,
           ],
           [
-            'Exact path',
+            m.story_reading_row_exact_path(),
             <KV
               key="k"
-              label="Path"
+              label={m.sessions_frame_inventory_col_path()}
               value="/astro/raw/2026-04-12/NGC7000"
               mono
             />,
           ],
           [
-            'Never measured',
+            m.story_reading_row_never_measured(),
             <KV
               key="k"
-              label="Observer site"
-              value={<Pill variant="ghost">Unresolved</Pill>}
+              label={m.story_label_observer_site()}
+              value={<Pill variant="ghost">{m.cmp_unresolved_chip()}</Pill>}
             />,
           ],
           [
-            'Coverage against a goal',
-            <CoverageBar key="c" label="Ha integration" value={6.5} max={12} />,
-          ],
-          [
-            'Coverage, other unit',
+            m.story_reading_row_coverage_goal(),
             <CoverageBar
               key="c"
-              label="Frames kept"
+              label={m.story_coverage_ha_integration()}
+              value={6.5}
+              max={12}
+            />,
+          ],
+          [
+            m.story_reading_row_coverage_unit(),
+            <CoverageBar
+              key="c"
+              label={m.story_coverage_frames_kept()}
               value={41}
               max={46}
-              unit=" frames"
+              unit={` ${m.sessions_calendar_frames_suffix()}`}
             />,
           ],
         ]}
@@ -276,24 +296,28 @@ export const Protection: Story = {
       <Matrix
         entries={[
           [
-            'Original captures',
+            m.story_protection_row_originals(),
             <Row key="r">
-              <Lock reason="Original captures are never cleanup candidates." />
-              <span>2026-04-12/NGC7000 · 41 light frames</span>
+              <Lock reason={m.story_lock_originals()} />
+              <span>
+                {m.story_protection_originals_sample({
+                  folder: SAMPLE.originalsFolder,
+                })}
+              </span>
             </Row>,
           ],
           [
-            'Calibration masters',
+            m.settings_cleanup_type_master(),
             <Row key="r">
-              <Lock reason="Calibration masters are reusable library records." />
-              <span>masterDark_300s_-10C.xisf</span>
+              <Lock reason={m.story_lock_masters()} />
+              <span>{SAMPLE.darkMaster}</span>
             </Row>,
           ],
           [
-            'Final outputs',
+            m.story_protection_row_outputs(),
             <Row key="r">
-              <Lock reason="Final outputs are protected until the project is archived." />
-              <span>NGC7000_HOO_final.xisf</span>
+              <Lock reason={m.story_lock_outputs()} />
+              <span>{SAMPLE.finalOutput}</span>
             </Row>,
           ],
         ]}
@@ -315,7 +339,7 @@ export const Waiting: Story = {
   render: () => (
     <Frame>
       <Stack>
-        <Skeleton count={5} label="Reading the acquisition ledger" />
+        <Skeleton count={5} label={m.story_skeleton_reading_ledger()} />
         <Skeleton variant="block" count={2} width="26rem" />
       </Stack>
     </Frame>
@@ -336,19 +360,19 @@ export const Nothing: Story = {
     <Frame>
       <Stack>
         <EmptyState
-          title="No new folders"
-          description="Everything found on your sources has been reconciled. Rescan after your next session."
-          action={<Btn>Rescan</Btn>}
+          title={m.story_empty_no_new_folders_title()}
+          description={m.story_empty_no_new_folders_desc()}
+          action={<Btn>{m.common_rescan()}</Btn>}
         />
         <EmptyState
-          title="No sessions match these filters"
-          description="Nine sessions are hidden by the frame type and filter choices above."
-          action={<Btn variant="ghost">Clear filters</Btn>}
+          title={m.story_empty_filtered_title()}
+          description={m.story_empty_filtered_desc_nine()}
+          action={<Btn variant="ghost">{m.common_clear_filters()}</Btn>}
         />
         <EmptyState
-          title="AstroArchive is not attached"
-          description="Its 4 sessions are listed from the last scan. Attach the drive to open, move or clean up anything on it."
-          action={<Btn>Check again</Btn>}
+          title={m.story_empty_drive_detached_title()}
+          description={m.story_empty_drive_detached_desc()}
+          action={<Btn>{m.settings_advanced_updates_check_retry()}</Btn>}
         />
       </Stack>
     </Frame>
@@ -366,14 +390,22 @@ export const DenseComparison: Story = {
     },
   },
   render: () => (
-    <Frame note="Rows are reachable by keyboard: arrow keys move between them, Enter and Space select.">
+    <Frame note={m.story_frame_dense_note()}>
       <Table
         columns={[
-          { key: 'night', label: 'Night', ariaSort: 'descending' },
-          { key: 'target', label: 'Target' },
-          { key: 'filter', label: 'Filter' },
-          { key: 'frames', label: 'Frames', className: 'pv-cell--num' },
-          { key: 'state', label: 'State' },
+          {
+            key: 'night',
+            label: m.sessions_col_night(),
+            ariaSort: 'descending',
+          },
+          { key: 'target', label: m.projects_dim_target() },
+          { key: 'filter', label: m.common_filter() },
+          {
+            key: 'frames',
+            label: m.session_mat_col_frames(),
+            className: 'pv-cell--num',
+          },
+          { key: 'state', label: m.sessions_col_state() },
         ]}
         rows={[
           {
@@ -381,7 +413,7 @@ export const DenseComparison: Story = {
             target: 'NGC 7000',
             filter: 'Ha',
             frames: 41,
-            state: <Pill variant="ok">Confirmed</Pill>,
+            state: <Pill variant="ok">{m.story_status_confirmed()}</Pill>,
             _onClick: () => undefined,
             _selected: true,
           },
@@ -390,7 +422,7 @@ export const DenseComparison: Story = {
             target: 'NGC 7000',
             filter: 'OIII',
             frames: 38,
-            state: <Pill variant="ok">Confirmed</Pill>,
+            state: <Pill variant="ok">{m.story_status_confirmed()}</Pill>,
             _onClick: () => undefined,
             _selected: false,
           },
@@ -399,7 +431,7 @@ export const DenseComparison: Story = {
             target: 'IC 1396',
             filter: 'SII',
             frames: 24,
-            state: <Pill variant="warn">Needs review</Pill>,
+            state: <Pill variant="warn">{m.inbox_state_needs_review()}</Pill>,
             _onClick: () => undefined,
             _selected: false,
           },
@@ -408,7 +440,9 @@ export const DenseComparison: Story = {
             target: 'M31',
             filter: 'L',
             frames: 60,
-            state: <Pill variant="warn">Source unavailable</Pill>,
+            state: (
+              <Pill variant="warn">{m.story_status_source_unavailable()}</Pill>
+            ),
             _onClick: () => undefined,
             _selected: false,
           },
@@ -432,20 +466,22 @@ export const LongContent: Story = {
     <Frame>
       <Table
         columns={[
-          { key: 'path', label: 'Path' },
-          { key: 'kind', label: 'Type' },
-          { key: 'state', label: 'State' },
+          { key: 'path', label: m.sessions_frame_inventory_col_path() },
+          { key: 'kind', label: m.sessions_frame_inventory_col_type() },
+          { key: 'state', label: m.sessions_col_state() },
         ]}
         rows={[
           {
-            path: '/Volumes/AstroArchive/astro/raw/2026-04-12/NGC7000_North_America_Nebula_Cygnus_Wall_mosaic_panel_03_of_09/Ha_300s_gain100_offset30_-10C/NGC7000_Ha_300s_0041.fits',
-            kind: 'Light',
-            state: <Pill variant="warn">Source unavailable</Pill>,
+            path: SAMPLE.deepPath,
+            kind: m.inbox_kind_light(),
+            state: (
+              <Pill variant="warn">{m.story_status_source_unavailable()}</Pill>
+            ),
           },
           {
-            path: '/astro/raw/2026-03-28/IC1396_Elephant_Trunk_Nebula_reprocessed_after_gradient_correction/SII_600s/IC1396_SII_600s_0012.fits',
-            kind: 'Light',
-            state: <Pill variant="ok">Confirmed</Pill>,
+            path: SAMPLE.longPath,
+            kind: m.inbox_kind_light(),
+            state: <Pill variant="ok">{m.story_status_confirmed()}</Pill>,
           },
         ]}
       />
@@ -465,72 +501,75 @@ function ChoiceBoard() {
     <Matrix
       entries={[
         [
-          'On',
+          m.story_choice_row_on(),
           <Toggle
             key="t"
             checked={scanning}
             onChange={setScanning}
-            aria-label="Scan sources at startup"
+            aria-label={m.story_choice_scan_at_startup()}
           >
-            Scan sources at startup
+            {m.story_choice_scan_at_startup()}
           </Toggle>,
         ],
         [
-          'On, and held',
+          m.story_choice_row_on_held(),
           <Toggle
             key="t"
             checked={protectOriginals}
             onChange={setProtectOriginals}
             disabled
-            aria-label="Protect original captures"
+            aria-label={m.story_choice_protect_originals()}
           >
-            Protect original captures — always on
+            {m.story_choice_protect_originals_always()}
           </Toggle>,
         ],
         [
-          'One of a few',
+          m.story_choice_row_one_of_few(),
           <SegControl
             key="s"
             options={[
-              { value: 'compact', label: 'Compact' },
-              { value: 'comfortable', label: 'Comfortable' },
-              { value: 'spacious', label: 'Spacious' },
+              { value: 'compact', label: m.setup_config_density_compact() },
+              {
+                value: 'comfortable',
+                label: m.setup_config_density_comfortable(),
+              },
+              { value: 'spacious', label: m.setup_config_density_spacious() },
             ]}
             value={density}
             onChange={setDensity}
-            aria-label="Row density"
+            aria-label={m.targets_legacy_row_density_aria()}
           />,
         ],
         [
-          'One of a few, one risky',
+          m.story_choice_row_one_risky(),
           <SegControl
             key="s"
             options={[
-              { value: 'archive', label: 'Archive' },
-              { value: 'trash', label: 'Trash' },
-              { value: 'delete', label: 'Delete permanently' },
+              { value: 'archive', label: m.verb_archive() },
+              { value: 'trash', label: m.inbox_action_trash() },
+              { value: 'delete', label: m.archive_delete_permanently_btn() },
             ]}
             value={destination}
             onChange={setDestination}
             danger
             dangerValue="delete"
-            aria-label="Where reclaimed material goes"
+            aria-label={m.story_choice_reclaim_destination()}
           />,
         ],
         [
-          'One of many, explained',
+          m.story_choice_row_one_of_many(),
           <RadioGroup
             key="r"
             options={[
               {
                 value: 'flag_missing',
-                label: 'Flag missing files',
-                desc: 'Keep the record and mark the file as missing.',
+                label: m.story_choice_flag_missing(),
+                desc: m.story_choice_flag_missing_desc(),
               },
               {
                 value: 'remove',
-                label: 'Remove missing files',
-                desc: 'Drop the record when the file is gone.',
+                label: m.story_choice_remove_missing(),
+                desc: m.story_choice_remove_missing_desc(),
               },
             ]}
             value="flag_missing"
@@ -538,12 +577,12 @@ function ChoiceBoard() {
           />,
         ],
         [
-          'A measured value',
+          m.story_choice_row_measured(),
           <NumberField
             key="n"
             id="story-aging-limit"
-            label="Masters age out after (days)"
-            hint="Older masters are offered with a lowered confidence."
+            label={m.story_choice_master_age_label()}
+            hint={m.story_choice_master_age_hint()}
             value={threshold}
             onChange={setThreshold}
             min={1}
@@ -565,7 +604,7 @@ export const Choices: Story = {
     },
   },
   render: () => (
-    <Frame note="Choices save as they are made. There is no separate save step to forget.">
+    <Frame note={m.story_frame_choices_note()}>
       <ChoiceBoard />
     </Frame>
   ),
@@ -590,23 +629,31 @@ export const AChoiceIsKept: Story = {
     const canvas = within(canvasElement);
 
     const density = within(
-      canvas.getByRole('radiogroup', { name: 'Row density' }),
+      canvas.getByRole('radiogroup', {
+        name: m.targets_legacy_row_density_aria(),
+      }),
     );
-    const spacious = density.getByRole('radio', { name: 'Spacious' });
+    const spacious = density.getByRole('radio', {
+      name: m.setup_config_density_spacious(),
+    });
     await expect(spacious).not.toBeChecked();
     await userEvent.click(spacious);
     await expect(spacious).toBeChecked();
     await expect(
-      density.getByRole('radio', { name: 'Comfortable' }),
+      density.getByRole('radio', {
+        name: m.setup_config_density_comfortable(),
+      }),
     ).not.toBeChecked();
 
     const held = canvas.getByRole('checkbox', {
-      name: 'Protect original captures',
+      name: m.story_choice_protect_originals(),
     });
     await expect(held).toBeChecked();
     await expect(held).toBeDisabled();
 
-    const days = canvas.getByLabelText(/Masters age out after/);
+    const days = canvas.getByLabelText(m.story_choice_master_age_label(), {
+      exact: false,
+    });
     await userEvent.clear(days);
     await userEvent.type(days, '180');
     await expect(days).toHaveValue(180);
@@ -628,22 +675,28 @@ export const KeyboardOnly: Story = {
     <Frame>
       <Row>
         <Btn variant="primary" onClick={fn()}>
-          Approve plan
+          {m.story_action_approve_plan()}
         </Btn>
         <Btn variant="ghost" onClick={fn()}>
-          Review first
+          {m.story_action_review_first()}
         </Btn>
         <Btn variant="destructive" disabled onClick={fn()}>
-          Delete permanently
+          {m.archive_delete_permanently_btn()}
         </Btn>
       </Row>
     </Frame>
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const approve = canvas.getByRole('button', { name: 'Approve plan' });
-    const review = canvas.getByRole('button', { name: 'Review first' });
-    const remove = canvas.getByRole('button', { name: 'Delete permanently' });
+    const approve = canvas.getByRole('button', {
+      name: m.story_action_approve_plan(),
+    });
+    const review = canvas.getByRole('button', {
+      name: m.story_action_review_first(),
+    });
+    const remove = canvas.getByRole('button', {
+      name: m.archive_delete_permanently_btn(),
+    });
 
     await userEvent.tab();
     await expect(approve).toHaveFocus();

@@ -262,8 +262,7 @@ export function AuditLog() {
           '@tauri-apps/plugin-dialog'
         );
         filePath = await showSaveDialog({
-          // eslint-disable-next-line alm/no-user-string -- native OS file-picker chrome, not rendered in the app
-          title: 'Export Audit Log',
+          title: m.settings_auditlog_save_dialog_title(),
           defaultPath: `audit-log-export-${Date.now()}.ndjson`,
           filters: [{ name: 'NDJSON', extensions: ['ndjson', 'json'] }],
         });

@@ -16,6 +16,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AppAt } from '@/stories/AppAt';
 
 const meta = {
+  // eslint-disable-next-line alm/no-user-string -- Storybook meta title is the story ID path; the CSF indexer requires a static literal
   title: 'Workflows/The whole product',
   component: AppAt,
   parameters: {

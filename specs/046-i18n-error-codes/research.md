@@ -144,11 +144,32 @@ zero," and it prevents regressions afterward (FR-001, FR-012, SC-001, SC-002).
 - Non-letter strings (punctuation-only, numbers, `·`, paths, hex).
 - `className`, `id`, `data-*`, `key`, `type`, `role`, `href`, `to`, enum/discriminant
   values, and other machine strings.
-- Catalog source itself, generated `bindings/`, `paraglide/`, tests, fixtures,
-  mocks, and `dev/` developer-mode surface (excluded; per spec, tests/fixtures are
-  out of SC-001's scope).
-- An inline `// eslint-disable-next-line alm/no-user-string` escape hatch with a
-  required reason, plus a small documented allowlist for genuine edge cases.
+- Catalog source itself, generated `bindings/` and `paraglide/` (global
+  ignores), plus these path exclusions, each with its reason, and nothing else
+  (owner rule 2026-10-12: nothing is excluded without a genuine reason):
+  - `**/*.test.*`, `**/*.spec.*`, `**/__fixtures__/**` — unit tests and their
+    fixtures; assertion literals are never rendered.
+  - `src/data/fixtures/**` — sample library records, imported only by the mock
+    IPC layer and tests.
+  - `src/api/mocks.ts`, `src/api/mocks/**` — the mock IPC layer, loaded only
+    behind `VITE_USE_MOCKS === 'true'` (`src/api/ipc.ts`); `vite.config.ts`
+    defines the flag `"false"` by default and no release workflow sets it, so
+    no mock chunk is emitted into a release bundle.
+  - `src/dev/**` — the developer-tools surface, imported only behind
+    `DEV_TOOLS_ENABLED`; release builds compile it out, and the release gate's
+    frontend-bundle check greps the built dist for it.
+
+  Component-workbench stories (`**/*.stories.tsx`, `src/stories/**`) and the
+  shipped `src/data/**` modules are under the gate: their visible strings are
+  catalogued in en-GB and pt-BR (`story_*` keys for story-only copy).
+- An inline `// eslint-disable-next-line alm/no-user-string -- <reason>` escape
+  hatch, limited to: proper and brand names (PlateVault, PixInsight, Siril);
+  mathematical notation (Δ deltas, p95, degree symbols); code identifiers and
+  paths (the project folder-tree preview); decorative glyphs (the InfoTip
+  "i"); and the Storybook meta `title`, which is the story ID path and must be
+  a static literal for Storybook's CSF indexer. An abbreviation of a word (the
+  Inbox "+Nm" masters count) and a native dialog title the user sees are
+  user-facing and catalogued.
 
 **Implementation choice**: prefer a **local custom rule** (a tiny rule module in
 `apps/desktop/eslint-rules/`) over a third-party plugin, because the existing repo
@@ -178,7 +199,9 @@ via prefix, not nesting.
 ```
 
 - Area: `inbox`, `sessions`, `calibration`, `targets`, `projects`, `settings`,
-  `setup`, `shell`, `common`.
+  `setup`, `shell`, `common`, and `story` for copy that only the
+  component-workbench stories render (a story reuses the product key when it
+  shows the product's own wording).
 - Element/intent: `..._title`, `..._empty`, `..._btn_save`, `..._ph_search`
   (placeholder), `..._tip_*` (tooltip), `..._toast_*`, `..._confirm_*`.
 - Errors: `err_<code-with-dots-as-underscores>` (e.g. `err_path_not_exists`),

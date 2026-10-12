@@ -3,9 +3,11 @@
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { m } from '@/lib/i18n';
 import { Btn } from './Btn';
 
 const meta = {
+  // eslint-disable-next-line alm/no-user-string -- Storybook meta title is the story ID path; the CSF indexer requires a static literal
   title: 'Primitives/Button',
   component: Btn,
   parameters: {
@@ -17,7 +19,7 @@ const meta = {
       },
     },
   },
-  args: { children: 'Rescan' },
+  args: { children: m.common_rescan() },
 } satisfies Meta<typeof Btn>;
 
 export default meta;
@@ -26,19 +28,22 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 
 export const Primary: Story = {
-  args: { variant: 'primary', children: 'Confirm 3 items' },
+  args: { variant: 'primary', children: m.story_action_confirm_items() },
 };
 
 export const Danger: Story = {
-  args: { variant: 'danger', children: 'Discard plan' },
+  args: { variant: 'danger', children: m.plans_review_discard_btn() },
 };
 
 export const Destructive: Story = {
-  args: { variant: 'destructive', children: 'Delete permanently' },
+  args: {
+    variant: 'destructive',
+    children: m.archive_delete_permanently_btn(),
+  },
 };
 
 export const Ghost: Story = {
-  args: { variant: 'ghost', children: 'Cancel' },
+  args: { variant: 'ghost', children: m.common_cancel() },
 };
 
 export const Disabled: Story = {
@@ -46,25 +51,29 @@ export const Disabled: Story = {
   args: {
     variant: 'primary',
     disabled: true,
-    children: 'Confirm (needs a filter)',
+    children: m.story_action_confirm_needs_filter(),
   },
 };
 
 export const Sizes: Story = {
   render: () => (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <Btn size="xs">Extra small</Btn>
-      <Btn size="sm">Small</Btn>
-      <Btn size="md">Medium</Btn>
+      <Btn size="xs">{m.story_size_xs()}</Btn>
+      <Btn size="sm">{m.story_size_sm()}</Btn>
+      <Btn size="md">{m.story_size_md()}</Btn>
     </div>
   ),
 };
 
 export const ActivatesFromTheKeyboard: Story = {
-  args: { variant: 'primary', children: 'Approve plan', onClick: fn() },
+  args: {
+    variant: 'primary',
+    children: m.story_action_approve_plan(),
+    onClick: fn(),
+  },
   play: async ({ args, canvasElement }) => {
     const button = within(canvasElement).getByRole('button', {
-      name: 'Approve plan',
+      name: m.story_action_approve_plan(),
     });
     await userEvent.tab();
     await expect(button).toHaveFocus();
@@ -77,7 +86,7 @@ export const UnavailableActionCannotFire: Story = {
   args: {
     variant: 'primary',
     disabled: true,
-    children: 'Confirm (needs a filter)',
+    children: m.story_action_confirm_needs_filter(),
     onClick: fn(),
   },
   play: async ({ args, canvasElement }) => {

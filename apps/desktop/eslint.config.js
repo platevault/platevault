@@ -29,9 +29,20 @@ import requireRootTestid from './eslint-rules/require-root-testid.js';
 //      rule, and the existing opt-outs are eslint-disable comments.
 
 // The i18n catalog migration is complete: the `alm/no-user-string` gate is
-// enforced across ALL of src (spec 046, FR-001 / SC-001 met). Non-user-facing
-// exclusions (tests, fixtures, mocks, dev surface, generated) are listed in the
-// gated config block's `ignores` below.
+// enforced across ALL of src (spec 046, FR-001 / SC-001 met). Every visible
+// string, including component-workbench stories, goes through the message
+// catalogue in en-GB and pt-BR. The i18n gate block below lists each excluded
+// path with its reason; nothing else may be excluded.
+//
+// The per-line escape hatch `// eslint-disable-next-line alm/no-user-string --
+// <reason>` is reserved for these classes, each carrying its reason inline:
+//   - proper and brand names: PlateVault (window title, sidebar glyph),
+//     PixInsight and Siril (processing-tool options);
+//   - mathematical notation: Δ deltas, p95 percentile, degree symbols;
+//   - code identifiers and paths: the project folder-tree preview;
+//   - decorative glyphs: the InfoTip "i" icon;
+//   - Storybook meta `title`: the story ID path, which Storybook's CSF indexer
+//     requires as a static literal.
 const I18N_MIGRATED = ['src/**/*.{ts,tsx}'];
 
 export default tseslint.config(
@@ -64,15 +75,53 @@ export default tseslint.config(
   },
   {
     files: I18N_MIGRATED,
-    // Tests, fixtures, mocks, and the dev-tools surface are out of SC-001 scope
-    // (research R4): assertion literals are legitimate, and the dev surface is
-    // compiled out of release builds.
+    // Each entry below is excluded for a stated reason; everything else in
+    // src/** is user-facing and goes through the message catalogue
+    // (messages/en-GB.json + pt-BR.json). Never add an entry without one.
+    ignores: [
+      // Unit tests: assertion literals and test fixtures, never rendered.
+      '**/*.test.{ts,tsx}',
+      '**/*.spec.{ts,tsx}',
+      '**/__fixtures__/**',
+      // Sample library records served by the mock IPC layer below and read by
+      // tests; imported only from src/api/mocks.ts and *.test files, so they
+      // ship in no release bundle.
+      'src/data/fixtures/**',
+      // Mock IPC layer: loaded only through `import('./mocks')` behind
+      // `VITE_USE_MOCKS === 'true'` (src/api/ipc.ts). vite.config.ts defines
+      // that flag as "false" unless set, and no release workflow sets it, so
+      // the branch folds to `if (false)` and the chunk is never emitted into a
+      // release bundle.
+      'src/api/mocks.ts',
+      'src/api/mocks/**',
+      // Developer-tools surface: imported only behind `DEV_TOOLS_ENABLED`
+      // (src/dev/devToolsEnabled.ts, VITE_DEV_TOOLS defined "false" by
+      // vite.config.ts). Release builds compile it out; the release gate's
+      // "dev-tools-off (frontend bundle)" check greps the built dist for it.
+      // devToolsEnabled.ts itself ships but holds no strings.
+      'src/dev/**',
+    ],
+    rules: {
+      'alm/no-user-string': 'error',
+      // JS-side pluralization ('s'/'es' suffix ternaries) bakes English plural
+      // rules into code; use inlang plural variant messages instead (spec 046 #7).
+      'alm/no-js-plural': 'error',
+    },
+  },
+
+  // Exported React components must have data-testid on their root JSX element
+  // so e2e tests can locate them without coupling to CSS class names.
+  // Existing violations are baselined in scripts/eslint-alm-baseline.txt;
+  // new violations (not in the baseline) fail the build immediately. This is
+  // an e2e-locator gate, not the i18n gate, so its scope is kept separate and
+  // unchanged: stories frame components for review, src/data holds stores and
+  // context providers, and tests, fixtures, mocks and the dev surface are never
+  // the subject of an e2e locator.
+  {
+    files: I18N_MIGRATED,
     ignores: [
       '**/*.test.{ts,tsx}',
       '**/*.spec.{ts,tsx}',
-      // Component-workbench stories are a review surface, not shipped product
-      // UI: their labels describe the state being demonstrated to a reviewer
-      // and never reach an end user, so the catalog gate does not apply.
       '**/*.stories.tsx',
       'src/stories/**',
       '**/__fixtures__/**',
@@ -82,14 +131,6 @@ export default tseslint.config(
       'src/dev/**',
     ],
     rules: {
-      'alm/no-user-string': 'error',
-      // JS-side pluralization ('s'/'es' suffix ternaries) bakes English plural
-      // rules into code; use inlang plural variant messages instead (spec 046 #7).
-      'alm/no-js-plural': 'error',
-      // Exported React components must have data-testid on their root JSX element
-      // so e2e tests can locate them without coupling to CSS class names.
-      // Existing violations are baselined in scripts/eslint-alm-baseline.txt;
-      // new violations (not in the baseline) fail the build immediately.
       'alm/require-root-testid': 'error',
     },
   },
