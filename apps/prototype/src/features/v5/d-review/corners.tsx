@@ -142,7 +142,8 @@ function CornerTile({ field, stretch, tile, size, overlay, centre }: { field: St
         </svg>
       ) : null}
       <figcaption className="pointer-events-none absolute inset-0.5 flex flex-col justify-between text-[0.625rem] leading-4 whitespace-nowrap tabular-nums">
-        <span className="self-start rounded-sm bg-background/80 px-1 text-foreground">{name}</span>
+        {/* Clipped by CSS only: the full name stays in the text, the tile's title and the raster's label. */}
+        <span className="max-w-full self-start truncate rounded-sm bg-background/80 px-1 text-foreground">{name}</span>
         {shown ? (
           <span className="flex flex-col items-start gap-px">
             {overlay.fwhm ? (
