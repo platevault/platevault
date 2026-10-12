@@ -1,13 +1,13 @@
 ---
 id: J38
 title: Handle issues from the status bar and the Issues hub
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [issues, status-bar, shell, home, sessions, projects, preparation, calibration, calibration-process, locations, import, indexing, activity, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md]
 ---
 
 ## Goal
@@ -35,7 +35,7 @@ running, and the notifications history. Done means:
   - Nothing else needs attention. No operation is running, failed or interrupted, no adopted master has changed, and no frame has a byte-identical second copy.
 - P2: Exactly three locations are registered, `Astro-T7 captures`, `Cold-1 captures` and `Astro-T7/Calibration`, and all three are online. `Cold-1` can be ejected and mounted again.
 - P3: The notification history was opened once before S1, so no notification is unread.
-- P4: Removable volume `Card-2` is as in J31/P4: 12 NGC 7000 Ha 300 s `RedCat` lights from the night of 2026-10-04, with pointing inside the NGC 7000 footprint. It has not been imported, and none of its files is byte-identical to a library file.
+- P4: Removable volume `Card-2` is as in J31/P4: 12 NGC 7000 Ha 300 s `RedCat` lights from the night of 2026-10-04, with OBJECT `NGC7000` and no pointing. It has not been imported, and none of its files is byte-identical to a library file.
 - P5: Volume `Spare` is mounted, has an OS Trash and is not registered. `Spare/Captures/` holds byte-identical copies of two `4 Oct M 33` lights, M-1 and M-2. Each file is 52,191,360 bytes.
 - P6: A second development catalog, catalog B, holds only the Done Project `Pleiades 2025` with its Complete run. Every session of the catalog has a confirmed Target and is a member of that run. Its one registered location, `Astro-T7 captures`, is online, and nothing else needs attention (G2).
 - P7: Manifests (relative path, size, SHA-256) of every file on `Astro-T7`, `Cold-1`, `Card-2` and `Spare`, recorded outside PlateVault before S1.
@@ -110,27 +110,27 @@ running, and the notifications history. Done means:
 
 ### S7 — Watch an import run {#S7}
 
-- **Do:** Import `Card-2` into `Astro-T7 captures` with Copy. While it runs, hover the running work in the status bar, move the pointer away, then move keyboard focus onto it.
+- **Do:** Open Import on `Card-2`. In the preview, choose NGC 7000 as the `4 Oct` Ha session's Target (its lights carry no pointing, so none is prefilled; `OBJECT NGC7000` is only a hint), then import into `Astro-T7 captures` with Copy. While it runs, hover the running work in the status bar, move the pointer away, then move keyboard focus onto it.
 - **Expect:** The middle of the bar shows the import as plain text with a mini progress bar, in place of "Idle". Cancel appears while the pointer hovers the item, disappears when the pointer leaves, and appears again when the item has keyboard focus.
 - **Expect (negative):** Running work raises no issue, and no counter changes because of it. Cancel is not activated.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "running work as plain text with a mini progress bar and Cancel on hover/focus" · src/app/status-bar.tsx OperationItem · J31/S6
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "running work as plain text with a mini progress bar and Cancel on hover/focus" · src/app/status-bar.tsx OperationItem · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 · J31/S6
 
 ### S8 — Retry interrupted work {#S8}
 
-- **Do:** Once at least 4 items have been copied and verified, quit PlateVault and launch it again. Open the ⚠ counter, follow the import's interrupted issue (Activity), and choose Retry.
-- **Expect:** After relaunch, ⚠ reads 4 and the hub's Work group lists the import as interrupted. Activity shows the import as Interrupted with "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
+- **Do:** Once at least 4 items have been copied and verified, quit PlateVault and read the confirmation. Cancel it, then quit again and confirm. Launch PlateVault again. Open the ⚠ counter, follow the import's interrupted issue (Activity), and choose Retry.
+- **Expect:** While the import runs, quitting first asks for confirmation. Cancelling it leaves PlateVault open with the import still shown as running work; confirming quits. After relaunch, ⚠ reads 4 and the hub's Work group lists the import as interrupted. Activity shows the import as Interrupted with "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
   - After Retry, the import runs from its recorded progress, shows again as running work, and finishes with 12 lights imported.
   - ⚠ returns to 3 and the Work group is gone.
-  - The `need a Target` count in the hub equals the number of sessions under the Sessions filter Needs a Target.
-- **Expect (negative):** No verified item is copied a second time, and every `Card-2` file still matches P7.
-- **Trace:** src/store/operations.ts interruptRunningOperations, resumeOperation · messages op_interrupted_summary · src/domain/issues.ts work-interrupted · D-W11 · J31/S10
+  - Sessions lists a new `4 Oct` Ha session of 12 frames with its Target NGC 7000 confirmed. The hub still reads `2 need a Target`, equal to the number of sessions under the Sessions filter Needs a Target.
+- **Expect (negative):** PlateVault does not quit while the import runs without that confirmation. No verified item is copied a second time, and every `Card-2` file still matches P7. The imported session is not listed under Needs a Target.
+- **Trace:** src/store/operations.ts interruptRunningOperations, resumeOperation · messages op_interrupted_summary · src/domain/issues.ts work-interrupted · D-W11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Quit asks while an import, index or prepare runs", P-IMP2 · J31/S10
 
 ### S9 — See the automatic duplicate scan {#S9}
 
 - **Do:** After the import finishes, read the status bar, then open Activity.
 - **Expect:** A duplicate scan runs as background work in the middle of the bar after the import. Activity records that scan after the import with an outcome of no duplicates. The bar then reads "Idle".
-- **Expect (negative):** The scan raises no duplicates issue and moves, renames or writes no file.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates "Duplicates are scanned automatically after each index and import, as a background operation" · src/store/actions/storage.ts duplicate-scan
+- **Expect (negative):** The scan raises no duplicates issue and moves, renames or writes no file. `Card-2`, still connected and now holding 12 sources byte-identical to the imported lights, is not part of the scan: no duplicate copy is counted and no `Card-2` path is listed.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates "Duplicates are scanned automatically after each index and import, as a background operation" · src/store/actions/storage.ts duplicate-scan · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Capture cards never raise the duplicates warning"
 
 ### S10 — Cancel running work by keyboard {#S10}
 
@@ -145,11 +145,11 @@ running, and the notifications history. Done means:
 - **Expect:** The left of the bar reads `4 of 4 online`. After the index, a duplicate scan runs on its own. Then:
   - ⚠ reads 4, and the Issues button reads 8.
   - The hub and the ⚠ popout list `2 duplicate copies · 104 MB`.
-  - Following it opens the Duplicates review with 2 groups, M-1 and M-2. Each group has two copies, and the `Astro-T7 captures` copy is preselected as the keeper.
+  - Following it opens the Duplicates review with 2 groups, M-1 and M-2. Each group has two copies, and the `Astro-T7 captures` copy, in the earlier-registered location, is preselected as the keeper.
 
   J39 continues the clean-up from here.
-- **Expect (negative):** Neither the index, the scan nor opening the review moves, trashes or writes a file. Sessions still lists `4 Oct M 33` with the same frame count.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review; keeper rule) · J39
+- **Expect (negative):** Neither the index, the scan nor opening the review moves, trashes or writes a file. Sessions still lists `4 Oct M 33` with the same frame count. The 12 `Card-2` sources, still connected, are not counted: the issue does not read 14 copies, and no group lists a `Card-2` path.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates (⚠ issue "N duplicate copies · 2.1 GB" opening the Duplicates review) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "registered library locations only … the copy in the earliest-registered location" · J39
 
 ### S12 — Read and clear the notification history {#S12}
 
@@ -165,8 +165,8 @@ running, and the notifications history. Done means:
 ### S13 — Confirm nothing changed outside the actions {#S13}
 
 - **Do:** Outside PlateVault, recompute the P7 manifests.
-- **Expect:** `Cold-1`, `Card-2` and `Spare` match P7. On `Astro-T7`, the only new files are the 12 imported `Card-2` lights, each with its source's SHA-256. Every other file matches P7.
-- **Expect (negative):** No file was moved, trashed or deleted.
+- **Expect:** `Cold-1`, `Card-2` and `Spare` match P7. On `Astro-T7`, the only new files are the 12 imported `Card-2` lights, each with its source's SHA-256, filed at once under the Target confirmed in S7: `Astro-T7/Captures/NGC 7000/Ha/2026-10-04/light/` (the default Lights template). Every other file matches P7.
+- **Expect (negative):** No file was moved, trashed or deleted. No imported light sits in an Unclassified folder.
 - **Trace:** specs/071-storage-custody/spec.md · D-W11
 
 ### S14 — Read a bar with no issues {#S14}
@@ -187,7 +187,7 @@ running, and the notifications history. Done means:
 
 ## Known gaps
 
-- G1: Not validated. Behavior follows the harness v5 design: HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 1, §Round 1b, §Round 2c and §Round 5 P-SB3, and HARNESS-V5-IA.md §Round 2b (apps/prototype/design/ on ui-harness-v5 @ b5e813a5). The prototype at b5e813a5 still shows P-SB2 pills and inline notifications, and P-SB3 and the duplicates issue are Round 5 work in progress. No implementation has been validated against this journey.
+- G1: Not validated. Behavior follows the harness v5 design: HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 1, §Round 1b, §Round 2c and §Round 5 P-SB3, and HARNESS-V5-IA.md §Round 2b (apps/prototype/design/ on ui-harness-v5 @ b5e813a5). The prototype at b5e813a5 still shows P-SB2 pills and inline notifications, and P-SB3 and the duplicates issue are Round 5 work in progress. The Round 6 decisions S7 to S13 assert (HARNESS-V5-FEEDBACK-R1.md §Round 6 at ui-harness-v5 @ 4f470775: Targets confirmed in the Import preview, Quit asks, library-only duplicate scan) are not yet in the prototype. No implementation has been validated against this journey.
 - G2: Unresolved implementation qualification: P1 and P6 need seeded catalogs in a known state, including a pending master offer, a raw flat session awaiting Stack and a drifted frame. No fixture builder exists. Blocks readiness.
 - G3: Unresolved implementation qualification: S8 needs the import interrupted at a known point, and S10 needs a rescan that runs long enough to focus. No pacing or fault fixture exists. Blocks readiness.
 - G4: Out of scope for this journey: failed work (`… failed`, ⛔, from an operation that fails) and an unreadable location (`… unreadable`, ⛔, Fix). Both need fault injection. A failed calibration process belongs to the calibration process journey, and an adopted master that changed belongs to J26. Blocks readiness until covered by a step or a journey.
@@ -196,4 +196,7 @@ running, and the notifications history. Done means:
 
 ## Delta log
 
-- No entries (initial draft, version 1).
+- **Δ2** 2026-10-12 · S7, S8, S9, S11, S13 · behavior-change
+  The Card-2 session's Target is confirmed in the Import preview, so the import files its lights under `NGC 7000/` at once and adds nothing to Needs a Target. Quitting during the import asks first.
+  The duplicate scan covers registered library locations only: the connected Card-2 sources raise no duplicates; the keeper is the copy in the earlier-registered location.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "P-IMP2: confirm Targets in the Import preview", "Quit asks", "The duplicate scan covers registered library locations only" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)

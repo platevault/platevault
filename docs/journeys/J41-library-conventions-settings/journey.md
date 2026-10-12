@@ -1,13 +1,13 @@
 ---
 id: J41
 title: Set library conventions in Settings: naming templates, goal templates, locations and applications
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [settings, naming, goal-templates, locations, applications, import, projects, wrap-up, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#e2, HARNESS-V5-FEEDBACK-R1.md#round-5, P-ARC1, P-STO2, P-CAL3, D-W20, D-W29, D-W30, D-W47, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/e-targets-plan-settings/settings-naming.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/t4/applications.tsx, apps/prototype/src/store/actions/settings.ts, apps/prototype/src/store/actions/projects.ts, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, specs/063-clean-rebuild-contract/workflow-decisions.md]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#e2, HARNESS-V5-FEEDBACK-R1.md#round-5, P-ARC1, P-STO2, P-CAL3, D-W20, D-W29, D-W30, D-W47, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/e-targets-plan-settings/settings-naming.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/t4/applications.tsx, apps/prototype/src/store/actions/settings.ts, apps/prototype/src/store/actions/projects.ts, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, specs/063-clean-rebuild-contract/workflow-decisions.md]
 ---
 
 ## Goal
@@ -24,10 +24,11 @@ The user sets the conventions the library follows: how imported and stored files
 
 - P1: A development catalog seeded to the state of J32/P1 to J32/P4: the rigs `RedCat` and `Esprit`, the five Projects of J32/P2 and the J19 sessions. `IC 1396 Ha`'s only run `IC1396-Ha-Siril` is Complete, so the Project is at its Wrap up stage (J34), with its Archive step not yet approved (G2).
 - P2: Settings › Naming holds every default template. Settings › Goal templates holds only the built-in templates. No application profile has a located executable.
-- P3: Three Archive locations are registered and online: `Archive` (volume `Archive`, the Default), `Backup archive` (`Backup/Archive`) and `Cold-1 archive` (`Cold-1/Archive`). In `IC 1396 Ha`'s Wrap up, the Archive step's destination was changed to `Cold-1 archive`. `Astro-T7 captures` is the Captures location and `Astro-T7/Calibration` the Calibration location.
+- P3: Three Archive locations are registered and online: `Archive` (volume `Archive`, the Default), `Backup archive` (`Backup/Archive`) and `Cold-1 archive` (`Cold-1/Archive`). In `IC 1396 Ha`'s Wrap up, the Archive step's destination was changed to `Cold-1 archive`. `Astro-T7 captures` and `Cold-1 captures` (`Cold-1/Captures`, holding the J19/P3 `12 Sep` session) are the Captures locations and `Astro-T7/Calibration` the Calibration location.
 - P4: Removable volume `Card-2` holds the J31/P4 lights and has not been imported.
 - P5: PixInsight is installed at `/Applications/PixInsight/PixInsight.app`, and its bundle can be renamed and renamed back outside PlateVault for S15 (a stand-in bundle at that path is acceptable). PixInsight is not running.
 - P6: Manifests (relative path, size, SHA-256) of `Astro-T7`, `Cold-1`, `Backup`, `Archive` and `Card-2`, recorded outside PlateVault before S1.
+- P7: On volume `Cold-1`, `Captures/` holds only the 24 `12 Sep` OIII lights, each 52,191,360 bytes (1,252,592,640 bytes in all, every one catalogued), and `Archive/` holds no file. `Cold-1/Other/backup.dmg`, a 1,000,000,000-byte file outside every registered location, is not catalogued. Immediately before S13 the validator records `Cold-1`'s free space as the OS reports it (for example `df -k`), and nothing writes to `Cold-1` between that reading and S13.
 
 ## Steps
 
@@ -65,10 +66,12 @@ The user sets the conventions the library follows: how imported and stored files
 
 ### S6 — See the next Import use the new template {#S6}
 
-- **Do:** Connect `Card-2`, open Import, pick `Card-2`, read the destination preview for its lights, and close Import without importing.
-- **Expect:** The lights' destination folder resolves through the saved Lights template, with the optical train from the files' TELESCOP header: `NGC 7000/RedCat 51/Ha/2026-10-04/light/` under `Astro-T7 captures`.
-- **Expect (negative):** Closing Import copies, moves and renames nothing on `Card-2` or `Astro-T7`. Files indexed before S3 keep their paths.
-- **Trace:** templates.ts headerNamingValues (`train` from TELESCOP) · import-model.ts · J31
+- **Do:** Connect `Card-2`, open Import and pick `Card-2`. In the preview, read the `4 Oct` Ha session's Target, then choose NGC 7000 as its Target and read the destination preview for its lights. Close Import without importing.
+- **Expect:**
+  - Before the pick, the preview lists the `4 Oct` Ha session with no Target prefilled, because its lights carry no pointing (J31/P4); `OBJECT NGC7000` is shown only as a hint, and no destination under `NGC 7000/` or `NGC7000/` is listed.
+  - After choosing NGC 7000, the lights' destination folder resolves through the saved Lights template, with the optical train from the files' TELESCOP header: `NGC 7000/RedCat 51/Ha/2026-10-04/light/` under `Astro-T7 captures`.
+- **Expect (negative):** Closing Import copies, moves and renames nothing on `Card-2` or `Astro-T7`, and confirms no Target: no session from `Card-2` appears in Sessions. Files indexed before S3 keep their paths.
+- **Trace:** templates.ts headerNamingValues (`train` from TELESCOP) · import-model.ts · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 "confirm Targets in the Import preview" · J31/S9
 
 ### S7 — Restore the default {#S7}
 
@@ -111,8 +114,11 @@ The user sets the conventions the library follows: how imported and stored files
 ### S13 — Read Settings › Locations {#S13}
 
 - **Do:** Open Settings › Locations.
-- **Expect:** Locations are grouped by role (Captures, Calibration, Results, Archive). Each row names the location, its path, its availability and access, and its disk use (G3). The Archive group lists `Archive` with a "Default" pill, and `Backup archive` and `Cold-1 archive` each offering **Make default**. Every row's More actions menu, and right-click, offers the location's actions. There is no Storage page in the source list.
-- **Trace:** IA §Screens S16 (Locations: several archive locations, one Default pill, Make default) · Feedback §Round 5 P-STO2 · P-ARC1 · locations-page.tsx
+- **Expect:** Locations are grouped by role (Captures, Calibration, Results, Archive). Each row names the location, its path, its availability and access, and its disk use as two figures: the bytes PlateVault catalogues under that location, and its volume's free space. The Archive group lists `Archive` with a "Default" pill, and `Backup archive` and `Cold-1 archive` each offering **Make default**. Every row's More actions menu, and right-click, offers the location's actions. There is no Storage page in the source list. On volume `Cold-1` (P7):
+  - `Cold-1 captures` reads 1,252,592,640 bytes catalogued, shown at the display's rounding (`1.25 GB` to three significant figures), and `Cold-1 archive` reads zero bytes catalogued.
+  - Both `Cold-1` rows show the same free space, equal at display rounding to the P7 reading.
+- **Expect (negative):** Neither `Cold-1` row counts `backup.dmg`: `Cold-1 captures` does not read 2.25 GB or more, and `Cold-1 archive` does not read 1 GB. No row shows the volume's used space in place of the catalogued bytes. Opening Locations starts no rescan or index.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 "Disk use per location: bytes PlateVault catalogues there, plus the volume's free space" · IA §Screens S16 (Locations: several archive locations, one Default pill, Make default) · Feedback §Round 5 P-STO2 · P-ARC1 · locations-page.tsx
 
 ### S14 — Make `Backup archive` the Default {#S14}
 
@@ -145,22 +151,26 @@ The user sets the conventions the library follows: how imported and stored files
 ## Success criteria
 
 - SC1: S1 lists exactly 8 frame types with the default templates, and S2's palette offers exactly 11 tokens.
-- SC2: After S3, 1 Lights template is saved and the S6 Import preview resolves to `NGC 7000/RedCat 51/Ha/2026-10-04/light/`; after S7, 0 naming templates are custom.
+- SC2: After S3, 1 Lights template is saved and the S6 Import preview, once NGC 7000 is picked, resolves to `NGC 7000/RedCat 51/Ha/2026-10-04/light/`; after S7, 0 naming templates are custom.
 - SC3: S4 and S10 save 0 changes and record 0 Activity entries.
 - SC4: S8 lists exactly 5 built-in templates with the D-W47 values, and 0 Applied in references.
 - SC5: `IC 1396 HOO deep` reads Ha 15h and OIII 15h · 120 frames after S11, after the S12 edit and after the S12 delete.
 - SC6: After S14, exactly 1 Archive location carries the Default pill (`Backup archive`) and `IC 1396 Ha`'s destination is `Cold-1 archive`.
 - SC7: After S15 and S16, PixInsight / WBPP reads Found and Open in… holds the saved arguments, with 0 application processes started.
 - SC8: S17 manifests match P6 for 100% of files.
+- SC9: At S13, `Cold-1 captures` shows 1,252,592,640 catalogued bytes and `Cold-1 archive` 0, both at display rounding, and both show the P7 free space.
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet; the behavior follows the harness v5 design (ui-harness-v5 @ b5e813a5: HARNESS-V5-IA.md §S16 and §Round 2/2b foundations, HARNESS-V5-FEEDBACK-R1.md §Domain and seed, §E2 and §Round 5) and workflow decisions D-W20, D-W29, D-W30 and D-W47.
+- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet; the behavior follows the harness v5 design (ui-harness-v5 @ b5e813a5: HARNESS-V5-IA.md §S16 and §Round 2/2b foundations, HARNESS-V5-FEEDBACK-R1.md §Domain and seed, §E2 and §Round 5) and workflow decisions D-W20, D-W29, D-W30 and D-W47, with S6 and S13 following HARNESS-V5-FEEDBACK-R1.md §Round 6 (ui-harness-v5 @ 4f470775), which the prototype does not yet implement.
 - G2: Unresolved implementation qualification: P1 needs a seeded catalog (J32's fixture world plus P3's three Archive locations and the Wrap up destination). No fixture builder exists. Blocks readiness.
-- G3: Unresolved product question: Round 5 P-STO2 moves "disk use per location" into Settings › Locations without saying which figures a row shows. Options: (a, recommended) the bytes PlateVault catalogues under the location plus its volume's free space, so the user sees both what the library uses and the room left; (b) only the volume's used and free space, which the OS already shows and which mixes in unrelated files; (c) only the catalogued bytes, which hides whether the next import or archive fits. S13 asserts only that a disk-use figure is shown. Blocks readiness.
+- G3: (dissolved 2026-10-12): answered by Round 6 "Disk use per location"; S13 now asserts each row's catalogued bytes plus its volume's free space, with the `Cold-1` figures of P7 and an uncatalogued file that must not be counted.
 - G4: Out of scope: equipment, sites and Target lookup (J15); Settings › Calibration "Keep raw calibration frames" (J36); appearance and language (J40); adding, rescanning, retiring and remapping locations (J19, J28); choosing the destination inside Wrap up and approving Archive (J34); a profile's launch failure inside a run's Prepare (J24).
 - G5: The validation lane must be able to rename the PixInsight bundle (P5) without affecting the user's own install; on a machine with PixInsight in use, a stand-in bundle is required.
 
 ## Delta log
 
-- No entries (initial draft, version 1).
+- **Δ2** 2026-10-12 · S6, S13 · behavior-change
+  Settings › Locations shows each location's disk use as the bytes PlateVault catalogues there plus its volume's free space.
+  The Import preview prefills no Target for Card-2's no-pointing session (OBJECT is a hint only); the destination resolves once the user picks NGC 7000.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Disk use per location", "P-IMP2: confirm Targets in the Import preview" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)
