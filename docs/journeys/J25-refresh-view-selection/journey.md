@@ -120,7 +120,7 @@ warning without any file being moved.
 - G2: Out of scope for this journey: preparing revision 3 into `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril (rev 2)/`, with both revisions sending their Results to `NGC7000-HOO-Siril Results/` (D09, PREP-FR-07, PREP-AC-21), and cleanup of the replaced entries before the run is Complete (STO-FR-10) are not exercised. Blocks readiness until covered by a step or a journey.
 - G3: Out of scope for this journey: path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 - G4: Out of scope for this journey: Refresh while the external application is running on the prepared revision (VSEL-AC-12) is not exercised, and no member is a manual inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are not exercised here; the journey only reads the warning. Blocks readiness until covered by a step or a journey.
+- G5: Covered elsewhere: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are exercised by J39 (S2 to S6); this journey only reads the warning.
 
 ## Delta log
 
