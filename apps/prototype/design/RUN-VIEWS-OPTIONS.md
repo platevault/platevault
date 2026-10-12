@@ -2,6 +2,8 @@
 
 Scope: the folder a processing run gives to Siril, WBPP or DeepSkyStacker. Ingest is out of scope, because getting raws into the catalogue may cross volumes and copy. The prior research is [INPUT-MODES-RESEARCH.md](INPUT-MODES-RESEARCH.md); this note narrows it.
 
+Status: proposal. The decisions are open with the user; nothing here changes P-PREP2 until they are made.
+
 Evidence labels: **[src]** is a pinned source, **[probe]** is a local test on macOS 26.7.1 APFS (2026-10-12), and **[code]** is current PlateVault code. Source pins: Siril `2a72477`, siril-doc `9ae8ec8`, PJSR `76e4f38`, DSS `7989bcd`.
 
 ## Answer
@@ -87,6 +89,9 @@ Cross-cutting choices:
 - **The view is links.**
   - Use symlinks wherever they can be created.
   - On Windows without Developer Mode, use hard links when the source is on the same volume, else temporary copies.
+    - Siril copies the frames into its own working folder whatever the view holds ([FITS_symlink.c L66-L81]). Siril's working folder is inside the run folder, so the intermediates cleanup removes those copies.
+    - For Siril there, a hard-link view only avoids a second copy. For WBPP and DSS it avoids copying at all.
+    - How Siril reads a hard-linked input on Windows has not been tested **[INFERENCE: an ordinary file, read `READONLY`]**.
   - There is no mode picker. Prepare reports either "Linked · 0 B" or "18 frames copied · 3.4 GB, removed when the run completes".
 - **Copies are temporary and exceptional:** SER, Windows without Developer Mode across volumes, or an opt-in "Copy frames locally for speed" for NAS sources.
 - **Delete the view on Complete.** Offer intermediates cleanup in the same dialog, so one action returns the disk to roughly the size of the result.
@@ -108,6 +113,7 @@ This supersedes P-PREP2's "Automatic = Independent copy first". It also makes th
 [BPP-Processing.js L2008]: https://gitlab.com/pixinsight/PJSR/-/blob/76e4f38c461320f07a0010bcc973fe26133f303a/src/scripts/BatchPreprocessing/BPP-Processing.js#L2008
 [BPP-Helper.js L146-L149]: https://gitlab.com/pixinsight/PJSR/-/blob/76e4f38c461320f07a0010bcc973fe26133f303a/src/scripts/BatchPreprocessing/BPP-Helper.js#L146-L149
 [ImageFileManager-engine.jsh L589-L592]: https://gitlab.com/pixinsight/PJSR/-/blob/76e4f38c461320f07a0010bcc973fe26133f303a/src/scripts/ImageFileManager/ImageFileManager-engine.jsh#L589-L592
+[FITS_symlink.c L66-L81]: https://gitlab.com/free-astro/siril/-/blob/2a724774dc4b2f9218d4d9055e81289b77ca9be3/src/io/FITS_symlink.c#L66-L81
 [FITSUtil.cpp L224]: https://github.com/deepskystacker/DSS/blob/7989bcdd9db84a7cc0821e18bf84852c4ecb343d/DeepSkyStackerKernel/FITSUtil.cpp#L224
 [TIFFUtil.cpp L200-L202]: https://github.com/deepskystacker/DSS/blob/7989bcdd9db84a7cc0821e18bf84852c4ecb343d/DeepSkyStackerKernel/TIFFUtil.cpp#L200-L202
 [RegisterEngine.cpp L987]: https://github.com/deepskystacker/DSS/blob/7989bcdd9db84a7cc0821e18bf84852c4ecb343d/DeepSkyStackerKernel/RegisterEngine.cpp#L987
