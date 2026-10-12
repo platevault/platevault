@@ -4,9 +4,10 @@
  * ★ favourites (D-W60). Catalog only: source headers never change.
  */
 import { latestRevision } from "@/domain/derive"
+import { confirmedEvidence } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
 import { rejectInContent, sessionRef, unrejectInContent } from "@/domain/membership"
-import type { AssetId, CatalogCorrection, Evidence, OpticalTrainId, QualityValue, RunId, Session, SessionId, TargetId } from "@/domain/types"
+import type { AssetId, CatalogCorrection, OpticalTrainId, QualityValue, RunId, Session, SessionId, TargetId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
@@ -67,11 +68,6 @@ export function rejectForProjectOnly(runId: RunId, assetIds: AssetId[], rejected
   if (!run) return MISSING
   const result = setProjectRejection(run.projectId, assetIds, rejected)
   return result.ok ? applyToDraft(runId, assetIds, rejected) : result
-}
-
-/** Observed evidence stays as read; the confirmation is a separate user row. */
-function confirmedEvidence(evidence: Evidence[], label: MessageRef, value: MessageRef): Evidence[] {
-  return [...evidence.filter((e) => e.source !== "user"), { source: "user", label, value, agrees: true }]
 }
 
 function correction(session: Session, field: CatalogCorrection["field"], observed: string | null, corrected: string): CatalogCorrection[] {
