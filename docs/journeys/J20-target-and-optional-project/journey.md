@@ -19,7 +19,7 @@ compare planning sites on the Targets page and start the first processing run
 inside the Project. Done means:
 
 - The Target page shows captured, usable and Unreviewed integration per channel, with the offline contribution labelled Offline, and offers Add to Plan, Add to Project and New Project but no way to start a run.
-- The Project's candidates are exactly the sessions whose confirmed Target is NGC 7000 and whose rig is a Project rig. Nothing is assigned to the Project itself.
+- The Project's candidates are exactly the sessions whose settled Target (Confirmed, or Associated by pointing) is NGC 7000 and whose rig is a Project rig. Nothing is assigned to the Project itself.
 - Goal progress reads "in project" and "captured", "captured" never reads below "in project", and every goal is unmet while no run has a saved membership.
 - Switching planning site changes only visibility.
 - The run `NGC7000-HOO-Siril`, started from the Project's Start run sheet, opens at Select inside the Project. A rig or subject that any run uses cannot be removed, and an unused rig can.
@@ -27,7 +27,7 @@ inside the Project. Done means:
 
 ## Preconditions
 
-- P1: J19 completed through S15 (`Cold-1` is offline). All seven light sessions have confirmed Target NGC 7000. The six RedCat sessions read rig `RedCat`, and the other-camera session reads rig `Esprit`.
+- P1: J19 completed through S15 (`Cold-1` is offline). All seven light sessions have their Target settled as NGC 7000: 24 and 26 Sep are Confirmed, and 12, 18, 28 and 30 Sep and the other-camera session are Associated by pointing within NGC 7000's footprint (OBJECT never counts). The six RedCat sessions read rig `RedCat`, and the other-camera session reads rig `Esprit`.
 - P2: Settings › Sites holds two saved sites: Backyard, the Default, and `Remote site` (J15/S6, J15/S7), at least 15° of longitude and one time zone away from Backyard.
 - P3: No Project and no processing run exist.
 - P4: The J19/P5 manifest is available.
@@ -120,6 +120,6 @@ inside the Project. Done means:
   A Project is now required for every processing run and holds subjects, rigs and goals from templates. Candidates are derived from confirmed Target and rig, so S3 reads them instead of linking sessions. Goals read "in project" and "captured" (candidates plus run members), and the exposure preference is dropped. Home opens first, Open in Planner uses the Project's rigs, S8 starts the run `NGC7000-HOO-Siril`, and S9 checks that a rig or subject that any run uses cannot be removed.
   Evidence: D-W1, D-W3, D-W9, D-W16, D-W29, D-W30, D-W33, D-W34, D-W36, D-W37, D-W39, D-W50. 065 PRJ-FR-01 to PRJ-FR-12, PRJ-FR-20. 066 VSEL-FR-01. 072 PLAN-FR-10 at e4476231. D-W65 and D-W66 as narrowed by D-W72. 065 PRJ-FR-02, PRJ-FR-04, PRJ-FR-20, PRJ-FR-21, PRJ-AC-25. Root FR-023. Rig names `RedCat`, `Esprit` and site `Remote site` from J15 · by: agent (intent-gated, user instruction)
 - **Δ3** 2026-10-10 · S1, S2, S3, S4, S7, S8, S9 · behavior-change
-  The Target page offers Add to Plan, Add to Project and New Project, never a run; search results act on click. The New Project sheet copies a template's values in for editing and leaves mosaics to the Project page, whose sections, stage strip and toolbar Next follow v5. Planner opens the merged Targets page scoped to the Project, Backyard is the Default site (P2), and G3 is retired because Settings › Sites exists.
+  The Target page offers Add to Plan, Add to Project and New Project, never a run; search results act on click. The New Project sheet copies a template's values in for editing and leaves mosaics to the Project page, whose sections, stage strip and toolbar Next follow v5. Planner opens the merged Targets page scoped to the Project, Backyard is the Default site (P2), G3 is retired because Settings › Sites exists, and P1 follows J19 v3 (Targets Confirmed or Associated by pointing).
   The run starts from the Start run sheet (subject, rig, optional profile) and appears in the Runs table. Refusals read `Can't remove rig · used by 1 run ▸`, and an unused rig offers Remove.
-  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S10, S16; HARNESS-V5-FEEDBACK-R1.md §B "Start run sheet", §Copy rules, §Domain and seed Goals and Sites, §Round 5 "Runs read as one model", "Remove an unused rig", P-PLAN2, "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-10 · by: JourneysV5.U2Projects (intent-gated)
+  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S10, S16; HARNESS-V5-FEEDBACK-R1.md §B "Start run sheet", §Copy rules, §Domain and seed Goals and Sites, §Round 5 "Runs read as one model", "Remove an unused rig", P-PLAN2, "Click a result to act", "OBJECT is a label, never evidence" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J19 v3; user instruction 2026-10-10 · by: JourneysV5.U2Projects (intent-gated)
