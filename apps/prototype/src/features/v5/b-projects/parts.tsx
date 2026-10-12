@@ -281,7 +281,7 @@ function ResultGroup({ title, rows, taken, onPick, empty }: { title: string; row
                 disabled={added}
                 onClick={() => onPick(row.pick)}
                 title={added ? undefined : m.verb_add()}
-                className="flex min-h-(--row-h) w-full items-center gap-3 px-3 py-1 text-left text-sm outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent"
+                className="flex min-h-(--row-h) w-full items-center gap-3 px-3 py-(--row-py) text-left text-sm outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent"
               >
                 <span className="min-w-0 flex-1">
                   <span className="font-medium">{row.pick.name}</span>

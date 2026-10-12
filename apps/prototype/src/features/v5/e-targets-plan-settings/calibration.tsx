@@ -56,7 +56,7 @@ import { cancelOperation, isSettled } from "@/store/operations"
 import { masterNight, masterSha256 } from "./calibration-model"
 
 const TH = "h-(--row-h) px-3 text-left font-medium whitespace-nowrap"
-const TD = "px-3 py-1"
+const TD = "px-3 py-(--row-py)"
 const ROW = "h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]"
 
 /** Refusal props for any failed store result: a contract refusal lists its blockers; a failed write names its message. */
@@ -414,7 +414,7 @@ function UsedBy({ usage, catalog }: { usage: MasterUse[] | undefined; catalog: C
                   to={link.to as never}
                   params={link.params as never}
                   onClick={() => setOpen(false)}
-                  className="flex min-h-(--row-h) flex-col justify-center px-3 py-1 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent"
+                  className="flex min-h-(--row-h) flex-col justify-center px-3 py-(--row-py) outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent"
                 >
                   <span className="truncate font-medium">{u.run.name}</span>
                   <span className="truncate text-xs text-muted-foreground">

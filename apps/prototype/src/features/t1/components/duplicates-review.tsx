@@ -201,7 +201,7 @@ function DuplicateGroupBox({ group, catalog, keptPath, blocked, onKeep, onMove, 
           const refusal = kept ? null : refusalOf(copy)
           const itemId = `${id}-${index}`
           return (
-            <div key={copy.path} className="flex min-h-(--row-h) min-w-0 items-center gap-2 border-b border-border/50 px-3 py-1 last:border-0" data-copy-kept={kept || undefined}>
+            <div key={copy.path} className="flex min-h-(--row-h) min-w-0 items-center gap-2 border-b border-border/50 px-3 py-(--row-py) last:border-0" data-copy-kept={kept || undefined}>
               <RadioGroupItem id={itemId} value={copy.path} />
               <label htmlFor={itemId} className="flex min-w-0 flex-1 items-center gap-2">
                 <Pill tone="muted">{locationName(catalog, copy)}</Pill>

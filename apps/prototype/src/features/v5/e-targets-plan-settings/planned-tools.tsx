@@ -194,7 +194,7 @@ function ExportCalendarDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 <h3 className="text-xs font-semibold text-muted-foreground">{formatNight(night, true)}</h3>
                 <ul className="divide-y divide-border/50">
                   {list.map((w) => (
-                    <li key={w.key} className="flex min-h-(--row-h) items-center justify-between gap-3 py-0.5" data-ics-event>
+                    <li key={w.key} className="flex min-h-(--row-h) items-center justify-between gap-3 py-(--row-py)" data-ics-event>
                       <span className="truncate font-medium">{catalog.targets[w.targetId]?.name ?? w.targetId}</span>
                       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                         {site ? siteTimeRange(w.start, w.end, site) : null} · {m.plan_event_max_alt({ altitude: Math.round(w.maxAltitudeDeg) })}

@@ -333,7 +333,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                     key={d.volume.id}
                     {...menuKey(`device:${d.volume.id}`)}
                     aria-current={selected || undefined}
-                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8 hover:bg-foreground/[0.04]"
+                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-(--row-py) aria-[current=true]:bg-primary/8 hover:bg-foreground/[0.04]"
                     data-device={d.volume.id}
                     onClick={d.connected ? rowPick(() => selectSource(choiceAt(state, d.volume.mountPath))) : undefined}
                   >
@@ -383,7 +383,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                     key={src.id}
                     {...menuKey(`saved:${src.id}`)}
                     aria-current={selected || undefined}
-                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8 hover:bg-foreground/[0.04]"
+                    className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-(--row-py) aria-[current=true]:bg-primary/8 hover:bg-foreground/[0.04]"
                     onClick={rowPick(() => selectSource({ kind: "saved", id: src.id }, true))}
                   >
                     <FolderOpen aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -821,7 +821,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
             </h3>
             <ul className="divide-y divide-border/60 rounded-md border border-separator text-sm" data-imported>
               {imported.map((s) => (
-                <li key={s.id} className="flex min-h-(--row-h) items-center justify-between gap-2 px-2.5 py-1">
+                <li key={s.id} className="flex min-h-(--row-h) items-center justify-between gap-2 px-2.5 py-(--row-py)">
                   {s.imageType === "light" ? (
                     <Link to="/sessions/$sessionId" params={{ sessionId: s.id }} onClick={closeSheet} className="font-medium underline-offset-2 hover:underline">
                       {sessionLongLabel(m, s)}
@@ -846,7 +846,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
                 </li>
               ))}
               {masters > 0 ? (
-                <li className="flex min-h-(--row-h) items-center justify-between gap-2 px-2.5 py-1">
+                <li className="flex min-h-(--row-h) items-center justify-between gap-2 px-2.5 py-(--row-py)">
                   <span>{m.import_master_count({ count: masters })}</span>
                   <Pill tone="success" onClick={() => go("/calibration")}>
                     {routeLabel(m, "masters")}

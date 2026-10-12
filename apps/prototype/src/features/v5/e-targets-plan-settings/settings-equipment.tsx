@@ -1,7 +1,7 @@
 /**
  * S16 Settings › Equipment (slice E; D-W31, PLAN-EQ-FR-01 to PLAN-EQ-FR-06).
- * A rig is one optical train: a camera (mono or OSC, sensor size, pixel
- * size), a telescope and its effective focal length, the derived field of
+ * A rig is one optical train: a camera, a telescope and its effective focal
+ * length (the telescope's, times a reducer), the derived field of
  * view, and a plain filter list where each filter names the FITS FILTER
  * values it matches and the bands it passes. The list drives the Targets band
  * strip, the narrowband presets and Fit; it never filters Goal templates.
@@ -10,7 +10,9 @@
  *
  * Round 6: rigs come from detection plus manual add. The header adds a
  * camera, a telescope or a rig by hand (Manual; equipment-records.tsx), and
- * the Cameras and Telescopes tables rename and edit detected ones.
+ * the Cameras and Telescopes tables rename and edit detected ones. A rig's
+ * Edit changes only what it is made of; camera and telescope properties are
+ * edited on their own records.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Camera, Pencil, Plus, Trash2 } from "lucide-react"
@@ -23,15 +25,13 @@ import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { CountBadge, Pill } from "@/components/app/pill"
 import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
-import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { liveLightSessions, rigBands, rigCameraKind, rigFieldOfView, sessionRigId, unknownFilterValues } from "@/domain/derive"
 import { BANDS, NARROW_BANDS } from "@/domain/labels"
-import { fieldOfView } from "@/domain/sky"
-import type { Band, CameraKind, Catalog, OpticalTrain, RigFilter } from "@/domain/types"
-import { TextField, parseAliases, parseNumber } from "@/features/t1/components/form-field"
+import type { Band, Catalog, OpticalTrain, RigFilter } from "@/domain/types"
+import { TextField, parseAliases } from "@/features/t1/components/form-field"
 import { ReturnNotice } from "@/features/t1/settings/settings-layout"
 import { formatCount, formatDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -40,8 +40,7 @@ import { addFilterToRig, renameRig, setRigFilters } from "@/store/actions/settin
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, useStore } from "@/store/core"
 import { NameDialog } from "./dialogs"
-import { AddRigDialog, CameraDialog, CameraKindField, CamerasTable, formatFov, TelescopeDialog, TelescopesTable } from "./equipment-records"
-import { updateRigOptics } from "./settings-actions"
+import { CameraDialog, CamerasTable, formatFov, RigDialog, TelescopeDialog, TelescopesTable } from "./equipment-records"
 
 /** Bands a header value most likely passes, to prefill "Add {value}". The user confirms them. */
 function guessBands(value: string): Band[] {
@@ -158,96 +157,13 @@ function FilterDialog({ rig, draft, onClose }: { rig: OpticalTrain; draft: Filte
   )
 }
 
-function OpticsDialog({ rig, open, onClose }: { rig: OpticalTrain; open: boolean; onClose: () => void }) {
-  const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const camera = rig.cameraId ? catalog.cameras[rig.cameraId] : undefined
-  const sharing = camera ? Object.values(catalog.opticalTrains).filter((r) => r.cameraId === camera.id) : []
-  const init = () => ({ kind: camera?.kind ?? "mono", width: camera ? String(camera.widthPx) : "", height: camera ? String(camera.heightPx) : "", pixel: camera ? String(camera.pixelSizeUm) : "", focal: String(rig.effectiveFocalLengthMm) })
-  const [values, setValues] = useState(init)
-  const [errors, setErrors] = useState<Record<string, string | undefined>>({})
-  const [failure, setFailure] = useState<string | null>(null)
-  const ids = { width: useId(), height: useId(), pixel: useId(), focal: useId(), kind: useId() }
-  useEffect(() => {
-    if (open) {
-      setValues(init())
-      setErrors({})
-      setFailure(null)
-    }
-    // Reset only when the dialog opens.
-  }, [open])
-
-  const num = (v: string) => parseNumber(v)
-  const width = num(values.width)
-  const height = num(values.height)
-  const pixel = num(values.pixel)
-  const focal = num(values.focal)
-  const preview =
-    camera && width && height && pixel && focal && width > 0 && height > 0 && pixel > 0 && focal > 0
-      ? fieldOfView({ ...rig, effectiveFocalLengthMm: focal }, { ...camera, widthPx: width, heightPx: height, pixelSizeUm: pixel })
-      : null
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    const positive = (v: number | null, whole: boolean) => v !== null && !Number.isNaN(v) && v > 0 && (!whole || Number.isInteger(v))
-    const next: Record<string, string | undefined> = {
-      width: camera && !positive(width, true) ? m.equipment_error_whole_pixels() : undefined,
-      height: camera && !positive(height, true) ? m.equipment_error_whole_pixels() : undefined,
-      pixel: camera && !positive(pixel, false) ? m.equipment_error_microns() : undefined,
-      focal: !positive(focal, false) ? m.equipment_error_mm() : undefined,
-    }
-    setErrors(next)
-    if (Object.values(next).some(Boolean)) return
-    const result = updateRigOptics(rig.id, { focalLengthMm: focal!, camera: camera ? { kind: values.kind as CameraKind, widthPx: width!, heightPx: height!, pixelSizeUm: pixel! } : null })
-    if (result.ok) onClose()
-    else setFailure(result.message)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={submit} noValidate className="space-y-3">
-          <DialogHeader>
-            <DialogTitle className="inline-flex items-center gap-1.5">
-              {m.equipment_optics_title({ name: rig.name })}
-              {camera && sharing.length > 1 ? <HelpTip label={m.equipment_shared_camera()}>{m.equipment_shared_camera_help({ rigs: sharing.map((r) => r.name).join(", ") })}</HelpTip> : null}
-            </DialogTitle>
-          </DialogHeader>
-          {camera ? (
-            <>
-              <CameraKindField value={values.kind as CameraKind} onChange={(kind) => setValues({ ...values, kind })} />
-              <div className="grid grid-cols-3 gap-3">
-                <TextField id={ids.width} label={m.equipment_sensor_width()} inputMode="numeric" value={values.width} onChange={(width) => setValues({ ...values, width })} error={errors.width} />
-                <TextField id={ids.height} label={m.equipment_sensor_height()} inputMode="numeric" value={values.height} onChange={(height) => setValues({ ...values, height })} error={errors.height} />
-                <TextField id={ids.pixel} label={m.equipment_pixel_size()} inputMode="decimal" value={values.pixel} onChange={(pixel) => setValues({ ...values, pixel })} error={errors.pixel} />
-              </div>
-            </>
-          ) : null}
-          <TextField id={ids.focal} label={m.equipment_focal_length()} inputMode="decimal" value={values.focal} onChange={(f) => setValues({ ...values, focal: f })} error={errors.focal} className="max-w-56" />
-          <p className="text-sm tabular-nums" aria-live="polite">
-            <span className="text-muted-foreground">{m.equipment_field_of_view()} </span>
-            {formatFov(preview)}
-          </p>
-          {failure ? <ActionError message={failure} /> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {m.verb_cancel()}
-            </Button>
-            <Button type="submit">{failure ? m.verb_retry() : m.settings_save()}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolean }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const [filterDraft, setFilterDraft] = useState<FilterDraft | null>(null)
   const [removing, setRemoving] = useState<RigFilter | null>(null)
   const [renaming, setRenaming] = useState(false)
-  const [optics, setOptics] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [declined, setDeclined] = useState<string[]>([])
   const ref = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -283,9 +199,9 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
           {m.equipment_rename()}
           <span className="sr-only"> {rig.name}</span>
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setOptics(true)}>
-          {m.equipment_edit_optics()}
-          <span className="sr-only"> {m.trash_of_run({ name: rig.name })}</span>
+        <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+          {m.settings_edit()}
+          <span className="sr-only"> {rig.name}</span>
         </Button>
       </div>
       {unknown
@@ -405,7 +321,7 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
                           {f.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2 ? <Pill tone="muted">{m.equipment_dual_band()}</Pill> : null}
                         </span>
                       </td>
-                      <td className="px-3 py-0.5 text-right whitespace-nowrap">
+                      <td className="px-3 py-(--row-py) text-right whitespace-nowrap">
                         <Button size="xs" variant="ghost" onClick={() => editFilter(f)}>
                           {m.settings_edit()}
                           <span className="sr-only"> {f.name}</span>
@@ -426,7 +342,7 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
       </div>
 
       <FilterDialog rig={rig} draft={filterDraft} onClose={() => setFilterDraft(null)} />
-      <OpticsDialog rig={rig} open={optics} onClose={() => setOptics(false)} />
+      <RigDialog open={editing} rig={rig} onClose={() => setEditing(false)} />
       <NameDialog
         open={renaming}
         onOpenChange={setRenaming}
@@ -517,7 +433,7 @@ export function EquipmentSettingsPage() {
       </PageBody>
       <CameraDialog open={adding === "camera"} camera={null} onClose={() => setAdding(null)} />
       <TelescopeDialog open={adding === "telescope"} telescope={null} onClose={() => setAdding(null)} />
-      <AddRigDialog open={adding === "rig"} onClose={() => setAdding(null)} onAdded={(rig) => void navigate({ to: "/settings/equipment", search: { rig } as never, replace: true })} />
+      <RigDialog open={adding === "rig"} rig={null} onClose={() => setAdding(null)} onSaved={(rig) => void navigate({ to: "/settings/equipment", search: { rig } as never, replace: true })} />
     </div>
   )
 }

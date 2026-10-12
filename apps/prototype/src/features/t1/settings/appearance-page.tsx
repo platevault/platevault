@@ -18,12 +18,12 @@ import { Switch } from "@/components/ui/switch"
 import { type Density, setDensity, setLocale, setSingleKeyShortcuts, setTheme, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
 import { DEFAULT_THEME, themeInfo } from "@/app/themes"
 import { DEFAULT_LOCALE, LOCALE_META, m } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
 
-const DENSITIES: Array<{ value: Density; title: () => string; rows: string; rowClass: string }> = [
-  { value: "compact", title: m.settings_density_compact, rows: "28 px", rowClass: "h-7" },
-  { value: "comfortable", title: m.settings_density_comfortable, rows: "32 px", rowClass: "h-8" },
-  { value: "spacious", title: m.settings_density_spacious, rows: "40 px", rowClass: "h-10" },
+/** `rows` restates the `--row-h` value for each scope in src/index.css; the preview renders the token itself. */
+const DENSITIES: Array<{ value: Density; title: () => string; rows: string }> = [
+  { value: "compact", title: m.settings_density_compact, rows: "24 px" },
+  { value: "comfortable", title: m.settings_density_comfortable, rows: "26 px" },
+  { value: "spacious", title: m.settings_density_spacious, rows: "32 px" },
 ]
 
 const DEFAULTS = { theme: DEFAULT_THEME as ThemePreference, locale: DEFAULT_LOCALE, density: "comfortable" as Density, singleKeyShortcuts: true }
@@ -64,9 +64,9 @@ export function AppearancePage() {
                   <FieldContent>
                     <FieldTitle>{density.title()}</FieldTitle>
                     <FieldDescription className="text-xs tabular-nums">{density.rows}</FieldDescription>
-                    <div aria-hidden="true" className="mt-2 overflow-hidden rounded-md border text-xs">
+                    <div aria-hidden="true" data-density={density.value} className="mt-2 overflow-hidden rounded-md border text-xs">
                       {["18 Sep · Ha · 55", "24 Sep · OIII · 20", "26 Sep · OIII · 35"].map((row) => (
-                        <div key={row} className={cn("flex items-center border-b px-2 text-muted-foreground tabular-nums last:border-0", density.rowClass)}>
+                        <div key={row} className="flex h-(--row-h) items-center border-b px-2 text-muted-foreground tabular-nums last:border-0">
                           {row}
                         </div>
                       ))}

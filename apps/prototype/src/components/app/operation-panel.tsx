@@ -2,14 +2,16 @@
  * Operation progress and outcome (foundation-owned). Shows Running with
  * progress, per-item outcomes, the single settled status and the actions
  * that are safe for the kind (Pause, Resume, Cancel, Retry). A start
- * acknowledgment is never shown as success (PREP-FR-09).
+ * acknowledgment is never shown as success (PREP-FR-09). `OperationLine` is
+ * the same status and actions on one fixed-height line, for a pane header
+ * where a panel would push the page down.
  */
-import { useEffect, useRef, useState } from "react"
+import { type RefObject, useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressValue } from "@/components/ui/progress"
 import { OPERATION_UNIT_NAME } from "@/domain/labels"
-import type { OperationId, OperationItemStatus } from "@/domain/types"
+import type { Operation, OperationId, OperationItemStatus } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -34,22 +36,8 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
   const m = useMessages()
   const op = useStore((s) => s.operations[operationId])
   const [showAll, setShowAll] = useState(false)
-  const controls = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
-  const keepFocus = useRef(false)
-  // Pause, Resume, Retry and Cancel replace themselves when the status changes (WCAG 2.4.3):
-  // move focus to the replacement control, else to the panel title, never to the page body.
-  useEffect(() => {
-    if (!keepFocus.current) return
-    keepFocus.current = false
-    if (controls.current?.contains(document.activeElement)) return
-    ;(controls.current?.querySelector<HTMLElement>("button:not([disabled])") ?? heading.current)?.focus()
-  }, [op?.id, op?.status])
   if (!op) return null
-  const act = (action: () => void) => () => {
-    keepFocus.current = true
-    action()
-  }
   const Heading = headingLevel === 2 ? "h2" : headingLevel === 4 ? "h4" : "h3"
   const settled = isSettled(op.status)
   const value = op.progress.total > 0 ? Math.min(100, (op.progress.done / op.progress.total) * 100) : settled ? 100 : null
@@ -72,28 +60,7 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
           </Heading>
           <StatusBadge kind="operation" value={op.status} />
         </div>
-        <div ref={controls} className="flex flex-wrap gap-2">
-          {op.status === "running" && op.canPause ? (
-            <Button size="sm" variant="outline" onClick={act(() => pauseOperation(op.id))}>
-              {m.verb_pause()}
-            </Button>
-          ) : null}
-          {op.status === "paused" || op.status === "interrupted" ? (
-            <Button size="sm" variant="outline" onClick={act(() => resumeOperation(op.id))}>
-              {op.status === "paused" ? m.verb_resume() : m.verb_retry()}
-            </Button>
-          ) : null}
-          {!settled && op.canCancel ? (
-            <Button size="sm" variant="outline" onClick={act(() => cancelOperation(op.id))}>
-              {m.verb_cancel()}
-            </Button>
-          ) : null}
-          {settled && (op.status === "failed" || op.status === "partial") && onRetry ? (
-            <Button size="sm" variant="outline" onClick={act(onRetry)}>
-              {m.verb_retry()}
-            </Button>
-          ) : null}
-        </div>
+        <OperationControls op={op} onRetry={onRetry} fallback={heading} />
       </div>
 
       <Progress
@@ -115,9 +82,7 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
         <ProgressValue className="text-xs" aria-hidden="true" />
       </Progress>
 
-      <p className="sr-only" aria-live="polite">
-        {settled ? `${title}: ${summary ?? statusMeta("operation", op.status).label}` : ""}
-      </p>
+      <SettledAnnouncement op={op} title={title} summary={summary} />
 
       {summary ? <p className="text-sm text-pretty">{summary}</p> : null}
 
@@ -157,5 +122,83 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
         {op.settledAt ? ` · ${m.operation_settled({ date: formatDateTime(op.settledAt) })}` : ""}
       </p>
     </section>
+  )
+}
+
+/** One line: title, status, percent (or when it settled) and the actions; the line keeps one height in every state. */
+export function OperationLine({ operationId, onRetry, className }: { operationId: OperationId; onRetry?: () => void; className?: string }) {
+  const m = useMessages()
+  const op = useStore((s) => s.operations[operationId])
+  const name = useRef<HTMLSpanElement>(null)
+  if (!op) return null
+  const title = say(m, op.title)
+  const summary = op.summary ? say(m, op.summary) : null
+  const percent = op.progress.total > 0 ? `${Math.round(Math.min(1, op.progress.done / op.progress.total) * 100)}%` : null
+  return (
+    <div className={cn("flex h-6 min-w-0 items-center gap-2 text-xs", className)} data-operation-line={op.id}>
+      <span ref={name} tabIndex={-1} className="min-w-0 truncate font-medium outline-none" title={title}>
+        {title}
+      </span>
+      <StatusBadge kind="operation" value={op.status} />
+      <span className="shrink-0 text-muted-foreground tabular-nums">
+        {isSettled(op.status) && op.settledAt ? formatDateTime(op.settledAt) : percent}
+      </span>
+      <OperationControls op={op} onRetry={onRetry} fallback={name} size="xs" />
+      <SettledAnnouncement op={op} title={title} summary={summary} />
+    </div>
+  )
+}
+
+function SettledAnnouncement({ op, title, summary }: { op: Operation; title: string; summary: string | null }) {
+  return (
+    <p className="sr-only" aria-live="polite">
+      {isSettled(op.status) ? `${title}: ${summary ?? statusMeta("operation", op.status).label}` : ""}
+    </p>
+  )
+}
+
+/**
+ * Pause, Resume, Cancel and Retry, as the kind allows. They replace
+ * themselves when the status changes (WCAG 2.4.3): focus moves to the
+ * replacement control, else to `fallback`, never to the page body.
+ */
+function OperationControls({ op, onRetry, fallback, size = "sm" }: { op: Operation; onRetry?: () => void; fallback: RefObject<HTMLElement | null>; size?: "sm" | "xs" }) {
+  const m = useMessages()
+  const controls = useRef<HTMLDivElement>(null)
+  const keepFocus = useRef(false)
+  useEffect(() => {
+    if (!keepFocus.current) return
+    keepFocus.current = false
+    if (controls.current?.contains(document.activeElement)) return
+    ;(controls.current?.querySelector<HTMLElement>("button:not([disabled])") ?? fallback.current)?.focus()
+  }, [op.id, op.status, fallback])
+  const act = (action: () => void) => () => {
+    keepFocus.current = true
+    action()
+  }
+  const settled = isSettled(op.status)
+  return (
+    <div ref={controls} className={cn("flex shrink-0", size === "sm" ? "flex-wrap gap-2" : "gap-1")}>
+      {op.status === "running" && op.canPause ? (
+        <Button size={size} variant="outline" onClick={act(() => pauseOperation(op.id))}>
+          {m.verb_pause()}
+        </Button>
+      ) : null}
+      {op.status === "paused" || op.status === "interrupted" ? (
+        <Button size={size} variant="outline" onClick={act(() => resumeOperation(op.id))}>
+          {op.status === "paused" ? m.verb_resume() : m.verb_retry()}
+        </Button>
+      ) : null}
+      {!settled && op.canCancel ? (
+        <Button size={size} variant="outline" onClick={act(() => cancelOperation(op.id))}>
+          {m.verb_cancel()}
+        </Button>
+      ) : null}
+      {settled && (op.status === "failed" || op.status === "partial") && onRetry ? (
+        <Button size={size} variant="outline" onClick={act(onRetry)}>
+          {m.verb_retry()}
+        </Button>
+      ) : null}
+    </div>
   )
 }

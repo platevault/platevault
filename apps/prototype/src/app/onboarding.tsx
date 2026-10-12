@@ -279,7 +279,7 @@ export function GettingStarted() {
     >
       <ol className="divide-y divide-border/60 text-sm" data-getting-started>
         {items.map((item) => (
-          <li key={item.id} className="flex min-h-(--row-h) items-center gap-2 px-3 py-1" data-check={item.id} data-done={item.done || undefined}>
+          <li key={item.id} className="flex min-h-(--row-h) items-center gap-2 px-3 py-(--row-py)" data-check={item.id} data-done={item.done || undefined}>
             {item.done ? <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-success" /> : <Circle aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
             <span className={cn("min-w-0 flex-1 truncate", item.done && "text-muted-foreground")}>
               {row[item.id].label}
