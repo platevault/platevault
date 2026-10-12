@@ -338,3 +338,6 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **C13 Typeface:** system font until the stack is decided.
 - **C14 Review at ingestion:** the Sessions list's "Needs review" filter is the queue; each session has a review step page; "Finish review" opens the next one; Import ends by opening the first session that needs review.
 - **C15 Metadata corrections** move to ingestion (a recorded vs corrected table in the session's review flow); Prepare applies them and shows "N corrected values".
+
+### Copy rule (user, 2026-10-12)
+- **Everything is i18n.** Every visible string goes through the message catalogue in en-GB and pt-BR: product pages, the component catalogue and its captions, the design-system page, the simulation panel and the Prototype controls. Only tests, fixtures and seed library content (names of targets, projects and sessions) are exempt from the i18n lint.
