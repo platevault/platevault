@@ -34,8 +34,8 @@ folders, while the first folder stays unchanged. Panel 2's Results of both
 revisions come from the one `Veil Mosaic Results/Panel 2/` folder, and each
 names the revision it came from: by tool evidence where the file carries it,
 otherwise the revision current when it appeared, marked Inferred. The
-prepared entries are independent copies whose footprint is shown, and
-completing a panel run offers to clean them up. The assembled image saved to
+prepared entries are independent copies, cloned on `Astro-T7` at no extra
+space, and completing a panel run offers to clean them up. The assembled image saved to
 `Veil Mosaic Results/Assembled/` is the group Result candidate and is accepted
 with lineage Unknown. A panel moved to the Project Trash is listed as Trashed
 and its frames leave the counts until it is restored exactly as it was. No
@@ -61,7 +61,7 @@ the group Result.
 - P3: Panel geometry for the Veil mosaic: the mosaic editor's 2 × 2 layout, drawn from `RedCat`'s field of view around the Veil Nebula's catalogued centre, gives four panel centres and one rotation. Recorded outside PlateVault, they produce the P2 pointing column, and no P2 session points inside a panel added beside the 2 × 2 grid (S1b).
 - P4: Calibration masters only (P-CAL3), in the Calibration library and filed in structured calibration storage on `Astro-T7`, each stacked through a calibration process as in J36 or filed with Import masters: master darks that match the P2 lights exactly; master flats A, Ha and OIII per night, filed under `Flats/RedCat/<filter>/<night>/` and matching the nights of 10, 11, 12, 14 and 15 Aug; master flat B, Ha, filed under `Flats/RedCat/Ha/13 Aug/` and matching 13 Aug; and a 17 Aug Ha master flat whose header carries no optical-train evidence (G7). No raw calibration frame is assigned to any run.
 - P5: PixInsight is installed. Its WBPP profile is configured in PlateVault with recorded evidence that it reads input folders and never writes into its input files (D04).
-- P6: `Work/Processing` exists on `Astro-T7`, writable. `Astro-T7` is formatted exFAT, which cannot clone, so every prepared entry is a copy; the volume has free space for two sets of copies of the 120 lights (S8, S13).
+- P6: `Work/Processing` exists on `Astro-T7`, writable, on the same volume as `Astro-T7/Captures`. As in J24/P3, `Astro-T7` clones within one volume (APFS on macOS; Btrfs or XFS with reflink, or ReFS, elsewhere), so Independent copy clones every prepared entry.
 - P7: Two named 12 Aug frames, Q1 and Q2, whose read permission the user can remove and restore.
 - P8: Test images kept outside PlateVault, none of which carries tool evidence of its inputs unless stated: one per panel for the `Veil Mosaic Results/Panel N/` folders, `Panel4_OIII_drizzle.xisf`, whose file name names Panel 4, `Veil_HOO_mosaic.xisf`, `stray.xisf`, `Panel2_rev2_stack.xisf`, and `Panel2_rev1_late.xisf`, whose header records its input list: the 30 Panel 2 lights of saved membership revision 1, Q2 included.
 
@@ -147,7 +147,7 @@ the group Result.
 ### S8 — Review Prepare all {#S8}
 
 - **Do:** Click **Prepare all**. Choose `Work/Processing` as the parent folder. Read the review.
-- **Expect:** The review lists `Work/Processing/Veil Mosaic HOO/Veil Mosaic/Panel 1/` to `Panel 4/`. It lists each panel run's Results folder, `Work/Processing/Veil Mosaic HOO/Veil Mosaic Results/Panel 1/` to `Panel 4/`, and the group Results folder `Veil Mosaic Results/Assembled/`. Each panel shows its entry count, covering 40, 30, 30 and 20 lights, and its own calibration choices. Panel 3 is named with its exception. Profile WBPP, input mode Independent copy and calibration policy automatic appear once, with one total footprint and the free space. The footprint is the actual extra space: the 120 lights' and their assigned masters' total size, read as copied, because `Astro-T7` cannot clone (P6).
+- **Expect:** The review lists `Work/Processing/Veil Mosaic HOO/Veil Mosaic/Panel 1/` to `Panel 4/`. It lists each panel run's Results folder, `Work/Processing/Veil Mosaic HOO/Veil Mosaic Results/Panel 1/` to `Panel 4/`, and the group Results folder `Veil Mosaic Results/Assembled/`. Each panel shows its entry count, covering 40, 30, 30 and 20 lights, and its own calibration choices. Panel 3 is named with its exception. Profile WBPP, input mode Independent copy and calibration policy automatic appear once, with one total footprint and the free space. The footprint is the actual extra space, `0 B extra · cloned`, because `Astro-T7` clones within the volume (P6).
 - **Expect (negative):** Nothing is created under `Work/Processing` before approval. No Results folder is inside the group folder `Veil Mosaic/` or a prepared `Panel N/` folder. No `Panel 5/` folder is proposed for the excluded Panel 5.
 - **Trace:** Run group: Prepare all and the panel folder layout · HARNESS-V5-IA.md S7 · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("Footprint is real") · PREP-FR-06, PREP-FR-07, PREP-FR-12 · PREP-AC-16 · D-W38, D-W41, D-W51, D-W73
 
@@ -161,7 +161,7 @@ the group Result.
 ### S10 — Retry the blocked panel {#S10}
 
 - **Do:** Restore read permission on Q1 and Q2. Click **Retry** on Panel 2. Then click **Open** on the group folder and quit PixInsight.
-- **Expect:** Panel 2 reads Prepared, and the group reads Prepared. Every prepared item records that it was copied, and every verified entry in `Veil Mosaic/` is read-only. **Open** on the group folder appears, re-verifies every panel's entries, and launches PixInsight on `Work/Processing/Veil Mosaic HOO/Veil Mosaic/`, which holds only the four `Panel N/` folders. The launch is recorded separately from processing.
+- **Expect:** Panel 2 reads Prepared, and the group reads Prepared. Every prepared item records that it was cloned, and every verified entry in `Veil Mosaic/` is read-only. **Open** on the group folder appears, re-verifies every panel's entries, and launches PixInsight on `Work/Processing/Veil Mosaic HOO/Veil Mosaic/`, which holds only the four `Panel N/` folders. The launch is recorded separately from processing.
 - **Expect (negative):** Retry does not re-create Panels 1, 3 and 4. Quitting PixInsight marks no panel run Complete. The folder PixInsight loads holds no Results folder, so a later pass never reads a panel's own output as input.
 - **Trace:** Run group: Prepare all and the panel folder layout · PREP-FR-10, PREP-FR-12, PREP-FR-13 · D-W38, D-W51
 
@@ -185,7 +185,7 @@ the group Result.
 ### S13 — Re-prepare one panel into a new group folder {#S13}
 
 - **Do:** Record a listing (path, inode, size) of `Veil Mosaic/` outside PlateVault. In the group's Review, set the Panel filter to Panel 2, make Q2 current and press **X**, then click **Save run**. Click **Prepare** on Panel 2, read the review, and approve.
-- **Expect:** Q2 reads `Rejected · Library` and leaves Panel 2's draft, and Panel 2 reads saved membership revision 2 with 29 lights. The review proposes the new group folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic (rev 2)/`, with a `Panel N/` folder inside it for every panel run, `Panel 1/` to `Panel 4/`, and its footprint read as copied. It names `Veil Mosaic Results/Panel 2/` as Panel 2's unchanged Results folder, which serves both revisions. After approval, `Veil Mosaic (rev 2)/Panel 2/` holds 29 lights and every panel reads Prepared.
+- **Expect:** Q2 reads `Rejected · Library` and leaves Panel 2's draft, and Panel 2 reads saved membership revision 2 with 29 lights. The review proposes the new group folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic (rev 2)/`, with a `Panel N/` folder inside it for every panel run, `Panel 1/` to `Panel 4/`, and its footprint reads `0 B extra · cloned`. It names `Veil Mosaic Results/Panel 2/` as Panel 2's unchanged Results folder, which serves both revisions. After approval, `Veil Mosaic (rev 2)/Panel 2/` holds 29 lights and every panel reads Prepared.
 - **Expect (negative):** `Veil Mosaic/` and its `Panel N/` folders equal the recorded listing, and no existing folder is reused or cleared. The previous group folder stays until the user approves its cleanup. No second Results folder is proposed, and none is inside `Veil Mosaic (rev 2)/`. Pressing X moves no file: Q2 stays in `Astro-T7/Captures`, and no panel run other than Panel 2 changes its draft.
 - **Trace:** Run group: Prepare all and the panel folder layout · HARNESS-V5-FEEDBACK-R1.md Round 6 "Reject is library-wide by default" · PREP-FR-06, PREP-FR-07, PREP-FR-11, PREP-FR-13 · PREP-AC-18 · D-W51, D-W67, D-W73
 
@@ -199,7 +199,7 @@ the group Result.
 ### S15 — Complete each panel run {#S15}
 
 - **Do:** Mark each of the four panel runs processing complete. Read each run's **Clean up prepared copies** offer, and close it without approving.
-- **Expect:** Each panel run reads Complete with its own Results, and completing it offers **Clean up prepared copies**, on by default, showing that run's footprint as copied bytes. The group lists all four as Complete.
+- **Expect:** Each panel run reads Complete with its own Results, and completing it offers **Clean up prepared copies** by default, showing that run's footprint and saying that it frees no space, because every entry is a clone. The group lists all four as Complete.
 - **Expect (negative):** Completing and closing the offer remove no file: every prepared copy stays in place, and nothing goes to the OS Trash without an approved review. No panel run waits on the group Result or on another panel.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Input modes "Prepared copies are cleaned up when a run is done" · RES-FR-06, RES-FR-08 · RES-AC-12 · D-W26, D-W38
 
@@ -233,5 +233,5 @@ the group Result.
   Evidence: HARNESS-V5-IA.md §Screens S3, S4, S7, S8, §Round 2b foundation (structured calibration storage); HARNESS-V5-FEEDBACK-R1.md §B "Mosaic flow (one frame)", §Round 1b P-CAL3, §Round 5 "Runs read as one model"; D-W75 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J36 calibration process; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)
 - **Δ3** 2026-10-12 · S2, +S2a, S5, S8, S10, S11, S13, S14, S15 · behavior-change
   The excluded Panel 5 keeps its unmet goals on the subject (S2, S2a). A Result's revision comes from tool evidence, else the revision current when it appeared, marked Inferred (S11, S14). X replaces Exclude from run (S13).
-  Prepare uses Independent copy with a real footprint read as copied (S5, S8, S10), and completing a panel run offers Clean up prepared copies (S15). G5 and G6 are dissolved.
+  Prepare uses Independent copy, cloned on `Astro-T7` with a real footprint of `0 B extra · cloned` (S5, S8, S10, S13), and completing a panel run offers Clean up prepared copies, which frees no space (S15). G5 and G6 are dissolved.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Mosaic: an excluded panel keeps its goals", "Result revision", "Reject is library-wide by default" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); §Input modes (user, 2026-10-10) P-PREP2, "Prepared copies are cleaned up when a run is done" (@ d609ff55); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)
