@@ -1,13 +1,13 @@
 ---
 id: J14
 title: Add a Target to an existing Project from its Target page and start its run there
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
 surfaces: [targets, planning, projects, sessions, home, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 072-observing-plans, D-W1, D-W8, D-W17, D-W23, D-W30, D-W33, D-W36, D-W37, D-W47, D-W49, D-W50, D-W59, D-W60, D-W61, D-W65, D-W66, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/072-observing-plans/spec.md, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, apps/prototype/src/features/v5/e-targets-plan-settings/target.tsx, apps/prototype/src/features/v5/b-projects/start-run.tsx, apps/prototype/src/features/v5/a-home/parts.tsx]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 072-observing-plans, D-W1, D-W8, D-W17, D-W23, D-W30, D-W33, D-W36, D-W37, D-W47, D-W49, D-W50, D-W59, D-W60, D-W61, D-W65, D-W66, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/072-observing-plans/spec.md, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S12, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-PLAN2, apps/prototype/src/features/v5/e-targets-plan-settings/target.tsx, apps/prototype/src/features/v5/b-projects/start-run.tsx, apps/prototype/src/features/v5/a-home/parts.tsx]
 ---
 
 ## Goal
@@ -16,8 +16,9 @@ The user knows what to shoot and process next: NGC 7000. They find it on the
 Targets page and check that it fits their `RedCat` rig. A Target page cannot
 start a run, so from NGC 7000's Target page they add it to `Cygnus HOO`, the
 Project they already keep for the Cygnus region, after reading a preview of
-what the addition changes. They then start the run `NGC7000-HOO-Siril` inside
-that Project, choosing NGC 7000 among its two subjects. Later the user adds the
+what the addition changes. They then start the run inside that Project,
+choosing NGC 7000 among its two subjects, and rename the auto-named run to
+`NGC7000-HOO-Siril` on its header. Later the user adds the
 other-camera session to the same Project from the **Not in any Project**
 filter. Done means:
 
@@ -45,10 +46,10 @@ filter. Done means:
 
 ### S2 — Open the Target page {#S2}
 
-- **Do:** Click NGC 7000's row under My targets.
-- **Expect:** The click opens NGC 7000's Target page. Its captured time reads Ha 12h35 and OIII 10h35, with the seven sessions listed by night, channel, frames and rig: six on `RedCat` and one on `Esprit`. Its header offers **Add to Plan**, **Add to Project** and **New Project…**, and its Projects box reads `No Project`.
-- **Expect (negative):** The Target page offers no Start run, because a run starts only inside a Project.
-- **Trace:** flow B1 · HARNESS-V5-IA.md S10 Target detail · LIB-FR-08 · LIB-AC-05 · D-W1, D-W8
+- **Do:** In the search results, which still list NGC 7000, click NGC 7000's result row.
+- **Expect:** NGC 7000 is now in My targets, so the click opens NGC 7000's Target page. Its captured time reads Ha 12h35 and OIII 10h35, with the seven sessions listed by night, channel, frames and rig: six on `RedCat` and one on `Esprit`. Its header offers **Add to Plan**, **Add to Project** and **New Project…**, and its Projects box reads `No Project`.
+- **Expect (negative):** The Target page offers no Start run, because a run starts only inside a Project. The click adds nothing: My targets still lists NGC 7000 once, with ★ set.
+- **Trace:** flow B1 · HARNESS-V5-IA.md S10 Target detail · HARNESS-V5-FEEDBACK-R1.md Round 6 "Clicking a result" · LIB-FR-08 · LIB-AC-05 · D-W1, D-W8
 
 ### S2a — Add NGC 7000 to Cygnus HOO, previewed first {#S2a}
 
@@ -57,12 +58,12 @@ filter. Done means:
 - **Expect (negative):** Cancelling the preview changes nothing. Confirming adds no rig, so `Esprit` stays off the Project, and the captured values leave out the `Esprit` session. It creates no run, moves no file, and leaves NGC 6888 and its goals unchanged.
 - **Trace:** flow B2 · HARNESS-V5-IA.md S10 "Add to Project (previewed first)" · HARNESS-V5-FEEDBACK-R1.md §Copy rules previews · PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-21 · PRJ-AC-03 · D-W30, D-W36, D-W37, D-W66
 
-### S2b — Start the run inside the Project {#S2b}
+### S2b — Start the run inside the Project and rename it {#S2b}
 
-- **Do:** Open `Cygnus HOO` from the Target page's Projects box. In Runs, click **Start run**. In the sheet, choose subject NGC 7000 and rig `RedCat`, leave **Profile (optional)** at None, and click **Start run**. Name the run `NGC7000-HOO-Siril` (G4).
-- **Expect:** The Project page lists the subjects NGC 6888 and NGC 7000, its Candidates list the six RedCat NGC 7000 sessions, and Runs reads `No runs yet`. The Start run sheet offers both subjects and the one rig `RedCat`. The run is created inside `Cygnus HOO` and opens at its Select step, and the Runs table lists `NGC7000-HOO-Siril` at Select. NGC 7000's goals still read 0h00 in project and are unmet.
-- **Expect (negative):** No run is created for NGC 6888, and no standalone or Target-only run exists. No goal reads "in project" above "captured". The Project stays Open; no goal state marks it Done.
-- **Trace:** flow B4 · HARNESS-V5-IA.md S3 Runs · HARNESS-V5-FEEDBACK-R1.md §B Start run sheet · PRJ-FR-10, PRJ-FR-12 · PRJ-AC-01, PRJ-AC-14 · VSEL-FR-01 · VSEL-AC-17 · D-W1, D-W8, D-W47, D-W50
+- **Do:** Open `Cygnus HOO` from the Target page's Projects box. In Runs, click **Start run**. In the sheet, choose subject NGC 7000 and rig `RedCat`, leave **Profile (optional)** at None, and click **Start run**. On the run header, click **Rename**, enter `NGC7000-HOO-Siril` and confirm.
+- **Expect:** The Project page lists the subjects NGC 6888 and NGC 7000, its Candidates list the six RedCat NGC 7000 sessions, and Runs reads `No runs yet`. The Start run sheet offers both subjects, the one rig `RedCat` and the optional profile, and no name field. The run is created inside `Cygnus HOO`, named `NGC 7000 RedCat` (subject and rig), and opens at its Select step with 5 sessions selected; the Runs table lists `NGC 7000 RedCat` at Select. After the rename, the run header and the Runs table read `NGC7000-HOO-Siril`, still at Select with the same 5 sessions selected. NGC 7000's goals still read 0h00 in project and are unmet.
+- **Expect (negative):** No run is created for NGC 6888, and no standalone or Target-only run exists. No goal reads "in project" above "captured". The Project stays Open; no goal state marks it Done. The rename writes, moves or renames no file, creates no run folder, and changes neither the run's step nor its selected sessions; the Runs table still lists exactly one run.
+- **Trace:** flow B4 · HARNESS-V5-IA.md S3 Runs, S5 Run header · HARNESS-V5-FEEDBACK-R1.md §B Start run sheet, Round 6 "Rename runs and Projects" · PRJ-FR-10, PRJ-FR-12 · PRJ-AC-01, PRJ-AC-14 · VSEL-FR-01 · VSEL-AC-17 · D-W1, D-W8, D-W47, D-W50
 
 ### S5 — Read the run's candidates and ownership {#S5}
 
@@ -73,10 +74,10 @@ filter. Done means:
 
 ### S6 — Check the link from both sides and rename {#S6}
 
-- **Do:** Open Targets on My targets, then open NGC 7000's Target page. Rename the Project to `Cygnus HOO bicolour` (G5), then open the Target page again. Rename the Project back to `Cygnus HOO`.
-- **Expect:** My targets lists NGC 7000 with ★ and the badge `Project Cygnus HOO`. The Target page lists the Project, and choosing it opens the Project page with NGC 7000 among its subjects. After the rename, the badge and the Target page show the new name, and the Project page still shows subject NGC 7000 and the run `NGC7000-HOO-Siril`.
-- **Expect (negative):** Renaming leaves the subject, the run and its Target attached, because the link is by identity.
-- **Trace:** Projects surface · HARNESS-V5-IA.md S10 My targets badge · PRJ-FR-01, PRJ-FR-07 · PLAN-TGT-FR-01 · PLAN-TGT-AC-16 · D-W60
+- **Do:** Open Targets on My targets, then open NGC 7000's Target page and choose `Cygnus HOO` in its Projects box. On the Project header, choose **Edit details**, change the name to `Cygnus HOO bicolour` and save, then open NGC 7000's Target page again. Open **Projects**, open the `Cygnus HOO bicolour` row's menu, choose **Edit details**, change the name back to `Cygnus HOO` and save.
+- **Expect:** My targets lists NGC 7000 with ★ and the badge `Project Cygnus HOO`. The Target page lists the Project, and choosing it opens the Project page with NGC 7000 among its subjects. **Edit details** offers the Project's name and notes, from the header and from the row menu alike. After the first rename, the Project header, the My targets badge and the Target page's Projects box read `Cygnus HOO bicolour`, and the Project page still shows subject NGC 7000 and the run `NGC7000-HOO-Siril`. After the second rename, the Projects list row, the badge and the Target page read `Cygnus HOO` again.
+- **Expect (negative):** Renaming leaves the subject, the run and its Target attached, because the link is by identity. Neither rename changes the run's name `NGC7000-HOO-Siril`, the Project's notes, its goals or its candidates, and neither writes, moves or renames a file.
+- **Trace:** Projects surface · HARNESS-V5-IA.md S2 Projects list row menu, S3 Project header, S10 My targets badge · HARNESS-V5-FEEDBACK-R1.md Round 6 "Rename runs and Projects" · PRJ-FR-01, PRJ-FR-07 · PLAN-TGT-FR-01 · PLAN-TGT-AC-16 · D-W60
 
 ### S7 — Add the other-camera session from Not in any Project {#S7}
 
@@ -94,10 +95,10 @@ filter. Done means:
 
 ## Success criteria
 
-- SC1: The Target page offers 0 Start run controls (S2). Zero runs exist after S2a, and exactly one run, `NGC7000-HOO-Siril` in `Cygnus HOO`, exists after S2b, with 0 runs for NGC 6888.
+- SC1: The Target page offers 0 Start run controls (S2). Zero runs exist after S2a, and exactly one run exists after S2b, in `Cygnus HOO`, created as `NGC 7000 RedCat` and renamed to `NGC7000-HOO-Siril` with 0 file changes and 5 sessions still selected, with 0 runs for NGC 6888.
 - SC2: After S2a, NGC 7000's Ha reads 9h15 captured and OIII reads 10h35 captured, both with 0h00 in project and unmet, and NGC 6888's 2 goals are unchanged.
 - SC3: The S5 picker lists 6 sessions with 5 selected and 0 Esprit sessions. The run offers 0 move or share controls.
-- SC4: After the S6 rename, the badge, the Target page and the Project page all show the new name, and the subject is still NGC 7000.
+- SC4: After the S6 header rename, the badge, the Target page and the Project page all show `Cygnus HOO bicolour`; after the row-menu rename they show `Cygnus HOO`. The subject is still NGC 7000 and the run still reads `NGC7000-HOO-Siril` throughout.
 - SC5: After S7, the Project lists 2 rigs and Ha reads 12h35 captured, and the run's picker still lists 0 Esprit sessions.
 - SC6: The S8 manifest equals P4 for 100% of files, and 0 frames have a quality other than Unreviewed.
 
@@ -105,8 +106,8 @@ filter. Done means:
 
 - G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, apps/prototype/design/ on ui-harness-v5 @ b5e813a5), on top of specs 063 to 072 at d45a22ad and the workflow decisions of 2026-10-06. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: S1 assumes NGC 7000's catalogued major axis is about 2°. The bundled catalogue's size value has not been checked, so the exact coverage behind "fits" is unverified. Blocks readiness.
-- G4: Unresolved product question: v5 auto-names a new run '<subject> <rig>' (store/actions/runs.ts startRun; the Start run sheet has only subject, rig and profile) and no Rename control is exposed, although the store has renameRun; this journey's run name needs a Rename control or a fixture rename. Blocks readiness.
-- G5: Unresolved product question: S6 renames the Project, but the v5 Project page exposes no control to rename a Project or edit its details (the store has updateProjectDetails; no screen calls it). Blocks readiness.
+- G4: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S2b now asserts that Start run auto-names the run `NGC 7000 RedCat` and that Rename on the run header renames it to `NGC7000-HOO-Siril` without touching a file or the selection.
+- G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S6 now asserts Edit details (name, notes) on the Project header and in the Projects row menu, and that both renames keep the Project–Target link and the run's name.
 - G6: Out of scope for this journey: New Project from a Target (J20/S2), the refusal to remove a rig or subject that a run uses (J20/S9) and a mosaic subject (J33).
 
 ## Delta log
@@ -118,3 +119,7 @@ filter. Done means:
   A Target page no longer starts a run: it offers Add to Plan, Add to Project (previewed first) and New Project. The journey now adds NGC 7000 to the existing Project `Cygnus HOO` (P2) and starts the run there from the Start run sheet; old steps 3 (start a run with no Project) and 4 (create the prefilled Project) are retired.
   The Targets search stars a result from its row menu, with no Add button, and Filters shows a chip per rig filter graded good tonight. Home's top line is gone, so S7 reads the Sessions box. P1 follows J19 v3 (Targets Confirmed or Associated by pointing). G3 is retired; G6 records what stays out of scope.
   Evidence: HARNESS-V5-IA.md §Screens S1, S3, S10 ("Target detail: … Add to Plan, Add to Project (previewed first) or New Project"), S12; HARNESS-V5-FEEDBACK-R1.md §B "Start run sheet", §Round 5 "Home has no issues strip", "Click a result to act", "OBJECT is a label, never evidence", P-PLAN2 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J19 v3; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)
+- **Δ4** 2026-10-12 · S2, S2b, S6 · behavior-change
+  Start run auto-names the run `NGC 7000 RedCat`, and S2b renames it to `NGC7000-HOO-Siril` with Rename on the run header. S6 renames the Project with Edit details (name, notes) on the Project header and back again from the Projects row menu.
+  S2 opens the Target page by clicking its search result, because a result already in My targets opens. G4 and G5 are dissolved.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Rename runs and Projects", "Clicking a result" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)

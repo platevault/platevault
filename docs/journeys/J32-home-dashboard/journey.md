@@ -1,13 +1,13 @@
 ---
 id: J32
 title: Work from the Home dashboard and follow each Project's Next action
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [home, projects, sessions, frame-review, targets, planning, view-review, wrap-up, locations, indexing, duplicates, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 067-frame-review, 072-observing-plans, D-W14, D-W27, D-W33, D-W35, D-W36, D-W37, D-W39, D-W40, D-W48, D-W59, D-W60, D-W63, D-W66, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/067-frame-review/spec.md, specs/072-observing-plans/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S10, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, P-STO2, P-WRAP1, apps/prototype/src/features/v5/a-home/home.tsx, apps/prototype/src/domain/derive.ts#projectNext]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 067-frame-review, 072-observing-plans, D-W14, D-W27, D-W33, D-W35, D-W36, D-W37, D-W39, D-W40, D-W48, D-W59, D-W60, D-W63, D-W66, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/067-frame-review/spec.md, specs/072-observing-plans/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-PLAN2, P-STO2, P-WRAP1, apps/prototype/src/features/v5/a-home/home.tsx, apps/prototype/src/domain/derive.ts#projectNext]
 ---
 
 ## Goal
@@ -26,7 +26,7 @@ that need work, tonight's windows, unmet goals and running work. Done means:
 
 ## Preconditions
 
-- P1: A development catalog seeded to the state in P2 to P4 at 2026-10-06 18:00 local time (G2). It reuses the NGC 7000 worked example and the `Veil Mosaic HOO` Project of J33. The rigs are `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC), as J15 creates them. Backyard is the default site. The Targets page, on tonight at Backyard, shows a window for NGC 7000, the Veil Mosaic centre, M 31, IC 1396 and M 33.
+- P1: A development catalog seeded to the state in P2 to P4 at 2026-10-06 18:00 local time (G2). It reuses the NGC 7000 worked example and the `Veil Mosaic HOO` Project of J33. The rigs are `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC), as J15 creates them. Backyard is the default site. The Targets page, on tonight at Backyard, shows a window for NGC 7000, the Veil Mosaic centre, M 31, IC 1396 and M 33. The seed has finished setup, Activity records a completed import that brought frames into the catalog, Projects exist, and `IC1396-Ha-Siril` was prepared and opened in Siril before it was marked Complete (P2). So every Getting started item (setup, first import, first Project, first run) is done under each reading of J18/G5, as J18 completes them.
 - P2: Four open Projects and one Done Project:
 
   | Project | Subject | Rig | Goals | Progress | Runs |
@@ -55,7 +55,7 @@ that need work, tonight's windows, unmet goals and running work. Done means:
 
 - **Do:** Launch PlateVault.
 - **Expect:** Home is the first surface shown. Its header offers **Plan tonight**, **New Project…** and **Import…**. Below it, five boxes are titled Projects, Sessions, Tonight, Goals and Work. Work reads `Nothing running`.
-- **Expect (negative):** Home shows no issues strip: no issue pill and no `No issues` line, although two sessions need a Target (P3). The Targets page is not the first surface, and no Inbox exists.
+- **Expect (negative):** Home shows no issues strip: no issue pill and no `No issues` line, although two sessions need a Target (P3). Home shows no Getting started checklist, because all four of its items are done (P1). The Targets page is not the first surface, and no Inbox exists.
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 · HARNESS-V5-FEEDBACK-R1.md Round 5 "Home has no issues strip" · root FR-020 · PRJ-FR-17, PRJ-FR-19 · PRJ-AC-18, PRJ-AC-20 · LIB-AC-09 · D-W39
 
 ### S2 — Read the Projects box {#S2}
@@ -85,7 +85,7 @@ that need work, tonight's windows, unmet goals and running work. Done means:
 
 ### S4 — Review the frames in the sheet over Home and watch Next move {#S4}
 
-- **Do:** Return to Home. In the Sessions box's Unreviewed group, click **Review** on `2 Oct OIII`. Switch frame review to the grid view with G. Select all 48 frames with ⌘A and press P. Close the sheet and click `NGC 7000 HOO`'s Next action.
+- **Do:** Return to Home. In the Sessions box's Unreviewed group, click **Review** on `2 Oct OIII`. Switch frame review to the grid view with G. Select all 48 frames with ⌘A and press P, confirming the bulk mark if PlateVault asks for it (G6). Close the sheet and click `NGC 7000 HOO`'s Next action.
 - **Expect:** Frame review opens in a sheet over Home (`?review=<sessionId>`) with the filter set to Unreviewed and lists the 48 frames. All 48 frames read Usable. After the sheet closes, the Unreviewed group reads `None`. `NGC 7000 HOO`'s Next now names `NGC7000-HOO-Siril`, at Calibrate. Clicking it opens that run at its Calibrate step, with its readiness line and **Review matches**.
 - **Expect (negative):** The sheet sets library marks only and offers no "Reject for this Project only". Marking the frames changes no run's saved membership and no goal's "in project" value; OIII still reads 4h00 in project.
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 Sessions ("reviewed in a sheet over Home, library marks only"), S6 · PRJ-FR-18 · PRJ-AC-23 · PIX-FR-18 · D-W14, D-W40, D-W48
@@ -154,7 +154,7 @@ that need work, tonight's windows, unmet goals and running work. Done means:
 
 ## Success criteria
 
-- SC1: At S1 Home shows exactly 3 header actions and 5 boxes, and 0 issue pills.
+- SC1: At S1 Home shows exactly 3 header actions and 5 boxes, 0 issue pills and 0 Getting started checklists.
 - SC2: At S2, 4 Projects are listed and each shows the Next of the first applicable rule: review new frames, Plan tonight, the blocked run and Wrap up for `NGC 7000 HOO`, `Veil Mosaic HOO`, `M 31 OSC` and `IC 1396 Ha`.
 - SC3: After S4, `NGC 7000 HOO`'s Next names `NGC7000-HOO-Siril` at Calibrate, and OIII still reads 4h00 in project.
 - SC4: After S6, Needs a Target lists 2 sessions, Not in any Project lists 0, `M 33`'s Next is Start a processing run, and 0 runs have been created.
@@ -168,6 +168,7 @@ that need work, tonight's windows, unmet goals and running work. Done means:
 - G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, apps/prototype/design/ on ui-harness-v5 @ b5e813a5), on top of specs 063, 065 and 072 at d45a22ad and the 2026-10-06 workflow decisions. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: P1 and P2 need a seeded catalog in a known state at a fixed local time. No fixture builder exists, and the windows depend on Backyard's coordinates. Blocks readiness.
 - G5: Out of scope for this journey: a session that qualifies for two Sessions groups at once (the v5 prototype lists a candidate in no run with Unreviewed frames under both Unreviewed and Ready to add), and the Work box's Pause, Resume and Retry, are not exercised. Blocks readiness until covered by a step or a journey.
+- G6: Unresolved product question: Round 6 asks for confirmation on large bulk marks ("⌘A then P/X/U on many frames", "Mark 120 frames Unusable?") but sets no size, so S4 cannot say whether ⌘A then P on 48 frames asks first. Options: (a, recommended) every mark on a ⌘A selection asks, whatever its count, so S4 reads a "Mark 48 frames Usable?" confirmation and no frame changes before it is confirmed; (b) a fixed count; (c) every mark on more than one frame. Single-frame P, X and U never ask. Mirrors J22/G8. Blocks readiness.
 
 ## Delta log
 
@@ -175,3 +176,6 @@ that need work, tonight's windows, unmet goals and running work. Done means:
   Home is the harness v5 dashboard: header actions Plan tonight, New Project and Import over the boxes Projects, Sessions, Tonight, Goals and Work, with no issues strip (the top line is gone). A Project row opens its Project page, an Unreviewed session is reviewed in a sheet over Home, and Next follows the v5 rule order, so `IC 1396 Ha` now reads Wrap up.
   Plan tonight opens the merged Targets page, and the rescan runs from Settings › Locations, followed by the automatic duplicate scan. Gaps G3 (no rescan control) and G4 (where Plan tonight opens) are resolved and retired.
   Evidence: HARNESS-V5-IA.md §Screens S1, S3, S9, S10; HARNESS-V5-FEEDBACK-R1.md §Round 5 "Home has no issues strip", "Home rows open the Project page", P-PLAN2, P-STO2, "Duplicates are scanned automatically", "OBJECT is a label, never evidence" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype src/domain/derive.ts projectNext and src/features/t1/settings/locations-page.tsx Rescan; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)
+- **Δ3** 2026-10-12 · S1, S4 · behavior-change
+  Home shows a Getting started checklist until setup, a first import, a first Project and a first run are done; in this fixture all four are done, so S1 asserts its absence. S4's ⌘A bulk mark may now ask for confirmation, and G6 records that the size that triggers it is undecided.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Onboarding: walk plus checklist", "Large bulk marks need confirmation" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)
