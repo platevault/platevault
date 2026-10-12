@@ -10,7 +10,7 @@ import type { Catalog, Goal, GoalTemplate, GoalTemplateId, GoalTemplateValue, Lo
 import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
-import { freshId, MISSING, recordSaved, refuse } from "./shared"
+import { closedRefusal, freshId, MISSING, recordSaved, refuse } from "./shared"
 
 const projectHref = (id: ProjectId) => `/projects/${id}`
 
@@ -54,22 +54,21 @@ export interface NewProjectInput {
   notes: string
   subjects: SubjectInput[]
   rigIds: OpticalTrainId[]
-  /** Copied in once; the copy stands alone and stays editable, and the Project keeps no link to it (D-W30). */
-  goalTemplateId: GoalTemplateId | null
+  /** Goal values per channel, typed in or prefilled from a template; copied once, so the Project keeps no link to a template (D-W30). */
+  goals: GoalTemplateValue[]
 }
 
-/** New Project (PRJ-FR-01): name, subjects, rigs and an optional goal template. Creates no run. */
+/** New Project (PRJ-FR-01): name, subjects, rigs and optional goals. Creates no run. */
 export function createProject(input: NewProjectInput): { result: CommitResult; projectId: ProjectId } {
   const id = freshId("prj", input.name)
   const subjects: Subject[] = input.subjects.map((s) => ({ id: freshId("sub", s.targetId), targetId: s.targetId, mosaic: s.mosaic }))
-  const template = goalTemplate(input.goalTemplateId)
   const project: Project = {
     id,
     name: input.name.trim(),
     notes: input.notes,
     subjects,
     rigIds: [...new Set(input.rigIds)],
-    goals: subjects.flatMap((s) => goalsFromTemplate(template, s)),
+    goals: subjects.flatMap((s) => goalsFromValues(input.goals, s)),
     archiveLocationId: null,
     wrapUp: {},
     state: "open",
@@ -84,7 +83,8 @@ export function createProject(input: NewProjectInput): { result: CommitResult; p
   return { result, projectId: id }
 }
 
-function editProject(projectId: ProjectId, label: MessageRef, expectRevision: number, update: (project: Project) => Project): CommitResult {
+/** Commit one Project patch, guarded by its revision; only Reopen writes a closed Project, the rest go through `editProject`. */
+function writeProject(projectId: ProjectId, label: MessageRef, expectRevision: number, update: (project: Project) => Project): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
   const result = commit(
@@ -94,6 +94,11 @@ function editProject(projectId: ProjectId, label: MessageRef, expectRevision: nu
   )
   if (result.ok) recordSaved(msg("store_saved_label_name", { label, name: project.name }), null, projectHref(projectId))
   return result
+}
+
+/** A Project edit: refused while the Project is closed (`closedRefusal`). */
+function editProject(projectId: ProjectId, label: MessageRef, expectRevision: number, update: (project: Project) => Project): CommitResult {
+  return closedRefusal(store.getState().catalog.projects[projectId], label) ?? writeProject(projectId, label, expectRevision, update)
 }
 
 /** Edit details (round 6): name and notes; a Project always keeps a name. */
@@ -111,10 +116,27 @@ export function addSubject(projectId: ProjectId, input: SubjectInput, expectRevi
   )
 }
 
+/** Runs of the Project that hold the subject, the Trash included (a restored run needs its subject). */
+function subjectRuns(catalog: Catalog, projectId: ProjectId, subjectId: string): Run[] {
+  return Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.subjectId === subjectId)
+}
+
+/** Edit: point the subject at another Target; its goals stay. Refused while any run uses the subject (D-W65) or the Target is already a subject. */
+export function changeSubjectTarget(projectId: ProjectId, subjectId: string, targetId: TargetId, expectRevision: number): CommitResult {
+  const { catalog } = store.getState()
+  const project = catalog.projects[projectId]
+  if (!project) return MISSING
+  const label = msg("store_label_edit_subject")
+  const users = subjectRuns(catalog, projectId, subjectId)
+  if (users.length > 0) return refuse(msg("store_refused", { label }), usesIt(users), projectHref(projectId))
+  const taken = project.subjects.find((s) => s.id !== subjectId && s.targetId === targetId)
+  if (taken) return refuse(msg("store_refused", { label }), [msg("store_reason_already_subject", { name: subjectName(m, catalog, taken) })], projectHref(projectId))
+  return editProject(projectId, label, expectRevision, (p) => ({ ...p, subjects: p.subjects.map((s) => (s.id === subjectId ? { ...s, targetId } : s)) }))
+}
+
 /** Refused while any run uses the subject; the refusal names each run (D-W65). */
 export function removeSubject(projectId: ProjectId, subjectId: string, expectRevision: number): CommitResult {
-  const { catalog } = store.getState()
-  const users = Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.subjectId === subjectId)
+  const users = subjectRuns(store.getState().catalog, projectId, subjectId)
   const label = msg("store_label_remove_subject")
   if (users.length > 0) return refuse(msg("store_refused", { label }), usesIt(users), projectHref(projectId))
   return editProject(projectId, label, expectRevision, (p) => ({ ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId) }))
@@ -249,7 +271,7 @@ export function markProjectDone(projectId: ProjectId): CommitResult {
 export function reopenProject(projectId: ProjectId): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
-  return editProject(projectId, msg("project_reopen"), project.revision, (p) => ({ ...p, state: "open", doneAt: null }))
+  return writeProject(projectId, msg("project_reopen"), project.revision, (p) => ({ ...p, state: "open", doneAt: null }))
 }
 
 /** Project-only reject or its undo (D-W42): never changes library quality, captured or other Projects. */
@@ -277,5 +299,5 @@ export function prefillFromSession(sessionId: SessionId): NewProjectInput | null
   if (!session || !targetId) return null
   const rigId = sessionRigId(session)
   const name = subjectName(m, catalog, { id: "", targetId, mosaic: null })
-  return { name, notes: "", subjects: [{ targetId, mosaic: null }], rigIds: rigId ? [rigId] : [], goalTemplateId: null }
+  return { name, notes: "", subjects: [{ targetId, mosaic: null }], rigIds: rigId ? [rigId] : [], goals: [] }
 }

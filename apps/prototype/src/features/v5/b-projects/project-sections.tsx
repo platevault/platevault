@@ -42,7 +42,6 @@ import {
   projectGroups,
   projectRuns,
   projectTrash,
-  projectWarnings,
   rigCameraKind,
   rigFieldOfView,
   rigName,
@@ -64,12 +63,12 @@ import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Run, RunGroup, Session, Subject } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatDegrees, formatNight, formatRa, formatTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { addRig, addSubject, applyGoalTemplate, goalsFromTemplate, removeRig, removeSubject, rigRuns, setGoals } from "@/store/actions/projects"
+import { addRig, addSubject, applyGoalTemplate, changeSubjectTarget, goalsFromTemplate, removeRig, removeSubject, rigRuns, setGoals } from "@/store/actions/projects"
 import { completeRun, startRun, trashRun } from "@/store/actions/runs"
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, nowIso, type PrototypeState, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
-import { GroupStatusLabel, RunStatusLabel } from "@/features/v5/c-runs/parts"
+import { GroupStatusLabel, RowActions, RunStatusLabel } from "@/features/v5/c-runs/parts"
 import { cn } from "@/lib/utils"
 import { startArchiveTransfer } from "./actions"
 import { ChannelChips, DEFAULT_GOAL, GoalKindsFields } from "./goals"
@@ -264,6 +263,7 @@ export function RunsSection({ project }: { project: Project }) {
       cell: (row) => (row.kind === "run" ? runStatusCell(row.run, row.pipeline) : row.kind === "group" ? <GroupStatusLabel status={row.pipeline.status} /> : runStatusCell(row.panel.run, row.panel.pipeline)),
     },
     { id: "updated", header: m.project_col_updated(), cell: (row) => <span className="text-muted-foreground tabular-nums">{formatDateTime(row.updatedAt)}</span> },
+    { id: "actions", header: "", className: "w-px", cell: (row) => <RowActions entries={menu(row)} label={m.run_actions_for({ name: row.kind === "group" ? row.group.name : row.kind === "run" ? row.run.name : row.panel.run.name })} /> },
   ]
 
   return (
@@ -597,7 +597,6 @@ export function GoalsSection({ project }: { project: Project }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const progress = useStore((s) => goalProgress(s.catalog, project))
-  const warnings = useStore((s) => projectWarnings(s.disk, s.catalog, project))
   const channels = projectChannels(catalog, project.rigIds)
   const [editing, setEditing] = useState<Goal[] | null>(null)
   const [templateId, setTemplateId] = useState(BUILT_IN_GOAL_TEMPLATES[0]!.id)
@@ -668,7 +667,6 @@ export function GoalsSection({ project }: { project: Project }) {
                 <ul className="divide-y divide-separator rounded-md border border-border">
                   {rows.map((goal) => {
                     const p = progress.find((x) => x.goal.id === goal.id)
-                    const rowWarnings = panel ? [] : warnings.filter((w) => w.subjectId === subject.id && w.channel === goal.channel)
                     return (
                       <li key={goal.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-sm">
                         <Pill tone="info">{goal.channel}</Pill>
@@ -684,11 +682,6 @@ export function GoalsSection({ project }: { project: Project }) {
                             <span className="min-w-0 flex-1 tabular-nums">{p ? say(m, p.amounts) : kindsLine(m, goal)}</span>
                             {goal.qualityBar ? <Pill tone="muted">{say(m, qualityBarRef(goal.qualityBar))}</Pill> : null}
                             {p && p.unknownQuality > 0 ? <NoteMarker label={m.goal_unmeasured_label()}>{m.goal_unmeasured({ count: p.unknownQuality })}</NoteMarker> : null}
-                            {rowWarnings.map((w) => (
-                              <Pill key={w.id} tone="warning" title={say(m, w.message)}>
-                                {w.kind === "exposure-mismatch" ? m.goal_warning_exposure() : m.goal_warning_calibration()}
-                              </Pill>
-                            ))}
                             {p?.met ? (
                               <Pill tone="success">{m.status_met()}</Pill>
                             ) : p && p.remainingS !== null ? (
@@ -730,15 +723,25 @@ export function SubjectsSection({ project }: { project: Project }) {
   const navigate = useNavigate()
   const remove = useCommitError()
   const add = useCommitError()
+  const change = useCommitError()
   const [adding, setAdding] = useState(false)
+  /** The plain subject whose Target is being changed (Edit); a mosaic subject is edited in the mosaic editor. */
+  const [changing, setChanging] = useState<Subject | null>(null)
   const editable = project.state === "open"
   const mosaicLink = (subjectId: string) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: subjectId } })
+  const edit = (subject: Subject) => {
+    if (subject.mosaic) return mosaicLink(subject.id)
+    setAdding(false)
+    change.setError(null)
+    setChanging(subject)
+  }
 
   const menu = (subject: Subject): MenuEntry[] => {
     const target = subjectTarget(catalog, subject)
     return [
       { heading: subjectName(m, catalog, subject) },
       ...(target ? [{ label: m.project_open_target(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id } }) }] : []),
+      ...(editable ? [{ label: m.project_edit_subject_ellipsis(), icon: Pencil, onSelect: () => edit(subject) }] : []),
       ...(editable ? [{ label: subject.mosaic ? m.mosaic_start_run() : m.mosaic_make(), icon: Grid2x2Plus, onSelect: () => mosaicLink(subject.id) }] : []),
       ...(editable ? [{ separator: true } as const, { label: m.project_remove(), icon: X, destructive: true, onSelect: () => remove.run(() => removeSubject(project.id, subject.id, project.revision)) }] : []),
     ]
@@ -755,7 +758,7 @@ export function SubjectsSection({ project }: { project: Project }) {
         </span>
       }
       actions={
-        editable && !adding ? (
+        editable && !adding && !changing ? (
           <>
             <Button size="sm" variant="ghost" onClick={() => mosaicLink("new")}>
               <Grid2x2Plus aria-hidden="true" data-icon="inline-start" />
@@ -770,6 +773,28 @@ export function SubjectsSection({ project }: { project: Project }) {
       }
     >
       <CommitOutcome result={remove.result} action={m.project_refusal_remove_subject()} reason={(count) => m.project_used_by_runs({ count })} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
+      <CommitOutcome result={change.result} action={m.project_refusal_edit_subject()} reason={(count) => m.project_used_by_runs({ count })} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
+      {changing ? (
+        <div className="space-y-2 border-b border-border p-3">
+          <p className="text-sm font-medium">{m.settings_edit_title({ name: subjectName(m, catalog, changing) })}</p>
+          <SubjectSearch
+            autoFocus
+            taken={project.subjects.map((s) => subjectTarget(catalog, s)?.name ?? "")}
+            onPick={(pick) => {
+              const resolved = resolvePick(pick)
+              if (!resolved.ok) {
+                change.setError(resolved.message)
+                return
+              }
+              change.run(() => changeSubjectTarget(project.id, changing.id, resolved.targetId, project.revision))
+              setChanging(null)
+            }}
+          />
+          <Button size="sm" variant="ghost" onClick={() => setChanging(null)}>
+            {m.verb_cancel()}
+          </Button>
+        </div>
+      ) : null}
       {adding ? (
         <div className="space-y-2 border-b border-border p-3">
           <SubjectSearch
@@ -793,7 +818,7 @@ export function SubjectsSection({ project }: { project: Project }) {
       {project.subjects.length === 0 ? (
         <Empty>{m.projects_no_subjects()}</Empty>
       ) : (
-        <SimpleTable caption={m.project_subjects_of({ name: project.name })} headers={[m.project_col_subject(), m.project_col_kind(), m.project_col_centre(), m.common_runs()]}>
+        <SimpleTable caption={m.project_subjects_of({ name: project.name })} headers={[m.project_col_subject(), m.project_col_kind(), m.project_col_centre(), m.common_runs(), ...(editable ? [""] : [])]}>
           {project.subjects.map((subject) => {
             const target = subjectTarget(catalog, subject)
             const centre = subjectCentre(catalog, subject)
@@ -823,6 +848,11 @@ export function SubjectsSection({ project }: { project: Project }) {
                   </td>
                   <td className={`${TD} whitespace-nowrap tabular-nums`}>{centre ? `${formatRa(centre.ra)} ${formatDec(centre.dec)}` : "–"}</td>
                   <td className={`${TD} tabular-nums`}>{users.length}</td>
+                  {editable ? (
+                    <td className={`${TD} w-px text-right`}>
+                      <RowActions entries={menu(subject)} label={m.run_actions_for({ name: subjectName(m, catalog, subject) })} />
+                    </td>
+                  ) : null}
                 </tr>
               </RowContextMenu>
             )

@@ -138,7 +138,7 @@ export function ProjectsPage() {
     { heading: r.project.name },
     { label: m.verb_open(), icon: Eye, onSelect: () => open(r) },
     ...(r.next ? [{ label: say(m, r.next.label), onSelect: () => follow(r.next!.link) }] : []),
-    { label: m.project_edit_details(), icon: Pencil, onSelect: () => setEditing(r.project) },
+    ...(r.project.state === "open" ? [{ label: m.project_edit_details(), icon: Pencil, onSelect: () => setEditing(r.project) }] : []),
     { separator: true },
     ...(r.project.state === "open"
       ? [

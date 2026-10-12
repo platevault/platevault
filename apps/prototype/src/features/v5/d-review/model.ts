@@ -63,9 +63,9 @@ export interface ReviewScope {
   /** Measurement operations, one per run (or one for candidates and a session). */
   measureKeys: string[]
   ops: Operation[]
-  /** Marks are refused here, with this terse reason (a trashed run) and where to resolve it. Read in the chosen language. */
+  /** Marks are refused here, with this terse reason (a closed Project, a trashed run) and the blocker that resolves it. Read in the chosen language. */
   readonly readOnlyReason: string | null
-  readOnlyLink: StepLink | null
+  readonly readOnlyBlocker: { label: string; link: StepLink } | null
   /** Marks still apply to the library, but run membership stays (a Complete run): a pill and its help. */
   readonly membershipNote: { label: string; help: string } | null
   /** A group's panel runs in the Trash: listed by name, their frames never counted (D-W75). */
@@ -123,7 +123,6 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
   let project: Project | null = null
   let runs: Run[] = []
   let runTrashed = false
-  let readOnlyLink: StepLink | null = null
   let membership: "run-complete" | "panel-complete" | null = null
   /** A trashed panel run reads by its panel number, else by its run name. */
   const trashed: Array<{ n: number } | { name: string }> = []
@@ -141,10 +140,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
     runs = [run]
     const subject = findSubject(project, run.subjectId)
     membersOf(run, findPanel(subject, run.panelId) ?? null)
-    if (run.trashedAt) {
-      runTrashed = true
-      readOnlyLink = { to: "/projects/$projectId/trash", params: { projectId: project.id } }
-    }
+    if (run.trashedAt) runTrashed = true
     membership = run.completion === "complete" ? "run-complete" : null
     href = runHref(run, "review")
   } else if (context.kind === "group") {
@@ -225,6 +221,8 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       order,
     }
   })
+  // A closed Project is read-only everywhere (its library marks included) until Reopen; a trashed run until Restore.
+  const closed = project !== null && project.state !== "open" ? project : null
   return {
     key,
     project,
@@ -232,12 +230,16 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
     runs,
     measureKeys,
     ops,
-    readOnlyLink,
     trashedHidden,
     href,
     panels,
     get readOnlyReason() {
-      return runTrashed ? m.review_run_in_trash() : null
+      return closed ? m.startrun_blocker_done({ name: closed.name }) : runTrashed ? m.review_run_in_trash() : null
+    },
+    get readOnlyBlocker() {
+      if (closed) return { label: closed.name, link: { to: "/projects/$projectId", params: { projectId: closed.id } } }
+      if (runTrashed && project) return { label: m.activity_destination_trash(), link: { to: "/projects/$projectId/trash", params: { projectId: project.id } } }
+      return null
     },
     get membershipNote() {
       if (membership === "run-complete") return { label: m.review_run_complete(), help: m.review_run_complete_help() }

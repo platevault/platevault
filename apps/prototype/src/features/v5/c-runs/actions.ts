@@ -40,7 +40,7 @@ import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, updateSlice, withCatalog } from "@/store/core"
 import { completeRun, editRun, setGroupSetup, setRunSetup } from "@/store/actions/runs"
 import { pinAutomaticChoices } from "@/store/actions/calibration"
-import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
+import { closedRefusal, freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { runIntermediatesOffer } from "@/features/v5/b-projects/model"
 import { startOperation } from "@/store/operations"
@@ -102,6 +102,8 @@ export function setOutputParent(target: { runId?: string; groupId?: string }, pa
   if (target.groupId) {
     const group = state.catalog.runGroups[target.groupId]
     if (!group) return MISSING
+    const closed = closedRefusal(state.catalog.projects[group.projectId], msg("run_layout_output_folder"))
+    if (closed) return closed
     const result = commit(
       msg("run_layout_output_folder"),
       (s) => ({ ...withCatalog(s, (c) => ({ ...c, runGroups: { ...c.runGroups, [group.id]: { ...c.runGroups[group.id]!, outputParent: path } } })), settings: { ...s.settings, lastOutputParent: path } }),
@@ -500,6 +502,8 @@ export function discoverResults(target: { runId?: string; groupId?: string }): {
   const run = target.runId ? state.catalog.runs[target.runId] : undefined
   const group = target.groupId ? state.catalog.runGroups[target.groupId] : undefined
   if (!run && !group) return { result: MISSING, found: 0 }
+  const closed = closedRefusal(ownerProject(state, target), msg("store_label_discover_results"))
+  if (closed) return { result: closed, found: 0 }
   const folders = run ? resultsFolders(state, run) : [groupAssembledPath(state, group!)].filter((p): p is string => p !== null)
   const scan = scanResultsFolders(state, folders, { assembled: !run })
   if (scan.files.length === 0) return { result: { ok: true }, found: 0 }
@@ -575,6 +579,8 @@ export function attachResult(target: { runId?: string; groupId?: string }, path:
   if (!run && !group) return MISSING
   const href = run ? runHref(run, "results") : groupHref(group!, "results")
   const title = msg("store_refused", { label: fileName(path) ? msg("store_label_attach_named", { name: fileName(path) }) : msg("store_label_attach_result") })
+  const closed = closedRefusal(ownerProject(state, target), msg("store_label_attach_result"))
+  if (closed) return closed
   const trimmed = path.trim()
   if (!trimmed.startsWith("/")) return refuse(title, [msg("store_reason_not_full_path")], href)
   if (run?.trashedAt) return refuse(title, [msg("run_lock_trashed")], href)
@@ -590,8 +596,19 @@ export function attachResult(target: { runId?: string; groupId?: string }, path:
   return result
 }
 
+/** The Project that owns a run, a run group or a result. */
+function ownerProject(state: PrototypeState, owner: { runId?: string | null; groupId?: string | null }) {
+  const run = owner.runId ? state.catalog.runs[owner.runId] : undefined
+  const group = owner.groupId ? state.catalog.runGroups[owner.groupId] : undefined
+  const projectId = run?.projectId ?? group?.projectId
+  return projectId ? state.catalog.projects[projectId] : undefined
+}
+
+/** Patch one result; refused while its Project is closed. */
 function editResult(resultId: string, label: MessageRef, update: (r: ResultRecord) => ResultRecord, href: string): CommitResult {
-  return commit(label, (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [resultId]: update(c.results[resultId]!) } })), { href })
+  const state = store.getState()
+  const record = state.catalog.results[resultId]
+  return closedRefusal(record ? ownerProject(state, record) : undefined, label) ?? commit(label, (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [resultId]: update(c.results[resultId]!) } })), { href })
 }
 
 function resultHref(state: PrototypeState, record: ResultRecord): string {
@@ -661,6 +678,8 @@ export function startCleanup(runId: string, paths: string[]): { result: CommitRe
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return { result: MISSING, operationId: null }
+  const closed = closedRefusal(state.catalog.projects[run.projectId], msg("store_label_clean_up_named", { name: run.name }))
+  if (closed) return { result: closed, operationId: null }
   const href = runHref(run, "done")
   const title = msg("store_refused", { label: msg("store_label_clean_up_named", { name: run.name }) })
   if (run.trashedAt) return { result: refuse(title, [msg("run_lock_trashed")], href), operationId: null }
@@ -689,6 +708,8 @@ export function startRunIntermediatesCleanup(runId: string): { result: CommitRes
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return { result: MISSING, operationId: null }
+  const closed = closedRefusal(state.catalog.projects[run.projectId], msg("run_results_intermediates"))
+  if (closed) return { result: closed, operationId: null }
   const href = runHref(run, "done")
   const offer = runIntermediatesOffer(state, run)
   if (offer.items.length === 0) return { result: refuse(msg("store_refused", { label: msg("run_results_intermediates") }), [msg("store_reason_nothing_selected")], href), operationId: null }

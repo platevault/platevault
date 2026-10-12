@@ -84,11 +84,12 @@ function ProjectDetail({ project, view }: { project: Project; view: View }) {
         description={project.notes || undefined}
         actions={
           <>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              <Pencil aria-hidden="true" data-icon="inline-start" />
-              {m.project_edit_details()}
-            </Button>
-            {project.state === "done" ? (
+            {project.state === "open" ? (
+              <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+                <Pencil aria-hidden="true" data-icon="inline-start" />
+                {m.project_edit_details()}
+              </Button>
+            ) : (
               <ConfirmDialog
                 trigger={
                   <Button size="sm" variant="outline">
@@ -103,7 +104,7 @@ function ProjectDetail({ project, view }: { project: Project; view: View }) {
                 confirmLabel={m.project_reopen()}
                 onConfirm={() => reopenProject(project.id)}
               />
-            ) : null}
+            )}
             <ProjectDetailsDialog project={project} open={editing} onOpenChange={setEditing} />
           </>
         }
