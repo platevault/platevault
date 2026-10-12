@@ -82,12 +82,15 @@ export interface StepFlow {
   current: string
   /** Later steps are viewable but read-only until the earlier ones finish. */
   ordered: boolean
-  /** Label "Proceed", or the flow's terminal verb on the last step ("Finish run…"). */
-  proceed: Action
+  /** Label "Proceed", or the flow's terminal verb on the last step ("Finish run…"). Null once the flow is finished: the footer shows the viewed step's summary only. */
+  proceed: Action | null
+  /** Where the host navigates after `proceed.run` succeeds; null stays (the page turns read-only). */
+  next: StepLink | null
   /** Optional steps only. */
   skip?: Action
   reopen?: (stepId: string) => Action
-  linkFor: (stepId: string) => StepLink
+  /** Route of each step; absent for flows whose steps are local state (FormDialog steps). */
+  linkFor?: (stepId: string) => StepLink
 }
 
 /** One named filter of a FilterBar: a single select with "All {label}" first, or a multi-select (P5). Controlled: the host owns `value`. */
