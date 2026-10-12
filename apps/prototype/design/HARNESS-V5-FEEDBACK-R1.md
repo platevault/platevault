@@ -227,3 +227,48 @@ The user reviewed `d6c9f1b2`. This section is the work order for round 5. Decisi
 - **Duplicates are scanned automatically** after each index and import, as a background operation. A non-zero result raises a ⚠ issue ("N duplicate copies · 2.1 GB"), which opens the Duplicates review.
 - **Duplicates review has clean-up:** groups of byte-identical copies, each with the copy to keep preselected (a library location over a capture card, then the oldest), Keep this copy and Move the others to the OS Trash, per group and for all. Nothing is deleted permanently.
 
+
+## Round 6 (user, 2026-10-10): decisions from the journey questions
+
+Every decision below was made by the user while answering the v5 journeys' open questions (journeys PR #1788). Each item is a work order for the prototype and is reflected in the journeys. Supersedes earlier text where they disagree.
+
+### Import and sessions
+- **P-IMP2: confirm Targets in the Import preview.** The preview lists each incoming session with its Target, prefilled from pointing (the Target whose footprint contains the pointing; nearest centre wins), with OBJECT shown only as a hint. The user confirms or changes it there, or picks Unclassified. Importing confirms those Targets and files the frames under `{target}/…` at once: no Inbox and no later move. Unclassified sessions go to an Unclassified folder and can be filed later with one reviewed move.
+- **Import source vanishes mid-import** (SD pulled, share dropped): the import pauses as Interrupted; reconnecting and choosing Retry resumes it.
+- **Confirming a Target the pointing disagrees with** is allowed. The session's Target box then shows a mismatch warning.
+- **Archive… from Sessions:** sessions in no Project can be archived from Sessions (select, then Archive…), using the same reviewed transfer as Wrap up.
+
+### Frames
+- **Reject is library-wide by default.** X marks a frame Unusable in the library, so it leaves every run, and Unusable frames become purge candidates: a library clean-up and Wrap up offer to move them to the OS Trash. "Reject for this Project only" stays in the frame menu for the rare case. There is no separate "Exclude from run".
+- **Large bulk marks need confirmation** (⌘A then P/X/U on many frames): "Mark 120 frames Unusable?"
+
+### Projects and runs
+- **Rename runs and Projects:** Rename on the run header, plus Edit details (name, notes) on the Project header and in the Projects row menu. Start run stays subject + rig + profile, auto-named.
+- **Select keeps the selection tools from spec 066:** sky coverage, distance from the Target, geometry ordering, filters and the hidden-selection count.
+- **Results location override stays** in Prepare (default: beside the run folder).
+- **Mosaic: an excluded panel keeps its goals** on the subject, so a later group can include it (its goals show as unmet).
+
+### Calibration
+- **Calibration Off:** compatible masters still show as Suggested and wait for acceptance.
+- **Dismiss is refused while a run uses the master** ("Can't dismiss · used by N runs ▸"). A dismissed master is never matched; Restore brings it back.
+- **Adopting a master** (Add to library) opens a confirmation with the destination path and SHA-256, and re-verifies the bytes at that moment.
+- **No silent re-rank.** A run with masters assigned keeps them. When a better compatible master appears, Calibrate shows "Better match available".
+- **Result revision:** tool evidence (header or recorded input list) decides; without it, the revision current when the file appeared, marked Inferred.
+
+### Targets and planning
+- **Targets opens on My targets** (yours plus favourites). A toggle switches to Browse catalogues.
+- **Clicking a result:** a Target in My targets opens; a catalogue result is added.
+- **Per-night plans.** Each night has its own plan, and Add to plan adds to the chosen night.
+- **Reminders and calendar export stay.** A notification before a planned window, and a calendar export of everything upcoming (all planned nights, not just one). Both live in the Planned view header.
+- **Target library facts:** the Target page shows usable, Unreviewed and Offline integration per channel, library-wide. Candidates gets a capture-site column.
+
+### Equipment, storage, shell
+- **Rigs: detection plus manual add.** Settings › Equipment can add a camera, telescope or rig by hand for gear not yet imaged with, as well as renaming and editing detected ones.
+- **The duplicate scan covers registered library locations only.** Capture cards never raise the duplicates warning. The keeper is the copy in the earliest-registered location.
+- **Disk use per location:** bytes PlateVault catalogues there, plus the volume's free space.
+- **Quit asks** while an import, index or prepare runs.
+- **Onboarding: walk plus checklist.** An orientation walk after setup, and a Getting started checklist on Home (setup, first import, first Project, first run) until done.
+
+### Pending research
+- **Input modes (hard links, clones, symlinks, junctions, network shares).** The user asked for a fuller analysis before deciding (prior art such as omp and pnpm, Windows junctions and symlinks across filesystems, network filesystems, Rust crates, a custom CoW layer). Research is in progress; this also decides Q-ARCHIVE-LINKS (archiving sessions that a run holds hard links to).
+
