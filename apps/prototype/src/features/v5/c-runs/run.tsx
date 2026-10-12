@@ -5,7 +5,7 @@
  * the step bar, and the Select, Calibrate, Prepare, Results and Done steps.
  * The Review step is slice D's `ReviewStep`, mounted here as the last child
  * of the pane's flex column (D-W3, D-W50, D-W49, D-W54, D-W5, D-W55, D-W51,
- * D-W4, D-W56, D-W26, D-W72).
+ * D-W4, D-W26, D-W72).
  */
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { ChevronRight, Lock, Pencil, RotateCcw, Telescope, Trash2, Undo2, Wand2 } from "lucide-react"

@@ -32,7 +32,7 @@ import { formatCount, formatDecimal, formatDuration, formatExposure } from "@/li
 import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 export function emptyContent(): MembershipContent {
-  return { sessions: [], included: [], excluded: [], rejected: [], unresolved: [], productInputs: [] }
+  return { sessions: [], included: [], excluded: [], rejected: [], unresolved: [] }
 }
 
 /** The content fields only, without revision or draft bookkeeping. */
@@ -43,7 +43,6 @@ export function contentOf(content: MembershipContent): MembershipContent {
     excluded: content.excluded,
     rejected: content.rejected,
     unresolved: content.unresolved,
-    productInputs: content.productInputs,
   }
 }
 
@@ -58,8 +57,7 @@ export function contentEquals(a: MembershipContent, b: MembershipContent): boole
     sameSet(a.included, b.included) &&
     sameSet(a.excluded, b.excluded) &&
     sameSet(a.rejected, b.rejected) &&
-    sameSet(a.unresolved, b.unresolved) &&
-    sameSet(a.productInputs, b.productInputs)
+    sameSet(a.unresolved, b.unresolved)
   )
 }
 

@@ -8,7 +8,7 @@
  */
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
-import type { Disk, FrameHeader, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
+import type { Disk, FrameHeader, InputMode, Operation, OperationItem, Preparation } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState } from "@/store/core"
@@ -111,7 +111,6 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
   const prep = next.catalog.preparations[payload.preparationId]
   if (!prep) return settleOperation(next, op.id, "failed", msg("op_prep_record_missing"))
   const preparedAssetIds: string[] = []
-  const preparedResultIds: string[] = []
   const blocked: Preparation["blocked"] = []
   let calibrationDone = 0
   let calibrationTotal = 0
@@ -121,14 +120,12 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
     if (entry.kind === "calibration") calibrationTotal += 1
     if (item.status === "done") {
       if (entry.kind === "calibration") calibrationDone += 1
-      else if (entry.resultId) preparedResultIds.push(entry.resultId)
       else if (entry.assetId) preparedAssetIds.push(entry.assetId)
       continue
     }
-    const input: PreparationInput = entry.resultId ? { kind: "result", resultId: entry.resultId } : { kind: "asset", assetId: entry.assetId ?? item.id }
-    blocked.push({ input, path: entry.sourcePath, reason: item.detail ?? msg("run_not_prepared") })
+    blocked.push({ assetId: entry.assetId ?? item.id, path: entry.sourcePath, reason: item.detail ?? msg("run_not_prepared") })
   }
-  const prepared = preparedAssetIds.length + preparedResultIds.length
+  const prepared = preparedAssetIds.length
   const complete = blocked.length === 0
   const state_: Preparation["state"] = complete ? "prepared" : prepared === 0 && calibrationDone === 0 ? "failed" : "partial"
   // The handoff list names exact paths; the Results folder exists before the application writes to it.
@@ -152,7 +149,7 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
   next = patchPreparation(next, payload.preparationId, {
     state: state_,
     preparedAssetIds,
-    preparedResultIds,
+    preparedCalibrationCount: calibrationDone,
     blocked,
     entryCount: prep.entryCount,
     footprintBytes: copied.reduce((n, item) => n + payload.entries[item.id]!.sizeBytes, 0),

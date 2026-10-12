@@ -303,6 +303,7 @@
   "status_trashed": "Na lixeira",
   "status_suggested": "Sugerido",
   "status_accepted": "Aceito",
+  "status_rejected": "Rejeitado",
   "status_exception": "Exceção",
   "status_deferred": "Adiado",
   "status_compatible": "Compatível",
@@ -2759,21 +2760,15 @@
   "run_actions_for": "Ações de {name}",
   "run_remove": "Remover",
   "run_none": "Nenhum",
-  "run_unknown_run": "Execução desconhecida",
-  "run_unknown_project": "Projeto desconhecido",
   "run_unknown_kind": "Tipo desconhecido",
-  "run_another_rig": "Outro equipamento",
   "run_col_night": "Noite",
   "run_col_channel": "Canal",
   "run_col_frames": "Quadros",
   "run_col_integration": "Integração",
   "run_col_reason": "Motivo",
   "run_col_state": "Estado",
-  "run_col_product": "Produto",
   "run_col_kind": "Tipo",
-  "run_col_from": "Origem",
   "run_col_rig": "Equipamento",
-  "run_col_accepted_bytes": "Bytes aceitos",
   "run_select_pointing_inside_panel": "Apontamento dentro do painel",
   "run_selection_blocked": "Alteração da seleção bloqueada",
   "run_select_remove_from_run": "Remover da execução",
@@ -2841,41 +2836,6 @@
   "run_save_revision": "Salvar revisão {revision}",
   "run_saved_revision": "Revisão {revision} salva",
   "run_save_blocked": "Salvamento bloqueado",
-  "run_products_blocked": "Produtos de entrada bloqueados",
-  "run_product_inputs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} produto de entrada",
-        "countPlural=*": "{count} produtos de entrada"
-      }
-    }
-  ],
-  "run_product_inputs_help": "Resultados aceitos, de qualquer Projeto e equipamento. A regra de um só equipamento vale apenas para quadros brutos.",
-  "run_products_add": "Adicionar produtos…",
-  "run_products_add_title": "Adicionar produtos",
-  "run_products_none": "Nenhum produto aceito",
-  "run_products_use": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Usar {count} produto",
-        "countPlural=*": "Usar {count} produtos"
-      }
-    }
-  ],
   "run_complete": "Concluir",
   "run_completed": "{name} concluída",
   "run_complete_blocked": "Conclusão bloqueada",
@@ -3103,6 +3063,7 @@
   "run_cal_bin": "bin {binning}",
   "run_wrap_up": "Encerramento",
   "run_accept": "Aceitar",
+  "run_reject": "Rejeitar",
   "run_not_prepared": "Sem preparo",
   "run_files_count": [
     {
@@ -3122,7 +3083,6 @@
   "run_col_file": "Arquivo",
   "run_col_revision": "Revisão",
   "run_col_project": "Projeto",
-  "run_col_subject": "Objeto",
   "run_proto_blocked": "Simulação bloqueada",
   "run_proto_app_writes_outputs": "O aplicativo grava saídas",
   "run_proto_app_writes_outputs_detail": "Uma pilha por canal, um arquivo ainda sendo gravado, dois intermediários e um master dark.",
@@ -3185,7 +3145,6 @@
   "run_results_attached_no_evidence": "Anexado · sem evidência",
   "run_results_attribution_for": "Atribuição de {name}",
   "run_results_accept_blocked": "Aceite bloqueado",
-  "run_results_use_as_input": "Usar como entrada…",
   "run_results_inspect_again": "Inspecionar de novo",
   "run_results_inspect_blocked": "Inspeção bloqueada",
   "run_results_kind_option": "Tipo: {kind}",
@@ -3193,6 +3152,7 @@
   "run_results_kind_missing": "Tipo?",
   "run_results_changed": "Alterado",
   "run_results_accept_named": "Aceitar {name}",
+  "run_results_reject_named": "Rejeitar {name}",
   "run_results_no_products": "Nenhum produto ainda",
   "run_results_attach_title": "Anexar um Resultado",
   "run_results_attached": "Anexado",
@@ -3202,9 +3162,6 @@
   "run_results_channel_optional": "Canal (opcional)",
   "run_results_channel_placeholder": "Ha",
   "run_results_run_group": "Grupo de execuções",
-  "run_results_start_blocked": "Início bloqueado",
-  "run_results_mosaic_subjects_only": "apenas objetos de mosaico",
-  "run_one_rig_rule_help": "A regra de um só equipamento vale apenas para quadros brutos.",
   "run_prepare_running": "{title} em execução",
   "run_read_only_because": "Somente leitura · {reason}",
   "run_prepare_shared_title": "Perfil, modo e política compartilhados por todos os painéis",
@@ -3393,8 +3350,6 @@
       }
     }
   ],
-  "run_check_products_reads": "{name} lê {kinds}",
-  "run_check_products_unsupported": "Não suportado: {files}",
   "run_check_corrections_to_decide": [
     {
       "declarations": [
@@ -3428,7 +3383,6 @@
     }
   ],
   "run_check_folder_exists": "{name} já existe",
-  "run_check_space_of": "{bytes} de {free} livres",
   "run_check_sources_readable": [
     {
       "declarations": [
@@ -3698,6 +3652,21 @@
       "match": {
         "countPlural=one": "{count} aceito",
         "countPlural=*": "{count} aceitos"
+      }
+    }
+  ],
+  "rungroup_rejected_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} rejeitado",
+        "countPlural=*": "{count} rejeitados"
       }
     }
   ],
@@ -4430,12 +4399,10 @@
   "apps_badge_writes_unknown": "Gravação nas entradas desconhecida",
   "apps_badge_write_prone": "Grava nas entradas",
   "apps_unsupported_corrected": "ler valores corrigidos pela configuração",
-  "apps_unsupported_products": "Resultados aceitos como entradas",
   "apps_evidence": "Evidência",
   "apps_prototype_fixture": "Simulação do protótipo",
   "apps_input_writes": "Gravação nas entradas",
   "apps_none_recorded": "Nenhum registrado",
-  "apps_product_inputs": "Entradas de produtos",
   "apps_corrected_values": "Valores corrigidos",
   "apps_corrected_through": "Pela configuração",
   "apps_corrected_not_through": "Não pela configuração",
@@ -5422,11 +5389,6 @@
   "domain_result_channel_product": "Produto de canal",
   "domain_result_mosaic_panel": "Painel de mosaico",
   "domain_result_assembled_mosaic": "Mosaico montado",
-  "domain_products_final_image": "imagens finais",
-  "domain_products_linear_integration": "integrações lineares",
-  "domain_products_channel_product": "produtos de canal",
-  "domain_products_mosaic_panel": "painéis de mosaico",
-  "domain_products_assembled_mosaic": "mosaicos montados",
   "domain_quality_any": "Qualquer qualidade",
   "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
   "domain_quality_usable_max_fwhm": "Utilizável, FWHM ≤ {arcsec}″",
@@ -5672,6 +5634,7 @@
   "domain_next_resolve_preparation": "Resolver preparação",
   "domain_next_watch_preparation": "Acompanhar preparação",
   "domain_next_review_preparation": "Revisar preparação",
+  "domain_next_prepare_run": "Preparar execução",
   "domain_status_awaiting_outputs": "Aguardando saídas",
   "domain_status_accepted_of": "{accepted} de {total} aceitos",
   "domain_gate_results_folder": "Os resultados são procurados na pasta Resultados.",
@@ -5739,7 +5702,6 @@
   "domain_operation_running": "{title} está em execução",
   "domain_operation_paused": "{title} está pausada",
   "domain_operation_interrupted": "{title} foi interrompida",
-  "domain_refusal_uses_result": "{name} usa um dos seus Resultados como entrada",
   "domain_panels_done": [
     {
       "declarations": [
@@ -6045,7 +6007,6 @@
       }
     }
   ],
-  "store_label_product_inputs": "Entradas de produto ({count})",
   "store_label_discard": "Descartar alterações",
   "store_label_rename_run": "Renomear execução",
   "store_label_run_setup": "Configuração da execução",
@@ -6551,11 +6512,11 @@
   "store_reason_changed_since_inspection": "Alterado desde a inspeção",
   "store_reason_no_kind": "Sem tipo",
   "store_label_accept_result": "Aceitar Resultado",
+  "store_label_reject_result": "Rejeitar Resultado",
   "store_saved_accepted": "{name} aceito",
+  "store_saved_rejected": "{name} rejeitado",
   "store_sha_short": "SHA-256 {hash}…",
   "store_label_result_kind": "Tipo de Resultado",
-  "store_reason_not_accepted": "Não aceito",
-  "store_reason_mosaic_subject": "Objeto de mosaico",
   "store_label_clean_up_named": "Limpeza de {name}",
   "store_reason_not_complete_short": "Não Concluída",
   "store_reason_nothing_selected": "Nada selecionado",
@@ -7562,8 +7523,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} quadro copiado · {bytes}",
-        "countPlural=*": "{n} quadros copiados · {bytes}"
+        "countPlural=one": "{n} arquivo copiado · {bytes}",
+        "countPlural=*": "{n} arquivos copiados · {bytes}"
       }
     }
   ],
