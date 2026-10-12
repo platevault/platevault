@@ -261,8 +261,7 @@
           "G4 (implementation qualification) P4 needs Tool-recorded input lineage from a processing tool for F-res.",
           "G5 (out of scope) approving the restore of an Archived session after Reopen (STO-FR-13) is not exercised, because S12a stops at the review.",
           "G6 (out of scope) Next reading Wrap up (D-W35, HARNESS-V5-IA.md S1) is not observed, because the Project's candidates keep library-Unreviewed frames (P2), so Review N new frames comes first.",
-          "G7 (out of scope) approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared symlinks.",
-          "G8 (product question) P-PREP3 does not say what a kept Symlinks view does when an original it links to goes to the OS Trash (S6: the two P3 18 Sep frames and F-ab, still linked from `NGC7000-HOO-Siril/`)."
+          "G7 (out of scope) approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared symlinks."
         ]
       },
       {
@@ -340,7 +339,7 @@
         "blocking": [
           "G3 (out of scope) an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in the library clean-up.",
           "G4 (implementation qualification) F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it.",
-          "G5 (product question) shared with J34/G8: what the kept Symlinks view of `NGC7000-HOO-Siril` does when the two 18 Sep frames and F-ab it links to go to the OS Trash in S2."
+          "G6 (product question) P-TRASH2 names the views of Complete runs, not the superseded folder an unfinished run keeps after it is prepared again (S6: `Ha deep`'s first folder still links F-prep)."
         ]
       }
     ]

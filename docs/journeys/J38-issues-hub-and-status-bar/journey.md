@@ -1,13 +1,13 @@
 ---
 id: J38
 title: Handle issues from the status bar and the Issues hub
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [issues, status-bar, shell, home, sessions, projects, preparation, calibration, calibration-process, locations, import, indexing, activity, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-ISS1, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md]
 ---
 
 ## Goal
@@ -23,6 +23,7 @@ running, and the notifications history. Done means:
 - An offline drive, interrupted work and a duplicates result raise their issue. Reconnecting the drive and retrying the work clear it without any other action.
 - Running work shows with its progress, and "Idle" shows when nothing runs. Cancel appears on hover or keyboard focus.
 - With no issues the bar shows only a muted ✓. A counter never reads 0.
+- Dismissing an issue (×) hid it from the hub, its popout and the counts until it changed, and left the state behind it and its page unchanged. The hub listed it under `Dismissed (N)` with Restore. The two issues that are a run's next step had no ×.
 - Opening the hub, a popout or the notification history changes no file, catalog record or run.
 
 ## Preconditions
@@ -101,6 +102,28 @@ running, and the notifications history. Done means:
 - **Expect (negative):** No `12 Sep` frame reads Missing, and no session is removed. No other issue appears or disappears.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "Left: locations online" · HARNESS-V5-IA.md §Round 2b "locations online (links to Settings › Locations)" · src/domain/issues.ts location-offline · J19/S15
 
+### S5a — Dismiss two issues and restore them {#S5a}
+
+- **Do:** In the hub, read which issues have an ×. Dismiss `1 to stack` in the hub and `1 master offered` in the ℹ popout. Read the counters and the Issues button, then open the Calibration library and `M31-OSC-Siril` at Calibrate. Back in the hub, open `Dismissed (2)`, choose **Restore** on `1 master offered`, then **Restore all**.
+- **Expect:**
+  - Every issue has an × with the tooltip "Dismiss", except `M31-OSC-Siril blocked` and `NGC7000-HOO-Siril: 2 to review`, which are a run's next step.
+  - After both dismissals, ℹ reads 1 and the Issues button reads 5, while ⛔ 1 and ⚠ 3 are unchanged. The ℹ popout lists only `1 not in a Project`. The hub ends with `Dismissed (2)`, collapsed.
+  - The Calibration library still lists the 2 Oct Ha flat process awaiting Stack. `M31-OSC-Siril`'s Calibrate step still shows its pending master offer with its Dismiss action.
+  - Opened, `Dismissed (2)` lists both issues, each with **Restore**, beside **Restore all**. After Restore on `1 master offered`, ℹ reads 2, the button reads 6 and the trigger reads `Dismissed (1)`. After Restore all, ℹ reads 3, the button reads 7, and no `Dismissed` entry shows.
+- **Expect (negative):** Dismissing or restoring an issue starts no stack, dismisses or restores no master offer, and changes no run, calibration process or file. No popout lists a dismissed issue, and no counter reads 0.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("Each issue in the issues hub and in the status-bar popouts has an ×", "The hub ends with 'Dismissed (N)' and Restore. The counters and badges count only issues that are not dismissed", "Dismiss hides the issue only", "No × on issues that are a run's next step (`run-blocked`, `calibration-review`)") · src/app/issues-hub.tsx
+
+### S5b — A dismissed issue returns when it changes {#S5b}
+
+- **Do:** Eject `Cold-1`, then dismiss `Cold-1 captures offline` in the ⚠ popout. Read the bar, the hub and Settings › Locations. Mount `Cold-1`, eject it again and read the ⚠ popout. Then mount `Cold-1` again.
+- **Expect:**
+  - After the dismissal, ⚠ reads 3 and the Issues button reads 7. The hub ends with `Dismissed (1)`, which lists the offline issue. The left of the bar still reads `2 of 3 online`, and the `Cold-1 captures` row in Settings › Locations still reads Offline.
+  - After the mount, the bar reads `3 of 3 online`, ⚠ reads 3 and the Issues button reads 7.
+  - After the second eject, `Cold-1 captures offline` is back in the hub and the ⚠ popout with its ×. ⚠ reads 4, the Issues button reads 8, and no `Dismissed` entry shows.
+  - After the final mount, the bar reads `3 of 3 online`, ⚠ reads 3 and the Issues button reads 7.
+- **Expect (negative):** Dismissing the issue marks no location online. No `12 Sep` frame reads Missing, and no session is removed.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("A dismissed issue stays hidden until it changes … a location going offline again brings it back", "its page still shows it") · src/domain/issues.ts location-offline · J39/S5a, J39/S6
+
 ### S6 — Read the selection count {#S6}
 
 - **Do:** Open Project `NGC 7000 HOO` and, in its Candidates, select the `12 Sep` and `24 Sep` sessions. Then clear the selection.
@@ -178,16 +201,17 @@ running, and the notifications history. Done means:
 
 ## Success criteria
 
-- SC1: At S1, S5, S8, S11 and S14 the counters add up to the Issues button's count: 1 + 3 + 3 = 7, then 1 + 4 + 3 = 8, then 7, 8 and 0. In S2 every one of the 7 hub issues appears in exactly one popout.
+- SC1: At S1, S5, S8, S11 and S14 the counters add up to the Issues button's count: 1 + 3 + 3 = 7, then 1 + 4 + 3 = 8, then 7, 8 and 0. In S2 every one of the 7 hub issues appears in exactly one popout. In S5a and S5b they add up to the button's count at every reading: 5, 6, 7, then 7, 7, 8 and 7.
 - SC2: Each issue's action opens its owner in one step: the run at Prepare (S3), the Calibration library, the run's Calibrate step and the Sessions filter (S4), Settings › Locations (S5), Activity with Retry (S8) and the Duplicates review (S11).
 - SC3: The offline issue appears within one status-bar update of the eject and clears on remount with 0 user actions (S5). The interrupted issue clears when Retry finishes, and the import ends with exactly 12 lights imported and 0 copied twice (S8).
 - SC4: Running work shows instead of "Idle" while an operation runs (S7, S9, S10). Cancel is visible on hover and on focus only, and after Cancel focus lands on the bell (S10).
 - SC5: The duplicates issue reads exactly `2 duplicate copies · 104 MB`, and its review lists 2 groups (S11).
 - SC6: 0 files are moved, trashed or deleted, and the only new files are the 12 imported lights (S13).
+- SC7: Exactly 5 of the 7 issues have an × (S5a). Dismissing 2 lowers the button from 7 to 5, and Restore and Restore all return it to 7 with 0 runs, master offers, calibration processes or files changed (S5a). The dismissed offline issue returns on the next eject with 0 user actions on the dismissed entry (S5b).
 
 ## Known gaps
 
-- G1: Not validated. Behavior follows the harness v5 design: HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 1, §Round 1b, §Round 2c and §Round 5 P-SB3, and HARNESS-V5-IA.md §Round 2b (apps/prototype/design/ on ui-harness-v5 @ b5e813a5). The prototype at b5e813a5 still shows P-SB2 pills and inline notifications, and P-SB3 and the duplicates issue are Round 5 work in progress. The Round 6 decisions S7 to S13 assert (HARNESS-V5-FEEDBACK-R1.md §Round 6 at ui-harness-v5 @ 4f470775: Targets confirmed in the Import preview, Quit asks, library-only duplicate scan) are not yet in the prototype. No implementation has been validated against this journey.
+- G1: Not validated. Behavior follows the harness v5 design: HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 1, §Round 1b, §Round 2c and §Round 5 P-SB3, and HARNESS-V5-IA.md §Round 2b (apps/prototype/design/ on ui-harness-v5 @ b5e813a5). The prototype at b5e813a5 still shows P-SB2 pills and inline notifications, and P-SB3 and the duplicates issue are Round 5 work in progress. The Round 6 decisions S7 to S13 assert (HARNESS-V5-FEEDBACK-R1.md §Round 6 at ui-harness-v5 @ 4f470775: Targets confirmed in the Import preview, Quit asks, library-only duplicate scan) are not yet in the prototype, nor is the Round 8 P-ISS1 dismissal that S5a and S5b assert. No implementation has been validated against this journey.
 - G2: Unresolved implementation qualification: P1 and P6 need seeded catalogs in a known state, including a pending master offer, a raw flat session awaiting Stack and a drifted frame. No fixture builder exists. Blocks readiness.
 - G3: Unresolved implementation qualification: S8 needs the import interrupted at a known point, and S10 needs a rescan that runs long enough to focus. No pacing or fault fixture exists. Blocks readiness.
 - G4: Out of scope for this journey: failed work (`… failed`, ⛔, from an operation that fails) and an unreadable location (`… unreadable`, ⛔, Fix). Both need fault injection. A failed calibration process belongs to the calibration process journey, and an adopted master that changed belongs to J26. Blocks readiness until covered by a step or a journey.
@@ -200,3 +224,6 @@ running, and the notifications history. Done means:
   The Card-2 session's Target is confirmed in the Import preview, so the import files its lights under `NGC 7000/` at once and adds nothing to Needs a Target. Quitting during the import asks first.
   The duplicate scan covers registered library locations only: the connected Card-2 sources raise no duplicates; the keeper is the copy in the earlier-registered location.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "P-IMP2: confirm Targets in the Import preview", "Quit asks", "The duplicate scan covers registered library locations only" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)
+- **Δ3** 2026-10-12 · +S5a, +S5b · behavior-change
+  P-ISS1: each issue has an × (Dismiss) except a run's next step (`run-blocked`, `calibration-review`). Dismissed issues leave the counters and badge and sit under `Dismissed (N)` with Restore and Restore all, and an offline drive that goes offline again brings its issue back.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-ISS1 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)
