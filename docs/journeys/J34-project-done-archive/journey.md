@@ -1,13 +1,13 @@
 ---
 id: J34
 title: Wrap up a Project, trash its rejected frames, intermediates and duplicate copies, archive it, mark it Done, and reopen it
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [projects, wrap-up, project-trash, sessions, targets, home, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W35, D-W42, D-W43, D-W46, D-W48, D-W52, D-W54, D-W57, D-W66, D-W69, D-W70, D-W72, D-W74, P-WRAP1, P-ARC1, P-PREP3, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W35, D-W42, D-W43, D-W46, D-W48, D-W52, D-W54, D-W57, D-W66, D-W69, D-W70, D-W72, D-W74, P-WRAP1, P-ARC1, P-PREP3, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12]
 ---
 
 ## Goal
@@ -22,7 +22,7 @@ and reopens the Project.
 Done means:
 - Wrap up stayed blocked until every run outside the Project Trash was Complete. Moving a run to the Trash and emptying it moved no file and changed no goal number.
 - Each Wrap up step showed its state and size, and Skip and Undo moved no file.
-- The trash offers covered only what they may cover. A frame in a Complete run's prepared revision was offered, the adopted master's generated source went only as a verified duplicate of the kept library copy, and every frame kept one copy. No Project-only reject, refused frame, accepted Result or adopted library master reached the Trash, and every refusal was listed with its reason. Nothing was permanently deleted.
+- The trash offers covered only what they may cover. A frame in a Complete run's prepared revision was offered, and the review counted its links in kept run views, which went with it. The adopted master's generated source went only as a verified duplicate of the kept library copy, and every frame kept one copy. No Project-only reject, frame linked by the view of a run that is not Complete, other refused frame, accepted Result or adopted library master reached the Trash. Every refusal was listed with its reason, and nothing was permanently deleted.
 - The Trashed frames counted nowhere and showed only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of every Complete run that holds them.
 - Archive went to the chosen archive location and kept the session another open Project's run uses. The symlinks of the Project's runs followed their sessions to the archive. The Project stayed open until Mark Done, which came after Archive and moved no file.
 - Reopening returned the Project to open with its runs, goals and members unchanged, and it moved no file. The archived sessions still read Archived at their archive paths and are listed on the Project page, and restoring one opens a reviewed transfer.
@@ -36,10 +36,10 @@ Done means:
   - `NGC7000 HOO combine`: open, not Complete.
 - P2: From J22, saved revision 2 of `NGC7000-HOO-Siril` leaves out the six rejected 30 Sep frames. Five of them are library Unusable, and one is Rejected for this Project only, with library quality Unreviewed. From J24/S17, one 28 Sep frame is also Rejected for this Project only. Its library quality stays Usable, and it is still a member of `NGC7000-HOO-Siril`.
 - P3: After J27/S2, two included 18 Sep frames of `NGC7000-HOO-Siril` were marked Unusable in the library. Their symlink entries remain in `NGC7000-HOO-Siril/`.
-- P4: An open Project `NGC 7000 Ha deep` (subject NGC 7000, rig `RedCat`) holds two runs, each with member session 28 Sep:
-  - `Ha deep v1` is Complete. Its saved membership and prepared revision include two 28 Sep frames, F-res and F-ab. Its accepted Ha stack has Tool-recorded input lineage that names F-res and not F-ab.
+- P4: An open Project `NGC 7000 Ha deep` (subject NGC 7000, rig `RedCat`) holds two runs, each with member session 28 Sep and each prepared with the Symlinks run view:
+  - `Ha deep v1` is Complete and kept its view. Its saved membership and prepared revision include two 28 Sep frames, F-res and F-ab. Its accepted Ha stack has Tool-recorded input lineage that names F-res and not F-ab.
   - `Ha deep` is open and Prepared. Its prepared revision includes one 28 Sep frame, F-prep, and leaves F-res and F-ab out.
-  - After J27/S2, F-res and F-ab were marked Unusable in the library after `Ha deep v1` was Complete and before `Ha deep` saved its membership, and F-prep was marked Unusable after `Ha deep` was prepared. Each run keeps the frames its saved and prepared revisions already held. Like every 28 Sep frame, each of the three is a member of `NGC7000-HOO-Siril` with a symlink entry in `NGC7000-HOO-Siril/`. No other run holds F-ab.
+  - After J27/S2, F-res and F-ab were marked Unusable in the library after `Ha deep v1` was Complete and before `Ha deep` saved its membership, and F-prep was marked Unusable after `Ha deep` was prepared. `Ha deep v1` keeps F-res and F-ab in its fixed membership. F-prep has left the membership of `Ha deep`, and the run's view still links it. Like every 28 Sep frame, each of the three is a member of `NGC7000-HOO-Siril` with a symlink entry in `NGC7000-HOO-Siril/`. No other run holds F-ab.
 - P5: The open Project `NGC 7000 SHO` from J26/P7 has 18, 28 and 30 Sep as candidates, and none of its runs includes them.
 - P6: `Scratch/Captures` is registered and indexed as a Captures location after `Astro-T7/Captures`. It holds a byte copy of one of the five Unusable 30 Sep frames, F-dup. `Scratch` has no OS Trash.
 - P7: The J27/P7 helper is available. F-drift, one of the other Unusable 30 Sep frames, is its target in S6. One registered intermediate is its target in S9.
@@ -98,13 +98,13 @@ Done means:
 - **Do:** In the Trash step, read the Rejects row and open its refusal's disclosure. Then choose **Trash…** on Rejects, read the review, and cancel.
 - **Expect:**
   - The review lists the seven offered frames: the two P3 18 Sep frames, four 30 Sep frames and F-ab. F-ab is offered, because its place in a prepared revision of the Complete run `Ha deep v1` is no refusal reason.
-  - The size covers all seven frames, because a symlink entry holds none of a frame's bytes.
+  - The size covers all seven frames, because a symlink entry holds none of a frame's bytes. The review's changes list reads `Also removes 4 links in kept run views`: the symlinks to the two P3 18 Sep frames and F-ab in `NGC7000-HOO-Siril/`, and to F-ab in `Ha deep v1/`.
   - The row's terse refusal reads `Can't trash 3`, and its disclosure lists each refused frame with its reason:
-    - F-prep: in a prepared revision of run `Ha deep` in Project `NGC 7000 Ha deep`, a run that is not Complete.
+    - F-prep: `Can't trash 1 · linked by Ha deep ▸`, leading to the Prepare step of `Ha deep` in Project `NGC 7000 Ha deep`, a run that is not Complete.
     - F-res: a recorded input of the accepted Ha stack of `Ha deep v1`.
     - F-dup: one of its copies sits on `Scratch`, which has no OS Trash.
-- **Expect (negative):** Neither Project-only reject of P2 is counted or listed. No library-Usable or Unreviewed frame is offered. Cancelling moves no file, and the Rejects row still reads 7 items.
-- **Trace:** HARNESS-V5-IA.md S9 · HARNESS-V5-FEEDBACK-R1.md Copy rules, §Round 6 ("Reject is library-wide by default"), §Round 7 P-PREP3 ("Linked · 0 B") · PRJ-FR-15 · PRJ-AC-16 · STO-FR-14, STO-FR-15 · STO-AC-18 · root FR-021 · D-W42, D-W43, D-W54, D-W57 · G8
+- **Expect (negative):** Neither Project-only reject of P2 is counted or listed. No library-Usable or Unreviewed frame is offered. Cancelling moves no file or link, and the Rejects row still reads 7 items.
+- **Trace:** HARNESS-V5-IA.md S9 · HARNESS-V5-FEEDBACK-R1.md Copy rules, §Round 6 ("Reject is library-wide by default"), §Round 7 P-PREP3 ("Linked · 0 B"), §Round 8 P-TRASH2 ("Can't trash · linked by {run} ▸", "Also removes N links in kept run views") · PRJ-FR-15 · PRJ-AC-16 · STO-FR-14, STO-FR-15 · STO-AC-18 · root FR-021 · D-W42, D-W43, D-W54, D-W57 · J44/S6
 
 ### S5 — Read the Archive step {#S5}
 
@@ -123,12 +123,12 @@ Done means:
 - **Do:** On the Rejects row, choose **Trash…** and read the review. With the P7 helper, overwrite F-drift in place. Then confirm **Move to Trash**. Afterwards, restore F-drift's saved bytes and mtime with the helper.
 - **Expect:**
   - Progress shows per-frame outcomes. The summary names 6 frames moved, and F-drift refused with drift named and left in place.
-  - The six moved files are newly in the OS Trash, and the library marks them Trashed.
+  - The six moved files are newly in the OS Trash, and the library marks them Trashed. The 4 links that S4's review counted went with them: `NGC7000-HOO-Siril/` has lost its links to the two 18 Sep frames and F-ab, and `Ha deep v1/` its link to F-ab.
 - **Expect (negative):**
   - Nothing is permanently deleted.
-  - No prepared entry of `NGC7000-HOO-Siril`, `26 Sep symlink check`, `Ha deep` or `Ha deep v1` is moved.
-  - F-prep, F-res, F-dup (both copies) and both Project-only rejects remain at their paths.
-- **Trace:** HARNESS-V5-IA.md S9 · STO-FR-15 · STO-AC-19 · PRJ-FR-15 · PRJ-AC-17 · LIB-FR-18 · root SC-010 · D19, D-W43, D-W57
+  - No other prepared entry of `NGC7000-HOO-Siril`, `26 Sep symlink check`, `Ha deep` or `Ha deep v1` is moved.
+  - F-prep, F-res, F-dup (both copies) and both Project-only rejects remain at their paths, and `Ha deep`'s view still links F-prep.
+- **Trace:** HARNESS-V5-IA.md S9 · HARNESS-V5-FEEDBACK-R1.md §Round 8 P-TRASH2 ("the move takes those links with the frame") · STO-FR-15 · STO-AC-19 · PRJ-FR-15 · PRJ-AC-17 · LIB-FR-18 · root SC-010 · D19, D-W43, D-W57
 
 ### S7 — Confirm the Trashed frames are hidden {#S7}
 
@@ -191,7 +191,7 @@ Done means:
   - The memberships and totals of `Ha deep` and `Ha deep v1` are unchanged.
   - The Archive step reads Done, Done is marked Next, and the Project still reads open.
 - **Expect (negative):** The four Trashed 18 Sep and 30 Sep frames are not transferred, and no run's membership changes. No prepared entry changes kind: no symlink becomes a copy. The review offers no reference-mode choice. Archive does not mark the Project Done.
-- **Trace:** HARNESS-V5-IA.md S9 · P-WRAP1, P-ARC1 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · root FR-011 · D-W26, D-W46 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("a symlinked entry is repointed when its session moves"), §Round 7 P-PREP3 · G3, G8
+- **Trace:** HARNESS-V5-IA.md S9 · P-WRAP1, P-ARC1 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · root FR-011 · D-W26, D-W46 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("a symlinked entry is repointed when its session moves"), §Round 7 P-PREP3 · G3
 
 ### S11a — Mark the Project Done {#S11a}
 
@@ -224,8 +224,8 @@ Done means:
 ## Success criteria
 
 - SC1: Wrap up offers 0 approvals and 0 Mark Done while a run outside the Project Trash is open (S1, S2). Once every such run is Complete, it lists 4 steps in order, and its Trash step offers exactly 3 approvals and 0 ways to empty the Project Trash (S3). Moving the flat check run to the Project Trash and emptying it moves 0 files and changes the OIII numbers by 0 (S2, S3a).
-- SC2: The rejected-frames offer counts exactly 7 frames, including 1 in a Complete run's prepared revision. It lists exactly 3 refusals with reasons and includes 0 of the 2 Project-only rejects (S4).
-- SC3: Exactly 6 frames reach the OS Trash. 0 refused or drifted frames, 0 prepared entries and 0 files are permanently deleted (S6).
+- SC2: The rejected-frames offer counts exactly 7 frames, including 1 in a Complete run's prepared revision, and its review counts exactly 4 links in kept run views. It lists exactly 3 refusals with reasons, F-prep's naming `Ha deep`, and includes 0 of the 2 Project-only rejects (S4).
+- SC3: Exactly 6 frames and the 4 links to them in kept run views reach the OS Trash. 0 refused or drifted frames and 0 other prepared entries move, and 0 files are permanently deleted (S6).
 - SC4: The Trashed frames appear in 0 pickers, candidate lists, frame reviews, goals or totals. They show only under the Trashed filter (6 frames) and, marked "Trashed", in the fixed memberships of `NGC7000-HOO-Siril` (3 frames) and `Ha deep v1` (1 frame) (S7, S8).
 - SC5: Exactly 415 intermediates and 1 generated source, listed as a verified duplicate of the kept library copy, reach the OS Trash. 0 accepted Results and 0 adopted library masters do (S9).
 - SC6: Put back plus rescan returns 1 frame as Unusable, and the Trashed filter then lists 5 (S10).
@@ -238,13 +238,13 @@ Done means:
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S1, S2, S3, S8, S9 and S16; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1, Screens B and Round 5, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775; Round 7 P-PREP3 @ 12638a7c), the specs, decision D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design: HARNESS-V5-IA.md S1, S2, S3, S8, S9 and S16, and HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1, Screens B and Round 5 (ui-harness-v5 @ b5e813a5), Round 6 (@ 4f470775), Round 7 P-PREP3 (@ 12638a7c) and Round 8 P-TRASH2. It also follows the specs, decision D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
 - G3: Out of scope for this journey: archive transfer failures, interruption and a symlink that cannot be repointed are J28's. J28 forks from S5. Blocks readiness until J28 covers them.
 - G4: Unresolved implementation qualification: P4 needs Tool-recorded input lineage from a processing tool for F-res. No profile has qualified how that evidence is captured. Blocks readiness.
 - G5: Out of scope for this journey: approving the restore of an Archived session after Reopen (STO-FR-13) is not exercised, because S12a stops at the review. Blocks readiness until covered by a step or a journey.
 - G6: Out of scope for this journey: Next reading Wrap up (D-W35, HARNESS-V5-IA.md S1) is not observed, because the Project's candidates keep library-Unreviewed frames (P2), so Review N new frames comes first. Blocks readiness until covered by a step or a journey.
 - G7: Out of scope for this journey: approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared symlinks. Run Clean up itself is J27's. Blocks readiness until covered by a step or a journey.
-- G8: Unresolved product question: P-PREP3 does not say what a kept Symlinks view does when an original it links to goes to the OS Trash. In S6 the two P3 18 Sep frames and F-ab move to the Trash while `NGC7000-HOO-Siril/` still links to them, and S11 leaves those links out of the repoint. Options: (a, recommended) the Trash review names each run whose kept view links the frame, and after the move the run's fixed membership reads those inputs Trashed while Open on the run is refused naming them; (b) the frame is refused while a kept view links to it ("Can't trash · linked by N runs ▸"), pointing at that run's Clean up; (c) the run's links to the frame go to the OS Trash with it. S4 and S6 assert only that the frames are offered and moved and that no prepared entry moves. Blocks readiness.
+- G8: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S4 refuses F-prep while the view of the unfinished run `Ha deep` links it (J44/S6 prepares that run again and then moves it), and its review counts the 4 links of the kept views of `NGC7000-HOO-Siril` and `Ha deep v1`, which S6 moves with their frames. S11 has no link to a Trashed frame left to repoint.
 
 ## Delta log
 
@@ -259,3 +259,6 @@ Done means:
 - **Δ4** 2026-10-12 · S3, S3b, S4, S5, S11 · behavior-change
   P-PREP3: `NGC7000-HOO-Siril` and `26 Sep symlink check` hold symlinks (`Linked · 0 B`), so a Rejects row's size covers every offered frame, and Archive repoints the symlinks of both runs to the archived frames. Completing `NGC7000 HOO combine` unticks **Remove run view** so that Clean up runs still lists it.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
+- **Δ5** 2026-10-12 · S4, S6, S11 · behavior-change
+  P-TRASH2: F-prep is refused as `Can't trash 1 · linked by Ha deep ▸`, because the view of that unfinished run links it. The Rejects review reads "Also removes 4 links in kept run views", and the move takes those links of `NGC7000-HOO-Siril` and `Ha deep v1` to the OS Trash with their frames.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-TRASH2 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)

@@ -1,13 +1,13 @@
 ---
 id: J39
 title: Clean up duplicate copies found by the automatic scan
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [duplicates, issues, status-bar, locations, indexing, activity, sessions, import]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#storage-and-duplicates, P-STO2, HARNESS-V5-IA.md#S15, HARNESS-V5-IA.md#round-2-foundation-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#e2-calibration-storage-settings, apps/prototype/src/domain/storage.ts, apps/prototype/src/store/actions/storage.ts, apps/prototype/src/domain/issues.ts, apps/prototype/src/components/app/confirm-dialog.tsx, D-W43, D-W57, D-W74, specs/071-storage-custody/spec.md, J34, J38]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#storage-and-duplicates, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-STO2, P-ISS1, HARNESS-V5-IA.md#S15, HARNESS-V5-IA.md#round-2-foundation-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#e2-calibration-storage-settings, apps/prototype/src/domain/storage.ts, apps/prototype/src/store/actions/storage.ts, apps/prototype/src/domain/issues.ts, apps/prototype/src/components/app/confirm-dialog.tsx, D-W43, D-W57, D-W74, specs/071-storage-custody/spec.md, J34, J38]
 ---
 
 ## Goal
@@ -26,7 +26,7 @@ duplicate copies stays in the Project's Wrap up (J34). Done means:
 - The connected capture card `Card-3`, which holds byte-identical copies of 2 library frames, adds nothing to any scan result and is never listed.
 - Every copy that was moved is in the OS Trash with its original bytes. Every kept copy and every refused copy is unchanged, and nothing is permanently deleted.
 - Every frame keeps exactly one copy, its session frame counts do not change, and no frame reads Trashed.
-- A copy put back from the OS Trash shows as a duplicate again after the next index, with no scan started by hand.
+- A copy put back from the OS Trash shows as a duplicate again after the next index, with no scan started by hand. The duplicates issue, dismissed while one copy was left, comes back because its count and bytes changed.
 
 ## Preconditions
 
@@ -106,14 +106,24 @@ duplicate copies stays in the Project's Wrap up (J34). Done means:
 - **Expect (negative):** No kept copy moves, and the refused `Scratch` copy is unchanged and not deleted. Nothing is moved before the confirmation.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates · HARNESS-V5-FEEDBACK-R1.md §Copy rules "Errors and refusals are terse" · D-W43 (OS Trash only) · J34/S9a (copy on a volume with no OS Trash refused)
 
+### S5a — Dismiss the remaining issue {#S5a}
+
+- **Do:** In the ⚠ popout, dismiss `1 duplicate copy · 52.2 MB` (×). Read the status bar, the Issues hub and the Duplicates review, which is still open.
+- **Expect:**
+  - The ⚠ counter is gone, and the Issues button's count falls by 1.
+  - The hub ends with `Dismissed (1)`. Opened, it lists `1 duplicate copy · 52.2 MB` with **Restore**.
+  - The Duplicates review still lists the S-1 group, with the refused `Scratch` copy.
+- **Expect (negative):** Dismissing moves, trashes or writes no file, and the `Scratch` copy of S-1 is unchanged. No counter reads 0.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("Dismiss hides the issue only; the state behind it is unchanged, and its page still shows it", "The hub ends with 'Dismissed (N)' and Restore") · J38/S5a
+
 ### S6 — Put one copy back {#S6}
 
 - **Do:** In the OS Trash, put back the `Spare` copy of M-1. In Settings › Locations, Rescan `Spare captures`. Then follow the duplicates issue again.
 - **Expect:**
-  - After the rescan a duplicate scan runs on its own, and the issue reads `2 duplicate copies · 104 MB`.
+  - After the rescan a duplicate scan runs on its own, and the issue reads `2 duplicate copies · 104 MB`. It is back in the hub and the ⚠ popout, ⚠ reads 1, and no `Dismissed` entry shows, because its count and bytes changed.
   - The review lists the M-1 group again with 2 copies, keeper `Astro-T7 captures`, and the S-1 group.
 - **Expect (negative):** The put-back file is byte-identical to its P5 manifest entry. M-1's session, quality and memberships are unchanged, and no new session appears. `Card-3`, still connected, adds no copy and no group: S-1 lists 2 copies and no group lists M-2.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates "after each index" · messages location_rescan · J34/S10
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates "after each index", §Round 8 P-ISS1 ("another duplicate … brings it back") · messages location_rescan · J34/S10
 
 ### S7 — Verify custody {#S7}
 
@@ -133,6 +143,7 @@ duplicate copies stays in the Project's Wrap up (J34). Done means:
 - SC4: Exactly 5 copies reach the OS Trash across S4 and S5, 1 copy is refused with its reason, and 1 is put back. At S7 the OS Trash holds 4 files.
 - SC5: 0 files are permanently deleted, 0 originals move, 0 session frame counts change, and 0 frames read Trashed (S4, S5, S7).
 - SC6: With `Card-3` connected through S1 to S7, 0 of its copies are counted or listed at S1, S2 and S6, and both its files match P5 at S7.
+- SC7: Dismissing the `1 duplicate copy · 52.2 MB` issue moves 0 files and leaves 0 ⚠ counters (S5a). After the put-back it returns as `2 duplicate copies · 104 MB` with 0 user actions on the dismissed entry (S6).
 
 ## Known gaps
 
@@ -150,3 +161,6 @@ duplicate copies stays in the Project's Wrap up (J34). Done means:
   The duplicate scan covers registered library locations only: a connected capture card with byte-identical copies is never counted, listed or trashed.
   The keeper is the copy in the earliest-registered location, not the oldest file; the fixture now makes the `Spare` copy of N-1 the oldest file and asserts it is not kept.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "The duplicate scan covers registered library locations only" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)
+- **Δ3** 2026-10-12 · +S5a, S6 · behavior-change
+  P-ISS1: the user dismisses the remaining duplicates issue (×), which moves no file and lists it under `Dismissed (1)` with Restore. The put-back copy changes its count and bytes, so the issue comes back by itself.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-ISS1 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)
