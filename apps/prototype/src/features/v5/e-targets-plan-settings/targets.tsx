@@ -194,7 +194,7 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
   )
 }
 
-/** The night the page plans for: previous and next night around a date field, and back to tonight. */
+/** The night the page plans for: previous and next night around a date field, and back to tonight; the date picker's Clear also returns to tonight. */
 function NightPicker({ ctx, onChange }: { ctx: SkyContext; onChange: (night: string | undefined) => void }) {
   const m = useMessages()
   const night = ctx.grid.night
@@ -205,7 +205,7 @@ function NightPicker({ ctx, onChange }: { ctx: SkyContext; onChange: (night: str
       <Button size="icon-sm" variant="ghost" aria-label={m.targets_night_previous()} disabled={isTonight} onClick={() => pick(shiftNight(night, -1))}>
         <ChevronLeft aria-hidden="true" />
       </Button>
-      <Input type="date" aria-label={m.tonight_night()} min={ctx.tonight} value={night} onChange={(event) => event.target.value && pick(event.target.value)} className="h-7 w-36 px-2 text-sm tabular-nums" />
+      <Input type="date" aria-label={m.tonight_night()} min={ctx.tonight} value={night} onChange={(event) => (event.target.value ? pick(event.target.value) : onChange(undefined))} className="h-7 w-36 px-2 text-sm tabular-nums" />
       <Button size="icon-sm" variant="ghost" aria-label={m.targets_night_next()} onClick={() => pick(shiftNight(night, 1))}>
         <ChevronRight aria-hidden="true" />
       </Button>

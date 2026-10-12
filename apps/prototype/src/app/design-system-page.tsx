@@ -95,14 +95,6 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
   return (
     <div className="space-y-2">
       <TableToolbar search={{ label: "Filter sessions", placeholder: "Filter by channel, OBJECT or night", value: query, onChange: setQuery }} />
-      <SelectionBar
-        count={selected.length}
-        hiddenByFilters={hidden}
-        label={`${selected.length} selected`}
-        onShowSelected={() => setQuery("")}
-        onClear={() => setSelected([])}
-        clearDisabledReason={locked ? "Selection is locked while the View is being prepared." : undefined}
-      />
       <DataTable
         label="Light sessions (design-system sample)"
         rows={empty ? [] : shown}
@@ -133,6 +125,14 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
           { separator: true },
           { label: "Clear selection", onSelect: () => setSelected([]), disabled: selected.length === 0 },
         ]}
+      />
+      <SelectionBar
+        count={selected.length}
+        hiddenByFilters={hidden}
+        label={`${selected.length} selected`}
+        onShowSelected={() => setQuery("")}
+        onClear={() => setSelected([])}
+        clearDisabledReason={locked ? "Selection is locked while the View is being prepared." : undefined}
       />
     </div>
   )

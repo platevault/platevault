@@ -452,8 +452,12 @@ export function TableToolbar({
 /**
  * Selection summary for multi-select tables (VSEL-FR-06): how many are
  * selected, how many of those are hidden by the current filters, and the
- * bulk actions that apply. With nothing selected only an empty live region
- * stays mounted, so the first count is announced too (WCAG 4.1.3).
+ * bulk actions that apply, with any standing refusal of those actions
+ * (`children`) inside the same bar. Render it right after its table and
+ * keep it mounted: it takes no room above the rows, so selecting never
+ * moves them, and it sticks to the pane's bottom edge while the table runs
+ * past it. With nothing selected only an empty live region stays mounted,
+ * so the first count is announced too (WCAG 4.1.3).
  */
 export function SelectionBar({
   count,
@@ -463,6 +467,7 @@ export function SelectionBar({
   onClear,
   clearDisabledReason,
   actions,
+  children,
 }: {
   count: number
   hiddenByFilters?: number
@@ -473,6 +478,8 @@ export function SelectionBar({
   /** When set, Clear selection stays focusable but disabled, with this reason beside it. */
   clearDisabledReason?: string
   actions?: ReactNode
+  /** Why an action is unavailable for this selection, e.g. a `Refusal`; shown under the actions. */
+  children?: ReactNode
 }) {
   const m = useMessages()
   const clearReasonId = useId()
@@ -489,30 +496,35 @@ export function SelectionBar({
   // Out of the layout flow, so an empty bar adds no gap between its siblings.
   if (count === 0) return <div className="sr-only">{live}</div>
   return (
-    <div role="region" aria-label={m.selection_region()} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
-      {live}
-      {onShowSelected ? (
-        <Button size="sm" variant="ghost" onClick={onShowSelected}>
-          {m.selection_show()}
-        </Button>
-      ) : null}
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onClear}
-        disabled={clearDisabledReason !== undefined}
-        focusableWhenDisabled
-        aria-describedby={clearDisabledReason !== undefined ? clearReasonId : undefined}
-      >
-        {m.selection_clear()}
-      </Button>
-      {clearDisabledReason !== undefined ? (
-        <span id={clearReasonId} className="text-xs text-muted-foreground">
-          {clearDisabledReason}
-        </span>
-      ) : null}
-      <div className="flex-1" />
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    <div role="region" aria-label={m.selection_region()} className="sticky bottom-2 z-10 rounded-lg bg-background">
+      <div className="space-y-1.5 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {live}
+          {onShowSelected ? (
+            <Button size="sm" variant="ghost" onClick={onShowSelected}>
+              {m.selection_show()}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onClear}
+            disabled={clearDisabledReason !== undefined}
+            focusableWhenDisabled
+            aria-describedby={clearDisabledReason !== undefined ? clearReasonId : undefined}
+          >
+            {m.selection_clear()}
+          </Button>
+          {clearDisabledReason !== undefined ? (
+            <span id={clearReasonId} className="text-xs text-muted-foreground">
+              {clearDisabledReason}
+            </span>
+          ) : null}
+          <div className="flex-1" />
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        </div>
+        {children}
+      </div>
     </div>
   )
 }
