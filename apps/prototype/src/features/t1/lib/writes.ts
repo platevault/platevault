@@ -26,14 +26,16 @@ export function save(options: SaveOptions, mutate: (state: PrototypeState) => Pr
   return result
 }
 
-function setOnboarding(patch: Partial<AppSettings["onboarding"]>) {
+/** Patch the onboarding progress flags (UI progress, written directly). */
+export function setOnboarding(patch: Partial<AppSettings["onboarding"]>) {
   store.setState((s) => ({ ...s, settings: { ...s.settings, onboarding: { ...s.settings.onboarding, ...patch } } }))
 }
 
-/** Open library, Index later and Set up later all end setup (HLD seam 1). */
+/** Open library, Index later and Set up later all end setup (HLD seam 1); the orientation walk follows once (Round 6). */
 export function completeOnboarding() {
-  if (store.getState().settings.onboarding.completedAt) return
-  setOnboarding({ completedAt: nowIso() })
+  const { onboarding } = store.getState().settings
+  if (onboarding.completedAt) return
+  setOnboarding({ completedAt: nowIso(), walk: onboarding.walk === "done" ? "done" : "due" })
 }
 
 /** Settings › About: reopen the setup steps; locations and data stay. Earlier setup runs no longer describe this setup. */

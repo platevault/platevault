@@ -27,7 +27,7 @@
  *   finished with its raws kept, and an OIII flat whose Stack output was not
  *   found.
  * - Targets: favourites, a southern Target with no window tonight, a default
- *   site, and a Plan list of two Targets.
+ *   site, and tonight's plan of two Targets.
  *
  * All names, paths and counts are illustrative fixtures.
  */
@@ -39,6 +39,7 @@ import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from 
 import { confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
 import { addSessions, describeDiff, diffContent, emptyContent } from "./membership"
 import { simulateMeasurement } from "./measurement"
+import { upcomingNight } from "./planning"
 import { pixelScaleArcsec } from "./sky"
 import type {
   ActivityEvent,
@@ -565,8 +566,8 @@ function emptySeed(): SeedData {
   }
 }
 
-function location(id: string, displayName: string, path: string, volumeId: VolumeId, role: Location["role"]): Location {
-  return { id, displayName, path, volumeId, role, registeredAt: "2026-09-01T18:00:00.000Z", access: "unknown", lastIndexedAt: null, scanScope: "never", unreadablePaths: [], lastScanOperationId: null }
+function location(id: string, displayName: string, path: string, volumeId: VolumeId, role: Location["role"], registeredAt = "2026-09-01T18:00:00.000Z"): Location {
+  return { id, displayName, path, volumeId, role, registeredAt, access: "unknown", lastIndexedAt: null, scanScope: "never", unreadablePaths: [], lastScanOperationId: null }
 }
 
 function findSession(catalog: Catalog, predicate: (s: Session) => boolean): Session {
@@ -736,7 +737,8 @@ function demoSeed(): SeedData {
     loc_cold: location("loc_cold", "Cold-1 captures", "/Volumes/Cold-1/Captures", VOLUME_IDS.cold, "captures"),
     loc_calibration: location("loc_calibration", "Astro-T7 calibration", "/Volumes/Astro-T7/Calibration", A, "calibration"),
     loc_processing: location("loc_processing", "Astro-T7 processing", PROCESSING, A, "results"),
-    loc_spare: location("loc_spare", "Spare captures", "/Volumes/Spare/Captures", VOLUME_IDS.spare, "captures"),
+    // Registered after Astro-T7, so its byte-identical M 31 copies are the ones the Duplicates review offers to move (Round 6 keeper rule).
+    loc_spare: location("loc_spare", "Spare captures", "/Volumes/Spare/Captures", VOLUME_IDS.spare, "captures", "2026-09-02T18:00:00.000Z"),
     loc_archive: location("loc_archive", "Archive", "/Volumes/Archive", VOLUME_IDS.archive, "archive"),
     // P-ARC1: a second archive location; Archive is the Default, M 31 picks this one.
     loc_archive_nas: location("loc_archive_nas", "NAS archive", "/Volumes/NAS/Archive", VOLUME_IDS.nas, "archive"),
@@ -1150,9 +1152,10 @@ function demoSeed(): SeedData {
   // A saved Import source for "Import new" (STO-IMP-FR-01): the ASIAIR device's folder.
   catalog.importSources = { src_asiair: { id: "src_asiair", name: "ASIAIR", path: "/Volumes/ASIAIR", lastImportedAt: "2026-10-03T08:00:00.000Z", importedSha256: [] } }
 
-  // The Plan list: NGC 7000 and M 33 (Planning's default view); "Show all" lists My targets.
+  // Tonight's plan at the default site: NGC 7000 and M 33 (Round 6: each night has its own plan).
+  const tonight = upcomingNight(catalog.sites.site_backyard!, Date.now())
   for (const targetId of [ngc, s.m33.target.value!]) {
-    catalog.plans[targetId] = { targetId, planned: true, criteria: { minAltitudeDeg: 25, darkness: "astronomical", maxMoonIlluminationPct: null, minMoonSeparationDeg: null, minDurationMin: 60 }, updatedAt: "2026-10-01T18:00:00.000Z" }
+    catalog.plans[targetId] = { targetId, nights: [tonight], criteria: { minAltitudeDeg: 25, darkness: "astronomical", maxMoonIlluminationPct: null, minMoonSeparationDeg: null, minDurationMin: 60 }, updatedAt: "2026-10-01T18:00:00.000Z" }
   }
 
   const cleanupM31: Operation = {

@@ -8,9 +8,9 @@
  * best window per Target.
  */
 import { angularSeparationDeg } from "./sky"
-import type { Band, CalendarExport, MoonConstraint, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
+import type { Band, CalendarExport, Catalog, MoonConstraint, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
 import { formatDateTime } from "@/lib/format"
-import { msg, type MessageRef } from "@/lib/i18n"
+import { m, msg, type MessageRef } from "@/lib/i18n"
 
 const RAD = Math.PI / 180
 /** Minutes between samples of the night grid that windows, Tonight and the Targets timeline share. */
@@ -130,6 +130,39 @@ export function windowKey(targetId: TargetId, siteId: SiteId, start: string): st
  */
 export function reminderKey(window: ObservingWindow, site: ObservingSite): string {
   return `${window.targetId}/${window.siteId}/${nightAt(Date.parse(window.start), site)}`
+}
+
+// ---------------------------------------------------------------------------
+// Per-night plans (Round 6): each night has its own plan
+// ---------------------------------------------------------------------------
+
+/** The Targets on one night's plan, by name. */
+export function nightPlan(catalog: Catalog, night: NightDate): Target[] {
+  return Object.values(catalog.plans)
+    .filter((p) => p.nights.includes(night))
+    .map((p) => catalog.targets[p.targetId])
+    .filter((t): t is Target => t !== undefined)
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Every night from `from` on whose plan holds a Target, in order: what reminders and the calendar export cover. */
+export function plannedNights(catalog: Catalog, from: NightDate): NightDate[] {
+  const nights = new Set<NightDate>()
+  for (const plan of Object.values(catalog.plans)) {
+    if (!catalog.targets[plan.targetId]) continue
+    for (const night of plan.nights) if (night >= from) nights.add(night)
+  }
+  return [...nights].sort()
+}
+
+/** The windows of every upcoming planned night at a site, night by night: the calendar export's events and the reminders' schedule. */
+export function plannedWindows(catalog: Catalog, site: ObservingSite, nowMs: number): ObservingWindow[] {
+  const criteria = defaultCriteria(site)
+  return plannedNights(catalog, upcomingNight(site, nowMs)).flatMap((night) =>
+    nightPlan(catalog, night)
+      .flatMap((target) => windowsOnNight(target, site, criteria, night, nowMs))
+      .sort((a, b) => a.start.localeCompare(b.start)),
+  )
 }
 
 /**
@@ -469,8 +502,9 @@ function fold(line: string): string {
 }
 
 /**
- * The .ics bytes for a saved export. Generated only from the snapshot, so a
- * later criteria change never alters a saved file (PLAN-AC-03).
+ * The .ics bytes for a saved export, worded in the current language.
+ * Generated only from the snapshot, so a later criteria change never alters
+ * a saved file (PLAN-AC-03).
  */
 export function calendarFile(exportRecord: CalendarExport, siteName: string, targetNames: Record<TargetId, string>): string {
   const lines = [
@@ -479,7 +513,7 @@ export function calendarFile(exportRecord: CalendarExport, siteName: string, tar
     "PRODID:-//PlateVault prototype//Observing plans//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${icsText(`PlateVault windows at ${siteName}`)}`,
+    `X-WR-CALNAME:${icsText(m.plan_ics_calendar({ site: siteName }))}`,
     `X-WR-TIMEZONE:${exportRecord.timeZone}`,
   ]
   for (const w of exportRecord.windows) {
@@ -490,11 +524,9 @@ export function calendarFile(exportRecord: CalendarExport, siteName: string, tar
       `DTSTAMP:${icsTime(exportRecord.at)}`,
       `DTSTART:${icsTime(w.start)}`,
       `DTEND:${icsTime(w.end)}`,
-      `SUMMARY:${icsText(`${name} observing window at ${siteName}`)}`,
+      `SUMMARY:${icsText(m.plan_ics_summary({ name }))}`,
       `LOCATION:${icsText(siteName)}`,
-      `DESCRIPTION:${icsText(
-        `Astronomical suitability only: no weather, equipment or processing readiness. Max altitude ${Math.round(w.maxAltitudeDeg)}°. Moon ${w.moonIlluminationPct}% illuminated, ${Math.round(w.moonSeparationDeg)}° away. Times shown in ${exportRecord.timeZone}. Prototype calculation.`,
-      )}`,
+      `DESCRIPTION:${icsText(m.plan_ics_description({ altitude: Math.round(w.maxAltitudeDeg), moon: w.moonIlluminationPct, separation: Math.round(w.moonSeparationDeg) }))}`,
       "END:VEVENT",
     )
   }

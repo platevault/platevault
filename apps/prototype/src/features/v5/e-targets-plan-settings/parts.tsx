@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatHours, planningSite } from "@/domain/derive"
 import { defaultCriteria, nightSummary, upcomingNight, zoneAbbreviation } from "@/domain/planning"
 import type { Fit } from "@/domain/derive"
-import type { ObservingSite, PlanCriteria, Project } from "@/domain/types"
+import type { NightDate, ObservingSite, PlanCriteria, Project } from "@/domain/types"
 import { formatTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -45,6 +45,11 @@ export function useSkyContext(night?: string): SkyContext | null {
     return { site, grid: nightGrid(site, chosen), summary: nightSummary(site, chosen), criteria: defaultCriteria(site), nowMs, tonight }
     // `bucket` re-derives tonight as the clock moves on.
   }, [site, bucket, night])
+}
+
+/** The night Add to plan adds to and Planned lists: the chosen night at the planning site, else today's date while no site is saved. */
+export function planNight(ctx: SkyContext | null): NightDate {
+  return ctx?.grid.night ?? nowIso().slice(0, 10)
 }
 
 /** "21:40 CEST" in the site's zone. */

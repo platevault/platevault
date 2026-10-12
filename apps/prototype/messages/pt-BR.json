@@ -7300,5 +7300,130 @@
       }
     }
   ],
-  "duplicates_trash_title": "Mover cópias duplicadas para a Lixeira do sistema"
+  "duplicates_trash_title": "Mover cópias duplicadas para a Lixeira do sistema",
+  "plan_add_night_named": "Adicionar {name} ao plano de {night}",
+  "plan_remove_night_named": "Remover {name} do plano de {night}",
+  "plan_reminders": "Lembretes",
+  "plan_reason_notifications_denied": "notificações não permitidas",
+  "plan_reminder_lead": "Antecedência do lembrete",
+  "plan_reminder_notice": "Janela de {name} em {minutes} min",
+  "plan_reminder_detail": "{night} · {site}",
+  "plan_export_calendar": "Exportar calendário",
+  "plan_exported_calendar": "{file} exportado",
+  "plan_ics_calendar": "Plano do PlateVault em {site}",
+  "plan_ics_summary": "Janela de observação de {name}",
+  "plan_ics_description": "Altitude máx. {altitude}° · Lua {moon}%, a {separation}°",
+  "duplicates_scope_help": "Somente locais da biblioteca; cartões de captura nunca são verificados. Mantém a cópia no local registrado primeiro.",
+  "plan_night_empty": "Nada planejado para {night}",
+  "plan_lead_option": "{minutes} min antes",
+  "plan_cant_turn_on_reminders": "Não é possível ativar lembretes",
+  "plan_next_reminder": "Próximo {time}",
+  "plan_proto_next_reminder": "Protótipo: ir para o próximo lembrete",
+  "plan_export_calendar_open": "Exportar calendário…",
+  "plan_export_summary": "{events} em {nights} · {site}",
+  "plan_events_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} evento",
+        "countPlural=*": "{count} eventos"
+      }
+    }
+  ],
+  "plan_nights_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} noite",
+        "countPlural=*": "{count} noites"
+      }
+    }
+  ],
+  "plan_nothing_upcoming": "Nada planejado a partir de hoje à noite",
+  "plan_event_max_alt": "máx. {altitude}°",
+  "plan_download_ics": "Baixar .ics",
+  "plan_reminder_badge": "Lembrete",
+  "target_library_caption": "Integração de {name} na biblioteca, por canal",
+  "equipment_add_camera": "Adicionar câmera",
+  "equipment_add_telescope": "Adicionar telescópio",
+  "equipment_saved_named": "{name} salvo",
+  "equipment_add_camera_open": "Adicionar câmera…",
+  "equipment_add_telescope_open": "Adicionar telescópio…",
+  "equipment_add_rig_open": "Adicionar equipamento…",
+  "equipment_name": "Nome",
+  "equipment_native_focal_length": "Distância focal (mm)",
+  "equipment_aperture": "Abertura (mm)",
+  "equipment_aperture_short": "Abertura",
+  "equipment_rig_suggested": "{telescope} · {camera}",
+  "equipment_error_choose": "Escolha um",
+  "equipment_error_reducer": "0,2–3×",
+  "equipment_reducer_field": "Redutor (×)",
+  "equipment_source": "Origem",
+  "equipment_cameras": "Câmeras",
+  "equipment_telescopes": "Telescópios",
+  "equipment_with_reducer": "com redutor de {factor}×",
+  "shell_quit_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Sair com {n} tarefa em andamento?",
+        "countPlural=*": "Sair com {n} tarefas em andamento?"
+      }
+    }
+  ],
+  "shell_quit_resume": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Ela continua na próxima abertura.",
+        "countPlural=*": "Elas continuam na próxima abertura."
+      }
+    }
+  ],
+  "shell_quit": "Sair",
+  "shell_quit_app": "Sair do PlateVault",
+  "onboarding_walk_sources_title": "Navegação",
+  "onboarding_walk_sources": "Início, Projetos, Alvos e a biblioteca, além dos seus Projetos recentes.",
+  "onboarding_walk_issues": "Tudo o que precisa de você, numa só lista.",
+  "onboarding_walk_next": "O próximo passo de cada Projeto. Clique para fazê-lo.",
+  "onboarding_walk_status_title": "Barra de status",
+  "onboarding_walk_status": "Trabalho em andamento, contadores de problemas e notificações.",
+  "onboarding_walk_targets": "Seus Alvos, os catálogos e o plano de cada noite.",
+  "onboarding_walk_step": "{step} de {total}",
+  "onboarding_walk_skip": "Pular",
+  "onboarding_walk_done": "Concluir",
+  "onboarding_getting_started": "Primeiros passos",
+  "onboarding_check_progress": "{done} de {total} feitos",
+  "onboarding_check_import": "Importe suas primeiras capturas",
+  "onboarding_check_targets": "Confirme os Alvos",
+  "onboarding_check_project": "Crie seu primeiro Projeto",
+  "onboarding_check_run": "Inicie sua primeira execução",
+  "onboarding_dismiss_checklist": "Dispensar Primeiros passos",
+  "onboarding_walk_name": "Tour de orientação",
+  "onboarding_restart_walk": "Reiniciar tour"
 }

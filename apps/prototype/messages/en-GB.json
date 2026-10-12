@@ -7244,5 +7244,130 @@
       }
     }
   ],
-  "duplicates_trash_title": "Move duplicate copies to the OS Trash"
+  "duplicates_trash_title": "Move duplicate copies to the OS Trash",
+  "plan_add_night_named": "Add {name} to the plan for {night}",
+  "plan_remove_night_named": "Remove {name} from the plan for {night}",
+  "plan_reminders": "Reminders",
+  "plan_reason_notifications_denied": "notifications not allowed",
+  "plan_reminder_lead": "Reminder lead time",
+  "plan_reminder_notice": "{name} window in {minutes} min",
+  "plan_reminder_detail": "{night} · {site}",
+  "plan_export_calendar": "Export calendar",
+  "plan_exported_calendar": "Exported {file}",
+  "plan_ics_calendar": "PlateVault plan at {site}",
+  "plan_ics_summary": "{name} observing window",
+  "plan_ics_description": "Max altitude {altitude}° · Moon {moon}%, {separation}° away",
+  "duplicates_scope_help": "Library locations only; capture cards are never scanned. Keeps the copy in the earliest-registered location.",
+  "plan_night_empty": "Nothing planned for {night}",
+  "plan_lead_option": "{minutes} min before",
+  "plan_cant_turn_on_reminders": "Can't turn on reminders",
+  "plan_next_reminder": "Next {time}",
+  "plan_proto_next_reminder": "Prototype: jump to the next reminder",
+  "plan_export_calendar_open": "Export calendar…",
+  "plan_export_summary": "{events} on {nights} · {site}",
+  "plan_events_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} event",
+        "countPlural=*": "{count} events"
+      }
+    }
+  ],
+  "plan_nights_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} night",
+        "countPlural=*": "{count} nights"
+      }
+    }
+  ],
+  "plan_nothing_upcoming": "Nothing planned from tonight on",
+  "plan_event_max_alt": "max {altitude}°",
+  "plan_download_ics": "Download .ics",
+  "plan_reminder_badge": "Reminder",
+  "target_library_caption": "Integration of {name} in the library, per channel",
+  "equipment_add_camera": "Add camera",
+  "equipment_add_telescope": "Add telescope",
+  "equipment_saved_named": "Saved {name}",
+  "equipment_add_camera_open": "Add camera…",
+  "equipment_add_telescope_open": "Add telescope…",
+  "equipment_add_rig_open": "Add rig…",
+  "equipment_name": "Name",
+  "equipment_native_focal_length": "Focal length (mm)",
+  "equipment_aperture": "Aperture (mm)",
+  "equipment_aperture_short": "Aperture",
+  "equipment_rig_suggested": "{telescope} · {camera}",
+  "equipment_error_choose": "Choose one",
+  "equipment_error_reducer": "0.2–3×",
+  "equipment_reducer_field": "Reducer (×)",
+  "equipment_source": "Source",
+  "equipment_cameras": "Cameras",
+  "equipment_telescopes": "Telescopes",
+  "equipment_with_reducer": "with {factor}× reducer",
+  "shell_quit_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Quit while {n} task runs?",
+        "countPlural=*": "Quit while {n} tasks run?"
+      }
+    }
+  ],
+  "shell_quit_resume": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "It resumes next launch.",
+        "countPlural=*": "They resume next launch."
+      }
+    }
+  ],
+  "shell_quit": "Quit",
+  "shell_quit_app": "Quit PlateVault",
+  "onboarding_walk_sources_title": "Navigation",
+  "onboarding_walk_sources": "Home, Projects, Targets and the library, plus your recent Projects.",
+  "onboarding_walk_issues": "Everything that needs you, in one list.",
+  "onboarding_walk_next": "Each Project's next step. Click it to do it.",
+  "onboarding_walk_status_title": "Status bar",
+  "onboarding_walk_status": "Running work, issue counters and notifications.",
+  "onboarding_walk_targets": "Your Targets, the catalogues and each night's plan.",
+  "onboarding_walk_step": "{step} of {total}",
+  "onboarding_walk_skip": "Skip",
+  "onboarding_walk_done": "Done",
+  "onboarding_getting_started": "Getting started",
+  "onboarding_check_progress": "{done} of {total} done",
+  "onboarding_check_import": "Import your first captures",
+  "onboarding_check_targets": "Confirm Targets",
+  "onboarding_check_project": "Create your first Project",
+  "onboarding_check_run": "Start your first run",
+  "onboarding_dismiss_checklist": "Dismiss Getting started",
+  "onboarding_walk_name": "Orientation walk",
+  "onboarding_restart_walk": "Restart walk"
 }
