@@ -2,12 +2,14 @@
  * Catalogue entry for the action components (design/R9-COMPOSITION-PLAN.md
  * §8.3): Button roles × sizes × states, ActionButton kinds, ActionBar,
  * ActionMenu, MenuItems, RowActions with RowContextMenu, and IconButton.
- * Component content is real catalogue copy; captions speak to the reviewer.
- * Every demo action runs against no store: refusals and failures are
- * returned as results, so the error states can be triggered here.
+ * Every visible string comes from the message catalogue (catalogue_actions_*
+ * for the reviewer captions). Key legends follow app/shortcuts.tsx. The demo
+ * actions write nothing to the store: refusals and failures come back as
+ * results, so those states can be triggered here.
  */
 import { ChevronLeft, ChevronRight, Copy, Pencil, Play, RefreshCw, Trash2 } from "lucide-react"
 import { useMessages } from "@/app/preferences"
+import { MOD_LABEL } from "@/app/shortcuts"
 import { ActionBar, ActionButton, ActionMenu, IconButton, MenuItems, useAction } from "@/components/app/actions"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { Section } from "@/components/app/page"
@@ -18,16 +20,20 @@ import { Spinner } from "@/components/ui/spinner"
 import type { Messages } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
 import { useStore } from "@/store/core"
+import { Specimen } from "./specimen"
 
+/** Each Button variant with the caption naming its role. */
 const ROLES = [
-  ["default", "primary"],
-  ["outline", "standard"],
-  ["ghost", "quiet"],
-  ["destructive", "destructive"],
-  ["link", "link"],
+  ["default", (m: Messages) => m.catalogue_actions_role_primary()],
+  ["outline", (m: Messages) => m.catalogue_actions_role_standard()],
+  ["ghost", (m: Messages) => m.catalogue_actions_role_quiet()],
+  ["destructive", (m: Messages) => m.catalogue_actions_role_destructive()],
+  ["link", (m: Messages) => m.catalogue_actions_role_link()],
 ] as const
 
 const SIZES = ["sm", "default", "xs"] as const
+
+const SPINNER_SIZE: Record<(typeof SIZES)[number], string | undefined> = { sm: "size-3.5", default: undefined, xs: "size-3" }
 
 const done = (): CommitResult => ({ ok: true })
 
@@ -37,9 +43,9 @@ const slowly = (): Promise<CommitResult> => new Promise((resolve) => setTimeout(
 /** The demo set: every kind, a dialog opener, a confirm, an unavailable action, a refusal, a failure and a slow run. */
 function demoActions(m: Messages, names: string[]) {
   const start: Action = { id: "start", label: m.startrun_title(), icon: Play, kind: "primary", run: slowly }
-  const rename: Action = { id: "rename", label: m.run_rename(), icon: Pencil, opensDialog: true, shortcut: "⌘R", run: done }
+  const rename: Action = { id: "rename", label: m.run_rename(), icon: Pencil, opensDialog: true, shortcut: `${MOD_LABEL}R`, run: done }
   const rescan: Action = { id: "rescan", label: m.location_rescan(), icon: RefreshCw, run: slowly }
-  const copyPath: Action = { id: "copy-path", label: m.session_copy_path(), icon: Copy, shortcut: "⌥⌘C", run: done }
+  const copyPath: Action = { id: "copy-path", label: m.session_copy_path(), icon: Copy, shortcut: `⇧${MOD_LABEL}C`, run: done }
   const duplicate: Action = { id: "duplicate", label: m.template_duplicate(), run: done }
   const archive: Action = {
     id: "archive",
@@ -68,34 +74,46 @@ function demoActions(m: Messages, names: string[]) {
       confirm: { label: m.run_move_to_trash() },
     },
   }
-  const remove2: Action = {
+  const destroy: Action = {
     id: "delete",
     label: m.template_delete(),
     kind: "destructive",
     run: done,
     confirm: { title: m.template_delete_title({ name: names[0] ?? "" }), groups: [{ label: m.nav_sessions(), rows: [] }], confirm: { label: m.template_delete(), kind: "destructive" } },
   }
-  return { start, rename, rescan, copyPath, duplicate, archive, remove, fail, trash, delete: remove2 }
+  return { start, rename, rescan, copyPath, duplicate, archive, remove, fail, trash, delete: destroy }
+}
+
+type DemoActions = ReturnType<typeof demoActions>
+
+/** A sub-heading and its one-line reviewer caption. */
+function Part({ heading, caption }: { heading: string; caption: string }) {
+  return (
+    <>
+      <h3 className="text-sm font-semibold">{heading}</h3>
+      <p className="text-xs text-pretty text-muted-foreground">{caption}</p>
+    </>
+  )
 }
 
 function RoleMatrix() {
   const m = useMessages()
+  const states = [m.catalogue_actions_state_default(), m.catalogue_actions_state_disabled(), m.catalogue_actions_state_loading()]
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold">Button roles</h3>
-      <p className="text-xs text-muted-foreground">Variant × size × state. Point at, Tab to or press any button for hover, focus-visible and active. Disabled stays focusable.</p>
+      <Part heading={m.catalogue_actions_roles_heading()} caption={m.catalogue_actions_roles_caption()} />
       <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
         {SIZES.map((size) => (
           <div key={size} className="grid grid-cols-[auto_repeat(3,auto)] items-center gap-x-3 gap-y-2 text-xs">
-            <span className="font-mono">{size}</span>
-            <span className="text-muted-foreground">default</span>
-            <span className="text-muted-foreground">disabled</span>
-            <span className="text-muted-foreground">loading</span>
+            <span className="font-medium">{m.catalogue_actions_size({ size })}</span>
+            {states.map((state) => (
+              <span key={state} className="text-muted-foreground">
+                {state}
+              </span>
+            ))}
             {ROLES.map(([variant, role]) => (
               <div key={variant} className="contents">
-                <span className="font-mono text-muted-foreground">
-                  {variant} ({role})
-                </span>
+                <span className="text-muted-foreground">{role(m)}</span>
                 <Button variant={variant} size={size}>
                   {m.startrun_title()}
                 </Button>
@@ -103,7 +121,7 @@ function RoleMatrix() {
                   {m.startrun_title()}
                 </Button>
                 <Button variant={variant} size={size} aria-busy="true">
-                  <Spinner aria-hidden="true" data-icon="inline-start" className={size === "xs" ? "size-3" : size === "sm" ? "size-3.5" : undefined} />
+                  <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} />
                   {m.startrun_title()}
                 </Button>
               </div>
@@ -111,56 +129,55 @@ function RoleMatrix() {
           </div>
         ))}
         <div className="grid grid-cols-[auto_repeat(2,auto)] items-center gap-x-3 gap-y-2 text-xs">
-          <span className="font-mono">icon-sm</span>
-          <span className="text-muted-foreground">default</span>
-          <span className="text-muted-foreground">disabled</span>
-          <span className="font-mono text-muted-foreground">IconButton</span>
-          <IconButton label={m.targets_night_previous()} icon={ChevronLeft} shortcut="⌥←" />
-          <IconButton label={m.targets_night_next()} icon={ChevronRight} shortcut="⌥→" disabled focusableWhenDisabled />
+          <span className="font-medium">{m.catalogue_actions_size({ size: "icon-sm" })}</span>
+          <span className="text-muted-foreground">{states[0]}</span>
+          <span className="text-muted-foreground">{states[1]}</span>
+          <span className="text-muted-foreground">{m.catalogue_actions_role_icon()}</span>
+          <IconButton label={m.targets_night_previous()} icon={ChevronLeft} shortcut={`${MOD_LABEL}←`} />
+          <IconButton label={m.targets_night_next()} icon={ChevronRight} shortcut={`${MOD_LABEL}→`} disabled focusableWhenDisabled />
         </div>
       </div>
     </div>
   )
 }
 
-function KindMatrix({ actions }: { actions: ReturnType<typeof demoActions> }) {
+function KindMatrix({ actions }: { actions: DemoActions }) {
+  const m = useMessages()
+  const caption = m.catalogue_actions_button_caption({
+    archive: actions.archive.label,
+    start: actions.start.label,
+    rescan: actions.rescan.label,
+    remove: actions.remove.label,
+    retry: m.verb_retry(),
+  })
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold">ActionButton</h3>
-      <p className="text-xs text-muted-foreground">
-        The kind picks the variant. In a table cell (xs) a primary stays outline. Archive is unavailable: point at or Tab to it for its blockers. Start run and Rescan run slowly (busy); Remove is refused;
-        the second Rescan fails with Retry.
-      </p>
-      {(["sm", "default", "xs"] as const).map((size) => (
-        <div key={size} className="flex flex-wrap items-center gap-2">
-          <span className="w-16 font-mono text-xs">{size}</span>
+      <Part heading={m.catalogue_actions_button_heading()} caption={caption} />
+      {SIZES.map((size) => (
+        <Specimen key={size} caption={m.catalogue_actions_size({ size })}>
           <ActionButton action={actions.start} size={size} />
           <ActionButton action={actions.rescan} size={size} />
           <ActionButton action={actions.delete} size={size} />
           <ActionButton action={actions.archive} size={size} />
           <ActionButton action={actions.remove} size={size} />
           <ActionButton action={actions.fail} size={size} />
-        </div>
+        </Specimen>
       ))}
     </div>
   )
 }
 
-function Bars({ actions }: { actions: ReturnType<typeof demoActions> }) {
+function Bars({ actions }: { actions: DemoActions }) {
   const m = useMessages()
   const { start, rename, rescan, copyPath, duplicate, archive, remove, trash } = actions
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold">ActionBar</h3>
-      <p className="text-xs text-muted-foreground">
-        Up to three standard buttons, the named menu, then the one primary trailing. A fourth standard action, destructive actions and the overflow go to the menu (More by default, or an object menu).
-        Feedback appears under the bar.
-      </p>
+      <Part heading={m.catalogue_actions_bar_heading()} caption={m.catalogue_actions_bar_caption({ more: m.common_more() })} />
       <div className="flex flex-col items-end gap-4 rounded-lg border p-3">
         <ActionBar actions={[rename, rescan, copyPath, duplicate, start, actions.delete]} overflow={[archive, trash, remove]} />
         <ActionBar actions={[rename, start]} overflow={[archive, trash, actions.delete]} menuLabel={m.project_noun()} />
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          Empty (no actions) renders nothing:
+          {m.catalogue_actions_bar_empty()}
           <ActionBar actions={[]} />
         </div>
       </div>
@@ -168,7 +185,7 @@ function Bars({ actions }: { actions: ReturnType<typeof demoActions> }) {
   )
 }
 
-function Menus({ actions }: { actions: ReturnType<typeof demoActions> }) {
+function Menus({ actions }: { actions: DemoActions }) {
   const m = useMessages()
   const { rename, rescan, copyPath, archive, remove, trash } = actions
   const items: MenuItem[] = [
@@ -187,16 +204,12 @@ function Menus({ actions }: { actions: ReturnType<typeof demoActions> }) {
   ]
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold">ActionMenu · MenuItems</h3>
-      <p className="text-xs text-muted-foreground">
-        The items are given out of order, with Delete first and doubled separators: every menu shows Delete last after one separator, a heading group, a submenu, shortcuts and an unavailable item
-        with its reason. Right-click the box for the same list as a context menu.
-      </p>
+      <Part heading={m.catalogue_actions_menu_heading()} caption={m.catalogue_actions_menu_caption({ delete: actions.delete.label })} />
       <div className="flex flex-wrap items-start gap-3">
         <ActionMenu label={m.calibration_run()} items={items} />
         <ContextMenuDemo items={items} />
-        <span className="text-xs text-muted-foreground">
-          Without an action the menu renders nothing:
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          {m.catalogue_actions_menu_empty()}
           <ActionMenu label={m.calibration_run()} items={[{ heading: m.calibration_run() }, { separator: true }]} />
         </span>
       </div>
@@ -205,12 +218,13 @@ function Menus({ actions }: { actions: ReturnType<typeof demoActions> }) {
 }
 
 function ContextMenuDemo({ items }: { items: MenuItem[] }) {
+  const m = useMessages()
   const runner = useAction()
   return (
     <>
       <ContextMenu>
-        <ContextMenuTrigger className="flex h-16 w-64 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">Right-click here</ContextMenuTrigger>
-        <ContextMenuContent aria-label="Context menu sample">
+        <ContextMenuTrigger className="flex h-16 w-64 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">{m.catalogue_actions_context_target()}</ContextMenuTrigger>
+        <ContextMenuContent aria-label={m.catalogue_actions_context_name()}>
           <MenuItems items={items} runner={runner} />
         </ContextMenuContent>
       </ContextMenu>
@@ -220,15 +234,13 @@ function ContextMenuDemo({ items }: { items: MenuItem[] }) {
   )
 }
 
-function Rows({ actions, names }: { actions: ReturnType<typeof demoActions>; names: string[] }) {
+function Rows({ actions, names }: { actions: DemoActions; names: string[] }) {
+  const m = useMessages()
   const runner = useAction()
   const items: MenuItem[] = [actions.rename, actions.copyPath, actions.archive, actions.delete, actions.remove]
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold">RowActions · RowContextMenu</h3>
-      <p className="text-xs text-muted-foreground">
-        Each row: a ⋯ in the Tab order, and the same items on right click, Shift+F10 or the Menu key (on the row or its ⋯). One runner per list, so its feedback appears under the list.
-      </p>
+      <Part heading={m.catalogue_actions_rows_heading()} caption={m.catalogue_actions_rows_caption()} />
       <ul className="w-96 divide-y rounded-lg border">
         {names.map((name) => (
           <RowContextMenu key={name} name={name} items={items} runner={runner}>
@@ -239,7 +251,7 @@ function Rows({ actions, names }: { actions: ReturnType<typeof demoActions>; nam
           </RowContextMenu>
         ))}
         <li className="flex items-center justify-between gap-2 px-3 py-1 text-sm text-muted-foreground">
-          <span>Row without actions: no ⋯</span>
+          <span>{m.catalogue_actions_rows_none()}</span>
           <RowActions name="—" items={[{ separator: true }]} />
         </li>
       </ul>
@@ -257,10 +269,7 @@ export function ActionsCatalogue() {
     .map((target) => target.name)
   const actions = demoActions(m, names)
   return (
-    <Section
-      title="Actions"
-      description="One Action descriptor renders as a header button, a named menu item, a row ⋯ item, a context-menu item and a palette command, with the same label, shortcut and unavailable reason."
-    >
+    <Section title={m.catalogue_actions_heading()} description={m.catalogue_actions_summary()}>
       <div className="space-y-6">
         <RoleMatrix />
         <KindMatrix actions={actions} />

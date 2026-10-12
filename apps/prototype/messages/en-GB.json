@@ -7583,5 +7583,32 @@
         "countPlural=*": "{label} · {count} files"
       }
     }
-  ]
+  ],
+  "catalogue_actions_heading": "Actions",
+  "catalogue_actions_summary": "One Action renders as a header button, a named menu item, a row ⋯ item, a context-menu item and a palette command, with the same label, shortcut and unavailable reason.",
+  "catalogue_actions_roles_heading": "Button roles",
+  "catalogue_actions_roles_caption": "Role × size × state. Point at, Tab to or press a button for hover, focus-visible and active. Disabled stays focusable.",
+  "catalogue_actions_size": "Size {size}",
+  "catalogue_actions_state_default": "Default",
+  "catalogue_actions_state_disabled": "Disabled",
+  "catalogue_actions_state_loading": "Loading",
+  "catalogue_actions_role_primary": "Primary (default)",
+  "catalogue_actions_role_standard": "Standard (outline)",
+  "catalogue_actions_role_quiet": "Quiet (ghost)",
+  "catalogue_actions_role_destructive": "Destructive (destructive)",
+  "catalogue_actions_role_link": "Link (link)",
+  "catalogue_actions_role_icon": "Icon only (IconButton)",
+  "catalogue_actions_button_heading": "ActionButton",
+  "catalogue_actions_button_caption": "The kind picks the variant. In a table cell (xs) a primary stays outline. {archive} is unavailable: point at or Tab to it for its blockers. {start} and {rescan} run slowly; {remove} is refused; the second {rescan} fails and offers {retry}.",
+  "catalogue_actions_bar_heading": "ActionBar",
+  "catalogue_actions_bar_caption": "Up to three standard buttons, the named menu, then the one primary at the trailing end. A fourth standard action, destructive actions and the overflow go to the menu ({more} by default, or an object menu). Feedback shows under the bar.",
+  "catalogue_actions_bar_empty": "No actions: nothing renders",
+  "catalogue_actions_menu_heading": "ActionMenu · MenuItems",
+  "catalogue_actions_menu_caption": "The items arrive out of order, {delete} first, with doubled separators. Every menu shows {delete} last after one separator, a heading group, a submenu, shortcuts and an unavailable item with its reason. Right-click the box for the same list as a context menu.",
+  "catalogue_actions_menu_empty": "No action: the menu renders nothing",
+  "catalogue_actions_context_target": "Right-click here",
+  "catalogue_actions_context_name": "Context menu sample",
+  "catalogue_actions_rows_heading": "RowActions · RowContextMenu",
+  "catalogue_actions_rows_caption": "Each row has a ⋯ in the Tab order, and the same items on right click, Shift+F10 or the Menu key, on the row or its ⋯. One runner per list, so its feedback shows under the list.",
+  "catalogue_actions_rows_none": "Row without actions: no ⋯"
 }

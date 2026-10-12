@@ -7639,5 +7639,32 @@
         "countPlural=*": "{label} · {count} arquivos"
       }
     }
-  ]
+  ],
+  "catalogue_actions_heading": "Ações",
+  "catalogue_actions_summary": "Uma Action aparece como botão do cabeçalho, item de menu nomeado, item ⋯ da linha, item do menu de contexto e comando da paleta, com o mesmo rótulo, atalho e motivo de indisponibilidade.",
+  "catalogue_actions_roles_heading": "Papéis dos botões",
+  "catalogue_actions_roles_caption": "Papel × tamanho × estado. Aponte, use Tab ou pressione um botão para ver passar o mouse, foco visível e ativo. Desativado continua focalizável.",
+  "catalogue_actions_size": "Tamanho {size}",
+  "catalogue_actions_state_default": "Padrão",
+  "catalogue_actions_state_disabled": "Desativado",
+  "catalogue_actions_state_loading": "Carregando",
+  "catalogue_actions_role_primary": "Principal (default)",
+  "catalogue_actions_role_standard": "Comum (outline)",
+  "catalogue_actions_role_quiet": "Discreto (ghost)",
+  "catalogue_actions_role_destructive": "Destrutivo (destructive)",
+  "catalogue_actions_role_link": "Link (link)",
+  "catalogue_actions_role_icon": "Só ícone (IconButton)",
+  "catalogue_actions_button_heading": "ActionButton",
+  "catalogue_actions_button_caption": "O tipo escolhe a variante. Numa célula de tabela (xs), uma ação principal fica outline. {archive} está indisponível: aponte ou use Tab para ver os impedimentos. {start} e {rescan} demoram; {remove} é recusado; o segundo {rescan} falha e oferece {retry}.",
+  "catalogue_actions_bar_heading": "ActionBar",
+  "catalogue_actions_bar_caption": "Até três botões comuns, o menu nomeado e, por último, a única ação principal. Uma quarta ação comum, as ações destrutivas e o excedente vão para o menu ({more} por padrão, ou um menu do objeto). O retorno aparece abaixo da barra.",
+  "catalogue_actions_bar_empty": "Sem ações: nada é exibido",
+  "catalogue_actions_menu_heading": "ActionMenu · MenuItems",
+  "catalogue_actions_menu_caption": "Os itens chegam fora de ordem, {delete} primeiro, com separadores duplicados. Todo menu mostra {delete} por último, após um separador, um grupo com título, um submenu, atalhos e um item indisponível com o motivo. Clique com o botão direito na caixa para ver a mesma lista como menu de contexto.",
+  "catalogue_actions_menu_empty": "Sem ação: o menu não é exibido",
+  "catalogue_actions_context_target": "Clique com o botão direito aqui",
+  "catalogue_actions_context_name": "Exemplo de menu de contexto",
+  "catalogue_actions_rows_heading": "RowActions · RowContextMenu",
+  "catalogue_actions_rows_caption": "Cada linha tem um ⋯ na ordem do Tab e os mesmos itens no clique com o botão direito, Shift+F10 ou na tecla Menu, na linha ou no ⋯. Um executor por lista, então o retorno aparece abaixo da lista.",
+  "catalogue_actions_rows_none": "Linha sem ações: sem ⋯"
 }
