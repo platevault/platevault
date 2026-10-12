@@ -2304,6 +2304,7 @@
   "project_lookup_sesame": "CDS Sesame (SIMBAD)",
   "project_panel_short": "P{n}",
   "tonight_limit": "Moon ≥ {separation}° · ≤ {illumination}%",
+  "tonight_avoidance": "Moon ≥ {separation}° at full · {width} d",
   "tonight_moon_position": "Moon {separation}° · {illumination}%",
   "tonight_moon_down": "Moon down",
   "tonight_reason_good": "{band} good · {hours} · {moon}",
