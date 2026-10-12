@@ -1,13 +1,13 @@
 ---
 id: J22
 title: Review frames and record scoped quality decisions in a processing run
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [frame-review, view-review, targets, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, D02, D03, D08, D10, D19, D-W13, D-W14, D-W15, D-W22, D-W36, D-W40, D-W42, D-W44, D-W53, D-W54, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, D02, D03, D08, D10, D19, D-W13, D-W14, D-W15, D-W22, D-W36, D-W40, D-W42, D-W44, D-W53, D-W54, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality, HARNESS-V5-IA.md#S6, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#d-review, HARNESS-V5-FEEDBACK-R1.md#copy-rules]
 ---
 
 ## Goal
@@ -39,32 +39,35 @@ source file.
 
 ### S1 — Open frame review {#S1}
 
-- **Do:** Click the run's **Review** step.
-- **Expect:** Frame review opens in the table view. The frame table sits at the top across the full width at about 8 rows. The preview, with its histogram and star cutouts, fills the rest, and the plots run across the session in the bottom strip. Every frame reads pending, and progress is visible as native measurements are computed.
-- **Trace:** flow D1 · PIX-FR-01, PIX-FR-10 · D-W13, D-W22
+- **Do:** Click the run's **Review** step and read the status line. Click **Measure frames**.
+- **Expect:** Frame review opens in the table view. The frame table sits at the top across the full width at about 8 rows. The preview, with its histogram and star cutouts, fills the rest, and the plots run across the session in the bottom strip. Every measurement column reads Not measured, and the status line reads `214 frames shown of 214` and "214 frames not measured." beside **Measure frames**. After the click it announces "Measuring 214 frames, the current frame first.", **Cancel** replaces **Measure frames**, and progress shows in the status line as native measurements are computed.
+- **Expect (negative):** Opening Review starts no measurement; only **Measure frames** does.
+- **Trace:** flow D1 · PIX-FR-01, PIX-FR-10 · PIX-AC-01 · D-W13, D-W22 · HARNESS-V5-IA.md S6, Fix pass "Review layout" (Measure frames in the status line)
 
 ### S2 — Inspect a frame while measuring runs {#S2}
 
-- **Do:** While measurement runs, click a 30 Sep frame row, then a different frame's measurement-plot point. Open the disclosure.
-- **Expect:** Each chosen frame is highlighted in the table, the plots and the preview at once. The disclosure shows header metadata and each measurement's source, method and units. Measurement keeps progressing.
-- **Trace:** flow D1, D2 · PIX-FR-01, PIX-FR-02 · D03
+- **Do:** While measurement runs, click a 30 Sep frame row, then a different frame's measurement-plot point. Open the inspector and hover the ① marker beside one measured value.
+- **Expect:** Each chosen frame is highlighted in the table, the plots and the preview at once. The inspector shows header metadata. Each measured value shows with its units and a ① marker, whose tooltip names its source, method, basis and time. Measurement keeps progressing.
+- **Expect (negative):** No inline paragraph explains a measured value.
+- **Trace:** flow D1, D2 · PIX-FR-01, PIX-FR-02 · D03 · HARNESS-V5-FEEDBACK-R1.md Copy rules "Measured values", §D (source notes become ① tooltips)
 
 ### S3 — Cancel measurement {#S3}
 
-- **Do:** Click **Cancel** before measurement finishes.
-- **Expect:** Further measurement stops. Frames without a value read **Not measured**; values already computed remain. The draft still includes 214 lights.
+- **Do:** Click **Cancel** in the status line before measurement finishes.
+- **Expect:** Further measurement stops, the status line reads "Measurement canceled; N not measured." with N the frames still without a value, and **Measure frames** returns. Frames without a value read **Not measured**; values already computed remain. The draft still includes 214 lights.
 - **Expect (negative):** Cancel discards no selection, inclusion or exclusion.
 - **Trace:** flow D1, cross-flow "Measurement pending/failed" · PIX-FR-01 · PIX-AC-01
 
 ### S4 — Resume by reopening review {#S4}
 
-- **Do:** Leave the Review step and open it again.
-- **Expect:** Values computed before S3 appear immediately as cached; the remaining frames read pending and are measured until progress completes.
-- **Trace:** flow D1 · PIX-FR-01 · PIX-AC-01
+- **Do:** Leave the Review step and open it again. Read the measurement columns, then click **Measure frames**.
+- **Expect:** Values computed before S3 appear immediately as cached, and the remaining frames read Not measured. After **Measure frames**, those frames are measured until the status line reads "Every readable frame has a built-in value."
+- **Expect (negative):** Reopening Review starts no measurement and recomputes no cached value.
+- **Trace:** flow D1 · PIX-FR-01 · PIX-AC-01 · prototype d-review/measure-bar.tsx (Review opens idle)
 
 ### S5 — Inspect pixels without changing data {#S5}
 
-- **Do:** On a 30 Sep frame press **Z** to zoom to 1:1 and pan. Compare the fixed centre and corner regions. Press **→** and **←** (then **K** and **J**) to step frames. Press **C**, choose a reference frame, zoom and pan, and press **C** again. Press **F** twice. Apply a strong display stretch, then remove it.
+- **Do:** On a 30 Sep frame press **Z** to zoom to 1:1 and pan. Compare the fixed centre and corner regions. Press **→** and **←** (then **K** and **J**) to step frames. Press **C**, choose a reference frame, zoom and pan, and press **C** again. Press **F** twice. Set the display stretch to Strong, then back to Linear.
 - **Expect:** **Z** toggles between fit and 1:1. Each arrow and **J**/**K** press makes the next or previous frame current. Compare mode shows the current frame beside the reference with linked zoom and pan. **F** enters and leaves fullscreen. The preview, thumbnails and histogram respond to the stretch, and the frame's measured values are identical with the stretch on and off.
 - **Expect (negative):** Source bytes still match P4; no measurement is recomputed from the stretched display.
 - **Trace:** flow D2 · PIX-FR-03, PIX-FR-04, PIX-FR-13 · PIX-AC-02 · root SC-005 · D03, D-W13, D-W14
@@ -103,6 +106,13 @@ source file.
 - **Expect (negative):** Threshold selection changes no quality state and no membership.
 - **Trace:** flow D2 · PIX-FR-08, PIX-FR-15 · PIX-AC-14 · D-W13
 
+### S7b — Inspect the corners at 1:1 {#S7b}
+
+- **Do:** On a measured 30 Sep frame press **⌘I** (Ctrl+I off macOS). Turn on the FWHM overlay and the eccentricity overlay and read the tiles. Press **⌘I** again. Then turn the corner inspector on and off with the toolbar's **Corners** toggle.
+- **Expect:** **⌘I** replaces the preview with nine tiles of the current frame at 1:1, named Top left, Top, Top right, Left, Centre, Right, Bottom left, Bottom and Bottom right. With both overlays on, each tile draws its stars' FWHM circles and eccentricity whiskers and names its FWHM and eccentricity. The second **⌘I**, and the **Corners** toggle, switch between the tiles and the preview, and the same frame stays current throughout.
+- **Expect (negative):** The corner inspector starts no measurement and changes no quality state or membership. A tile's FWHM and eccentricity values do not change with the display stretch.
+- **Trace:** flow D2 · PIX-FR-03, PIX-FR-05 · HARNESS-V5-FEEDBACK-R1.md §D "Corner inspector" · prototype d-review/corners.tsx
+
 ### S8 — Exclude six frames from this run {#S8}
 
 - **Do:** Select the six trailed 30 Sep frames and click **Exclude from run**.
@@ -133,16 +143,16 @@ source file.
 ### S11a — Cull with hotkeys {#S11a}
 
 - **Do:** In the table make F1 current and press **X**. Press **⌥3**, then **⌥1**. Make F1 current again. Turn auto-advance off and press **P**, then **Shift+P**. Turn auto-advance back on.
-- **Expect:** **X** applies at once: F1 reads Rejected with scope Library, and F2 becomes current. The draft holds 207 lights and lists F1 with the reason "Rejected". NGC 7000 usable Ha reads 9h 10m. **⌥3** lists only F1, and **⌥1** lists every frame. With auto-advance off, **P** makes F1 Picked again, F1 stays current, and the draft holds 208 lights with NGC 7000 usable Ha 9h 15m. **Shift+P** keeps F1 Picked and makes F2 current.
-- **Expect (negative):** No mark asks for confirmation. Saved membership revision 2 is unchanged throughout.
-- **Trace:** flow D5 · PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-12, VSEL-AC-23 · D-W14, D-W42, D-W53, D-W54
+- **Expect:** **X** applies at once: F1 reads "Rejected · Library", and F2 becomes current. The draft holds 207 lights and lists F1 with the reason "Rejected". The status line reads `1 rejected, unsaved` with **Save run** and **Discard**, while Select's step state still reads `Saved r2`. NGC 7000 usable Ha reads 9h 10m. **⌥3** lists only F1, and **⌥1** lists every frame. With auto-advance off, **P** makes F1 Picked again, F1 stays current, the draft holds 208 lights, the `1 rejected, unsaved` note is gone, and NGC 7000 usable Ha reads 9h 15m. **Shift+P** keeps F1 Picked and makes F2 current.
+- **Expect (negative):** No P, X or U mark asks for confirmation. Saved membership revision 2 is unchanged throughout, and the rejection changes Review's draft, not Select's.
+- **Trace:** flow D5 · PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-12, VSEL-AC-23 · D-W14, D-W42, D-W53, D-W54 · HARNESS-V5-IA.md S6, Fix pass "Review drafts"
 
 ### S11b — Reject a frame for this Project only {#S11b}
 
-- **Do:** On F2 open the frame menu and choose **Reject for this Project only**. Read the Project's Ha goal. Then choose **Clear Project reject** on F2 and read the goal again.
-- **Expect:** F2 reads Rejected with scope This Project and its library quality stays Usable. The draft holds 207 lights and lists F2 with the reason "Rejected". Ha reads `9h 10m in project`, and its captured value stays `12h 35m`. After **Clear Project reject**, F2 reads Picked, the draft holds 208 lights, and Ha reads `9h 15m in project`.
-- **Expect (negative):** NGC 7000 usable Ha stays 9h 15m. No single-key hotkey performs this action. Saved membership revision 2 is unchanged.
-- **Trace:** flow D5 · PIX-FR-14 · VSEL-FR-11, VSEL-FR-15 · VSEL-AC-11, PRJ-AC-08 · PRJ-FR-04 · D10, D-W42, D-W44, D-W54, D-W66
+- **Do:** On F2 open the frame menu and choose **Reject for this Project**. Read the confirmation and confirm with **Reject 1 frame**. Read the Project's Ha goal. Then choose **Clear Project reject** on F2 and read the goal again.
+- **Expect:** The confirmation is titled "Reject <F2's file name> for NGC 7000 HOO?", reads "This Project only. Library quality stays." and lists "Rejected · This Project: 1 frame", "Out of NGC 7000 HOO's totals" and "Out of the NGC7000-HOO-Siril draft". Afterwards F2 reads "Rejected · This Project" and its library quality stays Usable. The draft holds 207 lights and lists F2 with the reason "Rejected", and the status line reads `1 rejected, unsaved`. Ha reads `9h 10m in project`, and its captured value stays `12h 35m`. After **Clear Project reject**, F2 reads Picked, the draft holds 208 lights, the unsaved note is gone, and Ha reads `9h 15m in project`.
+- **Expect (negative):** NGC 7000 usable Ha stays 9h 15m. No single-key hotkey performs this action, and nothing changes before the confirmation. Saved membership revision 2 is unchanged.
+- **Trace:** flow D5 · PIX-FR-14 · VSEL-FR-11, VSEL-FR-15 · VSEL-AC-11, PRJ-AC-08 · PRJ-FR-04 · D10, D-W42, D-W44, D-W54, D-W66 · HARNESS-V5-IA.md S6 (secondary "Reject for this Project only")
 
 ### S12 — Meet a goal without closing the Project {#S12}
 
@@ -153,17 +163,17 @@ source file.
 
 ### S13 — Mark the excluded frames in the grid {#S13}
 
-- **Do:** Show excluded rows and press **G**. Select the six excluded 30 Sep frames and press **X**. Then select only the first of them, press **U**, and choose **Reject for this Project only** from its frame menu. Press **⌥3**. Return to the table view. Leave the Review step and open it again in the grid.
-- **Expect:** All six read Rejected with scope Library after **X**, and NGC 7000 Unreviewed OIII integration falls by 0h 30m. After **U** and the Project reject, the first frame reads Rejected with scope This Project and its library quality is Unreviewed. **⌥3** lists exactly the six frames, with five labelled Library and one labelled This Project. The table keeps the same selection, current frame, filter and sort as the grid. On reopening, the grid shows the cached thumbnails with no pending state.
-- **Expect (negative):** The draft still holds 208 lights, and NGC 7000 usable integration and the Project's "in project" and "captured" values are unchanged. No mark asks for confirmation.
+- **Do:** Show excluded rows and press **G**. Select the six excluded 30 Sep frames and press **X**. Then select only the first of them, press **U**, choose **Reject for this Project** from its frame menu and confirm. Press **⌥3**. Return to the table view. Leave the Review step and open it again in the grid.
+- **Expect:** All six read "Rejected · Library" after **X**, and NGC 7000 Unreviewed OIII integration falls by 0h 30m. After **U** and the Project reject, the first frame reads "Rejected · This Project" and its library quality is Unreviewed. **⌥3** lists exactly the six frames, with five labelled Library and one labelled This Project. The table keeps the same selection, current frame, filter and sort as the grid. On reopening, the grid shows the cached thumbnails with no pending state.
+- **Expect (negative):** The draft still holds 208 lights, and NGC 7000 usable integration and the Project's "in project" and "captured" values are unchanged. No P, X or U mark asks for confirmation.
 - **Trace:** flow D5 · PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-16 · PRJ-FR-04 · D10, D-W40, D-W42, D-W54, D-W66
 
 ### S14 — Import measurements {#S14}
 
-- **Do:** Overwrite the P6 frame in place with its variant and restore its recorded mtime. Click **Import measurements**, choose the P3 CSV, review the mapping, and confirm it. Then restore the P6 frame's original bytes and recorded mtime.
-- **Expect:** The mapping review lists matched rows, the row with no matching frame, and the ambiguous row, with units and source/method. It also lists the P6 row for review, because the frame's bytes differ from the digest recorded when PlateVault measured it. After confirmation, imported values show as imported and content unverified, with their units, next to native values.
+- **Do:** Overwrite the P6 frame in place with its variant and restore its recorded mtime. Click **Import** in Review's status line, choose the P3 CSV in **Import measurements**, review the mapping, and confirm it. Then restore the P6 frame's original bytes and recorded mtime.
+- **Expect:** The mapping review lists matched rows, the row with no matching frame, and the ambiguous row, with units and source/method. It also lists the P6 row for review, because the frame's bytes differ from the digest recorded when PlateVault measured it. After confirmation, imported values show as "Imported, unverified", with their units, next to native values. Every frame without an imported value, the P6 frame included, reads "–" in the FWHM imported column.
 - **Expect (negative):** No imported value attaches to the P6 frame, and no imported value reads verified. Every native value, exclusion and quality state stays as it was, and the run still reads 208 lights.
-- **Trace:** flow D6, cross-flow "External changes" · PIX-FR-06, PIX-FR-07, PIX-FR-08 · PIX-AC-04, PIX-AC-11 · D03, D19
+- **Trace:** flow D6, cross-flow "External changes" · PIX-FR-06, PIX-FR-07, PIX-FR-08 · PIX-AC-04, PIX-AC-11 · D03, D19 · HARNESS-V5-IA.md Fix pass "Review layout" (Import measurements in the status line) · HARNESS-V5-FEEDBACK-R1.md §D ("Absent imports read '–'")
 
 ### S15 — Inspect unresolved import rows {#S15}
 
@@ -174,8 +184,8 @@ source file.
 
 ### S15a — Replace a reviewed frame in place {#S15a}
 
-- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then open the run's Review step.
-- **Expect:** Before the rescan, usable Ha still reads 9h 15m, labelled as last verified at S11. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, and its thumbnail is decoded again. The frame is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
+- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then open the run's Review step and click **Measure frames**.
+- **Expect:** Before the rescan, usable Ha still reads 9h 15m, labelled as last verified at S11. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, its thumbnail is decoded again, and it reads Not measured until **Measure frames**. Then it is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
 - **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded, and the run still reads 208 lights / 17h 20m.
 - **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PIX-FR-12 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19 · J19/G4
 
@@ -202,17 +212,24 @@ source file.
 - SC5: The draft holds 207 lights after each rejection of an included frame and 208 after each restore (S11a, S11b); saved revision 2 changes 0 times between S10 and S16.
 - SC6: S14 attaches 0 imported values to the P6 frame and shows 0 imported values as verified.
 - SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
+- SC8: Measurement starts exactly three times, at S1, S4 and S15a, each time from **Measure frames**. Opening Review and the corner inspector (S7b) start 0 measurements, and S7b shows exactly 9 tiles.
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults set in decisions D02, D03, D08, D10 and D19 and workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53, D-W54 and D-W66. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (`apps/prototype/design/HARNESS-V5-IA.md` S6 and Fix pass, `HARNESS-V5-FEEDBACK-R1.md` Copy rules and §D, on `ui-harness-v5` @ b5e813a5), the specs and the defaults set in decisions D02, D03, D08, D10 and D19 and workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53, D-W54 and D-W66. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: numerical measurement methods, metric set, masks, saturation, background, aperture and tolerances need fixture qualification in PIX planning (D03). The P2 fixture is mono, so CFA inspection as the recorded mosaic plane (D03) is not exercised. Blocks readiness.
 - G3: Out of scope for this journey: no fixture holds NaN, infinity or masked samples, so PIX-AC-08's invalid-sample evidence is not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Out of scope for this journey: a frame shared with a second Project's candidates (PIX-AC-13) and its Rejected state in other Projects' runs (PIX-AC-12) are not observed, because the fixture has one NGC 7000 Project. A session entering a draft with library-Unusable frames that start visibly excluded (VSEL-AC-13) is not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: no frame is trashed before this journey. J34/S7 covers a Trashed frame's absence from frame review (PIX-AC-19), and J33/S6 covers run-group review across panels (PIX-AC-18).
+- G5: Out of scope for this journey: no frame is trashed before this journey. J34/S7 covers a Trashed frame's absence from frame review (PIX-AC-19), and J33/S6 covers run-group review across panels (PIX-AC-18). Review from a library session (library marks only) is covered by J37. Review from a Project's candidates (HARNESS-V5-FEEDBACK-R1.md §D) is not exercised. Blocks readiness until covered by a step or a journey.
+- G6: Unresolved product question: harness v5 Review offers no run-only **Exclude from run** action. Its frame menu holds P, X, U and Reject for this Project, and a frame leaves the draft only as Rejected. It still shows the "Excluded from run" state, and the v5 IA neither keeps nor drops the action. S8, S9, S10, S13 and S16 keep the contract's run-only exclusion (VSEL-FR-10, VSEL-AC-04) until this is decided. Blocks readiness.
+- G7: Unresolved product question: harness v5 Review has no **Mark included frames usable** control with a scope confirmation. Bulk marking there is ⌘A and then P, with no confirmation. S11 keeps the confirmed bulk mark (VSEL-FR-11, VSEL-AC-05, D10) until this is decided. Blocks readiness.
 
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S10 to S13, S15a, S16, +S5a, +S5b, +S7a, +S11a, +S11b · behavior-change
   Review is a step of processing run `NGC7000-HOO-Siril`, with table, filmstrip and grid views, Lightroom hotkeys, and threshold selection. Quality has two levels, library (P/X/U) and "Reject for this Project only", and rejecting a frame in Review removes it from the draft. Goals read "in project"; the standalone-View step 13a is retired.
   Evidence: specs/067-frame-review PIX-FR-10 to PIX-FR-16, PIX-AC-12, PIX-AC-14 to PIX-AC-17; specs/066-view-selection VSEL-FR-15, VSEL-AC-23; specs/065-project-goals PRJ-AC-08, PRJ-FR-04 and PRJ-FR-21 with workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53, D-W54 and D-W66 at d45a22ad · by: journey-scribe (intent-gated)
+- **Δ3** 2026-10-10 · S1, S2, S3, S4, S5, S11a, S11b, S13, S14, S15a, +S7b · behavior-change
+  Review opens idle: only Measure frames in the status line starts or resumes measuring; provenance moves into ① tooltips, and absent imports read "–". A corner inspector (⌘/Ctrl+I or Corners) shows nine 1:1 tiles with FWHM and eccentricity overlays.
+  Rejections show as Review's own draft ("1 rejected, unsaved", with Save run and Discard), while Select keeps "Saved r2". Reject for this Project now asks for a confirmation that names its scope.
+  Evidence: HARNESS-V5-IA.md §Screens S6 and §Fix pass ("Review drafts", "Review layout"); HARNESS-V5-FEEDBACK-R1.md §Copy rules "Measured values" and §Screens D (corner inspector, ① NoteMarker); prototype src/features/v5/d-review/frame-review.tsx, measure-bar.tsx, corners.tsx and messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-10 · by: JourneysV5.U3Runs (intent-gated)
