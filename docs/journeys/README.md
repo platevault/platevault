@@ -32,9 +32,9 @@ instead of being repeated per journey:
 
 ## Clean rebuild validation
 
-J14, J15, J18 to J29 and J31 to J43 describe the rebuild contract in specs 063 through 072, as amended by the workflow decisions D-W1 to D-W75. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired with status deprecated, because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no rebuild execution evidence. J01 to J13, J16 and J17 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to formal journey steps and owning requirements: the 44 product-flow steps, the redesign surfaces and the cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the rebuild successor of each legacy journey and the readiness blockers of each rebuild journey.
+J14, J15, J18 to J29 and J31 to J44 describe the rebuild contract in specs 063 through 072, as amended by the workflow decisions D-W1 to D-W75. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired with status deprecated, because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no rebuild execution evidence. J01 to J13, J16 and J17 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to formal journey steps and owning requirements: the 44 product-flow steps, the redesign surfaces and the cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the rebuild successor of each legacy journey and the readiness blockers of each rebuild journey.
 
-The rebuild journeys follow the **harness v5** design, the clickable prototype the production frontend is built to: `apps/prototype/design/HARNESS-V5-IA.md`, `HARNESS-V5-FEEDBACK-R1.md` (every round through Round 5, 2026-10-10), `HIGH-LEVEL-DESIGN.md` and `I18N.md` on the `ui-harness-v5` branch (user instruction, 2026-10-12). Where a user-decided v5 item (Round 1b, 2c and 5, and the accepted P- items) changes a contract interaction, the journey states the v5 behavior and its Δ entry cites the v5 section; the spec text, and the interaction map's paraphrase of it, waits for the contract amendment (D-W28 order). J36 to J43 were authored from the v5 design. J18's orientation walk and Getting-started checklist do not appear in v5; J18 stays unchanged until the user decides its future.
+The rebuild journeys follow the **harness v5** design, the clickable prototype the production frontend is built to: `apps/prototype/design/HARNESS-V5-IA.md`, `HARNESS-V5-FEEDBACK-R1.md` (every round through Round 6), `HIGH-LEVEL-DESIGN.md` and `I18N.md` on the `ui-harness-v5` branch (user instruction, 2026-10-12). Round 6 (user, 2026-10-10) records the user's answers to the journeys' open product questions and supersedes earlier rounds where they disagree. Where a user-decided v5 item (Round 1b, 2c, 5 and 6, and the accepted P- items) changes a contract interaction, the journey states the v5 behavior and its Δ entry cites the v5 section; the spec text, and the interaction map's paraphrase of it, waits for the contract amendment (D-W28 order). J36 to J44 were authored from the v5 design. Input modes and archiving sessions that a run holds hard links to are pending research (Round 6, "Pending research"); J24 and J28 record that gap.
 
 Both desktop MCP profiles apply to development rebuild validation. A functional Tauri MCP bridge is mandatory, binds only to loopback, and drives the actual Tauri backend and webview. Mock IPC is never validation evidence. Production MCP shipping is optional future work.
 
@@ -288,20 +288,20 @@ journey whose surfaces its changed section names.
 | `src/features/v5/c-runs/results-step.tsx` | results, view-review |
 | `src/features/v5/c-runs/done-step.tsx` | cleanup, view-review |
 | `src/features/v5/d-review/**`, `src/domain/measurement.ts` | frame-review |
-| `src/features/v5/e-targets-plan-settings/target*`, `src/domain/sky.ts` | targets |
-| `src/features/v5/e-targets-plan-settings/plan*`, `src/features/v5/e-targets-plan-settings/good-tonight.ts`, `src/features/v5/e-targets-plan-settings/moon-limits.tsx`, `src/features/v5/e-targets-plan-settings/sky-tonight.ts`, `src/features/v5/e-targets-plan-settings/night-timeline.tsx`, `src/domain/planning.ts`, `src/store/actions/planning.ts` | planning, targets |
+| `src/features/v5/e-targets-plan-settings/target*`, `src/domain/sky.ts` | targets, planning |
+| `src/features/v5/e-targets-plan-settings/good-tonight.ts`, `src/features/v5/e-targets-plan-settings/moon-limits.tsx`, `src/features/v5/e-targets-plan-settings/sky-tonight.ts`, `src/domain/planning.ts`, `src/store/actions/planning.ts` | planning, targets |
 | `src/features/v5/e-targets-plan-settings/calibration*`, `src/domain/calibration-library.ts`, `src/domain/calibration-process.ts`, `src/store/actions/calibration.ts` | calibration, calibration-process |
 | `src/features/v5/e-targets-plan-settings/settings-calibration.tsx` | calibration-process, settings |
 | `src/features/v5/e-targets-plan-settings/settings-equipment.tsx` | equipment, settings |
 | `src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx` | goal-templates, settings |
 | `src/features/v5/e-targets-plan-settings/settings-naming.tsx`, `src/domain/templates.ts` | naming, settings |
-| `src/features/v5/e-targets-plan-settings/storage.tsx`, `src/domain/storage.ts`, `src/store/actions/storage.ts` | duplicates, locations |
+| `src/features/t1/components/duplicates-review.tsx`, `src/domain/storage.ts`, `src/store/actions/storage.ts` | duplicates, locations |
 | `src/store/actions/trash.ts` | project-trash, wrap-up, cleanup, duplicates |
 | `src/features/v5/e-targets-plan-settings/activity.tsx` | activity |
 
-(Globs verified against `ui-harness-v5` at b5e813a5. Round 5 work in progress
-moves Plan into Targets and removes the Storage page; keep the surface keys and
-correct the globs when those files move.)
+(Globs verified against `ui-harness-v5` at 4f470775, after Round 5 merged Plan
+into the Targets page and removed the Storage page. Round 6 is not yet built;
+correct the globs when its files land.)
 
 ## Intent-evidence sources
 
