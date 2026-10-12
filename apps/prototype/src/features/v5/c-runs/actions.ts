@@ -42,6 +42,7 @@ import { completeRun, editRun, setGroupSetup, setProductInputs, setRunSetup, sta
 import { pinAutomaticChoices } from "@/store/actions/calibration"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { moveToOsTrash } from "@/store/actions/trash"
+import { runIntermediatesOffer } from "@/features/v5/b-projects/model"
 import { startOperation } from "@/store/operations"
 import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultsFolders, runLock, scanResultsFolders, type VerifyOutcome, verifyPreparation } from "./model"
 import type { PreparePayload } from "./operations"
@@ -81,14 +82,7 @@ export function setCalibrationPolicy(runId: string, policy: CalibrationPolicy): 
 }
 
 export function chooseProfile(runOrGroup: { runId?: string; groupId?: string }, profileId: ProfileId): CommitResult {
-  const profile = store.getState().catalog.profiles[profileId]
-  const patch: Partial<RunSetup> = { profileId }
-  // A mode the profile cannot use is cleared rather than kept silently (PREP-FR-04).
-  if (profile) {
-    const current = runOrGroup.groupId ? store.getState().catalog.runGroups[runOrGroup.groupId]?.setup.inputMode : runOrGroup.runId ? runSetup(store.getState().catalog, store.getState().catalog.runs[runOrGroup.runId]!).inputMode : null
-    if (current && !profile.capability.inputModes.includes(current)) patch.inputMode = null
-  }
-  return runOrGroup.groupId ? changeGroupSetup(runOrGroup.groupId, patch) : changeRunSetup(runOrGroup.runId!, patch)
+  return runOrGroup.groupId ? changeGroupSetup(runOrGroup.groupId, { profileId }) : changeRunSetup(runOrGroup.runId!, { profileId })
 }
 
 export function chooseMode(runOrGroup: { runId?: string; groupId?: string }, mode: InputMode): CommitResult {
@@ -288,7 +282,7 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
   const plan = preparePlan(state, run, choices, options)
   const href = runHref(run, "prepare")
   const refused = msg("store_refused", { label: msg("store_label_prepare_named", { name: run.name }) })
-  if (!plan.ready || !plan.revision || !plan.profile || !plan.mode || !plan.layout.folderPath || !plan.layout.resultsPath) {
+  if (!plan.ready || !plan.revision || !plan.profile || !plan.layout.folderPath || !plan.layout.resultsPath) {
     return { result: refuse(refused, blockingReasons(plan), href), operationId: null }
   }
   const running = completeRefusals(state, run)
@@ -306,7 +300,6 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     membershipRevision: plan.revision.revision,
     profileId: plan.profile.id,
     mode: plan.mode,
-    linkType: plan.linkType,
     folderPath: plan.layout.folderPath,
     resultsPath: plan.layout.resultsPath,
     entryCount: plan.entries.filter((e) => e.kind !== "calibration").length,
@@ -331,14 +324,12 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     preparationId: id,
     runId: run.id,
     mode: plan.mode,
-    linkType: plan.linkType,
     folderPath: plan.layout.folderPath,
     resultsPath: plan.layout.resultsPath,
     entries: Object.fromEntries(plan.entries.map((e) => [e.id, e])),
     snapshots: {},
     expected: {},
     href,
-    cloned: [],
   }
   const items: OperationItem[] = plan.entries.map((e) => ({ id: e.id, label: e.label, path: e.sourcePath, status: "pending", phase: null, detail: null }))
   const operationId = startOperation({
@@ -694,6 +685,25 @@ export function startCleanup(runId: string, paths: string[]): { result: CommitRe
     items: chosen.map((path) => ({ path })),
     pruneFolders: [...new Set(review.entries.map((e) => e.prep.folderPath))],
     unit: "prepared-entries",
+    href,
+  })
+  return { result: { ok: true }, operationId }
+}
+
+/** The run's intermediates offer from its Complete confirmation (P-PREP3): what `runIntermediatesOffer` lists now goes to the OS Trash. */
+export function startRunIntermediatesCleanup(runId: string): { result: CommitResult; operationId: string | null } {
+  const state = store.getState()
+  const run = state.catalog.runs[runId]
+  if (!run) return { result: MISSING, operationId: null }
+  const href = runHref(run, "done")
+  const offer = runIntermediatesOffer(state, run)
+  if (offer.items.length === 0) return { result: refuse(msg("store_refused", { label: msg("run_results_intermediates") }), [msg("store_reason_nothing_selected")], href), operationId: null }
+  const operationId = moveToOsTrash({
+    kind: "intermediates",
+    title: msg("op_offer_to_trash", { offer: msg("run_results_intermediates"), name: run.name }),
+    projectId: run.projectId,
+    runIds: [run.id],
+    items: offer.items,
     href,
   })
   return { result: { ok: true }, operationId }

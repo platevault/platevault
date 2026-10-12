@@ -1,13 +1,14 @@
 /**
  * Refusal (foundation primitive): a terse line, `<Action> blocked · <count>
  * <reason>`, with a disclosure that lists each blocker as a chip, linked to
- * where it can be resolved. Never one long semicolon line.
+ * where it can be resolved, and any actions that resolve it. Never one long
+ * semicolon line.
  *
  *   <Refusal action="Can't remove rig" reason="used by 6 runs" blockers={runs.map(…)} />
  *   <Refusal {...refusalFrom(result, "Can't remove rig")} />
  */
 import { ChevronRight, OctagonX } from "lucide-react"
-import { useId, useState } from "react"
+import { type ReactNode, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import type { StepLink } from "@/domain/derive"
 import { m } from "@/lib/i18n"
@@ -30,9 +31,11 @@ export interface RefusalProps {
   className?: string
   /** A refusal shown as standing state (an action that is unavailable while it renders), not the outcome of a click: no alert role, so it is not announced on load. */
   standing?: boolean
+  /** Buttons that resolve the refusal, shown in the disclosure after the blockers. */
+  actions?: ReactNode
 }
 
-export function Refusal({ action, reason, blockers, className, standing = false }: RefusalProps) {
+export function Refusal({ action, reason, blockers, className, standing = false, actions }: RefusalProps) {
   // The same catalogue as the module `m`, subscribed so the words follow a language change.
   const m = useMessages()
   const [open, setOpen] = useState(false)
@@ -43,7 +46,7 @@ export function Refusal({ action, reason, blockers, className, standing = false 
         <OctagonX aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
         <span className="font-medium">{action}</span>
         <span className="text-muted-foreground">· {reason}</span>
-        {blockers.length > 0 ? (
+        {blockers.length > 0 || actions ? (
           <button
             type="button"
             aria-expanded={open}
@@ -56,7 +59,7 @@ export function Refusal({ action, reason, blockers, className, standing = false 
           </button>
         ) : null}
       </div>
-      {blockers.length > 0 && open ? (
+      {open && blockers.length > 0 ? (
         <ul id={panel} className="flex flex-wrap gap-1 pl-5">
           {blockers.map((b) => (
             <li key={b.label}>
@@ -66,6 +69,11 @@ export function Refusal({ action, reason, blockers, className, standing = false 
             </li>
           ))}
         </ul>
+      ) : null}
+      {open && actions ? (
+        <div id={blockers.length > 0 ? undefined : panel} className="flex flex-wrap items-center gap-1.5 pl-5">
+          {actions}
+        </div>
       ) : null}
     </div>
   )

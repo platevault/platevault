@@ -2845,7 +2845,7 @@
   "run_completion": "Completion",
   "run_cleanup_kind_link": "Link",
   "run_cleanup_kind_list": "Source list",
-  "run_cleanup_kind_copy": "Copy or clone",
+  "run_cleanup_kind_copy": "Copy",
   "run_exclude": "Exclude",
   "run_include": "Include",
   "run_clean_up_this": "Clean up this…",
@@ -2869,23 +2869,7 @@
     }
   ],
   "run_after_complete": "After Complete",
-  "run_direct_source_nothing_to_clean": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Direct-source preparation · nothing to clean",
-        "countPlural=*": "{count} Direct-source preparations · nothing to clean"
-      }
-    }
-  ],
   "run_prepared_entries_label": "Prepared entries of {name}",
-  "run_no_prepared_entries": "No prepared entries",
   "run_all_in_os_trash": "All in the OS Trash",
   "run_nothing_prepared": "Nothing prepared",
   "run_open_prepare": "Open Prepare",
@@ -3169,7 +3153,7 @@
   "run_prepare_shared_title": "Profile, mode and policy shared by every panel",
   "run_shared_with": "Shared · {name}",
   "run_profile_blocked": "Profile change blocked",
-  "run_mode_blocked": "Input mode change blocked",
+  "run_mode_blocked": "Run view change blocked",
   "run_folder_blocked": "Run folder change blocked",
   "run_layout_output": "<output>",
   "run_layout_last_used": "Last used",
@@ -3210,7 +3194,6 @@
   ],
   "run_prepare_creates": "Creates {folder}",
   "run_prepare_creates_run_folder": "Creates the run folder",
-  "run_prepare_writes_source_list": "Writes a source list",
   "run_prepare_writes_entries": [
     {
       "declarations": [
@@ -3270,7 +3253,7 @@
   "run_metadata_absent": "absent",
   "run_metadata_legend": "How the corrected value of {field} reaches the application",
   "run_metadata_not_supported": "{name}: not supported",
-  "run_metadata_needs_isolated": "Needs Copy or Clone",
+  "run_metadata_needs_isolated": "Needs Copies",
   "run_footprint_title": "Prepared bytes",
   "run_footprint_prepared": "{bytes} prepared",
   "run_footprint_note_label": "Footprint note",
@@ -3284,8 +3267,6 @@
   "run_open_blocked": "Open blocked",
   "run_opened": "Opened {name}",
   "run_open_in": "Open in {app}",
-  "run_link_symbolic": "symbolic",
-  "run_link_hard": "hard",
   "run_membership_changed": "Membership changed · prepare r{revision}",
   "run_unverified_since": "Unverified since {date}",
   "run_entries_changed": [
@@ -3321,13 +3302,12 @@
   "run_metadata_choice_patched_copy": "Patched copy",
   "run_metadata_choice_accept_source": "Accept the source value",
   "run_metadata_choice_excluded": "Exclude these inputs",
-  "run_mode_semantics_direct_source": "Nothing is placed in the run folder. PixInsight reads each frame where it is.",
-  "run_mode_semantics_copy": "Tools work on their own copy, so your originals can't be changed. No extra space when the drive clones; otherwise the files are copied.",
+  "run_mode_semantics_copy": "Temporary copies, removed when the run completes.",
   "run_check_lock": "Run state",
   "run_check_membership": "Saved membership",
   "run_check_profile": "Application profile",
   "run_check_metadata": "Corrected metadata",
-  "run_check_mode": "Input mode",
+  "run_check_mode": "Run view",
   "run_check_destination": "Run folder",
   "run_check_space": "Free space",
   "run_check_sources": "Source presence",
@@ -3340,25 +3320,6 @@
   "run_entry_not_found": "Not found at {path} at the last scan",
   "run_entry_unresolved": "Unresolved member: it could not be read when it was selected",
   "run_entry_not_readable": "Not readable at {path}",
-  "run_mode_output_volume": "the output volume",
-  "run_mode_write_prone": "{name}: write-prone",
-  "run_mode_writes_unknown": "{name}: input writes unknown",
-  "run_mode_whole_folders": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Reads whole folders · {count} excluded frame",
-        "countPlural=*": "Reads whole folders · {count} excluded frames"
-      }
-    }
-  ],
-  "run_mode_no_source_paths": "{name}: no source paths",
   "run_mode_needs_space": "Needs {bytes} · {free} free",
   "run_check_requirements_to_review": [
     {
@@ -3392,7 +3353,7 @@
       }
     }
   ],
-  "run_check_patched_needs_isolated": "Patched copies need Copy or Clone",
+  "run_check_patched_needs_isolated": "Patched copies need Copies",
   "run_check_no_configuration": "{name}: no configuration",
   "run_check_decisions": [
     {
@@ -3688,9 +3649,7 @@
   "rungroup_complete_all": "Complete all",
   "rungroup_open_done": "Open Done",
   "run_revision_short": "r{revision}",
-  "run_mode_no_symlinks": "{name}: no symbolic links",
-  "run_check_mode_symlinks": "{mode} (symbolic links)",
-  "run_check_mode_hardlinks": "{mode} (hard links)",
+  "run_mode_no_symlinks": "{name}: no symlinks",
   "location_role_captures_description": "Light frames to index. Add as many folders as you like.",
   "location_role_captures_add": "Add capture location",
   "location_role_captures_picker": "Choose a capture folder",
@@ -4110,10 +4069,7 @@
       }
     }
   ],
-  "location_links": "Links",
   "location_link_symlinks": "Symlinks",
-  "location_link_hardlinks": "Hardlinks",
-  "location_link_clones": "Clones",
   "location_links_none": "Not supported",
   "location_unreadable_folders": "Unreadable folders at the last scan",
   "settings_none": "None",
@@ -4417,17 +4373,11 @@
   "apps_badge_writes_unknown": "Input writes unknown",
   "apps_badge_write_prone": "Writes into inputs",
   "apps_unsupported_corrected": "reading corrected values through configuration",
-  "apps_unsupported_paths": "passing exact source paths",
-  "apps_unsupported_file_list": "handing off an exact file list (it reads whole folders)",
   "apps_unsupported_products": "accepted Results as inputs",
   "apps_evidence": "Evidence",
   "apps_prototype_fixture": "Prototype fixture",
   "apps_input_writes": "Input writes",
-  "apps_input_modes": "Input modes",
   "apps_none_recorded": "None recorded",
-  "apps_direct_source": "Direct source",
-  "apps_direct_file_list": "Exact file list",
-  "apps_direct_whole_folders": "Whole folders only",
   "apps_product_inputs": "Product inputs",
   "apps_corrected_values": "Corrected values",
   "apps_corrected_through": "Through configuration",
@@ -4438,7 +4388,7 @@
   "apps_locate_description": "Prototype: simulated application chooser. It lists application bundles on the simulated computer and records the path only; nothing is launched.",
   "apps_none_present": "No application bundle is present. Restore one in this step's prototype controls.",
   "apps_use_this": "Use this application",
-  "apps_generic_description": "Launches any application with your arguments. It is not a verified preparation profile, so only Copy or Clone handoffs are offered.",
+  "apps_generic_description": "Launches any application with your arguments. It is not a verified preparation profile.",
   "apps_check_again": "Check again",
   "apps_change": "Change…",
   "apps_locate": "Locate…",
@@ -5409,9 +5359,7 @@
   "importdlg_note_eccentricity": "Shown next to built-in eccentricity",
   "importdlg_note_stars": "Shown next to built-in star count",
   "importdlg_note_psf_signal_weight": "No units and no PlateVault equivalent; never shown as FWHM or HFR.",
-  "domain_mode_linked": "Link to originals",
-  "domain_mode_copy": "Independent copy",
-  "domain_mode_clone": "Clone",
+  "domain_mode_copy": "Copies",
   "domain_result_final_image": "Final image",
   "domain_result_linear_integration": "Linear integration",
   "domain_result_channel_product": "Channel product",
@@ -6573,7 +6521,6 @@
   "op_prep_not_reachable": "Not readable now: nothing is reachable at {path}. Nothing was written for it.",
   "op_prep_not_in_selection": "Not in the reviewed selection.",
   "op_prep_source_changed": "Source changed since it was indexed: its bytes differ from the catalog fingerprint. Rescan and review it first.",
-  "op_prep_direct_verified": "Exact source path listed; identity matches its snapshot.",
   "op_prep_destination_exists": "Destination exists: {path}. Nothing was overwritten.",
   "op_prep_write_removed": "Write permission removed at {folder}. Nothing was written.",
   "op_prep_destination_offline": "Destination offline: {folder} is on a volume that is not mounted.",
@@ -7028,8 +6975,8 @@
     }
   ],
   "measure_value_stars": "{value} stars",
-  "seed_apps_evidence_pixinsight": "Fixture evidence: WBPP 2.8 reads an exact file list and does not write to input files.",
-  "seed_apps_evidence_siril": "Fixture evidence: Siril 1.4 accepts an exact file list and opens inputs read-only.",
+  "seed_apps_evidence_pixinsight": "Fixture evidence: WBPP 2.8 reads the run folder and does not write to input files.",
+  "seed_apps_evidence_siril": "Fixture evidence: Siril 1.4 reads the run folder and opens inputs read-only.",
   "seed_apps_evidence_seti": "No capability evidence recorded. Input-write behaviour is unknown and it consumes whole folders.",
   "seed_apps_evidence_generic": "Generic launcher. It does not claim a verified profile.",
   "domain_device_evidence_sharpcap": "SharpCap Captures folder",
@@ -7436,19 +7383,6 @@
   "onboarding_dismiss_checklist": "Dismiss Getting started",
   "onboarding_walk_name": "Orientation walk",
   "onboarding_restart_walk": "Restart walk",
-  "domain_mode_automatic": "Automatic",
-  "domain_mode_file_list": "Give PixInsight the file list",
-  "run_mode_semantics_automatic": "PlateVault picks the safest option that fits. Your originals are never changed.",
-  "run_mode_semantics_linked": "No extra space. The run folder points at your originals, so the drive must stay connected, and a tool that edits a frame edits the original. PlateVault re-checks every original after the run.",
-  "run_placed_cloned": "{bytes} extra · cloned",
-  "run_placed_copied": "{bytes} copied",
-  "run_placed_mixed": "{cloned} cloned · {copied} copied · {bytes}",
-  "run_frees_no_space": "frees no space",
-  "run_link_confirm_title": "Link to the originals?",
-  "run_link_confirm_description": "The drive must stay connected while the run uses it.",
-  "run_link_confirm_writes": "A tool that writes in place changes the originals",
-  "run_link_confirm_recheck": "PlateVault re-hashes every original after the run",
-  "run_complete_clean_up": "Clean up prepared copies · {frees}",
   "run_complete_keeps_prepared": [
     {
       "declarations": [
@@ -7464,7 +7398,6 @@
       }
     }
   ],
-  "run_cleanup_kind_clone": "Clone",
   "run_cal_master_changed": "master changed",
   "run_cal_add_to_library_ellipsis": "Add to library…",
   "run_cal_add_title": "Add {name} to the calibration library?",
@@ -7534,25 +7467,90 @@
   "store_reason_name_empty": "Name is empty",
   "store_reason_run_name_taken": "{name} is already a run in this Project",
   "store_saved_run_renamed": "Renamed {from} to {to}",
-  "store_saved_originals_rechecked": [
+  "store_reason_sha_now": "SHA-256 now {hash}…",
+  "store_label_proto_better_master": "Prototype: newer compatible master",
+  "store_reason_no_master_assigned": "No master assigned yet",
+  "domain_mode_symlink": "Symlinks",
+  "run_mode_semantics_symlink": "Links to the catalogue originals. Their drive stays connected during the run.",
+  "run_mode_needs_developer_mode": "symlinks need Windows Developer Mode",
+  "run_cant_prepare": "Can't prepare",
+  "run_use_copies": "Use copies for this run",
+  "run_view_linked": "Linked · {bytes}",
+  "run_view_copied": [
     {
       "declarations": [
         "input count",
-        "input name",
         "input n",
-        "input changed",
+        "input bytes",
         "local countPlural = count: plural"
       ],
       "selectors": [
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name}: {n} original re-hashed · {changed} changed",
-        "countPlural=*": "{name}: {n} originals re-hashed · {changed} changed"
+        "countPlural=one": "{n} frame copied · {bytes}",
+        "countPlural=*": "{n} frames copied · {bytes}"
       }
     }
   ],
-  "store_reason_sha_now": "SHA-256 now {hash}…",
-  "store_label_proto_better_master": "Prototype: newer compatible master",
-  "store_reason_no_master_assigned": "No master assigned yet"
+  "run_complete_remove_view": "Remove run view · {frees}",
+  "run_complete_frees": "frees {bytes}",
+  "run_complete_links_only": "links only",
+  "run_complete_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} intermediate to Trash · {size}",
+        "countPlural=*": "Move {n} intermediates to Trash · {size}"
+      }
+    }
+  ],
+  "run_complete_moves_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Moves {n} intermediate · {size}",
+        "countPlural=*": "Moves {n} intermediates · {size}"
+      }
+    }
+  ],
+  "run_complete_keeps_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} intermediate stays",
+        "countPlural=*": "{n} intermediates stay"
+      }
+    }
+  ],
+  "settings_default_run_view": "Default run view",
+  "settings_developer_mode": "Windows Developer Mode",
+  "settings_developer_mode_on": "On",
+  "settings_developer_mode_off": "Off",
+  "settings_open_windows_settings": "Open Windows settings",
+  "onboarding_check_developer_mode": "Turn on Windows Developer Mode",
+  "location_symlinks_supported": "Supported"
 }

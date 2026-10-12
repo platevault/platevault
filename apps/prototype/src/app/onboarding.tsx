@@ -11,8 +11,9 @@
  *   not on screen (a collapsed source list, a narrow window) sits in the
  *   middle of the window.
  * - The checklist: set up locations, first import, confirm Targets, first
- *   Project, first run, each ticked from the library's state, until all are
- *   done or the user dismisses it.
+ *   Project, first run and, on Windows, turn on Developer Mode (symlinks
+ *   need it, P-PREP3), each ticked from the library's state or the last
+ *   check, until all are done or the user dismisses it.
  */
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { setOnboarding } from "@/features/t1/lib/writes"
 import { cn } from "@/lib/utils"
 import { nowIso, type PrototypeState, useStore } from "@/store/core"
+import { DeveloperModeActions } from "./developer-mode"
 import { useMessages } from "./preferences"
 import { openSheet } from "./ui-state"
 
@@ -209,19 +211,20 @@ function CoachMark({ index, onIndex }: { index: number; onIndex: (index: number)
 // ---------------------------------------------------------------------------
 
 interface ChecklistItem {
-  id: "locations" | "import" | "targets" | "project" | "run"
+  id: "locations" | "import" | "targets" | "project" | "run" | "developer-mode"
   done: boolean
 }
 
 /** Each step, ticked from what the library holds now. */
 function checklist(s: PrototypeState): ChecklistItem[] {
-  const { catalog, operations } = s
+  const { catalog, operations, settings } = s
   return [
     { id: "locations", done: Object.values(catalog.locations).some((l) => !l.retiredAt) },
     { id: "import", done: Object.values(operations).some((op) => op.kind === "import" && (op.status === "succeeded" || op.status === "partial")) },
     { id: "targets", done: Object.values(catalog.sessions).some((x) => x.imageType === "light" && !x.supersededBy && x.target.status === "confirmed") },
     { id: "project", done: Object.keys(catalog.projects).length > 0 },
     { id: "run", done: Object.keys(catalog.runs).length > 0 },
+    ...(settings.developerModeCheck === "not-windows" ? [] : [{ id: "developer-mode" as const, done: settings.developerModeCheck === "on" }]),
   ]
 }
 
@@ -245,6 +248,14 @@ export function GettingStarted() {
         <Button size="xs" variant="outline" disabled={!firstProjectId} title={firstProjectId ? undefined : m.onboarding_check_project()} onClick={() => firstProjectId && openSheet({ kind: "start-run", projectId: firstProjectId })}>
           {m.startrun_open()}
         </Button>
+      ),
+    },
+    "developer-mode": {
+      label: m.onboarding_check_developer_mode(),
+      action: (
+        <span className="flex gap-1.5">
+          <DeveloperModeActions />
+        </span>
       ),
     },
   }

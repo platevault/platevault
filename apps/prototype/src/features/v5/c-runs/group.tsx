@@ -1,7 +1,7 @@
 /**
  * S7 Run group (slice C): the group status (the worst panel status, then
  * "N of M panels at <step>") and the panels, each with the status its run
- * page shows; the shared setup (profile, input mode, calibration policy; a
+ * page shows; the shared setup (profile, run view, calibration policy; a
  * Complete panel refuses a setup change), Review all (slice D's
  * `GroupReviewStep`), calibration readiness per panel, Prepare all into
  * `<Mosaic>/Panel N/` with `<Mosaic> Results/Panel N/` and `Assembled/`, the
@@ -424,10 +424,14 @@ function aggregateModes(lists: ModeOption[][]): ModeOption[] {
     const all = lists.map((l) => l.find((x) => x.mode === option.mode)!)
     // Panels refuse a mode for the same reason in the same words; refs are compared by their content.
     const reasons = [...new Map(all.flatMap((x) => x.reasons).map((r) => [JSON.stringify(r), r])).values()]
-    const placements = all.flatMap((x) => (x.placement ? [x.placement] : []))
-    const placement = placements.length > 0 ? placements.reduce((sum, p) => ({ cloned: sum.cloned + p.cloned, copied: sum.copied + p.copied, copiedBytes: sum.copiedBytes + p.copiedBytes })) : null
-    const linkType = all.some((x) => x.linkType === null) ? null : all.some((x) => x.linkType === "hardlink") ? "hardlink" : option.linkType
-    return { ...option, allowed: reasons.length === 0, reasons, footprintBytes: all.reduce((n, x) => n + x.footprintBytes, 0), placement, linkType }
+    return {
+      ...option,
+      allowed: reasons.length === 0,
+      reasons,
+      entries: all.reduce((n, x) => n + x.entries, 0),
+      footprintBytes: all.reduce((n, x) => n + x.footprintBytes, 0),
+      developerModeOff: all.some((x) => x.developerModeOff),
+    }
   })
 }
 
@@ -474,7 +478,7 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
       </Box>
       {setupRefusals.length > 0 ? <Refusal action={m.rungroup_setup_locked()} reason={m.rungroup_complete_panels({ count: setupRefusals.length })} blockers={setupRefusals.map((label) => ({ label: say(m, label) }))} /> : null}
       <ProfileSection profileId={group.setup.profileId} locked={false} onPick={(id) => onOutcome(chooseProfile(target, id), { blocked: m.run_profile_blocked() })} />
-      <ModeSection modes={aggregateModes(plans.map((p) => p.plan.modes))} mode={group.setup.inputMode} locked={false} onMode={(mode: InputMode) => onOutcome(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} />
+      <ModeSection modes={aggregateModes(plans.map((p) => p.plan.modes))} mode={group.setup.inputMode ?? state.settings.defaultRunView} locked={false} onMode={(mode: InputMode) => onOutcome(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} />
       {first ? (
         <LayoutSection
           layout={first.layout}
@@ -533,7 +537,7 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
         open={confirm}
         onOpenChange={setConfirm}
         title={m.rungroup_prepare_all_title({ count: live.length, name: group.name })}
-        description={`${profileLabel(state.catalog, group.setup.profileId)} · ${group.setup.inputMode ? say(m, MODE_NAME[group.setup.inputMode]) : ""}`}
+        description={`${profileLabel(state.catalog, group.setup.profileId)} · ${say(m, MODE_NAME[group.setup.inputMode ?? state.settings.defaultRunView])}`}
         changes={[
           m.rungroup_prepare_all_creates({ folder: fileName(first?.layout.groupFolder ?? mosaic), panels: plans.map((p) => fileName(p.plan.layout.folderPath ?? "")).join(", ") }),
           ...plans.map((p) => {

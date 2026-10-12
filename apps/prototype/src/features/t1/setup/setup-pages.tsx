@@ -1,11 +1,14 @@
 /**
  * First-run setup screens (SetupShell): Welcome, Choose locations, Index your
  * captures. One task per screen, Back is never destructive, and progress lives
- * in the catalog so a reload resumes where the user was (HLD §6).
+ * in the catalog so a reload resumes where the user was (HLD §6). On Windows,
+ * Choose locations shows the Developer Mode check symlinks need (P-PREP3); it
+ * never blocks setup.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, ArrowRight, Check, FlaskConical, FolderPlus, Play, X } from "lucide-react"
 import { type ReactNode, useEffect, useId, useRef, useState } from "react"
+import { DeveloperModeStatus } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Stat } from "@/components/app/data"
@@ -239,6 +242,8 @@ export function SetupLocationsPage() {
             </section>
           )
         })}
+
+        <DeveloperModeStatus className="rounded-lg border px-4 py-3" />
 
         <Notice tone="info" title={m.setup_nothing_else_title()}>
           {m.setup_nothing_else_body()}

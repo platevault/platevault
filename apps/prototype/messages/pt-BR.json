@@ -2901,7 +2901,7 @@
   "run_completion": "Conclusão",
   "run_cleanup_kind_link": "Link",
   "run_cleanup_kind_list": "Lista de origens",
-  "run_cleanup_kind_copy": "Cópia ou clone",
+  "run_cleanup_kind_copy": "Cópia",
   "run_exclude": "Excluir",
   "run_include": "Incluir",
   "run_clean_up_this": "Limpar este…",
@@ -2925,23 +2925,7 @@
     }
   ],
   "run_after_complete": "Após concluir",
-  "run_direct_source_nothing_to_clean": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} preparação de origem direta · nada a limpar",
-        "countPlural=*": "{count} preparações de origem direta · nada a limpar"
-      }
-    }
-  ],
   "run_prepared_entries_label": "Entradas preparadas de {name}",
-  "run_no_prepared_entries": "Nenhuma entrada preparada",
   "run_all_in_os_trash": "Tudo na Lixeira do sistema",
   "run_nothing_prepared": "Nada preparado",
   "run_open_prepare": "Abrir Preparar",
@@ -3225,7 +3209,7 @@
   "run_prepare_shared_title": "Perfil, modo e política compartilhados por todos os painéis",
   "run_shared_with": "Compartilhado · {name}",
   "run_profile_blocked": "Troca de perfil bloqueada",
-  "run_mode_blocked": "Troca de modo de entrada bloqueada",
+  "run_mode_blocked": "Troca de visão da execução bloqueada",
   "run_folder_blocked": "Troca da pasta da execução bloqueada",
   "run_layout_output": "<saída>",
   "run_layout_last_used": "Último usado",
@@ -3266,7 +3250,6 @@
   ],
   "run_prepare_creates": "Cria {folder}",
   "run_prepare_creates_run_folder": "Cria a pasta da execução",
-  "run_prepare_writes_source_list": "Grava uma lista de origens",
   "run_prepare_writes_entries": [
     {
       "declarations": [
@@ -3326,7 +3309,7 @@
   "run_metadata_absent": "ausente",
   "run_metadata_legend": "Como o valor corrigido de {field} chega ao aplicativo",
   "run_metadata_not_supported": "{name}: não suportado",
-  "run_metadata_needs_isolated": "Requer Cópia ou Clone",
+  "run_metadata_needs_isolated": "Requer Cópias",
   "run_footprint_title": "Bytes preparados",
   "run_footprint_prepared": "{bytes} preparados",
   "run_footprint_note_label": "Nota de ocupação",
@@ -3340,8 +3323,6 @@
   "run_open_blocked": "Abertura bloqueada",
   "run_opened": "{name} aberta",
   "run_open_in": "Abrir no {app}",
-  "run_link_symbolic": "simbólico",
-  "run_link_hard": "hard link",
   "run_membership_changed": "Membros alterados · preparar r{revision}",
   "run_unverified_since": "Não verificada desde {date}",
   "run_entries_changed": [
@@ -3377,13 +3358,12 @@
   "run_metadata_choice_patched_copy": "Cópia corrigida",
   "run_metadata_choice_accept_source": "Aceitar o valor da origem",
   "run_metadata_choice_excluded": "Excluir estas entradas",
-  "run_mode_semantics_direct_source": "Nada é colocado na pasta da execução. O PixInsight lê cada quadro onde ele está.",
-  "run_mode_semantics_copy": "As ferramentas trabalham na própria cópia, então seus originais não podem ser alterados. Sem espaço extra quando o disco clona; caso contrário, os arquivos são copiados.",
+  "run_mode_semantics_copy": "Cópias temporárias, removidas quando a execução é concluída.",
   "run_check_lock": "Estado da execução",
   "run_check_membership": "Membros salvos",
   "run_check_profile": "Perfil de aplicativo",
   "run_check_metadata": "Metadados corrigidos",
-  "run_check_mode": "Modo de entrada",
+  "run_check_mode": "Visão da execução",
   "run_check_destination": "Pasta da execução",
   "run_check_space": "Espaço livre",
   "run_check_sources": "Presença das origens",
@@ -3396,25 +3376,6 @@
   "run_entry_not_found": "Não encontrado em {path} na última varredura",
   "run_entry_unresolved": "Membro não resolvido: não pôde ser lido quando foi selecionado",
   "run_entry_not_readable": "Ilegível em {path}",
-  "run_mode_output_volume": "o volume de saída",
-  "run_mode_write_prone": "{name}: propenso a gravar",
-  "run_mode_writes_unknown": "{name}: gravação nas entradas desconhecida",
-  "run_mode_whole_folders": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Lê pastas inteiras · {count} quadro excluído",
-        "countPlural=*": "Lê pastas inteiras · {count} quadros excluídos"
-      }
-    }
-  ],
-  "run_mode_no_source_paths": "{name}: sem caminhos de origem",
   "run_mode_needs_space": "Requer {bytes} · {free} livres",
   "run_check_requirements_to_review": [
     {
@@ -3448,7 +3409,7 @@
       }
     }
   ],
-  "run_check_patched_needs_isolated": "Cópias corrigidas requerem Cópia ou Clone",
+  "run_check_patched_needs_isolated": "Cópias corrigidas requerem Cópias",
   "run_check_no_configuration": "{name}: sem configuração",
   "run_check_decisions": [
     {
@@ -3745,8 +3706,6 @@
   "rungroup_open_done": "Abrir Concluído",
   "run_revision_short": "r{revision}",
   "run_mode_no_symlinks": "{name}: sem links simbólicos",
-  "run_check_mode_symlinks": "{mode} (links simbólicos)",
-  "run_check_mode_hardlinks": "{mode} (links físicos)",
   "location_role_captures_description": "Light frames para indexar. Adicione quantas pastas quiser.",
   "location_role_captures_add": "Adicionar local de capturas",
   "location_role_captures_picker": "Escolher pasta de capturas",
@@ -4166,10 +4125,7 @@
       }
     }
   ],
-  "location_links": "Links",
   "location_link_symlinks": "Links simbólicos",
-  "location_link_hardlinks": "Hard links",
-  "location_link_clones": "Clones",
   "location_links_none": "Sem suporte",
   "location_unreadable_folders": "Pastas ilegíveis na última varredura",
   "settings_none": "Nenhum",
@@ -4473,17 +4429,11 @@
   "apps_badge_writes_unknown": "Gravação nas entradas desconhecida",
   "apps_badge_write_prone": "Grava nas entradas",
   "apps_unsupported_corrected": "ler valores corrigidos pela configuração",
-  "apps_unsupported_paths": "receber caminhos de origem exatos",
-  "apps_unsupported_file_list": "receber uma lista exata de arquivos (lê pastas inteiras)",
   "apps_unsupported_products": "Resultados aceitos como entradas",
   "apps_evidence": "Evidência",
   "apps_prototype_fixture": "Simulação do protótipo",
   "apps_input_writes": "Gravação nas entradas",
-  "apps_input_modes": "Modos de entrada",
   "apps_none_recorded": "Nenhum registrado",
-  "apps_direct_source": "Origem direta",
-  "apps_direct_file_list": "Lista exata de arquivos",
-  "apps_direct_whole_folders": "Só pastas inteiras",
   "apps_product_inputs": "Entradas de produtos",
   "apps_corrected_values": "Valores corrigidos",
   "apps_corrected_through": "Pela configuração",
@@ -4494,7 +4444,7 @@
   "apps_locate_description": "Protótipo: seletor de aplicativos simulado. Lista os pacotes de aplicativos do computador simulado e registra só o caminho; nada é aberto.",
   "apps_none_present": "Nenhum pacote de aplicativo presente. Restaure um nos controles de protótipo desta etapa.",
   "apps_use_this": "Usar este aplicativo",
-  "apps_generic_description": "Abre qualquer aplicativo com seus argumentos. Não é um perfil de preparação verificado, então só são oferecidas entregas por Cópia ou Clone.",
+  "apps_generic_description": "Abre qualquer aplicativo com seus argumentos. Não é um perfil de preparação verificado.",
   "apps_check_again": "Verificar de novo",
   "apps_change": "Alterar…",
   "apps_locate": "Localizar…",
@@ -5465,9 +5415,7 @@
   "importdlg_note_eccentricity": "Exibido ao lado da excentricidade integrada",
   "importdlg_note_stars": "Exibido ao lado da contagem de estrelas integrada",
   "importdlg_note_psf_signal_weight": "Sem unidades nem equivalente no PlateVault; nunca é exibido como FWHM ou HFR.",
-  "domain_mode_linked": "Vincular aos originais",
-  "domain_mode_copy": "Cópia independente",
-  "domain_mode_clone": "Clone",
+  "domain_mode_copy": "Cópias",
   "domain_result_final_image": "Imagem final",
   "domain_result_linear_integration": "Integração linear",
   "domain_result_channel_product": "Produto de canal",
@@ -6629,7 +6577,6 @@
   "op_prep_not_reachable": "Ilegível agora: nada está acessível em {path}. Nada foi gravado para ela.",
   "op_prep_not_in_selection": "Fora da seleção revisada.",
   "op_prep_source_changed": "A origem mudou desde a indexação: seus bytes diferem da impressão digital do catálogo. Faça nova varredura e revise-a primeiro.",
-  "op_prep_direct_verified": "Caminho exato da origem listado; a identidade confere com o seu instantâneo.",
   "op_prep_destination_exists": "O destino existe: {path}. Nada foi sobrescrito.",
   "op_prep_write_removed": "Permissão de gravação removida em {folder}. Nada foi gravado.",
   "op_prep_destination_offline": "Destino offline: {folder} está em um volume que não está montado.",
@@ -7084,8 +7031,8 @@
     }
   ],
   "measure_value_stars": "{value} estrelas",
-  "seed_apps_evidence_pixinsight": "Evidência de fixture: o WBPP 2.8 lê uma lista exata de arquivos e não grava nos arquivos de entrada.",
-  "seed_apps_evidence_siril": "Evidência de fixture: o Siril 1.4 aceita uma lista exata de arquivos e abre as entradas somente para leitura.",
+  "seed_apps_evidence_pixinsight": "Evidência de fixture: o WBPP 2.8 lê a pasta da execução e não grava nos arquivos de entrada.",
+  "seed_apps_evidence_siril": "Evidência de fixture: o Siril 1.4 lê a pasta da execução e abre as entradas somente para leitura.",
   "seed_apps_evidence_seti": "Nenhuma evidência de capacidade registrada. Não se sabe se grava nas entradas, e consome pastas inteiras.",
   "seed_apps_evidence_generic": "Iniciador genérico. Não alega um perfil verificado.",
   "domain_device_evidence_sharpcap": "Pasta SharpCap Captures",
@@ -7492,19 +7439,6 @@
   "onboarding_dismiss_checklist": "Dispensar Primeiros passos",
   "onboarding_walk_name": "Tour de orientação",
   "onboarding_restart_walk": "Reiniciar tour",
-  "domain_mode_automatic": "Automático",
-  "domain_mode_file_list": "Passar a lista de arquivos ao PixInsight",
-  "run_mode_semantics_automatic": "O PlateVault escolhe a opção mais segura que couber. Seus originais nunca são alterados.",
-  "run_mode_semantics_linked": "Sem espaço extra. A pasta da execução aponta para seus originais, então o disco deve ficar conectado, e uma ferramenta que edita um quadro edita o original. O PlateVault confere cada original depois da execução.",
-  "run_placed_cloned": "{bytes} a mais · clonado",
-  "run_placed_copied": "{bytes} copiados",
-  "run_placed_mixed": "{cloned} clonados · {copied} copiados · {bytes}",
-  "run_frees_no_space": "não libera espaço",
-  "run_link_confirm_title": "Vincular aos originais?",
-  "run_link_confirm_description": "O disco deve ficar conectado enquanto a execução o usa.",
-  "run_link_confirm_writes": "Uma ferramenta que grava no lugar altera os originais",
-  "run_link_confirm_recheck": "O PlateVault recalcula o hash de cada original depois da execução",
-  "run_complete_clean_up": "Limpar cópias preparadas · {frees}",
   "run_complete_keeps_prepared": [
     {
       "declarations": [
@@ -7520,7 +7454,6 @@
       }
     }
   ],
-  "run_cleanup_kind_clone": "Clone",
   "run_cal_master_changed": "o master mudou",
   "run_cal_add_to_library_ellipsis": "Adicionar à biblioteca…",
   "run_cal_add_title": "Adicionar {name} à biblioteca de calibração?",
@@ -7590,25 +7523,90 @@
   "store_reason_name_empty": "O nome está vazio",
   "store_reason_run_name_taken": "{name} já é uma execução neste projeto",
   "store_saved_run_renamed": "{from} renomeada para {to}",
-  "store_saved_originals_rechecked": [
+  "store_reason_sha_now": "SHA-256 agora {hash}…",
+  "store_label_proto_better_master": "Protótipo: master compatível mais novo",
+  "store_reason_no_master_assigned": "Nenhum master atribuído ainda",
+  "domain_mode_symlink": "Links simbólicos",
+  "run_mode_semantics_symlink": "Links para os originais do catálogo. A unidade deles fica conectada durante a execução.",
+  "run_mode_needs_developer_mode": "links simbólicos exigem o Modo de Desenvolvedor do Windows",
+  "run_cant_prepare": "Não é possível preparar",
+  "run_use_copies": "Usar cópias nesta execução",
+  "run_view_linked": "Vinculado · {bytes}",
+  "run_view_copied": [
     {
       "declarations": [
         "input count",
-        "input name",
         "input n",
-        "input changed",
+        "input bytes",
         "local countPlural = count: plural"
       ],
       "selectors": [
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name}: {n} original com hash recalculado · {changed} alterados",
-        "countPlural=*": "{name}: {n} originais com hash recalculado · {changed} alterados"
+        "countPlural=one": "{n} quadro copiado · {bytes}",
+        "countPlural=*": "{n} quadros copiados · {bytes}"
       }
     }
   ],
-  "store_reason_sha_now": "SHA-256 agora {hash}…",
-  "store_label_proto_better_master": "Protótipo: master compatível mais novo",
-  "store_reason_no_master_assigned": "Nenhum master atribuído ainda"
+  "run_complete_remove_view": "Remover visão da execução · {frees}",
+  "run_complete_frees": "libera {bytes}",
+  "run_complete_links_only": "só links",
+  "run_complete_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} intermediário para a Lixeira · {size}",
+        "countPlural=*": "Mover {n} intermediários para a Lixeira · {size}"
+      }
+    }
+  ],
+  "run_complete_moves_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} intermediário · {size}",
+        "countPlural=*": "Move {n} intermediários · {size}"
+      }
+    }
+  ],
+  "run_complete_keeps_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} intermediário fica",
+        "countPlural=*": "{n} intermediários ficam"
+      }
+    }
+  ],
+  "settings_default_run_view": "Visão padrão da execução",
+  "settings_developer_mode": "Modo de Desenvolvedor do Windows",
+  "settings_developer_mode_on": "Ligado",
+  "settings_developer_mode_off": "Desligado",
+  "settings_open_windows_settings": "Abrir configurações do Windows",
+  "onboarding_check_developer_mode": "Ative o Modo de Desenvolvedor do Windows",
+  "location_symlinks_supported": "Com suporte"
 }

@@ -40,6 +40,7 @@ import {
   setFolderAccess,
   setPathReadOnly,
   setVolumeMounted,
+  setWindowsWithoutDeveloperMode,
   toolFinishedStacking,
 } from "@/store/simulation"
 import { useMessages } from "./preferences"
@@ -364,6 +365,16 @@ export function SimulationControls() {
             detail={'Planning sees no saved site: Home Tonight, Plan and Targets show "Add an observing site in Settings"'}
             checked={faults.noSite}
             onChange={(value) => setFault("noSite", value)}
+          />
+          <ToggleRow
+            label="Windows without Developer Mode"
+            detail={
+              faults.developerMode === "on"
+                ? "Developer Mode turned on in Windows settings; PlateVault sees it at its next check"
+                : "Symlinks need Developer Mode: Prepare refuses Symlinks, Settings › Applications and Home show the check"
+            }
+            checked={faults.developerMode === "off"}
+            onChange={(value) => setWindowsWithoutDeveloperMode(value)}
           />
         </div>
       </Section>

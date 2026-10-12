@@ -61,6 +61,11 @@ function persistNow() {
 
 let initialized = false
 
+/** Checks PlateVault runs at launch: Windows Developer Mode, which symlinks need (P-PREP3). */
+function launchChecks(state: PrototypeState): PrototypeState {
+  return { ...state, settings: { ...state.settings, developerModeCheck: state.faults.developerMode } }
+}
+
 /** Hydrate from localStorage (or the empty seed) and start persistence. */
 export function initializeStore() {
   if (initialized) return
@@ -68,7 +73,7 @@ export function initializeStore() {
   // Foundation handlers first, so a slice that owns the same kind replaces it.
   registerOperationHandlers([...FOUNDATION_HANDLERS, ...CALIBRATION_HANDLERS, ...STORAGE_HANDLERS])
   for (const slice of Object.values(SLICES)) if (slice.operations) registerOperationHandlers(slice.operations)
-  store.replace(interruptRunningOperations(load() ?? fromSeed("empty")))
+  store.replace(launchChecks(interruptRunningOperations(load() ?? fromSeed("empty"))))
   // Work that survives a restart (a stack's output-folder watch) carries on.
   if (Object.values(store.getState().operations).some((op) => op.status === "running")) ensureTicker()
   store.subscribe(() => {
