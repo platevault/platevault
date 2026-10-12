@@ -312,7 +312,7 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **Components (user):** only standard components, composed; no page-local look-alikes; reuse before rebuilding; one flow for staged work across the product. A single owner plans the rebuild (astro-plan-blbjw).
 
 ### UI stack, grilling round 1 (user, 2026-10-12; research R9-NATIVE-UI-KITS.md, R9-FLUTTER-MIGRATION.md, R9-BACKEND-SERVICES.md)
-- **"Native" means:** (a) OS-drawn surfaces and platform conventions (menu bar, context menus, dialogs, notifications, tray, window chrome, button order, shortcuts) **and** (b) per-OS control looks (Fluent on Windows, macOS controls on a Mac). (c) Speed is nice to have.
+- **"Native" means OS-drawn surfaces and platform conventions** (menu bar, context menus, dialogs, notifications, tray, window chrome, button order, shortcuts). Per-OS control looks (Fluent on Windows, macOS controls on a Mac) were considered and then **dropped** (user). Speed is nice to have.
 - **No dual web component kits** inside the webview (Fluent + a macOS kit behind one API): dropped.
 - **WCAG 2.2 AA is a target, not a hard gate.** It does not by itself rule out Flutter.
 - **Flutter: wait** for the spike results before deciding.
