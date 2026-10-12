@@ -1,10 +1,11 @@
 /**
  * Review inspector (D-W13, D-W15, D-W42, PIX-FR-02, PIX-FR-05, PIX-FR-06):
- * the current frame's display name and full path, both quality levels with
- * their marks (library only in a session review), the histogram of its
- * displayed region, and tabs for its measured values with their sources,
- * detected stars with cutouts, and the header. The corners at 1:1 live on
- * the stage (`corners.tsx`).
+ * the current frame's display name and full path, its quality with the
+ * library marks (P, X, U are library-wide; "Reject for this Project only"
+ * lives in the frame menu, round 6), the histogram of its displayed region,
+ * and tabs for its measured values with their sources, detected stars with
+ * cutouts, and the header. The corners at 1:1 live on the stage
+ * (`corners.tsx`).
  */
 import { Link } from "@tanstack/react-router"
 import { Sparkles, X } from "lucide-react"
@@ -34,8 +35,6 @@ const MARKS = [
 
 export interface InspectorActions {
   mark: (value: "usable" | "unusable" | "unreviewed") => void
-  projectReject: () => void
-  clearProjectReject: () => void
 }
 
 export function Inspector({
@@ -111,6 +110,7 @@ export function Inspector({
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <QualityLabel frame={frame} />
+          {scope.project ? <HelpTip label={m.review_mark_scope_help()}>{m.review_mark_scope_tip()}</HelpTip> : null}
           {frame.member ? <span className="text-muted-foreground">{m.review_in_run({ state: memberWord(m, frame.member) })}</span> : null}
           {frame.panel && frame.run ? (
             <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: frame.run.projectId, runId: frame.run.id, step: "review" }} className="text-link hover:underline">
@@ -136,20 +136,6 @@ export function Inspector({
             </Button>
           ))}
         </div>
-        {scope.project ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {frame.rejectedBy.project && targets <= 1 ? (
-              <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.clearProjectReject}>
-                {m.review_clear_project_reject()}
-              </Button>
-            ) : (
-              <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.projectReject}>
-                {targets > 1 ? m.review_reject_for_project_frames({ count: targets }) : m.review_reject_for_project()}
-              </Button>
-            )}
-            <HelpTip label={m.review_mark_scope_help()}>{m.review_mark_scope_tip()}</HelpTip>
-          </div>
-        ) : null}
       </div>
       <div className="border-b border-separator px-3 py-2">{field && window ? <HistogramView field={field} window={window} /> : <p className="text-xs text-muted-foreground">{m.review_no_pixels()}</p>}</div>
       <Tabs value={tab === "regions" ? "values" : tab} onValueChange={(v) => onTab(String(v))} className="gap-0">

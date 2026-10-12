@@ -11,6 +11,7 @@
 import { fileAt, fileKey, freeBytes, trashRefusal } from "@/domain/disk"
 import {
   archiveDestination,
+  defaultArchiveLocation,
   formatHours,
   goalProgress,
   liveAssetIds,
@@ -163,12 +164,13 @@ function resultInputs(catalog: Catalog): Map<AssetId, string> {
 }
 
 /**
- * "Move N rejected frames to Trash" (D-W43, PRJ-FR-15): the Project's
- * candidate frames whose applicable library quality is Unusable. Project-only
- * rejects, ChangedContent and Trashed frames never enter. Every copy moves,
- * and one refused copy refuses the frame (D-W57).
+ * "Move N Unusable frames to Trash" (D-W43, PRJ-FR-15, round 6): of the
+ * given frames, those whose applicable library quality is Unusable.
+ * Project-only rejects, ChangedContent and Trashed frames never enter. Every
+ * copy moves, and one refused copy refuses the frame (D-W57). Wrap up offers
+ * a Project's candidate frames; Sessions' Unusable filter offers any.
  */
-export function rejectedFramesOffer(state: PrototypeState, project: Project): TrashOffer {
+export function unusableFramesOffer(state: PrototypeState, assetIds: Iterable<AssetId>): TrashOffer {
   const { catalog, disk } = state
   const prepared = preparedInOpenRuns(catalog)
   const inputs = resultInputs(catalog)
@@ -177,49 +179,55 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
   const refusals: OfferRefusal[] = []
   const items: TrashItem[] = []
   const seen = new Set<AssetId>()
-  for (const candidate of projectCandidates(catalog, project)) {
-    for (const id of liveAssetIds(catalog, candidate.session)) {
-      const asset = catalog.assets[id]
-      if (!asset || seen.has(id) || asset.quality.value !== "unusable" || qualityApplicability(asset) !== "applicable") continue
-      seen.add(id)
-      const label = asset.fileName
-      const path = asset.copies[0]?.path ?? ""
-      const refuse = (reason: MessageRef) => refusals.push({ key: id, label, path, reason })
-      const preparedIn = prepared.get(id)
-      if (preparedIn) {
-        refuse(msg("wrapup_refusal_in_open_run", { where: preparedIn }))
-        continue
-      }
-      const input = inputs.get(id)
-      if (input) {
-        refuse(msg("wrapup_refusal_result_input", { name: input }))
-        continue
-      }
-      if (asset.sessionId && moving.has(asset.sessionId)) {
-        refuse(msg("wrapup_refusal_archive_moving"))
-        continue
-      }
-      const outside = asset.copies.find((c) => catalog.locations[c.locationId]?.role !== "captures")
-      if (outside) {
-        refuse(msg("wrapup_refusal_outside_captures"))
-        continue
-      }
-      const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
-      if (copyRefusal) {
-        refuse(copyRefusal)
-        continue
-      }
-      entries.push({
-        key: id,
-        label,
-        path,
-        detail: asset.copies.length > 1 ? `${frameLabel(catalog, asset)} · ${m.wrapup_copies({ count: asset.copies.length })}` : frameLabel(catalog, asset),
-        sizeBytes: asset.sizeBytes,
-      })
-      for (const copy of asset.copies) items.push({ path: copy.path, assetId: id })
+  for (const id of assetIds) {
+    const asset = catalog.assets[id]
+    if (!asset || asset.trashed || seen.has(id) || asset.quality.value !== "unusable" || qualityApplicability(asset) !== "applicable") continue
+    seen.add(id)
+    const label = asset.fileName
+    const path = asset.copies[0]?.path ?? ""
+    const refuse = (reason: MessageRef) => refusals.push({ key: id, label, path, reason })
+    const preparedIn = prepared.get(id)
+    if (preparedIn) {
+      refuse(msg("wrapup_refusal_in_open_run", { where: preparedIn }))
+      continue
     }
+    const input = inputs.get(id)
+    if (input) {
+      refuse(msg("wrapup_refusal_result_input", { name: input }))
+      continue
+    }
+    if (asset.sessionId && moving.has(asset.sessionId)) {
+      refuse(msg("wrapup_refusal_archive_moving"))
+      continue
+    }
+    const outside = asset.copies.find((c) => catalog.locations[c.locationId]?.role !== "captures")
+    if (outside) {
+      refuse(msg("wrapup_refusal_outside_captures"))
+      continue
+    }
+    const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
+    if (copyRefusal) {
+      refuse(copyRefusal)
+      continue
+    }
+    entries.push({
+      key: id,
+      label,
+      path,
+      detail: asset.copies.length > 1 ? `${frameLabel(catalog, asset)} · ${m.wrapup_copies({ count: asset.copies.length })}` : frameLabel(catalog, asset),
+      sizeBytes: asset.sizeBytes,
+    })
+    for (const copy of asset.copies) items.push({ path: copy.path, assetId: id })
   }
   return offer("rejected-frames", disk, entries, refusals, items)
+}
+
+/** Wrap up's rejected-frames offer: the Project's candidate frames that are library Unusable. */
+export function rejectedFramesOffer(state: PrototypeState, project: Project): TrashOffer {
+  return unusableFramesOffer(
+    state,
+    projectCandidates(state.catalog, project).flatMap((candidate) => liveAssetIds(state.catalog, candidate.session)),
+  )
 }
 
 /**
@@ -464,6 +472,23 @@ export function archivePlan(state: PrototypeState, project: Project, destination
     destination ? null : msg("wrapup_no_archive_location"),
   )
   return { ...plan, kept }
+}
+
+/**
+ * Archive… from Sessions (round 6): sessions in no Project transfer to the
+ * Default archive location along the naming template, the same reviewed
+ * transfer as Wrap up's. The caller offers only sessions in no Project.
+ */
+export function sessionsArchivePlan(state: PrototypeState, sessions: Session[]): ArchivePlan {
+  const destination = defaultArchiveLocation(state)
+  const plan = planOver(
+    state,
+    [...sessions].sort((a, b) => a.night.localeCompare(b.night)),
+    (session, asset) => (destination ? { locationId: destination.id, volumeId: destination.volumeId, path: joinPath(templatedFolder(state, destination.path, session), asset.fileName) } : null),
+    destination,
+    destination ? null : msg("wrapup_no_archive_location"),
+  )
+  return { ...plan, kept: [] }
 }
 
 /** Where each archived frame came from, recorded by the archive transfer so Restore puts it back. */

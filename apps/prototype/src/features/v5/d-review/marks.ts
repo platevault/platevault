@@ -1,10 +1,10 @@
 /**
  * Mark routing for S6 Review (D-W42, D-W54, PIX-FR-14, PIX-FR-17). Library
- * P/X/U goes through `markFrames` with the run that holds each frame, so a
- * Review all mark lands in that frame's own panel run; candidates and a
- * library session have no run and change library quality only. "Reject for
- * this Project" uses the Project-scoped reject; a session review has no
- * Project, so it refuses. Each call returns one result for the whole mark.
+ * P/X/U goes through `markFrames`, which is library-wide (round 6): X marks
+ * a frame Unusable everywhere and takes it out of every open run's draft.
+ * "Reject for this Project only" uses the Project-scoped reject with the run
+ * that holds each frame; a session review has no Project, so it refuses.
+ * Each call returns one result for the whole mark.
  */
 import type { QualityValue, RunId } from "@/domain/types"
 import { m } from "@/lib/i18n"
@@ -43,7 +43,11 @@ function firstFailure(results: CommitResult[]): CommitResult {
 
 export function markLibrary(scope: ReviewScope, frames: ReviewFrame[], value: QualityValue): CommitResult {
   if (scope.readOnlyReason) return { ok: false, reason: "refused", message: scope.readOnlyReason, reasons: [scope.readOnlyReason] }
-  return firstFailure([...byRun(frames)].map(([runId, ids]) => markFrames(ids, value, runId, scope.href)))
+  return markFrames(
+    frames.map((f) => f.asset.id),
+    value,
+    scope.href,
+  )
 }
 
 export function setProjectOnlyReject(scope: ReviewScope, frames: ReviewFrame[], rejected: boolean): CommitResult {

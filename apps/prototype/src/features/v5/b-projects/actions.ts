@@ -26,29 +26,30 @@ import { type ArchiveMove, type ArchiveRow, sessionRef } from "./model"
 export type TransferDirection = "archive" | "restore"
 
 interface ArchivePayload {
-  projectId: ProjectId
+  /** Null for Archive… from Sessions (round 6): sessions in no Project. */
+  projectId: ProjectId | null
   direction: TransferDirection
   queue: Array<{ sessionId: SessionId; moves: ArchiveMove[]; folder: string }>
   moved: SessionId[]
   href: string
 }
 
-/** Start an approved Archive or Restore of the reviewed rows; returns the operation id. */
-export function startArchiveTransfer(projectId: ProjectId, rows: ArchiveRow[], direction: TransferDirection): OperationId {
+/** Start an approved Archive or Restore of the reviewed rows; returns the operation id. Without a Project it archives sessions from Sessions. */
+export function startArchiveTransfer(projectId: ProjectId | null, rows: ArchiveRow[], direction: TransferDirection): OperationId {
   const state = store.getState()
-  const project = state.catalog.projects[projectId]
-  const name = project ? project.name : msg("project_noun")
+  const project = projectId ? state.catalog.projects[projectId] : undefined
+  const name = project ? project.name : projectId ? msg("project_noun") : msg("session_count", { count: rows.length })
   const payload: ArchivePayload = {
     projectId,
     direction,
     queue: rows.map((r) => ({ sessionId: r.session.id, moves: r.moves, folder: r.folder })),
     moved: [],
-    href: `/projects/${projectId}`,
+    href: projectId ? `/projects/${projectId}` : "/sessions",
   }
   return startOperation({
     kind: "archive",
     title: direction === "archive" ? msg("op_archive_title", { name }) : msg("op_restore_title", { name }),
-    scope: { projectId, sessionIds: rows.map((r) => r.session.id) },
+    scope: { projectId: projectId ?? undefined, sessionIds: rows.map((r) => r.session.id) },
     total: rows.length,
     unit: "sessions",
     items: rows.map((r) => ({
@@ -113,7 +114,7 @@ function finish(state: PrototypeState, id: OperationId, payload: ArchivePayload)
   const op = state.operations[id]!
   const refused = op.items.filter((i) => i.status === "blocked").length
   const moved = payload.moved.length
-  const project = state.catalog.projects[payload.projectId]
+  const project = payload.projectId ? state.catalog.projects[payload.projectId] : undefined
   let next = state
   if (project && moved > 0) {
     const current = project.archive?.sessionIds ?? []

@@ -1183,12 +1183,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} frame rejeitado para a Lixeira ({size})",
-        "countPlural=*": "Mover {n} frames rejeitados para a Lixeira ({size})"
+        "countPlural=one": "Mover {n} frame inutilizável para a Lixeira ({size})",
+        "countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira ({size})"
       }
     }
   ],
-  "wrapup_offer_rejected_none": "Mover frames rejeitados para a Lixeira: nenhum restante",
+  "wrapup_offer_rejected_none": "Mover frames inutilizáveis para a Lixeira: nenhum restante",
   "wrapup_offer_intermediates": [
     {
       "declarations": [
@@ -1901,7 +1901,7 @@
   "trash_empty_description": "Os arquivos vão para a Lixeira do sistema depois de verificados novamente.",
   "trash_empty_run": "Esvaziar execução",
   "trash_empty": "Esvaziar Lixeira",
-  "wrapup_offer_rejects": "Rejeitados",
+  "wrapup_offer_rejects": "Frames inutilizáveis",
   "wrapup_offer_duplicates_label": "Duplicatas",
   "wrapup_blocked": "Encerramento bloqueado",
   "wrapup_runs_not_complete": [
@@ -4711,7 +4711,7 @@
   "review_quality_library_title": "Biblioteca: {word}",
   "review_member_included": "Incluído",
   "review_member_rejected": "Fora do rascunho · Rejeitado",
-  "review_member_excluded": "Excluído da execução",
+  "review_member_excluded": "Fora da execução · Inutilizável",
   "review_key_prev_next": "Frame anterior ou seguinte",
   "review_key_pick": "Aprovar",
   "review_key_reject": "Rejeitar",
@@ -4834,22 +4834,7 @@
     }
   ],
   "review_clear_project_reject": "Desfazer rejeição no Projeto",
-  "review_reject_for_project": "Rejeitar neste Projeto",
-  "review_reject_for_project_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Rejeitar neste Projeto: {count} frame",
-        "countPlural=*": "Rejeitar neste Projeto: {count} frames"
-      }
-    }
-  ],
+  "review_reject_for_project": "Rejeitar só neste Projeto…",
   "review_mark_scope_help": "Escopo da marcação",
   "review_mark_scope_tip": "P, X e U marcam a biblioteca, em todos os Projetos. Uma rejeição no Projeto vale só neste Projeto.",
   "review_no_pixels": "Sem pixels",
@@ -7300,5 +7285,129 @@
       }
     }
   ],
-  "duplicates_trash_title": "Mover cópias duplicadas para a Lixeira do sistema"
+  "duplicates_trash_title": "Mover cópias duplicadas para a Lixeira do sistema",
+  "import_source_disconnected": "Origem desconectada · {name}",
+  "session_file_into": "Mover para {name}",
+  "session_filed_into": "{session} movida para {target}",
+  "session_frames_moved": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame movido",
+        "countPlural=*": "{n} frames movidos"
+      }
+    }
+  ],
+  "session_cant_file": "Não é possível mover",
+  "session_file_into_target_ellipsis": "Mover para o Alvo…",
+  "session_file_into_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} frame para {name}?",
+        "countPlural=*": "Mover {n} frames para {name}?"
+      }
+    }
+  ],
+  "session_file_moves": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} frame ({size})",
+        "countPlural=*": "Move {n} frames ({size})"
+      }
+    }
+  ],
+  "session_confirms_target": "Confirma {name} como Alvo",
+  "session_pointing_mismatch": "Apontamento divergente",
+  "review_bulk_mark_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Marcar {n} frame como {quality}?",
+        "countPlural=*": "Marcar {n} frames como {quality}?"
+      }
+    }
+  ],
+  "sessions_empty_unusable": "Nenhum frame inutilizável",
+  "sessions_cant_archive": "Não é possível arquivar",
+  "sessions_in_a_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão em um Projeto",
+        "countPlural=*": "{count} sessões em um Projeto"
+      }
+    }
+  ],
+  "sessions_already_archived": "já está no arquivo",
+  "sessions_unusable_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} inutilizável",
+        "countPlural=*": "{n} inutilizáveis"
+      }
+    }
+  ],
+  "sessions_trash_unusable_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} frame inutilizável para a Lixeira?",
+        "countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira?"
+      }
+    }
+  ]
 }

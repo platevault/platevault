@@ -1127,12 +1127,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Move {n} rejected frame to Trash ({size})",
-        "countPlural=*": "Move {n} rejected frames to Trash ({size})"
+        "countPlural=one": "Move {n} Unusable frame to Trash ({size})",
+        "countPlural=*": "Move {n} Unusable frames to Trash ({size})"
       }
     }
   ],
-  "wrapup_offer_rejected_none": "Move rejected frames to Trash: none left",
+  "wrapup_offer_rejected_none": "Move Unusable frames to Trash: none left",
   "wrapup_offer_intermediates": [
     {
       "declarations": [
@@ -1845,7 +1845,7 @@
   "trash_empty_description": "Files go to the OS Trash after each is re-verified.",
   "trash_empty_run": "Empty run",
   "trash_empty": "Empty Trash",
-  "wrapup_offer_rejects": "Rejects",
+  "wrapup_offer_rejects": "Unusable frames",
   "wrapup_offer_duplicates_label": "Duplicates",
   "wrapup_blocked": "Wrap up blocked",
   "wrapup_runs_not_complete": [
@@ -4655,7 +4655,7 @@
   "review_quality_library_title": "Library: {word}",
   "review_member_included": "Included",
   "review_member_rejected": "Out of draft · Rejected",
-  "review_member_excluded": "Excluded from run",
+  "review_member_excluded": "Out of run · Unusable",
   "review_key_prev_next": "Previous or next frame",
   "review_key_pick": "Pick",
   "review_key_reject": "Reject",
@@ -4778,22 +4778,7 @@
     }
   ],
   "review_clear_project_reject": "Clear Project reject",
-  "review_reject_for_project": "Reject for this Project",
-  "review_reject_for_project_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Reject for this Project: {count} frame",
-        "countPlural=*": "Reject for this Project: {count} frames"
-      }
-    }
-  ],
+  "review_reject_for_project": "Reject for this Project only…",
   "review_mark_scope_help": "Mark scope",
   "review_mark_scope_tip": "P, X and U mark the library, in every Project. A Project reject stays in this Project.",
   "review_no_pixels": "No pixels",
@@ -7244,5 +7229,129 @@
       }
     }
   ],
-  "duplicates_trash_title": "Move duplicate copies to the OS Trash"
+  "duplicates_trash_title": "Move duplicate copies to the OS Trash",
+  "import_source_disconnected": "Source disconnected · {name}",
+  "session_file_into": "File into {name}",
+  "session_filed_into": "{session} filed into {target}",
+  "session_frames_moved": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame moved",
+        "countPlural=*": "{n} frames moved"
+      }
+    }
+  ],
+  "session_cant_file": "Can't file",
+  "session_file_into_target_ellipsis": "File into Target…",
+  "session_file_into_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "File {n} frame into {name}?",
+        "countPlural=*": "File {n} frames into {name}?"
+      }
+    }
+  ],
+  "session_file_moves": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Moves {n} frame ({size})",
+        "countPlural=*": "Moves {n} frames ({size})"
+      }
+    }
+  ],
+  "session_confirms_target": "Confirms {name} as the Target",
+  "session_pointing_mismatch": "Pointing mismatch",
+  "review_bulk_mark_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mark {n} frame {quality}?",
+        "countPlural=*": "Mark {n} frames {quality}?"
+      }
+    }
+  ],
+  "sessions_empty_unusable": "No Unusable frames",
+  "sessions_cant_archive": "Can't archive",
+  "sessions_in_a_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session in a Project",
+        "countPlural=*": "{count} sessions in a Project"
+      }
+    }
+  ],
+  "sessions_already_archived": "already in the archive",
+  "sessions_unusable_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Unusable",
+        "countPlural=*": "{n} Unusable"
+      }
+    }
+  ],
+  "sessions_trash_unusable_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} Unusable frame to Trash?",
+        "countPlural=*": "Move {n} Unusable frames to Trash?"
+      }
+    }
+  ]
 }
