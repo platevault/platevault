@@ -340,4 +340,10 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **C15 Metadata corrections** move to ingestion (a recorded vs corrected table in the session's review flow); Prepare applies them and shows "N corrected values".
 
 ### Copy rule (user, 2026-10-12)
-- **Everything is i18n.** Every visible string goes through the message catalogue in en-GB and pt-BR: product pages, the component catalogue and its captions, the design-system page, the simulation panel and the Prototype controls. Only tests, fixtures and seed library content (names of targets, projects and sessions) are exempt from the i18n lint.
+- **Everything is i18n.** Every visible string goes through the message catalogue in en-GB and pt-BR: product pages, the component catalogue and its captions, the design-system page, the simulation panel and the Prototype controls. Nothing goes in the i18n ignores without a genuine reason; the only valid ones are catalogue names and other proper nouns (Messier, NGC, target designations, file names, paths, code identifiers), unit tests and fixtures, internal code and docs, debugging and logs (user).
+
+### Stack and updates, grilling round 3 (user, 2026-10-12; R9-SPIKE-*.md, R9-UPDATER-OPTIONS.md)
+- **S1 Stack: stay on Tauri + React.** The composition rebuild happens there; the services crate keeps a later switch possible.
+- **S2 Updater path:** under discussion (tradeoffs requested).
+- **S3 Update behaviour:** nothing downloads until the user chooses to install. When an update is available, a notification offers **Install now** or **Install on quit**. Never at launch.
+- **S4:** fix the three release bugs now (macOS 0.6.0 build without a darwin manifest entry, Windows signing order breaking minisign, updater plugin bump).

@@ -397,6 +397,117 @@
   "selection_region": "Seleção",
   "selection_show": "Mostrar selecionados",
   "selection_clear": "Limpar seleção",
+  "table_actions_column": "Ações",
+  "table_selected_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} selecionado",
+        "countPlural=*": "{n} selecionados"
+      }
+    }
+  ],
+  "table_selection_hidden": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} oculto pelos filtros",
+        "countPlural=*": "{n} ocultos pelos filtros"
+      }
+    }
+  ],
+  "table_selection_show": "Mostrar",
+  "table_row_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} linha",
+        "countPlural=*": "{n} linhas"
+      }
+    }
+  ],
+  "table_row_details": "Detalhes de {name}",
+  "filter_bar_label": "Filtros",
+  "filter_bar_all": "Todos",
+  "filter_bar_facet_value": "{label}: {value}",
+  "filter_bar_matches": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} resultado",
+        "countPlural=*": "{n} resultados"
+      }
+    }
+  ],
+  "filter_bar_presets": "Presets",
+  "filter_bar_presets_saved": "Salvos",
+  "filter_bar_preset_save_ellipsis": "Salvar atual…",
+  "filter_bar_preset_delete": "Excluir",
+  "filter_bar_preset_new_title": "Novo preset",
+  "filter_bar_preset_name": "Nome",
+  "filter_bar_preset_create": "Criar preset",
+  "filter_bar_preset_name_taken": "Nome já em uso",
+  "catalogue_datatable_title": "DataTable",
+  "catalogue_datatable_description": "Ordenação, filtros, presets, seleção, ações em lote, ações de linha e expansão numa só tabela. A barra de lote ocupa o lugar da linha de ferramentas, na mesma altura.",
+  "catalogue_datatable_state": "Estado da tabela",
+  "catalogue_datatable_state_rows": "Linhas",
+  "catalogue_datatable_state_loading": "Carregando",
+  "catalogue_datatable_state_empty": "Vazia",
+  "catalogue_datatable_state_error": "Erro",
+  "catalogue_datatable_wide": "Colunas largas e fixadas",
+  "catalogue_datatable_restore": "Restaurar linhas excluídas",
+  "catalogue_datatable_shift": "Deslocamento da tabela na última mudança de seleção: {px} px",
+  "catalogue_datatable_last_run": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input action",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Última ação: {action} · {n} linha",
+        "countPlural=*": "Última ação: {action} · {n} linhas"
+      }
+    }
+  ],
+  "catalogue_datatable_no_action": "Última ação: nenhuma",
+  "catalogue_datatable_notes": "Alvo não ordena (estática). Câmera trunca e mostra o texto inteiro ao passar o ponteiro, só quando cortado.",
+  "catalogue_datatable_label": "Sessões de luz (amostra do catálogo)",
+  "catalogue_datatable_preset_long": "Exposições longas",
+  "catalogue_datatable_filter_bar_title": "FilterBar",
+  "catalogue_datatable_filter_bar_description": "Os mesmos filtros controlados para uma lista que não é uma tabela.",
   "save_review_current": "Ver a revisão atual",
   "folder_picker_volumes": "Volumes",
   "folder_picker_up": "Subir uma pasta",
@@ -7640,6 +7751,33 @@
       }
     }
   ],
+  "catalogue_actions_heading": "Ações",
+  "catalogue_actions_summary": "Uma Action aparece como botão do cabeçalho, item de menu nomeado, item ⋯ da linha, item do menu de contexto e comando da paleta, com o mesmo rótulo, atalho e motivo de indisponibilidade.",
+  "catalogue_actions_roles_heading": "Papéis dos botões",
+  "catalogue_actions_roles_caption": "Papel × tamanho × estado. Aponte, use Tab ou pressione um botão para ver passar o mouse, foco visível e ativo. Desativado continua focalizável.",
+  "catalogue_actions_size": "Tamanho {size}",
+  "catalogue_actions_state_default": "Padrão",
+  "catalogue_actions_state_disabled": "Desativado",
+  "catalogue_actions_state_loading": "Carregando",
+  "catalogue_actions_role_primary": "Principal (default)",
+  "catalogue_actions_role_standard": "Comum (outline)",
+  "catalogue_actions_role_quiet": "Discreto (ghost)",
+  "catalogue_actions_role_destructive": "Destrutivo (destructive)",
+  "catalogue_actions_role_link": "Link (link)",
+  "catalogue_actions_role_icon": "Só ícone (IconButton)",
+  "catalogue_actions_button_heading": "ActionButton",
+  "catalogue_actions_button_caption": "O tipo escolhe a variante. Numa célula de tabela (xs), uma ação principal fica outline. {archive} está indisponível: aponte ou use Tab para ver os impedimentos. {start} e {rescan} demoram; {remove} é recusado; o segundo {rescan} falha e oferece {retry}.",
+  "catalogue_actions_bar_heading": "ActionBar",
+  "catalogue_actions_bar_caption": "Até três botões comuns, o menu nomeado e, por último, a única ação principal. Uma quarta ação comum, as ações destrutivas e o excedente vão para o menu ({more} por padrão, ou um menu do objeto). O retorno aparece abaixo da barra.",
+  "catalogue_actions_bar_empty": "Sem ações: nada é exibido",
+  "catalogue_actions_menu_heading": "ActionMenu · MenuItems",
+  "catalogue_actions_menu_caption": "Os itens chegam fora de ordem, {delete} primeiro, com separadores duplicados. Todo menu mostra {delete} por último, após um separador, um grupo com título, um submenu, atalhos e um item indisponível com o motivo. Clique com o botão direito na caixa para ver a mesma lista como menu de contexto.",
+  "catalogue_actions_menu_empty": "Sem ação: o menu não é exibido",
+  "catalogue_actions_context_target": "Clique com o botão direito aqui",
+  "catalogue_actions_context_name": "Exemplo de menu de contexto",
+  "catalogue_actions_rows_heading": "RowActions · RowContextMenu",
+  "catalogue_actions_rows_caption": "Cada linha tem um ⋯ na ordem do Tab e os mesmos itens no clique com o botão direito, Shift+F10 ou na tecla Menu, na linha ou no ⋯. Um executor por lista, então o retorno aparece abaixo da lista.",
+  "catalogue_actions_rows_none": "Linha sem ações: sem ⋯",
   "catalogue_feedback_refusal_desc": "Ao lado do controle recusado. O motivo abre os bloqueios num cartão flutuante (passe o cursor, foque ou pressione para entrar nele; Escape fecha). Nada é inserido, nada se move.",
   "catalogue_feedback_refused_blockers": "recusado · bloqueios",
   "catalogue_feedback_refused_blockers_actions": "recusado · bloqueios + ações",
