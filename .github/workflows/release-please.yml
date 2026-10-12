@@ -15,9 +15,13 @@ name: Release Please
 # the `build` job (spec 051 US10 / T060) builds the Tauri desktop app on the
 # Windows/macOS/Linux matrix, signs the bundles + updater artifact with
 # tauri-apps/tauri-action (minisign, via the TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]
-# repo secrets), and uploads them — plus the generated `latest.json` updater
-# manifest — to the release that release-please just created. This is what
-# makes https://github.com/platevault/platevault/releases/latest/download/latest.json
+# repo secrets), and uploads bundles and signatures to the release that
+# release-please just created. The optional `sign-windows` job then replaces the
+# Windows installers with Authenticode-signed copies. Last, `updater-manifest`
+# writes the `latest.json` updater manifest, but only once every leg has
+# succeeded and every updater signature verifies against the bytes on the
+# release. This is what makes
+# https://github.com/platevault/platevault/releases/latest/download/latest.json
 # resolve for `tauri-plugin-updater`. The embedded public key that verifies
 # these signatures lives in apps/desktop/src-tauri/tauri.conf.json and is
 # owned by a separate US10 lane, not this workflow.
@@ -114,15 +118,58 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
+      # macOS Developer ID signing and notarization, off unless
+      # vars.ENABLE_MACOS_SIGNING is 'true' (docs/development/code-signing.md).
+      # The Tauri bundler treats an APPLE_* variable that is set as a request to
+      # sign, even when its value is empty. It checks `var_os("APPLE_CERTIFICATE")`,
+      # which is Some("") for an empty value. The v0.6.0 macOS leg passed
+      # `APPLE_CERTIFICATE: ''` and failed with "failed to import keychain
+      # certificate". So the credentials are exported only when signing is on,
+      # and only when every one of them is present. With signing off they are
+      # never set, and the bundler ad-hoc signs as it did for v0.5.0.
+      #
+      # $GITHUB_ENV makes the values visible to the remaining steps of this leg,
+      # including post-job steps. A step-level `env:` cannot leave a variable
+      # unset, so there is no narrower scope.
+      - name: Export macOS signing credentials
+        if: runner.os == 'macOS' && vars.ENABLE_MACOS_SIGNING == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          names='APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID'
+          missing=''
+          for name in $names; do
+            if [ -z "${!name:-}" ]; then missing="${missing} ${name}"; fi
+          done
+          if [ -n "${missing}" ]; then
+            echo "::error::ENABLE_MACOS_SIGNING is 'true' but these are empty:${missing}. Set them, or unset ENABLE_MACOS_SIGNING to ship ad-hoc signed macOS builds."
+            exit 1
+          fi
+          for name in $names; do
+            delimiter="APPLE_EOF_$(openssl rand -hex 16)"
+            printf '%s<<%s\n%s\n%s\n' "${name}" "${delimiter}" "${!name}" "${delimiter}" >> "$GITHUB_ENV"
+          done
+
       # tauri-action auto-detects the package manager by checking for a
       # lockfile inside `projectPath` — apps/desktop has no pnpm-lock.yaml of
       # its own (it lives at the workspace root), so auto-detection would fall
       # through to `npm run tauri`. `tauriScript: pnpm tauri` pins it to the
       # same invocation the justfile already uses for `tauri dev`.
       #
-      # uploadUpdaterJson + updaterJsonPreferNsis: uploadUpdaterJson was named
-      # includeUpdaterJson in v0 — renaming was required or latest.json silently
-      # stops uploading. updaterJsonPreferNsis is unchanged in v1.
+      # uploadUpdaterJson: false. Each leg used to merge its own platform into
+      # the release's latest.json as it finished. A failed leg then left a
+      # published manifest without that platform (v0.6.0 shipped with no
+      # darwin-* key). The `updater-manifest` job writes latest.json once the
+      # whole release is built, so updaterJsonPreferNsis, which only shapes
+      # that file, is gone too. Its NSIS preference now lives in
+      # scripts/assemble-updater-manifest.mjs. The .sig files are still uploaded
+      # (uploadUpdaterSignatures defaults to true).
       #
       # releaseDraft: false — release-please (the `release-please` job above)
       # already published a real (non-draft) GitHub Release for this tag, so
@@ -133,9 +180,9 @@ jobs:
       #
       # v1 breaking changes that do NOT bite us:
       #   - .app.tar.gz (macOS updater artifact) now embeds the app version in
-      #     the filename; latest.json URLs point to these versioned names.
-      #     tauri-plugin-updater 2.x follows GitHub redirect URLs so the
-      #     installed client will resolve the new names correctly.
+      #     the filename. latest.json points at the asset names actually on the
+      #     release, and tauri-plugin-updater 2.x follows GitHub's redirects, so
+      #     installed clients resolve the new names.
       #   - updaterJsonKeepUniversal removed (now always on): we never set it.
       #   - assetNamePattern renamed to artifactNamePattern: we don't use it.
       #   - Tauri v1/unstable support dropped: we are on Tauri 2 stable.
@@ -146,18 +193,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS Developer ID signing + notarization (see
-          # docs/development/code-signing.md). tauri-action reads these
-          # directly; an empty string is treated as unset, so gating each
-          # value on vars.ENABLE_MACOS_SIGNING keeps this inert until an
-          # Apple Developer account exists and the secrets are populated —
-          # no separate disabled job needed, unlike Windows/SignPath.
-          APPLE_CERTIFICATE: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && vars.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_ID: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && vars.APPLE_TEAM_ID || '' }}
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
@@ -166,8 +201,7 @@ jobs:
           releaseBody: ${{ needs.release-please.outputs.release_body }}
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: true
-          updaterJsonPreferNsis: true
+          uploadUpdaterJson: false
 
       # Build provenance for the bundles this matrix leg produced: a signed statement of
       # which workflow run, at which commit, built these exact bytes. Complements the
@@ -185,9 +219,11 @@ jobs:
       # tauri-action emits artifactPaths as a JSON array STRING (its src/index.ts does
       # JSON.stringify(artifacts.map(a => a.path))), which actions/attest cannot consume
       # directly — subject-path wants a newline-separated list. Converting here also
-      # avoids hardcoding bundle filenames, which carry the version and would drift on
-      # every release.
-      - name: Collect artifact paths for attestation
+      # avoids hardcoding bundle paths: filenames carry the version, and the bundle
+      # directory is the workspace's cargo target dir (target/release/bundle), not
+      # apps/desktop/src-tauri/target. The same list feeds the unsigned Windows
+      # bundles that sign-windows submits.
+      - name: Collect artifact paths
         id: subjects
         shell: bash
         env:
@@ -220,10 +256,23 @@ jobs:
             fi
           fi
 
+          windows_bundles=''
+          if [ "${SKIP_WINDOWS_BUNDLES}" = "true" ]; then
+            windows_bundles="$(printf '%s' "${ARTIFACT_PATHS:-[]}" | jq -r '.[] | select(endswith(".exe") or endswith(".msi"))')"
+            if [ -z "${windows_bundles}" ]; then
+              echo "::error::no .exe/.msi in artifactPaths; sign-windows would have nothing to sign"
+              echo "artifactPaths was: ${ARTIFACT_PATHS:-<unset>}"
+              exit 1
+            fi
+          fi
+
           {
             echo 'paths<<SUBJECTS_EOF'
             echo "${subjects}"
             echo 'SUBJECTS_EOF'
+            echo 'windows_bundles<<WINDOWS_BUNDLES_EOF'
+            echo "${windows_bundles}"
+            echo 'WINDOWS_BUNDLES_EOF'
           } >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance
@@ -236,18 +285,15 @@ jobs:
       # Authenticode signature — Windows SmartScreen still shows "Unknown
       # Publisher" for the NSIS .exe and .msi. Collect them here so the
       # (currently disabled) sign-windows job below can submit them to
-      # SignPath without needing its own build/checkout of the Tauri app.
+      # SignPath without needing its own build of the Tauri app.
       # Gated on the same var as sign-windows: with ENABLE_WINDOWS_SIGNING
-      # unset, this step is skipped and the build job's effects (including
-      # the release published by tauri-action above) are unchanged.
+      # unset, this step is skipped and the build job's effects are unchanged.
       - name: Collect unsigned Windows bundles
         if: ${{ runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: windows-unsigned-bundles
-          path: |
-            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
-            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+          path: ${{ steps.subjects.outputs.windows_bundles }}
           if-no-files-found: error
           retention-days: 1
 
@@ -260,6 +306,12 @@ jobs:
   # unset until the application is approved and wired up. With the variable
   # unset, this job is skipped entirely and the release published by `build`
   # above is unchanged.
+  #
+  # The NSIS setup.exe and the .msi are also the Windows updater payloads, so
+  # their minisign signatures have to be made over the Authenticode-signed bytes.
+  # tauri-action's signatures cover the unsigned build output. This job therefore
+  # signs them again after SignPath and replaces the bundle and its .sig
+  # together. The updater-manifest job checks the result.
   sign-windows:
     name: Sign Windows bundles (SignPath)
     needs: [release-please, build]
@@ -270,11 +322,47 @@ jobs:
       id-token: write # OIDC identity that signs the attestation
       attestations: write # publish the attestation to this repo
     steps:
+      # First, because checkout empties the workspace. The repo is only needed
+      # for the pinned Tauri CLI (`tauri signer sign`) below.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Download unsigned Windows bundles
         uses: actions/download-artifact@v4
         with:
           name: windows-unsigned-bundles
           path: unsigned
+
+      # The build leg's artifact keeps tauri's nsis/ and msi/ directories.
+      # SignPath's artifact configuration is simpler with both files at the
+      # root, and the steps below then find each signed file by name.
+      - name: Flatten bundles for SignPath
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir to-sign
+          find unsigned -type f \( -name '*.exe' -o -name '*.msi' \) -exec mv -- {} to-sign/ \;
+          nsis_installers=(to-sign/*.exe)
+          msi_installers=(to-sign/*.msi)
+          if [ "${#nsis_installers[@]}" -eq 0 ] || [ "${#msi_installers[@]}" -eq 0 ]; then
+            echo "::error::expected an .exe and an .msi in windows-unsigned-bundles"
+            find unsigned to-sign -type f
+            exit 1
+          fi
+          ls -l to-sign
 
       # Re-upload as a fresh workflow artifact: the SignPath action takes a
       # github-artifact-id from actions/upload-artifact in *this* job, it
@@ -284,7 +372,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-bundles-for-signing
-          path: unsigned/**
+          path: to-sign/
           retention-days: 1
 
       # project-slug/signing-policy-slug/artifact-configuration-slug are
@@ -304,6 +392,26 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: signed
 
+      # minisign over the final bytes: Authenticode just rewrote these files.
+      # Writes signed/<file>.sig, the same format the bundler writes, from the same
+      # key. Once @tauri-apps/cli is 2.12 or later, pass `--app-version` as well,
+      # so the trusted comment carries the version the way the bundler's 2.12
+      # signatures do. The updater's `requireSignedVersion` checks it.
+      - name: Sign the signed bundles for the updater
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for submitted in to-sign/*; do
+            name="$(basename -- "${submitted}")"
+            if [ ! -f "signed/${name}" ]; then
+              echo "::error::SignPath returned no signed/${name}. The artifact configuration must keep each file at the artifact root under its own name."
+              exit 1
+            fi
+            pnpm --dir apps/desktop exec tauri signer sign "${PWD}/signed/${name}"
+          done
+
       # Attest the SIGNED bundles, and do it before the upload below. Authenticode
       # signing rewrites the file, so these digests differ from the unsigned copies the
       # build job produced — which is exactly why build/ skips .exe/.msi when this job is
@@ -316,14 +424,67 @@ jobs:
             signed/*.exe
             signed/*.msi
 
-      # tauri-action already uploaded unsigned copies of these files to the
-      # release in the `build` job; --clobber replaces them in place with the
-      # Authenticode-signed versions.
+      # tauri-action already uploaded unsigned copies of these files, with
+      # signatures over the unsigned bytes, to the release in the `build` job.
+      # --clobber replaces each bundle and its .sig in the same upload.
       - name: Upload signed bundles to the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          gh release upload "${{ needs.release-please.outputs.tag_name }}" \
-            signed/*.exe signed/*.msi \
-            --repo "${{ github.repository }}" \
+          gh release upload "${TAG}" \
+            signed/*.exe signed/*.msi signed/*.exe.sig signed/*.msi.sig \
+            --repo "${GITHUB_REPOSITORY}" \
             --clobber
+
+  # Writes latest.json, the manifest every installed copy polls through
+  # releases/latest/download/latest.json. It runs only after every build leg
+  # (and sign-windows, when enabled) has succeeded. It refuses to publish if a
+  # platform is missing, or if any updater signature fails against the public
+  # key the app embeds, checked over the bytes on the release. When a leg fails,
+  # the new release has no latest.json and the run is red. Clients' update
+  # checks then fail, as they already do in the few minutes between the release
+  # being created and the first leg finishing, rather than some platforms
+  # silently missing the update. Re-running the failed jobs finishes the release.
+  updater-manifest:
+    name: Publish updater manifest
+    needs: [release-please, build, sign-windows]
+    if: >-
+      ${{ !cancelled()
+        && needs.release-please.outputs.release_created == 'true'
+        && needs.build.result == 'success'
+        && (needs.sign-windows.result == 'success' || needs.sign-windows.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release upload latest.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download the release's assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets,body > release.json
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
+
+      - name: Assemble and verify latest.json
+        run: |
+          node scripts/assemble-updater-manifest.mjs \
+            --release release.json \
+            --assets release-assets \
+            --tauri-conf apps/desktop/src-tauri/tauri.conf.json \
+            --out latest.json
+
+      - name: Upload latest.json to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "${TAG}" latest.json --repo "${GITHUB_REPOSITORY}" --clobber

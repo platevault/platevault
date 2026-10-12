@@ -64,16 +64,24 @@ Flow, once enabled (`.github/workflows/release-please.yml`):
 
 1. `build` job (Windows leg only) uploads the unsigned `.exe`/`.msi` as a
    workflow artifact (`windows-unsigned-bundles`) after `tauri-action`
-   publishes the unsigned release. This step is itself gated on
+   uploads them to the release. The paths come from `tauri-action`'s
+   `artifactPaths` output, because the bundles land in the workspace's cargo
+   target directory (`target/release/bundle/`), not under
+   `apps/desktop/src-tauri/`. This step is itself gated on
    `vars.ENABLE_WINDOWS_SIGNING == 'true'`, so with the variable unset it is
    skipped and today's release output is unchanged.
-2. `sign-windows` job downloads that artifact, re-uploads it under a fresh
+2. `sign-windows` job downloads that artifact and flattens it, so the `.exe`
+   and `.msi` sit at the artifact root, which is the layout the SignPath
+   artifact configuration must expect. It re-uploads the result under a fresh
    artifact ID (SignPath's action needs a `github-artifact-id` from an
    `upload-artifact` step in the *same* job), then submits it via
    [`signpath/github-action-submit-signing-request`](https://github.com/signpath/github-action-submit-signing-request).
-3. The signed artifact is downloaded back and re-uploaded to the same GitHub
-   Release with `gh release upload --clobber`, replacing the unsigned copies
-   `tauri-action` already published.
+3. The job signs each Authenticode-signed file again with minisign
+   (`tauri signer sign`, same key), because Authenticode changed its bytes.
+   It then uploads each bundle and its new `.sig` to the same GitHub Release
+   with `gh release upload --clobber`, replacing the unsigned copies and their
+   now-stale signatures.
+4. `updater-manifest` job publishes `latest.json` (see below).
 
 This job is entirely gated on `vars.ENABLE_WINDOWS_SIGNING == 'true'`. That
 repo Actions variable is **unset today**, so `sign-windows` — and the
@@ -82,8 +90,8 @@ behavior is unchanged.
 
 ## Interaction with the minisign updater signature
 
-Both signatures coexist and serve different purposes — enabling one does not
-touch the other:
+The two signatures do different jobs, but on Windows they cover the **same
+file**, so the order matters:
 
 - **minisign** (`TAURI_SIGNING_PRIVATE_KEY`) signs the updater payload that
   `tauri-plugin-updater` verifies against the embedded public key in
@@ -91,6 +99,38 @@ touch the other:
 - **Authenticode** (SignPath) signs the `.exe`/`.msi` binary itself so Windows
   SmartScreen and the OS installer UI show a trusted publisher instead of
   "Unknown Publisher." This is what this doc adds, disabled.
+
+The NSIS `setup.exe` and the `.msi` *are* the Windows updater payloads (Tauri
+v2 `createUpdaterArtifacts: true` signs the installers directly). Authenticode
+embeds its signature in the file, so a minisign signature made before it no
+longer matches what clients download, and the updater would reject every
+Windows update. So the minisign signature must be made **after** Authenticode.
+`sign-windows` does that in step 3 above, and `updater-manifest` checks it.
+
+## Updater manifest (`latest.json`)
+
+Installed copies poll
+`https://github.com/platevault/platevault/releases/latest/download/latest.json`.
+The `updater-manifest` job writes that file once per release, after every
+`build` leg and, when enabled, `sign-windows` have succeeded. It runs
+`scripts/assemble-updater-manifest.mjs`, which publishes nothing unless:
+
+- every updater bundle in its `UPDATER_BUNDLES` table (macOS `.app.tar.gz`,
+  Linux AppImage/deb/rpm, Windows NSIS/MSI) is on the release with its `.sig`;
+- every `.sig` on the release belongs to a row in that table, so a new matrix
+  leg cannot be silently left out;
+- every signature verifies against the bytes on the release, using the public
+  key in `apps/desktop/src-tauri/tauri.conf.json`. These are the same checks
+  `tauri-plugin-updater` runs before it installs an update.
+
+If any check fails, the run is red and the new release has no `latest.json`,
+so clients' update checks fail until the failed jobs are re-run. Before this
+gate, each `build` leg merged its own platform into `latest.json`. v0.6.0's
+failed macOS leg then shipped a manifest with no `darwin-*` entry, and 0.5.0
+Macs got `TargetsNotFound`. The cask bump (`homebrew-bump.yml`) only runs
+after a fully successful release run, so it waits too.
+
+Add a row to `UPDATER_BUNDLES` whenever the `build` matrix gains a platform.
 
 ## Application checklist (user action required)
 
@@ -108,8 +148,10 @@ touch the other:
    - Actions variable `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`
 4. Flip it on: set the Actions variable `ENABLE_WINDOWS_SIGNING` to `true`.
 5. Verify on the next tagged release: the `sign-windows` job should run after
-   `build`, and the release's `.exe`/`.msi` assets should carry a valid
-   Authenticode signature (`signtool verify /pa`) from SignPath Foundation.
+   `build`, the release's `.exe`/`.msi` assets should carry a valid
+   Authenticode signature (`signtool verify /pa`) from SignPath Foundation,
+   and `updater-manifest` should publish `latest.json`. It only does so when
+   the re-made minisign signatures verify against those signed files.
 
 ## macOS signing (state and path)
 
@@ -158,17 +200,21 @@ than a new mechanism:
   `apps/desktop/src-tauri/tauri.conf.json` (or the `APPLE_SIGNING_IDENTITY`
   env var, which overrides it — used here to avoid a config change gated
   only by env var presence).
-- **CI env vars**, added to the macOS leg of the `build` job's
-  `tauri-apps/tauri-action` step in `.github/workflows/release-please.yml`,
-  each gated behind `vars.ENABLE_MACOS_SIGNING == 'true'` (empty string when
-  the var is unset — `tauri-action` treats an empty value as not set, so this
-  is provably inert today, the same guarantee as the Windows job):
+- **CI env vars**, exported for the macOS leg of the `build` job by its
+  `Export macOS signing credentials` step in
+  `.github/workflows/release-please.yml`. That step runs only when
+  `vars.ENABLE_MACOS_SIGNING == 'true'`, and it fails the leg if any value is
+  empty. The Tauri bundler treats an `APPLE_*` variable that is **set** as a
+  request to sign, even when it is empty. The earlier wiring passed
+  `APPLE_CERTIFICATE: ''` while signing was off, which made v0.6.0's macOS leg
+  fail with "failed to import keychain certificate". With the variable unset,
+  none of these are set, and the bundler ad-hoc signs as before:
   - Secret `APPLE_CERTIFICATE` (base64 `.p12`)
   - Secret `APPLE_CERTIFICATE_PASSWORD`
   - Actions variable `APPLE_SIGNING_IDENTITY`
   - Secret `APPLE_ID` + Secret `APPLE_PASSWORD` (app-specific password) for
-    notarization, or the `APPLE_API_KEY`/`APPLE_API_ISSUER` App Store Connect
-    API key alternative
+    notarization. The App Store Connect API key alternative
+    (`APPLE_API_KEY`/`APPLE_API_ISSUER`) would need that step extended.
   - Actions variable `APPLE_TEAM_ID`
 
   Source: [Tauri v2 macOS code signing](https://v2.tauri.app/distribute/sign/macos/),
