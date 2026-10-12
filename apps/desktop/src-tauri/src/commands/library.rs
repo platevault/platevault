@@ -265,7 +265,11 @@ pub async fn library_set_quality(
     expected: Vec<ExpectedAsset>,
     state: Quality,
 ) -> Reply<Vec<Asset>> {
-    library.catalog().set_quality(&expected, state, InventoryProbe).await.map_err(fail(None))
+    library
+        .catalog()
+        .set_quality(&expected, state, InventoryProbe::default())
+        .await
+        .map_err(fail(None))
 }
 
 /// Offline seed plus saved targets by text and/or cone, with distinct provenance.
@@ -440,7 +444,7 @@ pub async fn library_apply_remap(
 ) -> Reply<Location> {
     library
         .catalog()
-        .apply_remap(review_id, expected_revision, InventoryProbe)
+        .apply_remap(review_id, expected_revision, InventoryProbe::default())
         .await
         .map_err(fail(Some(review_id)))
 }

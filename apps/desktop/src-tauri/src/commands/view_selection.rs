@@ -377,7 +377,7 @@ pub async fn view_apply_quality(
             expected_draft_revision,
             &expected,
             quality,
-            InventoryProbe,
+            InventoryProbe::default(),
         )
         .await
         .map(|assets| QualityOutcome::Assets { assets })
@@ -399,7 +399,7 @@ pub async fn view_review_mark(
 ) -> Reply<ReviewMarkOutcome> {
     library
         .catalog()
-        .view_review_mark(view_id, expected_draft_revision, &mark, InventoryProbe)
+        .view_review_mark(view_id, expected_draft_revision, &mark, InventoryProbe::default())
         .await
         .map_err(fail(Some(view_id)))
 }
