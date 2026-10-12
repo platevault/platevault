@@ -1,7 +1,8 @@
 /**
- * Shared pieces of slice E's Targets, Target and Plan screens: tonight's sky
- * context, the Moon and site line, the per-filter good-tonight chips, Fit
- * per rig, compact Captured per channel and the Project badge.
+ * Shared pieces of slice E's Targets and Target screens: the chosen night's
+ * sky context, the Moon, darkness and site lines, the altitude sparkline,
+ * the per-filter good-tonight chips, Fit per rig, compact Captured per
+ * channel and the Project badge.
  */
 import { Link } from "@tanstack/react-router"
 import { MapPin, Moon } from "lucide-react"
@@ -11,8 +12,9 @@ import { UnknownValue } from "@/components/app/feedback"
 import { Pill } from "@/components/app/pill"
 import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatHours, planningSite } from "@/domain/derive"
-import { defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
+import { defaultCriteria, nightSummary, upcomingNight, zoneAbbreviation } from "@/domain/planning"
 import type { Fit } from "@/domain/derive"
 import type { ObservingSite, PlanCriteria, Project } from "@/domain/types"
 import { formatTime } from "@/lib/format"
@@ -21,22 +23,28 @@ import { cn } from "@/lib/utils"
 import { nowIso, useStore } from "@/store/core"
 import { type FilterChip, type FilterGrade, filterReason } from "./good-tonight"
 import { nightGrid } from "./sky-tonight"
-import type { RigFit, SkyContext } from "./targets-model"
+import type { RigFit, RowSky, SkyContext } from "./targets-model"
+
+const NIGHT = /^\d{4}-\d{2}-\d{2}$/
 
 /**
- * Tonight at the active planning site, recomputed every 10 minutes of the
- * (simulated) clock; null with no site or the "no site" prototype fault.
+ * The chosen night (`night`, `YYYY-MM-DD`, else tonight) at the active
+ * planning site, recomputed every 10 minutes of the (simulated) clock; null
+ * with no site or the "no site" prototype fault. A night before tonight, or
+ * a malformed one, reads as tonight.
  */
-export function useSkyContext(): SkyContext | null {
+export function useSkyContext(night?: string): SkyContext | null {
   const site = useStore((s) => planningSite(s))
   const offset = useStore((s) => s.faults.clockOffsetMs)
   const bucket = Math.floor((Date.now() + offset) / 600_000)
   return useMemo(() => {
     if (!site) return null
     const nowMs = Date.parse(nowIso())
-    return { site, grid: nightGrid(site, nowMs), tonight: tonightAt(site, nowMs), criteria: defaultCriteria(site), nowMs }
+    const tonight = upcomingNight(site, nowMs)
+    const chosen = night && NIGHT.test(night) && !Number.isNaN(Date.parse(night)) && night > tonight ? night : tonight
+    return { site, grid: nightGrid(site, chosen), summary: nightSummary(site, chosen), criteria: defaultCriteria(site), nowMs, tonight }
     // `bucket` re-derives tonight as the clock moves on.
-  }, [site, bucket])
+  }, [site, bucket, night])
 }
 
 /** "21:40 CEST" in the site's zone. */
@@ -53,10 +61,10 @@ export function clockRange(start: string, end: string, site: ObservingSite): str
   return `${formatTime(start, site.timeZone)}–${formatTime(end, site.timeZone)}`
 }
 
-/** The Moon, once, for a toolbar: illumination, phase, rise and set (PLAN-TGT-FR-07). */
+/** The Moon, once, for a toolbar: illumination, phase, rise and set on the chosen night (PLAN-TGT-FR-07). */
 export function MoonLine({ ctx, className }: { ctx: SkyContext; className?: string }) {
   const m = useMessages()
-  const { moon } = ctx.tonight
+  const { moon } = ctx.summary
   const parts = [
     `${moon.illuminationPct}%`,
     say(m, moon.phase),
@@ -70,6 +78,72 @@ export function MoonLine({ ctx, className }: { ctx: SkyContext; className?: stri
         <span className="text-foreground">{m.tonight_moon()}</span> {parts.join(" · ")}
       </span>
     </span>
+  )
+}
+
+/** "Dark 20:10–05:40 CEST": the chosen night's darkness window at the planning site. */
+export function DarkLine({ ctx, className }: { ctx: SkyContext; className?: string }) {
+  const m = useMessages()
+  const { darkness } = ctx.summary
+  return (
+    <span className={cn("text-[0.75rem] text-muted-foreground tabular-nums", className)}>
+      <span className="text-foreground">{m.plan_dark()}</span> {darkness ? siteTimeRange(darkness.start, darkness.end, ctx.site) : m.plan_dark_none()}
+    </span>
+  )
+}
+
+type SkyOk = Extract<RowSky, { status: "ok" }>
+
+/** "Max 81° at 22:40 · window 20:10–02:30 CEST": the sparkline's tooltip and accessible name, one string. */
+export function altitudeFacts(m: Messages, sky: SkyOk, site: ObservingSite): string {
+  if (sky.peakDeg === null || sky.peakAt === null) return m.tonight_no_darkness()
+  const altitude = String(Math.round(sky.peakDeg)).replace("-", "−")
+  if (!sky.best) return m.tonight_spark_no_window({ altitude, time: siteTime(sky.peakAt, site) })
+  return m.tonight_spark_window({ altitude, time: formatTime(sky.peakAt, site.timeZone), window: siteTimeRange(sky.best.start, sky.best.end, site) })
+}
+
+/**
+ * The altitude cell (P-PLAN2): a sparkline of the position's altitude from
+ * sunset to sunrise on the chosen night, its dark window shaded, its best
+ * window marked and the altitude limit dashed, beside the peak in darkness.
+ * At most 120 px with its cell's padding; the tooltip and the accessible
+ * name state the same facts.
+ */
+export function AltitudeSpark({ ctx, sky }: { ctx: SkyContext; sky: SkyOk }) {
+  const m = useMessages()
+  const { grid } = ctx
+  const facts = altitudeFacts(m, sky, ctx.site)
+  const span = grid.to - grid.from + 1
+  const startMs = grid.samples[grid.from]!.ms
+  const stepMs = grid.samples[1]!.ms - grid.samples[0]!.ms
+  const x = (iso: string) => Math.max(0, Math.min(span, (Date.parse(iso) - startMs) / stepMs))
+  const y = (alt: number) => 100 - (Math.max(0, Math.min(90, alt)) / 90) * 100
+  const dark = ctx.summary.darkness
+  const curve = sky.altitudes
+    .slice(grid.from, grid.to + 1)
+    .map((alt, i) => `${i + 0.5},${y(alt)}`)
+    .join(" ")
+  const limitY = y(ctx.criteria.minAltitudeDeg)
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span role="img" aria-label={facts} data-altitude-spark className="inline-flex items-center gap-1 align-middle" />}>
+        <svg aria-hidden="true" viewBox={`0 0 ${span} 100`} preserveAspectRatio="none" className="h-5 w-[4.5rem] shrink-0 rounded-[2px] bg-foreground/[0.04]">
+          {dark ? <rect x={x(dark.start)} y={0} width={x(dark.end) - x(dark.start)} height={100} fill="var(--foreground)" fillOpacity={0.1} /> : null}
+          <line x1={0} x2={span} y1={limitY} y2={limitY} stroke="var(--muted-foreground)" strokeOpacity={0.6} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
+          {sky.best ? (
+            <>
+              <rect x={x(sky.best.start)} y={0} width={Math.max(0.5, x(sky.best.end) - x(sky.best.start))} height={100} fill="var(--primary)" fillOpacity={0.22} />
+              <rect x={x(sky.best.start)} y={84} width={Math.max(0.5, x(sky.best.end) - x(sky.best.start))} height={16} fill="var(--primary)" />
+            </>
+          ) : null}
+          <polyline points={curve} fill="none" stroke="var(--link)" strokeWidth={1.25} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span aria-hidden="true" className="w-7 text-right text-xs tabular-nums">
+          {sky.peakDeg === null ? "–" : `${String(Math.round(sky.peakDeg)).replace("-", "−")}°`}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{facts}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -95,7 +169,7 @@ export function AddSiteButton({ returnTo }: { returnTo: string }) {
   )
 }
 
-/** The planning criteria behind every window, for a timeline's method note. */
+/** The planning criteria behind every window, for the night's method note. */
 export function criteriaText(m: Messages, c: PlanCriteria): string {
   const parts = [
     m.tonight_criteria_altitude({ altitude: c.minAltitudeDeg }),
@@ -116,8 +190,8 @@ const GRADE_SHAPE: Record<FilterGrade, string> = {
   poor: "bg-transparent line-through decoration-foreground/50",
 }
 
-/** A grade-tinted chip: a filter's band, or a legend word. */
-export function GradePill({ grade, title, className, children }: { grade: FilterGrade; title?: string; className?: string; children: string }) {
+/** A grade-tinted chip: a filter's band. */
+function GradePill({ grade, title, className, children }: { grade: FilterGrade; title?: string; className?: string; children: string }) {
   return (
     <Pill tone={GRADE_TONE[grade]} title={title} className={cn("h-4 min-w-5 justify-center gap-0 px-1 text-[0.625rem] leading-none", GRADE_SHAPE[grade], className)}>
       {children}
