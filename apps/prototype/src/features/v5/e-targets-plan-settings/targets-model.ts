@@ -3,8 +3,8 @@
  * search over the shared bundled catalogue and SIMBAD fixture (domain/sky);
  * the chosen night's values per row, with each filter graded "good
  * tonight"; Fit per rig; the built-in presets; "Add to targets", which
- * writes through the shared `addTarget`; and the Plan list in the Planned
- * view's order.
+ * writes through the shared `addTarget`; and each night's plan in the
+ * Planned view's order.
  *
  * Planning values come from the foundation's `computeWindows` on the chosen
  * night (`?night=`, else tonight), so a row's Img time equals the total of
@@ -16,7 +16,7 @@ import { BANDS, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import { type Tonight, windowsOnNight } from "@/domain/planning"
 import { BUNDLED_CATALOGUE, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
-import type { Band, Catalog, Disk, MoonConstraint, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target, TargetId } from "@/domain/types"
+import type { Band, Catalog, Disk, MoonConstraint, NightDate, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target, TargetId } from "@/domain/types"
 import { m, type MessageRef, msg, say } from "@/lib/i18n"
 import { addTarget, setFavourite } from "@/store/actions/library"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
@@ -509,7 +509,7 @@ export function formatSort(sort: SortSpec): string {
 }
 
 // ---------------------------------------------------------------------------
-// Add to targets (PLAN-TGT-FR-03) and the Plan list (the Planned view)
+// Add to targets (PLAN-TGT-FR-03) and each night's plan (the Planned view)
 // ---------------------------------------------------------------------------
 
 const stale = (): CommitResult => ({ ok: false, reason: "stale", message: m.targets_result_gone() })
@@ -522,10 +522,10 @@ export function addToMyTargets(row: TargetRow): { result: CommitResult; targetId
 }
 
 /**
- * Put the row on the Plan list. A catalogue or SIMBAD entry is written into
- * the library first (not as a favourite), then planned.
+ * Put the row on one night's plan. A catalogue or SIMBAD entry is written
+ * into the library first (not as a favourite), then planned.
  */
-export function planRow(row: TargetRow): CommitResult {
+export function planRow(row: TargetRow, night: NightDate): CommitResult {
   let targetId = row.target?.id ?? null
   if (!targetId) {
     if (!row.entry) return stale()
@@ -533,19 +533,20 @@ export function planRow(row: TargetRow): CommitResult {
     if (!written.result.ok) return written.result
     targetId = written.targetId
   }
-  return targetId ? addToPlan(targetId) : stale()
+  return targetId ? addToPlan(targetId, night) : stale()
 }
 
-/** Take a Target off the Plan list, and out of the order the user gave it. */
-export function unplan(targetId: TargetId): CommitResult {
-  const result = removeFromPlan(targetId)
-  if (result.ok) updateSlice("e", (slice) => ({ ...slice, planOrder: slice.planOrder.filter((id) => id !== targetId) }))
+/** Take a Target off one night's plan, and out of the order the user gave that night. */
+export function unplan(targetId: TargetId, night: NightDate): CommitResult {
+  const result = removeFromPlan(targetId, night)
+  if (result.ok) updateSlice("e", (slice) => ({ ...slice, planOrder: { ...slice.planOrder, [night]: (slice.planOrder[night] ?? []).filter((id) => id !== targetId) } }))
   return result
 }
 
 /**
- * The Planned view's order: the order the user gave (slice E `planOrder`),
- * then the rest by their first window on the chosen night, then by name.
+ * The Planned view's order: the order the user gave that night (slice E
+ * `planOrder`), then the rest by their first window on the night, then by
+ * name.
  */
 export function plannedOrder(views: RowView[], order: TargetId[]): RowView[] {
   const place = new Map(order.map((id, index) => [id, index]))
@@ -558,13 +559,13 @@ export function plannedOrder(views: RowView[], order: TargetId[]): RowView[] {
   })
 }
 
-/** Move a planned Target one place up (-1) or down (1) in the shown order, and keep that whole order. */
-export function movePlanned(shown: TargetId[], targetId: TargetId, delta: -1 | 1): void {
+/** Move a planned Target one place up (-1) or down (1) in the night's shown order, and keep that whole order. */
+export function movePlanned(night: NightDate, shown: TargetId[], targetId: TargetId, delta: -1 | 1): void {
   const from = shown.indexOf(targetId)
   const to = from + delta
   if (from < 0 || to < 0 || to >= shown.length) return
   const next = [...shown]
   next.splice(from, 1)
   next.splice(to, 0, targetId)
-  updateSlice("e", (slice) => ({ ...slice, planOrder: next }))
+  updateSlice("e", (slice) => ({ ...slice, planOrder: { ...slice.planOrder, [night]: next } }))
 }

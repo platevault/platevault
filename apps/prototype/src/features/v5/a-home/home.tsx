@@ -19,6 +19,7 @@
 import { Link, useLocation, useNavigate, useSearch } from "@tanstack/react-router"
 import { CalendarClock, Download, Eye, FolderPlus, ListChecks, Pause, Play, Target, X } from "lucide-react"
 import { type ReactNode, useId, useState } from "react"
+import { GettingStarted } from "@/app/onboarding"
 import { useMessages } from "@/app/preferences"
 import { GateLabel, StepGlyph, stepName, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
@@ -122,6 +123,7 @@ export function HomePage() {
         }
       />
       <PageBody className="space-y-4">
+        <GettingStarted />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ProjectsBox state={state} className="xl:col-start-1 xl:row-start-1" />
           <SessionsBox state={state} onReview={review.open} className="xl:col-start-1 xl:row-start-2" />

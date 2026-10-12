@@ -349,9 +349,10 @@ export function SetupIndexingPage() {
     setFocusOpenLibrary(false)
   }, [focusOpenLibrary, first])
 
+  // Setup ends on Home, the start page (D-W39), where the orientation walk begins (Round 6).
   function openLibrary() {
     completeOnboarding()
-    void navigate({ to: "/targets" })
+    void navigate({ to: "/" })
   }
 
   return (

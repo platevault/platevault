@@ -8,9 +8,13 @@
  * Forward and carries the Issues hub; every word comes from the message
  * catalogue (`useMessages()`). The
  * status bar is its own module (`status-bar.tsx`).
+ *
+ * Round 6: the root carries the quit guard (`quit-guard.tsx`; More ›
+ * Prototype › Quit PlateVault asks while an import, index or prepare runs)
+ * and the app frame the orientation walk after setup (`onboarding.tsx`).
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, Download, Ellipsis, FlaskConical, FolderKanban, Languages, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Palette, Play, Search, Sun } from "lucide-react"
+import { Aperture, Download, Ellipsis, FlaskConical, FolderKanban, Languages, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Palette, Play, Power, Search, Sun } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
@@ -38,15 +42,17 @@ import { LOCALE_META, LOCALES, type Locale, say } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
 import { useNavCounts } from "@/store/issues"
-import { nowIso, useStore } from "@/store/core"
+import { nowIso, store, useStore } from "@/store/core"
 import { useActiveRoute } from "./active-route"
 import { CommandPalette } from "./command-palette"
 import { SHELLS } from "./contributions"
 import { HistoryControl } from "./history"
 import { IssuesButton } from "./issues-hub"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
+import { OrientationWalk } from "./onboarding"
 import { setLocale, setTheme, type ThemePreference, useMessages, usePreferences } from "./preferences"
 import { CurrentLink, gateWord, StepGlyph, stepName, useFollowLink } from "./run-ui"
+import { guardedWork, QuitDialog, quitPrototype, useQuitGuard } from "./quit-guard"
 import { MOD_LABEL, PALETTE_SHORTCUT, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
 import { THEMES, themeInfo } from "./themes"
@@ -55,6 +61,7 @@ import { openPanel, openSheet, rememberProject, toggleSidebar, useShellUi } from
 
 export function RootLayout() {
   useGlobalShortcuts()
+  useQuitGuard()
   return (
     <TooltipProvider delay={400}>
       <LiveAnnouncer />
@@ -268,7 +275,7 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
         <Aperture aria-hidden="true" className="size-4.5 shrink-0 text-link" />
         {collapsed ? <span className="sr-only">{m.app_name()}</span> : <span className="text-sm font-semibold">{m.app_name()}</span>}
       </div>
-      <nav aria-label={m.shell_nav_main()} data-chrome className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+      <nav aria-label={m.shell_nav_main()} data-chrome data-coach="sources" className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
         <ul className="space-y-px">
           {PRIMARY_ITEMS.map((item) => (
             <li key={item.to}>{row(item)}</li>
@@ -405,40 +412,53 @@ function ThemeMenu() {
   )
 }
 
-/** The toolbar's overflow: Prototype controls, Theme and Language, so the toolbar keeps one row at every width. */
+/** The toolbar's overflow: Prototype (controls, Quit), Theme and Language, so the toolbar keeps one row at every width. */
 function MoreMenu() {
   const m = useMessages()
+  const [asking, setAsking] = useState(false)
+  // Quit asks first while an import, index or prepare runs (Round 6); otherwise it quits at once.
+  const quit = () => (guardedWork(store.getState().operations).length > 0 ? setAsking(true) : quitPrototype())
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={m.common_more()} title={m.common_more()} />}>
-        <Ellipsis aria-hidden="true" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem onClick={() => openPanel("simulation")}>
-          <FlaskConical aria-hidden="true" />
-          {m.shell_prototype_controls()}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Palette aria-hidden="true" />
-            {m.shell_theme()}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-52">
-            <ThemeItems />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Languages aria-hidden="true" />
-            {m.shell_language()}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-52">
-            <LanguageItems />
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={m.common_more()} title={m.common_more()} />}>
+          <Ellipsis aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{m.common_prototype()}</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => openPanel("simulation")}>
+              <FlaskConical aria-hidden="true" />
+              {m.shell_prototype_controls()}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={quit} data-quit>
+              <Power aria-hidden="true" />
+              {m.shell_quit_app()}
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Palette aria-hidden="true" />
+              {m.shell_theme()}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-52">
+              <ThemeItems />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Languages aria-hidden="true" />
+              {m.shell_language()}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-52">
+              <LanguageItems />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <QuitDialog open={asking} onOpenChange={setAsking} />
+    </>
   )
 }
 
@@ -583,6 +603,7 @@ function AppFrame({ children }: { children: ReactNode }) {
         </div>
       </div>
       <StatusBar />
+      <OrientationWalk />
     </div>
   )
 }

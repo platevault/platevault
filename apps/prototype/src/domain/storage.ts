@@ -74,22 +74,23 @@ export function liveCopies(catalog: Catalog, asset: Asset): AssetCopy[] {
 /** Library storage keeps its copy; archived frames live in the archive location after Archive (STO-FR-13). */
 const LIBRARY_ROLES = new Set<LocationRole>(["captures", "calibration", "archive"])
 
+/** A copy in library storage: a Captures, Calibration or Archive location, never one on a capture card (a removable volume). */
+function isLibraryCopy(catalog: Catalog, disk: Disk, copy: AssetCopy): boolean {
+  const location = catalog.locations[copy.locationId]
+  return Boolean(location && LIBRARY_ROLES.has(location.role) && !disk.volumes[copy.volumeId]?.removable)
+}
+
 /**
- * The copy a frame keeps (D-W74): a copy in library storage (Captures,
- * Calibration or Archive) over one on a capture card (a removable volume) or
- * elsewhere; then the oldest: the earliest-registered location, then the
- * copy found first. Only byte-identical copies take part.
+ * The copy a frame keeps (D-W74): a copy in library storage over one on a
+ * capture card or elsewhere; then the one in the earliest-registered
+ * location, then the copy found first. Only byte-identical copies take part.
  */
 export function keptCopy(catalog: Catalog, disk: Disk, asset: Asset): AssetCopy | null {
   return preferredCopy(catalog, disk, asset.copies.filter((c) => c.sha256 === asset.sha256))
 }
 
 function preferredCopy(catalog: Catalog, disk: Disk, copies: AssetCopy[]): AssetCopy | null {
-  const rank = (copy: AssetCopy) => {
-    const location = catalog.locations[copy.locationId]
-    const library = location && LIBRARY_ROLES.has(location.role) && !disk.volumes[copy.volumeId]?.removable
-    return { library: library ? 0 : 1, registered: location?.registeredAt ?? "9999" }
-  }
+  const rank = (copy: AssetCopy) => ({ library: isLibraryCopy(catalog, disk, copy) ? 0 : 1, registered: catalog.locations[copy.locationId]?.registeredAt ?? "9999" })
   return (
     [...copies].sort((a, b) => {
       const ra = rank(a)
@@ -104,7 +105,7 @@ export interface DuplicateGroup {
   fileName: string
   sha256: string
   sizeBytes: number
-  /** Live byte-identical copies, the one the frame keeps by preference (`keptCopy`'s rule) first. */
+  /** Live byte-identical copies in library storage, the one in the earliest-registered location first. */
   copies: AssetCopy[]
   /** Bytes beyond the kept copy. */
   extraBytes: number
@@ -116,19 +117,24 @@ export interface ScannedDuplicate {
   paths: string[]
 }
 
-/** The frame's live byte-identical copies, limited to `paths` when given; null unless at least two remain. */
+/**
+ * The frame's live byte-identical copies in library storage, limited to
+ * `paths` when given; null unless at least two remain. A copy on a capture
+ * card never counts, so a card never raises the duplicates warning (Round 6).
+ */
 function duplicateGroup(catalog: Catalog, disk: Disk, asset: Asset, paths?: ReadonlySet<string>): DuplicateGroup | null {
   if (asset.trashed) return null
-  const copies = liveCopies(catalog, asset).filter((c) => c.sha256 === asset.sha256 && (!paths || paths.has(c.path)))
+  const copies = liveCopies(catalog, asset).filter((c) => c.sha256 === asset.sha256 && isLibraryCopy(catalog, disk, c) && (!paths || paths.has(c.path)))
   const kept = preferredCopy(catalog, disk, copies)
   if (!kept || copies.length < 2) return null
   return { assetId: asset.id, fileName: asset.fileName, sha256: asset.sha256, sizeBytes: asset.sizeBytes, copies: [kept, ...copies.filter((c) => c !== kept)], extraBytes: asset.sizeBytes * (copies.length - 1) }
 }
 
 /**
- * The copy the review preselects to keep: the preferred one, unless exactly
- * one copy cannot go to the OS Trash (`trashRefusal`, say write permission
- * removed): keeping that one is the only choice that lets the others go.
+ * The copy the review preselects to keep: the one in the earliest-registered
+ * location, unless exactly one copy cannot go to the OS Trash
+ * (`trashRefusal`, say write permission removed): keeping that one is the
+ * only choice that lets the others go.
  */
 export function keepChoice(disk: Disk, group: DuplicateGroup): AssetCopy {
   const stuck = group.copies.filter((c) => trashRefusal(disk, c.path) !== null)
@@ -137,7 +143,7 @@ export function keepChoice(disk: Disk, group: DuplicateGroup): AssetCopy {
 
 const byExtraBytes = (a: DuplicateGroup, b: DuplicateGroup) => b.extraBytes - a.extraBytes || a.fileName.localeCompare(b.fileName)
 
-/** Byte-identical live copies of library frames: what a duplicate scan records. */
+/** Byte-identical live copies of library frames across registered library locations: what a duplicate scan records. */
 export function duplicateCopies(catalog: Catalog, disk: Disk): ScannedDuplicate[] {
   return Object.values(catalog.assets)
     .map((asset) => duplicateGroup(catalog, disk, asset))

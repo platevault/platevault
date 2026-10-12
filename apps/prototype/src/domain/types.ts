@@ -445,11 +445,13 @@ export interface Telescope {
 export interface OpticalTrain {
   id: OpticalTrainId
   name: string
-  /** "detected" until the user confirms it (Confirm equipment promotes it to "manual"). */
+  /** "detected" until the user confirms it (Confirm equipment promotes it to "manual"); a rig added by hand is "manual". */
   source: RecordSource
   cameraId: CameraId | null
   telescopeId: TelescopeId | null
   effectiveFocalLengthMm: number
+  /** Reducer or extender factor of a rig added by hand (0.8 for a 0.8× reducer); the effective focal length already includes it. */
+  reducer?: number
   notes: string
   /** Plain filter list, the same form for mono and OSC cameras (PLAN-EQ-FR-01). */
   filters: RigFilter[]
@@ -1115,10 +1117,11 @@ export interface PlanCriteria {
   minDurationMin: number
 }
 
-/** A Target's planning record; `planned` puts it on the Plan list (`planList`, `addToPlan`). */
+/** A Target's planning record; each night in `nights` has it on that night's plan (`nightPlan`, `addToPlan`). */
 export interface ObservingPlan {
   targetId: TargetId
-  planned: boolean
+  /** The nights (evening dates) whose plan holds the Target, in order. */
+  nights: NightDate[]
   criteria: PlanCriteria
   updatedAt: IsoDateTime
 }
@@ -1227,7 +1230,8 @@ export interface Operation {
   settledAt: IsoDateTime | null
 }
 
-export type ActivityKind = "operation" | "write-failed" | "write-refused" | "refusal" | "saved"
+/** "reminder": a delivered planning reminder, the simulated OS notification. */
+export type ActivityKind = "operation" | "write-failed" | "write-refused" | "refusal" | "saved" | "reminder"
 
 export interface ActivityEvent {
   id: string
@@ -1270,6 +1274,10 @@ export interface AppSettings {
     completedAt: IsoDateTime | null
     /** Optional roles the user chose to set up later. */
     deferredRoles: LocationRole[]
+    /** The orientation walk: "due" once setup ends or it is restarted, "done" once finished or skipped; absent: never offered. */
+    walk?: "due" | "done"
+    /** Set when the user dismissed Home's Getting started checklist. */
+    checklistDismissedAt?: IsoDateTime | null
   }
   /** Last chosen `<output>` parent folder; no root is assumed on first use (PREP-FR-06). */
   lastOutputParent: string | null
