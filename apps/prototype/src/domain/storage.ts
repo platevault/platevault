@@ -1,13 +1,15 @@
 /**
  * Storage derivations (foundation-owned). A footprint is the bytes of a
  * run's prepared copies: it matters for Clean up only, so it is shown on the
- * run's Done step and in Wrap up, never in the Storage overview. Duplicates
- * are byte-identical live copies; Storage lists them only after a Scan for
- * duplicates operation (`duplicate-scan`). Nothing here writes state.
+ * run's Done step and in Wrap up. Settings › Locations shows each location's
+ * disk use (P-STO2). Duplicates are byte-identical live copies; a duplicate
+ * scan (`duplicate-scan`) runs by itself after each index and import, and
+ * the Duplicates review lists what it found that is still live. Nothing here
+ * writes state.
  */
-import { filesUnder, volumeForPath } from "./disk"
-import { runPreparations } from "./derive"
-import type { Asset, AssetCopy, Catalog, Disk, Operation, Preparation, RunId } from "./types"
+import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
+import { runPreparations, type World } from "./derive"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, LocationRole, Operation, Preparation, RunId } from "./types"
 
 export interface Footprint {
   /** Bytes the prepared folder holds itself; links count zero. */
@@ -40,45 +42,143 @@ export function runFootprint(disk: Disk, catalog: Catalog, runId: RunId): Footpr
   )
 }
 
+export interface DiskUse {
+  /** Bytes the location's own files hold: each inode once, links count zero. */
+  footprintBytes: number
+  /** Bytes in use on the location's volume. */
+  usedBytes: number
+  freeBytes: number
+  capacityBytes: number
+}
+
+/** A location's disk use (P-STO2): its own footprint and its volume's used and free bytes. Null while the volume is not mounted. */
+export function locationDiskUse(disk: Disk, location: Location): DiskUse | null {
+  const volume = disk.volumes[location.volumeId]
+  if (!volume?.mounted) return null
+  const inodes = new Set<number>()
+  let footprintBytes = 0
+  for (const file of filesUnder(disk, location.path)) {
+    if (file.linkTarget || inodes.has(file.inode)) continue
+    inodes.add(file.inode)
+    footprintBytes += file.sizeBytes
+  }
+  const free = freeBytes(disk, volume.id)
+  return { footprintBytes, usedBytes: volume.capacityBytes - free, freeBytes: free, capacityBytes: volume.capacityBytes }
+}
+
 /** Copies that hold the asset now: not absent, not on a retired location. */
 export function liveCopies(catalog: Catalog, asset: Asset): AssetCopy[] {
   return asset.copies.filter((c) => c.presence !== "absent" && !catalog.locations[c.locationId]?.retiredAt)
 }
 
+/** Library storage keeps its copy; archived frames live in the archive location after Archive (STO-FR-13). */
+const LIBRARY_ROLES = new Set<LocationRole>(["captures", "calibration", "archive"])
+
+/**
+ * The copy a frame keeps (D-W74): a copy in library storage (Captures,
+ * Calibration or Archive) over one on a capture card (a removable volume) or
+ * elsewhere; then the oldest: the earliest-registered location, then the
+ * copy found first. Only byte-identical copies take part.
+ */
+export function keptCopy(catalog: Catalog, disk: Disk, asset: Asset): AssetCopy | null {
+  return preferredCopy(catalog, disk, asset.copies.filter((c) => c.sha256 === asset.sha256))
+}
+
+function preferredCopy(catalog: Catalog, disk: Disk, copies: AssetCopy[]): AssetCopy | null {
+  const rank = (copy: AssetCopy) => {
+    const location = catalog.locations[copy.locationId]
+    const library = location && LIBRARY_ROLES.has(location.role) && !disk.volumes[copy.volumeId]?.removable
+    return { library: library ? 0 : 1, registered: location?.registeredAt ?? "9999" }
+  }
+  return (
+    [...copies].sort((a, b) => {
+      const ra = rank(a)
+      const rb = rank(b)
+      return ra.library - rb.library || ra.registered.localeCompare(rb.registered) || copies.indexOf(a) - copies.indexOf(b)
+    })[0] ?? null
+  )
+}
+
 export interface DuplicateGroup {
-  assetId: string
+  assetId: AssetId
   fileName: string
   sha256: string
+  sizeBytes: number
+  /** Live byte-identical copies, the one the frame keeps by preference (`keptCopy`'s rule) first. */
+  copies: AssetCopy[]
+  /** Bytes beyond the kept copy. */
+  extraBytes: number
+}
+
+/** What a duplicate scan records per frame: the paths of its byte-identical live copies. */
+export interface ScannedDuplicate {
+  assetId: AssetId
   paths: string[]
-  /** Bytes beyond the first copy. */
-  extraBytes: number
 }
 
-/** Byte-identical live copies of library frames, the result a duplicate scan records. */
-export function duplicateCopies(catalog: Catalog): DuplicateGroup[] {
-  const out: DuplicateGroup[] = []
-  for (const asset of Object.values(catalog.assets)) {
-    if (asset.trashed) continue
-    const copies = liveCopies(catalog, asset)
-    if (copies.length < 2) continue
-    out.push({ assetId: asset.id, fileName: asset.fileName, sha256: asset.sha256, paths: copies.map((c) => c.path), extraBytes: asset.sizeBytes * (copies.length - 1) })
-  }
-  return out.sort((a, b) => b.extraBytes - a.extraBytes || a.fileName.localeCompare(b.fileName))
+/** The frame's live byte-identical copies, limited to `paths` when given; null unless at least two remain. */
+function duplicateGroup(catalog: Catalog, disk: Disk, asset: Asset, paths?: ReadonlySet<string>): DuplicateGroup | null {
+  if (asset.trashed) return null
+  const copies = liveCopies(catalog, asset).filter((c) => c.sha256 === asset.sha256 && (!paths || paths.has(c.path)))
+  const kept = preferredCopy(catalog, disk, copies)
+  if (!kept || copies.length < 2) return null
+  return { assetId: asset.id, fileName: asset.fileName, sha256: asset.sha256, sizeBytes: asset.sizeBytes, copies: [kept, ...copies.filter((c) => c !== kept)], extraBytes: asset.sizeBytes * (copies.length - 1) }
 }
 
-export interface DuplicateScanResult {
-  operation: Operation
-  /** Null while the scan runs. */
-  groups: DuplicateGroup[] | null
-  extraBytes: number
+/**
+ * The copy the review preselects to keep: the preferred one, unless exactly
+ * one copy cannot go to the OS Trash (`trashRefusal`, say write permission
+ * removed): keeping that one is the only choice that lets the others go.
+ */
+export function keepChoice(disk: Disk, group: DuplicateGroup): AssetCopy {
+  const stuck = group.copies.filter((c) => trashRefusal(disk, c.path) !== null)
+  return stuck.length === 1 ? stuck[0]! : group.copies[0]!
 }
 
-/** The latest Scan for duplicates, if one ran; Storage lists its groups. */
-export function lastDuplicateScan(operations: Record<string, Operation>): DuplicateScanResult | null {
-  const latest = Object.values(operations)
-    .filter((op) => op.kind === "duplicate-scan")
+const byExtraBytes = (a: DuplicateGroup, b: DuplicateGroup) => b.extraBytes - a.extraBytes || a.fileName.localeCompare(b.fileName)
+
+/** Byte-identical live copies of library frames: what a duplicate scan records. */
+export function duplicateCopies(catalog: Catalog, disk: Disk): ScannedDuplicate[] {
+  return Object.values(catalog.assets)
+    .map((asset) => duplicateGroup(catalog, disk, asset))
+    .filter((g): g is DuplicateGroup => g !== null)
+    .map((g) => ({ assetId: g.assetId, paths: g.copies.map((c) => c.path) }))
+}
+
+export interface DuplicateFindings {
+  /** The scan that found them. */
+  scan: Operation
+  /** Largest first. */
+  groups: DuplicateGroup[]
+  /** Extra copies: every copy beyond the one each frame keeps. */
+  copies: number
+  /** Bytes the extra copies hold. */
+  bytes: number
+}
+
+/**
+ * The latest succeeded duplicate scan, narrowed to copies still live: a copy
+ * moved to the OS Trash since leaves its group, and a frame down to one copy
+ * leaves the list, so a clean-up clears its findings without a new scan.
+ * Null before a scan succeeded.
+ */
+export function duplicateFindings(world: World): DuplicateFindings | null {
+  const scan = Object.values(world.operations)
+    .filter((op) => op.kind === "duplicate-scan" && op.status === "succeeded")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-  if (!latest) return null
-  const groups = (latest.payload.groups as DuplicateGroup[] | undefined) ?? null
-  return { operation: latest, groups, extraBytes: groups?.reduce((n, g) => n + g.extraBytes, 0) ?? 0 }
+  if (!scan) return null
+  const found = (scan.payload.groups as ScannedDuplicate[] | undefined) ?? []
+  const groups = found
+    .map((g) => {
+      const asset = world.catalog.assets[g.assetId]
+      return asset ? duplicateGroup(world.catalog, world.disk, asset, new Set(g.paths)) : null
+    })
+    .filter((g): g is DuplicateGroup => g !== null)
+    .sort(byExtraBytes)
+  return { scan, groups, copies: groups.reduce((n, g) => n + g.copies.length - 1, 0), bytes: groups.reduce((n, g) => n + g.extraBytes, 0) }
+}
+
+/** The duplicate scan that is running now, if any. */
+export function runningDuplicateScan(operations: Record<string, Operation>): Operation | null {
+  return Object.values(operations).find((op) => op.kind === "duplicate-scan" && (op.status === "running" || op.status === "paused")) ?? null
 }

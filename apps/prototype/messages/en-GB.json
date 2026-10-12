@@ -2535,70 +2535,15 @@
   "activity_when": "When",
   "activity_outcome": "Outcome",
   "activity_what": "What",
-  "storage_scan_blocked": "Scan blocked",
-  "storage_location": "Location",
-  "storage_path_of": "{name}: path",
-  "storage_path": "Path",
-  "storage_role": "Role",
-  "storage_volume": "Volume",
-  "storage_network": "Network",
-  "storage_removable": "Removable",
-  "storage_availability": "Availability",
-  "storage_free": "Free",
-  "storage_unsupported": "Unsupported",
-  "storage_action": "Action",
-  "storage_locate": "Locate",
-  "storage_open_settings": "Open in Settings",
-  "storage_unregistered": "Unregistered",
-  "storage_frame": "Frame",
-  "storage_copies": "Copies",
-  "storage_copies_of": "{name}: copies",
   "storage_sha256": "SHA-256",
-  "storage_extra": "Extra",
   "storage_scan_again": "Scan again",
-  "storage_transfer": "Transfer",
-  "storage_kind": "Kind",
-  "storage_status": "Status",
-  "storage_started": "Started",
-  "storage_open_activity": "Open Activity",
   "storage_scan": "Scan for duplicates",
   "storage_no_locations": "No locations",
   "storage_add_location": "Add location",
   "storage_duplicates": "Duplicates",
   "storage_not_scanned": "Not scanned",
-  "storage_frames_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} frame",
-        "countPlural=*": "{count} frames"
-      }
-    }
-  ],
   "storage_no_duplicates": "No duplicates",
-  "storage_extra_bytes": "{bytes} extra",
   "storage_transfers": "Transfers",
-  "storage_transfers_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} transfer",
-        "countPlural=*": "{count} transfers"
-      }
-    }
-  ],
   "storage_no_transfers": "No transfers",
   "calibration_action_blocked": "{action} blocked",
   "calibration_action_not_saved": "{action} not saved",
@@ -2686,20 +2631,16 @@
   "calibration_open_offer": "Open offer",
   "calibration_used_by": "Used by",
   "calibration_open_raw_session": "Open raw session",
-  "calibration_master_storage": "{name} master: storage",
-  "calibration_origin": "Origin",
   "calibration_offered_in": "Offered in {name}",
   "calibration_offered": "Offered",
   "calibration_restore": "Restore",
   "calibration_offer_restored": "Offer restored",
   "calibration_open_run": "Open run",
   "calibration_dismissed": "Dismissed",
-  "calibration_no_dismissed": "No dismissed offers",
-  "calibration_dismissed_caption": "Dismissed master offers",
+  "calibration_no_dismissed": "No dismissed masters",
+  "calibration_dismissed_caption": "Dismissed masters and offers",
   "calibration_master": "Master",
   "calibration_run": "Run",
-  "calibration_file_of": "{name}: file",
-  "calibration_file": "File",
   "calibration_refused_reason": "refused",
   "calibration_import_refused_same": "{count} {reason}",
   "calibration_masters_count": [
@@ -6496,23 +6437,6 @@
   "store_label_check_named": "Check {name}",
   "store_reason_scan_running": "a scan is running",
   "op_no_duplicates": "No duplicates.",
-  "op_duplicates_found": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input bytes",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame with extra copies · {bytes}",
-        "countPlural=*": "{n} frames with extra copies · {bytes}"
-      }
-    }
-  ],
   "store_label_setup_change": "Setup change",
   "store_label_shared_setup_change": "Shared setup change",
   "store_saved_output_folder": "Output folder: {name}",
@@ -7277,5 +7201,49 @@
       }
     }
   ],
-  "session_header_label": "Label"
+  "session_header_label": "Label",
+  "calibration_used_by_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Used by {count} run",
+        "countPlural=*": "Used by {count} runs"
+      }
+    }
+  ],
+  "calibration_created": "Created",
+  "calibration_cant_dismiss": "Can't dismiss",
+  "calibration_dismiss_master": "Dismiss master",
+  "calibration_restore_master": "Restore master",
+  "calibration_restored_master": "Restored {name}",
+  "location_footprint": "Footprint {bytes}",
+  "location_volume_use": "{volume}: {used} used · {free} free",
+  "duplicates_scanned": "Scanned {date}",
+  "duplicates_keep_copy": "Keep this copy",
+  "duplicates_move_others": "Move others to Trash",
+  "duplicates_move_all": "Move all to Trash",
+  "duplicates_change_location": "{location}: {files} · {bytes}",
+  "duplicates_frames_keep_copy": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame keeps one copy",
+        "countPlural=*": "{n} frames keep one copy each"
+      }
+    }
+  ],
+  "duplicates_trash_title": "Move duplicate copies to the OS Trash"
 }

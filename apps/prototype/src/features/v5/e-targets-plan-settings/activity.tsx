@@ -3,8 +3,10 @@
  * paused and interrupted operations with their controls, then every
  * recorded outcome (operations, refusals, failed and refused writes, saves),
  * each linking to the surface that owns it (LIB-FR-10). A refusal names its
- * reasons, as the store recorded them. Right-click on an entry opens it or
- * shows its items.
+ * reasons, as the store recorded them. Transfers (imports, archive moves and
+ * OS Trash moves) are Activity entries with their own filter, since the
+ * Storage tab went (P-STO2). Right-click on an entry opens it or shows its
+ * items.
  */
 import { Activity as ActivityIcon } from "lucide-react"
 import { Fragment, useState } from "react"
@@ -17,7 +19,7 @@ import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { STEP_NAME } from "@/domain/labels"
-import type { ActivityEvent, ActivityKind, Operation, RunStep } from "@/domain/types"
+import type { ActivityEvent, Operation, RunStep } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -29,18 +31,22 @@ const DENSITY_CELL = "py-[max(0.25rem,calc((var(--row-h)-1.25rem)/2))]"
 /** The action cell holds 1.75rem buttons, so its padding makes the row exactly `--row-h`. */
 const ACTION_CELL = "py-[max(0px,calc((var(--row-h)-1.75rem)/2))]"
 
-type Filter = "all" | "operation" | "refused" | "write-failed" | "saved"
+type Filter = "all" | "operation" | "transfer" | "refused" | "write-failed" | "saved"
 
 /** Absolute paths inside a detail sentence, without trailing punctuation. */
 const PATH = /(\/Volumes\/\S*[^\s.,;:])/
 
+/** Operations that move or copy files: imports, archive and restore moves, OS Trash moves (P-STO2). */
+const TRANSFER_KINDS: ReadonlySet<Operation["kind"]> = new Set(["import", "archive", "trash", "cleanup"])
+
 /** "Refused" covers a contract refusal and a stale write refused as changed elsewhere. */
-const FILTERS: Array<{ value: Filter; readonly label: string; readonly empty: string; kinds: ActivityKind[] }> = [
-  { value: "all", get label() { return m.activity_filter_all() }, get empty() { return m.activity_empty() }, kinds: [] },
-  { value: "operation", get label() { return m.activity_filter_operations() }, get empty() { return m.activity_empty_operations() }, kinds: ["operation"] },
-  { value: "refused", get label() { return m.activity_filter_refusals() }, get empty() { return m.activity_empty_refusals() }, kinds: ["refusal", "write-refused"] },
-  { value: "write-failed", get label() { return m.status_not_saved() }, get empty() { return m.activity_empty_not_saved() }, kinds: ["write-failed"] },
-  { value: "saved", get label() { return m.status_saved() }, get empty() { return m.activity_empty_saved() }, kinds: ["saved"] },
+const FILTERS: Array<{ value: Filter; readonly label: string; readonly empty: string; test: (event: ActivityEvent, operation: Operation | undefined) => boolean }> = [
+  { value: "all", get label() { return m.activity_filter_all() }, get empty() { return m.activity_empty() }, test: () => true },
+  { value: "operation", get label() { return m.activity_filter_operations() }, get empty() { return m.activity_empty_operations() }, test: (e) => e.kind === "operation" },
+  { value: "transfer", get label() { return m.storage_transfers() }, get empty() { return m.storage_no_transfers() }, test: (e, op) => e.kind === "operation" && op !== undefined && TRANSFER_KINDS.has(op.kind) },
+  { value: "refused", get label() { return m.activity_filter_refusals() }, get empty() { return m.activity_empty_refusals() }, test: (e) => e.kind === "refusal" || e.kind === "write-refused" },
+  { value: "write-failed", get label() { return m.status_not_saved() }, get empty() { return m.activity_empty_not_saved() }, test: (e) => e.kind === "write-failed" },
+  { value: "saved", get label() { return m.status_saved() }, get empty() { return m.activity_empty_saved() }, test: (e) => e.kind === "saved" },
 ]
 
 const SECTION: Record<string, () => string> = {
@@ -49,7 +55,8 @@ const SECTION: Record<string, () => string> = {
   plan: m.nav_plan,
   sessions: m.nav_sessions,
   calibration: m.nav_calibration,
-  storage: m.nav_storage,
+  // `/storage` (S15) redirects to Settings › Locations (P-STO2).
+  storage: m.common_locations,
   activity: m.nav_activity,
   import: m.shell_import,
   setup: m.activity_destination_setup,
@@ -189,8 +196,9 @@ export function ActivityPage() {
   const [filter, setFilter] = useState<Filter>("all")
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const current = FILTERS.find((f) => f.value === filter) ?? FILTERS[0]!
-  const counts = Object.fromEntries(FILTERS.map((f) => [f.value, f.value === "all" ? activity.length : activity.filter((e) => f.kinds.includes(e.kind)).length])) as Record<Filter, number>
-  const shown = filter === "all" ? activity : activity.filter((e) => current.kinds.includes(e.kind))
+  const operationOf = (e: ActivityEvent) => (e.operationId ? operations[e.operationId] : undefined)
+  const counts = Object.fromEntries(FILTERS.map((f) => [f.value, activity.filter((e) => f.test(e, operationOf(e))).length])) as Record<Filter, number>
+  const shown = activity.filter((e) => current.test(e, operationOf(e)))
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev)

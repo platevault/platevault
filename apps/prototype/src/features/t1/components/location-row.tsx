@@ -2,9 +2,10 @@
  * One registered location (J19 S2-S3, LIB-FR-01): display name, path, role,
  * access, availability and scan scope, with the recovery notice that applies
  * (access denied, incomplete scope, offline), terse: the title names the
- * state, the actions fix it. Used by the setup steps and by Settings ›
- * Locations, where a `ContextMenuArea` around the list finds each row by its
- * menu key.
+ * state, the actions fix it. Settings › Locations also shows its disk use
+ * (P-STO2): the location's footprint and its volume's used and free bytes.
+ * Used by the setup steps and by Settings › Locations, where a
+ * `ContextMenuArea` around the list finds each row by its menu key.
  */
 import { Archive, FolderSearch, RotateCw } from "lucide-react"
 import type { ReactNode } from "react"
@@ -15,8 +16,9 @@ import { menuKey } from "@/components/app/row-menu"
 import { StatusBadge, statusMeta } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { locationAvailability } from "@/domain/library"
+import { locationDiskUse } from "@/domain/storage"
 import type { Location, Operation, OperationItem } from "@/domain/types"
-import { formatCount, formatDateTime } from "@/lib/format"
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
@@ -52,17 +54,20 @@ export interface LocationRowProps {
   badges?: ReactNode
   /** Heading level of the name inside its section. */
   headingLevel?: 3 | 4
+  /** Show the location's disk use (Settings › Locations). */
+  showDiskUse?: boolean
 }
 
 // Recovery notices sit inside the row's card: inline, without a second border or surface.
 const INLINE_NOTICE = "rounded-none border-0 bg-transparent px-0 py-0"
 
-export function LocationRow({ location, current, actions, actionsIncludeRescan = false, onChooseAgain, onRetry, onLocate, onRetire, feedback, badges, headingLevel = 3 }: LocationRowProps) {
+export function LocationRow({ location, current, actions, actionsIncludeRescan = false, onChooseAgain, onRetry, onLocate, onRetire, feedback, badges, headingLevel = 3, showDiskUse = false }: LocationRowProps) {
   const m = useMessages()
   const availability = useStore((s) => locationAvailability(s.disk, location))
   const volume = useStore((s) => s.disk.volumes[location.volumeId])
   const frames = useStore((s) => framesInLocation(s.catalog, location.id))
   const run = useStore((s) => latestIndexRun(s.operations, location.id))
+  const diskUse = useStore((s) => (showDiskUse && !location.retiredAt ? locationDiskUse(s.disk, location) : null))
   const indexing = run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted" && (run.item?.status === "running" || run.item?.status === "pending")
   const Heading = headingLevel === 3 ? "h3" : "h4"
   const offline = availability === "offline"
@@ -74,6 +79,8 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
   const facts = [
     location.lastIndexedAt ? (denied ? m.location_last_attempt({ date: formatDateTime(location.lastIndexedAt) }) : m.location_indexed({ date: formatDateTime(location.lastIndexedAt) })) : null,
     frames > 0 || (location.lastIndexedAt && !denied) ? m.location_frames({ count: frames, n: formatCount(frames) }) : null,
+    diskUse ? m.location_footprint({ bytes: formatBytes(diskUse.footprintBytes) }) : null,
+    diskUse && volume ? m.location_volume_use({ volume: volume.name, used: formatBytes(diskUse.usedBytes), free: formatBytes(diskUse.freeBytes) }) : null,
   ].filter((fact) => fact !== null)
   const nominal = [
     !offline && !retired && location.access === "ok" ? statusMeta("access", "ok").label : null,
@@ -110,7 +117,17 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
 
-      {facts.length ? <p className="text-xs text-muted-foreground tabular-nums">{facts.join(" · ")}</p> : null}
+      {facts.length ? (
+        // One unit per fact, so a wrap never leaves a separator at a line end.
+        <p className="flex flex-wrap gap-x-1 text-xs text-muted-foreground tabular-nums" data-location-facts>
+          {facts.map((fact, index) => (
+            <span key={fact} className="whitespace-nowrap">
+              {index > 0 ? "· " : ""}
+              {fact}
+            </span>
+          ))}
+        </p>
+      ) : null}
 
       {offline ? (
         <Notice

@@ -14,8 +14,11 @@
  * - `setKeepRawCalibration` is the Settings toggle: off (the default) moves
  *   the raws to the OS Trash once their master registers.
  *
- * Restore offer: a dismissed master offer becomes pending again. Dismiss is
- * the run's Calibrate step answer (`answerMasterOffer`).
+ * Dismiss and Restore (P-CAL2): `dismissMaster` takes an unused master out
+ * of the library's list (it is never matched while dismissed), and
+ * `restoreMaster` brings it back. A run's master offer is dismissed on its
+ * Calibrate step (`answerMasterOffer`); `restoreMasterOffer` makes it pending
+ * again.
  */
 import {
   awaitingStackProcess,
@@ -33,17 +36,18 @@ import {
   stepRecord,
 } from "@/domain/calibration-process"
 import { KIND_NOUN } from "@/domain/calibration"
+import { dismissBlockers, masterUsage } from "@/domain/calibration-library"
 import { createFolder, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder, nightOf, readFiles, stableHash } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import { headerNamingValues } from "@/domain/templates"
-import type { CalibrationKind, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
+import type { CalibrationKind, CalibrationMaster, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
 import { fileName } from "@/lib/format"
-import { type MessageRef, msg } from "@/lib/i18n"
-import { type CommitResult, commit, nowIso, type PrototypeState, store } from "@/store/core"
+import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { editRun } from "./runs"
-import { freshId, refuse } from "./shared"
+import { freshId, MISSING, recordSaved, refuse } from "./shared"
 import { queueOsTrash } from "./trash"
 
 const HREF = "/calibration"
@@ -373,6 +377,33 @@ export function restoreMasterOffer(runId: RunId, masterId: MasterId): CommitResu
   if (!run || !offer) return refuse(msg("store_refused", { label: msg("store_cal_restore_offer") }), [msg("store_cal_offer_missing")], HREF)
   if (offer.state !== "dismissed") return { ok: true }
   return editRun(runId, msg("store_cal_restore_master_offer"), (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "pending", at: nowIso() } : o)) }), { step: "calibrate" })
+}
+
+/** Patch one master in one commit; a saved change is recorded in Activity under `saved`. */
+function editMaster(masterId: MasterId, label: MessageRef, saved: MessageRef, update: (master: CalibrationMaster) => CalibrationMaster): CommitResult {
+  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, masters: { ...c.masters, [masterId]: update(c.masters[masterId]!) } })), { href: HREF })
+  if (result.ok) recordSaved(saved, null, HREF)
+  return result
+}
+
+/** Dismiss (P-CAL2): the master leaves the library's list for its Dismissed filter and is never matched; refused while a run uses or offers it. */
+export function dismissMaster(masterId: MasterId): CommitResult {
+  const { catalog, disk } = store.getState()
+  const master = catalog.masters[masterId]
+  if (!master) return MISSING
+  const label = msg("calibration_dismiss_master")
+  const blockers = dismissBlockers(catalog, masterUsage(catalog, disk), masterId)
+  if (blockers.length > 0) return refuse(msg("store_refused", { label }), blockers.map((run) => verbatim(run.name)), HREF)
+  if (master.dismissedAt) return { ok: true }
+  return editMaster(masterId, label, msg("store_saved_dismissed", { name: fileName(master.path) }), (current) => ({ ...current, dismissedAt: nowIso() }))
+}
+
+/** Restore (P-CAL2): a dismissed master is back in the library's list and matched again. */
+export function restoreMaster(masterId: MasterId): CommitResult {
+  const master = store.getState().catalog.masters[masterId]
+  if (!master) return MISSING
+  if (!master.dismissedAt) return { ok: true }
+  return editMaster(masterId, msg("calibration_restore_master"), msg("calibration_restored_master", { name: fileName(master.path) }), ({ dismissedAt: _dismissed, ...current }) => current)
 }
 
 export const CALIBRATION_HANDLERS: OperationHandler[] = [watchHandler]

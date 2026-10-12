@@ -159,11 +159,11 @@ function basisDrift(disk: Disk, assignment: CalibrationAssignment): string | nul
   return changed ? `Drifted: ${fileName(changed.path)} changed since this input was accepted (SHA-256 differs).` : null
 }
 
-/** Reusable sources only: adopted masters whose bytes match their basis. Candidates never match (CAL-AC-04). */
+/** Reusable sources only: adopted masters whose bytes match their basis. Candidates never match (CAL-AC-04), nor a dismissed master (P-CAL2). */
 export function reusableSources(catalog: Catalog, disk: Disk): CalSource[] {
   const out: CalSource[] = []
   for (const master of Object.values(catalog.masters)) {
-    if (master.state !== "adopted") continue
+    if (master.state !== "adopted" || master.dismissedAt) continue
     if (inputDrift(catalog, disk, { type: "master", masterId: master.id })) continue
     const source = masterSource(catalog, master.id)
     if (source) out.push(source)

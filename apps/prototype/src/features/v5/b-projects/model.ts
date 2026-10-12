@@ -1,9 +1,10 @@
 /**
  * Slice B derivations over the shared store and types: the Wrap up trash
  * offers (PRJ-FR-14, PRJ-FR-15, STO-FR-14 to STO-FR-16), the archive and
- * restore transfer plans (STO-FR-13, P-ARC1), the copy each frame keeps
- * (D-W74), goal gaps for planning and the goal channels a Project's rigs can
- * capture. Pure: nothing here writes state. Every OS Trash refusal is the
+ * restore transfer plans (STO-FR-13, P-ARC1), goal gaps for planning and
+ * the goal channels a Project's rigs can capture. The copy each frame keeps
+ * (D-W74) is the shared `keptCopy` (domain/storage.ts).
+ * Pure: nothing here writes state. Every OS Trash refusal is the
  * shared `trashRefusal`; the offers and plans stay here because only the
  * Project screens read them.
  */
@@ -23,6 +24,7 @@ import {
 } from "@/domain/derive"
 import { isUnder } from "@/domain/indexing"
 import { qualityApplicability } from "@/domain/library"
+import { keptCopy } from "@/domain/storage"
 import { GOAL_CHANNELS, NARROW_BANDS } from "@/domain/labels"
 import { namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Session, SessionId, Subject, Volume } from "@/domain/types"
@@ -34,28 +36,6 @@ import type { TrashItem } from "@/store/actions/trash"
 // ---------------------------------------------------------------------------
 // Copies and custody
 // ---------------------------------------------------------------------------
-
-/** Library storage keeps its copy; archived frames live in the archive location after Archive (STO-FR-13). */
-const LIBRARY_ROLES = new Set<Location["role"]>(["captures", "calibration", "archive"])
-
-/**
- * The copy a frame keeps (D-W74): a copy in Captures or Calibration library
- * storage, else the earliest-registered location; among equals, the copy
- * indexed first. Only byte-identical copies take part.
- */
-export function keptCopy(catalog: Catalog, asset: Asset): AssetCopy | null {
-  const identical = asset.copies.filter((c) => c.sha256 === asset.sha256)
-  if (identical.length === 0) return null
-  const rank = (copy: AssetCopy) => {
-    const location = catalog.locations[copy.locationId]
-    return { library: location && LIBRARY_ROLES.has(location.role) ? 0 : 1, registered: location?.registeredAt ?? "9999" }
-  }
-  return [...identical].sort((a, b) => {
-    const ra = rank(a)
-    const rb = rank(b)
-    return ra.library - rb.library || ra.registered.localeCompare(rb.registered) || identical.indexOf(a) - identical.indexOf(b)
-  })[0]!
-}
 
 /** Bytes a move reclaims: each inode once, and none while another hard link outside the move holds it (STO-FR-14). */
 export function reclaimBytes(disk: Disk, paths: string[]): number {
@@ -313,7 +293,7 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
     for (const id of liveAssetIds(catalog, session)) {
       const asset = catalog.assets[id]
       if (!asset || asset.copies.length < 2) continue
-      const kept = keptCopy(catalog, asset)
+      const kept = keptCopy(catalog, disk, asset)
       if (!kept) continue
       const keptName = catalog.locations[kept.locationId]?.displayName ?? kept.path
       for (const copy of asset.copies) {
@@ -410,8 +390,8 @@ function templatedFolder(state: PrototypeState, root: string, session: Session):
   return joinPath(root, path)
 }
 
-function sourceCopy(catalog: Catalog, asset: Asset): AssetCopy | null {
-  return keptCopy(catalog, asset) ?? asset.copies[0] ?? null
+function sourceCopy(catalog: Catalog, disk: Disk, asset: Asset): AssetCopy | null {
+  return keptCopy(catalog, disk, asset) ?? asset.copies[0] ?? null
 }
 
 /** Checks shared by archive and restore: the source is readable and nothing else sits at the destination. */
@@ -433,7 +413,7 @@ function planOver(state: PrototypeState, sessions: Session[], destinationFor: (s
     let reason: MessageRef | null = null
     for (const id of liveAssetIds(catalog, session)) {
       const asset = catalog.assets[id]
-      const copy = asset ? sourceCopy(catalog, asset) : null
+      const copy = asset ? sourceCopy(catalog, disk, asset) : null
       if (!asset || !copy) continue
       const to = destinationFor(session, asset)
       if (!to) continue
