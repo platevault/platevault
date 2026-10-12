@@ -1,9 +1,15 @@
 /**
  * Help and note markers (foundation primitives), both tooltips on a small
  * focusable glyph, so screens carry no explanatory paragraphs:
- * - HelpTip: an ⓘ for the rare rule that truly needs explaining. Default to none.
- * - NoteMarker: the ① beside a measured value; its tooltip carries the
+ * - HelpTip: an ⓘ for a non-obvious rule with consequences shown nowhere
+ *   else, one short sentence (tooltip policy T4, R9-COMPOSITION-PLAN §6.2):
+ *   at most one per page, with the lead's approval and a lint justification.
+ *   Default to none; the Help page lists shortcuts and explanations.
+ * - NoteMarker: the ① beside a measured value (T3); its tooltip carries the
  *   method, basis and time, as short label and value rows.
+ *
+ * Data never hides in a tooltip: lists such as "Used by", blockers and
+ * readouts go in a HoverCard preview (components/app/previews.tsx).
  *
  * The tooltip's text is also the glyph's description: a hidden copy that
  * stays in the DOM while the tooltip is closed, so a screen reader reads it

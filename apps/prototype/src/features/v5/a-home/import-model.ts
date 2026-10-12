@@ -25,7 +25,7 @@ import { fileAt, freeBytes, volumeForPath } from "@/domain/disk"
 import { isUnder, nightOf, sessionGroupingKey, targetAtPointing } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
-import type { Blocker } from "@/components/app/refusal"
+import type { Blocker } from "@/components/app/contracts"
 import { formatBytes } from "@/lib/format"
 import { m, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import type {

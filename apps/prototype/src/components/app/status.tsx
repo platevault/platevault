@@ -4,6 +4,11 @@
  * across tracks. State is never conveyed by colour alone: each badge carries
  * an icon and a text label. Labels reuse the spec terms exactly.
  *
+ * The one registry (R9-COMPOSITION-PLAN P10): a run step's gate is
+ * `<StatusBadge kind="gate" value={state} />` (replaces GateLabel), and the
+ * application-profile states are the `profile`, `executable`, `check` and
+ * `write` kinds (replace T4Badge).
+ *
  * A track that needs a new status value asks the integration owner; it does
  * not render ad-hoc coloured pills.
  */
@@ -12,9 +17,13 @@ import {
   Ban,
   Check,
   CheckCheck,
+  Circle,
   CircleAlert,
+  CircleArrowRight,
+  CircleCheck,
   CircleDashed,
   CircleDot,
+  CircleEllipsis,
   CircleHelp,
   CircleSlash,
   CircleX,
@@ -26,9 +35,11 @@ import {
   Loader,
   Lock,
   type LucideIcon,
+  OctagonX,
   Pause,
   Plug,
   ShieldCheck,
+  ShieldQuestion,
   Trash2,
   TriangleAlert,
   Unplug,
@@ -148,6 +159,41 @@ export const STATUS = {
     failed: s(m.status_failed, "danger", CircleX),
     canceled: s(m.status_canceled, "muted", CircleSlash),
     paused: s(m.status_paused, "neutral", Pause),
+    /** Entries failed re-verification at Open. */
+    unverified: s(m.status_unverified, "warning", TriangleAlert),
+  },
+  /** A run step's gate (domain/derive GateState): each state its own glyph shape, so colour only reinforces. The triangle stays for warnings. */
+  gate: {
+    done: s(m.status_done, "success", CircleCheck),
+    ready: s(m.status_ready, "info", CircleArrowRight),
+    review: s(m.status_needs_review, "warning", CircleEllipsis),
+    blocked: s(m.status_blocked, "danger", OctagonX),
+    running: s(m.status_running, "info", Loader),
+    partial: s(m.status_partial, "warning", CircleDashed),
+    idle: s(m.status_not_started, "muted", Circle),
+  },
+  /** An application profile's capability claims. */
+  profile: {
+    verified: s(m.apps_badge_verified, "success", ShieldCheck),
+    unverified: s(m.run_profile_not_verified, "muted", ShieldQuestion),
+  },
+  executable: {
+    found: s(m.apps_badge_found, "success", Check),
+    "not-configured": s(m.apps_badge_not_configured, "muted", CircleDashed),
+    missing: s(m.status_missing, "danger", CircleX),
+    "launch-fails": s(m.apps_badge_launch_failed, "danger", TriangleAlert),
+  },
+  /** A review check on an application profile. */
+  check: {
+    ok: s(m.apps_badge_checked, "success", Check),
+    blocked: s(m.status_blocked, "danger", Ban),
+    warning: s(m.apps_badge_needs_attention, "warning", TriangleAlert),
+  },
+  /** Whether an application writes to its inputs. */
+  write: {
+    "read-only": s(m.apps_badge_read_only, "success", Check),
+    unknown: s(m.apps_badge_writes_unknown, "warning", CircleHelp),
+    "write-prone": s(m.apps_badge_write_prone, "danger", TriangleAlert),
   },
   assignment: {
     suggested: s(m.status_suggested, "info", CircleDot),
@@ -235,9 +281,11 @@ export type StatusValue<K extends StatusKind> = keyof (typeof STATUS)[K] & strin
  * Harness v4: a status reads as a native status label, a tinted glyph and its
  * word, never a filled pill. Tone colours are text colours that meet 4.5:1 on
  * every surface; info keeps foreground text with an accent glyph.
+ * @deprecated as a public export (private in W4): render `StatusBadge`, whose kinds now cover T4Badge.
  */
 export const STATUS_CLASS = "h-auto min-h-5 gap-1 rounded-none border-0 bg-transparent px-0 py-0 text-[0.75rem] font-medium [&>svg]:size-3.5!"
 
+/** @deprecated as a public export (private in W4): render `StatusBadge`. */
 export const TONE_CLASS: Record<Tone, string> = {
   neutral: "text-foreground [&>svg]:text-muted-foreground",
   muted: "text-muted-foreground",
