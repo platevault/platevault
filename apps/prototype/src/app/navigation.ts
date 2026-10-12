@@ -63,7 +63,7 @@ export interface Destination {
 export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destination[] }> = [
   {
     get group() { return m.settings_group_general() },
-    items: [{ to: "/settings/appearance", get label() { return m.settings_appearance() }, keywords: "theme dark light density language locale portuguese gruvbox nord dracula solarized catppuccin tokyo one rose pine" }],
+    items: [{ to: "/settings/appearance", get label() { return m.settings_appearance() }, keywords: "theme dark light language locale portuguese gruvbox nord dracula solarized catppuccin tokyo one rose pine" }],
   },
   {
     get group() { return m.nav_library() },

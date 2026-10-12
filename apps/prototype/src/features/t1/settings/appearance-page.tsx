@@ -1,5 +1,5 @@
 /**
- * Settings › Appearance (J10 S2, S9). Theme, language, density and
+ * Settings › Appearance (J10 S2, S9). Theme, language and
  * single-key shortcuts live in `src/app/preferences.ts`: they apply
  * immediately, are stored in this browser and survive Reset prototype data.
  * The theme picker (live swatches over the theme registry) and the language
@@ -12,29 +12,19 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
-import { type Density, setDensity, setLocale, setSingleKeyShortcuts, setTheme, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
+import { setLocale, setSingleKeyShortcuts, setTheme, type ThemePreference, useMessages, usePreferences } from "@/app/preferences"
 import { DEFAULT_THEME, themeInfo } from "@/app/themes"
-import { DEFAULT_LOCALE, LOCALE_META, m } from "@/lib/i18n"
+import { DEFAULT_LOCALE, LOCALE_META } from "@/lib/i18n"
 
-/** `rows` restates the `--row-h` value for each scope in src/index.css; the preview renders the token itself. */
-const DENSITIES: Array<{ value: Density; title: () => string; rows: string }> = [
-  { value: "compact", title: m.settings_density_compact, rows: "24 px" },
-  { value: "comfortable", title: m.settings_density_comfortable, rows: "26 px" },
-  { value: "spacious", title: m.settings_density_spacious, rows: "32 px" },
-]
-
-const DEFAULTS = { theme: DEFAULT_THEME as ThemePreference, locale: DEFAULT_LOCALE, density: "comfortable" as Density, singleKeyShortcuts: true }
+const DEFAULTS = { theme: DEFAULT_THEME as ThemePreference, locale: DEFAULT_LOCALE, singleKeyShortcuts: true }
 
 export function AppearancePage() {
   const m = useMessages()
   const preferences = usePreferences()
   const [confirmReset, setConfirmReset] = useState(false)
-  const ids = { theme: useId(), language: useId(), density: useId(), shortcuts: useId() }
-  const atDefaults =
-    preferences.theme === DEFAULTS.theme && preferences.locale === DEFAULTS.locale && preferences.density === DEFAULTS.density && preferences.singleKeyShortcuts === DEFAULTS.singleKeyShortcuts
+  const ids = { theme: useId(), language: useId(), shortcuts: useId() }
+  const atDefaults = preferences.theme === DEFAULTS.theme && preferences.locale === DEFAULTS.locale && preferences.singleKeyShortcuts === DEFAULTS.singleKeyShortcuts
 
   return (
     <div>
@@ -54,29 +44,6 @@ export function AppearancePage() {
 
         <Section title={m.shell_language()} level={3} id={ids.language}>
           <LanguagePicker />
-        </Section>
-
-        <Section title={m.settings_density()} level={3} id={ids.density}>
-          <RadioGroup aria-labelledby={`${ids.density}-title`} value={preferences.density} onValueChange={(value) => setDensity(value as Density)} className="grid-cols-3">
-            {DENSITIES.map((density) => (
-              <FieldLabel key={density.value} htmlFor={`${ids.density}-${density.value}`} className="items-stretch">
-                <Field orientation="horizontal" className="items-start">
-                  <FieldContent>
-                    <FieldTitle>{density.title()}</FieldTitle>
-                    <FieldDescription className="text-xs tabular-nums">{density.rows}</FieldDescription>
-                    <div aria-hidden="true" data-density={density.value} className="mt-2 overflow-hidden rounded-md border text-xs">
-                      {["18 Sep · Ha · 55", "24 Sep · OIII · 20", "26 Sep · OIII · 35"].map((row) => (
-                        <div key={row} className="flex h-(--row-h) items-center border-b px-2 text-muted-foreground tabular-nums last:border-0">
-                          {row}
-                        </div>
-                      ))}
-                    </div>
-                  </FieldContent>
-                  <RadioGroupItem id={`${ids.density}-${density.value}`} value={density.value} />
-                </Field>
-              </FieldLabel>
-            ))}
-          </RadioGroup>
         </Section>
 
         <Section title={m.settings_keyboard()} level={3} id={ids.shortcuts}>
@@ -100,14 +67,12 @@ export function AppearancePage() {
         changes={[
           m.shell_theme_named({ name: themeInfo(DEFAULT_THEME).name }),
           m.shell_language_named({ name: LOCALE_META[DEFAULT_LOCALE].nativeName }),
-          m.settings_restore_density({ name: m.settings_density_comfortable() }),
           m.palette_single_key_on(),
         ]}
         confirmLabel={m.settings_restore_defaults()}
         onConfirm={() => {
           setTheme(DEFAULTS.theme)
           setLocale(DEFAULTS.locale)
-          setDensity(DEFAULTS.density)
           setSingleKeyShortcuts(DEFAULTS.singleKeyShortcuts)
         }}
       />
