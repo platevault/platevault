@@ -5,6 +5,7 @@
  */
 import type { ComponentType } from "react"
 import { ActionsCatalogue } from "./actions"
+import { DataTableCatalogue } from "./data-table"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
 import { PreviewsCatalogue } from "./previews"
@@ -31,6 +32,25 @@ export const CATALOGUE: CatalogueEntry[] = [
   },
   { id: "status", components: ["StatusBadge", "Pill", "Tag", "CountBadge"], Entry: StatusCatalogue },
   { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "UsedByPreview"], Entry: PreviewsCatalogue },
+  {
+    id: "data-table",
+    components: [
+      "DataTable",
+      "FilterBar",
+      "FilterControls",
+      "TableToolbar",
+      "SelectionBar",
+      "Table",
+      "TableHeader",
+      "TableBody",
+      "TableFooter",
+      "TableHead",
+      "TableRow",
+      "TableCell",
+      "TableCaption",
+    ],
+    Entry: DataTableCatalogue,
+  },
   {
     id: "fields",
     components: [
