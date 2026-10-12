@@ -21,6 +21,7 @@ export const I18N_IGNORES = [
   "**/__fixtures__/**",
   "src/domain/seed.ts",
   "src/app/design-system-page.tsx",
+  "src/app/catalogue/**",
   "src/app/simulation-panel.tsx",
   "src/features/t4/prototype-controls.tsx",
 ]
