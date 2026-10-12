@@ -4,6 +4,7 @@
  * exported names an entry covers, which `scripts/check-catalogue.mjs` reads.
  */
 import type { ComponentType } from "react"
+import { ActionsCatalogue } from "./actions"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
 import { PreviewsCatalogue } from "./previews"
@@ -18,6 +19,11 @@ export interface CatalogueEntry {
 }
 
 export const CATALOGUE: CatalogueEntry[] = [
+  {
+    id: "actions",
+    components: ["ActionBar", "ActionButton", "ActionMenu", "MenuItems", "IconButton", "RowActions", "RowContextMenu", "Button"],
+    Entry: ActionsCatalogue,
+  },
   {
     id: "feedback",
     components: ["Refusal", "ActionError", "Notice", "PageNotice", "NoticeSlot", "Toaster", "EmptyState", "SaveState"],
