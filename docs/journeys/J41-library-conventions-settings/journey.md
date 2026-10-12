@@ -1,13 +1,13 @@
 ---
 id: J41
 title: Set library conventions in Settings: naming templates, goal templates, locations and applications
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [settings, naming, goal-templates, locations, applications, import, projects, wrap-up, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#e2, HARNESS-V5-FEEDBACK-R1.md#round-5, P-ARC1, P-STO2, P-CAL3, D-W20, D-W29, D-W30, D-W47, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/e-targets-plan-settings/settings-naming.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/t4/applications.tsx, apps/prototype/src/store/actions/settings.ts, apps/prototype/src/store/actions/projects.ts, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, specs/063-clean-rebuild-contract/workflow-decisions.md]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#e2, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7, P-ARC1, P-STO2, P-CAL3, P-PREP3, D-W20, D-W29, D-W30, D-W47, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/e-targets-plan-settings/settings-naming.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/t4/applications.tsx, apps/prototype/src/store/actions/settings.ts, apps/prototype/src/store/actions/projects.ts, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, specs/063-clean-rebuild-contract/workflow-decisions.md]
 ---
 
 ## Goal
@@ -17,7 +17,7 @@ The user sets the conventions the library follows: how imported and stored files
 - A custom Lights naming template is saved, previewed against a real session, used by the next Import's destination preview, and restored to its default; no existing file is renamed.
 - A user goal template `HOO deep` is created from the built-in HOO, its values are copied into a new Project, and later editing or deleting the template leaves that Project's goals unchanged.
 - `Backup archive` becomes the Default archive location, while the Project that picked `Cold-1 archive` keeps it.
-- PixInsight / WBPP has a located, checked executable, and Open in… has saved launch arguments, with nothing launched.
+- PixInsight / WBPP has a located, checked executable, and Open in… has saved launch arguments, with nothing launched. The Default run view is set, and on Windows the Developer Mode check reads On once the user turns it on.
 - No step writes, moves or renames a file.
 
 ## Preconditions
@@ -29,6 +29,7 @@ The user sets the conventions the library follows: how imported and stored files
 - P5: PixInsight is installed at `/Applications/PixInsight/PixInsight.app`, and its bundle can be renamed and renamed back outside PlateVault for S15 (a stand-in bundle at that path is acceptable). PixInsight is not running.
 - P6: Manifests (relative path, size, SHA-256) of `Astro-T7`, `Cold-1`, `Backup`, `Archive` and `Card-2`, recorded outside PlateVault before S1.
 - P7: On volume `Cold-1`, `Captures/` holds only the 24 `12 Sep` OIII lights, each 52,191,360 bytes (1,252,592,640 bytes in all, every one catalogued), and `Archive/` holds no file. `Cold-1/Other/backup.dmg`, a 1,000,000,000-byte file outside every registered location, is not catalogued. Immediately before S13 the validator records `Cold-1`'s free space as the OS reports it (for example `df -k`), and nothing writes to `Cold-1` between that reading and S13.
+- P8: Settings › Applications' Default run view reads Symlinks. On the `desktop-ui` (Windows) lane, Windows Developer Mode is off at the start, and the validator can turn it on in Windows Settings. The `desktop-ui-macos` lane has no Developer Mode prerequisite.
 
 ## Steps
 
@@ -141,11 +142,21 @@ The user sets the conventions the library follows: how imported and stored files
 - **Expect (negative):** Saving starts no application.
 - **Trace:** applications.tsx LaunchArguments · settings.ts setLaunchArgs
 
+### S16a — Set the default run view and check Windows Developer Mode {#S16a}
+
+- **Do:** In Settings › Applications, read the Processing group. Choose **Copies** under Default run view, then **Symlinks** again. On the `desktop-ui` lane, read the Windows Developer Mode row, choose **Open Windows settings**, turn Developer Mode on, return to PlateVault and click **Check again**.
+- **Expect:**
+  - Default run view reads Symlinks and offers Copies. After each choice it reads the chosen mode.
+  - On the `desktop-ui` lane, Windows Developer Mode reads Off, with **Open Windows settings** and **Check again**. **Open Windows settings** opens Windows Settings at its Developer Mode setting. After **Check again** the row reads On.
+  - On the `desktop-ui-macos` lane, the Processing group shows no Windows Developer Mode row.
+- **Expect (negative):** Choosing a default copies, links or moves no file and changes no existing run's run view or prepared entries. **Open Windows settings** alone does not change the row: it reads On only after **Check again**.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("a default in Settings"; "Windows prerequisite": checked in setup, in Settings and at Prepare)
+
 ### S17 — Confirm nothing changed on disk {#S17}
 
 - **Do:** Recompute the P6 manifests, outside PlateVault, with PixInsight's bundle back at its path.
 - **Expect:** Every path, size and SHA-256 matches P6.
-- **Expect (negative):** No Settings change in S1 to S16 wrote, moved, renamed or trashed a file.
+- **Expect (negative):** No Settings change in S1 to S16a wrote, moved, renamed or trashed a file.
 - **Trace:** HLD trust rules · README §Product rules (every move is proposed as a plan first)
 
 ## Success criteria
@@ -159,10 +170,11 @@ The user sets the conventions the library follows: how imported and stored files
 - SC7: After S15 and S16, PixInsight / WBPP reads Found and Open in… holds the saved arguments, with 0 application processes started.
 - SC8: S17 manifests match P6 for 100% of files.
 - SC9: At S13, `Cold-1 captures` shows 1,252,592,640 catalogued bytes and `Cold-1 archive` 0, both at display rounding, and both show the P7 free space.
+- SC10: After S16a the Default run view reads Symlinks, and 0 runs change their run view. On the `desktop-ui` lane, the Developer Mode row reads On only after **Check again**.
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet; the behavior follows the harness v5 design (ui-harness-v5 @ b5e813a5: HARNESS-V5-IA.md §S16 and §Round 2/2b foundations, HARNESS-V5-FEEDBACK-R1.md §Domain and seed, §E2 and §Round 5) and workflow decisions D-W20, D-W29, D-W30 and D-W47, with S6 and S13 following HARNESS-V5-FEEDBACK-R1.md §Round 6 (ui-harness-v5 @ 4f470775), which the prototype does not yet implement.
+- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet; the behavior follows the harness v5 design (ui-harness-v5 @ b5e813a5: HARNESS-V5-IA.md §S16 and §Round 2/2b foundations, HARNESS-V5-FEEDBACK-R1.md §Domain and seed, §E2 and §Round 5) and workflow decisions D-W20, D-W29, D-W30 and D-W47, with S6 and S13 following HARNESS-V5-FEEDBACK-R1.md §Round 6 (ui-harness-v5 @ 4f470775) and S16a following §Round 7 P-PREP3 (@ 12638a7c), which the prototype does not yet implement.
 - G2: Unresolved implementation qualification: P1 needs a seeded catalog (J32's fixture world plus P3's three Archive locations and the Wrap up destination). No fixture builder exists. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Disk use per location"; S13 now asserts each row's catalogued bytes plus its volume's free space, with the `Cold-1` figures of P7 and an uncatalogued file that must not be counted.
 - G4: Out of scope: equipment, sites and Target lookup (J15); Settings › Calibration "Keep raw calibration frames" (J36); appearance and language (J40); adding, rescanning, retiring and remapping locations (J19, J28); choosing the destination inside Wrap up and approving Archive (J34); a profile's launch failure inside a run's Prepare (J24).
@@ -174,3 +186,6 @@ The user sets the conventions the library follows: how imported and stored files
   Settings › Locations shows each location's disk use as the bytes PlateVault catalogues there plus its volume's free space.
   The Import preview prefills no Target for Card-2's no-pointing session (OBJECT is a hint only); the destination resolves once the user picks NGC 7000.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Disk use per location", "P-IMP2: confirm Targets in the Import preview" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6G (intent-gated)
+- **Δ3** 2026-10-12 · +S16a · behavior-change
+  Settings › Applications holds the Default run view (Symlinks or Copies) and, on Windows, a Windows Developer Mode check with Open Windows settings and Check again.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); Settings placement as the U9 prototype slice builds it (R7U9Views, 2026-10-12) · by: JourneysV5.R7Prep3 (intent-gated)

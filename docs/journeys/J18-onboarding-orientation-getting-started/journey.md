@@ -1,7 +1,7 @@
 ---
 id: J18
 title: Get oriented after setup and track first-run progress on Home
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-07-19
 actors: [astrophotographer]
@@ -22,6 +22,7 @@ trace:
   - HARNESS-V5-IA.md#source-list, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S4, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S13
   - HIGH-LEVEL-DESIGN.md §7 (Motion)
   - apps/prototype/src/features/t1/setup/setup-pages.tsx (Welcome, Locations, Index; ui-harness-v5 @ 4f470775)
+  - HARNESS-V5-FEEDBACK-R1.md#round-7 (P-PREP3: Windows Developer Mode is checked in setup)
 ---
 
 ## Goal
@@ -41,15 +42,16 @@ It never uses demo data and never blocks a workflow. Done means:
 - P2: The desktop app is running and has never completed first-run setup or the orientation walk.
 - P3: Folder `Untyped/` holds only 2 frames with no frame-type header. Removable volume `Card-1` is connected and holds only the 30 NGC 7000 Ha lights of J31/P2, whose pointing lies within NGC 7000's footprint.
 - P4: A processing profile for Siril is configured and Siril is installed, as J24 requires for **Open in Siril**. Settings › Equipment holds rig `RedCat` (RedCat 51 + ASI2600MM, as J15/S3 composes it), the rig that captured the Card-1 lights. Both are set through Settings before S1.
+- P5: On the `desktop-ui` (Windows) lane, Windows Developer Mode is off before S1, and the validator can turn it on in Windows Settings. On that lane the checklist also holds a fifth item, "Turn on Windows Developer Mode", from S7 on, and it is done after S7a. S7's "1 of 4" then reads "1 of 5", every "N of 4" from S9 on reads "N+1 of 5", and "all four" means all five. The `desktop-ui-macos` lane has no Developer Mode prerequisite and no fifth item.
 
 ## Steps
 
 ### S1 — Orientation walk launches automatically after setup {#S1}
 
 - **Do:** On the Welcome screen, click **Set up locations**. Add `Empty/Captures` as the Captures location and leave Calibration and Results unset. Click **Continue**, then **Start indexing**. When indexing has finished, click **Open library**.
-- **Expect:** Setup closes, and a modal orientation walk opens at its first stop without any further click. Which page setup hands over to, and what the first stop shows, is G4.
-- **Expect (negative):** Neither setup nor the walk creates a demo, sample or placeholder session, Project, run or Target record anywhere. The walk is only an overlay on an empty, real library.
-- **Trace:** LIB-FR-10 · LIB-AC-09 · D-W39 · product decision 2026-07-18 (spec 056 FR-001) · prototype src/features/t1/setup/setup-pages.tsx · HARNESS-V5-FEEDBACK-R1.md §Round 6 (Onboarding: walk plus checklist) · G4
+- **Expect:** Setup closes, and a modal orientation walk opens at its first stop without any further click. Which page setup hands over to, and what the first stop shows, is G4. On the `desktop-ui` lane, the Locations step shows a Windows Developer Mode row reading Off, with **Open Windows settings** and **Check again**, and **Continue** stays available; on the `desktop-ui-macos` lane it shows no such row.
+- **Expect (negative):** Neither setup nor the walk creates a demo, sample or placeholder session, Project, run or Target record anywhere. The walk is only an overlay on an empty, real library. Developer Mode being off blocks no setup step.
+- **Trace:** LIB-FR-10 · LIB-AC-09 · D-W39 · product decision 2026-07-18 (spec 056 FR-001) · prototype src/features/t1/setup/setup-pages.tsx · HARNESS-V5-FEEDBACK-R1.md §Round 6 (Onboarding: walk plus checklist), §Round 7 P-PREP3 ("Windows prerequisite": checked in setup) · G4
 
 ### S2 — Complete the walk end to end {#S2}
 
@@ -89,6 +91,13 @@ It never uses demo data and never blocks a workflow. Done means:
 - **Expect:** It holds exactly four items, in this order: setup, first import, first Project, first run. The setup item reads done, because S1 registered and indexed `Empty/Captures` and ended setup with **Open library**. The other three read not done, and an overall progress indicator reads 1 of 4 done.
 - **Expect (negative):** No item refers to an Inbox, a View, "File into library", a page group, an observing site, a session's Target confirmation, the walk or a Calibration task. No item reads done before its outcome has happened.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 (Onboarding: walk plus checklist) · product decision 2026-07-18 (spec 056 FR-007 overall progress, FR-009 no demo data) · G5
+
+### S7a — Turn on Windows Developer Mode from the checklist {#S7a}
+
+- **Do:** On the `desktop-ui` lane, read the checklist's "Turn on Windows Developer Mode" item. Choose **Open Windows settings**, turn Developer Mode on and return to PlateVault, read the item, then click **Check again**.
+- **Expect:** The item reads not done, and the progress indicator reads 1 of 5. After returning from Windows Settings it still reads not done. After **Check again** it reads done, and the progress indicator reads 2 of 5.
+- **Expect (negative):** **Open Windows settings** alone ticks nothing. No other item changes. On the `desktop-ui-macos` lane the step is skipped: the checklist holds no Developer Mode item.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Windows prerequisite": checked in setup, in Settings and at Prepare) · Getting started item as the U9 prototype slice builds it (R7U9Views, 2026-10-12)
 
 ### S9 — A real Import auto-ticks the first-import item {#S9}
 
@@ -138,8 +147,8 @@ It never uses demo data and never blocks a workflow. Done means:
 
 - SC1: Across one fresh install, the orientation walk opens on its own exactly once (S1) and 0 more times across at least one later restart (S4). This is checkable through a persisted one-time-orientation flag and by observing no walk overlay on relaunch.
 - SC2: Both terminal walk outcomes, Finish (S2) and Skip or Escape (S3), satisfy SC1 on their own. The walk does not distinguish "skipped" from "finished" for re-run purposes.
-- SC3: Every time Home shows the checklist (S7, S9, S9a, S17), it holds exactly 4 items, in the order setup, first import, first Project, first run. The source list shows 0 Getting started controls (S6), and the walk's last stop points at Home's checklist (S2).
-- SC4: The checklist's done count changes only in response to a real outcome. It reads 1, 2 and 3 of 4 after setup (S7), the Card-1 import (S9) and `First light` (S9a). The held-only `Untyped/` source (S9) and the failed launch (S9b) each produce 0 ticks.
+- SC3: Every time Home shows the checklist (S7, S9, S9a, S17), it holds exactly 4 items, in the order setup, first import, first Project, first run, plus the Developer Mode item on the `desktop-ui` lane (P5). The source list shows 0 Getting started controls (S6), and the walk's last stop points at Home's checklist (S2).
+- SC4: The checklist's done count changes only in response to a real outcome. It reads 1, 2 and 3 of 4 after setup (S7), the Card-1 import (S9) and `First light` (S9a). The held-only `Untyped/` source (S9), the failed launch (S9b) and **Open Windows settings** without **Check again** (S7a) each produce 0 ticks.
 - SC5: Zero demo, sample or seeded-for-display records exist among sessions, Projects, runs or Targets at any point during or after this journey. Every record traces to a real user action taken during the journey.
 - SC6: Once all 4 items are done, Home shows 0 checklists across at least one full relaunch (S9c), until the Settings restore (S17) is used.
 - SC8: A done item never goes back to not done on its own (S9 to S9c). The restore re-seeds all 4 items as done from real catalog state (S17).
@@ -195,3 +204,6 @@ steps above were checked against it.
   The Getting started checklist moves from the sidebar flyout to Home and holds exactly four items: setup, first import, first Project and first run. It leaves Home once all four are done, and Settings restores it. The walk follows the v5 setup (Welcome, Locations, Index) and ends on Home's checklist. Its page stops are open (G4).
   Import confirms the Target in its preview, and a held-only source cannot start. The run is auto-named, and ticks change state in place without animation (HIGH-LEVEL-DESIGN.md §7 Motion). Retired old steps 8 (gated item), 11 (manual check and dismiss), 12 and 13 (spotlight), 14 (icon-collapsed sidebar), 15 (flyout collapse) and 16 (remove before done); what replaces them is G5 and G6. G2 is dissolved; G4 to G6 are new.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Onboarding: walk plus checklist", "P-IMP2: confirm Targets in the Import preview", "Rename runs and Projects" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6H (intent-gated)
+- **Δ5** 2026-10-12 · S1, +S7a · behavior-change
+  On Windows, setup's Locations step shows a Windows Developer Mode row (Off/On, Open Windows settings, Check again) that blocks nothing, and while it is off Home's checklist holds a fifth item, "Turn on Windows Developer Mode", which ticks once a check finds it on.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 "Windows prerequisite" (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); setup row and checklist item as the U9 prototype slice builds them (R7U9Views, 2026-10-12) · by: JourneysV5.R7Prep3 (intent-gated)

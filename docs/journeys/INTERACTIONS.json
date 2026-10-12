@@ -222,7 +222,7 @@
     {
       "flowStep": "F1",
       "owner": "069-application-handoff",
-      "journeyStep": "J24/S1, J24/S2, J24/S3",
+      "journeyStep": "J24/S1, J24/S1a",
       "spec": "069-application-handoff PREP-FR-04, PREP-FR-05, PREP-AC-04, PREP-AC-08; D04",
       "action": "Read the input modes, try Direct source, then return to Linked View and confirm a hardlink choice.",
       "expect": "Each mode states its semantics and storage, and Linked View is suggested. Direct source passes exact paths, or refuses a whole-folder handoff that holds excluded frames and offers supported alternatives. The hardlink confirmation names its volume, permission and filesystem limits.",
@@ -654,7 +654,7 @@
     {
       "flowStep": "Cross-flow: Direct-source exclusion unsupported by tool",
       "owner": "069-application-handoff",
-      "journeyStep": "J24/S2",
+      "journeyStep": "J24/S1",
       "spec": "069-application-handoff PREP-FR-05, PREP-AC-04; D04",
       "action": "Choose Direct source for a run whose 30 Sep folder also holds excluded frames.",
       "expect": "Exact original paths pass through a file list or configuration when the profile supports it. A profile that can hand off only whole folders is refused for this membership, and supported alternatives are offered.",

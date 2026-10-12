@@ -34,7 +34,7 @@ instead of being repeated per journey:
 
 J14, J15, J18 to J29 and J31 to J44 describe the rebuild contract in specs 063 through 072, as amended by the workflow decisions D-W1 to D-W75. J14, J15 and J18 keep their IDs and now describe rebuild behavior. J30 is retired with status deprecated, because Import (J31) replaces reviewed filing. The rebuild journeys remain Draft and have no rebuild execution evidence. J01 to J13, J16 and J17 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns every interaction that specs 064 through 072 own to formal journey steps and owning requirements: the 44 product-flow steps, the redesign surfaces and the cross-flow states. [REBUILD-MAPPING.json](REBUILD-MAPPING.json) names the rebuild successor of each legacy journey and the readiness blockers of each rebuild journey.
 
-The rebuild journeys follow the **harness v5** design, the clickable prototype the production frontend is built to: `apps/prototype/design/HARNESS-V5-IA.md`, `HARNESS-V5-FEEDBACK-R1.md` (every round through Round 6), `HIGH-LEVEL-DESIGN.md` and `I18N.md` on the `ui-harness-v5` branch (user instruction, 2026-10-12). Round 6 (user, 2026-10-10) records the user's answers to the journeys' open product questions and supersedes earlier rounds where they disagree. Where a user-decided v5 item (Round 1b, 2c, 5 and 6, and the accepted P- items) changes a contract interaction, the journey states the v5 behavior and its Δ entry cites the v5 section; the spec text, and the interaction map's paraphrase of it, waits for the contract amendment (D-W28 order). J36 to J44 were authored from the v5 design. Input modes and archiving sessions that a run holds hard links to are pending research (Round 6, "Pending research"); J24 and J28 record that gap.
+The rebuild journeys follow the **harness v5** design, the clickable prototype the production frontend is built to: `apps/prototype/design/HARNESS-V5-IA.md`, `HARNESS-V5-FEEDBACK-R1.md` (every round through Round 7), `HIGH-LEVEL-DESIGN.md` and `I18N.md` on the `ui-harness-v5` branch (user instruction, 2026-10-12). Round 6 (user, 2026-10-10) records the user's answers to the journeys' open product questions and supersedes earlier rounds where they disagree. Round 7 (user, 2026-10-12) decides run views as P-PREP3, which supersedes Round 6's P-PREP2 input modes: a run prepares as Symlinks (the Settings default) or as Copies, which are removed when the run completes, and on Windows Symlinks need Developer Mode, checked in setup, in Settings and at Prepare. Where a user-decided v5 item (Round 1b, 2c, 5, 6 and 7, and the accepted P- items) changes a contract interaction, the journey states the v5 behavior and its Δ entry cites the v5 section; the spec text, and the interaction map's paraphrase of it, waits for the contract amendment (D-W28 order). J36 to J44 were authored from the v5 design.
 
 Both desktop MCP profiles apply to development rebuild validation. A functional Tauri MCP bridge is mandatory, binds only to loopback, and drives the actual Tauri backend and webview. Mock IPC is never validation evidence. Production MCP shipping is optional future work.
 
@@ -168,6 +168,10 @@ should therefore expect:
 - **Single-instance.** No journey exercises single-instance behaviour, and the
   plugin's per-instance override exists only on Linux (`dbus_id`) — not macOS
   (`crates/e2e-tests/README.md`).
+- **Windows Developer Mode (rebuild journeys).** P-PREP3's Symlinks run view
+  needs Developer Mode only on Windows. J18/S1 and S7a, J24/S1a and J41/S16a
+  carry Windows-only branches that this lane skips: macOS shows no Developer
+  Mode check and never refuses Prepare for it.
 
 CI is not a substitute for this lane. `ci.yml` runs the L1+L2
 `cargo test --workspace` matrix on `macos-latest` by default, but the real-UI

@@ -107,7 +107,7 @@
       "actorsSurfacesInterfacesTrace": "pass (all 28 fill actors, surfaces, interfaces and trace; README lists the rebuild and harness v5 surface keys and maps the v5 prototype paths)",
       "preconditionsEstablishable": "fail where a G entry names an unresolved implementation qualification",
       "errorBranchesScoped": "pass only together with the G entries that scope branches no step observes; every \"out of scope\" entry below blocks readiness until a step covers it or the user accepts it",
-      "statusOutcome": "All 28 rebuild journeys (J14, J15, J18 to J29, J31 to J44) remain status: draft. Round 6 (user, 2026-10-10) and §Input modes P-PREP2 answered the earlier product questions; the answered gaps are dissolved. The not-validated gap in each (G1, or J15/G4) still holds, and FORMAT.md promotes a journey only through a validation run in which every step passes. J30 is retired (status: deprecated, successor J31) and has no readiness entry."
+      "statusOutcome": "All 28 rebuild journeys (J14, J15, J18 to J29, J31 to J44) remain status: draft. Round 6 (user, 2026-10-10) and Round 7 P-PREP3 (user, 2026-10-12; run views, superseding §Input modes P-PREP2) answered the earlier product questions; the answered gaps are dissolved. The not-validated gap in each (G1, or J15/G4) still holds, and FORMAT.md promotes a journey only through a validation run in which every step passes. J30 is retired (status: deprecated, successor J31) and has no readiness entry."
     },
     "perJourney": [
       {
@@ -175,14 +175,13 @@
         "blocking": [
           "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence.",
           "G6 (out of scope) when no master matches a requirement and a raw session that would stack into one awaits Stack, the row offers `Stack from <session>`, which opens that calibration process at…",
-          "G7 (product question) P-PREP2 makes **Link to originals** opt-in with a warning and re-hashes the originals after the run, but does not say whether it stays blocked for a profile whose input-write behavior is unknown…"
+          "G7 (product question) P-PREP3 makes **Symlinks** the default run view but does not say whether it stays allowed for a profile whose input-write behavior is unknown or write-prone, as PREP-AC-11 and D04 blocked linked modes."
         ]
       },
       {
         "id": "J24",
         "blocking": [
           "G2 (implementation qualification) Siril's exact handoff and its input-write behavior (P2) need a profile capability probe (D04).",
-          "G3 (out of scope) Automatic deciding per item across mixed volumes, so that one preparation holds both cloned and copied entries (D04, PREP-FR-08), and the re-hash of the originals after a Link to originals run,…",
           "G4 (implementation qualification) the specs do not say which preparation phases offer Cancel or Pause \"where safe\".",
           "G5 (implementation qualification) no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it.",
           "G10 (product question) what a rejection made in one run does to another open run of the same Project whose saved revision holds the frame."
@@ -207,10 +206,9 @@
       {
         "id": "J27",
         "blocking": [
-          "G2 (out of scope) Clean up of a **Give PixInsight the file list** run (P-PREP2, which replaces Direct source) needs such a run, and no journey prepares one yet.",
           "G3 (out of scope) removing replaced prepared entries before the run is Complete (STO-FR-10, D09) is not exercised.",
           "G5 (implementation qualification) no fault control yet holds a run's Clean up operation Running (P9).",
-          "G6 (out of scope) P-PREP2 re-hashes the originals of a **Link to originals** run after the run."
+          "G7 (out of scope) removing the view and the intermediates from the Complete confirmation is not approved here (J33/S15 covers it), and the refusal of an entry that may hold the last copy of a capture (STO-FR-04) is not exercised."
         ]
       },
       {
@@ -218,10 +216,8 @@
         "blocking": [
           "G2 (implementation qualification) no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised.",
           "G3 (implementation qualification) no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification.",
-          "G4 (out of scope) the file list of a **Give PixInsight the file list** run (P-PREP2, which replaces Direct source), whose paths a move affects, is not exercised because no journey prepares such a run.",
           "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5).",
-          "G9 (product question) Round 6 lets Sessions archive sessions that are in no Project, but says nothing about a selection that also holds a session of a Project, a candidate or a member of a run, or about archiving part…",
-          "G10 (product question) under P-PREP2 the entries of `NGC7000-HOO-Siril` are independent, read-only clones, so with `Archive` unplugged (S10) or retired (S12) its run folder still holds every verified input."
+          "G9 (product question) Round 6 lets Sessions archive sessions that are in no Project, but says nothing about a selection that also holds a session of a Project, a candidate or a member of a run, or about archiving part…"
         ]
       },
       {
@@ -265,7 +261,8 @@
           "G4 (implementation qualification) P4 needs Tool-recorded input lineage from a processing tool for F-res.",
           "G5 (out of scope) approving the restore of an Archived session after Reopen (STO-FR-13) is not exercised, because S12a stops at the review.",
           "G6 (out of scope) Next reading Wrap up (D-W35, HARNESS-V5-IA.md S1) is not observed, because the Project's candidates keep library-Unreviewed frames (P2), so Review N new frames comes first.",
-          "G7 (out of scope) approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared clones and symlinks."
+          "G7 (out of scope) approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared symlinks.",
+          "G8 (product question) P-PREP3 does not say what a kept Symlinks view does when an original it links to goes to the OS Trash (S6: the two P3 18 Sep frames and F-ab, still linked from `NGC7000-HOO-Siril/`)."
         ]
       },
       {
@@ -342,7 +339,8 @@
         "id": "J44",
         "blocking": [
           "G3 (out of scope) an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in the library clean-up.",
-          "G4 (implementation qualification) F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it."
+          "G4 (implementation qualification) F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it.",
+          "G5 (product question) shared with J34/G8: what the kept Symlinks view of `NGC7000-HOO-Siril` does when the two 18 Sep frames and F-ab it links to go to the OS Trash in S2."
         ]
       }
     ]

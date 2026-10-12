@@ -1,13 +1,13 @@
 ---
 id: J44
 title: Move Unusable frames to the OS Trash from the library clean-up, outside a Project's Wrap up, and put one back
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [cleanup, sessions, targets, projects, view-review, frame-review, status-bar, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, P-SB3, P-PREP2, D19, D-W42, D-W43, D-W52, D-W54, D-W57, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, apps/prototype/messages/en-GB.json, J22, J32, J34, J39]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, P-SB3, P-PREP3, D19, D-W42, D-W43, D-W52, D-W54, D-W57, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, apps/prototype/messages/en-GB.json, J22, J32, J34, J39]
 ---
 
 ## Goal
@@ -26,7 +26,7 @@ the rest to the OS Trash, and later puts one back. Done means:
 ## Preconditions
 
 - P1: The J34 starting world: J34/P1 to J34/P11 hold, and no step of J34 has run. Project `NGC 7000 HOO` is open. `NGC7000-HOO-Siril` and `26 Sep symlink check` read Complete, and `24 Sep flat check` and `NGC7000 HOO combine` are not Complete, so its Wrap up is blocked (J34/S1). These frames are library Unusable:
-  - the two 18 Sep frames of J34/P3, members of the Complete run `NGC7000-HOO-Siril`, with prepared clones in its prepared revision;
+  - the two 18 Sep frames of J34/P3, members of the Complete run `NGC7000-HOO-Siril`, with symlink entries in its prepared revision;
   - the five library-Unusable rejected 30 Sep frames of J34/P2, among them F-drift (J34/P7) and F-dup, which also has a byte copy on `Scratch` (J34/P6);
   - F-res, F-prep and F-ab of J34/P4.
 
@@ -44,14 +44,14 @@ the rest to the OS Trash, and later puts one back. Done means:
 - **Do:** Open the library clean-up of Unusable frames. Read its offer, its count and size, and open the disclosure of its refusals.
 - **Expect:**
   - The offer lists 9 frames, each with its session: the two 18 Sep frames, the four 30 Sep frames other than F-dup, F-ab, and MX-1 and MX-2 of `4 Oct M 33`, a session in no Project. F-ab is offered, because its place in a prepared revision of the Complete run `Ha deep v1` is no refusal reason.
-  - The size covers the four 30 Sep frames, MX-2 and both copies of MX-1. The two 18 Sep frames and F-ab add 0 bytes, because their prepared clones in `NGC7000-HOO-Siril/` still share their bytes.
+  - The size covers the four 30 Sep frames, the two 18 Sep frames, F-ab, MX-2 and both copies of MX-1. A symlink entry in `NGC7000-HOO-Siril/` holds none of a frame's bytes.
   - A terse refusal counts 4 frames, and its disclosure lists each with its reason:
     - F-prep: in a prepared revision of run `Ha deep` in Project `NGC 7000 Ha deep`, a run that is not Complete.
     - F-res: a recorded input of the accepted Ha stack of `Ha deep v1`.
     - F-dup: one of its copies sits on `Scratch`, which has no OS Trash, so neither copy moves.
     - C-x: its location `Cold-1 captures` is Offline.
 - **Expect (negative):** Neither Project-only reject is offered or counted, and no library-Usable or Unreviewed frame is offered, including the 14 Usable M 33 lights. Opening the clean-up moves no file. `NGC 7000 HOO` stays open, and its four runs keep their states.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Reject is library-wide by default": Unusable frames become purge candidates, and a library clean-up offers to move them to the OS Trash), §Copy rules (terse refusals), §Input modes (P-PREP2: footprint is real) · PRJ-FR-15 (refusal reasons) · STO-FR-15 · STO-AC-18 · D-W42, D-W43, D-W54, D-W57 · G2, G4
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Reject is library-wide by default": Unusable frames become purge candidates, and a library clean-up offers to move them to the OS Trash), §Copy rules (terse refusals), §Round 7 P-PREP3 ("Linked · 0 B") · PRJ-FR-15 (refusal reasons) · STO-FR-15 · STO-AC-18 · D-W42, D-W43, D-W54, D-W57 · G2, G4, G5
 
 ### S2 — Move the offered frames to the OS Trash {#S2}
 
@@ -106,11 +106,14 @@ the rest to the OS Trash, and later puts one back. Done means:
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist, and the v5 prototype at ui-harness-v5 4f470775 does not yet implement Round 6. Product behavior follows HARNESS-V5-FEEDBACK-R1.md §Round 6 "Reject is library-wide by default" (@ 4f470775) and §Input modes P-PREP2 (@ d609ff55), the trash and custody rules of D-W43, D-W52, D-W54 and D-W57, and the 064, 065 and 071 specs cited above. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist, and the v5 prototype at ui-harness-v5 4f470775 does not yet implement Round 6. Product behavior follows HARNESS-V5-FEEDBACK-R1.md §Round 6 "Reject is library-wide by default" (@ 4f470775) and §Round 7 P-PREP3 (@ 12638a7c), the trash and custody rules of D-W43, D-W52, D-W54 and D-W57, and the 064, 065 and 071 specs cited above. No implementation has been validated against them.
 - G2: Contract drift: STO-FR-03, STO-FR-14, STO-AC-20, PRJ-FR-15 and LIB-FR-18 still name the Project's Done / Archive sheet, now Wrap up, as the only way a library frame reaches the Trash. Round 6 adds the library clean-up of Unusable frames, which this journey follows. Those requirements need an amendment.
 - G3: Out of scope for this journey: an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in the library clean-up. Blocks readiness until covered by a step or a journey.
 - G4: Unresolved implementation qualification: F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it. Blocks readiness.
+- G5: Unresolved product question, shared with J34/G8: P-PREP3 does not say what the kept Symlinks view of `NGC7000-HOO-Siril` does when the two 18 Sep frames and F-ab it links to go to the OS Trash in S2. S1 and S2 assert only that the frames are offered and moved and that no prepared entry moves. Blocks readiness.
 
 ## Delta log
 
-- No entries (initial draft, version 1).
+- **Δ2** 2026-10-12 · S1 · behavior-change
+  P-PREP3: the Complete run `NGC7000-HOO-Siril` holds symlinks, so the offer's size covers every offered frame, the two 18 Sep frames and F-ab included.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c) · by: JourneysV5.R7Prep3 (intent-gated)

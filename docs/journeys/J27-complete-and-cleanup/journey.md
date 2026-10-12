@@ -1,37 +1,38 @@
 ---
 id: J27
 title: Complete a processing run, clean up its prepared entries, reopen a run, and trash and restore one
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, cleanup, view-review, projects, project-trash, activity, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, 065-project-goals, D09, D16, D19, D-W26, D-W43, D-W51, D-W66, D-W70, D-W72, P-WRAP1, P-SB3, P-PREP2, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd]
+trace: [063-clean-rebuild-contract, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, 065-project-goals, D09, D16, D19, D-W26, D-W43, D-W51, D-W66, D-W70, D-W72, P-WRAP1, P-SB3, P-PREP3, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd]
 ---
 
 ## Goal
 
 The user records that a processing run is finished, whether it has an
-accepted Result. The run's Clean up, on its Done step, then sends the run's
-prepared entries (links, clones and copies) to the OS Trash. The run's Results
-folder, the originals, accepted products and masters stay out of Clean up
-entirely. The user also reopens a run, moves one to the Project Trash, restores
-it, and empties it from the Trash. Done means:
-- Both runs read Complete, and completing them removed nothing. Each completion offered the run's Clean up with its real footprint: the copies' size for the copy run, and "frees no space" for the run whose entries are all clones.
+accepted Result. Completing a run offers to remove its run view and its
+intermediates through the OS Trash. A view the user keeps stays in the run's
+Clean up, on its Done step, which sends the reviewed prepared entries (symlinks
+or copies) to the OS Trash. The run's Results folder, the originals, accepted
+products and masters stay out of Clean up entirely. The user also reopens a
+run, moves one to the Project Trash, restores it, and empties it from the
+Trash. Done means:
+- Both runs read Complete, and completing them with the offers unticked removed nothing. Each Complete confirmation offered **Remove run view**: with the space it frees for the copy run, and "links only" for the symlink run, which also offered its intermediates.
 - Clean up listed only prepared entries, every one preselected beside the run's footprint, and removed only the reviewed selection, to the OS Trash, without following link targets.
-- An entry that may hold the last copy of a capture was refused.
+- An entry whose original changed after review was refused.
 - A location without safe Trash refused removal, with no permanent-delete fallback.
 - Move to Trash was refused, naming its blocker, while the run's Clean up was Running and while another run used the run's accepted Results. Moving a run to the Project Trash moved no file and changed no goal number, and Restore brought it back exactly as it was. Emptying it from the Trash on a location without OS Trash ran one trash operation, left its prepared folders in place and named them, and sent its ticked Results folder to the OS Trash.
 
 ## Preconditions
 
-- P1: Fresh replay of J24 and J26 (J25 not run). Siril is not running. `NGC7000-HOO-Siril Results/` also holds one file PlateVault does not recognize.
+- P1: Fresh replay of J24 and J26 (J25 not run). Siril is not running. `NGC7000-HOO-Siril Results/` holds the 416 recognized intermediates of J26/P1 (208 calibrated and 208 registered) and one file PlateVault does not recognize. `28 Sep Ha copy check Results/` holds no intermediates.
 - P2: From J24/S16 and J24/S17, `28 Sep Ha copy check` is Prepared on `Scratch`, which has no OS Trash. Revision 1 holds 56 copies and revision 2 holds 55. The run has no accepted Result. Its Results folder `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/` holds the two unaccepted J26/P8 stacks.
-- P3: In an isolated test OS account or disposable VM containing only these generated fixtures, unlink one named 30 Sep capture directly from its generated source folder, without using or emptying the OS Trash. Its prepared clone in `NGC7000-HOO-Siril/` becomes the fixture's last copy of those bytes. Record the exact fixture path and its pre-unlink hash. Real libraries and unrelated Trash contents are outside this setup.
 - P4: Record a baseline inventory of the isolated account's Trash without deleting anything. Also record a manifest of the remaining captures, every file in `NGC7000-HOO-Siril Results/`, and the adopted master. Trash checks compare only this journey's newly added entries against that baseline.
 - P5: A second final image saved by the user outside the run, at `Work/Finals/NGC7000-HOO-crop.tif`.
-- P6: Run `26 Sep symlink check` in Project `NGC 7000 HOO`, created from the 26 Sep session, prepared under `Work/Processing/NGC 7000 HOO/26 Sep symlink check/` with **Link to originals**, chosen after its warning, as 35 symlink entries, then marked Complete with no Result. Outside PlateVault, its run folder also receives `extra/`, holding a byte copy of one named 26 Sep capture. Record the J19/P5 entries of the 26 Sep session.
+- P6: Run `26 Sep symlink check` in Project `NGC 7000 HOO`, created from the 26 Sep session, prepared under `Work/Processing/NGC 7000 HOO/26 Sep symlink check/` with the Symlinks run view as 35 symlink entries, then marked Complete with no Result and **Remove run view** unticked. Outside PlateVault, its run folder also receives `extra/`, holding a byte copy of one named 26 Sep capture. Record the J19/P5 entries of the 26 Sep session.
 - P7: A helper outside PlateVault saves a named file's bytes and nanosecond mtime, then overwrites the file in place with a same-size variant whose bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
 - P8: `24 Sep flat check` reads Complete (J24/S15). Its stage before completion was Calibrate (J23/S7), and it has no preparation revision.
 - P9: A fault control holds a run's Clean up operation Running after its first entry moves, until it is released (G5).
@@ -40,17 +41,17 @@ it, and empties it from the Trash. Done means:
 
 ### S1 — Complete a run with no Result {#S1}
 
-- **Do:** Open `28 Sep Ha copy check`, choose **Complete**, read the preview and confirm. Read the Clean up offer, then leave it without confirming.
-- **Expect:** The preview lists each step that is not Done. Results is among them and reads that it stays Needs review, because neither J26/P8 stack is accepted. The preview reads "Nothing is removed." After confirming, the run reads Complete with no accepted Result, and PlateVault offers **Clean up** of its prepared copies, every one preselected. The offer shows the run's footprint in the form `<size> copied`, the bytes of its 111 copies, because each entry recorded copied.
-- **Expect (negative):** No file is removed. Nothing goes to the OS Trash before a Clean up review is confirmed, and leaving the offer starts no cleanup.
-- **Trace:** flow I1, cross-flow "Completion with no Result" · RES-FR-06 · RES-AC-06 · root SC-006 · HARNESS-V5-IA.md S5, Fix pass · HARNESS-V5-FEEDBACK-R1.md §Input modes (P-PREP2: prepared copies are cleaned up when a run is done; footprint is real)
+- **Do:** Open `28 Sep Ha copy check`, choose **Complete** and read the confirmation. Untick **Remove run view** and confirm.
+- **Expect:** The confirmation lists each step that is not Done. Results is among them and reads that it stays Needs review, because neither J26/P8 stack is accepted. It offers "Remove run view · frees <size>", ticked, with the bytes of the run's 111 copies, and no intermediates offer, because the run's Results folder holds none. After confirming, the run reads Complete with no accepted Result, and its Done step's Clean up lists its prepared copies, every one preselected.
+- **Expect (negative):** No file is removed. With **Remove run view** unticked, nothing goes to the OS Trash, and no Clean up starts.
+- **Trace:** flow I1, cross-flow "Completion with no Result" · RES-FR-06 · RES-AC-06 · root SC-006 · HARNESS-V5-IA.md S5, Fix pass · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Copies are removed when the run completes"; the Complete confirmation offers intermediates cleanup next to removing the view)
 
 ### S2 — Complete the main run {#S2}
 
-- **Do:** Open `NGC7000-HOO-Siril` and choose **Complete**, confirming its preview if one opens. Read the Clean up offer, then leave it without confirming.
-- **Expect:** The run reads Complete, its accepted Results are unchanged, and the Project page's Runs table lists it at Done with status Complete. The Clean up offer shows the footprint `0 B extra · cloned` and reads that it frees no space, because every prepared entry recorded cloned.
-- **Expect (negative):** Completion removes nothing and does not claim that Siril processing stopped or succeeded. Leaving the offer starts no cleanup.
-- **Trace:** flow I1 · RES-FR-06 · PRJ-FR-20 · D09, D-W26 · HARNESS-V5-IA.md S3, S5 · HARNESS-V5-FEEDBACK-R1.md Round 5 (runs read as one model), §Input modes (P-PREP2: "frees no space")
+- **Do:** Open `NGC7000-HOO-Siril`, choose **Complete** and read the confirmation. Untick both offers and confirm.
+- **Expect:** The confirmation offers "Remove run view · links only" and "Move 416 intermediates to Trash · <size>", both ticked. After confirming, the run reads Complete, its accepted Results are unchanged, and the Project page's Runs table lists it at Done with status Complete.
+- **Expect (negative):** With both offers unticked, completion removes nothing: the run folder keeps its entries and `NGC7000-HOO-Siril Results/` keeps its 416 intermediates. Completion does not claim that Siril processing stopped or succeeded.
+- **Trace:** flow I1 · RES-FR-06 · PRJ-FR-20 · D09, D-W26 · HARNESS-V5-IA.md S3, S5 · HARNESS-V5-FEEDBACK-R1.md Round 5 (runs read as one model), §Round 7 P-PREP3 ("Intermediates cleanup stays")
 
 ### S3 — Edit a Complete run {#S3}
 
@@ -62,20 +63,20 @@ it, and empties it from the Trash. Done means:
 ### S4 — Open Clean up {#S4}
 
 - **Do:** Open the run's Done step and read its Clean up list.
-- **Expect:** The list holds one group, the prepared folder `NGC7000-HOO-Siril/`, with the 208 frame entries of revision 1 and the entries of the masters assigned in J23, each with its kind, cloned, its size and proposed action. Every entry starts selected. Beside the list, the run's footprint reads `0 B extra · cloned`, and Clean up reads that it frees no space.
+- **Expect:** The list holds one group, the prepared folder `NGC7000-HOO-Siril/`, with the 208 frame entries of revision 1 and the entries of the masters assigned in J23, each with its kind, symlink, its target path and proposed action. Every entry starts selected. Beside the list, the run's footprint reads `Linked · 0 B`.
 - **Expect (negative):**
   - Nothing in `NGC7000-HOO-Siril Results/` is listed: not the intermediates, the log, the unknown file, the accepted stacks, the attached images, or the generated master source.
   - No original capture or library frame is listed.
   - The selection does not cover the whole run directory.
-  - Clean up offers no way to move rejected frames or processing intermediates to the Trash. Library-Unusable frames are offered only by the Project's Wrap up Trash step and by the library clean-up of Unusable frames (J44), and intermediates only by the Wrap up Trash step.
-- **Trace:** flow I2 · STO-FR-01, STO-FR-03, STO-FR-16 · STO-AC-01, STO-AC-20 · PREP-FR-14 · PREP-AC-19 · RES-FR-01 · D-W26, D-W43, D-W70 · HARNESS-V5-IA.md S5, S9 · HARNESS-V5-FEEDBACK-R1.md Domain and seed (P-WRAP1, Storage), Screens C, §Round 6 ("Reject is library-wide by default"), §Input modes (P-PREP2)
+  - Clean up offers no way to move rejected frames or processing intermediates to the Trash. Library-Unusable frames are offered only by the Project's Wrap up Trash step and by the library clean-up of Unusable frames (J44), and intermediates only by the run's Complete confirmation (S2) and the Wrap up Trash step.
+- **Trace:** flow I2 · STO-FR-01, STO-FR-03, STO-FR-16 · STO-AC-01, STO-AC-20 · PREP-FR-14 · PREP-AC-19 · RES-FR-01 · D-W26, D-W43, D-W70 · HARNESS-V5-IA.md S5, S9 · HARNESS-V5-FEEDBACK-R1.md Domain and seed (P-WRAP1, Storage), Screens C, §Round 6 ("Reject is library-wide by default"), §Round 7 P-PREP3
 
 ### S5 — Inspect and choose entries {#S5}
 
 - **Do:** In the Clean up list, deselect one frame entry.
 - **Expect:** Each entry shows its path, its role, other run or Project references, retained-original evidence and estimated bytes. The frame entries read 207 of 208 selected, and every master entry stays selected.
-- **Expect (negative):** No entry's size is presented as reclaimed bytes, and Clean up still reads that it frees no space.
-- **Trace:** flow I3 · STO-FR-02 · HARNESS-V5-FEEDBACK-R1.md §Input modes (P-PREP2: footprint is real)
+- **Expect (negative):** No entry's size is presented as reclaimed bytes, and the footprint still reads `Linked · 0 B`.
+- **Trace:** flow I3 · STO-FR-02 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Linked · 0 B")
 
 ### S7 — Review cleanup {#S7}
 
@@ -83,7 +84,7 @@ it, and empties it from the Trash. Done means:
 - **Expect:**
   - The review lists exactly the selected entries and the 1 retained frame entry, and its one action moves the selected entries to the OS Trash.
   - Trash support for `Work` shows movable and blocked counts.
-  - The P3 entry is blocked for insufficient retained-original proof. Every other selected entry shows a verified retained original.
+  - Every selected entry shows a verified retained original.
 - **Expect (negative):** No entry with stale identity, missing retained-original proof, an unavailable source or ambiguous ownership is approved.
 - **Trace:** flow I4 · STO-FR-04 · STO-AC-04
 
@@ -91,12 +92,12 @@ it, and empties it from the Trash. Done means:
 
 - **Do:** With the P7 helper, overwrite the original capture behind one selected frame entry after the review. Then confirm the move to the OS Trash. Afterwards, restore that capture's saved bytes and mtime with the helper.
 - **Expect:**
-  - Progress shows per-item outcomes and a partial summary that names both blocked entries: the P3 entry, and the entry whose retained original changed since review.
-  - The run records which prepared entries were removed and which remain. The removed entries, 205 frame entries and every master entry, are newly in the OS Trash.
+  - Progress shows per-item outcomes and a partial summary that names the blocked entry, whose retained original changed since review.
+  - The run records which prepared entries were removed and which remain. The removed entries, 206 frame entries and every master entry, are newly in the OS Trash.
   - The run still reads Complete.
 - **Expect (negative):**
   - Link targets are not followed. After the restore, the remaining captures, every file in `NGC7000-HOO-Siril Results/` and the adopted master match P4.
-  - The deselected entry, the entry whose original changed and the P3 entry remain.
+  - The deselected entry and the entry whose original changed remain.
   - Reviewed cleanup neither reopens the run nor changes its fixed membership.
 - **Trace:** flow I5 · STO-FR-04, STO-FR-05 · STO-AC-15 · root SC-006 · D09, D19
 
@@ -176,10 +177,9 @@ it, and empties it from the Trash. Done means:
 
 ## Success criteria
 
-- SC1: Completing either run removes 0 files and starts 0 cleanups. Each completion offers Clean up with its footprint: `<size> copied` for `28 Sep Ha copy check`, and `0 B extra · cloned`, freeing no space, for `NGC7000-HOO-Siril` (S1, S2).
-- SC2: Clean up lists only prepared entries: the 208 cloned frame entries and the masters' entries (S4), 111 copies (S10) and 35 symlinks (S11). It lists 0 files from a Results folder, 0 originals and 0 files the preparation did not create.
+- SC1: Completing either run with its offers unticked removes 0 files and starts 0 cleanups. The confirmation offers **Remove run view** with the bytes it frees for `28 Sep Ha copy check`, and "links only" plus 416 intermediates for `NGC7000-HOO-Siril` (S1, S2).
+- SC2: Clean up lists only prepared entries: the 208 symlink frame entries and the masters' entries (S4), 111 copies (S10) and 35 symlinks (S11). It lists 0 files from a Results folder, 0 originals and 0 files the preparation did not create.
 - SC3: Every removed entry is in the OS Trash, and the P4 manifest still matches after the restore (S8).
-- SC4: The last-copy clone is refused and remains (S7, S8).
 - SC5: On `Scratch`, 0 files are removed, and no permanent-delete action exists (S10).
 - SC6: A Complete run refuses membership edits, here clearing a session in Select, until Reopen, and accepts a notes edit and a Result acceptance. It still reads Complete after reviewed cleanup (S3, S8).
 - SC7: Trashing 35 symlinks leaves 100% of the 26 Sep captures and the `extra/` copy matching P6 (S11, S11a).
@@ -191,11 +191,12 @@ it, and empties it from the Trash. Done means:
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S3, S5, S8 and Fix pass; HARNESS-V5-FEEDBACK-R1.md Copy rules, Screens B and C, and Round 5, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775; Input modes P-PREP2 @ d609ff55), the specs, the decisions D09, D16 and D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
-- G2: Out of scope for this journey: Clean up of a **Give PixInsight the file list** run (P-PREP2, which replaces Direct source) needs such a run, and no journey prepares one yet. That Clean up offers no frame entry to remove, because the mode places none in a run folder (PREP-AC-20, STO-AC-02). Blocks readiness until covered.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S3, S5, S8 and Fix pass; HARNESS-V5-FEEDBACK-R1.md Copy rules, Screens B and C, and Round 5, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775; Round 7 P-PREP3 @ 12638a7c), the specs, the decisions D09, D16 and D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
+- G2: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: there is no file-list mode, so every run's Clean up lists the entries of its run folder.
 - G3: Out of scope for this journey: removing replaced prepared entries before the run is Complete (STO-FR-10, D09) is not exercised. Blocks readiness until covered by a step or a journey.
 - G5: Unresolved implementation qualification: no fault control yet holds a run's Clean up operation Running (P9). S11a depends on it. Blocks readiness.
-- G6: Out of scope for this journey: P-PREP2 re-hashes the originals of a **Link to originals** run after the run. That re-hash, and an original changed through a link, are not exercised (`26 Sep symlink check` is Complete before S1). Blocks readiness until covered by a step or a journey.
+- G6: (dissolved 2026-10-12): answered by §Round 7 P-PREP3 ("No verification of originals after a run"): no original is re-hashed after a run.
+- G7: Out of scope for this journey: removing the view and the intermediates from the Complete confirmation is not approved here, because S1 and S2 untick both offers so that J28 and J34 keep the views; J33/S15 covers it. The refusal of an entry that may hold the last copy of a capture (STO-FR-04) is not exercised. Every entry of `NGC7000-HOO-Siril` is a symlink, and the only Copies run sits on `Scratch`, which has no OS Trash. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 
@@ -210,3 +211,6 @@ it, and empties it from the Trash. Done means:
   There is no Exclude from run, so a Complete run's locked membership is shown by trying to clear a session in Select, and Reopen makes Select editable again. Library-Unusable frames are offered by Wrap up and by the library clean-up (J44), never by run Clean up.
   P-PREP2: `NGC7000-HOO-Siril` holds clones and `26 Sep symlink check` uses Link to originals. Completing a run offers its Clean up with the real footprint (`<size> copied`, or `0 B extra · cloned` and frees no space), and an entry whose original changed since review is refused.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Reject is library-wide by default", "There is no separate Exclude from run" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); §Input modes (user, 2026-10-10) P-PREP2 (@ d609ff55); user answers to the PR #1788 journey questions · by: JourneysV5.R6E (intent-gated)
+- **Δ5** 2026-10-12 · S1, S2, S4, S5, S7, S8 · behavior-change
+  `NGC7000-HOO-Siril` and `26 Sep symlink check` use the Symlinks run view, and `28 Sep Ha copy check` uses Copies. Complete's confirmation offers **Remove run view** and the run's intermediates, both ticked and both through the OS Trash; S1 and S2 untick them. The last-copy fixture (old P3) and the re-hash of originals are gone.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3, "No verification of originals after a run", "Intermediates cleanup stays" (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
