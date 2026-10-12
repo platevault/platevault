@@ -1396,7 +1396,7 @@
   "goal_add_channel_goal": "Adicionar meta de {channel}",
   "goal_add_channel": "Adicionar canal",
   "project_col_actions": "Ações",
-  "project_run_complete_ellipsis": "Completar…",
+  "project_run_complete_ellipsis": "Concluir…",
   "trash_move_ellipsis": "Mover para a Lixeira…",
   "project_runs_count": [
     {
@@ -1430,7 +1430,7 @@
   ],
   "startrun_title": "Iniciar execução",
   "project_refusal_trash_run": "Não é possível mover a execução para a Lixeira",
-  "project_refusal_complete_run": "Não é possível completar a execução",
+  "project_refusal_complete_run": "Não é possível concluir a execução",
   "project_no_runs": "Nenhuma execução ainda",
   "project_unknown_subject": "Objeto desconhecido",
   "project_held_at": "{state} em {step}",
@@ -1453,11 +1453,11 @@
   ],
   "project_run_noun": "execução",
   "project_run_noun_capital": "Execução",
-  "project_run_complete_title": "Completar {name}?",
+  "project_run_complete_title": "Concluir {name}?",
   "project_run_complete_description": "Reabrir a devolve à sua etapa.",
-  "project_run_to_complete": "{name} → Completa",
+  "project_run_to_complete": "{name} → Concluída",
   "project_step_stays": "{step} permanece {state}",
-  "project_run_complete": "Completar execução",
+  "project_run_complete": "Concluir execução",
   "project_run_trash_title": "Mover {name} para a Lixeira?",
   "project_run_trash_description": "Restaurar a traz de volta como estava.",
   "project_run_to_trash": "{name} → Lixeira do Projeto",
@@ -3607,7 +3607,6 @@
       }
     }
   ],
-  "rungroup_status": "Grupo: {status}",
   "rungroup_mosaic_fixed": "Mosaico (fixo)",
   "rungroup_panels_count": [
     {
@@ -7312,5 +7311,26 @@
   "targets_view_all": "Todos",
   "targets_view_planned": "Planejados",
   "plan_move_up": "Mover para cima",
-  "plan_move_down": "Mover para baixo"
+  "plan_move_down": "Mover para baixo",
+  "run_status_complete": "Concluída",
+  "rungroup_panels_at": [
+    {
+      "declarations": [
+        "input count",
+        "input at",
+        "input step",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{at} de {count} painel em {step}",
+        "countPlural=*": "{at} de {count} painéis em {step}"
+      }
+    }
+  ],
+  "project_col_step": "Etapa",
+  "project_col_updated": "Atualizado",
+  "project_runs_of": "Execuções de {name}"
 }

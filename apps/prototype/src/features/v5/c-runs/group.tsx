@@ -1,13 +1,14 @@
 /**
- * S7 Run group (slice C): the panels with per-panel status, the shared setup
- * (profile, input mode, calibration policy; a Complete panel refuses a setup
- * change), Review all (slice D's `GroupReviewStep`), calibration readiness
- * per panel, Prepare all into `<Mosaic>/Panel N/` with `<Mosaic> Results/
- * Panel N/` and `Assembled/`, the group outcome (Partial when one panel is
- * Partial), Open only when every panel is verified, and the group Result.
- * A trashed panel is listed as Trashed, its frames leave the counts and
- * every group action skips it (D-W38, D-W41, D-W73, D-W75). Panel rows have
- * a right-click menu.
+ * S7 Run group (slice C): the group status (the worst panel status, then
+ * "N of M panels at <step>") and the panels, each with the status its run
+ * page shows; the shared setup (profile, input mode, calibration policy; a
+ * Complete panel refuses a setup change), Review all (slice D's
+ * `GroupReviewStep`), calibration readiness per panel, Prepare all into
+ * `<Mosaic>/Panel N/` with `<Mosaic> Results/Panel N/` and `Assembled/`, the
+ * group outcome (Partial when one panel is Partial), Open only when every
+ * panel is verified, and the group Result. A trashed panel is listed as
+ * Trashed, its frames leave the counts and every group action skips it
+ * (D-W38, D-W41, D-W73, D-W75). Panel rows have a right-click menu.
  */
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { Eye, FolderOpen, Layers, Lock, MapPin, Play, Save, ShieldCheck, Trash2, Wand2 } from "lucide-react"
@@ -28,17 +29,18 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { calibrationPlan, KIND_NAME } from "@/domain/calibration"
-import { type GroupPanelState, groupCandidates, groupPipeline, groupStepLink, panelLabel, panelRef, rigName, runPreparations, runResults, subjectName, workingContent } from "@/domain/derive"
+import { type GroupPanelState, groupCandidates, groupPipeline, groupStepLink, panelLabel, panelRef, rigName, runPreparations, runResults, runStatus, subjectName, workingContent } from "@/domain/derive"
 import { MODE_NAME, RUN_STEPS } from "@/domain/labels"
 import type { InputMode, Preparation, ResultKind, Run, RunGroup, RunStep } from "@/domain/types"
 import { fileName, formatNight } from "@/lib/format"
 import { m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
 import { addRunSessions, saveRun } from "@/store/actions/runs"
 import { type PrototypeState, useStore } from "@/store/core"
+import { nearestPanel } from "@/features/v5/b-projects/model"
 import { GroupReviewStep } from "../d-review/review"
 import { attachResult, changeGroupSetup, chooseMode, chooseProfile, completeAllPanels, discoverResults, groupSetupRefusals, openGroupFolder, prepareAll, prepareChoices, setOutputParent, simulateApplicationOutput, updatePrepareChoices } from "./actions"
 import { currentPreparation, groupAssembledPath, livePanelRuns, type ModeOption, nextGroupRevision, preparePlan, readinessByKind, resultRow } from "./model"
-import { LayoutLine, OutcomeNotice, profileLabel, PrototypeMenu, StepBar, useOutcome } from "./parts"
+import { GroupStatusLabel, LayoutLine, OutcomeNotice, profileLabel, PrototypeMenu, RowActions, RunStatusLabel, StepBar, useOutcome } from "./parts"
 import { ChecksList, FootprintPill, LayoutSection, MetadataSection, ModeSection, PreparationOutcome, PrepStateBadge, ProfileSection } from "./prepare-step"
 import { AttachDialog, ResultsTable, WrapUpLink } from "./results-step"
 
@@ -76,7 +78,6 @@ function GroupScreen({ group, step }: { group: RunGroup; step: RunStep }) {
   const pipeline = groupPipeline(state, group)
   const outcome = useOutcome(`${group.id}:${step}`)
   const trashed = pipeline.panels.filter((p) => p.trashed).length
-  const status = groupOutcome(state, group)
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-screen="S7">
       <PageHeader
@@ -86,7 +87,7 @@ function GroupScreen({ group, step }: { group: RunGroup; step: RunStep }) {
             {project.name}
           </Link>
         }
-        meta={status.value ? <StatusBadge kind="preparation" value={status.value} label={m.rungroup_status({ status: status.label })} /> : <Pill tone="muted">{m.run_not_prepared()}</Pill>}
+        meta={<GroupStatusLabel status={pipeline.status} />}
         description={
           <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
             <Pill tone="muted" icon={Layers} title={m.rungroup_mosaic_fixed()}>
@@ -133,15 +134,23 @@ function panelFrames(p: GroupPanelState): number {
   return workingContent(p.run)?.included.length ?? 0
 }
 
-/** A panel run's right-click entries: open it at a step, or its Project Trash when trashed. */
+/** Opens a panel run at a step, or its Project Trash when trashed. */
+function usePanelOpen(group: RunGroup) {
+  const navigate = useNavigate()
+  return (p: GroupPanelState, step: RunStep) =>
+    p.trashed
+      ? void navigate({ to: "/projects/$projectId/trash", params: { projectId: group.projectId } })
+      : void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: p.run.projectId, runId: p.run.id, step } })
+}
+
+/** A panel run's right-click entries: open it at a step (`usePanelOpen`). */
 function usePanelMenu(group: RunGroup) {
   const m = useMessages()
-  const navigate = useNavigate()
-  const openRun = (run: Run, step: RunStep) => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step } })
+  const open = usePanelOpen(group)
   return (p: GroupPanelState, step: RunStep, extra: MenuEntry[] = []): MenuEntry[] =>
     p.trashed
-      ? [{ heading: p.run.name }, { label: m.run_open_trash(), icon: Trash2, onSelect: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: group.projectId } }) }]
-      : [{ heading: p.run.name }, { label: m.activity_open_destination({ name: stepName(m, step) }), icon: Eye, onSelect: () => openRun(p.run, step) }, ...extra]
+      ? [{ heading: p.run.name }, { label: m.run_open_trash(), icon: Trash2, onSelect: () => open(p, step) }]
+      : [{ heading: p.run.name }, { label: m.activity_open_destination({ name: stepName(m, step) }), icon: Eye, onSelect: () => open(p, step) }, ...extra]
 }
 
 function PanelStrip({ panels }: { panels: GroupPanelState[] }) {
@@ -162,6 +171,7 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
   const m = useMessages()
   const state = useStore((s) => s)
   const menu = usePanelMenu(group)
+  const open = usePanelOpen(group)
   const index = RUN_STEPS.indexOf(step)
   const total = panels.filter((p) => !p.trashed).reduce((n, p) => n + panelFrames(p), 0)
   const allColumns: Column<GroupPanelState>[] = [
@@ -180,7 +190,7 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
           </Link>
         ),
     },
-    { id: "status", header: m.rungroup_col_status(), cell: (p) => <StatusBadge kind="run" value={p.trashed ? "trashed" : p.run.completion === "complete" ? "complete" : "open"} /> },
+    { id: "status", header: m.rungroup_col_status(), cell: (p) => <RunStatusLabel status={runStatus(p.pipeline)} at /> },
     { id: "step", header: stepName(m, step), cell: (p) => (p.trashed ? <Pill tone="muted">{m.status_skipped()}</Pill> : <GateLabel state={p.pipeline.steps[index]!.state} label={say(m, p.pipeline.steps[index]!.status)} />) },
     { id: "frames", header: m.run_col_frames(), align: "right", cell: (p) => (p.trashed ? <span className="text-muted-foreground">–</span> : panelFrames(p)), sortValue: (p) => (p.trashed ? -1 : panelFrames(p)) },
     {
@@ -206,7 +216,16 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
       }
       actions={<Pill tone="muted">{m.run_frames_count({ count: total })}</Pill>}
     >
-      <DataTable label={m.rungroup_panels_label({ name: group.name })} rows={panels} columns={columns} getRowId={(p) => p.run.id} scroll="none" rowClassName={(p) => (p.trashed ? "text-muted-foreground" : undefined)} contextMenu={(p) => menu(p, step)} />
+      <DataTable
+        label={m.rungroup_panels_label({ name: group.name })}
+        rows={panels}
+        columns={columns}
+        getRowId={(p) => p.run.id}
+        scroll="none"
+        rowClassName={(p) => (p.trashed ? "text-muted-foreground" : undefined)}
+        contextMenu={(p) => menu(p, step)}
+        onRowClick={(p) => open(p, step)}
+      />
     </Box>
   )
 }
@@ -228,6 +247,20 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
   const panelName = (r: Run) => say(m, panelNameRef(r))
   const place = (r: Run, f: (typeof toPlace)[number]) => onOutcome(addRunSessions(r.id, [f.candidate.session.id], { kind: "panel-assigned", detail: msg("rungroup_placed_by_you", { panel: panelNameRef(r), detail: f.detail }) }), { blocked: m.rungroup_place_blocked() })
   const sessionName = (f: (typeof toPlace)[number]) => `${formatNight(f.candidate.session.night)} · ${f.candidate.session.channel ?? m.palette_session_no_filter()}`
+  // Clicking a flagged session places it on the live panel nearest its pointing; the menu offers every panel.
+  const nearest = (f: (typeof toPlace)[number]) => {
+    const panel = nearestPanel(
+      f.candidate.session.pointing,
+      panels.filter((p) => live.some((r) => r.panelId === p.id)),
+    )
+    return live.find((r) => r.panelId === panel?.id) ?? null
+  }
+  const placeEntries = (f: (typeof toPlace)[number]): MenuEntry[] => [
+    { heading: sessionName(f) },
+    ...live.map((r) => ({ label: m.rungroup_place_on({ panel: panelName(r) }), icon: MapPin, onSelect: () => place(r, f) })),
+    { separator: true },
+    { label: m.project_open_session(), icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: f.candidate.session.id } }) },
+  ]
   return (
     <>
       <Box
@@ -244,31 +277,42 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
           <p className="px-3 py-2 text-sm text-muted-foreground">{m.rungroup_all_placed()}</p>
         ) : (
           <ul className="divide-y divide-separator">
-            {toPlace.map((f) => (
-              <RowContextMenu
-                key={f.candidate.session.id}
-                entries={[
-                  { heading: sessionName(f) },
-                  ...live.map((r) => ({ label: m.rungroup_place_on({ panel: panelName(r) }), icon: MapPin, onSelect: () => place(r, f) })),
-                  { separator: true },
-                  { label: m.project_open_session(), icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: f.candidate.session.id } }) },
-                ]}
-              >
-                <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-sm">
-                  <span className="flex flex-wrap items-center gap-1.5">
+            {toPlace.map((f) => {
+              const best = nearest(f)
+              const content = (
+                <>
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
                     {sessionName(f)}
                     <Pill tone="warning">{say(m, f.detail)}</Pill>
                   </span>
-                  <span className="flex flex-wrap gap-1">
-                    {live.map((r) => (
-                      <Button key={r.id} size="xs" variant="outline" onClick={() => place(r, f)}>
-                        {m.rungroup_place_on({ panel: panelName(r) })}
-                      </Button>
-                    ))}
-                  </span>
-                </li>
-              </RowContextMenu>
-            ))}
+                  {best ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-link">
+                      <MapPin aria-hidden="true" className="size-3.5" />
+                      {panelName(best)}
+                    </span>
+                  ) : null}
+                </>
+              )
+              return (
+                <RowContextMenu key={f.candidate.session.id} entries={placeEntries(f)}>
+                  <li className="flex min-h-8 items-center gap-2 px-3 text-sm hover:bg-foreground/[0.04]" data-to-place={f.candidate.session.id}>
+                    {best ? (
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-2 self-stretch py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        title={m.rungroup_place_on({ panel: panelName(best) })}
+                        onClick={() => place(best, f)}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <span className="flex min-w-0 flex-1 items-center gap-2 py-1.5">{content}</span>
+                    )}
+                    <RowActions entries={placeEntries(f)} label={m.run_actions_for({ name: sessionName(f) })} />
+                  </li>
+                </RowContextMenu>
+              )
+            })}
           </ul>
         )}
       </Box>

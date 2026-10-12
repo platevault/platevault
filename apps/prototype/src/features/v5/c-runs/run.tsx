@@ -1,6 +1,6 @@
 /**
  * S5 Run (slice C): the run header (subject and rig as pills, fixed at
- * creation; Open / Complete / Trashed; Complete, Reopen, Move to Trash,
+ * creation; the run status, e.g. "Blocked at Calibrate"; Complete, Reopen, Move to Trash,
  * Restore and Clean up), the step bar, and the Select, Calibrate, Prepare,
  * Results and Done steps. The Review step is slice D's `ReviewStep`, mounted
  * here as the last child of the pane's flex column (D-W3, D-W50, D-W49,
@@ -15,9 +15,8 @@ import { stepName } from "@/app/run-ui"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
-import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { nextFrom, panelLabel, rigName, runPipeline, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
+import { nextFrom, panelLabel, rigName, runPipeline, runStatus, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
 import { RUN_STEPS } from "@/domain/labels"
 import type { RunStep } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
@@ -27,7 +26,7 @@ import { ReviewStep } from "../d-review/review"
 import { CalibrateStep } from "./calibrate-step"
 import { CompleteButton, DoneStep } from "./done-step"
 import { type RunContext, runContext } from "./model"
-import { OutcomeNotice, StepBar, useOutcome } from "./parts"
+import { OutcomeNotice, RunStatusLabel, StepBar, useOutcome } from "./parts"
 import { PrepareStep } from "./prepare-step"
 import { ResultsStep } from "./results-step"
 import { SelectStep } from "./select-step"
@@ -70,7 +69,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
         }
         meta={
           <>
-            <StatusBadge kind="run" value={pipeline.status} />
+            <RunStatusLabel status={runStatus(pipeline)} at />
             {pipeline.status === "complete" && pipeline.calibration.needsReview.length > 0 ? (
               <Pill tone="warning" link={runStepLink(run, "calibrate")}>
                 {m.domain_status_unresolved({ count: pipeline.calibration.needsReview.length })}

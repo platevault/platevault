@@ -8,27 +8,30 @@
  * PRJ-FR-08). Lists carry right-click menus.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
-import { CheckCheck, Eye, Grid2x2Plus, Layers, Pencil, Play, Plus, Trash2, X } from "lucide-react"
-import { useState } from "react"
+import { CheckCheck, ChevronRight, Eye, Grid2x2Plus, Layers, Pencil, Play, Plus, Trash2, X } from "lucide-react"
+import { Fragment, useState } from "react"
 import { Box } from "@/components/app/box"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
 import { type Column, DataTable, SelectionBar } from "@/components/app/data-table"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { CountBadge, Pill } from "@/components/app/pill"
-import { Refusal } from "@/components/app/refusal"
+import { type Blocker, Refusal } from "@/components/app/refusal"
 import { type MenuEntry, RowContextMenu } from "@/components/app/row-menu"
-import { StatusBadge } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useMessages } from "@/app/preferences"
-import { GateLabel, gateWord, StepRail, stepName, useFollowLink } from "@/app/run-ui"
+import { gateWord, StepRail, stepName, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import {
   formatHours,
   goalProgress,
+  type GroupPanelState,
+  type GroupPipeline,
   groupPipeline,
+  groupStepLink,
+  groupUpdatedAt,
   latestRevision,
   liveAssetIds,
   panelForSession,
@@ -42,9 +45,13 @@ import {
   rigCameraKind,
   rigFieldOfView,
   rigName,
+  type RunPipeline,
   runPipeline,
   runRefresh,
+  runStatus,
   runStepLink,
+  runUpdatedAt,
+  type StepLink,
   subjectCentre,
   subjectName,
   subjectTarget,
@@ -53,14 +60,16 @@ import { qualityBarRef } from "@/domain/labels"
 import { qualityApplicability } from "@/domain/library"
 import { bestWindowTonight, defaultCriteria, tonightAt } from "@/domain/planning"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
-import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Run, Session, Subject } from "@/domain/types"
-import { formatCount, formatDec, formatDegrees, formatNight, formatRa, formatTime } from "@/lib/format"
+import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Run, RunGroup, Session, Subject } from "@/domain/types"
+import { formatCount, formatDateTime, formatDec, formatDegrees, formatNight, formatRa, formatTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { addRig, addSubject, applyGoalTemplate, goalsFromTemplate, removeRig, removeSubject, setGoals } from "@/store/actions/projects"
+import { addRig, addSubject, applyGoalTemplate, goalsFromTemplate, removeRig, removeSubject, rigRuns, setGoals } from "@/store/actions/projects"
 import { completeRun, startRun, trashRun } from "@/store/actions/runs"
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, nowIso, type PrototypeState, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
+import { GroupStatusLabel, RunStatusLabel } from "@/features/v5/c-runs/parts"
+import { cn } from "@/lib/utils"
 import { startArchiveTransfer } from "./actions"
 import { ChannelChips, DEFAULT_GOAL, GoalKindsFields } from "./goals"
 import { projectChannels, restorePlan, sessionLabel, subjectGaps } from "./model"
@@ -99,13 +108,17 @@ function runsUsing(catalog: Catalog, project: Project, test: (run: Run) => boole
   return Object.values(catalog.runs).filter((r) => r.projectId === project.id && test(r))
 }
 
-/** "used by 6 runs" chips: each run linked to its current step (a trashed one to the Trash). */
-function runBlockers(state: PrototypeState, project: Project, reasons: string[]) {
+/** A run as a blocker chip, linked to its current step (a trashed one to the Trash). */
+function runChip(state: PrototypeState, project: Project, run: Run): Blocker {
+  return { label: run.name, link: run.trashedAt ? { to: "/projects/$projectId/trash", params: { projectId: project.id } } : runStepLink(run, runPipeline(state, run).current.id) }
+}
+
+/** "used by 6 runs" chips from a refusal's "<run> uses it" reasons. */
+function runBlockers(state: PrototypeState, project: Project, reasons: string[]): Blocker[] {
   const runs = Object.values(state.catalog.runs).filter((r) => r.projectId === project.id)
   return reasons.map((reason) => {
     const run = runs.find((r) => reason.startsWith(`${r.name} `))
-    if (!run) return { label: reason }
-    return { label: run.name, link: run.trashedAt ? { to: "/projects/$projectId/trash", params: { projectId: project.id } } : runStepLink(run, runPipeline(state, run).current.id) }
+    return run ? runChip(state, project, run) : { label: reason }
   })
 }
 
@@ -115,25 +128,141 @@ function runBlockers(state: PrototypeState, project: Project, reasons: string[])
 
 type RunDialog = { kind: "complete" | "trash"; run: Run } | null
 
+/** A row of the Runs table: a single run, a mosaic run group, or one of its panels while the group is expanded. */
+type RunsRow =
+  | { kind: "run"; id: string; run: Run; pipeline: RunPipeline; updatedAt: string }
+  | { kind: "group"; id: string; group: RunGroup; pipeline: GroupPipeline; updatedAt: string }
+  | { kind: "panel"; id: string; group: RunGroup; panel: GroupPanelState; updatedAt: string }
+
+/**
+ * Single runs and run groups in one table, oldest first, each with its step
+ * strip and its status in the one run vocabulary (`runStatus`); a group reads
+ * its worst panel and expands to its panels, each as its run page shows it.
+ */
 export function RunsSection({ project }: { project: Project }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const follow = useFollowLink()
-  const navigate = useNavigate()
   const runs = projectRuns(state.catalog, project.id).filter((r) => !r.groupId)
   const groups = projectGroups(state.catalog, project.id)
   const trashed = projectTrash(state.catalog, project.id).length
   const [dialog, setDialog] = useState<RunDialog>(null)
+  const [collapsed, setCollapsed] = useState<string[]>([])
   const action = useCommitError()
   const open = project.state === "open"
   const pending = dialog ? runPipeline(state, dialog.run) : null
   const openSteps = pending ? pending.steps.slice(0, 5).filter((s) => s.state !== "done") : []
+  const trashLink: StepLink = { to: "/projects/$projectId/trash", params: { projectId: project.id } }
 
-  const menu = (run: Run, step: string): MenuEntry[] => [
+  const items: Array<{ createdAt: string; rows: RunsRow[] }> = [
+    ...runs.map((run) => ({ createdAt: run.createdAt, rows: [{ kind: "run", id: run.id, run, pipeline: runPipeline(state, run), updatedAt: runUpdatedAt(state.catalog, run) } satisfies RunsRow] })),
+    ...groups.map((group) => {
+      const pipeline = groupPipeline(state, group)
+      const panels = collapsed.includes(group.id) ? [] : pipeline.panels.map((panel) => ({ kind: "panel", id: panel.run.id, group, panel, updatedAt: runUpdatedAt(state.catalog, panel.run) }) satisfies RunsRow)
+      return { createdAt: group.createdAt, rows: [{ kind: "group", id: group.id, group, pipeline, updatedAt: groupUpdatedAt(state.catalog, group) } satisfies RunsRow, ...panels] }
+    }),
+  ]
+  const rows = items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).flatMap((item) => item.rows)
+
+  const linkOf = (row: RunsRow): StepLink =>
+    row.kind === "run"
+      ? runStepLink(row.run, row.pipeline.current.id)
+      : row.kind === "group"
+        ? groupStepLink(row.group, row.pipeline.status.step)
+        : row.panel.trashed
+          ? trashLink
+          : runStepLink(row.panel.run, row.panel.pipeline.current.id)
+  const runEntries = (run: Run, link: StepLink): MenuEntry[] => [
     { heading: run.name },
-    { label: m.verb_open(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: run.id, step } }) },
+    { label: m.verb_open(), icon: Eye, onSelect: () => follow(link) },
     ...(open && run.completion !== "complete" ? [{ label: m.project_run_complete_ellipsis(), icon: CheckCheck, onSelect: () => setDialog({ kind: "complete", run }) }] : []),
     ...(open ? [{ separator: true } as const, { label: m.trash_move_ellipsis(), icon: Trash2, destructive: true, onSelect: () => setDialog({ kind: "trash", run }) }] : []),
+  ]
+  const menu = (row: RunsRow): MenuEntry[] =>
+    row.kind === "run"
+      ? runEntries(row.run, linkOf(row))
+      : row.kind === "group"
+        ? [{ heading: row.group.name }, { label: m.verb_open(), icon: Eye, onSelect: () => follow(linkOf(row)) }]
+        : row.panel.trashed
+          ? [{ heading: row.panel.run.name }, { label: m.run_open_trash(), icon: Trash2, onSelect: () => follow(trashLink) }]
+          : runEntries(row.panel.run, linkOf(row))
+  const toggle = (groupId: string) => setCollapsed((list) => (list.includes(groupId) ? list.filter((id) => id !== groupId) : [...list, groupId]))
+  const linkClass = "font-medium underline-offset-2 hover:underline"
+  /** A run's status, and why it is held when a step blocks it. */
+  const runStatusCell = (run: Run, pipeline: RunPipeline) => (
+    <span className="inline-flex items-center gap-1">
+      <RunStatusLabel status={runStatus(pipeline)} />
+      {pipeline.blocker && pipeline.status === "open" ? <NoteMarker label={m.project_why_held({ name: run.name })}>{say(m, pipeline.blocker.message)}</NoteMarker> : null}
+    </span>
+  )
+
+  const columns: Column<RunsRow>[] = [
+    {
+      id: "name",
+      header: m.newproject_field_name(),
+      rowHeader: true,
+      cell: (row) => {
+        if (row.kind === "group") {
+          const expanded = !collapsed.includes(row.group.id)
+          return (
+            <span className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-label={m.rungroup_panels_label({ name: row.group.name })}
+                onClick={() => toggle(row.group.id)}
+                className="-ml-1 inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <ChevronRight aria-hidden="true" className={cn("size-3.5 transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
+              </button>
+              <Link to="/projects/$projectId/groups/$groupId/$step" params={{ projectId: project.id, groupId: row.group.id, step: row.pipeline.status.step }} className={linkClass}>
+                {row.group.name}
+              </Link>
+              <Pill tone="info" icon={Layers}>
+                {m.project_panels({ count: row.pipeline.panels.length })}
+              </Pill>
+            </span>
+          )
+        }
+        if (row.kind === "panel") {
+          const link = linkOf(row)
+          return (
+            <Link to={link.to as never} params={link.params as never} className={cn(linkClass, "ml-5")} title={row.panel.run.name}>
+              {panelLabel(m, row.panel.panel)}
+            </Link>
+          )
+        }
+        const subject = project.subjects.find((s) => s.id === row.run.subjectId)
+        return (
+          <Link
+            to="/projects/$projectId/runs/$runId/$step"
+            params={{ projectId: project.id, runId: row.run.id, step: row.pipeline.current.id }}
+            className={linkClass}
+            title={`${subject ? subjectName(m, state.catalog, subject) : m.project_unknown_subject()} · ${rigName(m, state.catalog, row.run.rigId)}`}
+          >
+            {row.run.name}
+          </Link>
+        )
+      },
+    },
+    {
+      id: "step",
+      header: m.project_col_step(),
+      cell: (row) =>
+        row.kind === "run" ? (
+          <StepRail compact steps={row.pipeline.steps} current={row.pipeline.current.id} label={m.project_steps_of({ name: row.run.name })} />
+        ) : row.kind === "group" ? (
+          <StepRail compact steps={row.pipeline.steps} current={row.pipeline.status.step} label={m.project_steps_of({ name: row.group.name })} />
+        ) : (
+          <StepRail compact steps={row.panel.pipeline.steps} current={row.panel.pipeline.current.id} label={m.project_steps_of({ name: row.panel.run.name })} />
+        ),
+    },
+    {
+      id: "status",
+      header: m.rungroup_col_status(),
+      cell: (row) => (row.kind === "run" ? runStatusCell(row.run, row.pipeline) : row.kind === "group" ? <GroupStatusLabel status={row.pipeline.status} /> : runStatusCell(row.panel.run, row.panel.pipeline)),
+    },
+    { id: "updated", header: m.project_col_updated(), cell: (row) => <span className="text-muted-foreground tabular-nums">{formatDateTime(row.updatedAt)}</span> },
   ]
 
   return (
@@ -169,78 +298,19 @@ export function RunsSection({ project }: { project: Project }) {
         reason={(count) => m.refusal_blockers({ count })}
         className="border-b border-border px-3 py-2"
       />
-      {runs.length === 0 && groups.length === 0 ? (
+      {rows.length === 0 ? (
         <Empty>{m.project_no_runs()}</Empty>
       ) : (
-        <ul className="divide-y divide-separator">
-          {runs.map((run) => {
-            const pipeline = runPipeline(state, run)
-            const held = pipeline.blocker ? pipeline.steps.find((s) => s.id === pipeline.blocker!.step) : undefined
-            const subject = project.subjects.find((s) => s.id === run.subjectId)
-            return (
-              <RowContextMenu key={run.id} entries={menu(run, pipeline.current.id)}>
-                <li className="grid gap-x-4 gap-y-1 px-3 py-2 lg:grid-cols-[minmax(12rem,1fr)_auto_auto] lg:items-center">
-                  <div className="min-w-0">
-                    <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: run.id, step: pipeline.current.id }} className="font-medium underline-offset-2 hover:underline">
-                      {run.name}
-                    </Link>
-                    <span className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
-                      {subject ? subjectName(m, state.catalog, subject) : m.project_unknown_subject()} · {rigName(m, state.catalog, run.rigId)}
-                      <StatusBadge kind="run" value={pipeline.status} />
-                      {held ? <GateLabel state={held.state} label={m.project_held_at({ state: gateWord(m, held.state), step: stepName(m, held.id) })} /> : null}
-                      {held ? <NoteMarker label={m.project_why_held({ name: run.name })}>{say(m, pipeline.blocker!.message)}</NoteMarker> : null}
-                    </span>
-                  </div>
-                  <StepRail steps={pipeline.steps} current={pipeline.current.id} label={m.project_steps_of({ name: run.name })} />
-                  <NextButton next={pipeline.next} onFollow={follow} runName={run.name} />
-                </li>
-              </RowContextMenu>
-            )
-          })}
-          {groups.map((group) => {
-            const pipeline = groupPipeline(state, group)
-            const current = pipeline.next?.step ?? pipeline.steps.at(-1)!
-            return (
-              <li key={group.id} className="space-y-1.5 px-3 py-2">
-                <div className="grid gap-x-4 gap-y-1 lg:grid-cols-[minmax(12rem,1fr)_auto_auto] lg:items-center">
-                  <div className="min-w-0">
-                    <Link to="/projects/$projectId/groups/$groupId/$step" params={{ projectId: project.id, groupId: group.id, step: current.id }} className="font-medium underline-offset-2 hover:underline">
-                      {group.name}
-                    </Link>
-                    <span className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
-                      <Pill tone="info" icon={Layers}>
-                        {m.project_panels({ count: pipeline.panels.length })}
-                      </Pill>
-                      {rigName(m, state.catalog, group.rigId)}
-                    </span>
-                  </div>
-                  <StepRail steps={pipeline.steps} current={current.id} label={m.project_steps_of({ name: group.name })} />
-                  <NextButton next={pipeline.next} onFollow={follow} runName={group.name} />
-                </div>
-                <ul className="ml-3 space-y-1 border-l border-separator pl-3">
-                  {pipeline.panels.map((p) =>
-                    p.trashed ? (
-                      <li key={p.run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                        <span className="w-16 font-medium">{panelLabel(m, p.panel)}</span>
-                        <StatusBadge kind="run" value="trashed" />
-                      </li>
-                    ) : (
-                      <RowContextMenu key={p.run.id} entries={menu(p.run, p.pipeline.current.id)}>
-                        <li className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                          <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: p.run.id, step: p.pipeline.current.id }} className="w-16 font-medium underline-offset-2 hover:underline">
-                            {panelLabel(m, p.panel)}
-                          </Link>
-                          <StepRail compact steps={p.pipeline.steps} current={p.pipeline.current.id} label={m.project_steps_of({ name: p.run.name })} />
-                          <GateLabel state={p.pipeline.current.state} label={`${stepName(m, p.pipeline.current.id)}: ${say(m, p.pipeline.current.status)}`} className="text-muted-foreground" />
-                        </li>
-                      </RowContextMenu>
-                    ),
-                  )}
-                </ul>
-              </li>
-            )
-          })}
-        </ul>
+        <DataTable
+          label={m.project_runs_of({ name: project.name })}
+          rows={rows}
+          columns={columns}
+          getRowId={(row) => row.id}
+          scroll="none"
+          rowClassName={(row) => (row.kind === "panel" && row.panel.trashed ? "text-muted-foreground" : undefined)}
+          contextMenu={menu}
+          onRowClick={(row) => follow(linkOf(row))}
+        />
       )}
       <ConfirmDialog
         open={dialog?.kind === "complete"}
@@ -267,17 +337,6 @@ export function RunsSection({ project }: { project: Project }) {
         }}
       />
     </Box>
-  )
-}
-
-function NextButton({ next, onFollow, runName }: { next: ReturnType<typeof runPipeline>["next"]; onFollow: (link: NonNullable<ReturnType<typeof runPipeline>["next"]>["link"]) => void; runName: string }) {
-  const m = useMessages()
-  if (!next) return <span className="text-xs text-muted-foreground">–</span>
-  return (
-    <Button size="sm" variant="outline" title={say(m, next.reason)} onClick={() => onFollow(next.link)}>
-      {say(m, next.label)}
-      <span className="sr-only"> {m.projects_next_for({ name: runName })}</span>
-    </Button>
   )
 }
 
@@ -786,10 +845,10 @@ export function RigsSection({ project }: { project: Project }) {
   const others = Object.values(catalog.opticalTrains).filter((r) => !project.rigIds.includes(r.id))
   const chosen = others.find((r) => r.id === choice) ?? others[0]
 
-  const menu = (id: string): MenuEntry[] => [
+  const menu = (id: string, users: Run[]): MenuEntry[] => [
     { heading: rigName(m, catalog, id) },
     { label: m.project_open_in({ name: m.settings_equipment() }), onSelect: () => void navigate({ to: "/settings/equipment" as never }) },
-    ...(editable ? [{ separator: true } as const, { label: m.project_remove(), icon: X, destructive: true, onSelect: () => remove.run(() => removeRig(project.id, id, project.revision)) }] : []),
+    ...(editable && users.length === 0 ? [{ separator: true } as const, { label: m.project_remove(), icon: X, destructive: true, onSelect: () => remove.run(() => removeRig(project.id, id, project.revision)) }] : []),
   ]
 
   return (
@@ -807,30 +866,53 @@ export function RigsSection({ project }: { project: Project }) {
       {project.rigIds.length === 0 ? (
         <Empty>{m.equipment_no_rigs()}</Empty>
       ) : (
-        <SimpleTable caption={m.project_rigs_of({ name: project.name })} headers={[m.project_col_rig(), m.project_col_camera(), m.project_col_channels(), m.project_col_field(), m.project_candidates()]}>
+        <SimpleTable caption={m.project_rigs_of({ name: project.name })} headers={[m.project_col_rig(), m.project_col_camera(), m.project_col_channels(), m.project_col_field(), m.project_candidates(), ...(editable ? [""] : [])]}>
           {project.rigIds.map((id) => {
             const rig = catalog.opticalTrains[id]
             const fov = rig ? rigFieldOfView(catalog, rig) : null
             const kind = rig ? rigCameraKind(catalog, rig) : null
             const chips = projectChannels(catalog, [id])
+            const users = rigRuns(catalog, project.id, id)
+            const refused = editable && users.length > 0
             return (
-              <RowContextMenu key={id} entries={menu(id)}>
-                <tr>
-                  <th scope="row" className={`${TD} text-left font-medium`}>
-                    {rigName(m, catalog, id)}
-                  </th>
-                  <td className={TD}>
-                    <Pill tone="muted">{kind === "osc" ? m.project_camera_osc() : kind === "mono" ? m.project_camera_mono() : m.status_unknown()}</Pill>
-                  </td>
-                  <td className={TD}>
-                    <span className="flex flex-wrap gap-1">
-                      {chips.length > 0 ? chips.map((c) => <Pill key={c}>{c}</Pill>) : "–"}
-                    </span>
-                  </td>
-                  <td className={`${TD} whitespace-nowrap tabular-nums`}>{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : "–"}</td>
-                  <td className={`${TD} tabular-nums`}>{candidates.filter((c) => c.rigId === id).length}</td>
-                </tr>
-              </RowContextMenu>
+              <Fragment key={id}>
+                <RowContextMenu entries={menu(id, users)}>
+                  <tr data-rig-row={id} className={refused ? "border-b-0!" : undefined}>
+                    <th scope="row" className={`${TD} text-left font-medium`}>
+                      {rigName(m, catalog, id)}
+                    </th>
+                    <td className={TD}>
+                      <Pill tone="muted">{kind === "osc" ? m.project_camera_osc() : kind === "mono" ? m.project_camera_mono() : m.status_unknown()}</Pill>
+                    </td>
+                    <td className={TD}>
+                      <span className="flex flex-wrap gap-1">
+                        {chips.length > 0 ? chips.map((c) => <Pill key={c}>{c}</Pill>) : "–"}
+                      </span>
+                    </td>
+                    <td className={`${TD} whitespace-nowrap tabular-nums`}>{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : "–"}</td>
+                    <td className={`${TD} tabular-nums`}>{candidates.filter((c) => c.rigId === id).length}</td>
+                    {editable ? (
+                      <td className={`${TD} text-right`}>
+                        {users.length === 0 ? (
+                          <Button size="xs" variant="ghost" onClick={() => remove.run(() => removeRig(project.id, id, project.revision))}>
+                            <X aria-hidden="true" data-icon="inline-start" />
+                            {m.project_remove()}
+                            <span className="sr-only"> {rigName(m, catalog, id)}</span>
+                          </Button>
+                        ) : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                </RowContextMenu>
+                {refused ? (
+                  // The refusal reads under its rig, full width, so its run chips have room.
+                  <tr data-rig-refusal={id} className="bg-transparent!">
+                    <td colSpan={6} className="pb-1.5">
+                      <Refusal action={m.project_refusal_remove_rig()} reason={m.project_used_by_runs({ count: users.length })} blockers={users.map((r) => runChip(state, project, r))} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             )
           })}
         </SimpleTable>

@@ -3551,7 +3551,6 @@
       }
     }
   ],
-  "rungroup_status": "Group {status}",
   "rungroup_mosaic_fixed": "Mosaic (fixed)",
   "rungroup_panels_count": [
     {
@@ -7256,5 +7255,26 @@
   "targets_view_all": "All",
   "targets_view_planned": "Planned",
   "plan_move_up": "Move up",
-  "plan_move_down": "Move down"
+  "plan_move_down": "Move down",
+  "run_status_complete": "Complete",
+  "rungroup_panels_at": [
+    {
+      "declarations": [
+        "input count",
+        "input at",
+        "input step",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{at} of {count} panel at {step}",
+        "countPlural=*": "{at} of {count} panels at {step}"
+      }
+    }
+  ],
+  "project_col_step": "Step",
+  "project_col_updated": "Updated",
+  "project_runs_of": "Runs of {name}"
 }

@@ -124,7 +124,7 @@ export function ProjectTrashPage() {
         </span>
       ),
     },
-    { id: "stage", header: m.projects_col_stage(), cell: (r) => <GateLabel state={r.run.completion === "complete" ? "done" : r.stage.state} label={r.run.completion === "complete" ? m.status_complete() : stepName(m, r.stage.id)} /> },
+    { id: "stage", header: m.projects_col_stage(), cell: (r) => <GateLabel state={r.run.completion === "complete" ? "done" : r.stage.state} label={r.run.completion === "complete" ? m.run_status_complete() : stepName(m, r.stage.id)} /> },
     { id: "trashed", header: m.status_trashed(), sortValue: (r) => r.run.trashedAt, cell: (r) => (r.run.trashedAt ? formatDateTime(r.run.trashedAt) : "–") },
     { id: "prepared", header: m.status_prepared(), align: "right", sortValue: (r) => r.entries, cell: (r) => (r.entries > 0 ? <Pill tone="muted">{m.trash_entries({ count: r.entries })}</Pill> : "–") },
     {

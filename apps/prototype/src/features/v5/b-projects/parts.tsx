@@ -6,7 +6,7 @@
  * Project state is the shared `StatusBadge kind="project"`; a run's six-step
  * rail is `StepRail` in `src/app/run-ui.tsx`.
  */
-import { Loader, Search } from "lucide-react"
+import { Loader, Plus, Search } from "lucide-react"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ClearableInput } from "@/components/app/clearable-input"
@@ -101,7 +101,7 @@ type LookupState = { query: string; status: "running" } | { query: string; statu
 
 /**
  * Search across My targets, the bundled catalogues and, on request, SIMBAD.
- * The list is a group of buttons, each naming what it adds. `taken` names
+ * Each result row is a button: clicking it (or Enter) adds it. `taken` names
  * subjects already chosen; they read "Added".
  */
 export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: string[]; onPick: (pick: SubjectPick) => void; autoFocus?: boolean }) {
@@ -236,20 +236,25 @@ function ResultGroup({ title, rows, taken, onPick, empty }: { title: string; row
         {rows.map((row) => {
           const added = taken.includes(row.pick.name)
           return (
-            <li key={row.key} className="flex min-h-(--row-h) items-center gap-3 px-3 py-1 text-sm odd:bg-foreground/[0.02]">
-              <div className="min-w-0 flex-1">
-                <span className="font-medium">{row.pick.name}</span>
-                {row.aliases[0] ? <span className="ml-2 text-muted-foreground">{row.aliases[0]}</span> : null}
-                <span className="block text-xs text-muted-foreground tabular-nums">
-                  {row.type ? `${say(m, objectTypeRef(row.type))} · ` : ""}
-                  {row.pick.ra !== null && row.pick.dec !== null ? `${formatRa(row.pick.ra)} ${formatDec(row.pick.dec)}` : m.project_search_position_unknown()}
-                  {row.pick.kind === "new" ? ` · ${row.pick.resolver ? m.project_search_new_from({ source: row.pick.resolver }) : m.project_search_new_from_catalogue()}` : ""}
+            <li key={row.key} className="odd:bg-foreground/[0.02]">
+              <button
+                type="button"
+                disabled={added}
+                onClick={() => onPick(row.pick)}
+                title={added ? undefined : m.verb_add()}
+                className="flex min-h-(--row-h) w-full items-center gap-3 px-3 py-1 text-left text-sm outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">{row.pick.name}</span>
+                  {row.aliases[0] ? <span className="ml-2 text-muted-foreground">{row.aliases[0]}</span> : null}
+                  <span className="block text-xs text-muted-foreground tabular-nums">
+                    {row.type ? `${say(m, objectTypeRef(row.type))} · ` : ""}
+                    {row.pick.ra !== null && row.pick.dec !== null ? `${formatRa(row.pick.ra)} ${formatDec(row.pick.dec)}` : m.project_search_position_unknown()}
+                    {row.pick.kind === "new" ? ` · ${row.pick.resolver ? m.project_search_new_from({ source: row.pick.resolver }) : m.project_search_new_from_catalogue()}` : ""}
+                  </span>
                 </span>
-              </div>
-              <Button size="sm" variant="outline" disabled={added} onClick={() => onPick(row.pick)}>
-                {added ? m.project_search_added() : m.verb_add()}
-                <span className="sr-only"> {row.pick.name}</span>
-              </Button>
+                {added ? <span className="shrink-0 text-xs text-muted-foreground">{m.project_search_added()}</span> : <Plus aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />}
+              </button>
             </li>
           )
         })}

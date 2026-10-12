@@ -110,13 +110,12 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
   }
 
   const rowLabel = (r: SelectRow) => `${formatNight(r.session.night)} ${channelName(r.session)}`
+  /** A row's primary action, done on click or Enter (round 5): add a candidate, remove a member. */
+  const toggle = (r: SelectRow) =>
+    r.member ? outcome.act(removeRunSessions(run.id, [r.session.id]), selectionBlocked) : outcome.act(addRunSessions(run.id, [r.session.id], reasonFor(r)), selectionBlocked)
   const sessionEntries = (r: SelectRow): MenuEntry[] => [
     { heading: rowLabel(r) },
-    ...(lock
-      ? []
-      : r.member
-        ? [{ label: m.run_select_remove_from_run(), icon: ListX, onSelect: () => outcome.act(removeRunSessions(run.id, [r.session.id]), selectionBlocked) }]
-        : [{ label: m.run_select_add_to_run(), icon: ListChecks, onSelect: () => outcome.act(addRunSessions(run.id, [r.session.id], reasonFor(r)), selectionBlocked) }]),
+    ...(lock ? [] : [{ label: r.member ? m.run_select_remove_from_run() : m.run_select_add_to_run(), icon: r.member ? ListX : ListChecks, onSelect: () => toggle(r) }]),
     { separator: true },
     { label: m.project_open_session(), icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
   ]
@@ -153,7 +152,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
           <span className="flex flex-wrap items-center gap-1">
             <Pill tone="warning">{m.run_select_no_longer_matches()}</Pill>
             {!lock ? (
-              <Button size="xs" variant="outline" onClick={() => outcome.act(removeRunSessions(run.id, [r.session.id]), selectionBlocked)} aria-label={m.run_select_remove_session({ session: rowLabel(r) })}>
+              <Button size="xs" variant="outline" onClick={() => toggle(r)} aria-label={m.run_select_remove_session({ session: rowLabel(r) })}>
                 {m.run_remove()}
               </Button>
             ) : null}
@@ -240,6 +239,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
           scroll="none"
           selection={{ selected, onChange: onSelection, rowLabel, isSelectable: () => !lock }}
           contextMenu={sessionEntries}
+          onRowClick={lock ? undefined : toggle}
           empty={<p className="px-3 py-4 text-sm text-muted-foreground">{m.run_select_no_candidates({ rig: rigName(m, catalog, run.rigId) })}</p>}
         />
       </Box>
