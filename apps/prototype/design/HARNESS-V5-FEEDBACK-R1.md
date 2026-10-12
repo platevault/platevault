@@ -340,4 +340,4 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 - **C15 Metadata corrections** move to ingestion (a recorded vs corrected table in the session's review flow); Prepare applies them and shows "N corrected values".
 
 ### Copy rule (user, 2026-10-12)
-- **Everything is i18n.** Every visible string goes through the message catalogue in en-GB and pt-BR: product pages, the component catalogue and its captions, the design-system page, the simulation panel and the Prototype controls. Only tests, fixtures and seed library content (names of targets, projects and sessions) are exempt from the i18n lint.
+- **Everything is i18n.** Every visible string goes through the message catalogue in en-GB and pt-BR: product pages, the component catalogue and its captions, the design-system page, the simulation panel and the Prototype controls. Nothing goes in the i18n ignores without a genuine reason; the only valid ones are catalogue names and other proper nouns (Messier, NGC, target designations, file names, paths, code identifiers), unit tests and fixtures, internal code and docs, debugging and logs (user).
