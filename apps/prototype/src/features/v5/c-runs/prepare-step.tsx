@@ -1,12 +1,13 @@
 /**
- * S5 Prepare: application profile and input mode (Linked / Copy / Clone /
- * Direct source; write-prone profiles and unsupported links are refused with
- * their blockers), the layout preview `<output>/<Project>/<Run>/` with
- * `<Run> Results/` and `(rev N)` for later revisions, catalog corrections
- * (patch, accept or exclude), the review that runs the preparation as an
- * operation, its outcome (Partial lists what was prepared and what was
- * blocked) with the run's footprint, and Open, which re-verifies first
- * (PREP-FR-03 to PREP-FR-11).
+ * S5 Prepare: application profile and input mode (P-PREP2: Automatic,
+ * Independent copy, Link to originals behind a confirmation, and with a
+ * PixInsight profile Give PixInsight the file list; write-prone profiles and
+ * volumes without links are refused with their blockers), the layout preview
+ * `<output>/<Project>/<Run>/` with `<Run> Results/` and `(rev N)` for later
+ * revisions, catalog corrections (patch, accept or exclude), the review that
+ * runs the preparation as an operation, its outcome (cloned or copied, and
+ * Partial lists what was prepared and what was blocked) with the run's
+ * footprint, and Open, which re-verifies first (PREP-FR-03 to PREP-FR-11).
  */
 import { FolderOpen, HardDrive, Layers, Lock, Play } from "lucide-react"
 import { useState } from "react"
@@ -28,12 +29,12 @@ import type { InputMode, Preparation, Run } from "@/domain/types"
 import { ExecutableState } from "@/features/t4/profile-parts"
 import { NO_PROFILE, profileOptions } from "@/features/v5/b-projects/start-run"
 import { fileName, formatBytes, formatDateTime, formatNight } from "@/lib/format"
-import { m, say } from "@/lib/i18n"
+import { type Messages, m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { chooseMode, chooseProfile, openPreparation, prepareChoices, setOutputParent, simulateObjectCorrection, simulateSourceDrift, startPrepare, updatePrepareChoices } from "./actions"
-import { CHECK_NAME, currentPreparation, FIELD_KEYWORD, FIELD_NAME, METADATA_CHOICE_NAME, type MetadataChoice, type ModeOption, type PlanCheck, type PreparePlan, preparePlan, type RunContext, type RunLayout } from "./model"
+import { CHECK_NAME, cleanupReview, currentPreparation, FIELD_KEYWORD, FIELD_NAME, METADATA_CHOICE_NAME, type MetadataChoice, type ModeOption, type PlanCheck, type PreparePlan, placementKind, placementRef, preparePlan, type RunContext, type RunLayout } from "./model"
 import { LayoutLine, OptionCard, OutcomeNotice, PrototypeMenu, profileLabel, useOutcome } from "./parts"
 
 type Act = ReturnType<typeof useOutcome>["act"]
@@ -72,7 +73,7 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
       ) : null}
       <PreparationOutcome run={run} onOutcome={outcome.act} />
       <ProfileSection profileId={plan.profile?.id ?? null} locked={locked !== null} onPick={(id) => outcome.act(chooseProfile(target, id), { blocked: m.run_profile_blocked() })} />
-      <ModeSection modes={plan.modes} mode={plan.mode} linkType={choices.linkType} locked={locked !== null} onMode={(mode) => outcome.act(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} onLinkType={(t) => updatePrepareChoices(run.id, { linkType: t })} />
+      <ModeSection modes={plan.modes} mode={plan.mode} locked={locked !== null} onMode={(mode) => outcome.act(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} />
       <LayoutSection
         layout={plan.layout}
         locked={locked !== null}
@@ -219,42 +220,37 @@ export function ProfileSection({ profileId, locked, onPick }: { profileId: strin
   )
 }
 
-export function ModeSection({ modes, mode, linkType, locked, onMode, onLinkType }: { modes: ModeOption[]; mode: InputMode | null; linkType: "symlink" | "hardlink"; locked: boolean; onMode: (m: InputMode) => void; onLinkType: (t: "symlink" | "hardlink") => void }) {
+/** Footprint of one mode: what Automatic and Independent copy clone or copy; links and the file list take no space. */
+function modeFootprint(m: Messages, option: ModeOption): string {
+  return option.placement ? say(m, placementRef(option.placement)) : formatBytes(0)
+}
+
+/**
+ * Input modes (P-PREP2): Automatic (the default), Independent copy, Link to
+ * originals and, with a PixInsight profile, Give PixInsight the file list.
+ * Link to originals is opt-in behind a confirmation of what it risks.
+ */
+export function ModeSection({ modes, mode, locked, onMode }: { modes: ModeOption[]; mode: InputMode | null; locked: boolean; onMode: (m: InputMode) => void }) {
   const m = useMessages()
   const chosen = mode ? modes.find((o) => o.mode === mode) : undefined
+  const [confirmLink, setConfirmLink] = useState(false)
+  const pick = (value: InputMode) => (value === "linked" && mode !== "linked" ? setConfirmLink(true) : onMode(value))
   return (
-    <Box
-      id="prep-mode"
-      level={2}
-      title={m.run_check_mode()}
-      actions={
-        mode === "linked" ? (
-          <span className="flex items-center gap-1" role="group" aria-label={m.run_mode_link_type()}>
-            <Button size="xs" variant={linkType === "symlink" ? "secondary" : "ghost"} aria-pressed={linkType === "symlink"} disabled={locked} onClick={() => onLinkType("symlink")}>
-              {m.run_mode_symbolic_links()}
-            </Button>
-            <Button size="xs" variant={linkType === "hardlink" ? "secondary" : "ghost"} aria-pressed={linkType === "hardlink"} disabled={locked} onClick={() => onLinkType("hardlink")}>
-              {m.run_mode_hard_links()}
-            </Button>
-            <HelpTip label={m.run_mode_hard_links()}>{m.run_mode_hard_links_help()}</HelpTip>
-          </span>
-        ) : null
-      }
-    >
+    <Box id="prep-mode" level={2} title={m.run_check_mode()}>
       <div className="space-y-2">
         {chosen && !chosen.allowed ? (
-          <Refusal action={m.run_mode_named_blocked({ mode: say(m, MODE_NAME[chosen.mode]) })} reason={m.refusal_blockers({ count: chosen.reasons.length })} blockers={chosen.reasons.map((r) => ({ label: say(m, r) }))} />
+          <Refusal action={m.run_mode_named_blocked({ mode: say(m, MODE_NAME[chosen.mode]) })} reason={m.refusal_blockers({ count: chosen.reasons.length })} blockers={chosen.reasons.map((r) => ({ label: say(m, r) }))} standing />
         ) : null}
         <fieldset disabled={locked}>
           <legend className="sr-only">{m.run_check_mode()}</legend>
-          <RadioGroup value={mode ?? ""} onValueChange={(value) => onMode(String(value) as InputMode)} className="grid gap-1.5 lg:grid-cols-2">
+          <RadioGroup value={mode ?? ""} onValueChange={(value) => pick(String(value) as InputMode)} className="grid gap-1.5 lg:grid-cols-2">
             {modes.map((option) => (
               <OptionCard key={option.mode} value={option.mode} current={mode ?? ""} disabled={locked || (!option.allowed && option.mode !== mode)}>
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span className="font-medium">{say(m, MODE_NAME[option.mode])}</span>
                   <HelpTip label={say(m, MODE_NAME[option.mode])}>{say(m, option.semantics)}</HelpTip>
                   <Pill tone="muted" icon={HardDrive} className="ml-auto">
-                    {option.mode === "copy" || option.mode === "clone" ? formatBytes(option.footprintBytes) : formatBytes(0)}
+                    {modeFootprint(m, option)}
                   </Pill>
                 </span>
                 {option.reasons.length > 0 ? (
@@ -274,6 +270,16 @@ export function ModeSection({ modes, mode, linkType, locked, onMode, onLinkType 
           </RadioGroup>
         </fieldset>
       </div>
+      <ConfirmDialog
+        open={confirmLink}
+        onOpenChange={setConfirmLink}
+        title={m.run_link_confirm_title()}
+        description={m.run_link_confirm_description()}
+        changes={[m.run_link_confirm_writes(), m.run_link_confirm_recheck()]}
+        confirmLabel={say(m, MODE_NAME.linked)}
+        tone="destructive"
+        onConfirm={() => onMode("linked")}
+      />
     </Box>
   )
 }
@@ -312,7 +318,7 @@ export function MetadataSection({ plan, locked, onChoice }: { plan: PreparePlan;
   const catalog = useStore((s) => s.catalog)
   if (plan.diffs.length === 0) return null
   const appName = profileLabel(catalog, plan.profile?.id ?? null)
-  const isolated = plan.mode === "copy" || plan.mode === "clone"
+  const isolated = plan.mode !== null && placementKind(plan.mode) === "copy"
   return (
     <Box id={`prep-metadata-${plan.run.id}`} level={2} flush title={m.run_check_metadata()}>
       <ul className="divide-y divide-separator">
@@ -360,15 +366,16 @@ export function MetadataSection({ plan, locked, onChoice }: { plan: PreparePlan;
   )
 }
 
-/** The run's footprint: bytes its prepared folders hold (links count zero), what Clean up frees. */
+/** The run's footprint: bytes its prepared folders hold (links and clones count zero), what Clean up frees; "frees no space" when every entry is a link or clone. */
 export function FootprintPill({ run }: { run: Run }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const footprint = runFootprint(state.disk, state.catalog, run.id)
+  const sharesOnly = footprint.online && footprint.preparedBytes === 0 && cleanupReview(state, run).entries.some((e) => e.kind === "clone" || e.kind === "link")
   return (
     <span className="inline-flex items-center gap-1" data-footprint={footprint.preparedBytes}>
       <Pill tone="muted" icon={HardDrive} title={m.run_footprint_title()}>
-        {m.run_footprint_prepared({ bytes: footprint.online ? formatBytes(footprint.preparedBytes) : "–" })}
+        {sharesOnly ? m.run_frees_no_space() : m.run_footprint_prepared({ bytes: footprint.online ? formatBytes(footprint.preparedBytes) : "–" })}
       </Pill>
       {!footprint.online ? <NoteMarker label={m.run_footprint_note_label()}>{m.run_footprint_offline()}</NoteMarker> : null}
     </span>
@@ -417,7 +424,11 @@ export function PreparationOutcome({ run, onOutcome, compact = false }: { run: R
           <span className="min-w-0 truncate font-mono" title={prep.folderPath}>
             {fileName(prep.folderPath)}/
           </span>
-          <Pill tone="neutral">{say(m, MODE_NAME[prep.mode])}{prep.linkType ? ` · ${prep.linkType === "symlink" ? m.run_link_symbolic() : m.run_link_hard()}` : ""}</Pill>
+          <Pill tone="neutral">
+            {say(m, MODE_NAME[prep.mode])}
+            {prep.linkType ? ` · ${prep.linkType === "symlink" ? m.run_link_symbolic() : m.run_link_hard()}` : ""}
+            {prep.placed ? ` · ${say(m, placementRef({ ...prep.placed, copiedBytes: prep.footprintBytes }))}` : ""}
+          </Pill>
           <Pill tone="muted">{m.run_revision_short({ revision: prep.membershipRevision })}</Pill>
           <span>{formatDateTime(prep.createdAt)}</span>
           {lastLaunch ? <Pill tone={lastLaunch.outcome === "opened" ? "success" : "warning"} title={formatDateTime(lastLaunch.at)}>{launchWord(lastLaunch.outcome)}</Pill> : null}

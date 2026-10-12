@@ -96,8 +96,11 @@ function editProject(projectId: ProjectId, label: MessageRef, expectRevision: nu
   return result
 }
 
+/** Edit details (round 6): name and notes; a Project always keeps a name. */
 export function updateProjectDetails(projectId: ProjectId, details: { name: string; notes: string }, expectRevision: number): CommitResult {
-  return editProject(projectId, msg("store_label_project_details"), expectRevision, (p) => ({ ...p, name: details.name.trim(), notes: details.notes }))
+  const label = msg("store_label_project_details")
+  if (!details.name.trim()) return refuse(msg("store_refused", { label }), [msg("store_reason_name_empty")], projectHref(projectId))
+  return editProject(projectId, label, expectRevision, (p) => ({ ...p, name: details.name.trim(), notes: details.notes }))
 }
 
 /** Add a subject, with goals copied from the Project's goal set (`projectGoalSet`). */

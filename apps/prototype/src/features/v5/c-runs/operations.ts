@@ -1,9 +1,11 @@
 /**
  * Slice C operation handler: "prepare" (PREP-FR-09, D09), registered by
  * `src/store/slices/c.ts`. Each tick reads the simulated disk, so a source
- * that changes or goes offline between ticks is observed honestly. Clean up
- * runs through the foundation's OS Trash engine (`moveToOsTrash`, kind
- * "run-cleanup").
+ * that changes or goes offline between ticks is observed honestly. Automatic
+ * and Independent copy clone an entry onto a clone-capable volume holding its
+ * source (the clone shares the source's bytes, so it takes no extra space)
+ * and copy it otherwise (P-PREP2). Clean up runs through the foundation's OS
+ * Trash engine (`moveToOsTrash`, kind "run-cleanup").
  */
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
@@ -12,7 +14,7 @@ import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
-import { FIELD_KEYWORD, type LinkType, type PrepareEntry, type PrepareJournal } from "./model"
+import { clonesOnto, FIELD_KEYWORD, type LinkType, placementKind, type PrepareEntry, type PrepareJournal } from "./model"
 
 export const HANDOFF_FILE = "platevault-handoff.txt"
 
@@ -28,6 +30,8 @@ export interface PreparePayload extends PrepareJournal {
   folderPath: string
   resultsPath: string
   href: string
+  /** Entries written as clones of their source (P-PREP2). */
+  cloned: string[]
 }
 
 const BATCH = 6
@@ -54,7 +58,7 @@ function prepareEntry(state: PrototypeState, payload: PreparePayload, item: Oper
     return { state, item: block(item, msg("op_prep_source_changed")) }
   }
   payload.snapshots[item.id] = source.sha256
-  if (payload.mode === "direct-source") {
+  if (placementKind(payload.mode) === "direct-source") {
     payload.expected[item.id] = source.sha256
     return { state, item: { ...item, status: "done", phase: "verified", detail: msg("op_prep_direct_verified") } }
   }
@@ -74,11 +78,14 @@ function prepareEntry(state: PrototypeState, payload: PreparePayload, item: Oper
       else header.focalLengthMm = Number.parseFloat(value)
     }
   }
+  const linked = placementKind(payload.mode) === "linked"
+  const clone = !linked && clonesOnto(state.disk, source.path, entry.patches.length > 0, volumeId)
   const written =
-    payload.mode === "linked" && payload.linkType !== "hardlink"
+    linked && payload.linkType !== "hardlink"
       ? makeFile({ path: entry.destPath, volumeId, sizeBytes: 0, kind: source.kind, linkTarget: source.path, modifiedAt: at })
-      : payload.mode === "linked"
-        ? makeFile({ path: entry.destPath, volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header, pixelTruth: source.pixelTruth, inode: source.inode, sha256: source.sha256, modifiedAt: at })
+      : linked || clone
+        ? // A hard link is the source's file; a clone shares its bytes (the same blocks) until either side changes.
+          makeFile({ path: entry.destPath, volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header, pixelTruth: source.pixelTruth, inode: source.inode, sha256: source.sha256, modifiedAt: at })
         : makeFile({
             path: entry.destPath,
             volumeId,
@@ -89,6 +96,7 @@ function prepareEntry(state: PrototypeState, payload: PreparePayload, item: Oper
             sha256: entry.patches.length > 0 ? fakeSha256(entry.destPath, 7) : source.sha256,
             modifiedAt: at,
           })
+  if (clone) payload.cloned = [...(payload.cloned ?? []), item.id]
   payload.expected[item.id] = written.linkTarget ? source.sha256 : written.sha256
   const next = { ...state, disk: writeFiles(state.disk, [written]) }
   const reread = fileAt(next.disk, entry.destPath)
@@ -154,16 +162,17 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
       ? msg("op_prep_failed", inputs)
       : joinRefs([msg("op_prep_partial", { prepared, ...inputs }), ...calibrationNote, msg("op_prep_partial_open_waits")], " ")
   next = patchOperation(next, op.id, { items, payload: payload as unknown as Record<string, unknown>, progress: { ...op.progress, done: op.progress.total } })
+  const cloned = new Set(payload.cloned ?? [])
+  const placed = items.filter((item) => item.status === "done" && payload.entries[item.id] && placementKind(payload.mode) === "copy")
+  const copied = placed.filter((item) => !cloned.has(item.id))
   next = patchPreparation(next, payload.preparationId, {
     state: state_,
     preparedAssetIds,
     preparedResultIds,
     blocked,
     entryCount: prep.entryCount,
-    footprintBytes: items.reduce((n, item) => {
-      const e = payload.entries[item.id]
-      return n + (item.status === "done" && e && payload.mode !== "linked" && payload.mode !== "direct-source" ? (payload.mode === "clone" ? Math.round(e.sizeBytes * 0.001) : e.sizeBytes) : 0)
-    }, 0),
+    footprintBytes: copied.reduce((n, item) => n + payload.entries[item.id]!.sizeBytes, 0),
+    placed: placementKind(payload.mode) === "copy" ? { cloned: placed.length - copied.length, copied: copied.length } : undefined,
     settledAt: nowIso(),
   })
   return settleOperation(next, op.id, complete ? "succeeded" : state_ === "failed" ? "failed" : "partial", summary, payload.href)

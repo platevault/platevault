@@ -134,30 +134,6 @@ export function removeSessions(content: MembershipContent, catalog: Catalog, ses
   }
 }
 
-/** Exclude from run: run scope only; files and library quality are unchanged (VSEL-FR-10). */
-export function excludeFrames(content: MembershipContent, assetIds: AssetId[]): MembershipContent {
-  const ids = new Set(assetIds.filter((id) => content.included.includes(id) || content.unresolved.includes(id)))
-  if (ids.size === 0) return content
-  return { ...content, included: without(content.included, ids), unresolved: without(content.unresolved, ids), excluded: [...content.excluded, ...ids] }
-}
-
-/** Restore excluded frames to the run; unavailable ones return as unresolved, never as verified inputs. */
-export function restoreFrames(disk: Disk, catalog: Catalog, content: MembershipContent, assetIds: AssetId[]): MembershipContent {
-  const ids = assetIds.filter((id) => content.excluded.includes(id))
-  if (ids.length === 0) return content
-  const available = ids.filter((id) => {
-    const asset = catalog.assets[id]
-    return asset ? assetAvailability(disk, catalog, asset) === "available" : false
-  })
-  const unavailable = ids.filter((id) => !available.includes(id))
-  return {
-    ...content,
-    excluded: without(content.excluded, new Set(ids)),
-    included: [...content.included, ...available],
-    unresolved: [...content.unresolved, ...unavailable],
-  }
-}
-
 /** A frame rejected in Review leaves the draft with the reason "Rejected" (D-W54). */
 export function rejectInContent(content: MembershipContent, assetIds: AssetId[]): MembershipContent {
   const ids = new Set(assetIds.filter((id) => content.included.includes(id) || content.unresolved.includes(id) || content.excluded.includes(id)))

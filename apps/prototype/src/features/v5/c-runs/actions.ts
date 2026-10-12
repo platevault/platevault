@@ -8,7 +8,7 @@
  * application writing outputs, a source frame changing) so the review can
  * exercise discovery and re-verification.
  */
-import { basisFiles, type CalSource, KIND_NOUN } from "@/domain/calibration"
+import { basisFiles, type CalSource, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
 import { calibrationStorage, masterStoragePath } from "@/domain/calibration-process"
 import { completeRefusals, groupHref, groupPipeline, latestRevision, runHref, runPreparations, runSetup, workingContent } from "@/domain/derive"
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
@@ -39,6 +39,7 @@ import { fileName, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, updateSlice, withCatalog } from "@/store/core"
 import { completeRun, editRun, setGroupSetup, setProductInputs, setRunSetup, startRun } from "@/store/actions/runs"
+import { pinAutomaticChoices } from "@/store/actions/calibration"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { startOperation } from "@/store/operations"
@@ -175,33 +176,20 @@ export function clearCalibration(runId: string, sessionId: string, kind: Calibra
   return decide(runId, sessionId, kind, null, msg("store_label_automatic_kind", { kind: KIND_NOUN[kind] }))
 }
 
-/**
- * A master found in Results is offered: Add to the calibration library, which
- * files a copy into structured calibration storage (P-CAL3), or Dismiss,
- * which the Calibration library's Dismissed filter can restore (P-CAL2).
- */
-export function answerMasterOffer(runId: string, masterId: string, answer: "adopt" | "dismiss"): CommitResult {
-  const state = store.getState()
-  const run = state.catalog.runs[runId]
+/** Adopting a master: where it would be filed and the SHA-256 it holds now, shown for confirmation; or why it cannot be added. */
+export type AdoptionPreview = { ok: true; destinationPath: string; sha256: string } | { ok: false; reasons: MessageRef[] }
+
+export function adoptionPreview(state: PrototypeState, masterId: string): AdoptionPreview {
   const master = state.catalog.masters[masterId]
-  if (!run || !master) return MISSING
-  const href = runHref(run, "calibrate")
-  const name = fileName(master.origin.sourcePath)
-  if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse(msg("store_refused", { label: msg("store_label_offer") }), [msg("store_reason_already_answered")], href)
-  if (answer === "dismiss") {
-    const result = editRun(run.id, msg("store_label_dismiss_master_offer"), (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "dismissed", at: nowIso() } : o)) }), { step: "calibrate", record: false })
-    if (result.ok) recordSaved(msg("store_saved_dismissed", { name }), joinRefs([msg("nav_calibration"), msg("calibration_dismissed")], " › "), "/calibration?filter=dismissed")
-    return result
-  }
-  const title = msg("store_refused", { label: msg("store_label_add_named", { name }) })
+  if (!master) return { ok: false, reasons: [msg("store_record_missing")] }
   const source = fileAt(state.disk, master.origin.sourcePath)
-  if (!source) return refuse(title, [msg("store_reason_unreadable_now")], href)
-  if (source.growing) return refuse(title, [msg("store_reason_still_being_written")], href)
+  if (!source) return { ok: false, reasons: [msg("store_reason_unreadable_now")] }
+  if (source.growing) return { ok: false, reasons: [msg("store_reason_still_being_written")] }
   const location = calibrationStorage(state.catalog)
-  if (!location) return refuse(title, [msg("import_no_calibration_location")], href)
+  if (!location) return { ok: false, reasons: [msg("import_no_calibration_location")] }
   const volume = state.disk.volumes[location.volumeId]
-  if (!volume?.mounted) return refuse(title, [msg("issue_location_offline", { name: location.displayName })], href)
-  if (!volume.writable) return refuse(title, [msg("run_parent_read_only", { name: location.displayName })], href)
+  if (!volume?.mounted) return { ok: false, reasons: [msg("issue_location_offline", { name: location.displayName })] }
+  if (!volume.writable) return { ok: false, reasons: [msg("run_parent_read_only", { name: location.displayName })] }
   const night = master.createdAt.slice(0, 10)
   const values = namingValues({
     target: null,
@@ -217,23 +205,68 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
     train: master.opticalTrainId ? (state.catalog.opticalTrains[master.opticalTrainId]?.name ?? null) : null,
   })
   const destinationPath = masterStoragePath(location, state.settings.naming, master.kind, values, night, source.path.slice(source.path.lastIndexOf(".") + 1))
-  if (fileAt(state.disk, destinationPath)) return refuse(title, [msg("import_name_taken")], href)
+  if (fileAt(state.disk, destinationPath)) return { ok: false, reasons: [msg("import_name_taken")] }
+  return { ok: true, destinationPath, sha256: source.sha256 }
+}
+
+function pendingOffer(runId: string, masterId: string): { run: Run; name: string; href: string } | CommitResult {
+  const state = store.getState()
+  const run = state.catalog.runs[runId]
+  const master = state.catalog.masters[masterId]
+  if (!run || !master) return MISSING
+  const href = runHref(run, "calibrate")
+  if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse(msg("store_refused", { label: msg("store_label_offer") }), [msg("store_reason_already_answered")], href)
+  return { run, name: fileName(master.origin.sourcePath), href }
+}
+
+const isOffer = (value: { run: Run } | CommitResult): value is { run: Run; name: string; href: string } => "run" in value
+
+/** Dismiss a master found in Results; the Calibration library's Dismissed filter can restore it (P-CAL2). */
+export function dismissMasterOffer(runId: string, masterId: string): CommitResult {
+  const offer = pendingOffer(runId, masterId)
+  if (!isOffer(offer)) return offer
+  const result = editRun(runId, msg("store_label_dismiss_master_offer"), (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "dismissed", at: nowIso() } : o)) }), { step: "calibrate", record: false })
+  if (result.ok) recordSaved(msg("store_saved_dismissed", { name: offer.name }), joinRefs([msg("nav_calibration"), msg("calibration_dismissed")], " › "), "/calibration?filter=dismissed")
+  return result
+}
+
+/**
+ * Add to library (round 6): file a copy of a master found in Results into
+ * structured calibration storage (P-CAL3). The bytes are re-verified now
+ * against the SHA-256 the confirmation showed; a master that changed since is
+ * refused ("master changed"). Runs' automatic choices are recorded first, so
+ * no run re-ranks onto the new master by itself.
+ */
+export function adoptMasterOffer(runId: string, masterId: string, confirmedSha256: string): CommitResult {
+  const offer = pendingOffer(runId, masterId)
+  if (!isOffer(offer)) return offer
+  const state = store.getState()
+  const title = msg("store_refused", { label: msg("store_label_add_named", { name: offer.name }) })
+  const preview = adoptionPreview(state, masterId)
+  if (!preview.ok) return refuse(title, preview.reasons, offer.href)
+  if (state.faults.failNextHashVerification) {
+    store.setState((s) => ({ ...s, faults: { ...s.faults, failNextHashVerification: false } }))
+    return refuse(title, [msg("run_cal_master_changed"), msg("store_cal_copy_not_verified")], offer.href)
+  }
+  if (preview.sha256 !== confirmedSha256) return refuse(title, [msg("run_cal_master_changed"), msg("store_reason_sha_now", { hash: preview.sha256.slice(0, 12) })], offer.href)
+  const source = fileAt(state.disk, state.catalog.masters[masterId]!.origin.sourcePath)!
+  const { destinationPath } = preview
   const at = nowIso()
-  const copy = makeFile({ path: destinationPath, volumeId: location.volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, sha256: source.sha256, modifiedAt: at })
+  const copy = makeFile({ path: destinationPath, volumeId: calibrationStorage(state.catalog)!.volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, sha256: source.sha256, modifiedAt: at })
   const result = editRun(
-    run.id,
+    runId,
     msg("store_label_add_master_to_library"),
     (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "adopted", at } : o)) }),
     {
       step: "calibrate",
       record: false,
       also: (s) => ({
-        ...withCatalog(s, (c) => ({ ...c, masters: { ...c.masters, [masterId]: { ...c.masters[masterId]!, state: "adopted", path: destinationPath, adoption: { destinationPath, verifiedSha256: source.sha256, adoptedAt: at } } } })),
+        ...withCatalog(pinAutomaticChoices(s), (c) => ({ ...c, masters: { ...c.masters, [masterId]: { ...c.masters[masterId]!, state: "adopted", path: destinationPath, adoption: { destinationPath, verifiedSha256: source.sha256, adoptedAt: at } } } })),
         disk: writeFiles(s.disk, [copy]),
       }),
     },
   )
-  if (result.ok) recordSaved(msg("store_saved_added_to_library", { name }), verbatim(destinationPath), "/calibration")
+  if (result.ok) recordSaved(msg("store_saved_added_to_library", { name: offer.name }), verbatim(destinationPath), "/calibration")
   return result
 }
 
@@ -273,7 +306,7 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     membershipRevision: plan.revision.revision,
     profileId: plan.profile.id,
     mode: plan.mode,
-    linkType: plan.mode === "linked" ? plan.linkType : null,
+    linkType: plan.linkType,
     folderPath: plan.layout.folderPath,
     resultsPath: plan.layout.resultsPath,
     entryCount: plan.entries.filter((e) => e.kind !== "calibration").length,
@@ -298,13 +331,14 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     preparationId: id,
     runId: run.id,
     mode: plan.mode,
-    linkType: plan.mode === "linked" ? plan.linkType : null,
+    linkType: plan.linkType,
     folderPath: plan.layout.folderPath,
     resultsPath: plan.layout.resultsPath,
     entries: Object.fromEntries(plan.entries.map((e) => [e.id, e])),
     snapshots: {},
     expected: {},
     href,
+    cloned: [],
   }
   const items: OperationItem[] = plan.entries.map((e) => ({ id: e.id, label: e.label, path: e.sourcePath, status: "pending", phase: null, detail: null }))
   const operationId = startOperation({
@@ -725,6 +759,44 @@ export function simulateApplicationOutput(target: { runId?: string; groupId?: st
   }
   const result = commit(msg("store_label_proto_app_output"), (s) => ({ ...s, disk: createFolder(writeFiles(s.disk, files), { volumeId, path: folder }) }), { href: href ?? undefined })
   if (result.ok) recordSaved(msg("store_saved_proto_outputs"), msg("store_proto_outputs_detail", { files: unitCount("files", files.length), folder }), href)
+  return result
+}
+
+/**
+ * Prototype: a compatible master on a member's own night, with more frames,
+ * joins the calibration library. The run keeps the master it has (its
+ * automatic choices are recorded first) and Calibrate shows "Better match available".
+ */
+export function simulateBetterMaster(runId: string): CommitResult {
+  const state = store.getState()
+  const run = state.catalog.runs[runId]
+  if (!run) return MISSING
+  const href = runHref(run, "calibrate")
+  const refused = msg("store_refused", { label: msg("store_label_proto_better_master") })
+  const plan = calibrationPlan(state.catalog, state.disk, run, runSetup(state.catalog, run).calibrationPolicy, workingContent(run))
+  const row = plan.rows.find((r) => r.input && (r.state === "automatic" || r.state === "accepted" || r.state === "exception") && !r.better)
+  const current = row?.input ? state.catalog.masters[row.input.masterId] : undefined
+  if (!row || !current) return refuse(refused, [msg("store_reason_no_master_assigned")], href)
+  const file = fileAt(state.disk, current.path)
+  if (!file) return refuse(refused, [msg("store_reason_unreadable_now")], href)
+  const night = row.member.session.night
+  const path = uniquePath(state, current.path.replace(/(\.[^./]+)$/, `_${night}$1`))
+  const at = nowIso()
+  const sha256 = fakeSha256(path, 3)
+  const { dismissedAt: _dismissed, ...base } = current
+  const master: CalibrationMaster = {
+    ...base,
+    id: `mst_${stableHash(path)}`,
+    path,
+    createdAt: `${night}T12:00:00.000Z`,
+    frameCount: (current.frameCount ?? 0) + 20,
+    state: "adopted",
+    origin: { kind: "imported", runId: null, sourcePath: path, sessionId: null },
+    adoption: { destinationPath: path, verifiedSha256: sha256, adoptedAt: at },
+  }
+  const copy = makeFile({ path, volumeId: file.volumeId, sizeBytes: file.sizeBytes, kind: file.kind, header: file.header, sha256, modifiedAt: at })
+  const result = commit(msg("store_label_proto_better_master"), (s) => ({ ...withCatalog(pinAutomaticChoices(s), (c) => ({ ...c, masters: { ...c.masters, [master.id]: master } })), disk: writeFiles(s.disk, [copy]) }), { href })
+  if (result.ok) recordSaved(msg("store_saved_added_to_library", { name: fileName(path) }), verbatim(path), "/calibration")
   return result
 }
 

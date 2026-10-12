@@ -1,9 +1,12 @@
 /**
  * S5 Select: the subject's candidates on the run's rig, all preselected with
  * their reason (D-W49); Refresh offers new candidates and flags a member that
- * no longer matches its subject, with Remove (D-W45); accepted Results of
- * other runs as product inputs, shown with their rig (D-W4, D-W56); Save
- * makes the next membership revision. Rows have a right-click menu.
+ * no longer matches its subject, with Remove (D-W45); the spec 066 tools:
+ * sky coverage and distance from the Target, geometry ordering, filters
+ * (channel, night, exposure, rig, quality) and the count of selected
+ * sessions the filters hide, with Show (round 6); accepted Results of other
+ * runs as product inputs, shown with their rig (D-W4, D-W56); Save makes the
+ * next membership revision. Rows have a right-click menu.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { Copy, Eye, ListChecks, ListX, Plus, X } from "lucide-react"
@@ -18,14 +21,16 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, workingContent } from "@/domain/derive"
+import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, runSessionGeometry, sessionRigId, workingContent } from "@/domain/derive"
 import { RESULT_KIND_NAME } from "@/domain/labels"
 import { describeDiff, diffContent, REASON_NAME, sessionExposureS } from "@/domain/membership"
 import type { ResultRecord, Run, SelectionReason, Session } from "@/domain/types"
-import { fileName, formatDateTime, formatDuration, formatNight } from "@/lib/format"
+import { fileName, formatCount, formatDateTime, formatDegrees, formatDuration, formatExposure, formatNight } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
 import { addRunSessions, discardRunDraft, removeRunSessions, saveRun, setProductInputs } from "@/store/actions/runs"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
+import type { SelectFilter } from "@/store/slices/c"
+import { SelectField } from "@/features/t3/fields"
 import { type RunContext, runLock } from "./model"
 import { OutcomeNotice, RowActions, Sha, useOutcome } from "./parts"
 
@@ -37,6 +42,17 @@ interface SelectRow {
   noLongerMatching: boolean
   included: number
   frames: number
+  distanceDeg: number | null
+  coverage: number | null
+  /** Library quality decisions its live frames carry, for the quality filter. */
+  qualities: Set<string>
+}
+
+const ANY = "any"
+const ORDER_SORT: Record<NonNullable<SelectFilter["order"]>, { columnId: string; direction: "asc" | "desc" }> = {
+  night: { columnId: "night", direction: "asc" },
+  distance: { columnId: "distance", direction: "asc" },
+  coverage: { columnId: "coverage", direction: "desc" },
 }
 
 /** The channel filter's key for sessions without a filter: never a channel name. */
@@ -52,7 +68,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
   const content = workingContent(run)
   const lock = runLock(run)
   const refresh = runRefresh(catalog, run)
-  const filter = state.slices.c.selectFilter[run.id] ?? { channel: null, selectedOnly: false }
+  const filter: SelectFilter = state.slices.c.selectFilter[run.id] ?? { channel: null, selectedOnly: false }
   const rows = useMemo(() => {
     const byId = new Map<string, SelectRow>()
     const includedBySession = new Map<string, number>()
@@ -61,21 +77,24 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
       if (sid) includedBySession.set(sid, (includedBySession.get(sid) ?? 0) + 1)
     }
     const flagged = new Set(refresh.noLongerMatching)
+    const row = (session: Session): Omit<SelectRow, "member" | "reason" | "candidateReason" | "noLongerMatching" | "included"> => {
+      const live = liveAssetIds(catalog, session)
+      return { session, frames: live.length, ...runSessionGeometry(catalog, run, session), qualities: new Set(live.map((id) => catalog.assets[id]?.quality.value ?? "unreviewed")) }
+    }
     for (const c of runCandidates(catalog, run)) {
-      byId.set(c.session.id, { session: c.session, member: false, reason: null, candidateReason: c.reason, noLongerMatching: false, included: 0, frames: liveAssetIds(catalog, c.session).length })
+      byId.set(c.session.id, { ...row(c.session), member: false, reason: null, candidateReason: c.reason, noLongerMatching: false, included: 0 })
     }
     for (const member of content?.sessions ?? []) {
       const session = catalog.sessions[member.sessionId]
       if (!session) continue
       const existing = byId.get(session.id)
       byId.set(session.id, {
-        session,
+        ...row(session),
         member: true,
         reason: member.reason,
         candidateReason: existing?.candidateReason ?? null,
         noLongerMatching: flagged.has(session.id),
         included: includedBySession.get(session.id) ?? 0,
-        frames: liveAssetIds(catalog, session).length,
       })
     }
     return [...byId.values()].sort((a, b) => a.session.night.localeCompare(b.session.night) || (a.session.channel ?? "").localeCompare(b.session.channel ?? ""))
@@ -84,9 +103,20 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
   const channelKey = (s: Session) => s.channel ?? NO_CHANNEL
   const channelName = (s: Session) => s.channel ?? m.palette_session_no_filter()
   const channels = [...new Map(rows.map((r) => [channelKey(r.session), channelName(r.session)]))]
-  const shown = rows.filter((r) => (!filter.channel || channelKey(r.session) === filter.channel) && (!filter.selectedOnly || r.member))
+  const matches = (r: SelectRow) =>
+    (!filter.channel || channelKey(r.session) === filter.channel) &&
+    (!filter.night || r.session.night === filter.night) &&
+    (filter.exposureS == null || sessionExposureS(r.session) === filter.exposureS) &&
+    (!filter.rigId || sessionRigId(r.session) === filter.rigId) &&
+    (!filter.quality || r.qualities.has(filter.quality))
+  const shown = rows.filter((r) => matches(r) && (!filter.selectedOnly || r.member))
   const selected = rows.filter((r) => r.member).map((r) => r.session.id)
-  const setFilter = (patch: Partial<typeof filter>) => updateSlice("c", (c) => ({ ...c, selectFilter: { ...c.selectFilter, [run.id]: { ...filter, ...patch } } }))
+  const hiddenSelected = rows.filter((r) => r.member && !matches(r)).length
+  const setFilter = (patch: Partial<SelectFilter>) => updateSlice("c", (c) => ({ ...c, selectFilter: { ...c.selectFilter, [run.id]: { ...filter, ...patch } } }))
+  const clearFilters = () => setFilter({ channel: null, night: null, exposureS: null, rigId: null, quality: null })
+  const order = filter.order ?? "night"
+  const options = <T,>(values: T[], label: (v: T) => string) => [{ value: ANY, label: m.goal_bar_any() }, ...[...new Set(values)].map((v) => ({ value: String(v), label: label(v) }))]
+  const fieldClass = "w-32 gap-1 [&>label]:text-[0.6875rem] [&>label]:font-normal [&>label]:text-muted-foreground"
   const reasonFor = (row: SelectRow): SelectionReason =>
     run.panelId ? { kind: "panel-pointing", detail: row.candidateReason ?? msg("run_select_pointing_inside_panel") } : { kind: "candidate", detail: row.candidateReason ?? msg("status_candidate") }
   const selectionBlocked = { blocked: m.run_selection_blocked() }
@@ -128,6 +158,8 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
     { id: "channel", header: m.run_col_channel(), cell: (r) => channelName(r.session), sortValue: (r) => r.session.channel ?? "" },
     { id: "frames", header: m.run_col_frames(), align: "right", cell: (r) => (r.member ? m.run_select_frames_of({ included: r.included, total: r.frames }) : `${r.frames}`), sortValue: (r) => r.frames },
     { id: "integration", header: m.run_col_integration(), align: "right", cell: (r) => formatDuration((r.member ? r.included : r.frames) * sessionExposureS(r.session)), sortValue: (r) => r.frames * sessionExposureS(r.session) },
+    { id: "coverage", header: m.run_col_coverage(), align: "right", cell: (r) => (r.coverage === null ? "–" : `${formatCount(Math.round(r.coverage * 100))}%`), sortValue: (r) => r.coverage },
+    { id: "distance", header: m.run_col_distance(), align: "right", cell: (r) => (r.distanceDeg === null ? "–" : formatDegrees(r.distanceDeg, 2)), sortValue: (r) => r.distanceDeg },
     ...(reasonVaries
       ? [
           {
@@ -231,12 +263,29 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
           </>
         }
       >
+        <div className="flex flex-wrap items-end gap-2 border-b border-separator px-3 py-2" data-select-tools>
+          <SelectField className={fieldClass} triggerClassName="min-h-7" label={m.run_col_night()} value={filter.night ?? ANY} onChange={(v) => setFilter({ night: v === ANY ? null : v })} options={options([...rows.map((r) => r.session.night)].sort(), (n) => formatNight(n, true))} />
+          <SelectField className={fieldClass} triggerClassName="min-h-7" label={m.run_field_exposure()} value={filter.exposureS == null ? ANY : String(filter.exposureS)} onChange={(v) => setFilter({ exposureS: v === ANY ? null : Number(v) })} options={options([...rows.map((r) => sessionExposureS(r.session))].sort((a, b) => a - b), formatExposure)} />
+          <SelectField className={fieldClass} triggerClassName="min-h-7" label={m.run_col_rig()} value={filter.rigId ?? ANY} onChange={(v) => setFilter({ rigId: v === ANY ? null : v })} options={options(rows.flatMap((r) => sessionRigId(r.session) ?? []), (id) => rigName(m, catalog, id))} />
+          <SelectField className={fieldClass} triggerClassName="min-h-7" label={m.goal_quality()} value={filter.quality ?? ANY} onChange={(v) => setFilter({ quality: v === ANY ? null : (v as SelectFilter["quality"]) })} options={[{ value: ANY, label: m.goal_bar_any() }, { value: "unreviewed", label: m.status_unreviewed() }, { value: "usable", label: m.status_usable() }, { value: "unusable", label: m.status_unusable() }]} />
+          <SelectField className={fieldClass} triggerClassName="min-h-7" label={m.run_select_order()} value={order} onChange={(v) => setFilter({ order: v as SelectFilter["order"] })} options={[{ value: "night", label: m.run_col_night() }, { value: "distance", label: m.run_col_distance() }, { value: "coverage", label: m.run_col_coverage() }]} />
+          {hiddenSelected > 0 ? (
+            <span className="flex items-center gap-1 pb-1 text-[0.75rem] text-muted-foreground" data-hidden-selected>
+              {m.run_select_hidden_selected({ count: hiddenSelected })} ·
+              <Button size="xs" variant="link" className="h-auto px-0" onClick={clearFilters}>
+                {m.run_show()}
+              </Button>
+            </span>
+          ) : null}
+        </div>
         <DataTable
+          key={order}
           label={m.run_select_sessions_label({ name: run.name })}
           rows={shown}
           columns={columns}
           getRowId={(r) => r.session.id}
           scroll="none"
+          initialSort={ORDER_SORT[order]}
           selection={{ selected, onChange: onSelection, rowLabel, isSelectable: () => !lock }}
           contextMenu={sessionEntries}
           onRowClick={lock ? undefined : toggle}

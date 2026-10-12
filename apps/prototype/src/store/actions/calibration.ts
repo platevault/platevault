@@ -17,8 +17,13 @@
  * Dismiss and Restore (P-CAL2): `dismissMaster` takes an unused master out
  * of the library's list (it is never matched while dismissed), and
  * `restoreMaster` brings it back. A run's master offer is dismissed on its
- * Calibrate step (`answerMasterOffer`); `restoreMasterOffer` makes it pending
+ * Calibrate step (`dismissMasterOffer`); `restoreMasterOffer` makes it pending
  * again.
+ *
+ * No silent re-rank (round 6): every write that makes a master matchable
+ * (Register, Restore, adopting an offer) first records each run's current
+ * automatic choices (`pinAutomaticChoices`), so a run keeps its masters and a
+ * better one shows as "Better match available".
  */
 import {
   awaitingStackProcess,
@@ -35,13 +40,14 @@ import {
   stackRefusals,
   stepRecord,
 } from "@/domain/calibration-process"
-import { KIND_NOUN } from "@/domain/calibration"
+import { assignmentId, basisFiles, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
 import { dismissBlockers, masterUsage } from "@/domain/calibration-library"
 import { createFolder, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder, nightOf, readFiles, stableHash } from "@/domain/indexing"
+import { runSetup, workingContent } from "@/domain/derive"
 import { unitCount } from "@/domain/labels"
 import { headerNamingValues } from "@/domain/templates"
-import type { CalibrationKind, CalibrationMaster, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
+import type { CalibrationAssignment, CalibrationKind, CalibrationMaster, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
 import { fileName } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
@@ -54,6 +60,29 @@ const HREF = "/calibration"
 
 const DETECT_BLOCKED = msg("store_blocked", { label: CALIBRATION_STEP_NAME.detect })
 const IMPORT_BLOCKED = msg("store_blocked", { label: CALIBRATION_STEP_NAME.import })
+
+/**
+ * Record every automatic choice runs show now as their assignment, before a
+ * master joins the matched set: a run with masters assigned keeps them, and
+ * a better master is offered instead of taking over (no silent re-rank).
+ */
+export function pinAutomaticChoices(state: PrototypeState): PrototypeState {
+  const { catalog, disk } = state
+  const at = nowIso()
+  let runs: PrototypeState["catalog"]["runs"] | null = null
+  for (const run of Object.values(catalog.runs)) {
+    if (runSetup(catalog, run).calibrationPolicy !== "automatic") continue
+    const pins: CalibrationAssignment[] = calibrationPlan(catalog, disk, run, "automatic", workingContent(run)).rows.flatMap((row) =>
+      row.state === "automatic" && row.assignment === null && row.input
+        ? [{ id: assignmentId(run.id, row.member.session.id, row.kind), lightSessionId: row.member.session.id, kind: row.kind, input: row.input, state: "automatic", criteria: row.criteria, exception: null, basis: { at, files: basisFiles(catalog, disk, row.input) } }]
+        : [],
+    )
+    if (pins.length === 0) continue
+    runs ??= { ...catalog.runs }
+    runs[run.id] = { ...run, calibration: [...run.calibration, ...pins] }
+  }
+  return runs ? { ...state, catalog: { ...catalog, runs } } : state
+}
 
 interface WatchPayload {
   processId: CalibrationProcessId
@@ -130,7 +159,8 @@ function register(state: PrototypeState, process: CalibrationProcess): StepResul
   const file = process.storagePath ? fileAt(state.disk, process.storagePath) : undefined
   if (!storage || !file) return fail(state, process, "register", msg("store_cal_master_missing"))
   const at = nowIso()
-  const catalog = readFiles(state.catalog, storage, [file], at)
+  const pinned = pinAutomaticChoices(state)
+  const catalog = readFiles(pinned.catalog, storage, [file], at)
   const id: MasterId = `mst_${stableHash(file.path)}`
   const master = catalog.masters[id]
   if (!master) return fail(state, process, "register", msg("store_cal_not_a_master"))
@@ -143,7 +173,7 @@ function register(state: PrototypeState, process: CalibrationProcess): StepResul
     origin: { kind: session ? "stacked" : "imported", runId: null, sourcePath: process.detected?.path ?? file.path, sessionId: process.sessionId },
     adoption: { destinationPath: file.path, verifiedSha256: file.sha256, adoptedAt: at },
   }
-  return { state: setStep({ ...state, catalog }, process, "register", stepRecord("done", at), { masterId: id }), outcome: "done" }
+  return { state: setStep({ ...pinned, catalog }, process, "register", stepRecord("done", at), { masterId: id }), outcome: "done" }
 }
 
 /** Raws: kept when the setting says so, otherwise moved to the OS Trash (the episode settles the step). */
@@ -379,9 +409,9 @@ export function restoreMasterOffer(runId: RunId, masterId: MasterId): CommitResu
   return editRun(runId, msg("store_cal_restore_master_offer"), (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "pending", at: nowIso() } : o)) }), { step: "calibrate" })
 }
 
-/** Patch one master in one commit; a saved change is recorded in Activity under `saved`. */
-function editMaster(masterId: MasterId, label: MessageRef, saved: MessageRef, update: (master: CalibrationMaster) => CalibrationMaster): CommitResult {
-  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, masters: { ...c.masters, [masterId]: update(c.masters[masterId]!) } })), { href: HREF })
+/** Patch one master in one commit; a saved change is recorded in Activity under `saved`. `before` runs on the state first (pinning automatic choices). */
+function editMaster(masterId: MasterId, label: MessageRef, saved: MessageRef, update: (master: CalibrationMaster) => CalibrationMaster, before: (state: PrototypeState) => PrototypeState = (s) => s): CommitResult {
+  const result = commit(label, (s) => withCatalog(before(s), (c) => ({ ...c, masters: { ...c.masters, [masterId]: update(c.masters[masterId]!) } })), { href: HREF })
   if (result.ok) recordSaved(saved, null, HREF)
   return result
 }
@@ -403,7 +433,7 @@ export function restoreMaster(masterId: MasterId): CommitResult {
   const master = store.getState().catalog.masters[masterId]
   if (!master) return MISSING
   if (!master.dismissedAt) return { ok: true }
-  return editMaster(masterId, msg("calibration_restore_master"), msg("calibration_restored_master", { name: fileName(master.path) }), ({ dismissedAt: _dismissed, ...current }) => current)
+  return editMaster(masterId, msg("calibration_restore_master"), msg("calibration_restored_master", { name: fileName(master.path) }), ({ dismissedAt: _dismissed, ...current }) => current, pinAutomaticChoices)
 }
 
 export const CALIBRATION_HANDLERS: OperationHandler[] = [watchHandler]

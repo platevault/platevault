@@ -13,8 +13,8 @@
  * `&sessions=`).
  */
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { Check, ChevronRight, RotateCcw } from "lucide-react"
-import { useEffect } from "react"
+import { Check, ChevronRight, Pencil, RotateCcw } from "lucide-react"
+import { useEffect, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
@@ -31,6 +31,7 @@ import { useStore } from "@/store/core"
 import { CandidateReview } from "../d-review/review"
 import { MosaicEditor } from "./mosaic-editor"
 import { ArchivedSection, CandidatesSection, GoalsSection, PlanningSection, RigsSection, RunsSection, SubjectsSection } from "./project-sections"
+import { ProjectDetailsDialog } from "./details-dialog"
 import { WrapUpStage } from "./wrap-up"
 
 type View = "runs" | "wrap-up"
@@ -69,6 +70,7 @@ export function ProjectPage() {
 function ProjectDetail({ project, view }: { project: Project; view: View }) {
   const m = useMessages()
   const archived = project.archive?.sessionIds.length ?? 0
+  const [editing, setEditing] = useState(false)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
@@ -81,22 +83,29 @@ function ProjectDetail({ project, view }: { project: Project; view: View }) {
         meta={<StageStrip project={project} view={view} />}
         description={project.notes || undefined}
         actions={
-          project.state === "done" ? (
-            <ConfirmDialog
-              trigger={
-                <Button size="sm" variant="outline">
-                  <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                  {m.project_reopen_ellipsis()}
-                </Button>
-              }
-              title={m.project_reopen_title({ name: project.name })}
-              description={m.project_reopen_no_file_moves()}
-              changes={[m.project_reopen_change()]}
-              unchanged={archived > 0 ? [m.project_reopen_stay_archived({ count: archived })] : undefined}
-              confirmLabel={m.project_reopen()}
-              onConfirm={() => reopenProject(project.id)}
-            />
-          ) : null
+          <>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+              <Pencil aria-hidden="true" data-icon="inline-start" />
+              {m.project_edit_details()}
+            </Button>
+            {project.state === "done" ? (
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                    {m.project_reopen_ellipsis()}
+                  </Button>
+                }
+                title={m.project_reopen_title({ name: project.name })}
+                description={m.project_reopen_no_file_moves()}
+                changes={[m.project_reopen_change()]}
+                unchanged={archived > 0 ? [m.project_reopen_stay_archived({ count: archived })] : undefined}
+                confirmLabel={m.project_reopen()}
+                onConfirm={() => reopenProject(project.id)}
+              />
+            ) : null}
+            <ProjectDetailsDialog project={project} open={editing} onOpenChange={setEditing} />
+          </>
         }
       />
       <PageBody className="space-y-4">

@@ -9,8 +9,8 @@
  * their tooltip. Right click opens the row's menu.
  */
 import { Link, useNavigate } from "@tanstack/react-router"
-import { Eye, FolderKanban, Grid2x2Plus, PackageCheck, Play, Plus, Trash2 } from "lucide-react"
-import { useId } from "react"
+import { Eye, FolderKanban, Grid2x2Plus, PackageCheck, Pencil, Play, Plus, Trash2 } from "lucide-react"
+import { useId, useState } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
@@ -27,6 +27,7 @@ import { type GoalProgress, goalProgress, type NextAction, projectGroups, projec
 import type { Project } from "@/domain/types"
 import { say } from "@/lib/i18n"
 import { nowIso, updateSlice, useStore } from "@/store/core"
+import { ProjectDetailsDialog } from "./details-dialog"
 
 interface Row {
   project: Project
@@ -67,6 +68,7 @@ export function ProjectsPage() {
   const follow = useFollowLink()
   const navigate = useNavigate()
   const switchId = useId()
+  const [editing, setEditing] = useState<Project | null>(null)
   const shown = rows.filter((r) => showDone || r.project.state === "open")
   const hiddenDone = rows.length - shown.length
 
@@ -135,6 +137,7 @@ export function ProjectsPage() {
     { heading: r.project.name },
     { label: m.verb_open(), icon: Eye, onSelect: () => open(r) },
     ...(r.next ? [{ label: say(m, r.next.label), onSelect: () => follow(r.next!.link) }] : []),
+    { label: m.project_edit_details(), icon: Pencil, onSelect: () => setEditing(r.project) },
     { separator: true },
     ...(r.project.state === "open"
       ? [
@@ -193,6 +196,7 @@ export function ProjectsPage() {
           }
         />
       </PageBody>
+      {editing ? <ProjectDetailsDialog project={rows.find((r) => r.project.id === editing.id)?.project ?? editing} open onOpenChange={(open) => !open && setEditing(null)} /> : null}
     </div>
   )
 }

@@ -3197,7 +3197,6 @@
     }
   ],
   "run_results_basis_tool": "Evidência da ferramenta",
-  "run_results_basis_window": "Inferido pela janela de tempo",
   "run_results_attached_no_evidence": "Anexado · sem evidência",
   "run_results_attribution_for": "Atribuição de {name}",
   "run_results_accept_blocked": "Aceite bloqueado",
@@ -3320,10 +3319,6 @@
   "run_profile_write_prone": "Propenso a gravar",
   "run_profile_writes_unknown": "Gravação desconhecida",
   "run_profile_evidence": "Evidência de {name}",
-  "run_mode_link_type": "Tipo de link",
-  "run_mode_symbolic_links": "Links simbólicos",
-  "run_mode_hard_links": "Links físicos",
-  "run_mode_hard_links_help": "Todas as origens e a pasta da execução em um só volume.",
   "run_mode_named_blocked": "{mode} bloqueado",
   "run_metadata_hint_accept_source": "Cabeçalho como está",
   "run_metadata_hint_excluded": "Deixado de fora",
@@ -3382,11 +3377,8 @@
   "run_metadata_choice_patched_copy": "Cópia corrigida",
   "run_metadata_choice_accept_source": "Aceitar o valor da origem",
   "run_metadata_choice_excluded": "Excluir estas entradas",
-  "run_mode_semantics_symlink": "Uma pasta da execução com links simbólicos para os originais. Referências, não backups: um aplicativo que grava altera a origem.",
-  "run_mode_semantics_hardlink": "Uma pasta da execução com hard links. Só no mesmo volume; o link e o original são o mesmo arquivo.",
-  "run_mode_semantics_direct_source": "Sem entradas na pasta da execução: o perfil recebe os caminhos originais exatos numa lista de arquivos. Nada é vinculado nem copiado.",
-  "run_mode_semantics_copy": "Cópias completas e isoladas de cada entrada. Requer espaço para cada byte; os originais nunca são tocados.",
-  "run_mode_semantics_clone": "Clones copy-on-write isolados no mesmo volume. Espaço quase nulo até um dos lados mudar.",
+  "run_mode_semantics_direct_source": "Nada é colocado na pasta da execução. O PixInsight lê cada quadro onde ele está.",
+  "run_mode_semantics_copy": "As ferramentas trabalham na própria cópia, então seus originais não podem ser alterados. Sem espaço extra quando o disco clona; caso contrário, os arquivos são copiados.",
   "run_check_lock": "Estado da execução",
   "run_check_membership": "Membros salvos",
   "run_check_profile": "Perfil de aplicativo",
@@ -3407,7 +3399,6 @@
   "run_mode_output_volume": "o volume de saída",
   "run_mode_write_prone": "{name}: propenso a gravar",
   "run_mode_writes_unknown": "{name}: gravação nas entradas desconhecida",
-  "run_mode_other_volume": "Origens em outro volume",
   "run_mode_whole_folders": [
     {
       "declarations": [
@@ -3424,7 +3415,6 @@
     }
   ],
   "run_mode_no_source_paths": "{name}: sem caminhos de origem",
-  "run_mode_no_clones": "{name}: sem clones",
   "run_mode_needs_space": "Requer {bytes} · {free} livres",
   "run_check_requirements_to_review": [
     {
@@ -3755,7 +3745,6 @@
   "rungroup_open_done": "Abrir Concluído",
   "run_revision_short": "r{revision}",
   "run_mode_no_symlinks": "{name}: sem links simbólicos",
-  "run_mode_no_hardlinks": "{name}: sem hard links",
   "run_check_mode_symlinks": "{mode} (links simbólicos)",
   "run_check_mode_hardlinks": "{mode} (links físicos)",
   "location_role_captures_description": "Light frames para indexar. Adicione quantas pastas quiser.",
@@ -5476,8 +5465,8 @@
   "importdlg_note_eccentricity": "Exibido ao lado da excentricidade integrada",
   "importdlg_note_stars": "Exibido ao lado da contagem de estrelas integrada",
   "importdlg_note_psf_signal_weight": "Sem unidades nem equivalente no PlateVault; nunca é exibido como FWHM ou HFR.",
-  "domain_mode_linked": "Execução vinculada",
-  "domain_mode_copy": "Cópia",
+  "domain_mode_linked": "Vincular aos originais",
+  "domain_mode_copy": "Cópia independente",
   "domain_mode_clone": "Clone",
   "domain_result_final_image": "Imagem final",
   "domain_result_linear_integration": "Integração linear",
@@ -6104,38 +6093,6 @@
       "match": {
         "countPlural=one": "Remover {n} sessão",
         "countPlural=*": "Remover {n} sessões"
-      }
-    }
-  ],
-  "store_label_exclude_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Excluir {n} frame",
-        "countPlural=*": "Excluir {n} frames"
-      }
-    }
-  ],
-  "store_label_restore_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Restaurar {n} frame",
-        "countPlural=*": "Restaurar {n} frames"
       }
     }
   ],
@@ -7534,5 +7491,124 @@
   "onboarding_check_run": "Inicie sua primeira execução",
   "onboarding_dismiss_checklist": "Dispensar Primeiros passos",
   "onboarding_walk_name": "Tour de orientação",
-  "onboarding_restart_walk": "Reiniciar tour"
+  "onboarding_restart_walk": "Reiniciar tour",
+  "domain_mode_automatic": "Automático",
+  "domain_mode_file_list": "Passar a lista de arquivos ao PixInsight",
+  "run_mode_semantics_automatic": "O PlateVault escolhe a opção mais segura que couber. Seus originais nunca são alterados.",
+  "run_mode_semantics_linked": "Sem espaço extra. A pasta da execução aponta para seus originais, então o disco deve ficar conectado, e uma ferramenta que edita um quadro edita o original. O PlateVault confere cada original depois da execução.",
+  "run_placed_cloned": "{bytes} a mais · clonado",
+  "run_placed_copied": "{bytes} copiados",
+  "run_placed_mixed": "{cloned} clonados · {copied} copiados · {bytes}",
+  "run_frees_no_space": "não libera espaço",
+  "run_link_confirm_title": "Vincular aos originais?",
+  "run_link_confirm_description": "O disco deve ficar conectado enquanto a execução o usa.",
+  "run_link_confirm_writes": "Uma ferramenta que grava no lugar altera os originais",
+  "run_link_confirm_recheck": "O PlateVault recalcula o hash de cada original depois da execução",
+  "run_complete_clean_up": "Limpar cópias preparadas · {frees}",
+  "run_complete_keeps_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entrada preparada fica",
+        "countPlural=*": "{count} entradas preparadas ficam"
+      }
+    }
+  ],
+  "run_cleanup_kind_clone": "Clone",
+  "run_cal_master_changed": "o master mudou",
+  "run_cal_add_to_library_ellipsis": "Adicionar à biblioteca…",
+  "run_cal_add_title": "Adicionar {name} à biblioteca de calibração?",
+  "run_cal_add_destination": "Caminho de destino",
+  "run_cal_add_copies": "Copia {name} para o armazenamento de calibração",
+  "run_cal_add_reverifies": "Verifica de novo o SHA-256 antes de copiar",
+  "run_cal_add_source_stays": "O arquivo na pasta de resultados permanece",
+  "run_cal_suggested_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sugerido",
+        "countPlural=*": "{count} sugeridos"
+      }
+    }
+  ],
+  "run_cal_better_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} correspondência melhor",
+        "countPlural=*": "{count} correspondências melhores"
+      }
+    }
+  ],
+  "run_cal_better_match": "Melhor correspondência disponível",
+  "run_cal_use_it": "Usar esta",
+  "run_proto_better_master": "Master compatível mais novo",
+  "run_proto_better_master_detail": "Um master de noite mais próxima e com mais quadros entra na biblioteca",
+  "run_results_inferred": "Inferida",
+  "run_results_basis_inferred": "Sem evidência da ferramenta · a revisão atual quando o arquivo apareceu",
+  "run_rename": "Renomear",
+  "run_rename_ellipsis": "Renomear…",
+  "run_name_label": "Nome da execução",
+  "run_col_coverage": "Cobertura",
+  "run_col_distance": "Distância",
+  "run_select_order": "Ordem",
+  "run_select_hidden_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} selecionada oculta pelos filtros",
+        "countPlural=*": "{count} selecionadas ocultas pelos filtros"
+      }
+    }
+  ],
+  "project_edit_details": "Editar detalhes…",
+  "project_edit_details_title": "Editar detalhes de {name}",
+  "store_reason_name_empty": "O nome está vazio",
+  "store_reason_run_name_taken": "{name} já é uma execução neste projeto",
+  "store_saved_run_renamed": "{from} renomeada para {to}",
+  "store_saved_originals_rechecked": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input n",
+        "input changed",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {n} original com hash recalculado · {changed} alterados",
+        "countPlural=*": "{name}: {n} originais com hash recalculado · {changed} alterados"
+      }
+    }
+  ],
+  "store_reason_sha_now": "SHA-256 agora {hash}…",
+  "store_label_proto_better_master": "Protótipo: master compatível mais novo",
+  "store_reason_no_master_assigned": "Nenhum master atribuído ainda"
 }
