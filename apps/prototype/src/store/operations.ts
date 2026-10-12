@@ -16,6 +16,7 @@ import { runHref } from "@/domain/derive"
 import { fileKey } from "@/domain/disk"
 import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
+import { runningDuplicateScan } from "@/domain/storage"
 import type { ActivityEvent, LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, OperationUnit, RunStep, SettledStatus } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
@@ -111,17 +112,41 @@ export function patchOperation(state: PrototypeState, id: OperationId, patch: Pa
   return { ...state, operations: { ...state.operations, [id]: { ...op, ...patch, updatedAt: nowIso() } } }
 }
 
+/** Kinds that add frames or copies: once one settles having read something, a duplicate scan starts in the background (P-STO2). */
+const SCAN_AFTER: ReadonlySet<OperationKind> = new Set(["index", "import"])
+
+/**
+ * Queue a duplicate scan (its step is in `store/actions/storage.ts`) unless
+ * one already runs: that one reads the catalog as it is when it finishes.
+ * The caller runs `ensureTicker()` once the state is applied.
+ */
+export function addDuplicateScan(state: PrototypeState): { state: PrototypeState; id: OperationId | null } {
+  if (runningDuplicateScan(state.operations)) return { state, id: null }
+  const total = Object.values(state.catalog.assets).filter((a) => !a.trashed).length
+  return addOperation(state, { kind: "duplicate-scan", title: msg("storage_scan"), scope: {}, total, unit: "frames", canCancel: true })
+}
+
+/** After an index or import settles having read something, the duplicate scan starts in the background. */
+function scanAfter(state: PrototypeState, op: Operation, status: SettledStatus): PrototypeState {
+  if (!SCAN_AFTER.has(op.kind) || (status !== "succeeded" && status !== "partial")) return state
+  const added = addDuplicateScan(state)
+  // An import settles from a timer as well as from a tick; the ticker is idempotent, so start it either way.
+  if (added.id) ensureTicker()
+  return added.state
+}
+
 /** Settle an operation and record its outcome in Activity. */
 export function settleOperation(state: PrototypeState, id: OperationId, status: SettledStatus, summary: MessageRef, href: string | null = null): PrototypeState {
   const op = state.operations[id]
   if (!op) return state
   const now = nowIso()
   const event: ActivityEvent = { id: `act_${id}`, at: now, kind: "operation", title: op.title, detail: summary, status, operationId: id, href }
-  return {
+  const settled: PrototypeState = {
     ...state,
     operations: { ...state.operations, [id]: { ...op, status, summary, settledAt: now, updatedAt: now } },
     activity: [event, ...state.activity].slice(0, 200),
   }
+  return scanAfter(settled, op, status)
 }
 
 /** The word a settled operation reads in Activity: "Import finished". */

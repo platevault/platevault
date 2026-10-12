@@ -10,9 +10,11 @@
  *   Cancel a watch, Trash raws. A failure reads as a terse Refusal.
  * - Masters: the library, grouped by kind in the keys its structured storage
  *   uses (flats by train, filter and night; darks by camera, exposure, gain,
- *   offset and temperature; bias by camera, gain and offset). The runs that
- *   use a master sit behind a disclosure. The Dismissed filter lists
- *   dismissed master offers with Restore (P-CAL2).
+ *   offset and temperature; bias by camera, gain and offset). A row opens the
+ *   master's details panel, with Dismiss or Restore (P-CAL2); Used by is a
+ *   count opening a popover list of the runs, so a row never grows. The
+ *   Dismissed filter lists dismissed masters and dismissed master offers,
+ *   each with Restore.
  *
  * Import masters files masters stacked elsewhere straight into structured
  * storage. `?process=<processId>` highlights one process; `?filter=dismissed`
@@ -25,6 +27,8 @@ import { useMessages } from "@/app/preferences"
 import { StepGlyph, useFollowLink } from "@/app/run-ui"
 import { Box } from "@/components/app/box"
 import { ClearableInput } from "@/components/app/clearable-input"
+import { KeyValueList } from "@/components/app/data"
+import { type Column, DataTable } from "@/components/app/data-table"
 import { announce, EmptyState } from "@/components/app/feedback"
 import { FolderPicker } from "@/components/app/folder-picker"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
@@ -34,20 +38,22 @@ import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-m
 import { StatusBadge, type Tone } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { calibrationPlan, inputDrift, inputKey, KIND_NAME } from "@/domain/calibration"
-import { dismissedOffers } from "@/domain/calibration-library"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { inputDrift, KIND_NAME } from "@/domain/calibration"
+import { type Dismissal, dismissals, dismissBlockers, type MasterUse, masterUsage } from "@/domain/calibration-library"
 import { CALIBRATION_STEP_NAME, CALIBRATION_STEPS, calibrationProcesses, type ProcessStatus, type ProcessView, stackProfiles } from "@/domain/calibration-process"
-import { type GateState, rigName, runSetup, runStepLink, savedContent, type StepLink, workingContent } from "@/domain/derive"
+import { type GateState, rigName, runStepLink, type StepLink } from "@/domain/derive"
 import { filesUnder } from "@/domain/disk"
-import type { CalibrationKind, CalibrationMaster, CalibrationStepId, CalibrationStepState, Catalog, Disk, ProfileId, Run } from "@/domain/types"
-import { fileName, formatDateTime, formatExposure, formatNight } from "@/lib/format"
+import type { CalibrationKind, CalibrationMaster, CalibrationStepId, CalibrationStepState, Catalog, Disk, MasterId, ProfileId, Run } from "@/domain/types"
+import { fileName, formatCount, formatDateTime, formatExposure, formatNight } from "@/lib/format"
 import { m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { detectMasters, discardRaws, importMaster, importMasterFile, keepRaws, restoreMasterOffer, startStack } from "@/store/actions/calibration"
+import { detectMasters, discardRaws, dismissMaster, importMaster, importMasterFile, keepRaws, restoreMaster, restoreMasterOffer, startStack } from "@/store/actions/calibration"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
-import { masterNight } from "./calibration-model"
+import { masterNight, masterSha256 } from "./calibration-model"
 
 const TH = "h-(--row-h) px-3 text-left font-medium whitespace-nowrap"
 const TD = "px-3 py-1"
@@ -171,7 +177,7 @@ function processActions(view: ProcessView, profileId: ProfileId | null): Process
   return out
 }
 
-function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: string | null }) {
+function ProcessesBox({ catalog, highlight, onShowMaster }: { catalog: Catalog; highlight: string | null; onShowMaster: (masterId: MasterId) => void }) {
   const m = useMessages()
   const processes = calibrationProcesses(catalog)
   const profiles = stackProfiles(catalog)
@@ -197,7 +203,7 @@ function ProcessesBox({ catalog, highlight }: { catalog: Catalog; highlight: str
     const entries: MenuEntry[] = processActions(view, profileOf(view)).map((a) => ({ label: actionLabel(a.kind), onSelect: () => act(view, a) }))
     const open: MenuEntry[] = []
     if (view.session) open.push({ label: m.project_open_session(), onSelect: () => follow({ to: "/sessions/$sessionId", params: { sessionId: view.session!.id } }) })
-    if (view.master) open.push({ label: m.calibration_show_master(), onSelect: () => document.querySelector<HTMLElement>(`[data-master="${CSS.escape(view.master!.id)}"]`)?.scrollIntoView({ block: "center" }) })
+    if (view.master) open.push({ label: m.calibration_show_master(), onSelect: () => onShowMaster(view.master!.id) })
     return entries.length > 0 && open.length > 0 ? [...entries, { separator: true }, ...open] : [...entries, ...open]
   }
 
@@ -340,31 +346,6 @@ function ProcessRows({ id, current, detail, children }: { id: string; current: b
 // Masters
 // ---------------------------------------------------------------------------
 
-interface Usage {
-  run: Run
-  /** Light sessions of the run this master calibrates. */
-  sessions: number
-}
-
-/** Which runs hand off each master, keyed by master id. */
-function usageByMaster(catalog: Catalog, disk: Disk): Map<string, Usage[]> {
-  const out = new Map<string, Usage[]>()
-  for (const run of Object.values(catalog.runs)) {
-    if (run.trashedAt) continue
-    const plan = calibrationPlan(catalog, disk, run, runSetup(catalog, run).calibrationPolicy, savedContent(run) ?? workingContent(run))
-    for (const row of plan.rows) {
-      if (!row.input || (row.state !== "automatic" && row.state !== "accepted" && row.state !== "exception")) continue
-      const key = inputKey(row.input)
-      const list = out.get(key) ?? []
-      const usage = list.find((u) => u.run.id === run.id)
-      if (usage) usage.sessions += 1
-      else list.push({ run, sessions: 1 })
-      out.set(key, list)
-    }
-  }
-  return out
-}
-
 const KIND_ORDER: CalibrationKind[] = ["flat", "dark", "bias", "dark-flat"]
 const KIND_HEADING: Record<CalibrationKind, () => string> = { flat: m.calibration_heading_flats, dark: m.calibration_heading_darks, bias: m.calibration_heading_bias, "dark-flat": m.calibration_heading_dark_flats }
 const KIND_CAPTION: Record<CalibrationKind, () => string> = { flat: m.calibration_caption_flats, dark: m.calibration_caption_darks, bias: m.calibration_caption_bias, "dark-flat": m.calibration_caption_dark_flats }
@@ -407,219 +388,285 @@ function sortKey(master: CalibrationMaster, catalog: Catalog): string {
     .join("|")
 }
 
-function UsedBy({ usage, catalog }: { usage: Usage[] | undefined; catalog: Catalog }) {
+/** The run that offers a candidate master on its Calibrate step, if any. */
+function offeringRun(catalog: Catalog, masterId: MasterId): Run | undefined {
+  return Object.values(catalog.runs).find((r) => r.masterOffers.some((o) => o.masterId === masterId && o.state === "pending"))
+}
+
+/** "6 runs", opening a scrollable list that links each run. A popover, so the row keeps its height. */
+function UsedBy({ usage, catalog }: { usage: MasterUse[] | undefined; catalog: Catalog }) {
   const m = useMessages()
+  const [open, setOpen] = useState(false)
   if (!usage || usage.length === 0) return <span className="text-muted-foreground">–</span>
+  const label = m.calibration_used_by_runs({ count: usage.length })
   return (
-    <details className="group/used text-xs" data-used-by>
-      <summary className={cn(pillClass("neutral", true), "cursor-default list-none [&::-webkit-details-marker]:hidden")}>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger className={pillClass("neutral", true)} title={label} aria-label={label} data-used-by={usage.length}>
         {m.calibration_runs_count({ count: usage.length })}
-        <span aria-hidden="true" className="transition-transform group-open/used:rotate-90 motion-reduce:transition-none">
-          ▸
-        </span>
-      </summary>
-      <ul className="mt-1 space-y-0.5">
-        {usage.map((u) => {
-          const link = runStepLink(u.run, "calibrate")
-          return (
-            <li key={u.run.id} className="whitespace-nowrap">
-              <Link to={link.to as never} params={link.params as never} className="text-link hover:underline">
-                {u.run.name}
-              </Link>
-              <span className="text-muted-foreground">
-                {" "}
-                · {catalog.projects[u.run.projectId]?.name ?? m.activity_destination_project()} · {m.calibration_sessions_count({ count: u.sessions })}
-              </span>
-            </li>
-          )
-        })}
-      </ul>
-    </details>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="max-h-[min(18rem,var(--available-height))] w-80 gap-0 overflow-y-auto p-0" aria-label={label}>
+        <ul className="py-1 text-sm" data-used-by-list>
+          {usage.map((u) => {
+            const link = runStepLink(u.run, "calibrate")
+            return (
+              <li key={u.run.id}>
+                <Link
+                  to={link.to as never}
+                  params={link.params as never}
+                  onClick={() => setOpen(false)}
+                  className="flex min-h-(--row-h) flex-col justify-center px-3 py-1 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent"
+                >
+                  <span className="truncate font-medium">{u.run.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {catalog.projects[u.run.projectId]?.name ?? m.activity_destination_project()} · {m.calibration_sessions_count({ count: u.sessions })}
+                  </span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
   )
 }
 
-function MasterBox({ kind, masters, catalog, disk, usage }: { kind: CalibrationKind; masters: CalibrationMaster[]; catalog: Catalog; disk: Disk; usage: Map<string, Usage[]> }) {
+/** Adopted or Candidate, plus Drifted, Offered and Dismissed when they apply; on one line, so a row keeps its height. */
+function MasterState({ master, catalog, disk }: { master: CalibrationMaster; catalog: Catalog; disk: Disk }) {
   const m = useMessages()
-  const keys = STORAGE_KEYS[kind]
-  const offerRun = (masterId: string) => Object.values(catalog.runs).find((r) => r.masterOffers.some((o) => o.masterId === masterId && o.state === "pending"))
+  const drift = master.state === "adopted" ? inputDrift(catalog, disk, { type: "master", masterId: master.id }) : null
+  const run = master.state === "candidate" ? offeringRun(catalog, master.id) : undefined
+  return (
+    <span className="inline-flex items-center gap-1">
+      <StatusBadge kind="master" value={master.state} />
+      {drift ? (
+        <span title={drift}>
+          <StatusBadge kind="content" value="drifted" />
+        </span>
+      ) : null}
+      {run ? (
+        <Pill tone="info" link={runStepLink(run, "calibrate")} title={m.calibration_offered_in({ name: run.name })}>
+          {m.calibration_offered()}
+        </Pill>
+      ) : null}
+      {master.dismissedAt ? <Pill tone="muted">{m.calibration_dismissed()}</Pill> : null}
+    </span>
+  )
+}
+
+/** The row header: opens the master's details, as a click anywhere on the row does. */
+function OpenMaster({ master, label, onOpen }: { master: CalibrationMaster; label: string; onOpen: (id: MasterId) => void }) {
+  return (
+    <button type="button" className="rounded-sm text-left hover:underline" onClick={() => onOpen(master.id)} data-open-master={master.id}>
+      {label}
+    </button>
+  )
+}
+
+interface MasterActions {
+  open: (masterId: MasterId) => void
+  dismiss: (master: CalibrationMaster) => void
+  restore: (master: CalibrationMaster) => void
+}
+
+function MasterBox({ kind, masters, catalog, disk, usage, activeId, actions }: { kind: CalibrationKind; masters: CalibrationMaster[]; catalog: Catalog; disk: Disk; usage: Map<MasterId, MasterUse[]>; activeId: MasterId | null; actions: MasterActions }) {
+  const m = useMessages()
   const follow = useFollowLink()
-  const menu = (id: string): MenuEntry[] => {
-    const master = catalog.masters[id]
-    if (!master) return []
-    const entries: MenuEntry[] = []
-    const run = master.state === "candidate" ? offerRun(id) : undefined
+  const menu = (master: CalibrationMaster): MenuEntry[] => {
+    const entries: MenuEntry[] = [
+      { label: m.settings_details(), onSelect: () => actions.open(master.id) },
+      { label: m.run_dismiss(), onSelect: () => actions.dismiss(master) },
+    ]
+    const run = master.state === "candidate" ? offeringRun(catalog, master.id) : undefined
     if (run) entries.push({ label: m.calibration_open_offer(), onSelect: () => follow(runStepLink(run, "calibrate")) })
-    const used = usage.get(id) ?? []
+    const used = usage.get(master.id) ?? []
     if (used.length > 0) entries.push({ heading: m.calibration_used_by() }, ...used.map((u) => ({ label: u.run.name, onSelect: () => follow(runStepLink(u.run, "calibrate")) })))
     const session = master.origin.sessionId ? catalog.sessions[master.origin.sessionId] : undefined
-    if (session) entries.push(...(entries.length > 0 ? [{ separator: true } as const] : []), { label: m.calibration_open_raw_session(), onSelect: () => follow({ to: "/sessions/$sessionId", params: { sessionId: session.id } }) })
+    if (session) entries.push({ separator: true }, { label: m.calibration_open_raw_session(), onSelect: () => follow({ to: "/sessions/$sessionId", params: { sessionId: session.id } }) })
     return entries
   }
+  const columns: Column<CalibrationMaster>[] = [
+    ...STORAGE_KEYS[kind].map(
+      (k, index): Column<CalibrationMaster> => ({
+        id: k.id,
+        header: k.header,
+        align: k.align,
+        rowHeader: index === 0,
+        cell: (master) => {
+          const value = k.value(master, catalog)
+          const shown = value === null ? "–" : k.id === "night" ? formatNight(value, true) : value
+          if (index === 0) return <OpenMaster master={master} label={shown} onOpen={actions.open} />
+          return k.id === "filter" && value ? <Pill tone="muted">{value}</Pill> : shown
+        },
+      }),
+    ),
+    { id: "frames", header: m.calibration_frames(), align: "right", cell: (master) => master.frameCount ?? "–" },
+    { id: "state", header: m.calibration_state(), cell: (master) => <MasterState master={master} catalog={catalog} disk={disk} /> },
+    { id: "used-by", header: m.calibration_used_by(), cell: (master) => <UsedBy usage={usage.get(master.id)} catalog={catalog} /> },
+  ]
   return (
     <Box id={`cal-${kind}`} title={<span className="inline-flex items-center gap-1.5">{KIND_HEADING[kind]()} <CountBadge count={masters.length} /></span>} flush>
-      <ContextMenuArea menu={menu}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <caption className="sr-only">{KIND_CAPTION[kind]()}</caption>
-            <thead className="text-[0.6875rem] text-muted-foreground">
-              <tr className="border-b">
-                {keys.map((k) => (
-                  <th key={k.id} scope="col" className={cn(TH, k.align === "right" && "text-right")}>
-                    {k.header}
-                  </th>
-                ))}
-                <th scope="col" className={`${TH} text-right`}>
-                  {m.calibration_frames()}
-                </th>
-                <th scope="col" className={TH}>
-                  {m.calibration_state()}
-                </th>
-                <th scope="col" className={TH}>
-                  {m.calibration_used_by()}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {masters.map((master) => {
-                const drift = master.state === "adopted" ? inputDrift(catalog, disk, { type: "master", masterId: master.id }) : null
-                const run = master.state === "candidate" ? offerRun(master.id) : undefined
-                const lineage = master.origin.sessionId ? catalog.sessions[master.origin.sessionId] : undefined
-                const origin = ORIGIN_WORD[master.origin.kind]()
-                return (
-                  <tr key={master.id} {...menuKey(master.id)} data-master={master.id} className={cn(ROW, "align-top")}>
-                    {keys.map((k, index) => {
-                      const value = k.value(master, catalog)
-                      const shown = value === null ? "–" : k.id === "night" ? formatNight(value, true) : value
-                      if (index > 0) {
-                        return (
-                          <td key={k.id} className={cn(TD, "whitespace-nowrap tabular-nums", k.align === "right" && "text-right")}>
-                            {k.id === "filter" && value ? <Pill tone="muted">{value}</Pill> : shown}
-                          </td>
-                        )
-                      }
-                      return (
-                        <th key={k.id} scope="row" className={`${TD} text-left font-normal whitespace-nowrap`}>
-                          <span className="inline-flex items-center gap-1">
-                            {shown}
-                            <NoteMarker
-                              label={m.calibration_master_storage({ name: shown })}
-                              rows={[
-                                { label: m.calibration_stored(), value: <span className="font-mono [overflow-wrap:anywhere]">{master.path}</span> },
-                                { label: m.calibration_origin(), value: lineage ? `${origin} · ${formatNight(lineage.night)}` : origin },
-                                ...(master.adoption ? [{ label: m.status_adopted(), value: formatDateTime(master.adoption.adoptedAt) }] : []),
-                              ]}
-                            />
-                          </span>
-                        </th>
-                      )
-                    })}
-                    <td className={`${TD} text-right tabular-nums`}>{master.frameCount ?? "–"}</td>
-                    <td className={TD}>
-                      <span className="flex flex-wrap items-center gap-1">
-                        <StatusBadge kind="master" value={master.state} />
-                        {drift ? (
-                          <span title={drift}>
-                            <StatusBadge kind="content" value="drifted" />
-                          </span>
-                        ) : null}
-                        {run ? (
-                          <Pill tone="info" link={runStepLink(run, "calibrate")} title={m.calibration_offered_in({ name: run.name })}>
-                            {m.calibration_offered()}
-                          </Pill>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td className={TD}>
-                      <UsedBy usage={usage.get(master.id)} catalog={catalog} />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </ContextMenuArea>
+      <DataTable
+        label={KIND_CAPTION[kind]()}
+        rows={masters}
+        columns={columns}
+        getRowId={(master) => master.id}
+        scroll="none"
+        className="rounded-none border-0"
+        activeRowId={activeId}
+        onRowClick={(master) => actions.open(master.id)}
+        contextMenu={menu}
+      />
     </Box>
   )
 }
 
-function DismissedBox({ catalog, query }: { catalog: Catalog; query: string }) {
+type OfferDismissal = Extract<Dismissal, { kind: "offer" }>
+
+/** The Dismissed filter (P-CAL2): dismissed masters and dismissed master offers, each with Restore. */
+function DismissedBox({ catalog, query, activeId, actions, onRestoreOffer }: { catalog: Catalog; query: string; activeId: MasterId | null; actions: MasterActions; onRestoreOffer: (d: OfferDismissal) => void }) {
   const m = useMessages()
-  const offers = dismissedOffers(catalog).filter((d) => matches(d.master, catalog, query) || d.run.name.toLowerCase().includes(query))
-  const [refused, setRefused] = useState<RefusalProps | null>(null)
-  const restore = (runId: string, masterId: string) => {
-    const props = outcomeOf(restoreMasterOffer(runId, masterId), m.calibration_restore())
-    setRefused(props)
-    if (!props) announce(m.calibration_offer_restored())
-  }
   const follow = useFollowLink()
-  const menu = (key: string): MenuEntry[] => {
-    const found = offers.find((d) => `${d.run.id}:${d.master.id}` === key)
-    if (!found) return []
-    return [
-      { label: m.calibration_restore(), onSelect: () => restore(found.run.id, found.master.id) },
-      { label: m.calibration_open_run(), onSelect: () => follow(runStepLink(found.run, "calibrate")) },
-    ]
-  }
+  const rows = dismissals(catalog).filter((d) => matches(d.master, catalog, query) || (d.kind === "offer" && d.run.name.toLowerCase().includes(query)))
+  const restore = (d: Dismissal) => (d.kind === "master" ? actions.restore(d.master) : onRestoreOffer(d))
+  const menu = (d: Dismissal): MenuEntry[] => [
+    { label: m.calibration_restore(), onSelect: () => restore(d) },
+    { label: m.settings_details(), onSelect: () => actions.open(d.master.id) },
+    ...(d.kind === "offer" ? [{ label: m.calibration_open_run(), onSelect: () => follow(runStepLink(d.run, "calibrate")) }] : []),
+  ]
+  const columns: Column<Dismissal>[] = [
+    { id: "master", header: m.calibration_master(), rowHeader: true, cell: (d) => <OpenMaster master={d.master} label={masterLabel(d.master)} onOpen={actions.open} /> },
+    {
+      id: "run",
+      header: m.calibration_run(),
+      cell: (d) => {
+        if (d.kind === "master") return <span className="text-muted-foreground">–</span>
+        const link = runStepLink(d.run, "calibrate")
+        return (
+          <>
+            <Link to={link.to as never} params={link.params as never} className="text-link hover:underline">
+              {d.run.name}
+            </Link>
+            <span className="text-muted-foreground"> · {catalog.projects[d.run.projectId]?.name ?? m.activity_destination_project()}</span>
+          </>
+        )
+      },
+    },
+    { id: "dismissed", header: m.calibration_dismissed(), cell: (d) => formatDateTime(d.at) },
+    {
+      id: "action",
+      header: m.tonight_actions(),
+      align: "right",
+      cell: (d) => (
+        <Button size="xs" variant="outline" className="-my-1" onClick={() => restore(d)}>
+          {m.calibration_restore()}
+          <span className="sr-only"> {masterLabel(d.master)}</span>
+        </Button>
+      ),
+    },
+  ]
   return (
-    <Box id="cal-dismissed" title={<span className="inline-flex items-center gap-1.5">{m.calibration_dismissed()} <CountBadge count={offers.length} /></span>} flush>
-      {refused ? <Refusal {...refused} className="border-b border-border px-3 py-2" /> : null}
-      {offers.length === 0 ? (
+    <Box id="cal-dismissed" title={<span className="inline-flex items-center gap-1.5">{m.calibration_dismissed()} <CountBadge count={rows.length} /></span>} flush>
+      {rows.length === 0 ? (
         <p className="p-3 text-sm text-muted-foreground">{m.calibration_no_dismissed()}</p>
       ) : (
-        <ContextMenuArea menu={menu}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <caption className="sr-only">{m.calibration_dismissed_caption()}</caption>
-              <thead className="text-[0.6875rem] text-muted-foreground">
-                <tr className="border-b">
-                  <th scope="col" className={TH}>
-                    {m.calibration_master()}
-                  </th>
-                  <th scope="col" className={TH}>
-                    {m.calibration_run()}
-                  </th>
-                  <th scope="col" className={TH}>
-                    {m.calibration_dismissed()}
-                  </th>
-                  <th scope="col" className={TH}>
-                    <span className="sr-only">{m.tonight_actions()}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {offers.map((d) => {
-                  const link = runStepLink(d.run, "calibrate")
-                  const name = masterLabel(d.master)
-                  return (
-                    <tr key={`${d.run.id}:${d.master.id}`} {...menuKey(`${d.run.id}:${d.master.id}`)} data-dismissed={d.master.id} className={ROW}>
-                      <th scope="row" className={`${TD} text-left font-normal whitespace-nowrap`}>
-                        <span className="inline-flex items-center gap-1">
-                          {name}
-                          <NoteMarker label={m.calibration_file_of({ name })} rows={[{ label: m.calibration_file(), value: <span className="font-mono [overflow-wrap:anywhere]">{d.master.path}</span> }]} />
-                        </span>
-                      </th>
-                      <td className={`${TD} whitespace-nowrap`}>
-                        <Link to={link.to as never} params={link.params as never} className="text-link hover:underline">
-                          {d.run.name}
-                        </Link>
-                        <span className="text-muted-foreground"> · {catalog.projects[d.run.projectId]?.name ?? m.activity_destination_project()}</span>
-                      </td>
-                      <td className={`${TD} whitespace-nowrap tabular-nums`}>{formatDateTime(d.offer.at)}</td>
-                      <td className={`${TD} text-right`}>
-                        <Button size="xs" variant="outline" onClick={() => restore(d.run.id, d.master.id)}>
-                          {m.calibration_restore()}<span className="sr-only"> {name}</span>
-                        </Button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </ContextMenuArea>
+        <DataTable
+          label={m.calibration_dismissed_caption()}
+          rows={rows}
+          columns={columns}
+          getRowId={(d) => (d.kind === "master" ? `master:${d.master.id}` : `${d.run.id}:${d.master.id}`)}
+          scroll="none"
+          className="rounded-none border-0"
+          activeRowId={activeId ? `master:${activeId}` : null}
+          onRowClick={(d) => actions.open(d.master.id)}
+          contextMenu={menu}
+        />
       )}
     </Box>
+  )
+}
+
+/** Where the master came from: stacked from its raw session (linked), found in a run's Results, imported or indexed. */
+function MasterSource({ master, catalog }: { master: CalibrationMaster; catalog: Catalog }) {
+  const m = useMessages()
+  const session = master.origin.sessionId ? catalog.sessions[master.origin.sessionId] : undefined
+  const run = master.origin.runId ? catalog.runs[master.origin.runId] : undefined
+  const from = session ? (
+    <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="text-link hover:underline" title={m.calibration_open_raw_session()}>
+      {formatNight(session.night, true)}
+    </Link>
+  ) : run ? (
+    <span>{run.name}</span>
+  ) : null
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1">
+      {ORIGIN_WORD[master.origin.kind]()}
+      {from ? <span aria-hidden="true">·</span> : null}
+      {from}
+    </span>
+  )
+}
+
+interface MasterDetailsProps {
+  master: CalibrationMaster | null
+  catalog: Catalog
+  disk: Disk
+  usage: Map<MasterId, MasterUse[]>
+  refusal: RefusalProps | null
+  actions: MasterActions
+  onClose: () => void
+}
+
+/** The details panel: every recorded fact of one master, with Dismiss or Restore (P-CAL2). */
+function MasterDetails({ master, catalog, disk, usage, refusal, actions, onClose }: MasterDetailsProps) {
+  const m = useMessages()
+  const none = "–"
+  return (
+    <Sheet open={master !== null} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-[30rem] sm:max-w-[30rem]" data-master-details>
+        {master ? (
+          <>
+            <SheetHeader>
+              <SheetTitle>{masterLabel(master)}</SheetTitle>
+              <SheetDescription className="font-mono text-xs [overflow-wrap:anywhere]">{fileName(master.path)}</SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 overflow-y-auto px-4 pb-4">
+              <KeyValueList
+                items={[
+                  { label: m.run_col_kind(), value: kindLabel(master.kind) },
+                  { label: m.calibration_key_camera(), value: master.cameraName ?? none },
+                  { label: m.domain_optical_train(), value: master.opticalTrainId ? rigName(m, catalog, master.opticalTrainId) : none },
+                  { label: m.tonight_filter(), value: master.channel ?? none },
+                  { label: m.calibration_key_exposure(), value: master.exposureS === null ? none : formatExposure(master.exposureS) },
+                  { label: m.session_gain_offset(), value: `${master.gain ?? none} · ${master.offset ?? none}` },
+                  { label: m.domain_criterion_temperature(), value: master.ccdTempC === null ? none : `${Math.round(master.ccdTempC)} °C` },
+                  { label: m.domain_criterion_binning(), value: `${master.binning}×${master.binning}` },
+                  { label: m.calibration_frames(), value: master.frameCount === null ? none : formatCount(master.frameCount) },
+                  { label: m.calibration_created(), value: formatDateTime(master.createdAt) },
+                  { label: m.evidence_column_source(), value: <MasterSource master={master} catalog={catalog} /> },
+                  { label: m.calibration_stored(), value: master.path, mono: true },
+                  { label: m.storage_sha256(), value: masterSha256(catalog, disk, master) ?? none, mono: true },
+                  { label: m.calibration_used_by(), value: <UsedBy usage={usage.get(master.id)} catalog={catalog} /> },
+                  { label: m.calibration_state(), value: <MasterState master={master} catalog={catalog} disk={disk} /> },
+                  ...(master.dismissedAt ? [{ label: m.calibration_dismissed(), value: formatDateTime(master.dismissedAt) }] : []),
+                ]}
+              />
+              {refusal ? <Refusal {...refusal} /> : null}
+              <div className="flex flex-wrap gap-2">
+                {master.dismissedAt ? (
+                  <Button onClick={() => actions.restore(master)} data-master-restore>
+                    {m.calibration_restore()}
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={() => actions.dismiss(master)} data-master-dismiss>
+                    {m.run_dismiss()}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -683,11 +730,13 @@ export function CalibrationPage() {
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
   const search = useSearch({ strict: false }) as Record<string, string | undefined>
-  const usage = useMemo(() => usageByMaster(catalog, disk), [catalog, disk])
+  const usage = useMemo(() => masterUsage(catalog, disk), [catalog, disk])
   const [filter, setFilter] = useState<MasterFilter>(search.filter === "dismissed" ? "dismissed" : "all")
   const [query, setQuery] = useState("")
   const [picking, setPicking] = useState(false)
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null)
+  const [detailId, setDetailId] = useState<MasterId | null>(null)
+  const [refusal, setRefusal] = useState<RefusalProps | null>(null)
   const needle = query.trim().toLowerCase()
 
   // Links into the library follow the search while the page stays mounted.
@@ -699,10 +748,45 @@ export function CalibrationPage() {
     requestAnimationFrame(() => document.querySelector(`[data-process="${CSS.escape(search.process!)}"]`)?.scrollIntoView({ block: "center" }))
   }, [search.process])
 
-  const all = Object.values(catalog.masters)
-  const shown = all.filter((master) => matches(master, catalog, needle))
+  const actions: MasterActions = {
+    open: (id) => {
+      setRefusal(null)
+      setDetailId(id)
+    },
+    dismiss: (master) => {
+      const result = dismissMaster(master.id)
+      if (result.ok) {
+        setRefusal(null)
+        announce(m.store_saved_dismissed({ name: masterLabel(master) }))
+        return
+      }
+      // A refusal names the runs that use or offer the master: "Can't dismiss · used by 2 runs ▸".
+      const state = store.getState()
+      const runs = result.reason === "refused" ? dismissBlockers(state.catalog, masterUsage(state.catalog, state.disk), master.id) : []
+      setRefusal(
+        runs.length > 0
+          ? { action: m.calibration_cant_dismiss(), reason: m.project_used_by_runs({ count: runs.length }), blockers: runs.map((run) => ({ label: run.name, link: runStepLink(run, "calibrate") })) }
+          : outcomeOf(result, m.run_dismiss()),
+      )
+    },
+    restore: (master) => {
+      const result = restoreMaster(master.id)
+      setRefusal(outcomeOf(result, m.calibration_restore()))
+      if (result.ok) announce(m.calibration_restored_master({ name: masterLabel(master) }))
+    },
+  }
+  const restoreOffer = (d: OfferDismissal) => {
+    const props = outcomeOf(restoreMasterOffer(d.run.id, d.master.id), m.calibration_restore())
+    setRefusal(props)
+    if (!props) announce(m.calibration_offer_restored())
+  }
+
+  // A dismissed master leaves the list for the Dismissed filter (P-CAL2).
+  const library = Object.values(catalog.masters).filter((master) => !master.dismissedAt)
+  const shown = library.filter((master) => matches(master, catalog, needle))
   const byKind = KIND_ORDER.map((kind) => ({ kind, masters: shown.filter((master) => master.kind === kind).sort((a, b) => sortKey(a, catalog).localeCompare(sortKey(b, catalog))) })).filter((g) => g.masters.length > 0)
-  const dismissed = dismissedOffers(catalog).length
+  const dismissed = dismissals(catalog).length
+  const detail = detailId ? (catalog.masters[detailId] ?? null) : null
   const importButton = (
     <Button variant="outline" onClick={() => setPicking(true)}>
       <FolderInput aria-hidden="true" data-icon="inline-start" />
@@ -731,7 +815,7 @@ export function CalibrationPage() {
           </div>
         ) : null}
 
-        <ProcessesBox catalog={catalog} highlight={search.process ?? null} />
+        <ProcessesBox catalog={catalog} highlight={search.process ?? null} onShowMaster={actions.open} />
 
         <Section
           id="cal-masters"
@@ -740,7 +824,7 @@ export function CalibrationPage() {
             <>
               <div role="group" aria-label={m.targets_show()} className="flex items-center gap-1">
                 <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-                  {m.activity_filter_all()} <CountBadge count={all.length} />
+                  {m.activity_filter_all()} <CountBadge count={library.length} />
                 </FilterChip>
                 <FilterChip active={filter === "dismissed"} onClick={() => setFilter("dismissed")}>
                   {m.calibration_dismissed()} <CountBadge count={dismissed} />
@@ -750,9 +834,10 @@ export function CalibrationPage() {
             </>
           }
         >
+          {refusal && !detail ? <Refusal {...refusal} /> : null}
           {filter === "dismissed" ? (
-            <DismissedBox catalog={catalog} query={needle} />
-          ) : all.length === 0 ? (
+            <DismissedBox catalog={catalog} query={needle} activeId={detailId} actions={actions} onRestoreOffer={restoreOffer} />
+          ) : library.length === 0 ? (
             <EmptyState icon={SlidersHorizontal} title={m.calibration_no_masters()} action={importButton} />
           ) : byKind.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -764,13 +849,14 @@ export function CalibrationPage() {
           ) : (
             <div className="space-y-3">
               {byKind.map((g) => (
-                <MasterBox key={g.kind} kind={g.kind} masters={g.masters} catalog={catalog} disk={disk} usage={usage} />
+                <MasterBox key={g.kind} kind={g.kind} masters={g.masters} catalog={catalog} disk={disk} usage={usage} activeId={detailId} actions={actions} />
               ))}
             </div>
           )}
         </Section>
       </PageBody>
 
+      <MasterDetails master={detail} catalog={catalog} disk={disk} usage={usage} refusal={refusal} actions={actions} onClose={() => setDetailId(null)} />
       <FolderPicker
         open={picking}
         onOpenChange={setPicking}

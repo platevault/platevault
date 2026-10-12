@@ -1,13 +1,15 @@
 /**
  * Settings › Locations (J19 S2-S3, S5, S7, S12-S13, S15; J28 S11-S13;
  * LIB-FR-01, -06, -07, -15; LIB-AC-04, -05, -11, -16; D11; P-ARC1).
- * Registered locations by role with access, online state and scan scope;
- * Index now, Rescan, Choose folder again, Retry, Locate or remap, Retire
- * location, Edit and Remove, in each row's More actions menu and on
- * right-click. Several archive locations may be registered; one carries the
- * Default pill (the Archive step's default destination) and the others offer
- * Make default. `?locationId=` opens one location, `?add=<role>` starts
- * adding one, `?return=` links back.
+ * Registered locations by role with access, online state, scan scope and
+ * disk use (footprint, used and free; P-STO2); Index now, Rescan, Choose
+ * folder again, Retry, Locate or remap, Retire location, Edit and Remove, in
+ * each row's More actions menu and on right-click. Several archive locations
+ * may be registered; one carries the Default pill (the Archive step's default
+ * destination) and the others offer Make default. Duplicate copies the
+ * automatic scan found read as one line with Review. `?locationId=` opens one
+ * location, `?add=<role>` starts adding one, `?duplicates=review` opens the
+ * Duplicates review, `?return=` links back.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { MoreHorizontal, Play, Plus, RotateCw } from "lucide-react"
@@ -30,13 +32,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { defaultArchiveLocation } from "@/domain/derive"
 import { locationAvailability } from "@/domain/library"
+import { duplicateFindings } from "@/domain/storage"
 import type { Location, LocationRole } from "@/domain/types"
-import { formatCount, formatDateTime } from "@/lib/format"
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { AddLocationFlow } from "../components/add-location-flow"
+import { DuplicatesReview } from "../components/duplicates-review"
 import { focusFirstInvalid, TextField } from "../components/form-field"
 import { useLocationActions } from "../components/location-actions"
 import { latestIndexRun, LocationRow } from "../components/location-row"
@@ -295,6 +299,11 @@ export function LocationsPage() {
   const [highlight, setHighlight] = useState<string | null>(null)
   const actions = useLocationActions({ href: HREF })
   const detail = search.locationId ? (catalog.locations[search.locationId] ?? null) : null
+  const duplicates = useStore(duplicateFindings)
+
+  function setDuplicatesReview(open: boolean) {
+    void navigate({ to: "/settings/locations", search: (prev: Record<string, string | undefined>) => ({ ...prev, duplicates: open ? "review" : undefined }), replace: !open })
+  }
 
   function setDetail(id: string | null) {
     void navigate({ to: "/settings/locations", search: (prev: Record<string, string | undefined>) => ({ ...prev, locationId: id ?? undefined }), replace: true })
@@ -429,6 +438,14 @@ export function LocationsPage() {
           )
         ) : null}
         {defaultRefusal ? <Refusal {...defaultRefusal} /> : null}
+        {duplicates && duplicates.copies > 0 ? (
+          <p className="flex flex-wrap items-center gap-2 text-sm" data-duplicates-line>
+            <Pill tone="warning">{m.issue_duplicates({ count: duplicates.copies, bytes: formatBytes(duplicates.bytes) })}</Pill>
+            <Button size="sm" variant="outline" onClick={() => setDuplicatesReview(true)}>
+              {m.verb_review()}
+            </Button>
+          </p>
+        ) : null}
 
         {ROLE_ORDER.map((role) => {
           const rows = locations.filter((l) => l.role === role)
@@ -455,6 +472,7 @@ export function LocationsPage() {
                       <LocationRow
                         key={location.id}
                         headingLevel={4}
+                        showDiskUse
                         location={location}
                         current={highlight === location.id || search.locationId === location.id}
                         badges={role === "archive" && defaultArchiveId === location.id ? <Pill tone="info">{m.settings_default()}</Pill> : null}
@@ -495,6 +513,7 @@ export function LocationsPage() {
       />
       <EditLocationDialog location={editing} onClose={() => setEditing(null)} />
       <LocationDetail location={detail} onClose={() => setDetail(null)} actions={detailActions} />
+      <DuplicatesReview open={search.duplicates === "review"} onClose={() => setDuplicatesReview(false)} />
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}

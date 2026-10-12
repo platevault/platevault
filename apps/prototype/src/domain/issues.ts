@@ -14,7 +14,7 @@ import { calibrationProcesses } from "./calibration-process"
 import { runPipeline, runStepLink, type StepLink, sessionsNeedingWork, type World } from "./derive"
 import { locationAvailability, qualityApplicability } from "./library"
 import { sessionRef } from "./membership"
-import { duplicateCopies, lastDuplicateScan } from "./storage"
+import { duplicateFindings } from "./storage"
 import type { MessageRef } from "@/lib/i18n"
 
 export type IssueSeverity = "info" | "warning" | "danger"
@@ -44,7 +44,7 @@ export interface Issue {
   group: IssueGroup
   kind: IssueKind
   severity: IssueSeverity
-  /** How many things the issue covers (sessions, frames, runs, duplicate groups). */
+  /** How many things the issue covers (sessions, frames, runs, extra duplicate copies). */
   count: number
   /** Bytes the issue covers: the extra copies of duplicates; absent for other kinds. */
   bytes?: number
@@ -85,16 +85,10 @@ export function deriveIssues(world: World): Issue[] {
     }
   }
 
-  // Duplicates the latest scan found, narrowed to copies still live: counted as the extra copies (every copy beyond the one each group keeps) and their bytes.
-  const scan = lastDuplicateScan(operations)
-  if (scan?.groups && scan.operation.status === "succeeded") {
-    const live = new Map(duplicateCopies(catalog).map((g) => [g.assetId, g]))
-    const groups = scan.groups.flatMap((g) => live.get(g.assetId) ?? [])
-    const copies = groups.reduce((n, g) => n + g.paths.length - 1, 0)
-    if (copies > 0) {
-      const bytes = groups.reduce((n, g) => n + g.extraBytes, 0)
-      out.push({ id: "storage:duplicates", group: "storage", kind: "duplicates", severity: "warning", count: copies, bytes, name: null, about: null, link: { to: "/settings/locations", search: { duplicates: "review" } } })
-    }
+  // Duplicates the latest scan found that are still live: the extra copies (every copy beyond the one each frame keeps) and their bytes.
+  const duplicates = duplicateFindings(world)
+  if (duplicates && duplicates.copies > 0) {
+    out.push({ id: "storage:duplicates", group: "storage", kind: "duplicates", severity: "warning", count: duplicates.copies, bytes: duplicates.bytes, name: null, about: null, link: { to: "/settings/locations", search: { duplicates: "review" } } })
   }
 
   // Interrupted or failed work; a calibration process lists its own failures below.

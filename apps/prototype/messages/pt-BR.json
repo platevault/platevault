@@ -2561,70 +2561,15 @@
   "activity_when": "Quando",
   "activity_outcome": "Resultado",
   "activity_what": "O quê",
-  "storage_scan_blocked": "Varredura bloqueada",
-  "storage_location": "Local",
-  "storage_path_of": "{name}: caminho",
-  "storage_path": "Caminho",
-  "storage_role": "Função",
-  "storage_volume": "Volume",
-  "storage_network": "Rede",
-  "storage_removable": "Removível",
-  "storage_availability": "Disponibilidade",
-  "storage_free": "Livre",
-  "storage_unsupported": "Sem suporte",
-  "storage_action": "Ação",
-  "storage_locate": "Localizar",
-  "storage_open_settings": "Abrir em Configurações",
-  "storage_unregistered": "Não registrado",
-  "storage_frame": "Quadro",
-  "storage_copies": "Cópias",
-  "storage_copies_of": "{name}: cópias",
   "storage_sha256": "SHA-256",
-  "storage_extra": "Extra",
   "storage_scan_again": "Varrer de novo",
-  "storage_transfer": "Transferência",
-  "storage_kind": "Tipo",
-  "storage_status": "Status",
-  "storage_started": "Início",
-  "storage_open_activity": "Abrir Atividade",
   "storage_scan": "Procurar duplicatas",
   "storage_no_locations": "Nenhum local",
   "storage_add_location": "Adicionar local",
   "storage_duplicates": "Duplicatas",
   "storage_not_scanned": "Não verificado",
-  "storage_frames_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} quadro",
-        "countPlural=*": "{count} quadros"
-      }
-    }
-  ],
   "storage_no_duplicates": "Nenhuma duplicata",
-  "storage_extra_bytes": "{bytes} a mais",
   "storage_transfers": "Transferências",
-  "storage_transfers_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} transferência",
-        "countPlural=*": "{count} transferências"
-      }
-    }
-  ],
   "storage_no_transfers": "Nenhuma transferência",
   "calibration_action_blocked": "{action}: bloqueado",
   "calibration_action_not_saved": "{action}: não salvo",
@@ -2712,20 +2657,16 @@
   "calibration_open_offer": "Abrir oferta",
   "calibration_used_by": "Usado por",
   "calibration_open_raw_session": "Abrir sessão bruta",
-  "calibration_master_storage": "Master {name}: armazenamento",
-  "calibration_origin": "Origem",
   "calibration_offered_in": "Oferecido em {name}",
   "calibration_offered": "Oferecido",
   "calibration_restore": "Restaurar",
   "calibration_offer_restored": "Oferta restaurada",
   "calibration_open_run": "Abrir execução",
   "calibration_dismissed": "Dispensados",
-  "calibration_no_dismissed": "Nenhuma oferta dispensada",
-  "calibration_dismissed_caption": "Ofertas de master dispensadas",
+  "calibration_no_dismissed": "Nenhum master dispensado",
+  "calibration_dismissed_caption": "Masters e ofertas dispensados",
   "calibration_master": "Master",
   "calibration_run": "Execução",
-  "calibration_file_of": "{name}: arquivo",
-  "calibration_file": "Arquivo",
   "calibration_refused_reason": "recusado",
   "calibration_import_refused_same": "{count} {reason}",
   "calibration_masters_count": [
@@ -6521,23 +6462,6 @@
   "store_label_check_named": "Verificar {name}",
   "store_reason_scan_running": "uma varredura está em andamento",
   "op_no_duplicates": "Nenhuma duplicata.",
-  "op_duplicates_found": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input bytes",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame com cópias extras · {bytes}",
-        "countPlural=*": "{n} frames com cópias extras · {bytes}"
-      }
-    }
-  ],
   "store_label_setup_change": "Alteração de configuração",
   "store_label_shared_setup_change": "Alteração de configuração compartilhada",
   "store_saved_output_folder": "Pasta de saída: {name}",
@@ -7332,5 +7256,49 @@
   ],
   "project_col_step": "Etapa",
   "project_col_updated": "Atualizado",
-  "project_runs_of": "Execuções de {name}"
+  "project_runs_of": "Execuções de {name}",
+  "calibration_used_by_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Usado por {count} execução",
+        "countPlural=*": "Usado por {count} execuções"
+      }
+    }
+  ],
+  "calibration_created": "Criado",
+  "calibration_cant_dismiss": "Não é possível dispensar",
+  "calibration_dismiss_master": "Dispensar master",
+  "calibration_restore_master": "Restaurar master",
+  "calibration_restored_master": "{name} restaurado",
+  "location_footprint": "Ocupação {bytes}",
+  "location_volume_use": "{volume}: {used} usados · {free} livres",
+  "duplicates_scanned": "Verificado em {date}",
+  "duplicates_keep_copy": "Manter esta cópia",
+  "duplicates_move_others": "Mover as outras para a Lixeira",
+  "duplicates_move_all": "Mover todas para a Lixeira",
+  "duplicates_change_location": "{location}: {files} · {bytes}",
+  "duplicates_frames_keep_copy": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame mantém uma cópia",
+        "countPlural=*": "{n} frames mantêm uma cópia cada"
+      }
+    }
+  ],
+  "duplicates_trash_title": "Mover cópias duplicadas para a Lixeira do sistema"
 }

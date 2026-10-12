@@ -818,6 +818,8 @@ export interface CalibrationMaster {
    */
   origin: { kind: "library" | "generated" | "stacked" | "imported"; runId: RunId | null; sourcePath: string; sessionId: SessionId | null }
   adoption: { destinationPath: string; verifiedSha256: string; adoptedAt: IsoDateTime } | null
+  /** Set while the master is dismissed (P-CAL2): it leaves the library's list for its Dismissed filter and is never matched; Restore clears it. */
+  dismissedAt?: IsoDateTime
 }
 
 export type MatchCriterionName =
@@ -1166,7 +1168,7 @@ export type OperationKind =
   | "adopt-master"
   /** Stack: the output-folder watch of a calibration process while its tool stacks (P-CAL3). */
   | "stack-master"
-  /** Scan for duplicates: byte-identical live copies, listed only on demand (Storage). */
+  /** Duplicate scan: byte-identical live copies, after each index and import (P-STO2). */
   | "duplicate-scan"
   | "prepare"
   | "cleanup"

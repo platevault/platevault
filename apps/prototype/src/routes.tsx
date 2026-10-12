@@ -10,7 +10,8 @@
  * `?candidates=unreviewed`, `?mosaic=new|<subjectId>` (the mosaic editor);
  * `/projects/$projectId/runs/$runId/review?filter=unreviewed`;
  * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
- * planning values use; tonight when absent or past), `?project=`.
+ * planning values use; tonight when absent or past), `?project=`;
+ * `/settings/locations?duplicates=review` (the Duplicates review sheet).
  */
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 import type { ReactNode } from "react"
