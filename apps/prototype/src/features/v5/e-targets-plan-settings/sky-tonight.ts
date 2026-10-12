@@ -1,14 +1,14 @@
 /**
- * Tonight's sky on one grid (slice E, S10 and S11): Sun and Moon altitude
- * samples for the night timeline, a Target's altitude curve, peak altitude
- * in darkness, Moon separation and next opposition.
+ * One night's sky on one grid (slice E, S10): Sun and Moon altitude
+ * samples, a Target's altitude curve, peak altitude in darkness, Moon
+ * separation and next opposition.
  *
  * The grid is the planning module's `skyNight`, the samples that
  * `filterSuitability` and `clearStretches` read, on the same 10-minute grid
- * that `computeWindows` and `tonightAt` use, so curves, window blocks and
+ * that `computeWindows` and `nightSummary` use, so curves, windows and
  * filter windows line up. Production computes all of it in Rust (PLAN-FR-08).
  */
-import { altitudeDeg, julianDay, nightAt, norm360, SAMPLE_MIN, type SkyNight, skyNight, sunPosition } from "@/domain/planning"
+import { altitudeDeg, julianDay, norm360, SAMPLE_MIN, type SkyNight, skyNight, sunPosition } from "@/domain/planning"
 import { angularSeparationDeg } from "@/domain/sky"
 import type { ObservingSite } from "@/domain/types"
 
@@ -16,14 +16,13 @@ import type { ObservingSite } from "@/domain/types"
 export interface NightGrid extends SkyNight {
   site: ObservingSite
   night: string
-  /** Index range shown on the timeline: from sunset to sunrise, padded by 30 minutes. */
+  /** Index range of the night's drawing: from sunset to sunrise, padded by 30 minutes. */
   from: number
   to: number
 }
 
-/** Tonight's grid at a site: local noon to noon in 10-minute samples, as `tonightAt` uses. */
-export function nightGrid(site: ObservingSite, nowMs: number): NightGrid {
-  const night = nightAt(nowMs, site)
+/** One night's grid at a site: local noon to noon in 10-minute samples, as `nightSummary` uses. */
+export function nightGrid(site: ObservingSite, night: string): NightGrid {
   const { samples, sunLimit } = skyNight(site, night, site.twilight)
   const below = samples.map((s, i) => (s.sunAlt < 0 ? i : -1)).filter((i) => i >= 0)
   const pad = 30 / SAMPLE_MIN
@@ -39,23 +38,25 @@ export function altitudeCurve(grid: NightGrid, ra: number, dec: number): number[
 
 export interface ObjectTonight {
   altitudes: number[]
-  /** Peak altitude while dark; null when there is no darkness tonight. */
+  /** Peak altitude while dark, and when; null when there is no darkness. */
   peakDarkDeg: number | null
+  peakDarkAt: string | null
   /** Separation from the Moon in the middle of the darkness window (or of the night). */
   moonSeparationDeg: number
 }
 
 export function objectTonight(grid: NightGrid, ra: number, dec: number): ObjectTonight {
   const altitudes = altitudeCurve(grid, ra, dec)
-  let peak: number | null = null
-  const dark: number[] = []
-  grid.samples.forEach((s, i) => {
-    if (s.sunAlt > grid.sunLimit) return
-    dark.push(i)
-    peak = peak === null ? altitudes[i]! : Math.max(peak, altitudes[i]!)
-  })
+  // The dark samples, and the one where the position stands highest.
+  const dark = grid.samples.flatMap((s, i) => (s.sunAlt > grid.sunLimit ? [] : [i]))
+  const peak = dark.reduce<number | null>((best, i) => (best === null || altitudes[i]! > altitudes[best]! ? i : best), null)
   const mid = grid.samples[dark.length > 0 ? dark[Math.floor(dark.length / 2)]! : Math.floor(grid.samples.length / 2)]!
-  return { altitudes, peakDarkDeg: peak, moonSeparationDeg: angularSeparationDeg(ra, dec, mid.moonRa, mid.moonDec) }
+  return {
+    altitudes,
+    peakDarkDeg: peak === null ? null : altitudes[peak]!,
+    peakDarkAt: peak === null ? null : new Date(grid.samples[peak]!.ms).toISOString(),
+    moonSeparationDeg: angularSeparationDeg(ra, dec, mid.moonRa, mid.moonDec),
+  }
 }
 
 /** Whether the Moon is above the horizon at an instant on the grid (nearest sample). */

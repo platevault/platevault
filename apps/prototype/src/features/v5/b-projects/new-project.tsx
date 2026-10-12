@@ -229,7 +229,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
         </section>
       </div>
       <SheetFooter className="border-t border-separator">
-        {problems.length > 0 ? <Refusal action={m.newproject_refusal()} reason={m.newproject_fields_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
+        {problems.length > 0 ? <Refusal standing action={m.newproject_refusal()} reason={m.newproject_fields_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
         <InlineError message={error} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={closeSheet}>

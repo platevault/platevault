@@ -709,6 +709,37 @@ export interface RunPipeline {
   calibration: CalibrationPlan
 }
 
+/**
+ * A run's status in the one run vocabulary (round 5): Trashed or Complete,
+ * else the gate word of the step it is at ("Blocked", "Partial"). The run
+ * header, a group's panels and the Project's Runs table all show it, so the
+ * same run reads the same everywhere.
+ */
+export type RunState = GateState | "complete" | "trashed"
+
+export interface RunStatus {
+  state: RunState
+  /** The step it is at: where it is held, else its first step not done; Restore and Reopen return there. */
+  step: RunStep
+}
+
+export function runStatus(pipeline: Pick<RunPipeline, "status" | "current">): RunStatus {
+  return { state: pipeline.status === "open" ? pipeline.current.state : pipeline.status, step: pipeline.current.id }
+}
+
+/** When a run last changed: created, edited, saved, prepared, a Result accepted, Completed or Trashed. */
+export function runUpdatedAt(catalog: Catalog, run: Run): IsoDateTime {
+  const times = [
+    run.draft?.updatedAt,
+    run.completedAt,
+    run.trashedAt,
+    ...run.revisions.map((r) => r.savedAt),
+    ...runPreparations(catalog, run.id).flatMap((p) => [p.createdAt, p.settledAt]),
+    ...Object.values(catalog.results).flatMap((r) => (r.runId === run.id ? [r.acceptedAt] : [])),
+  ]
+  return times.reduce<IsoDateTime>((latest, t) => (t && t > latest ? t : latest), run.createdAt)
+}
+
 export function runStepLink(run: Pick<Run, "id" | "projectId">, step: RunStep, search?: Record<string, string>): StepLink {
   return { to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step }, search }
 }
@@ -1114,17 +1145,47 @@ export interface GroupPanelState {
   pipeline: RunPipeline
 }
 
+/** A group's overall status: the worst run status over its live panels, at the earliest step one of them holds it; `at` of `of` live panels are at that step. */
+export interface GroupStatus extends RunStatus {
+  at: number
+  of: number
+}
+
 export interface GroupPipeline {
   group: RunGroup
   panels: GroupPanelState[]
   /** Group steps: each the worst gate over the panels outside the Trash. */
   steps: RunStepState[]
+  status: GroupStatus
   /** Open on the group folder only when every live panel is prepared and verified (PREP-FR-13). */
   allVerified: boolean
   next: NextAction | null
 }
 
 const GATE_ORDER: GateState[] = ["blocked", "partial", "review", "running", "ready", "idle", "done"]
+/** Worst first: a held or waiting panel outranks a Complete one. */
+const RUN_STATE_ORDER: RunState[] = [...GATE_ORDER, "complete"]
+
+/** "Partial · 1 of 2 panels at Prepare". With every panel trashed the group reads Trashed. */
+function groupStatus(panels: GroupPanelState[]): GroupStatus {
+  const live = panels.filter((p) => !p.trashed).map((p) => runStatus(p.pipeline))
+  const state = RUN_STATE_ORDER.find((s) => live.some((x) => x.state === s))
+  if (!state) return { state: "trashed", step: panels[0] ? runStatus(panels[0].pipeline).step : "select", at: 0, of: 0 }
+  const step = RUN_STEPS.find((id) => live.some((x) => x.state === state && x.step === id))!
+  return { state, step, at: live.filter((x) => x.step === step).length, of: live.length }
+}
+
+/** When a group last changed: its own record, any panel run (`runUpdatedAt`) or its group Result. */
+export function groupUpdatedAt(catalog: Catalog, group: RunGroup): IsoDateTime {
+  const times = [
+    ...group.runIds.flatMap((id) => {
+      const run = catalog.runs[id]
+      return run ? [runUpdatedAt(catalog, run)] : []
+    }),
+    ...Object.values(catalog.results).flatMap((r) => (r.runId === null && r.groupId === group.id ? [r.acceptedAt] : [])),
+  ]
+  return times.reduce<IsoDateTime>((latest, t) => (t && t > latest ? t : latest), group.createdAt)
+}
 
 export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
   const { catalog } = world
@@ -1158,7 +1219,7 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
   // The reason names the first panel that holds the step back, e.g. "Panel 2: 30 inputs could not be prepared."
   const holder = open ? live.find((p) => p.pipeline.steps[open.n - 1]!.state === open.state) : undefined
   const next = open ? { step: open, label: open.nextLabel, reason: holder ? joinRefs([panelRef(holder.panel), stepReason(holder.pipeline.steps[open.n - 1]!)], ": ") : open.status, link: open.link } : null
-  return { group, panels, steps, allVerified, next }
+  return { group, panels, steps, status: groupStatus(panels), allVerified, next }
 }
 
 // ---------------------------------------------------------------------------

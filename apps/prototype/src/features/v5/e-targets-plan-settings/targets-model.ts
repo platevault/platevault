@@ -1,25 +1,26 @@
 /**
  * Targets model (slice E, S10): the rows of My targets, Browse catalogues and
  * search over the shared bundled catalogue and SIMBAD fixture (domain/sky);
- * tonight's values per row, with each filter graded "good tonight"; Fit per
- * rig; the built-in presets; and "Add to targets", which writes through the
- * shared `addTarget`.
+ * the chosen night's values per row, with each filter graded "good
+ * tonight"; Fit per rig; the built-in presets; "Add to targets", which
+ * writes through the shared `addTarget`; and the Plan list in the Planned
+ * view's order.
  *
- * Planning values come from the foundation's `computeWindows`, so a row's Img
- * time equals the total of its Plan windows tonight under the same site and
- * criteria (PLAN-TGT-FR-05). The filter grades come from `filterSuitability`
- * (good-tonight.ts).
+ * Planning values come from the foundation's `computeWindows` on the chosen
+ * night (`?night=`, else tonight), so a row's Img time equals the total of
+ * its windows that night under the same site and criteria (PLAN-TGT-FR-05).
+ * The filter grades come from `filterSuitability` (good-tonight.ts).
  */
-import { bandUnion, myTargets, sessionTargetId, liveLightSessions, rigRef, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
+import { bandUnion, myTargets, panelLabel, sessionTargetId, liveLightSessions, rigRef, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
 import { BANDS, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
-import { computeWindows, nightAt, type Tonight } from "@/domain/planning"
+import { type Tonight, windowsOnNight } from "@/domain/planning"
 import { BUNDLED_CATALOGUE, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
-import type { Band, Catalog, Disk, MoonConstraint, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target } from "@/domain/types"
+import type { Band, Catalog, Disk, MoonConstraint, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target, TargetId } from "@/domain/types"
 import { m, type MessageRef, msg, say } from "@/lib/i18n"
 import { addTarget, setFavourite } from "@/store/actions/library"
-import { addToPlan } from "@/store/actions/planning"
-import type { CommitResult } from "@/store/core"
+import { addToPlan, removeFromPlan } from "@/store/actions/planning"
+import { type CommitResult, updateSlice } from "@/store/core"
 import { bandOk, chipsScore, type FilterChip, filtersTonight } from "./good-tonight"
 import { moonUpAt, type NightGrid, nextOpposition, objectTonight } from "./sky-tonight"
 
@@ -59,6 +60,8 @@ export interface TargetRow {
   projects: Project[]
   /** In My targets: ★ favourite or an open-Project subject. */
   mine: boolean
+  /** A mosaic panel's row: the Target whose mosaic it belongs to (D-W63); null for every other row. */
+  panelOf: TargetId | null
 }
 
 function libraryRow(target: Target, projects: Project[], mine: boolean): TargetRow {
@@ -78,6 +81,7 @@ function libraryRow(target: Target, projects: Project[], mine: boolean): TargetR
     sizeDeg: target.sizeDeg ?? entry?.sizeDeg ?? null,
     projects,
     mine,
+    panelOf: null,
   }
 }
 
@@ -96,6 +100,7 @@ function entryRow(entry: CatalogueEntry, simbad: boolean): TargetRow {
     sizeDeg: entry.sizeDeg,
     projects: [],
     mine: false,
+    panelOf: null,
   }
 }
 
@@ -121,6 +126,29 @@ export function browseRows(rows: TargetRow[], catalogues: CatalogueId[]): Target
 export function projectRows(rows: TargetRow[], project: Project): TargetRow[] {
   const ids = new Set(project.subjects.map((s) => s.targetId))
   return rows.filter((r) => r.target && ids.has(r.target.id))
+}
+
+/**
+ * The panels of a mosaic subject of an open Project, as rows under the
+ * subject's row (D-W63): each points at its panel and reads "Panel 2".
+ */
+export function panelRows(row: TargetRow): TargetRow[] {
+  const targetId = row.target?.id
+  if (!targetId) return []
+  const mosaic = row.projects.flatMap((p) => p.subjects).find((s) => s.targetId === targetId && s.mosaic)?.mosaic
+  return (mosaic?.panels ?? []).map((panel) => ({
+    ...row,
+    key: `${row.key}:${panel.id}`,
+    target: null,
+    entry: null,
+    designation: panelLabel(m, panel),
+    aliases: [],
+    ra: panel.ra,
+    dec: panel.dec,
+    sizeDeg: null,
+    mine: false,
+    panelOf: targetId,
+  }))
 }
 
 /** Where a row was found, in the current language: My targets, the library, its bundled catalogues or SIMBAD. */
@@ -161,6 +189,8 @@ export type RowSky =
   | {
       status: "ok"
       peakDeg: number | null
+      /** When the peak in darkness falls; null without darkness. */
+      peakAt: string | null
       lunarDeg: number
       imgTimeS: number
       windows: ObservingWindow[]
@@ -191,31 +221,35 @@ export function zeroReasonWord(reason: ZeroReason): string {
   return reason.kind === "darkness" ? m.tonight_zero_word_darkness() : reason.kind === "moon" ? m.tonight_zero_word_moon() : m.tonight_zero_word_altitude()
 }
 
+/** The night the Targets page plans for (`?night=`, else tonight) at the planning site. */
 export interface SkyContext {
   site: ObservingSite
   grid: NightGrid
-  tonight: Tonight
+  /** The chosen night's Moon and darkness. */
+  summary: Tonight
   criteria: PlanCriteria
   nowMs: number
+  /** Tonight's date (`upcomingNight`): the earliest night to choose. */
+  tonight: string
 }
 
-/** Tonight's windows for a position, as `computeWindows` reports them for the night that holds `nowMs`. */
-export function windowsTonight(ctx: SkyContext, id: string, ra: number, dec: number): ObservingWindow[] {
+/** A position's windows on the chosen night, as `computeWindows` reports them: none already past. */
+export function windowsOnChosenNight(ctx: SkyContext, id: string, ra: number, dec: number): ObservingWindow[] {
   const probe: Target = { id, name: id, aliases: [], ra, dec, sizeDeg: null, coordinateSource: "catalog", resolver: null, notes: "", favourite: false, createdAt: "", revision: 1 }
-  return computeWindows(probe, ctx.site, ctx.criteria, ctx.nowMs, 1).filter((w) => nightAt(Date.parse(w.start), ctx.site) === ctx.grid.night)
+  return windowsOnNight(probe, ctx.site, ctx.criteria, ctx.grid.night, ctx.nowMs)
 }
 
 export function positionSky(ctx: SkyContext | null, id: string, ra: number | null, dec: number | null): RowSky {
   if (!ctx) return { status: "no-site" }
   if (ra === null || dec === null) return { status: "no-coordinates" }
-  const windows = windowsTonight(ctx, id, ra, dec)
+  const windows = windowsOnChosenNight(ctx, id, ra, dec)
   const sky = objectTonight(ctx.grid, ra, dec)
   const imgTimeS = windows.reduce((sum, w) => sum + (Date.parse(w.end) - Date.parse(w.start)) / 1000, 0)
   const best = [...windows].sort((a, b) => b.maxAltitudeDeg - a.maxAltitudeDeg)[0] ?? null
   let zeroReason: ZeroReason | null = null
   if (imgTimeS === 0) {
     const min = ctx.criteria.minAltitudeDeg
-    if (!ctx.tonight.darkness) zeroReason = { kind: "darkness", sunLimitDeg: ctx.grid.sunLimit }
+    if (!ctx.summary.darkness) zeroReason = { kind: "darkness", sunLimitDeg: ctx.grid.sunLimit }
     else if (sky.peakDarkDeg === null || sky.peakDarkDeg < min) zeroReason = { kind: "low", minAltitudeDeg: min }
     else if (ctx.criteria.maxMoonIlluminationPct !== null || ctx.criteria.minMoonSeparationDeg !== null) zeroReason = { kind: "moon" }
     else zeroReason = { kind: "short", minAltitudeDeg: min, minDurationMin: ctx.criteria.minDurationMin }
@@ -224,6 +258,7 @@ export function positionSky(ctx: SkyContext | null, id: string, ra: number | nul
   return {
     status: "ok",
     peakDeg: sky.peakDarkDeg,
+    peakAt: sky.peakDarkAt,
     lunarDeg: sky.moonSeparationDeg,
     imgTimeS,
     windows,
@@ -311,7 +346,8 @@ export interface PresetDef {
 
 const imgTime = (v: RowView) => (v.sky.status === "ok" ? v.sky.imgTimeS : 0)
 const ok = (v: RowView, band: Band) => bandOk(v.tonight, band)
-const broadOk = (v: RowView) => (v.tonight ?? []).some((c) => !NARROW_BANDS.includes(c.band) && c.grade !== "poor")
+/** Some filter the selection passes (the rig's, or all seven without one) is good or marginal. */
+const anyOk = (v: RowView) => (v.tonight ?? []).some((c) => c.grade !== "poor")
 const narrowOk = (v: RowView) => (v.tonight ?? []).some((c) => NARROW_BANDS.includes(c.band) && c.grade !== "poor")
 const moonUp = (v: RowView) => (v.sky.status === "ok" ? v.sky.moonUp : null)
 
@@ -322,7 +358,7 @@ export const BUILT_IN_PRESETS: PresetDef[] = [
     get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_best_definition() },
     needs: null,
-    match: (v) => imgTime(v) > 0 && broadOk(v),
+    match: (v) => imgTime(v) > 0 && anyOk(v),
     sort: { column: "img", direction: "desc" },
   },
   {
@@ -473,7 +509,7 @@ export function formatSort(sort: SortSpec): string {
 }
 
 // ---------------------------------------------------------------------------
-// Add to targets (PLAN-TGT-FR-03) and to the Plan list
+// Add to targets (PLAN-TGT-FR-03) and the Plan list (the Planned view)
 // ---------------------------------------------------------------------------
 
 const stale = (): CommitResult => ({ ok: false, reason: "stale", message: m.targets_result_gone() })
@@ -498,4 +534,37 @@ export function planRow(row: TargetRow): CommitResult {
     targetId = written.targetId
   }
   return targetId ? addToPlan(targetId) : stale()
+}
+
+/** Take a Target off the Plan list, and out of the order the user gave it. */
+export function unplan(targetId: TargetId): CommitResult {
+  const result = removeFromPlan(targetId)
+  if (result.ok) updateSlice("e", (slice) => ({ ...slice, planOrder: slice.planOrder.filter((id) => id !== targetId) }))
+  return result
+}
+
+/**
+ * The Planned view's order: the order the user gave (slice E `planOrder`),
+ * then the rest by their first window on the chosen night, then by name.
+ */
+export function plannedOrder(views: RowView[], order: TargetId[]): RowView[] {
+  const place = new Map(order.map((id, index) => [id, index]))
+  const first = (v: RowView) => (v.sky.status === "ok" && v.sky.windows[0] ? Date.parse(v.sky.windows[0].start) : Number.POSITIVE_INFINITY)
+  const rank = (v: RowView) => place.get(v.row.key) ?? Number.POSITIVE_INFINITY
+  return [...views].sort((a, b) => {
+    if (rank(a) !== rank(b)) return rank(a) < rank(b) ? -1 : 1
+    if (first(a) !== first(b)) return first(a) < first(b) ? -1 : 1
+    return collator.compare(a.row.designation, b.row.designation)
+  })
+}
+
+/** Move a planned Target one place up (-1) or down (1) in the shown order, and keep that whole order. */
+export function movePlanned(shown: TargetId[], targetId: TargetId, delta: -1 | 1): void {
+  const from = shown.indexOf(targetId)
+  const to = from + delta
+  if (from < 0 || to < 0 || to >= shown.length) return
+  const next = [...shown]
+  next.splice(from, 1)
+  next.splice(to, 0, targetId)
+  updateSlice("e", (slice) => ({ ...slice, planOrder: next }))
 }

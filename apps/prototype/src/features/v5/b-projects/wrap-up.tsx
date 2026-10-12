@@ -126,7 +126,7 @@ export function WrapUpStage({ project }: { project: Project }) {
   return (
     <div className="space-y-4">
       {!done && waiting.length > 0 ? (
-        <Refusal
+        <Refusal standing
           action={m.wrapup_blocked()}
           reason={m.wrapup_runs_not_complete({ count: waiting.length })}
           blockers={waiting.map((run) => ({ label: run.name, link: runStepLink(run, "done") }))}
@@ -385,7 +385,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
                 ) : null}
               </div>
               {offer.refusals.length > 0 && !operationId && !isSkipped ? (
-                <Refusal action={m.wrapup_cant_trash({ n: offer.refusals.length })} reason={trashRefusalReason(m, offer.refusals)} blockers={offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}` }))} />
+                <Refusal standing action={m.wrapup_cant_trash({ n: offer.refusals.length })} reason={trashRefusalReason(m, offer.refusals)} blockers={offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}` }))} />
               ) : null}
             </li>
           )
@@ -449,7 +449,7 @@ function ArchiveStep({ project, step, pill, editable, current, settle }: StepPro
             {m.wrapup_destination()}
           </legend>
           {locations.length === 0 ? (
-            <Refusal action={m.wrapup_archive_blocked()} reason={m.wrapup_no_archive_location()} blockers={[{ label: `${m.nav_settings()} › ${m.common_locations()}`, link: { to: "/settings/locations" } }]} />
+            <Refusal standing action={m.wrapup_archive_blocked()} reason={m.wrapup_no_archive_location()} blockers={[{ label: `${m.nav_settings()} › ${m.common_locations()}`, link: { to: "/settings/locations" } }]} />
           ) : (
             <RadioGroup
               aria-labelledby={groupId}
@@ -475,16 +475,16 @@ function ArchiveStep({ project, step, pill, editable, current, settle }: StepPro
           )}
           <CommitOutcome result={choose.result} action={m.wrapup_refusal_destination()} />
         </fieldset>
-        {plan.blocked && locations.length > 0 ? <Refusal action={m.wrapup_archive_blocked()} reason={say(m, plan.blocked)} blockers={[]} /> : null}
+        {plan.blocked && locations.length > 0 ? <Refusal standing action={m.wrapup_archive_blocked()} reason={say(m, plan.blocked)} blockers={[]} /> : null}
         <div className="flex flex-wrap items-center gap-1.5">
           {plan.rows.length > 0 ? <Pill tone="neutral">{m.wrapup_sessions_to_move({ count: plan.rows.length })}</Pill> : null}
           {operationId ? <ApprovalOutcome operationId={operationId} label={m.status_archived()} /> : project.archive ? <Pill tone="success">{m.wrapup_sessions_archived({ count: project.archive.sessionIds.length })}</Pill> : null}
         </div>
         {plan.refused.length > 0 ? (
-          <Refusal action={m.wrapup_sessions_stay({ count: plan.refused.length })} reason={m.wrapup_refused()} blockers={plan.refused.map((r) => ({ label: `${sessionLabel(catalog, r.session)} · ${say(m, r.reason)}` }))} />
+          <Refusal standing action={m.wrapup_sessions_stay({ count: plan.refused.length })} reason={m.wrapup_refused()} blockers={plan.refused.map((r) => ({ label: `${sessionLabel(catalog, r.session)} · ${say(m, r.reason)}` }))} />
         ) : null}
         {plan.kept.length > 0 ? (
-          <Refusal action={m.wrapup_sessions_kept({ count: plan.kept.length })} reason={m.wrapup_used_by_other_reason()} blockers={plan.kept.map((k) => ({ label: `${sessionLabel(catalog, k.session)} · ${k.projects.join(", ")}` }))} />
+          <Refusal standing action={m.wrapup_sessions_kept({ count: plan.kept.length })} reason={m.wrapup_used_by_other_reason()} blockers={plan.kept.map((k) => ({ label: `${sessionLabel(catalog, k.session)} · ${k.projects.join(", ")}` }))} />
         ) : null}
       </div>
     </StepBox>

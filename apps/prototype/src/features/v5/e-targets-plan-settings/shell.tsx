@@ -1,7 +1,7 @@
 /**
  * Slice E shell contribution (see `src/app/shell-contract.ts`): palette
- * actions for Plan tonight, each built-in Targets preset and each saved
- * preset. Slice E owns this file.
+ * actions for Plan tonight (the Targets page's Planned view), each built-in
+ * Targets preset and each saved preset. Slice E owns this file.
  */
 import { useMessages } from "@/app/preferences"
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
@@ -12,7 +12,7 @@ function useCommands(): PaletteCommand[] {
   const m = useMessages()
   const saved = useStore((s) => s.slices.e.savedPresets)
   return [
-    { id: "e:plan-tonight", label: m.target_plan_tonight(), group: "Actions", keywords: "tonight window moon darkness timeline planner", to: "/plan" },
+    { id: "e:plan-tonight", label: m.target_plan_tonight(), group: "Actions", keywords: "tonight window moon darkness planned planner", to: "/targets?view=planned" },
     // Presets that need a rig stay on the Targets toolbar, where the rig is chosen.
     ...BUILT_IN_PRESETS.filter((p) => p.needs !== "rig").map((p) => ({ id: `e:preset:${p.id}`, label: m.targets_palette_preset({ name: p.label }), group: "Actions", keywords: `preset targets ${p.definition}`, to: `/targets?preset=${p.id}` })),
     ...saved.map((p) => {

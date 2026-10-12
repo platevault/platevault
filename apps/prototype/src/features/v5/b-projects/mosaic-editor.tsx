@@ -35,6 +35,7 @@ import { formatCount, formatDec, formatNight, formatRa } from "@/lib/format"
 import { type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
+import { nearestPanel } from "./model"
 import { CommitOutcome, type SubjectPick, SubjectSearch } from "./parts"
 import { NO_PROFILE, profileOptions } from "./start-run"
 import { confirmMosaic } from "./subject-actions"
@@ -233,6 +234,15 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
     { label: m.mosaic_leave_out(), icon: Ban, onSelect: () => assign(key, null) },
   ]
 
+  /** What clicking a session does: a placed one is left out, a left-out one goes back to its pointing, a flagged one goes on the nearest panel. */
+  const primary = (row: SessionRow): { label: string; panelId: string | null | "auto" } | null => {
+    const { placement } = row
+    if (placement.panelId && included.some((p) => p.id === placement.panelId)) return { label: m.mosaic_leave_out(), panelId: null }
+    if (placement.byUser && placement.panelId === null) return { label: m.mosaic_by_pointing(), panelId: "auto" }
+    const nearest = nearestPanel(row.session.pointing, included)
+    return nearest ? { label: m.rungroup_place_on({ panel: m.review_panel_n({ n: nearest.n }) }), panelId: nearest.id } : null
+  }
+
   const centre = draft.mosaic!.centre
   const hasField = panels.length > 0
 
@@ -263,7 +273,7 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
         }
       />
       <div className="space-y-3 px-5 pt-3">
-        {problems.length > 0 ? <Refusal action={m.mosaic_refusal_start_group()} reason={m.mosaic_items_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
+        {problems.length > 0 ? <Refusal standing action={m.mosaic_refusal_start_group()} reason={m.mosaic_items_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
         <CommitOutcome result={outcome} action={m.mosaic_refusal_start_group()} />
       </div>
       <div className="grid min-h-0 flex-1 gap-4 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -384,7 +394,7 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
                 {[...rows]
                   .sort((a, b) => Number(b.placement.flag !== null) - Number(a.placement.flag !== null) || a.session.night.localeCompare(b.session.night))
                   .map((row) => (
-                    <SessionItem key={row.session.id} row={row} panels={included} onAssign={(panelId) => assign(row.session.id, panelId)} />
+                    <SessionItem key={row.session.id} row={row} panels={included} primary={primary(row)} onAssign={(panelId) => assign(row.session.id, panelId)} />
                   ))}
               </ul>
             </ContextMenuArea>
@@ -425,7 +435,8 @@ function LayoutButtons({ onPick }: { onPick: (cols: number, rows: number) => voi
 const PLACE_AUTO = "auto"
 const PLACE_OUT = "out"
 
-function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: PanelState[]; onAssign: (panelId: string | null | "auto") => void }) {
+/** A session to place: clicking it (or Enter) does `primary`; the panel choice and the right-click menu offer the rest. */
+function SessionItem({ row, panels, primary, onAssign }: { row: SessionRow; panels: PanelState[]; primary: { label: string; panelId: string | null | "auto" } | null; onAssign: (panelId: string | null | "auto") => void }) {
   const m = useMessages()
   const { session, placement } = row
   const panel = panels.find((p) => p.id === placement.panelId)
@@ -440,10 +451,16 @@ function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: Panel
         e.dataTransfer.setData("application/x-pv-session", session.id)
         e.dataTransfer.effectAllowed = "move"
       }}
-      className="flex items-center gap-2 px-2 py-1.5 text-sm"
+      className="flex items-center gap-2 px-2 text-sm hover:bg-foreground/[0.04]"
     >
       <GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground" />
-      <div className="min-w-0 flex-1">
+      <button
+        type="button"
+        disabled={!primary}
+        title={primary?.label}
+        onClick={() => primary && onAssign(primary.panelId)}
+        className="min-w-0 flex-1 self-stretch rounded-sm py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+      >
         <span className="block truncate font-medium tabular-nums">{label}</span>
         <span className="flex items-center gap-1">
           {placement.flag ? (
@@ -461,7 +478,8 @@ function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: Panel
           )}
           <span className="text-xs text-muted-foreground tabular-nums">{m.project_frames_count({ count: row.frames, n: formatCount(row.frames) })}</span>
         </span>
-      </div>
+        {primary ? <span className="sr-only">, {primary.label}</span> : null}
+      </button>
       <Select items={options} value={value} onValueChange={(next) => onAssign(next === PLACE_AUTO ? "auto" : next === PLACE_OUT ? null : String(next))}>
         <SelectTrigger size="sm" aria-label={m.mosaic_panel_for({ name: label })} className="w-fit min-w-28 shrink-0 whitespace-nowrap">
           <SelectValue />

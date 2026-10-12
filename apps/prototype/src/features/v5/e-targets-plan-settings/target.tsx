@@ -1,11 +1,12 @@
 /**
  * S10 Target detail (`/targets/$targetId`, slice E): v4's finder list beside
- * the Target. The detail holds, in boxes: tonight at the planning site
- * (values and a one-row night timeline whose filter sub-rows are open),
- * identity, Fit on every rig, the Projects that use it with their goal
- * lines, and captured time per channel with its sessions. The header adds
- * it to the Plan list, adds it to an open Project (previewed first) or
- * opens New Project with this Target as the subject.
+ * the Target. The detail holds, in boxes: the chosen night at the planning
+ * site (the Targets page's `?night=`, else tonight: the altitude sparkline,
+ * best window, Img time, Moon, filters graded good tonight), identity, Fit
+ * on every rig, the Projects that use it with their goal lines, and captured
+ * time per channel with its sessions. The header adds it to the Plan list,
+ * adds it to an open Project (previewed first) or opens New Project with
+ * this Target as the subject.
  */
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { ChevronDown, Star } from "lucide-react"
@@ -34,13 +35,11 @@ import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { setFavourite } from "@/store/actions/library"
-import { addToPlan, removeFromPlan } from "@/store/actions/planning"
+import { addToPlan } from "@/store/actions/planning"
 import { addSubject } from "@/store/actions/projects"
 import { type CommitResult, useStore } from "@/store/core"
-import { limitText } from "./good-tonight"
-import { type NightColumn, type NightRow, NightTable } from "./night-timeline"
-import { AddSiteButton, clockRange, criteriaText, FitCell, MoonLine, SiteLine, useSkyContext } from "./parts"
-import { allRows, rowView, sessionCountsByTarget, type TargetRow, zeroReasonText } from "./targets-model"
+import { AddSiteButton, AltitudeSpark, clockRange, criteriaText, DarkLine, FilterChips, FitCell, MoonLine, SiteLine, useSkyContext } from "./parts"
+import { allRows, rowView, sessionCountsByTarget, type TargetRow, unplan, zeroReasonText } from "./targets-model"
 import { keepSearch } from "./targets"
 
 function coordinateSource(m: Messages, source: string): string {
@@ -83,7 +82,7 @@ function TargetFinder({ activeId }: { activeId: string }) {
     return [
       { label: m.verb_open(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: key }, search: keep }) },
       { label: target.favourite ? m.targets_unstar() : m.targets_star(), onSelect: () => run(() => setFavourite(key, !target.favourite)) },
-      planned.has(key) ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => removeFromPlan(key)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => addToPlan(key)) },
+      planned.has(key) ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => unplan(key)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => addToPlan(key)) },
       { separator: true },
       { label: m.newproject_open(), onSelect: () => openSheet({ kind: "new-project", targetId: key }) },
     ]
@@ -179,10 +178,9 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
   const constraints = useStore((s) => s.settings.moonConstraints)
-  const ctx = useSkyContext()
+  const ctx = useSkyContext(search.night)
   const { error, run } = useWrite()
   const [adding, setAdding] = useState<Project | null>(null)
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([targetId]))
   const target = catalog.targets[targetId]!
   const row = useMemo(() => allRows(catalog).find((r) => r.key === targetId) as TargetRow, [catalog, targetId])
   const rigIds = Object.keys(catalog.opticalTrains)
@@ -197,14 +195,6 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const sky = view.sky
   const addingGoals = adding ? projectGoalSet(adding) : []
 
-  const toggleFilters = (key: string) =>
-    setExpanded((current) => {
-      const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-
   const tonightBox = (() => {
     if (!ctx)
       return (
@@ -214,67 +204,40 @@ function TargetDetail({ targetId }: { targetId: string }) {
         </div>
       )
     if (sky.status !== "ok") return <p className="p-3 text-sm text-muted-foreground">{m.target_no_coordinates()}</p>
-    const night: NightRow = { key: target.id, name: target.name, label: <span className="truncate font-medium">{target.name}</span>, altitudes: sky.altitudes, windows: sky.windows, chips: view.tonight }
-    const columns: NightColumn<NightRow>[] = [
-      {
-        id: "best",
-        header: m.tonight_best(),
-        width: "w-24",
-        wide: true,
-        cell: () => (sky.best ? clockRange(sky.best.start, sky.best.end, ctx.site) : "–"),
-        filterCell: (_r, chip) => (chip.stretches[0] ? clockRange(chip.stretches[0].start, chip.stretches[0].end, ctx.site) : "–"),
-      },
-      { id: "img", header: m.tonight_img(), width: "w-12", align: "right", cell: () => (sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : m.tonight_zero_hours()), filterCell: (_r, chip) => (chip.minutes > 0 ? formatHours(chip.minutes * 60) : "–") },
-      { id: "moon", header: m.tonight_moon(), width: "w-16", align: "right", cell: () => `${Math.round(sky.best ? sky.best.moonSeparationDeg : sky.lunarDeg)}°`, filterCell: (_r, chip) => <span title={limitText(chip.limit)}>≥ {chip.limit.minSeparationDeg}°</span> },
-    ]
     const zeroTitle = sky.zeroReason ? zeroReasonText(sky.zeroReason) : undefined
     const facts = [
+      { label: m.tonight_altitude(), value: <AltitudeSpark ctx={ctx} sky={sky} /> },
       { label: m.tonight_best(), value: sky.best ? `${clockRange(sky.best.start, sky.best.end, ctx.site)} · ${Math.round(sky.best.maxAltitudeDeg)}°` : <span title={zeroTitle}>{m.target_best_none()}</span> },
       { label: m.tonight_img_time(), value: sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : <span title={zeroTitle}>{m.tonight_zero_hours()}</span> },
-      { label: m.tonight_max_alt(), value: sky.peakDeg === null ? <UnknownValue label="–" reason={m.tonight_no_darkness()} /> : `${Math.round(sky.peakDeg)}°`.replace("-", "−") },
-      { label: m.tonight_lunar(), value: `${Math.round(sky.lunarDeg)}°` },
+      { label: m.tonight_lunar(), value: `${Math.round(sky.best ? sky.best.moonSeparationDeg : sky.lunarDeg)}°` },
+      { label: m.targets_filters(), value: <FilterChips chips={view.tonight} empty={zeroTitle ?? m.tonight_no_window()} /> },
       { label: m.tonight_opposition(), value: view.opposition ? formatNight(view.opposition, true) : "–" },
     ]
     return (
-      <>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-border px-3 py-2">
-          <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular-nums">
-            {facts.map((f) => (
-              <div key={f.label} className="flex items-baseline gap-1.5">
-                <dt className="text-xs text-muted-foreground">{f.label}</dt>
-                <dd>{f.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5">
-            <MoonLine ctx={ctx} />
-            <SiteLine site={ctx.site} />
-          </span>
-        </div>
-        <NightTable
-          grid={ctx.grid}
-          nowMs={ctx.nowMs}
-          minAltitudeDeg={ctx.criteria.minAltitudeDeg}
-          moonIlluminationPct={ctx.tonight.moon.illuminationPct}
-          caption={m.target_caption({ name: target.name, site: ctx.site.name })}
-          labelHeader={m.tonight_target()}
-          rows={[night]}
-          columns={columns}
-          expanded={expanded}
-          onToggle={toggleFilters}
-          menu={() => [
-            { label: expanded.has(targetId) ? m.tonight_hide_filters() : m.tonight_show_filters(), onSelect: () => toggleFilters(targetId) },
-            inPlan ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => removeFromPlan(targetId)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => addToPlan(targetId)) },
-            { label: m.targets_open_plan(), onSelect: () => void navigate({ to: "/plan" }) },
-          ]}
-          note={[
-            { label: m.tonight_night(), value: formatNight(ctx.grid.night, true) },
-            { label: m.tonight_times(), value: ctx.site.timeZone },
-            { label: m.tonight_criteria(), value: criteriaText(m, ctx.criteria) },
-            { label: m.tonight_method(), value: m.tonight_method_value() },
-          ]}
-        />
-      </>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-3 py-2" data-target-night>
+        <dl className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm tabular-nums">
+          {facts.map((f) => (
+            <div key={f.label} className="flex items-center gap-1.5">
+              <dt className="text-xs text-muted-foreground">{f.label}</dt>
+              <dd>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <MoonLine ctx={ctx} />
+          <DarkLine ctx={ctx} />
+          <SiteLine site={ctx.site} />
+          <NoteMarker
+            label={m.tonight_method()}
+            rows={[
+              { label: m.tonight_night(), value: formatNight(ctx.grid.night, true) },
+              { label: m.tonight_times(), value: ctx.site.timeZone },
+              { label: m.tonight_criteria(), value: criteriaText(m, ctx.criteria) },
+              { label: m.tonight_method(), value: m.tonight_method_value() },
+            ]}
+          />
+        </span>
+      </div>
     )
   })()
 
@@ -283,7 +246,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
     if (!p) return []
     return [
       { label: m.target_open_project(), onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
-      ...(p.state === "open" ? [{ label: m.target_open_planner(), onSelect: () => void navigate({ to: "/targets", search: { project: p.id } }) }, { label: m.target_plan_tonight(), onSelect: () => void navigate({ to: "/plan", search: { project: p.id } }) }] : []),
+      ...(p.state === "open" ? [{ label: m.target_open_planner(), onSelect: () => void navigate({ to: "/targets", search: { project: p.id, night: search.night } }) }] : []),
     ]
   }
   const sessionMenu = (key: string): MenuEntry[] => [{ label: m.project_open_session(), onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: key } }) }]
@@ -310,7 +273,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
         }
         actions={
           <>
-            <Button variant="outline" aria-pressed={inPlan} onClick={() => run(() => (inPlan ? removeFromPlan(targetId) : addToPlan(targetId)))}>
+            <Button variant="outline" aria-pressed={inPlan} onClick={() => run(() => (inPlan ? unplan(targetId) : addToPlan(targetId)))}>
               {inPlan ? m.targets_remove_from_plan() : m.targets_add_to_plan()}
             </Button>
             <DropdownMenu>
@@ -338,11 +301,11 @@ function TargetDetail({ targetId }: { targetId: string }) {
 
         <Box
           id="tgt-tonight"
-          title={m.target_tonight()}
+          title={ctx && ctx.grid.night !== ctx.tonight ? formatNight(ctx.grid.night, true) : m.target_tonight()}
           flush
           actions={
             ctx ? (
-              <Button size="xs" variant="ghost" render={<Link to="/plan" />}>
+              <Button size="xs" variant="ghost" render={<Link to="/targets" search={{ view: "planned", night: search.night }} />}>
                 {m.targets_open_plan()}
               </Button>
             ) : null
