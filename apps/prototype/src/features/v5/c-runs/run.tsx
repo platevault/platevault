@@ -109,7 +109,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
       ) : (
         <PageBody>
           {step === "select" ? <SelectStep ctx={ctx} /> : null}
-          {step === "calibrate" ? <CalibrateStep ctx={ctx} /> : null}
+          {step === "calibrate" ? <CalibrateStep key={ctx.run.id} ctx={ctx} /> : null}
           {step === "prepare" ? <PrepareStep ctx={ctx} /> : null}
           {step === "results" ? <ResultsStep ctx={ctx} /> : null}
           {step === "done" ? <DoneStep ctx={ctx} outcome={outcome} /> : null}

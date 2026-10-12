@@ -25,6 +25,7 @@ import type {
   MembershipContent,
   Run,
   Session,
+  SessionId,
 } from "./types"
 import { fileName, formatExposure } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
@@ -331,7 +332,10 @@ export type RowState = CalibrationAssignment["state"]
 
 export interface RequirementRow {
   key: string
+  /** The first light session the row covers: its facts and night rank the candidates. */
   member: MemberSession
+  /** Every light session the row covers, in run order (`requirementKey`). */
+  members: MemberSession[]
   kind: CalibrationKind
   /** Stored decision for this run, if any. */
   assignment: CalibrationAssignment | null
@@ -349,23 +353,47 @@ export interface RequirementRow {
   drift: string | null
   /** A compatible master the matching rule ranks above the assigned one: offered as "Better match available", never switched to by itself. */
   better: Candidate | null
-  /** Identifies the setup group: the same lights' channel, rig, size, binning, gain and offset. */
+  /** Identifies the setup group: the covered lights' channels, rig, size, binning, gain and offset. */
   groupKey: string
   /** The group's setup, one ref per part, in the order of `groupKey`. */
   groupParts: MessageRef[]
+}
+
+/** The light sessions a row's decision is stored for. */
+export function sessionIdsOf(row: RequirementRow): SessionId[] {
+  return row.members.map((m) => m.session.id)
 }
 
 export function assignmentId(runId: string, sessionId: string, kind: CalibrationKind): string {
   return `cal_${runId}_${sessionId}_${kind}`
 }
 
-function groupOf(catalog: Catalog, session: Session): { key: string; parts: MessageRef[] } {
+/**
+ * Light sessions with the same key share one requirement row. Darks and bias
+ * do not depend on the filter or the night (P-CAL3 files them per camera,
+ * exposure, gain and offset), so they key on the light facts their criteria
+ * compare (`matchCriteria`): one dark and one bias row across a run's
+ * channels. Flats and dark flats stay per light session (filter and night).
+ */
+function requirementKey(catalog: Catalog, session: Session, kind: CalibrationKind): string {
+  if (kind !== "dark" && kind !== "bias") return `${kind}|${session.id}`
+  const g = lightGeometry(catalog, session)
+  return [kind, g.cameraName, g.widthPx, g.heightPx, g.binning, g.gain, g.offset, ...(kind === "dark" ? [g.exposureS] : [])].join("|")
+}
+
+/** The setup group of the light sessions one row covers: their channels, then the rig and camera settings they share. */
+function groupOf(catalog: Catalog, sessions: Session[]): { key: string; parts: MessageRef[] } {
+  const session = sessions[0]!
   const g = lightGeometry(catalog, session)
   const train = trainName(catalog, g.opticalTrainId)
   const unknown = msg("status_unknown")
-  const values = [session.channel, train ?? g.cameraName, g.widthPx && g.heightPx ? `${g.widthPx}\u00a0×\u00a0${g.heightPx}` : null, String(g.binning), `${g.gain ?? "?"}/${g.offset ?? "?"}`]
+  const channels = [...new Set(sessions.map((s) => s.channel))]
+  const values = [channels.join(","), train ?? g.cameraName, g.widthPx && g.heightPx ? `${g.widthPx}\u00a0×\u00a0${g.heightPx}` : null, String(g.binning), `${g.gain ?? "?"}/${g.offset ?? "?"}`]
   const parts = [
-    session.channel ? verbatim(session.channel) : msg("palette_session_no_filter"),
+    joinRefs(
+      channels.map((channel) => (channel ? verbatim(channel) : msg("palette_session_no_filter"))),
+      ", ",
+    ),
     train ? verbatim(train) : msg("domain_cal_group_rig_unknown", { camera: g.cameraName ? verbatim(g.cameraName) : msg("newproject_camera_unknown") }),
     g.widthPx && g.heightPx ? verbatim(`${g.widthPx}\u00a0×\u00a0${g.heightPx}`) : msg("domain_cal_group_size_unknown"),
     msg("run_cal_bin", { binning: g.binning }),
@@ -397,61 +425,70 @@ const HANDED_OFF = new Set<RowState>(["automatic", "accepted", "exception"])
  */
 export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: CalibrationPolicy, content: MembershipContent | null): CalibrationPlan {
   const counts: Record<RowState, number> = { automatic: 0, suggested: 0, accepted: 0, exception: 0, deferred: 0, unresolved: 0 }
-  const members = content ? memberSessions(catalog, content) : []
   const frozen = run.completion === "complete"
   const sources = frozen ? [] : reusableSources(catalog, disk)
-  const rows: RequirementRow[] = []
-  for (const member of members) {
-    const group = groupOf(catalog, member.session)
+  const requirements = new Map<string, { kind: CalibrationKind; members: MemberSession[] }>()
+  for (const member of content ? memberSessions(catalog, content) : []) {
     for (const kind of KINDS) {
-      const candidates = candidatesFor(catalog, member.session, kind, sources)
-      const suggestion = candidates[0]?.summary.allCompatible ? candidates[0] : null
-      const closest = suggestion ? null : (candidates[0] ?? null)
-      const stored = run.calibration.find((a) => a.lightSessionId === member.session.id && a.kind === kind) ?? null
-      // Off assigns nothing by itself: a stored automatic choice waits for Accept like any suggestion.
-      const assignment = policy === "off" && stored?.state === "automatic" ? null : stored
-      let state: RowState
-      let input: CalibrationInput | null
-      let criteria: MatchCriterion[]
-      let drift: string | null = null
-      let better: Candidate | null = null
-      if (assignment) {
-        state = assignment.state
-        input = assignment.input
-        const live = assignment.input ? candidates.find((c) => sameInput(c.source.input, assignment.input)) : undefined
-        criteria = assignment.criteria.length > 0 ? assignment.criteria : (live?.criteria ?? [])
-        if (!frozen && assignment.input && HANDED_OFF.has(state)) {
-          drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, assignment)
-          if (suggestion && !sameInput(suggestion.source.input, assignment.input) && (!live || compareCandidates(member.session.night, suggestion, live) < 0)) better = suggestion
-        }
-      } else if (suggestion) {
-        state = policy === "automatic" ? "automatic" : "suggested"
-        input = suggestion.source.input
-        criteria = suggestion.criteria
-        if (policy === "automatic") drift = inputDrift(catalog, disk, suggestion.source.input)
-      } else {
-        state = "unresolved"
-        input = null
-        criteria = closest?.criteria ?? []
-      }
-      rows.push({
-        key: `${member.session.id}:${kind}`,
-        member,
-        kind,
-        assignment,
-        suggestion,
-        closest,
-        candidates,
-        state,
-        input,
-        source: input ? sourceFor(catalog, input) : null,
-        criteria,
-        drift,
-        better,
-        groupKey: group.key,
-        groupParts: group.parts,
-      })
+      const key = requirementKey(catalog, member.session, kind)
+      const requirement = requirements.get(key)
+      if (requirement) requirement.members.push(member)
+      else requirements.set(key, { kind, members: [member] })
     }
+  }
+  const rows: RequirementRow[] = []
+  for (const [key, { kind, members }] of requirements) {
+    const member = members[0]!
+    const group = groupOf(catalog, members.map((m) => m.session))
+    const candidates = candidatesFor(catalog, member.session, kind, sources)
+    const suggestion = candidates[0]?.summary.allCompatible ? candidates[0] : null
+    const closest = suggestion ? null : (candidates[0] ?? null)
+    // Decisions are stored per light session, for every session the row covers; the first one found decides.
+    const stored = members.map((m) => run.calibration.find((a) => a.lightSessionId === m.session.id && a.kind === kind)).find((a) => a !== undefined) ?? null
+    // Off assigns nothing by itself: a stored automatic choice waits for Accept like any suggestion.
+    const assignment = policy === "off" && stored?.state === "automatic" ? null : stored
+    let state: RowState
+    let input: CalibrationInput | null
+    let criteria: MatchCriterion[]
+    let drift: string | null = null
+    let better: Candidate | null = null
+    if (assignment) {
+      state = assignment.state
+      input = assignment.input
+      const live = assignment.input ? candidates.find((c) => sameInput(c.source.input, assignment.input)) : undefined
+      criteria = assignment.criteria.length > 0 ? assignment.criteria : (live?.criteria ?? [])
+      if (!frozen && assignment.input && HANDED_OFF.has(state)) {
+        drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, assignment)
+        if (suggestion && !sameInput(suggestion.source.input, assignment.input) && (!live || compareCandidates(member.session.night, suggestion, live) < 0)) better = suggestion
+      }
+    } else if (suggestion) {
+      state = policy === "automatic" ? "automatic" : "suggested"
+      input = suggestion.source.input
+      criteria = suggestion.criteria
+      if (policy === "automatic") drift = inputDrift(catalog, disk, suggestion.source.input)
+    } else {
+      state = "unresolved"
+      input = null
+      criteria = closest?.criteria ?? []
+    }
+    rows.push({
+      key,
+      member,
+      members,
+      kind,
+      assignment,
+      suggestion,
+      closest,
+      candidates,
+      state,
+      input,
+      source: input ? sourceFor(catalog, input) : null,
+      criteria,
+      drift,
+      better,
+      groupKey: group.key,
+      groupParts: group.parts,
+    })
   }
   const groups: CalibrationPlan["groups"] = []
   for (const row of rows) {
@@ -470,11 +507,12 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
  * silent re-rank) and on Complete, which freezes what the run handed off.
  */
 export function automaticAssignments(catalog: Catalog, disk: Disk, runId: string, plan: CalibrationPlan, at: IsoDateTime): CalibrationAssignment[] {
-  return plan.rows.flatMap((row): CalibrationAssignment[] =>
-    row.state === "automatic" && row.assignment === null && row.input
-      ? [{ id: assignmentId(runId, row.member.session.id, row.kind), lightSessionId: row.member.session.id, kind: row.kind, input: row.input, state: "automatic", criteria: row.criteria, exception: null, basis: { at, files: basisFiles(catalog, disk, row.input) } }]
-      : [],
-  )
+  return plan.rows.flatMap((row): CalibrationAssignment[] => {
+    const input = row.input
+    if (row.state !== "automatic" || row.assignment !== null || !input) return []
+    const basis = { at, files: basisFiles(catalog, disk, input) }
+    return row.members.map(({ session }) => ({ id: assignmentId(runId, session.id, row.kind), lightSessionId: session.id, kind: row.kind, input, state: "automatic", criteria: row.criteria, exception: null, basis }))
+  })
 }
 
 /** Handed-off calibration inputs, deduplicated (one master can serve many sessions). */

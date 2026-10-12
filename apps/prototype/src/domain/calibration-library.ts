@@ -27,8 +27,8 @@ export function masterUsage(catalog: Catalog, disk: Disk): Map<MasterId, MasterU
       const key = inputKey(row.input)
       const list = out.get(key) ?? []
       const use = list.find((u) => u.run.id === run.id)
-      if (use) use.sessions += 1
-      else list.push({ run, sessions: 1 })
+      if (use) use.sessions += row.members.length
+      else list.push({ run, sessions: row.members.length })
       out.set(key, list)
     }
   }

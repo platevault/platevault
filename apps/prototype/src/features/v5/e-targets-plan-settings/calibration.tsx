@@ -57,6 +57,7 @@ import { masterNight, masterSha256 } from "./calibration-model"
 
 const TH = "h-(--row-h) px-3 text-left font-medium whitespace-nowrap"
 const TD = "px-3 py-(--row-py)"
+const ACTIVITY_LINK: StepLink = { to: "/activity" }
 const ROW = "h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]"
 
 /** Refusal props for any failed store result: a contract refusal lists its blockers; a failed write names its message. */
@@ -259,6 +260,7 @@ function ProcessesBox({ catalog, highlight, onShowMaster }: { catalog: Catalog; 
                     view.process.outputFolder ? { label: m.calibration_output(), value: <span className="font-mono">{view.process.outputFolder}</span> } : null,
                     view.process.detected ? { label: m.calibration_detected(), value: [fileName(view.process.detected.path), view.process.detected.ncombine ? m.calibration_ncombine({ count: view.process.detected.ncombine }) : null].filter(Boolean).join(" · ") } : null,
                     view.process.storagePath ? { label: m.calibration_stored(), value: <span className="font-mono">{view.process.storagePath}</span> } : null,
+                    view.process.raws === "trashed" ? { label: m.calibration_step_raws(), value: m.calibration_raws_restore() } : null,
                   ].filter((n) => n !== null)
                   const detail = own ?? failure
                   return (
@@ -275,7 +277,18 @@ function ProcessesBox({ catalog, highlight, onShowMaster }: { catalog: Catalog; 
                           {notes.length > 0 ? <NoteMarker label={m.calibration_folders_of({ name })} rows={notes} /> : null}
                         </span>
                       </th>
-                      <td className={`${TD} text-right tabular-nums`}>{view.frames > 0 ? view.frames : "–"}</td>
+                      <td className={`${TD} text-right tabular-nums`}>
+                        {view.process.raws === "trashed" ? (
+                          // The raws' move is an Activity entry with its counts and sizes.
+                          <Pill tone="muted" link={ACTIVITY_LINK}>
+                            {m.status_trashed()}
+                          </Pill>
+                        ) : view.frames > 0 ? (
+                          view.frames
+                        ) : (
+                          "–"
+                        )}
+                      </td>
                       <td className={TD}>
                         {view.status === "awaiting-stack" || view.failure?.step === "detect" ? (
                           <Select

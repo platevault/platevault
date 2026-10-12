@@ -2534,6 +2534,7 @@
   "calibration_step_todo": "To do",
   "calibration_steps_of": "{name} steps",
   "calibration_raws_kept": "Kept",
+  "calibration_raws_restore": "In the OS Trash. Put them back and rescan to restore them.",
   "calibration_keep_raws": "Keep raws",
   "calibration_stack_again": "Stack again",
   "calibration_detect_now": "Detect now",
