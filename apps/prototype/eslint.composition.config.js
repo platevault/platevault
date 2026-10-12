@@ -15,8 +15,8 @@
 import { defineConfig } from "eslint/config"
 import base, { I18N_IGNORES } from "./eslint.config.js"
 
-/** §8.1 Exempt: the i18n ignores (the simulation panel, the Prototype controls, the reference page) plus the future catalogue. */
-const EXEMPT = [...I18N_IGNORES, "src/app/catalogue/**"]
+/** §8.1 Exempt: the i18n ignores (the simulation panel, the Prototype controls, the reference page and the catalogue). */
+const EXEMPT = I18N_IGNORES
 
 /** Truncated text is the one place a `title` may stay (§6.2 T2). */
 const TRUNCATES = "/(^|\\s)(truncate|line-clamp-\\d)(\\s|$)/"

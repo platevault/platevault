@@ -476,7 +476,6 @@
   "filter_bar_preset_create": "Create preset",
   "filter_bar_preset_name_taken": "Name already in use",
   "save_review_current": "Review current revision",
-  "folder_picker_description": "Prototype folder chooser: volumes and folders come from the simulated disk.",
   "folder_picker_volumes": "Volumes",
   "folder_picker_up": "Up one folder",
   "folder_picker_path": "Folder path",
@@ -500,6 +499,41 @@
   "folder_picker_denied_body": "PlateVault cannot list this folder. You can still choose it; indexing reports it as unreadable until access is restored.",
   "folder_picker_empty": "No folders inside {name}. Choose this folder, or go up one level.",
   "folder_picker_list": "Folders in {name}",
+  "folder_picker_applications": "Applications",
+  "folder_picker_contents": "Contents of {name}",
+  "folder_picker_empty_items": "Nothing to choose in {name}",
+  "folder_picker_live_items": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} item",
+        "countPlural=*": "{name}: {count} items"
+      }
+    }
+  ],
+  "fields_label_unit": "{label} ({unit})",
+  "fields_choose_ellipsis": "Choose…",
+  "fields_path_none_folder": "No folder",
+  "fields_path_none_file": "No file",
+  "fields_path_none_executable": "No application",
+  "fields_no_match": "No matches",
+  "fields_token_unmatched": "Unmatched brace",
+  "fields_tokens_list": "Tokens: {tokens}",
+  "fields_tokens": "Tokens",
+  "fields_token_col_token": "Token",
+  "fields_token_col_name": "Name",
+  "fields_token_col_example": "Example",
+  "fields_token_col_missing": "When missing",
+  "fields_token_omit": "Omit",
+  "fields_token_omitted": "Omitted",
+  "fields_template_preview": "Preview",
   "confirm_changes": "This will",
   "confirm_unchanged": "Unchanged",
   "operation_progress_label": "{title} progress",
@@ -509,8 +543,6 @@
   "operation_show_all": "Show all {count} items",
   "operation_started": "Started {date}",
   "operation_settled": "settled {date}",
-  "refusal_details": "Details",
-  "refusal_hide_details": "Hide details",
   "refusal_blockers": [
     {
       "declarations": [
@@ -7605,5 +7637,29 @@
   "import_flow_title": "Import",
   "session_intake_title": "Session",
   "calibration_process_title": "Process",
-  "settings_help": "Help"
+  "settings_help": "Help",
+  "checklist_ring_name": "{title}, {done} of {total} done",
+  "checklist_dismiss": "Dismiss {title}",
+  "theme_picker_mode": "Mode",
+  "theme_picker_light": "Light",
+  "theme_picker_dark": "Dark",
+  "theme_picker_theme": "Theme",
+  "actions_blocked": "{action} blocked",
+  "actions_for": "Actions for {name}",
+  "actions_confirm_group": [
+    {
+      "declarations": [
+        "input label",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{label} · {count} file",
+        "countPlural=*": "{label} · {count} files"
+      }
+    }
+  ]
 }

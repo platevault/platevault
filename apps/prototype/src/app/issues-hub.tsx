@@ -22,7 +22,9 @@ import { dismissIssue, restoreAllIssues, restoreIssue, useIssues } from "@/store
 import { useMessages } from "./preferences"
 
 const SEVERITY_TONE: Record<IssueSeverity, Tone> = { danger: "danger", warning: "warning", info: "info" }
+/** @deprecated Use `ISSUE_SEVERITY_ICON` from `@/components/app/issue-row`; removed in W4. */
 export const SEVERITY_ICON: Record<IssueSeverity, LucideIcon> = { danger: OctagonX, warning: TriangleAlert, info: Info }
+/** @deprecated Use `ISSUE_SEVERITY_TEXT` from `@/components/app/issue-row`; removed in W4. */
 export const SEVERITY_TEXT: Record<IssueSeverity, string> = { danger: "text-destructive", warning: "text-warning", info: "text-info" }
 
 function groupName(m: Messages, group: IssueGroup): string {
@@ -41,6 +43,7 @@ function groupName(m: Messages, group: IssueGroup): string {
  * The issue's terse label and its one action, in the chosen language:
  * "2 need a Target", "Assign". The kind decides the wording; drift on an
  * adopted master differs from drift in a session's frames.
+ * @deprecated Use `issueCopy` from `@/components/app/issue-row`; removed in W4.
  */
 export function issueCopy(m: Messages, issue: Issue): { text: string; action: string } {
   const { count } = issue
@@ -82,6 +85,7 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
  * (Dismiss), as a row of a `[data-issue-list]`. `onNavigate` closes the
  * popover that holds it; `refocus` names where focus goes when the list's
  * last row is dismissed.
+ * @deprecated Use `IssueRow` from `@/components/app/issue-row` (open and dismissed states); removed in W4.
  */
 export function IssueRow({ issue, onNavigate, refocus }: { issue: Issue; onNavigate: () => void; refocus: (list: Element | null) => HTMLElement | null | undefined }) {
   const m = useMessages()

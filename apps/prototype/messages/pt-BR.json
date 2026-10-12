@@ -476,7 +476,6 @@
   "filter_bar_preset_create": "Criar preset",
   "filter_bar_preset_name_taken": "Nome já em uso",
   "save_review_current": "Ver a revisão atual",
-  "folder_picker_description": "Seletor de pastas do protótipo: volumes e pastas vêm do disco simulado.",
   "folder_picker_volumes": "Volumes",
   "folder_picker_up": "Subir uma pasta",
   "folder_picker_path": "Caminho da pasta",
@@ -500,6 +499,41 @@
   "folder_picker_denied_body": "O PlateVault não consegue listar esta pasta. Você ainda pode escolhê-la; a indexação a relata como ilegível até que o acesso seja restaurado.",
   "folder_picker_empty": "Nenhuma pasta dentro de {name}. Escolha esta pasta ou suba um nível.",
   "folder_picker_list": "Pastas em {name}",
+  "folder_picker_applications": "Aplicativos",
+  "folder_picker_contents": "Conteúdo de {name}",
+  "folder_picker_empty_items": "Nada para escolher em {name}",
+  "folder_picker_live_items": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} item",
+        "countPlural=*": "{name}: {count} itens"
+      }
+    }
+  ],
+  "fields_label_unit": "{label} ({unit})",
+  "fields_choose_ellipsis": "Escolher…",
+  "fields_path_none_folder": "Nenhuma pasta",
+  "fields_path_none_file": "Nenhum arquivo",
+  "fields_path_none_executable": "Nenhum aplicativo",
+  "fields_no_match": "Nenhum resultado",
+  "fields_token_unmatched": "Chave sem par",
+  "fields_tokens_list": "Tokens: {tokens}",
+  "fields_tokens": "Tokens",
+  "fields_token_col_token": "Token",
+  "fields_token_col_name": "Nome",
+  "fields_token_col_example": "Exemplo",
+  "fields_token_col_missing": "Quando ausente",
+  "fields_token_omit": "Omitir",
+  "fields_token_omitted": "Omitido",
+  "fields_template_preview": "Pré-visualização",
   "confirm_changes": "Isto vai",
   "confirm_unchanged": "Inalterado",
   "operation_progress_label": "Progresso de {title}",
@@ -509,8 +543,6 @@
   "operation_show_all": "Mostrar todos os {count} itens",
   "operation_started": "Iniciado em {date}",
   "operation_settled": "concluído em {date}",
-  "refusal_details": "Detalhes",
-  "refusal_hide_details": "Ocultar detalhes",
   "refusal_blockers": [
     {
       "declarations": [
@@ -7661,5 +7693,29 @@
   "import_flow_title": "Importar",
   "session_intake_title": "Sessão",
   "calibration_process_title": "Processo",
-  "settings_help": "Ajuda"
+  "settings_help": "Ajuda",
+  "checklist_ring_name": "{title}, {done} de {total} feitos",
+  "checklist_dismiss": "Dispensar {title}",
+  "theme_picker_mode": "Modo",
+  "theme_picker_light": "Claro",
+  "theme_picker_dark": "Escuro",
+  "theme_picker_theme": "Tema",
+  "actions_blocked": "{action}: bloqueado",
+  "actions_for": "Ações de {name}",
+  "actions_confirm_group": [
+    {
+      "declarations": [
+        "input label",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{label} · {count} arquivo",
+        "countPlural=*": "{label} · {count} arquivos"
+      }
+    }
+  ]
 }

@@ -25,6 +25,7 @@ import type { Session } from "@/domain/types"
 import { formatDuration, formatExposure, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
+import { CATALOGUE } from "./catalogue/registry"
 
 const COLOR_TOKENS = [
   ["background", "Page canvas"],
@@ -457,6 +458,10 @@ export function DesignSystemPage() {
         <Section title="Operation" description="Running with progress, per-item outcomes and one settled status. Uses a real indexing run.">
           <SampleOperation />
         </Section>
+
+        {CATALOGUE.map(({ id, Entry }) => (
+          <Entry key={id} />
+        ))}
       </PageBody>
     </div>
   )

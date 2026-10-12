@@ -1,7 +1,19 @@
 /**
- * Context-menu helpers (foundation primitives), so right-click works on
- * every list the same way. A menu is a list of `MenuEntry` values; every
- * item must also be reachable from the row itself.
+ * Deprecated (design/R9-COMPOSITION-PLAN.md P2; removed in W4): rows take an
+ * `Action`-based `MenuItem[]` (contracts.ts) through row-actions.tsx, which
+ * renders the ⋯ and the context menu from the same list. W3 moves each page:
+ * - `MenuEntry` → `MenuItem` (`onSelect` → `run`, `destructive` → `kind`,
+ *   `disabled` → `unavailable` with its reason);
+ * - `MenuEntries` / `menuContent` → `MenuItems` (actions.tsx);
+ * - `RowContextMenu` → `RowContextMenu` + `RowActions` (row-actions.tsx);
+ * - `ContextMenuArea` / `menuKey` → one `RowContextMenu` per row, or
+ *   DataTable `rowActions` for a table.
+ * `menuRowAt`, `openMenuFromKeyboard` and `MenuRow` now live in
+ * row-actions.tsx and are re-exported here until DataTable imports them there.
+ *
+ * Context-menu helpers, so right-click works on every list the same way. A
+ * menu is a list of `MenuEntry` values; every item must also be reachable
+ * from the row itself.
  *
  * - DataTable: return entries from `contextMenu={(row) => [...]}`.
  * - One row: `<RowContextMenu entries={[...]}>{<li>…</li>}</RowContextMenu>`.
@@ -13,12 +25,17 @@
  * named after its row.
  */
 import type { LucideIcon } from "lucide-react"
-import { Fragment, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
+import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
+import { type MenuRow, menuRowAt, openMenuFromKeyboard } from "./row-actions"
+
+// Deprecated here: import these from row-actions.tsx.
+export { type MenuRow, menuRowAt, openMenuFromKeyboard }
 
 type MenuItemEntry = { label: string; onSelect: () => void; icon?: LucideIcon; shortcut?: string; destructive?: boolean; disabled?: boolean }
 
+/** @deprecated Use `MenuItem` (contracts.ts) with RowActions / MenuItems; removed in W4. */
 export type MenuEntry = MenuItemEntry | { separator: true } | { heading: string }
 
 function MenuItemView({ entry }: { entry: MenuItemEntry }) {
@@ -35,6 +52,8 @@ function MenuItemView({ entry }: { entry: MenuItemEntry }) {
 /**
  * A heading labels the items after it up to the next separator or heading:
  * they render as one group, as a Base UI group label must sit in a group.
+ *
+ * @deprecated Use `MenuItems` (actions.tsx); removed in W4.
  */
 export function MenuEntries({ entries }: { entries: MenuEntry[] }) {
   const blocks: Array<{ key: string; separator: true } | { key: string; heading: string | null; items: MenuItemEntry[] }> = []
@@ -62,12 +81,12 @@ export function MenuEntries({ entries }: { entries: MenuEntry[] }) {
   )
 }
 
-/** Render a menu result that is either entries or ready-made items. */
+/** Render a menu result that is either entries or ready-made items. @deprecated Use `MenuItems` (actions.tsx); removed in W4. */
 export function menuContent(content: ReactNode | MenuEntry[]): ReactNode {
   return Array.isArray(content) ? <MenuEntries entries={content as MenuEntry[]} /> : content
 }
 
-/** One row with its own menu; the child must accept a ref (a DOM element). */
+/** One row with its own menu; the child must accept a ref (a DOM element). @deprecated Use `RowContextMenu` and `RowActions` from row-actions.tsx; removed in W4. */
 export function RowContextMenu({ entries, children }: { entries: MenuEntry[]; children: ReactElement }) {
   return (
     <ContextMenu>
@@ -79,53 +98,16 @@ export function RowContextMenu({ entries, children }: { entries: MenuEntry[]; ch
   )
 }
 
-/** Mark a row of a `ContextMenuArea`. */
+/** Mark a row of a `ContextMenuArea`. @deprecated One `RowContextMenu` per row (row-actions.tsx); removed in W4. */
 export function menuKey(key: string): { "data-menu-key": string } {
   return { "data-menu-key": key }
-}
-
-/** The row a menu opens for: its key, and its name for the menu's accessible name. */
-export interface MenuRow {
-  key: string
-  name: string
-}
-
-/** A row's name: its own label, else its row header, else its first link or button, else its text. */
-function rowName(row: HTMLElement): string {
-  const named = row.hasAttribute("aria-label") ? row : (row.querySelector<HTMLElement>("th[scope=row]") ?? row.querySelector<HTMLElement>("a[href], button:not([role=checkbox])") ?? row)
-  const label = named.getAttribute("aria-label")
-  if (label) return label
-  // Its visible words only: a note's glyph number and screen-reader-only text are no part of the name.
-  const words = named.cloneNode(true) as HTMLElement
-  for (const extra of words.querySelectorAll(".sr-only, [aria-hidden=true]")) extra.remove()
-  return (words.textContent ?? "").replace(/\s+/g, " ").trim()
-}
-
-/** The row an event comes from, marked by `keyAttribute` (`data-menu-key`, `data-row-id`); null outside a row. */
-export function menuRowAt(target: EventTarget | null, keyAttribute: string): MenuRow | null {
-  const row = target instanceof Element ? target.closest<HTMLElement>(`[${keyAttribute}]`) : null
-  const key = row?.getAttribute(keyAttribute)
-  return row && key != null ? { key, name: rowName(row) } : null
-}
-
-/**
- * Shift+F10 or the Menu key on a focused row opens its menu (WCAG 2.1.1).
- * macOS browsers fire no `contextmenu` for either, so the focused element
- * gets one at its lower-left corner: the menu opens anchored there, through
- * the same path as a right click.
- */
-export function openMenuFromKeyboard(event: KeyboardEvent, keyAttribute: string): void {
-  if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return
-  const target = event.target
-  if (!(target instanceof HTMLElement) || !target.closest(`[${keyAttribute}]`)) return
-  event.preventDefault()
-  const box = target.getBoundingClientRect()
-  target.dispatchEvent(new globalThis.MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: box.left, clientY: box.bottom }))
 }
 
 /**
  * One menu for a whole list: the row under the pointer (or the focused row
  * for Shift+F10) picks the entries. Outside a row the browser's menu stays.
+ *
+ * @deprecated One `RowContextMenu` per row (row-actions.tsx), or DataTable `rowActions`; removed in W4.
  */
 export function ContextMenuArea({ menu, children, className }: { menu: (key: string) => MenuEntry[]; children: ReactNode; className?: string }) {
   const [row, setRow] = useState<MenuRow | null>(null)

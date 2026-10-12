@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Toaster } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
 import { wrapUpOf } from "@/features/v5/b-projects/model"
@@ -66,6 +67,7 @@ export function RootLayout() {
   return (
     <TooltipProvider delay={400}>
       <LiveAnnouncer />
+      <Toaster />
       <Outlet />
       <CommandPalette />
       <ShortcutsDialog />

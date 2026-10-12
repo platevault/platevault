@@ -12,3 +12,6 @@ dup-value	mosaic_left_out,run_metadata_hint_excluded
 dup-value	run_entry_its_volume,wrapup_its_volume
 # 'Measure frames' is a button (pt-BR verb 'Medir frames') and an operation title (noun 'Medição de frames').
 dup-value	measure_frames_action,op_measure_title
+# actions_* belong to the L2 action components (actions.tsx, row-actions.tsx); the feature copies go when W3 moves those pages onto RowActions and useAction (W8: patterns own their keys).
+dup-value	actions_blocked,calibration_action_blocked
+dup-value	actions_for,run_actions_for

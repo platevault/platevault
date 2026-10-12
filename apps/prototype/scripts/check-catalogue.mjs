@@ -45,9 +45,11 @@ function exportsOf(source) {
 }
 
 function main() {
-  const catalogue = CATALOGUES.find((file) => existsSync(path.join(SRC, file)))
-  if (!catalogue) throw new Error(`no catalogue: expected one of ${CATALOGUES.map((f) => `src/${f}`).join(", ")}`)
-  const listed = readFileSync(path.join(SRC, catalogue), "utf8")
+  // Until W4 deletes the old reference page, both the registry and the page count as the catalogue.
+  const catalogues = CATALOGUES.filter((file) => existsSync(path.join(SRC, file)))
+  if (catalogues.length === 0) throw new Error(`no catalogue: expected one of ${CATALOGUES.map((f) => `src/${f}`).join(", ")}`)
+  const catalogue = catalogues.join(" + src/")
+  const listed = catalogues.map((file) => readFileSync(path.join(SRC, file), "utf8")).join("\n")
   const modules = []
   for (const layer of LAYERS) {
     const dir = path.join(SRC, layer)
