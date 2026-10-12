@@ -233,7 +233,7 @@ export function DesignSystemPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title={m.ds_title()} description={m.ds_description()} eyebrow={m.prototype_ds_eyebrow()} />
+      <PageHeader title={m.nav_design_system()} description={m.ds_description()} eyebrow={m.prototype_ds_eyebrow()} />
       <PageBody className="space-y-6">
         <Section title={m.ds_colour_title()} description={m.ds_colour_description()}>
           <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
