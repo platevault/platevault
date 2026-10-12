@@ -2,7 +2,7 @@
 
 Scope: the folder a processing run gives to Siril, WBPP or DeepSkyStacker. Ingest is out of scope, because getting raws into the catalogue may cross volumes and copy. The prior research is [INPUT-MODES-RESEARCH.md](INPUT-MODES-RESEARCH.md); this note narrows it.
 
-Status: proposal. The decisions are open with the user; nothing here changes P-PREP2 until they are made.
+Status: decided 2026-10-12 as P-PREP3 (HARNESS-V5-FEEDBACK-R1.md § Round 7). The user chose Symlinks by default with a Windows Developer Mode check, Copies as the alternative, and no verification of originals; locking is still open. The recommendations below that differ (hard-link fallback, verification) were not adopted.
 
 Evidence labels: **[src]** is a pinned source, **[probe]** is a local test on macOS 26.7.1 APFS (2026-10-12), and **[code]** is current PlateVault code. Source pins: Siril `2a72477`, siril-doc `9ae8ec8`, PJSR `76e4f38`, DSS `7989bcd`.
 

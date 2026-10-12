@@ -278,3 +278,15 @@ Every decision below was made by the user while answering the v5 journeys' open 
   - **Footprint is real:** each prepared item records whether it was cloned or copied, and Prepare and Done show the actual extra space ("0 B extra · cloned" vs "12.4 GB copied").
 - **Prepared copies are cleaned up when a run is done (user).** Copies cost real space on volumes that can't clone. Completing a run offers Clean up prepared copies by default, showing the footprint; they go to the OS Trash after review. Wrap up's Clean up runs step covers any that are left. A run whose entries are all clones says so ("frees no space").
 - **Archiving with links (Q-ARCHIVE-LINKS):** a symlinked entry is repointed when its session moves. Hard-linked entries no longer exist as a mode.
+
+## Round 7 (user, 2026-10-12): run views (research: design/RUN-VIEWS-OPTIONS.md)
+
+- **P-PREP3: two view modes, Symlinks by default (user; supersedes P-PREP2).** A run view is a projection of catalogue frames and masters; tools never write to their inputs (RUN-VIEWS-OPTIONS.md).
+  - **Symlinks (default):** the run folder holds symlinks to the catalogue originals. Footprint "Linked · 0 B".
+  - **Copies:** the run folder holds temporary copies. Footprint "N frames copied · X GB". Copies are removed when the run completes.
+  - The mode is chosen per run in Prepare, with a default in Settings. There is no Automatic, no file-list mode, and no hard links or junctions.
+  - **Windows prerequisite:** Symlinks need Windows Developer Mode. PlateVault checks it in setup, in Settings and at Prepare. When it is off, Prepare in Symlinks mode is refused: "Can't prepare · symlinks need Windows Developer Mode ▸", offering Open Windows settings, Check again and Use copies for this run.
+- **Import still copies** frames into the catalogue (unchanged).
+- **No verification of originals after a run (user).** P-PREP2's re-hash of linked originals is dropped. Since PlateVault no longer records cloned vs copied, the per-item accounting that P-PREP2's "Footprint is real" required goes too.
+- **Intermediates cleanup stays (user).** Wrap up offers it, and the run's Complete confirmation offers it next to removing the view, both through the OS Trash.
+- **Locking originals: open.** No locking until the user decides.
