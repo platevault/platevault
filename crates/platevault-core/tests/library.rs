@@ -71,8 +71,11 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
         decision_revision: first.decision_revision,
         fingerprint: first.fingerprint.clone(),
     };
-    let reviewed =
-        library.catalog().set_quality(&[expected], Quality::Usable, InventoryProbe).await.unwrap();
+    let reviewed = library
+        .catalog()
+        .set_quality(&[expected], Quality::Usable, InventoryProbe::default())
+        .await
+        .unwrap();
     assert_eq!(reviewed[0].applicable_quality(), ApplicableQuality::Usable);
     assert!(reviewed[0].quality_basis.as_ref().unwrap().content_sha256.is_some());
     let query = SessionQuery::default();
@@ -358,7 +361,8 @@ async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_ret
         decision_revision: asset.decision_revision,
         fingerprint: asset.fingerprint.clone(),
     };
-    let decided = catalog.set_quality(&[expected], Quality::Usable, InventoryProbe).await.unwrap();
+    let decided =
+        catalog.set_quality(&[expected], Quality::Usable, InventoryProbe::default()).await.unwrap();
     let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
     let target = TargetCandidate {
         id: Uuid::new_v4(),
@@ -518,16 +522,14 @@ async fn byte_identical_copies_in_two_locations_are_one_logical_capture() {
     // A decision on either copy applies to the logical capture.
     let member = &detail.members[0];
     let first_copy = catalog.asset(member.copies[0]).await.unwrap();
-    catalog
-        .set_quality(&[expected_of(&first_copy)], Quality::Usable, InventoryProbe)
-        .await
-        .unwrap();
+    let probe = InventoryProbe::default();
+    catalog.set_quality(&[expected_of(&first_copy)], Quality::Usable, probe.clone()).await.unwrap();
     let coverage = catalog.target_coverage(target).await.unwrap();
     assert!((summed(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
     assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9);
     // Conflicting explicit decisions count as neither Usable nor Unreviewed.
     let second = catalog.asset(member.copies[1]).await.unwrap();
-    catalog.set_quality(&[expected_of(&second)], Quality::Unusable, InventoryProbe).await.unwrap();
+    catalog.set_quality(&[expected_of(&second)], Quality::Unusable, probe).await.unwrap();
     let coverage = catalog.target_coverage(target).await.unwrap();
     assert!(summed(&coverage, |c| c.usable_seconds).abs() < 1e-9, "{coverage:?}");
     assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9);
@@ -732,7 +734,10 @@ async fn a_missing_copy_stays_inside_its_logical_capture() {
     let (library, locations, target) = copied_library(&temp).await;
     let catalog = library.catalog();
     let reviewed = copy_named(&library, &locations[0], "light_1.fits").await;
-    catalog.set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe).await.unwrap();
+    catalog
+        .set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe::default())
+        .await
+        .unwrap();
     let kept = [
         temp.path().join("T7/light_2.fits"),
         temp.path().join("NAS/light_1.fits"),
@@ -820,7 +825,10 @@ async fn a_replaced_copy_never_carries_another_copys_decision() {
     let (library, locations, target) = copied_library(&temp).await;
     let catalog = library.catalog();
     let reviewed = copy_named(&library, &locations[0], "light_1.fits").await;
-    catalog.set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe).await.unwrap();
+    catalog
+        .set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe::default())
+        .await
+        .unwrap();
     let kept = [
         temp.path().join("T7/light_1.fits"),
         temp.path().join("T7/light_2.fits"),
@@ -958,7 +966,7 @@ async fn copies_without_a_capture_start_join_only_by_equal_digest() {
             let asset = library.catalog().asset(asset.id).await.unwrap();
             library
                 .catalog()
-                .set_quality(&[expected_of(&asset)], Quality::Usable, InventoryProbe)
+                .set_quality(&[expected_of(&asset)], Quality::Usable, InventoryProbe::default())
                 .await
                 .unwrap();
         }
@@ -1270,7 +1278,7 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     let m31 = target_of(&detail).unwrap().1.unwrap();
     let assets: Vec<Uuid> = detail.assets.iter().map(|asset| asset.id).collect();
     catalog
-        .set_quality(&[expected_of(&detail.assets[0])], Quality::Usable, InventoryProbe)
+        .set_quality(&[expected_of(&detail.assets[0])], Quality::Usable, InventoryProbe::default())
         .await
         .unwrap();
     let totals = |coverage: &TargetCoverage| {
@@ -1385,7 +1393,7 @@ async fn decide_and_confirm(
 ) -> Uuid {
     let catalog = library.catalog();
     catalog
-        .set_quality(&[expected_of(&detail.assets[0])], Quality::Usable, InventoryProbe)
+        .set_quality(&[expected_of(&detail.assets[0])], Quality::Usable, InventoryProbe::default())
         .await
         .unwrap();
     let corrected = expected_of(&catalog.asset(detail.assets[1].id).await.unwrap());

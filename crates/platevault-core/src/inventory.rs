@@ -50,7 +50,10 @@ use crate::{
     ScanProgress, ScanState, VolumeIdentity, VolumeKind,
 };
 
+#[cfg(test)]
+pub(crate) use identity::Probed;
 use identity::Stamp;
+pub(crate) use identity::{OsVolumes, VolumeCache, VolumeProbe};
 
 /// A folder observed for registration: its identity and the kind of volume it
 /// is on.
@@ -70,7 +73,7 @@ pub struct ObservedRoot {
 /// `IdentityConflict` when the volume or the root folder ID cannot be
 /// qualified on this host and filesystem.
 pub fn observe_root(root: &Path) -> Result<ObservedRoot, LibraryError> {
-    identity::observe(root).map(|observation| ObservedRoot {
+    identity::observe(root, &OsVolumes).map(|observation| ObservedRoot {
         identity: observation.identity,
         volume_kind: observation.kind,
     })
@@ -101,7 +104,7 @@ pub fn observe_folder_identity(root: &Path) -> Result<FileIdentity, LibraryError
             root,
         ));
     }
-    let volume = identity::volume_of(root, &meta)?;
+    let volume = identity::volume_of(root, &meta, &OsVolumes)?;
     let file_id = identity::file_id(root, &meta, &volume)
         .map_err(|error| LibraryError::from_io(root, &error))?;
     Ok(FileIdentity { volume, file_id })
@@ -114,8 +117,20 @@ pub fn observe_folder_identity(root: &Path) -> Result<FileIdentity, LibraryError
 /// As [`observe_root_identity`], plus `IdentityConflict` on any mismatch, and
 /// `SourceUnavailable` for a network location whose share is not mounted.
 pub fn validate_location_root(location: &Location) -> Result<FileIdentity, LibraryError> {
+    validate_location_root_in(location, &OsVolumes)
+}
+
+/// As [`validate_location_root`], qualifying the volume through `volumes`:
+/// a run's [`VolumeCache`] probes each root's volume once (see its invariant).
+///
+/// # Errors
+/// As [`validate_location_root`].
+pub(crate) fn validate_location_root_in(
+    location: &Location,
+    volumes: &impl VolumeProbe,
+) -> Result<FileIdentity, LibraryError> {
     let root = location.path.to_path_buf().map_err(|error| locate(error, location))?;
-    let observed = identity::observe(&root).map_err(|error| locate(error, location))?;
+    let observed = identity::observe(&root, volumes).map_err(|error| locate(error, location))?;
     identity::compare(location, &observed, &root).map_err(|error| locate(error, location))?;
     Ok(observed.identity)
 }
@@ -129,6 +144,18 @@ pub fn validate_location_root(location: &Location) -> Result<FileIdentity, Libra
 /// volume identity cannot be qualified or the entry changed while its file ID
 /// was read (a file still being written).
 pub fn probe_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryError> {
+    probe_fingerprint_in(path, &OsVolumes)
+}
+
+/// As [`probe_fingerprint`], qualifying the volume through `volumes`: below
+/// a root a run's [`VolumeCache`] already probed, its probe is reused.
+///
+/// # Errors
+/// As [`probe_fingerprint`].
+pub(crate) fn probe_fingerprint_in(
+    path: &Path,
+    volumes: &impl VolumeProbe,
+) -> Result<ObservationFingerprint, LibraryError> {
     let meta = fs::symlink_metadata(path).map_err(|error| LibraryError::from_io(path, &error))?;
     if fs_pathsafe::is_link_or_junction_metadata(&meta) || !meta.is_file() {
         return Err(identity::scoped(
@@ -136,7 +163,7 @@ pub fn probe_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryE
             path,
         ));
     }
-    let volume = identity::volume_of(path, &meta)?;
+    let volume = identity::volume_of(path, &meta, volumes)?;
     let file_id = identity::file_id(path, &meta, &volume)
         .map_err(|error| identity::file_id_error(path, &error))?;
     let modified_ns = meta.modified().ok().and_then(nanos_since_epoch).ok_or_else(|| {
@@ -167,7 +194,7 @@ pub fn scan(
     let root = location.path.to_path_buf().map_err(|error| locate(error, location))?;
     let scope =
         scope_path(options.relative_scope.as_ref()).map_err(|error| locate(error, location))?;
-    let anchor = identity::observe(&root)
+    let anchor = identity::observe(&root, &OsVolumes)
         .and_then(|observed| identity::compare(location, &observed, &root).map(|()| observed))
         .map_err(|error| locate(error, location))?;
     let scope_folder =
@@ -357,7 +384,7 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
         }
         // Full remount-stable revalidation plus same-session continuity guard
         // the final batch and the completeness claim.
-        if let Err(error) = identity::observe(self.root)
+        if let Err(error) = identity::observe(self.root, &OsVolumes)
             .and_then(|observed| identity::compare(self.location, &observed, self.root))
         {
             return Err(Halt::RootLost(root_issue(&error)));
@@ -648,7 +675,7 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                 let unmounted = meta.is_dir()
                     && !fs_pathsafe::is_link_or_junction_metadata(&meta)
                     && self.location.volume_kind == VolumeKind::Network
-                    && identity::observe(self.root).is_ok_and(|observed| {
+                    && identity::observe(self.root, &OsVolumes).is_ok_and(|observed| {
                         identity::share_unmounted(self.location.volume_kind, observed.kind)
                     });
                 Err(Halt::RootLost(if unmounted {

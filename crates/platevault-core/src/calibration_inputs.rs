@@ -141,7 +141,9 @@ impl Library {
         revision: Revision,
         expected: Revision,
     ) -> Result<CalibrationAssignment, LibraryError> {
-        self.catalog().assign_calibration(view, revision, expected, &Rules, InventoryProbe).await
+        self.catalog()
+            .assign_calibration(view, revision, expected, &Rules, InventoryProbe::default())
+            .await
     }
 
     /// Accept or replace inputs after hashing every input file.
@@ -156,7 +158,7 @@ impl Library {
         items: &[DecisionItem],
     ) -> Result<CalibrationViewPlan, LibraryError> {
         self.catalog()
-            .accept_calibration(view, revision, expected, items, &Rules, InventoryProbe)
+            .accept_calibration(view, revision, expected, items, &Rules, InventoryProbe::default())
             .await
     }
 
@@ -180,7 +182,7 @@ impl Library {
                 item,
                 reason,
                 &Rules,
-                InventoryProbe,
+                InventoryProbe::default(),
             )
             .await
     }
@@ -234,7 +236,7 @@ impl Library {
         source: &AdoptionSource,
         destination: &AdoptionDestination,
     ) -> Result<AdoptionReview, LibraryError> {
-        self.catalog().review_adoption(source, destination, &Rules, InventoryProbe).await
+        self.catalog().review_adoption(source, destination, &Rules, InventoryProbe::default()).await
     }
 
     /// Confirm a reviewed adoption and return the settled operation.
@@ -246,7 +248,7 @@ impl Library {
         review: Uuid,
         expected: Revision,
     ) -> Result<AdoptionOperation, LibraryError> {
-        Box::pin(self.catalog().adopt_master(review, expected, InventoryProbe)).await
+        Box::pin(self.catalog().adopt_master(review, expected, InventoryProbe::default())).await
     }
 
     /// Durable adoption operations, including interrupted ones after restart.

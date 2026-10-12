@@ -51,7 +51,7 @@ pub async fn set_quality(world: &World, asset: &Asset, quality: Quality) {
         decision_revision: asset.decision_revision,
         fingerprint: asset.fingerprint.clone(),
     };
-    world.catalog().set_quality(&[expected], quality, InventoryProbe).await.unwrap();
+    world.catalog().set_quality(&[expected], quality, InventoryProbe::default()).await.unwrap();
 }
 
 /// "Reject for this Project only" on `asset`, its first Project-only mark.
@@ -283,13 +283,13 @@ pub async fn scan(world: &World, location: &Location, files: &[(&str, Vec<u8>, C
         fs::write(&path, bytes).unwrap();
         scanned.push(ScanFile {
             relative_path: NativePath::from_path(Path::new(relative)),
-            fingerprint: InventoryProbe.fingerprint(&path).unwrap(),
+            fingerprint: InventoryProbe::default().fingerprint(&path).unwrap(),
             format: ImageFormat::Fits,
             metadata: metadata.clone(),
         });
     }
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let identity = InventoryProbe.root_identity(location).unwrap();
+    let identity = InventoryProbe::default().root_identity(location).unwrap();
     let count = scanned.len() as u64;
     let progress =
         ScanProgress { discovered: count, metadata_read: count, ..ScanProgress::default() };
@@ -310,7 +310,7 @@ pub async fn scan(world: &World, location: &Location, files: &[(&str, Vec<u8>, C
         .finish_scan(
             operation.id,
             &observation,
-            |location| InventoryProbe.root_identity(location),
+            |location| InventoryProbe::default().root_identity(location),
             by_night,
         )
         .await
@@ -320,7 +320,7 @@ pub async fn scan(world: &World, location: &Location, files: &[(&str, Vec<u8>, C
 
 /// Hash `asset`'s bytes and bind the digest to its record (lazy byte proof).
 pub async fn hashed(world: &World, asset: &Asset) -> Asset {
-    world.catalog().verify_digest(asset.id, InventoryProbe).await.unwrap();
+    world.catalog().verify_digest(asset.id, InventoryProbe::default()).await.unwrap();
     world
         .catalog()
         .location_assets(asset.location_id)

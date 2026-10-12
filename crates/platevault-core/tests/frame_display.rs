@@ -305,7 +305,8 @@ async fn thumbnail_cached_by_sha_and_redecoded_on_change() {
     // A digest change: bytes rewritten in place under equal size and mtime.
     // Once the catalog records the new digest the thumbnail is decoded again.
     rewrite_in_place_keeping_stats(&shelf.path(0), 101, 0);
-    let digest = shelf.library().catalog().verify_digest(ids[0], InventoryProbe).await.unwrap();
+    let digest =
+        shelf.library().catalog().verify_digest(ids[0], InventoryProbe::default()).await.unwrap();
     assert_eq!(digest.sha256, support::digest(&shelf.path(0)));
     let changed = shelf.review().thumbnails(&ids).await.unwrap();
     assert_eq!(changed[0].state, ThumbnailState::Pending, "{changed:?}");

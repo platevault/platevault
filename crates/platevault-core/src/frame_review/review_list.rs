@@ -170,8 +170,9 @@ impl FrameReview {
         let record = catalog.view(view_id).await?;
         // A run in the Trash takes the Review step route, which refuses it.
         if record.view.completion == RunCompletion::Open || record.view.trashed_at.is_some() {
-            let outcome =
-                catalog.view_review_mark(view_id, expected_draft, mark, InventoryProbe).await?;
+            let outcome = catalog
+                .view_review_mark(view_id, expected_draft, mark, InventoryProbe::default())
+                .await?;
             return Ok(ReviewMarked {
                 decision: outcome.decision,
                 member: Some(outcome.member),
@@ -189,7 +190,7 @@ impl FrameReview {
         let decision = match mark {
             ReviewMark::Library { asset, quality } => {
                 let decided = catalog
-                    .set_quality(std::slice::from_ref(asset), *quality, InventoryProbe)
+                    .set_quality(std::slice::from_ref(asset), *quality, InventoryProbe::default())
                     .await?
                     .pop()
                     .ok_or_else(missing)?;

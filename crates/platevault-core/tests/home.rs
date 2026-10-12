@@ -167,7 +167,11 @@ async fn next_rule1_review_n_new_frames() {
     };
     world
         .catalog()
-        .set_quality(&[expected], Quality::Usable, platevault_core::library::InventoryProbe)
+        .set_quality(
+            &[expected],
+            Quality::Usable,
+            platevault_core::library::InventoryProbe::default(),
+        )
         .await
         .unwrap();
     assert_eq!(next(&world).await, review(3));

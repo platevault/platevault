@@ -169,11 +169,14 @@ impl FrameReview {
         let mut queue = Vec::new();
         let entries =
             bases.into_iter().map(|basis| self.thumbnails.entry(basis, &mut queue)).collect();
+        // One run of reads: the batch's decodes reuse each root's volume probe.
+        let probe = InventoryProbe::default();
         for decode in queue {
             let work = Arc::clone(&self.thumbnails);
             let catalog = Arc::clone(&self.shared.catalog);
+            let probe = probe.clone();
             tokio::spawn(async move {
-                let outcome = decode_thumbnail(&work, &catalog, &decode).await;
+                let outcome = decode_thumbnail(&work, &catalog, &decode, probe).await;
                 work.settle(&decode, outcome);
             });
         }
@@ -187,6 +190,7 @@ async fn decode_thumbnail(
     work: &Arc<ThumbnailWork>,
     catalog: &Catalog,
     decode: &Decode,
+    probe: InventoryProbe,
 ) -> Result<(), LibraryError> {
     let _permit =
         Arc::clone(&work.decodes).acquire_owned().await.map_err(|_| LibraryError::Canceled)?;
@@ -204,7 +208,7 @@ async fn decode_thumbnail(
     let container = decode.container;
     let canceled = Arc::clone(work);
     let read = catalog
-        .open_contained(decode.asset_id, InventoryProbe, move |reader| {
+        .open_contained(decode.asset_id, probe, move |reader| {
             px::decode::decode(container, reader, &canceled.stopped).map_err(pixel_error)
         })
         .await?;

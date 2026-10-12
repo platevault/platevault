@@ -93,6 +93,9 @@ struct ActiveRun {
     end: Option<RunState>,
     dequeued: u64,
     workers: usize,
+    /// The run's source probe; its workers' reads share each root's volume
+    /// probe.
+    probe: InventoryProbe,
 }
 
 /// One frame waiting for a worker.
@@ -234,6 +237,7 @@ impl FrameReview {
             end: None,
             dequeued: 0,
             workers: 0,
+            probe: InventoryProbe::default(),
         };
         // One worker settles an empty run.
         self.spawn_workers(&mut active, 1);
@@ -280,7 +284,7 @@ impl FrameReview {
         let wanted = self.shared.workers.min(active.pending.len()).max(minimum);
         while active.workers < wanted {
             active.workers += 1;
-            tokio::spawn(worker(Arc::clone(&self.shared), active.id));
+            tokio::spawn(worker(Arc::clone(&self.shared), active.id, active.probe.clone()));
         }
     }
 
@@ -544,11 +548,13 @@ impl FrameReview {
             })
             .collect();
         let mut bases = BTreeMap::new();
+        // One run of reads: the candidates reuse each root's volume probe.
+        let probe = InventoryProbe::default();
         for candidate in candidates.iter().filter(|candidate| needed.contains(&candidate.asset_id))
         {
             let sha256 = match &candidate.sha256 {
                 Some(sha256) => Some(sha256.clone()),
-                None => self.hash(candidate).await,
+                None => self.hash(candidate, probe.clone()).await,
             };
             bases.insert(
                 candidate.asset_id,
@@ -577,13 +583,9 @@ impl FrameReview {
 
     /// The SHA-256 of a candidate's current bytes when they are still the
     /// recorded observation; `None` for an unavailable or changed file.
-    async fn hash(&self, candidate: &ImportCandidate) -> Option<String> {
-        let read = self
-            .shared
-            .catalog
-            .open_contained(candidate.asset_id, InventoryProbe, |_| Ok(()))
-            .await
-            .ok()?;
+    async fn hash(&self, candidate: &ImportCandidate, probe: InventoryProbe) -> Option<String> {
+        let read =
+            self.shared.catalog.open_contained(candidate.asset_id, probe, |_| Ok(())).await.ok()?;
         let mut recorded = candidate.fingerprint.clone();
         recorded.content_sha256.clone_from(&read.fingerprint.content_sha256);
         read.fingerprint.equivalent(&recorded).then_some(read.sha256)
@@ -622,10 +624,11 @@ impl FrameReview {
         let container = container_of(asset.format).ok_or_else(|| {
             LibraryError::UnsupportedFormat(format!("asset {asset_id} is not FITS or XISF"))
         })?;
+        let probe = self.shared.probe().await;
         let read = self
             .shared
             .catalog
-            .open_contained(asset_id, InventoryProbe, move |reader| {
+            .open_contained(asset_id, probe, move |reader| {
                 px::decode::decode(container, reader, &NEVER).map_err(pixel_error)
             })
             .await?;
@@ -649,6 +652,17 @@ impl FrameReview {
 }
 
 impl Shared {
+    /// The Running run's source probe, so a read made during the run, such as
+    /// a preview, shares the probe of each root's volume and costs no more
+    /// than one of its frames; a fresh probe when no run is Running.
+    async fn probe(&self) -> InventoryProbe {
+        self.run
+            .lock()
+            .await
+            .as_ref()
+            .map_or_else(InventoryProbe::default, |active| active.probe.clone())
+    }
+
     async fn frame_states(&self, assets: &[Uuid]) -> Result<Vec<FrameState>, LibraryError> {
         let records = self.catalog.frame_records(assets, &self.method).await?;
         let mut imported = self.imported(assets).await?;
@@ -750,8 +764,9 @@ impl Shared {
         run: Uuid,
         queued: Queued,
         sequence: u64,
+        probe: InventoryProbe,
     ) -> Result<(), LibraryError> {
-        let measured = self.measure(queued).await;
+        let measured = self.measure(queued, probe).await;
         if self.stopping() {
             return Ok(());
         }
@@ -791,12 +806,13 @@ impl Shared {
     async fn measure(
         self: &Arc<Self>,
         queued: Queued,
+        probe: InventoryProbe,
     ) -> Result<(InputBasis, MeasurementOutcome), LibraryError> {
         let shared = Arc::clone(self);
         let runtime = Handle::current();
         let read = self
             .catalog
-            .open_contained(queued.asset, InventoryProbe, move |reader| {
+            .open_contained(queued.asset, probe, move |reader| {
                 let Some(container) = queued.container else {
                     return Ok(Err(PixelError::Unsupported(
                         "an image format other than FITS or XISF".into(),
@@ -845,10 +861,11 @@ impl Shared {
 }
 
 /// A measurement worker: dequeue, measure and settle until the queue is
-/// empty or the run stops.
-async fn worker(shared: Arc<Shared>, run: Uuid) {
+/// empty or the run stops. Its reads go through the run's `probe`.
+async fn worker(shared: Arc<Shared>, run: Uuid, probe: InventoryProbe) {
     while let Some((queued, sequence)) = shared.next_frame(run).await {
-        if shared.settle(run, queued, sequence).await.is_err() && !shared.stopping() {
+        if shared.settle(run, queued, sequence, probe.clone()).await.is_err() && !shared.stopping()
+        {
             shared.fail(run).await;
         }
     }

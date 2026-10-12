@@ -363,6 +363,13 @@ pub struct SuggestedAssociation {
 ///
 /// The catalog adds its own no-follow ancestor and open-handle checks below the
 /// root and hashes the bytes itself; it never writes to sources.
+///
+/// A probe value may serve a whole run of reads, and every contained read
+/// calls it three times (root, file, root). An implementation may reuse a
+/// volume qualification across the run, but only while the entry it answers
+/// for still natively reports the qualified volume: a swapped, reformatted or
+/// remounted volume must be observed afresh, so the comparison with the
+/// registered identity refuses it before a read or write is trusted.
 pub trait SourceProbe: Send + Sync + 'static {
     /// No-follow fingerprint of a regular file, without a content digest.
     ///
