@@ -103,7 +103,7 @@ pub async fn index_folder(library: &Library, root: &Path, name: &str) -> Locatio
             }
             files.push(ScanFile {
                 relative_path: NativePath::from_path(path.strip_prefix(root).unwrap()),
-                fingerprint: InventoryProbe.fingerprint(&path).unwrap(),
+                fingerprint: InventoryProbe::default().fingerprint(&path).unwrap(),
                 format: ImageFormat::Fits,
                 metadata: CaptureMetadata {
                     image_type: Some("LIGHT".into()),
@@ -128,7 +128,7 @@ pub async fn index_folder(library: &Library, root: &Path, name: &str) -> Locatio
         }],
     };
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let identity = InventoryProbe.root_identity(&location).unwrap();
+    let identity = InventoryProbe::default().root_identity(&location).unwrap();
     let count = files.len() as u64;
     let progress =
         ScanProgress { discovered: count, metadata_read: count, ..ScanProgress::default() };
@@ -148,7 +148,7 @@ pub async fn index_folder(library: &Library, root: &Path, name: &str) -> Locatio
         .finish_scan(
             operation.id,
             &observation,
-            |location| InventoryProbe.root_identity(location),
+            |location| InventoryProbe::default().root_identity(location),
             one_session,
         )
         .await
@@ -170,7 +170,7 @@ pub async fn decide(library: &Library, location: &Location, paths: &[&str], qual
         })
         .collect();
     assert_eq!(expected.len(), paths.len(), "every frame to decide is indexed");
-    library.catalog().set_quality(&expected, quality, InventoryProbe).await.unwrap();
+    library.catalog().set_quality(&expected, quality, InventoryProbe::default()).await.unwrap();
 }
 
 /// Every library frame with its availability and quality decision.

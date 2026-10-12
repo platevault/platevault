@@ -223,7 +223,11 @@ pub async fn review_all(world: &World) {
             fingerprint: asset.fingerprint,
         });
     }
-    world.catalog().set_quality(&expected, Quality::Usable, InventoryProbe).await.unwrap();
+    world
+        .catalog()
+        .set_quality(&expected, Quality::Usable, InventoryProbe::default())
+        .await
+        .unwrap();
 }
 
 /// One frame-count goal on the Ha channel of the world's subject.

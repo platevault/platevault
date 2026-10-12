@@ -24,7 +24,8 @@
 //! network share (LIB-FR-01, LIB-FR-19).
 
 use std::fs::{self, Metadata};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use crate::{
@@ -41,9 +42,114 @@ pub(super) struct RootObservation {
 }
 
 /// A qualified volume and the kind of volume it is.
-struct Probed {
-    volume: VolumeIdentity,
-    kind: VolumeKind,
+#[derive(Clone, Debug)]
+pub struct Probed {
+    pub volume: VolumeIdentity,
+    pub kind: VolumeKind,
+}
+
+/// The operating system's volume queries: the seam [`VolumeCache`] reuses
+/// probes over, and that tests replace.
+pub trait VolumeProbe: Send + Sync {
+    /// Qualify the volume holding `path`, whose no-follow metadata is `meta`.
+    ///
+    /// # Errors
+    /// `IdentityConflict` when the volume cannot be qualified.
+    fn probe(&self, path: &Path, meta: &Metadata) -> Result<Probed, LibraryError>;
+
+    /// The stable id of the volume holding `path` as the entry's own
+    /// no-follow handle reports it, in the encoding [`Self::probe`] records;
+    /// `None` where the platform has no such native read.
+    fn handle_volume_id(&self, path: &Path) -> Option<String>;
+}
+
+/// This host's volume probe, run afresh on every call.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OsVolumes;
+
+impl VolumeProbe for OsVolumes {
+    fn probe(&self, path: &Path, meta: &Metadata) -> Result<Probed, LibraryError> {
+        let probed = probe_volume(path, meta)?;
+        probed.volume.validate().map_err(|error| scoped(error, path))?;
+        Ok(probed)
+    }
+
+    /// Windows reads the serial `GetFileInformationByHandle` reports, which
+    /// the CIM probe has to agree with. Unix device numbers are session-local
+    /// rather than remount-stable, so Unix has no such read.
+    fn handle_volume_id(&self, path: &Path) -> Option<String> {
+        #[cfg(windows)]
+        {
+            windows_handle::information(path).ok().map(|info| windows_handle::serial(&info))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = path;
+            None
+        }
+    }
+}
+
+/// The volume probes of one run of reads, reused per location root.
+///
+/// Invariant: a probe is reused only for an entry at or below the folder it
+/// was probed for, and only while that entry's own handle natively reports
+/// the probed stable volume id ([`VolumeProbe::handle_volume_id`]). A
+/// swapped, reformatted or remounted volume reports another id, so it misses,
+/// is probed afresh, and the caller's comparison with the registered identity
+/// refuses it before a read or write is trusted. A probe is kept only when it
+/// answers the id the handle reported just before it, so a volume swapped
+/// during the probe is never recorded under the old id. Where no native id
+/// exists every lookup probes: Unix device numbers are session-local, so they
+/// cannot stand in for the volume UUID.
+///
+/// Windows reads the serial the CIM probe already has to agree with, so a
+/// reused probe differs from a fresh one only for a volume that changes its
+/// filesystem or drive type while keeping its serial. A miss probes while it
+/// holds the cache, so the concurrent readers of one run share one probe.
+pub struct VolumeCache {
+    source: Box<dyn VolumeProbe>,
+    roots: Mutex<Vec<(PathBuf, Probed)>>,
+}
+
+impl Default for VolumeCache {
+    fn default() -> Self {
+        Self::over(OsVolumes)
+    }
+}
+
+impl VolumeCache {
+    /// An empty cache over `source`.
+    #[must_use]
+    pub fn over(source: impl VolumeProbe + 'static) -> Self {
+        Self { source: Box::new(source), roots: Mutex::new(Vec::new()) }
+    }
+}
+
+impl VolumeProbe for VolumeCache {
+    fn probe(&self, path: &Path, meta: &Metadata) -> Result<Probed, LibraryError> {
+        let Some(id) = self.source.handle_volume_id(path) else {
+            return self.source.probe(path, meta);
+        };
+        let reports_id = |probed: &Probed| probed.volume.stable_id.as_deref() == Some(id.as_str());
+        let mut roots = self.roots.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some((_, probed)) =
+            roots.iter().find(|(root, probed)| path.starts_with(root) && reports_id(probed))
+        {
+            return Ok(probed.clone());
+        }
+        // The miss probes under the lock, so concurrent readers wait for it.
+        let probed = self.source.probe(path, meta)?;
+        if meta.is_dir() && reports_id(&probed) {
+            roots.push((path.to_path_buf(), probed.clone()));
+        }
+        drop(roots);
+        Ok(probed)
+    }
+
+    fn handle_volume_id(&self, path: &Path) -> Option<String> {
+        self.source.handle_volume_id(path)
+    }
 }
 
 /// Same-session continuity evidence for one directory entry.
@@ -169,8 +275,12 @@ fn unqualified(root: &Path, why: &str) -> LibraryError {
 /// `PlateVault` mounts nothing, so it never touches such an address. Linked
 /// ancestors (such as macOS `/var`) are allowed: the recorded volume and folder
 /// ID bind the folder they resolved to, so a retargeted ancestor fails the
-/// comparison instead of being trusted.
-pub(super) fn observe(root: &Path) -> Result<RootObservation, LibraryError> {
+/// comparison instead of being trusted. `volumes` qualifies the volume:
+/// [`OsVolumes`] probes it afresh, a run's [`VolumeCache`] reuses its probe.
+pub(super) fn observe(
+    root: &Path,
+    volumes: &impl VolumeProbe,
+) -> Result<RootObservation, LibraryError> {
     if NativePath::from_path(root).is_network_address() {
         return Err(scoped(LibraryError::InvalidInput(NETWORK_ADDRESS_REFUSED.into()), root));
     }
@@ -206,7 +316,7 @@ pub(super) fn observe(root: &Path) -> Result<RootObservation, LibraryError> {
             root,
         ));
     }
-    let Probed { volume, kind } = probe(root, &meta)?;
+    let Probed { volume, kind } = volumes.probe(root, &meta)?;
     let file_id = file_id(root, &meta, &volume)
         .map_err(|error| unqualified(root, &format!("root folder ID {error}")))?;
     if file_id.is_none() {
@@ -223,14 +333,12 @@ pub(super) fn observe(root: &Path) -> Result<RootObservation, LibraryError> {
 }
 
 /// Qualified remount-stable identity of the volume holding an entry.
-pub(super) fn volume_of(path: &Path, meta: &Metadata) -> Result<VolumeIdentity, LibraryError> {
-    probe(path, meta).map(|probed| probed.volume)
-}
-
-fn probe(path: &Path, meta: &Metadata) -> Result<Probed, LibraryError> {
-    let probed = probe_volume(path, meta)?;
-    probed.volume.validate().map_err(|error| scoped(error, path))?;
-    Ok(probed)
+pub(super) fn volume_of(
+    path: &Path,
+    meta: &Metadata,
+    volumes: &impl VolumeProbe,
+) -> Result<VolumeIdentity, LibraryError> {
+    volumes.probe(path, meta).map(|probed| probed.volume)
 }
 
 /// Refuse an observed root that is not the registered volume and folder.
@@ -968,9 +1076,84 @@ mod tests {
     #[test]
     fn share_addresses_are_refused_before_the_filesystem_is_touched() {
         for address in ["smb://nas/astro", "//nas/astro", "afp://nas/astro"] {
-            let refused = observe(Path::new(address)).err().unwrap();
+            let refused = observe(Path::new(address), &OsVolumes).err().unwrap();
             assert_eq!(refused.response(None, None).kind, "invalid_input", "{address}");
             assert!(refused.to_string().contains("mounts no share"), "{address}: {refused}");
         }
+    }
+
+    /// What a fake volume's handles report and what its probe answers.
+    struct Mounted {
+        handle: Option<&'static str>,
+        answer: &'static str,
+        probes: usize,
+    }
+
+    struct FakeVolumes(std::sync::Arc<Mutex<Mounted>>);
+
+    impl VolumeProbe for FakeVolumes {
+        fn probe(&self, _path: &Path, _meta: &Metadata) -> Result<Probed, LibraryError> {
+            let mut mounted = self.0.lock().unwrap();
+            mounted.probes += 1;
+            Ok(Probed {
+                volume: VolumeIdentity {
+                    filesystem: "apfs".into(),
+                    stable_id: Some(mounted.answer.into()),
+                    file_ids_stable: true,
+                    case: PathSensitivity::Unknown,
+                    normalization: PathSensitivity::Unknown,
+                },
+                kind: VolumeKind::Local,
+            })
+        }
+
+        fn handle_volume_id(&self, _path: &Path) -> Option<String> {
+            self.0.lock().unwrap().handle.map(str::to_owned)
+        }
+    }
+
+    #[test]
+    fn a_root_probe_is_reused_below_it_only_while_its_handles_report_the_probed_id() {
+        let folder = tempfile::tempdir().unwrap();
+        let root = folder.path().join("captures");
+        let elsewhere = folder.path().join("elsewhere");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&elsewhere).unwrap();
+        let frame = root.join("light_001.fits");
+        fs::write(&frame, [0_u8; 2880]).unwrap();
+        let meta = |path: &Path| fs::symlink_metadata(path).unwrap();
+        let state =
+            std::sync::Arc::new(Mutex::new(Mounted { handle: Some("A"), answer: "A", probes: 0 }));
+        let cache = VolumeCache::over(FakeVolumes(std::sync::Arc::clone(&state)));
+        let set = |handle, answer| {
+            let mut mounted = state.lock().unwrap();
+            (mounted.handle, mounted.answer) = (handle, answer);
+        };
+        let probes = || state.lock().unwrap().probes;
+        let volume = |path: &Path| volume_of(path, &meta(path), &cache).unwrap().stable_id;
+
+        for _ in 0..3 {
+            assert_eq!(volume(&root).as_deref(), Some("A"));
+            assert_eq!(volume(&frame).as_deref(), Some("A"));
+        }
+        assert_eq!(probes(), 1, "the root and every frame below it share one probe");
+        assert_eq!(volume(&elsewhere).as_deref(), Some("A"));
+        assert_eq!(probes(), 2, "a folder outside the probed root is probed itself");
+
+        set(Some("B"), "B");
+        assert_eq!(volume(&frame).as_deref(), Some("B"), "a swapped volume is probed again");
+        assert_eq!(volume(&root).as_deref(), Some("B"));
+        assert_eq!(volume(&frame).as_deref(), Some("B"));
+        assert_eq!(probes(), 4, "a frame probed alone is not kept; its root is");
+
+        set(Some("C"), "D");
+        assert_eq!(volume(&root).as_deref(), Some("D"));
+        assert_eq!(volume(&root).as_deref(), Some("D"));
+        assert_eq!(probes(), 6, "a probe answering another id than the handle is not kept");
+
+        set(None, "A");
+        assert_eq!(volume(&root).as_deref(), Some("A"));
+        assert_eq!(volume(&root).as_deref(), Some("A"));
+        assert_eq!(probes(), 8, "without a native volume id every lookup probes");
     }
 }

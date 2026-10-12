@@ -99,15 +99,21 @@ pub struct ConfirmedCorrection {
     pub association_refresh: Option<crate::ErrorResponse>,
 }
 
-pub struct InventoryProbe;
+/// The inventory's source probe. Each probe holds the volume probes of one
+/// run of reads (`inventory::VolumeCache`): clone it across the reads of a
+/// run so each root's volume is probed once, and create a new one per run.
+#[derive(Clone, Default)]
+pub struct InventoryProbe {
+    volumes: Arc<inventory::VolumeCache>,
+}
 
 impl persistence_library::SourceProbe for InventoryProbe {
     fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
-        inventory::probe_fingerprint(path)
+        inventory::probe_fingerprint_in(path, &*self.volumes)
     }
 
     fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
-        inventory::validate_location_root(location)
+        inventory::validate_location_root_in(location, &*self.volumes)
     }
 }
 
@@ -196,7 +202,9 @@ impl Library {
     ) -> Result<RemapReview, LibraryError> {
         let root = proposed.to_path_buf()?;
         let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
-        self.catalog.review_remap(location_id, expected, &proposed, &identity, InventoryProbe).await
+        self.catalog
+            .review_remap(location_id, expected, &proposed, &identity, InventoryProbe::default())
+            .await
     }
 
     /// Register a qualified native root without scanning or modifying its files.
@@ -678,13 +686,15 @@ impl Library {
             return Ok(());
         }
         let work = self.catalog.duplicate_verification_work(id).await?;
+        // One run of reads: every chunk reuses the probe of each root's volume.
+        let probe = InventoryProbe::default();
         for chunk in work.chunks(COPY_CHUNK) {
             if canceled.load(Ordering::Acquire) {
                 break;
             }
             let status = self
                 .catalog
-                .verify_duplicate_candidates(id, chunk, InventoryProbe, Arc::clone(canceled))
+                .verify_duplicate_candidates(id, chunk, probe.clone(), Arc::clone(canceled))
                 .await?;
             let _ = self.progress.send(status);
         }
@@ -806,6 +816,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::inventory::{OsVolumes, Probed, VolumeCache, VolumeProbe};
     use crate::{ExpectedAsset, Quality};
 
     fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {
@@ -891,7 +902,11 @@ mod tests {
             decision_revision: asset.decision_revision,
             fingerprint: asset.fingerprint.clone(),
         };
-        library.catalog.set_quality(&[expected], Quality::Usable, InventoryProbe).await.unwrap();
+        library
+            .catalog
+            .set_quality(&[expected], Quality::Usable, InventoryProbe::default())
+            .await
+            .unwrap();
 
         let saved = library.saved_targets().await.unwrap();
         let refused = library.record_assessment(&stale, &saved).await.unwrap_err();
@@ -1041,6 +1056,75 @@ mod tests {
             (event.progress.duplicate_candidates, event.progress.duplicates_verified),
             (2, 2)
         );
+        unchanged(&originals);
+    }
+
+    /// This host's volume under a swappable stable id: the id its handles
+    /// report and its probe answers. Counts the probes.
+    struct Swappable {
+        mounted: Arc<std::sync::Mutex<String>>,
+        probes: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl VolumeProbe for Swappable {
+        fn probe(&self, path: &Path, meta: &std::fs::Metadata) -> Result<Probed, LibraryError> {
+            self.probes.fetch_add(1, Ordering::SeqCst);
+            let mut probed = OsVolumes.probe(path, meta)?;
+            probed.volume.stable_id = Some(self.mounted.lock().unwrap().clone());
+            Ok(probed)
+        }
+
+        fn handle_volume_id(&self, _path: &Path) -> Option<String> {
+            Some(self.mounted.lock().unwrap().clone())
+        }
+    }
+
+    /// On Windows each contained read probed the volume three times, each a
+    /// PowerShell CIM query (astro-plan-c6fna). The reads of one run probe
+    /// each root's volume once, and again when the volume's id changes.
+    #[tokio::test]
+    async fn a_run_of_reads_probes_each_root_volume_once_and_again_after_a_swap() {
+        const READS: usize = 5;
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, originals) = scanned_library(&temp, &["T7", "NAS"]).await;
+        let mut assets = Vec::new();
+        for location in &locations {
+            assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+            assets.extend(library.catalog.location_assets(location.id).await.unwrap());
+        }
+        let registered = locations[0].identity.volume.stable_id.clone().unwrap();
+        let mounted = Arc::new(std::sync::Mutex::new(registered.clone()));
+        let probes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let run = InventoryProbe {
+            volumes: Arc::new(VolumeCache::over(Swappable {
+                mounted: Arc::clone(&mounted),
+                probes: Arc::clone(&probes),
+            })),
+        };
+        let read = |asset: Uuid| library.catalog.open_contained(asset, run.clone(), |_| Ok(()));
+        let probe_count = || probes.load(Ordering::SeqCst);
+
+        for _ in 0..READS {
+            for asset in &assets {
+                read(asset.id).await.unwrap();
+            }
+        }
+        assert_eq!(
+            probe_count(),
+            locations.len(),
+            "{} reads probe each of {} roots once",
+            READS * assets.len(),
+            locations.len()
+        );
+
+        *mounted.lock().unwrap() = "0BADF00D".into();
+        let refused = read(assets[0].id).await.unwrap_err();
+        assert_eq!(refused.response(None, None).kind, "identity_conflict", "{refused}");
+        assert_eq!(probe_count(), locations.len() + 1, "the swapped volume is probed again");
+
+        *mounted.lock().unwrap() = registered;
+        read(assets[0].id).await.unwrap();
+        assert_eq!(probe_count(), locations.len() + 1, "the registered volume's probe still holds");
         unchanged(&originals);
     }
 }

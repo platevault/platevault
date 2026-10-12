@@ -143,13 +143,13 @@ async fn scan(
         fs::write(&path, fits(relative, metadata)).unwrap();
         files.push(ScanFile {
             relative_path: NativePath::from_path(Path::new(relative)),
-            fingerprint: InventoryProbe.fingerprint(&path).unwrap(),
+            fingerprint: InventoryProbe::default().fingerprint(&path).unwrap(),
             format: ImageFormat::Fits,
             metadata: metadata.clone(),
         });
     }
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let identity = InventoryProbe.root_identity(location).unwrap();
+    let identity = InventoryProbe::default().root_identity(location).unwrap();
     let count = files.len() as u64;
     let progress =
         ScanProgress { discovered: count, metadata_read: count, ..ScanProgress::default() };
@@ -169,7 +169,7 @@ async fn scan(
         .finish_scan(
             operation.id,
             &observation,
-            |location| InventoryProbe.root_identity(location),
+            |location| InventoryProbe::default().root_identity(location),
             group_by_night,
         )
         .await

@@ -786,15 +786,17 @@ impl Library {
             match digest {
                 Some(digest) if digest == sha256 => return Ok(IndexedCopy::Found(asset_id)),
                 Some(_) => {}
-                None => match self.catalog().verify_digest(asset_id, InventoryProbe).await {
-                    Ok(evidence) if evidence.sha256 == sha256 => {
-                        return Ok(IndexedCopy::Found(asset_id));
+                None => {
+                    match self.catalog().verify_digest(asset_id, InventoryProbe::default()).await {
+                        Ok(evidence) if evidence.sha256 == sha256 => {
+                            return Ok(IndexedCopy::Found(asset_id));
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            unproven = unproven.or_else(|| Some((asset_id, error.to_string())));
+                        }
                     }
-                    Ok(_) => {}
-                    Err(error) => {
-                        unproven = unproven.or_else(|| Some((asset_id, error.to_string())));
-                    }
-                },
+                }
             }
         }
         Ok(unproven.map_or(IndexedCopy::None, |(asset_id, detail)| {
