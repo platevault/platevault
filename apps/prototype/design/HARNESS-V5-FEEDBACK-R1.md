@@ -269,6 +269,13 @@ Every decision below was made by the user while answering the v5 journeys' open 
 - **Quit asks** while an import, index or prepare runs.
 - **Onboarding: walk plus checklist.** An orientation walk after setup, and a Getting started checklist on Home (setup, first import, first Project, first run) until done.
 
-### Pending research
-- **Input modes (hard links, clones, symlinks, junctions, network shares).** The user asked for a fuller analysis before deciding (prior art such as omp and pnpm, Windows junctions and symlinks across filesystems, network filesystems, Rust crates, a custom CoW layer). Research is in progress; this also decides Q-ARCHIVE-LINKS (archiving sessions that a run holds hard links to).
+### Input modes (user, 2026-10-10; research: design/INPUT-MODES-RESEARCH.md)
+- **P-PREP2: three Prepare modes, Automatic by default.**
+  - **Independent copy (default):** Rust `std::fs::copy` clones where the filesystem can (APFS, Btrfs/XFS, ReFS/Dev Drive), uses server-side copy on NFS 4.2 and SMB, and otherwise copies. Entries are made read-only once verified.
+  - **Link to originals (opt-in, with a warning):** symlinks; a hard link only on the same local volume when symlinks are unavailable. The originals are re-hashed after the run.
+  - **Give PixInsight the file list:** WBPP only. Siril always needs a folder.
+  - **Removed:** Hard links as a mode of their own, and junctions for files.
+  - **Footprint is real:** each prepared item records whether it was cloned or copied, and Prepare and Done show the actual extra space ("0 B extra · cloned" vs "12.4 GB copied").
+- **Prepared copies are cleaned up when a run is done (user).** Copies cost real space on volumes that can't clone. Completing a run offers Clean up prepared copies by default, showing the footprint; they go to the OS Trash after review. Wrap up's Clean up runs step covers any that are left. A run whose entries are all clones says so ("frees no space").
+- **Archiving with links (Q-ARCHIVE-LINKS):** a symlinked entry is repointed when its session moves. Hard-linked entries no longer exist as a mode.
 
