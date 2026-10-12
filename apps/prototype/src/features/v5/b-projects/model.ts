@@ -5,7 +5,8 @@
  * the goal channels a Project's rigs can capture. The copy each frame keeps
  * (D-W74) is the shared `keptCopy` (domain/storage.ts).
  * Pure: nothing here writes state. Every OS Trash refusal is the
- * shared `trashRefusal`; the offers and plans stay here because only the
+ * shared `trashBlock` (the disk, then run views linking the file, P-TRASH2);
+ * the offers and plans stay here because only the
  * Project screens read them.
  */
 import { fileAt, fileKey, freeBytes, trashRefusal } from "@/domain/disk"
@@ -22,10 +23,10 @@ import {
   rigCameraKind,
   sessionNamingValues,
   sessionTargetId,
+  type StepLink,
 } from "@/domain/derive"
-import { isUnder } from "@/domain/indexing"
 import { qualityApplicability } from "@/domain/library"
-import { keptCopy } from "@/domain/storage"
+import { keptCopy, keptViewLinks, runViewLinks, type RunViewLinks, type TrashBlock, trashBlock } from "@/domain/storage"
 import { GOAL_CHANNELS, NARROW_BANDS } from "@/domain/labels"
 import { namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Run, Session, SessionId, Subject, Volume } from "@/domain/types"
@@ -105,6 +106,8 @@ export interface OfferRefusal {
   label: string
   path: string | null
   reason: MessageRef
+  /** Where the refusal can be resolved: the run whose view links the item (P-TRASH2). */
+  link?: StepLink
 }
 
 export interface TrashOffer {
@@ -117,6 +120,8 @@ export interface TrashOffer {
   refusals: OfferRefusal[]
   /** What the approval hands to the OS Trash engine. */
   items: TrashItem[]
+  /** Links in kept run views that leave with the items (P-TRASH2). */
+  keptLinks: number
 }
 
 type OfferCount = { count: number; n: string; size: string }
@@ -128,27 +133,11 @@ const OFFER_TITLE: Record<OfferKind, { some: (count: OfferCount) => string; none
   "duplicate-copies": { some: (c) => m.wrapup_offer_duplicates(c), none: () => m.wrapup_offer_duplicates_none() },
 }
 
-function offer(kind: OfferKind, disk: Disk, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
-  const sizeBytes = reclaimBytes(
-    disk,
-    items.map((i) => i.path),
-  )
+function offer(kind: OfferKind, disk: Disk, links: RunViewLinks, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
+  const paths = items.map((i) => i.path)
+  const sizeBytes = reclaimBytes(disk, paths)
   const title = entries.length === 0 ? OFFER_TITLE[kind].none() : OFFER_TITLE[kind].some({ count: entries.length, n: formatCount(entries.length), size: formatBytes(sizeBytes) })
-  return { kind, title, count: entries.length, sizeBytes, entries, refusals, items }
-}
-
-/** Frames in a prepared revision of a run that is not Complete, in any Project, with that run's name. */
-function preparedInOpenRuns(catalog: Catalog): Map<AssetId, string> {
-  const out = new Map<AssetId, string>()
-  for (const prep of Object.values(catalog.preparations)) {
-    const run = catalog.runs[prep.runId]
-    if (!run || run.completion === "complete") continue
-    const project = catalog.projects[run.projectId]
-    const named = project ? `${run.name} (${project.name})` : run.name
-    const where = run.trashedAt ? m.wrapup_where_in_trash({ where: named }) : named
-    for (const id of prep.preparedAssetIds) if (!out.has(id)) out.set(id, where)
-  }
-  return out
+  return { kind, title, count: entries.length, sizeBytes, entries, refusals, items, keptLinks: keptViewLinks(links, paths).length }
 }
 
 /** Frames recorded as inputs of a Result: the prepared revision a tool-recorded Result came from. */
@@ -172,7 +161,7 @@ function resultInputs(catalog: Catalog): Map<AssetId, string> {
  */
 export function unusableFramesOffer(state: PrototypeState, assetIds: Iterable<AssetId>): TrashOffer {
   const { catalog, disk } = state
-  const prepared = preparedInOpenRuns(catalog)
+  const links = runViewLinks(catalog, disk)
   const inputs = resultInputs(catalog)
   const moving = sessionsInTransfer(state.operations)
   const entries: OfferEntry[] = []
@@ -185,29 +174,24 @@ export function unusableFramesOffer(state: PrototypeState, assetIds: Iterable<As
     seen.add(id)
     const label = asset.fileName
     const path = asset.copies[0]?.path ?? ""
-    const refuse = (reason: MessageRef) => refusals.push({ key: id, label, path, reason })
-    const preparedIn = prepared.get(id)
-    if (preparedIn) {
-      refuse(msg("wrapup_refusal_in_open_run", { where: preparedIn }))
-      continue
-    }
+    const refuse = (block: TrashBlock) => refusals.push({ key: id, label, path, ...block })
     const input = inputs.get(id)
     if (input) {
-      refuse(msg("wrapup_refusal_result_input", { name: input }))
+      refuse({ reason: msg("wrapup_refusal_result_input", { name: input }) })
       continue
     }
     if (asset.sessionId && moving.has(asset.sessionId)) {
-      refuse(msg("wrapup_refusal_archive_moving"))
+      refuse({ reason: msg("wrapup_refusal_archive_moving") })
       continue
     }
     const outside = asset.copies.find((c) => catalog.locations[c.locationId]?.role !== "captures")
     if (outside) {
-      refuse(msg("wrapup_refusal_outside_captures"))
+      refuse({ reason: msg("wrapup_refusal_outside_captures") })
       continue
     }
-    const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
-    if (copyRefusal) {
-      refuse(copyRefusal)
+    const copyBlock = asset.copies.map((c) => trashBlock(disk, links, c.path)).find((b) => b !== null)
+    if (copyBlock) {
+      refuse(copyBlock)
       continue
     }
     entries.push({
@@ -219,7 +203,7 @@ export function unusableFramesOffer(state: PrototypeState, assetIds: Iterable<As
     })
     for (const copy of asset.copies) items.push({ path: copy.path, assetId: id })
   }
-  return offer("rejected-frames", disk, entries, refusals, items)
+  return offer("rejected-frames", disk, links, entries, refusals, items)
 }
 
 /** Wrap up's rejected-frames offer: the Project's candidate frames that are library Unusable. */
@@ -248,6 +232,7 @@ export function runIntermediatesOffer(state: PrototypeState, run: Run): TrashOff
 
 function intermediatesOf(state: PrototypeState, runIds: ReadonlySet<string>, groupIds: ReadonlySet<string>): TrashOffer {
   const { catalog, disk } = state
+  const links = runViewLinks(catalog, disk)
   const entries: OfferEntry[] = []
   const refusals: OfferRefusal[] = []
   const items: TrashItem[] = []
@@ -258,9 +243,9 @@ function intermediatesOf(state: PrototypeState, runIds: ReadonlySet<string>, gro
     seen.add(result.path)
     const label = result.path.split("/").at(-1) ?? result.path
     const owner = result.runId ? catalog.runs[result.runId]?.name : result.groupId ? catalog.runGroups[result.groupId]?.name : undefined
-    const reason = trashRefusal(disk, result.path)
-    if (reason) {
-      refusals.push({ key: result.id, label, path: result.path, reason })
+    const block = trashBlock(disk, links, result.path)
+    if (block) {
+      refusals.push({ key: result.id, label, path: result.path, ...block })
       continue
     }
     entries.push({ key: result.id, label, path: result.path, detail: owner ? m.wrapup_intermediate_of({ name: owner }) : m.wrapup_intermediate(), sizeBytes: fileAt(disk, result.path)?.sizeBytes ?? 0 })
@@ -272,15 +257,15 @@ function intermediatesOf(state: PrototypeState, runIds: ReadonlySet<string>, gro
     if (seen.has(path) || path === master.adoption.destinationPath) continue
     const label = path.split("/").at(-1) ?? path
     const kept = fileAt(disk, master.adoption.destinationPath)
-    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? msg("wrapup_refusal_kept_unverifiable", { path: master.adoption.destinationPath }) : trashRefusal(disk, path)
-    if (reason) {
-      refusals.push({ key: master.id, label, path, reason })
+    const block = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? { reason: msg("wrapup_refusal_kept_unverifiable", { path: master.adoption.destinationPath }) } : trashBlock(disk, links, path)
+    if (block) {
+      refusals.push({ key: master.id, label, path, ...block })
       continue
     }
     entries.push({ key: master.id, label, path, detail: m.wrapup_master_source_duplicate({ path: master.adoption.destinationPath }), sizeBytes: fileAt(disk, path)?.sizeBytes ?? 0 })
     items.push({ path })
   }
-  return offer("intermediates", disk, entries, refusals, items)
+  return offer("intermediates", disk, links, entries, refusals, items)
 }
 
 /**
@@ -291,14 +276,7 @@ function intermediatesOf(state: PrototypeState, runIds: ReadonlySet<string>, gro
 export function duplicatesOffer(state: PrototypeState, project: Project): TrashOffer {
   const { catalog, disk } = state
   const moving = sessionsInTransfer(state.operations)
-  const linkedBy = new Map<string, string>()
-  for (const prep of Object.values(catalog.preparations)) {
-    const run = catalog.runs[prep.runId]
-    if (!run || run.completion === "complete") continue
-    // A run view's symlinks point at one copy of each frame.
-    const used = Object.values(disk.files).flatMap((f) => (f.linkTarget && isUnder(f.path, prep.folderPath) ? [f.linkTarget] : []))
-    for (const path of used) if (!linkedBy.has(path)) linkedBy.set(path, run.name)
-  }
+  const links = runViewLinks(catalog, disk)
   const entries: OfferEntry[] = []
   const refusals: OfferRefusal[] = []
   const items: TrashItem[] = []
@@ -313,16 +291,13 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
         if (copy === kept || copy.sha256 !== asset.sha256) continue
         const key = `${id}|${copy.path}`
         const label = m.wrapup_copy_on({ name: asset.fileName, location: catalog.locations[copy.locationId]?.displayName ?? m.wrapup_unknown_location() })
-        const reason =
-          linkedBy.has(copy.path) && copy.path !== kept.path
-            ? msg("wrapup_refusal_linked_source", { name: linkedBy.get(copy.path) ?? "" })
-            : moving.has(session.id)
-              ? msg("wrapup_refusal_archive_moving")
-              : trashRefusal(disk, kept.path)
-                ? msg("wrapup_refusal_kept_copy_unverified", { name: keptName })
-                : trashRefusal(disk, copy.path)
-        if (reason) {
-          refusals.push({ key, label, path: copy.path, reason })
+        const block: TrashBlock | null = moving.has(session.id)
+          ? { reason: msg("wrapup_refusal_archive_moving") }
+          : trashRefusal(disk, kept.path)
+            ? { reason: msg("wrapup_refusal_kept_copy_unverified", { name: keptName }) }
+            : trashBlock(disk, links, copy.path)
+        if (block) {
+          refusals.push({ key, label, path: copy.path, ...block })
           continue
         }
         entries.push({ key, label, path: copy.path, detail: m.wrapup_keeps_copy_on({ name: keptName, path: kept.path }), sizeBytes: asset.sizeBytes })
@@ -330,7 +305,7 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
       }
     }
   }
-  return offer("duplicate-copies", disk, entries, refusals, items)
+  return offer("duplicate-copies", disk, links, entries, refusals, items)
 }
 
 export function trashOffers(state: PrototypeState, project: Project): Record<OfferKind, TrashOffer> {

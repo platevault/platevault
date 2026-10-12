@@ -5,15 +5,18 @@
  * Import Move sources, a run's Clean up) runs as one operation with visible
  * per-item progress and records one `TrashEpisode`. Nothing is ever deleted
  * permanently: a file goes to `disk.trash`, or it is kept and listed as
- * refused with its reason (`trashRefusal`, asked again for every item). A
- * frame with copies in several locations moves every copy, and if any copy
- * is refused the whole frame is refused (D-W57).
+ * refused with its reason (`trashBlock`, asked again for every item; it
+ * keeps a file linked by an unfinished run's view, P-TRASH2). A file's links
+ * in kept run views go with it. A frame with copies in several locations
+ * moves every copy, and if any copy is refused the whole frame is refused
+ * (D-W57).
  */
 import { stepRecord } from "@/domain/calibration-process"
-import { fileAt, filesUnder, removeFile, trashRefusal } from "@/domain/disk"
+import { fileAt, filesUnder, removeFile } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
-import type { AssetId, CalibrationProcessId, Disk, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
+import { keptViewLinks, runViewLinks, type RunViewLinks, trashBlock } from "@/domain/storage"
+import type { AssetId, CalibrationProcessId, Disk, DiskFile, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
 import { fileName, formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
@@ -140,8 +143,12 @@ export function queueOsTrash(state: PrototypeState, input: MoveToOsTrash): { sta
   return { state: added.state, operationId: added.id }
 }
 
-function refusal(disk: Disk, item: TrashItem): MessageRef | null {
-  return item.refusedReason ?? trashRefusal(disk, item.path)
+function refusal(disk: Disk, links: RunViewLinks, item: TrashItem): MessageRef | null {
+  return item.refusedReason ?? trashBlock(disk, links, item.path)?.reason ?? null
+}
+
+function toTrash(disk: Disk, file: DiskFile, at: string): Disk {
+  return { ...removeFile(disk, file.volumeId, file.path), trash: [...disk.trash, { file, originalPath: file.path, trashedAt: at }] }
 }
 
 const GROUPS_PER_TICK = 12
@@ -151,13 +158,14 @@ function trashStep(kind: OperationKind): OperationHandler {
     kind,
     step(state, op) {
       const payload = op.payload as unknown as TrashPayload
+      const links = runViewLinks(state.catalog, state.disk)
       let disk = state.disk
       const queue = [...payload.queue]
       const done = [...payload.done]
       const outcomes = new Map<string, Pick<OperationItem, "status" | "detail">>()
       const at = nowIso()
       for (const group of queue.splice(0, GROUPS_PER_TICK)) {
-        const reasons = group.map((item) => refusal(disk, item))
+        const reasons = group.map((item) => refusal(disk, links, item))
         const firstRefusal = reasons.find((r) => r !== null) ?? null
         for (const [index, item] of group.entries()) {
           const file = fileAt(disk, item.path)
@@ -169,7 +177,9 @@ function trashStep(kind: OperationKind): OperationHandler {
             outcomes.set(item.path, { status: "blocked", detail: reason })
             continue
           }
-          disk = { ...removeFile(disk, file!.volumeId, item.path), trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
+          disk = toTrash(disk, file!, at)
+          // P-TRASH2: the file's links in kept run views go with it.
+          for (const link of keptViewLinks(links, [item.path])) if (fileAt(disk, link.path)) disk = toTrash(disk, link, at)
           done.push({ ...base, outcome: "trashed", reason: null })
           outcomes.set(item.path, { status: "done", detail: msg("op_trash_moved") })
         }

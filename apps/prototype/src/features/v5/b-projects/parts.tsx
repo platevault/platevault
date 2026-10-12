@@ -1,10 +1,12 @@
 /**
  * Slice B UI parts shared by the Project screens and sheets: the subject
- * search (My targets, the bundled catalogues and SIMBAD, D-W17) and the
- * commit outcome beside a control: a refusal reads as the terse `Refusal`
- * line with its blocker chips, any other failure as an inline error. The
- * Project state is the shared `StatusBadge kind="project"`; a run's six-step
- * rail is `StepRail` in `src/app/run-ui.tsx`.
+ * search (My targets, the bundled catalogues and SIMBAD, D-W17), the commit
+ * outcome beside a control (a refusal reads as the terse `Refusal` line with
+ * its blocker chips, any other failure as an inline error) and a trash
+ * offer's review: what it moves and the items it keeps, each linked to where
+ * it can be resolved. The Project state is the shared
+ * `StatusBadge kind="project"`; a run's six-step rail is `StepRail` in
+ * `src/app/run-ui.tsx`.
  */
 import { Loader, Plus, Search } from "lucide-react"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
@@ -18,10 +20,11 @@ import { myTargets } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { BUNDLED_CATALOGUE, type CatalogueEntry, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Catalog, TargetId } from "@/domain/types"
-import { formatDec, formatRa } from "@/lib/format"
+import { formatBytes, formatDec, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
 import { store, useStore } from "@/store/core"
+import type { OfferRefusal, TrashOffer } from "./model"
 
 // ---------------------------------------------------------------------------
 // Commit outcome beside the control
@@ -67,6 +70,42 @@ export function CommitOutcome({
   if (!refusal || result.reason !== "refused") return <ActionError message={result.message} className={className} />
   const chips = blockers ? blockers(result.reasons) : refusal.blockers
   return <Refusal {...refusal} reason={reason ? reason(chips.length) : refusal.reason} blockers={chips} className={className} />
+}
+
+// ---------------------------------------------------------------------------
+// Trash offer review (D-W43, P-TRASH2)
+// ---------------------------------------------------------------------------
+
+/** The terse reason an offer's items stay put ("no write permission", "linked by M 31 LRGB"); mixed reasons read as a blocker count. */
+function trashRefusalReason(m: Messages, refusals: OfferRefusal[]): string {
+  const keys = new Set(refusals.map((r) => ("key" in r.reason ? r.reason.key : null)))
+  if (keys.size === 1) {
+    const [key] = keys
+    if (key === "domain_trash_read_only") return m.wrapup_reason_no_write()
+    if (key === "domain_trash_no_volume") return m.wrapup_reason_no_volume()
+    if (key === "domain_trash_unsupported") return m.wrapup_reason_no_trash()
+    if (key === "domain_trash_not_found") return m.wrapup_reason_not_found()
+    if (key === "run_cleanup_volume_offline") return m.wrapup_reason_offline()
+    const reasons = new Set(refusals.map((r) => say(m, r.reason)))
+    if (key === "domain_trash_linked_by" && reasons.size === 1) return [...reasons][0]!
+  }
+  return m.refusal_blockers({ count: keys.size })
+}
+
+/** "Can't trash 2 · linked by M 31 LRGB ▸": the items an offer keeps, each a chip leading to where it can be resolved. */
+export function OfferRefusals({ refusals, className }: { refusals: OfferRefusal[]; className?: string }) {
+  const m = useMessages()
+  if (refusals.length === 0) return null
+  return <Refusal standing className={className} action={m.wrapup_cant_trash({ n: refusals.length })} reason={trashRefusalReason(m, refusals)} blockers={refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}`, link: r.link }))} />
+}
+
+/** What approving the offer changes: the items it moves, the items it keeps and the kept-view links that go with them. */
+export function offerChanges(m: Messages, offer: TrashOffer): string[] {
+  return [
+    m.wrapup_items_to_trash({ count: offer.count, size: formatBytes(offer.sizeBytes) }),
+    ...(offer.refusals.length > 0 ? [m.wrapup_items_kept_reason({ count: offer.refusals.length })] : []),
+    ...(offer.keptLinks > 0 ? [m.trash_also_removes_links({ count: offer.keptLinks })] : []),
+  ]
 }
 
 // ---------------------------------------------------------------------------

@@ -1229,8 +1229,6 @@
     }
   ],
   "wrapup_offer_duplicates_none": "Mover cópias duplicadas para a Lixeira: nenhuma restante",
-  "wrapup_where_in_trash": "{where}, na Lixeira do Projeto",
-  "wrapup_refusal_in_open_run": "em {where}, não Completa",
   "wrapup_refusal_result_input": "entrada de {name}",
   "wrapup_refusal_archive_moving": "arquivamento em andamento",
   "wrapup_refusal_outside_captures": "cópia fora de Capturas",
@@ -1255,7 +1253,6 @@
   "wrapup_master_source_duplicate": "Origem do master gerado: duplicata verificada; mantém a cópia da biblioteca {path}",
   "wrapup_copy_on": "{name} em {location}",
   "wrapup_unknown_location": "um local desconhecido",
-  "wrapup_refusal_linked_source": "origem de {name}, não Completa",
   "wrapup_refusal_kept_copy_unverified": "cópia mantida em {name} não verificada",
   "wrapup_keeps_copy_on": "Mantém a cópia em {name}: {path}",
   "wrapup_refusal_space": "{name}: {free} livres de {size}",
@@ -7057,6 +7054,23 @@
   "wrapup_reason_no_trash": "volume sem Lixeira do sistema",
   "wrapup_reason_not_found": "ausente no caminho registrado",
   "wrapup_reason_offline": "volume offline",
+  "trash_cant": "Não é possível descartar",
+  "domain_trash_linked_by": "vinculado por {name}",
+  "trash_also_removes_links": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Também remove {count} link em visualizações mantidas de execuções",
+        "countPlural=*": "Também remove {count} links em visualizações mantidas de execuções"
+      }
+    }
+  ],
   "tips_note_named": "Nota {number}: {label}",
   "issue_duplicates": [
     {

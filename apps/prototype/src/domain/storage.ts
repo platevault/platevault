@@ -4,12 +4,15 @@
  * run's Done step and in Wrap up. Settings › Locations shows each location's
  * disk use (P-STO2). Duplicates are byte-identical live copies; a duplicate
  * scan (`duplicate-scan`) runs by itself after each index and import, and
- * the Duplicates review lists what it found that is still live. Nothing here
- * writes state.
+ * the Duplicates review lists what it found that is still live. A run view's
+ * links decide what may go to the OS Trash (`linkRefusal`, P-TRASH2).
+ * Nothing here writes state.
  */
 import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
-import { runPreparations, type World } from "./derive"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, LocationRole, Operation, Preparation, RunId } from "./types"
+import { runPreparations, runStepLink, type StepLink, type World } from "./derive"
+import { isUnder } from "./indexing"
+import { type MessageRef, msg } from "@/lib/i18n"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Preparation, Run, RunId } from "./types"
 
 export interface Footprint {
   /** Bytes the prepared folder holds itself: a Copies view's copies; symlinks count zero. */
@@ -40,6 +43,61 @@ export function runFootprint(disk: Disk, catalog: Catalog, runId: RunId): Footpr
     },
     { preparedBytes: 0, resultsBytes: 0, online: true },
   )
+}
+
+/** One run view's symlink to a catalogue file (P-PREP3). */
+export interface RunViewLink {
+  link: DiskFile
+  run: Run
+  /** In the latest view of a run that is not Complete: the file stays out of the OS Trash until that view is refreshed (P-TRASH2). */
+  holds: boolean
+}
+
+/** Every run view's links, by the path each points at. */
+export type RunViewLinks = Map<string, RunViewLink[]>
+
+export function runViewLinks(catalog: Catalog, disk: Disk): RunViewLinks {
+  const views = Object.values(catalog.runs).flatMap((run) => {
+    const preps = runPreparations(catalog, run.id)
+    return preps.map((prep, index) => ({ folder: prep.folderPath, run, holds: run.completion !== "complete" && index === preps.length - 1 }))
+  })
+  const out: RunViewLinks = new Map()
+  if (views.length === 0) return out
+  for (const file of Object.values(disk.files)) {
+    if (!file.linkTarget) continue
+    const view = views.find((v) => isUnder(file.path, v.folder))
+    if (!view) continue
+    const entry = { link: file, run: view.run, holds: view.holds }
+    const list = out.get(file.linkTarget)
+    if (list) list.push(entry)
+    else out.set(file.linkTarget, [entry])
+  }
+  return out
+}
+
+/** Why a file can't go to the OS Trash now; `link` leads to where it can be resolved. */
+export interface TrashBlock {
+  reason: MessageRef
+  link?: StepLink
+}
+
+/**
+ * The guard every move to the OS Trash applies, in every flow and again for
+ * each item as it moves: the disk's own refusal (`trashRefusal`), then the
+ * run views (P-TRASH2). A file the latest view of a run that is not
+ * Complete links to stays, "linked by {run}", leading to that run's
+ * Prepare step; refreshing the view drops the link. Null when it may go.
+ */
+export function trashBlock(disk: Disk, links: RunViewLinks, path: string): TrashBlock | null {
+  const reason = trashRefusal(disk, path)
+  if (reason) return { reason }
+  const run = links.get(path)?.find((l) => l.holds)?.run
+  return run ? { reason: msg("domain_trash_linked_by", { name: run.name }), link: runStepLink(run, "prepare") } : null
+}
+
+/** Links in kept run views (a Complete run's view the user kept, a superseded revision): they leave with the paths. */
+export function keptViewLinks(links: RunViewLinks, paths: Iterable<string>): DiskFile[] {
+  return [...new Set(paths)].flatMap((path) => (links.get(path) ?? []).filter((l) => !l.holds).map((l) => l.link))
 }
 
 export interface DiskUse {
@@ -133,11 +191,11 @@ function duplicateGroup(catalog: Catalog, disk: Disk, asset: Asset, paths?: Read
 /**
  * The copy the review preselects to keep: the one in the earliest-registered
  * location, unless exactly one copy cannot go to the OS Trash
- * (`trashRefusal`, say write permission removed): keeping that one is the
- * only choice that lets the others go.
+ * (`trashBlock`, say write permission removed or linked by a run): keeping
+ * that one is the only choice that lets the others go.
  */
-export function keepChoice(disk: Disk, group: DuplicateGroup): AssetCopy {
-  const stuck = group.copies.filter((c) => trashRefusal(disk, c.path) !== null)
+export function keepChoice(disk: Disk, links: RunViewLinks, group: DuplicateGroup): AssetCopy {
+  const stuck = group.copies.filter((c) => trashBlock(disk, links, c.path) !== null)
   return stuck.length === 1 ? stuck[0]! : group.copies[0]!
 }
 
