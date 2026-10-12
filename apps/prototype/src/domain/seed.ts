@@ -33,7 +33,7 @@
  * All names, paths and counts are illustrative fixtures.
  */
 import { fileName, formatCount } from "@/lib/format"
-import { joinRefs, msg, verbatim } from "@/lib/i18n"
+import { joinRefs, m, msg, verbatim } from "@/lib/i18n"
 import { assignmentId, automaticAssignments, calibrationPlan } from "./calibration"
 import { CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
 import { DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
@@ -814,7 +814,7 @@ function demoSeed(): SeedData {
     [PROJECT.cygnus]: {
       id: PROJECT.cygnus,
       name: "Cygnus HOO 2026",
-      notes: "Wide HOO of the North America and Pelican region; the OSC rig adds dual-band data.",
+      notes: m.seed_project_cygnus_notes(),
       subjects: [ngcSubject, mosaicSubject],
       rigIds: [RIG.redcat, RIG.esprit],
       goals: [
@@ -833,7 +833,7 @@ function demoSeed(): SeedData {
     [PROJECT.m31]: {
       id: PROJECT.m31,
       name: "M 31 LRGB",
-      notes: "Broadband first; narrowband blend later.",
+      notes: m.seed_project_m31_notes(),
       subjects: [subject("sub_m31", m31)],
       rigIds: [RIG.fra],
       // Every goal kind: integration with a quality bar (Usable and FWHM), frame counts, Usable only.
@@ -856,7 +856,7 @@ function demoSeed(): SeedData {
     [PROJECT.heart]: {
       id: PROJECT.heart,
       name: "Heart and Soul",
-      notes: "Ha first; OIII when the Moon allows.",
+      notes: m.seed_project_heart_notes(),
       subjects: heartIds.map((x, i) => subject(`sub_heart_${i + 1}`, catalog.sessions[x.id]!.target.value!)),
       rigIds: [RIG.redcat],
       goals: heartIds.flatMap((_, i) => [goal(`goal_heart_${i + 1}_ha`, `sub_heart_${i + 1}`, "Ha", 10), goal(`goal_heart_${i + 1}_oiii`, `sub_heart_${i + 1}`, "OIII", null, null, { frameCount: 120, qualityBar: { kind: "usable-only" } })]),
@@ -1136,7 +1136,7 @@ function demoSeed(): SeedData {
   recordHandoff(
     m31Run,
     m31Run.completedAt!,
-    m31Run.revisions[0]!.sessions.map(({ sessionId }): CalibrationAssignment => ({ id: assignmentId(m31Run.id, sessionId, "dark"), lightSessionId: sessionId, kind: "dark", input: null, state: "exception", criteria: [], exception: { reason: "Darks stacked in PixInsight", at: noDarkAt }, basis: { at: noDarkAt, files: [] } })),
+    m31Run.revisions[0]!.sessions.map(({ sessionId }): CalibrationAssignment => ({ id: assignmentId(m31Run.id, sessionId, "dark"), lightSessionId: sessionId, kind: "dark", input: null, state: "exception", criteria: [], exception: { reason: m.seed_dark_exception_reason(), at: noDarkAt }, basis: { at: noDarkAt, files: [] } })),
   )
 
   // One drifted-content frame: an M 31 L frame changed on disk after review (LIB-FR-09).

@@ -6,6 +6,7 @@
  */
 import { FlaskConical } from "lucide-react"
 import { type ReactNode, useId } from "react"
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Label } from "@/components/ui/label"
@@ -27,14 +28,15 @@ export function PrototypeToggle({ label, detail, checked, onChange }: { label: s
 }
 
 export function PrototypeControls({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+  const m = useMessages()
   return (
     <Collapsible defaultOpen={defaultOpen} className="rounded-lg border border-dashed border-input">
       <CollapsibleTrigger render={<Button variant="ghost" className="w-full justify-start rounded-lg" />}>
         <FlaskConical aria-hidden="true" data-icon="inline-start" />
-        Prototype: {title}
+        {m.prototype_controls_title({ title })}
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-3 border-t border-dashed border-input px-3 py-3 text-sm">
-        <p className="text-xs text-pretty text-muted-foreground">Simulates changes outside PlateVault for review. Not part of the product.</p>
+        <p className="text-xs text-pretty text-muted-foreground">{m.prototype_controls_note()}</p>
         {children}
       </CollapsibleContent>
     </Collapsible>

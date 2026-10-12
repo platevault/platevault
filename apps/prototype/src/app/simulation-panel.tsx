@@ -19,7 +19,8 @@ import { calibrationProcesses } from "@/domain/calibration-process"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/domain/planning"
-import { say } from "@/lib/i18n"
+import { formatNight } from "@/lib/format"
+import { type MessageRef, msg, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
@@ -96,8 +97,8 @@ export function SimulationControls() {
   const [destination, setDestination] = useState("")
   const [clock, setClock] = useState("")
   /** Outcome of the last disk control; `invalid` names the field an error is about. */
-  const [pathMessage, setPathMessage] = useState<{ text: string; invalid: "path" | "destination" | null } | null>(null)
-  const [clockMessage, setClockMessage] = useState<string | null>(null)
+  const [pathMessage, setPathMessage] = useState<{ ref: MessageRef; invalid: "path" | "destination" | null } | null>(null)
+  const [clockMessage, setClockMessage] = useState<MessageRef | null>(null)
   const [confirmSeed, setConfirmSeed] = useState<"empty" | "demo" | null>(null)
   const folderInput = useId()
   const pathInput = useId()
@@ -117,16 +118,19 @@ export function SimulationControls() {
     return [...set].filter((p) => !p.includes("/Work/Processing/") && !p.includes("/output")).sort()
   }, [files, explicitFolders, denied])
   const shownFolders = folders.filter((f) => f.toLowerCase().includes(folderQuery.toLowerCase())).slice(0, 60)
+  /** The path field must name an existing file; returns the refusal to show, or null. */
+  const missingFile = (): { ref: MessageRef; invalid: "path" } | null =>
+    fileAt(store.getState().disk, path) ? null : { ref: path ? msg("simulation_no_file_at", { path }) : msg("simulation_enter_file_path"), invalid: "path" }
 
   return (
     <div className="space-y-6">
-      <Section title="Volumes" level={3} description="Unmount to make a location offline. Two volumes cannot share a mount path.">
+      <Section title={m.folder_picker_volumes()} level={3} description={m.simulation_volumes_description()}>
         <div className="divide-y rounded-md border px-3">
           {Object.values(volumes).map((volume) => (
             <ToggleRow
               key={volume.id}
-              label={`${volume.name}${volume.id.includes("impostor") ? " (different volume, same name)" : ""}`}
-              path={`${volume.mountPath} · ${volume.volumeUuid} · ${volume.trash === "supported" ? "Trash" : "no Trash"}`}
+              label={volume.id.includes("impostor") ? m.simulation_volume_impostor({ name: volume.name }) : volume.name}
+              path={`${volume.mountPath} · ${volume.volumeUuid} · ${volume.trash === "supported" ? m.trash_title() : m.simulation_no_trash()}`}
               checked={volume.mounted}
               onChange={(mounted) => setVolumeMounted(volume.id, mounted)}
             />
@@ -134,10 +138,10 @@ export function SimulationControls() {
         </div>
       </Section>
 
-      <Section title="Folder access" level={3} description="Deny access to make a folder unreadable at the next scan or operation.">
+      <Section title={m.simulation_folder_access_title()} level={3} description={m.simulation_folder_access_description()}>
         <div className="space-y-2">
-          <Label htmlFor={folderInput}>Filter folders</Label>
-          <Input id={folderInput} placeholder="e.g. NGC7000" value={folderQuery} onChange={(e) => setFolderQuery(e.target.value)} />
+          <Label htmlFor={folderInput}>{m.simulation_filter_folders()}</Label>
+          <Input id={folderInput} placeholder={m.simulation_filter_folders_placeholder({ example: "NGC7000" })} value={folderQuery} onChange={(e) => setFolderQuery(e.target.value)} />
           <div className="max-h-64 divide-y overflow-y-auto rounded-md border px-3">
             {shownFolders.map((folder) => {
               const registered = Object.values(locations).some((l) => isUnder(folder, l.path))
@@ -145,30 +149,30 @@ export function SimulationControls() {
                 <ToggleRow
                   key={folder}
                   label={folder.split("/").slice(-2).join("/")}
-                  path={`${folder}${registered ? "" : " · not registered"}`}
+                  path={registered ? folder : `${folder} · ${m.simulation_not_registered()}`}
                   checked={denied.includes(folder)}
                   onChange={(value) => setFolderAccess(folder, value)}
                 />
               )
             })}
           </div>
-          <p className="text-xs text-muted-foreground">On = access denied.</p>
+          <p className="text-xs text-muted-foreground">{m.simulation_on_denied()}</p>
         </div>
       </Section>
 
-      <Section title="Outside PlateVault" level={3} description="Changes another application or the user makes on disk.">
+      <Section title={m.simulation_outside_title()} level={3} description={m.simulation_outside_description()}>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" disabled={arrived} onClick={() => copyNewCaptures()}>
-              Copy 2 Oct NGC 7000 captures to Astro-T7
+              {m.simulation_copy_new_captures({ night: formatNight("2026-10-02"), target: "NGC 7000", volume: "Astro-T7" })}
             </Button>
-            {arrived ? <span className="text-xs text-muted-foreground">Already copied. Rescan to index them.</span> : null}
+            {arrived ? <span className="text-xs text-muted-foreground">{m.simulation_already_copied()}</span> : null}
           </div>
           {devices.map((device) => (
             <ToggleRow
               key={device.volume.id}
-              label={`${device.volume.name} connected`}
-              detail={device.layout ? `${device.label} layout` : "Generic device"}
+              label={m.simulation_device_connected({ name: device.volume.name })}
+              detail={device.layout ? m.simulation_device_layout({ label: device.label }) : m.simulation_generic_device()}
               path={device.volume.mountPath}
               checked={device.connected}
               onChange={(on) => (on ? connectDevice(device.volume.id) : ejectDevice(device.volume.id))}
@@ -181,15 +185,16 @@ export function SimulationControls() {
                 <p className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{view.process.outputFolder}</p>
               </div>
               <Button size="sm" variant="outline" className="shrink-0" onClick={() => toolFinishedStacking(view.process.id)}>
-                Tool finished stacking
+                {m.simulation_tool_finished()}
               </Button>
             </div>
           ))}
           <div className="space-y-1.5">
-            <Label htmlFor={pathInput}>File or folder path</Label>
+            <Label htmlFor={pathInput}>{m.simulation_path_label()}</Label>
             <Input
               id={pathInput}
               className="font-mono text-xs"
+              // eslint-disable-next-line alm/no-user-string -- an example path
               placeholder="/Volumes/Astro-T7/…"
               value={path}
               aria-invalid={pathMessage?.invalid === "path" || undefined}
@@ -201,53 +206,52 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!fileAt(store.getState().disk, path)) return setPathMessage({ text: path ? `No file at ${path}. Enter the full path of an existing file.` : "Enter a file path first.", invalid: "path" })
+                  const missing = missingFile()
+                  if (missing) return setPathMessage(missing)
                   modifyFileExternally(path)
-                  setPathMessage({ text: `Overwrote ${path} with new bytes. Restore original bytes puts them back.`, invalid: null })
+                  setPathMessage({ ref: msg("simulation_overwrote", { path }), invalid: null })
                 }}
               >
-                Overwrite existing file
+                {m.simulation_overwrite()}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!fileAt(store.getState().disk, path)) return setPathMessage({ text: path ? `No file at ${path}. Enter the full path of an existing file.` : "Enter a file path first.", invalid: "path" })
+                  const missing = missingFile()
+                  if (missing) return setPathMessage(missing)
                   setPathMessage(
-                    restoreFileExternally(path)
-                      ? { text: `Restored the original bytes of ${path}.`, invalid: null }
-                      : { text: `${path} has not been overwritten, so there is nothing to restore.`, invalid: "path" },
+                    restoreFileExternally(path) ? { ref: msg("simulation_restored", { path }), invalid: null } : { ref: msg("simulation_nothing_to_restore", { path }), invalid: "path" },
                   )
                 }}
               >
-                Restore original bytes
+                {m.simulation_restore_bytes()}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!path) return setPathMessage({ text: "Enter a file path first.", invalid: "path" })
-                  if (fileAt(store.getState().disk, path)) return setPathMessage({ text: `A file already exists at ${path}.`, invalid: "path" })
+                  if (!path) return setPathMessage({ ref: msg("simulation_enter_file_path"), invalid: "path" })
+                  if (fileAt(store.getState().disk, path)) return setPathMessage({ ref: msg("simulation_file_exists", { path }), invalid: "path" })
                   createExternalFile(path)
                   setPathMessage(
-                    fileAt(store.getState().disk, path)
-                      ? { text: `Created ${path}.`, invalid: null }
-                      : { text: `Could not create ${path}: no mounted volume holds that path.`, invalid: "path" },
+                    fileAt(store.getState().disk, path) ? { ref: msg("simulation_created", { path }), invalid: null } : { ref: msg("simulation_create_no_volume", { path }), invalid: "path" },
                   )
                 }}
               >
-                Create unrelated file
+                {m.simulation_create_file()}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!fileAt(store.getState().disk, path)) return setPathMessage({ text: path ? `No file at ${path}. Enter the full path of an existing file.` : "Enter a file path first.", invalid: "path" })
+                  const missing = missingFile()
+                  if (missing) return setPathMessage(missing)
                   deleteFileExternally(path)
-                  setPathMessage({ text: `Deleted ${path} outside PlateVault. It is not in the OS Trash.`, invalid: null })
+                  setPathMessage({ ref: msg("simulation_deleted", { path }), invalid: null })
                 }}
               >
-                Delete outside PlateVault
+                {m.simulation_delete_outside()}
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -255,34 +259,35 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!path) return setPathMessage({ text: "Enter a folder or file path first.", invalid: "path" })
+                  if (!path) return setPathMessage({ ref: msg("simulation_enter_path"), invalid: "path" })
                   const deny = !denied.includes(path)
                   setFolderAccess(path, deny)
-                  setPathMessage({ text: deny ? `Access denied: ${path}.` : `Access restored: ${path}.`, invalid: null })
+                  setPathMessage({ ref: deny ? msg("simulation_access_denied", { path }) : msg("simulation_access_restored", { path }), invalid: null })
                 }}
               >
-                {denied.includes(path) ? "Restore read access" : "Deny read access"}
+                {denied.includes(path) ? m.simulation_restore_read() : m.simulation_deny_read()}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!path) return setPathMessage({ text: "Enter a folder or file path first.", invalid: "path" })
+                  if (!path) return setPathMessage({ ref: msg("simulation_enter_path"), invalid: "path" })
                   const readOnly = !readOnlyPaths.includes(path)
                   setPathReadOnly(path, readOnly)
-                  setPathMessage({ text: readOnly ? `Write permission removed: ${path}.` : `Write permission restored: ${path}.`, invalid: null })
+                  setPathMessage({ ref: readOnly ? msg("simulation_write_removed", { path }) : msg("simulation_write_restored", { path }), invalid: null })
                 }}
               >
-                {readOnlyPaths.includes(path) ? "Restore write permission" : "Remove write permission"}
+                {readOnlyPaths.includes(path) ? m.simulation_restore_write() : m.simulation_remove_write()}
               </Button>
             </div>
             {/* Copying acts on two fields; its own group keeps it apart from the single-path controls. */}
             <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
               <div className="min-w-64 flex-1 space-y-1.5">
-                <Label htmlFor={destinationInput}>Copy into folder</Label>
+                <Label htmlFor={destinationInput}>{m.simulation_copy_into_label()}</Label>
                 <Input
                   id={destinationInput}
                   className="font-mono text-xs"
+                  // eslint-disable-next-line alm/no-user-string -- an example path
                   placeholder="/Volumes/Spare/Captures"
                   value={destination}
                   aria-invalid={pathMessage?.invalid === "destination" || undefined}
@@ -294,85 +299,81 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!path) return setPathMessage({ text: "Enter the file or folder to copy in File or folder path.", invalid: "path" })
-                  if (!destination) return setPathMessage({ text: "Enter the folder to copy into in Copy into folder.", invalid: "destination" })
+                  if (!path) return setPathMessage({ ref: msg("simulation_copy_enter_source"), invalid: "path" })
+                  if (!destination) return setPathMessage({ ref: msg("simulation_copy_enter_destination"), invalid: "destination" })
                   const outcome = copyFolderExternally(path, destination)
                   setPathMessage(
                     outcome.ok
-                      ? { text: `Copied ${outcome.copied} file${outcome.copied === 1 ? "" : "s"} byte for byte to ${outcome.destination}.`, invalid: null }
-                      : { text: outcome.message, invalid: outcome.field === "source" ? "path" : "destination" },
+                      ? { ref: msg("simulation_copied", { count: outcome.copied, path: outcome.destination }), invalid: null }
+                      : { ref: outcome.message, invalid: outcome.field === "source" ? "path" : "destination" },
                   )
                 }}
               >
-                Copy byte for byte
+                {m.simulation_copy_bytes()}
               </Button>
             </div>
             <p id={pathMessageId} className={cn("text-xs", pathMessage?.invalid ? "text-destructive" : "text-muted-foreground")} aria-live="polite">
-              {pathMessage?.text}
+              {pathMessage ? say(m, pathMessage.ref) : null}
             </p>
           </div>
         </div>
       </Section>
 
-      <Section title="Faults" level={3}>
+      <Section title={m.simulation_faults_title()} level={3}>
         <div className="divide-y rounded-md border px-3">
-          <ToggleRow label="Fail the next catalog write" checked={faults.failNextCatalogWrite} onChange={(value) => setFault("failNextCatalogWrite", value)} />
+          <ToggleRow label={m.simulation_fail_catalog_write()} checked={faults.failNextCatalogWrite} onChange={(value) => setFault("failNextCatalogWrite", value)} />
           <div className="flex items-center justify-between gap-3 py-1.5">
-            <span className="text-sm">Next notification permission answer</span>
+            <span className="text-sm">{m.simulation_notification_answer()}</span>
             <Select
               items={[
-                { value: "grant", label: "Allow" },
-                { value: "deny", label: "Deny" },
+                { value: "grant", label: m.simulation_allow() },
+                { value: "deny", label: m.simulation_deny() },
               ]}
               value={faults.notificationResponse}
               onValueChange={(value) => setFault("notificationResponse", value === "deny" ? "deny" : "grant")}
             >
-              <SelectTrigger size="sm" aria-label="Next notification permission answer" className="w-28">
+              <SelectTrigger size="sm" aria-label={m.simulation_notification_answer()} className="w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="grant">Allow</SelectItem>
-                <SelectItem value="deny">Deny</SelectItem>
+                <SelectItem value="grant">{m.simulation_allow()}</SelectItem>
+                <SelectItem value="deny">{m.simulation_deny()}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <ToggleRow
-            label="Fail the next hash verification"
-            detail="Archive transfer or master adoption"
+            label={m.simulation_fail_hash()}
+            detail={m.simulation_fail_hash_detail()}
             checked={faults.failNextHashVerification}
             onChange={(value) => setFault("failNextHashVerification", value)}
           />
           <ToggleRow
-            label="Next revision-checked save is stale"
-            detail="Another writer changes the record first"
+            label={m.simulation_stale_save()}
+            detail={m.simulation_stale_save_detail()}
             checked={faults.staleNextWrite}
             onChange={(value) => setFault("staleNextWrite", value)}
           />
           <ToggleRow
-            label="Fail the next Target resolver lookup"
-            detail="As if the network were unavailable"
+            label={m.simulation_fail_resolver()}
+            detail={m.simulation_fail_resolver_detail()}
             checked={faults.failNextResolverLookup}
             onChange={(value) => setFault("failNextResolverLookup", value)}
           />
           <ToggleRow
-            label="Index slowly"
-            detail="Reads 2 files at a time instead of 14, so partial results can be browsed while indexing runs"
+            label={m.simulation_slow_index()}
+            detail={m.simulation_slow_index_detail()}
             checked={faults.slowIndexing}
             onChange={(value) => setFault("slowIndexing", value)}
           />
           <ToggleRow
-            label="No observing site"
-            detail={'Planning sees no saved site: Home Tonight, Plan and Targets show "Add an observing site in Settings"'}
+            label={m.simulation_no_site()}
+            detail={m.simulation_no_site_detail()}
             checked={faults.noSite}
             onChange={(value) => setFault("noSite", value)}
           />
           <ToggleRow
-            label="Windows without Developer Mode"
-            detail={
-              faults.developerMode === "on"
-                ? "Developer Mode turned on in Windows settings; PlateVault sees it at its next check"
-                : "Symlinks need Developer Mode: Prepare refuses Symlinks, Settings › Applications and Home show the check"
-            }
+            label={m.simulation_no_developer_mode()}
+            detail={faults.developerMode === "on" ? m.simulation_developer_mode_on() : m.simulation_developer_mode_off()}
             checked={faults.developerMode === "off"}
             onChange={(value) => setWindowsWithoutDeveloperMode(value)}
           />
@@ -380,13 +381,13 @@ export function SimulationControls() {
       </Section>
 
       <Section
-        title="Clock"
+        title={m.simulation_clock_title()}
         level={3}
-        description={`PlateVault time: ${formatZonedDateTime(new Date(Date.now() + faults.clockOffsetMs).toISOString(), clockZone)}${faults.clockOffsetMs ? " (set by this control; kept after reload)" : " (system clock)"}.`}
+        description={(faults.clockOffsetMs ? m.simulation_clock_set : m.simulation_clock_system)({ time: formatZonedDateTime(new Date(Date.now() + faults.clockOffsetMs).toISOString(), clockZone) })}
       >
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1.5">
-            <Label htmlFor={clockInput}>Set PlateVault time in {displayZone(clockZone)}</Label>
+            <Label htmlFor={clockInput}>{m.simulation_clock_label({ zone: displayZone(clockZone) })}</Label>
             <Input id={clockInput} type="datetime-local" className="w-56" value={clock} onChange={(e) => setClock(e.target.value)} />
           </div>
           <Button
@@ -394,12 +395,12 @@ export function SimulationControls() {
             variant="outline"
             onClick={() => {
               const at = wallTimeToIso(clock, clockZone)
-              if (!at) return setClockMessage("Enter a date and time first.")
+              if (!at) return setClockMessage(msg("simulation_clock_enter"))
               setClockTo(at)
-              setClockMessage(`PlateVault time set to ${formatZonedDateTime(at, clockZone)}. It keeps running from there.`)
+              setClockMessage(msg("simulation_clock_set_to", { time: formatZonedDateTime(at, clockZone) }))
             }}
           >
-            Set time
+            {m.simulation_set_time()}
           </Button>
           {faults.clockOffsetMs !== 0 ? (
             <Button
@@ -407,41 +408,39 @@ export function SimulationControls() {
               variant="ghost"
               onClick={() => {
                 resetClock()
-                setClockMessage("PlateVault uses the system clock again.")
+                setClockMessage(msg("simulation_clock_reset"))
               }}
             >
-              Use system clock
+              {m.simulation_use_system_clock()}
             </Button>
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          {clockMessage}
+          {clockMessage ? say(m, clockMessage) : null}
         </p>
       </Section>
 
-      <Section title="Prototype data" level={3} description={`Current seed: ${seed === "demo" ? "demo library" : "empty library (first run)"}. Theme and density are kept.`}>
+      <Section title={m.simulation_data_title()} level={3} description={seed === "demo" ? m.simulation_data_demo() : m.simulation_data_empty()}>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => setConfirmSeed("empty")}>
             <RotateCcw aria-hidden="true" data-icon="inline-start" />
-            Reset to empty library
+            {m.simulation_reset_empty()}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setConfirmSeed("demo")}>
-            Load demo library
+            {m.setup_demo_load()}
           </Button>
         </div>
         <ConfirmDialog
           open={confirmSeed !== null}
           onOpenChange={(open) => !open && setConfirmSeed(null)}
-          title={confirmSeed === "demo" ? "Load the demo library?" : "Reset to an empty library?"}
-          description="This replaces all prototype data in this browser. It cannot be undone."
+          title={confirmSeed === "demo" ? m.simulation_confirm_demo_title() : m.simulation_confirm_empty_title()}
+          description={m.simulation_confirm_description()}
           changes={[
-            confirmSeed === "demo"
-              ? "Replace the catalog with the demo library (Cygnus HOO 2026, M 31 LRGB, Heart and Soul)"
-              : "Remove every location, session, Project and run; onboarding starts again",
-            "Discard running operations and Activity",
+            confirmSeed === "demo" ? m.simulation_confirm_demo_change({ projects: "Cygnus HOO 2026, M 31 LRGB, Heart and Soul" }) : m.simulation_confirm_empty_change(),
+            m.simulation_confirm_discard(),
           ]}
-          unchanged={["Theme and density", "No real files exist; nothing on your computer is touched"]}
-          confirmLabel={confirmSeed === "demo" ? "Load demo library" : "Reset to empty library"}
+          unchanged={[m.simulation_confirm_kept_theme(), m.simulation_confirm_no_real_files()]}
+          confirmLabel={confirmSeed === "demo" ? m.setup_demo_load() : m.simulation_reset_empty()}
           tone="destructive"
           onConfirm={() => {
             if (!confirmSeed) return
@@ -456,6 +455,7 @@ export function SimulationControls() {
 }
 
 export function SimulationSheet() {
+  const m = useMessages()
   const { panel } = useShellUi()
   // Initial focus on the heading, never on a switch: one Space press must not unmount a volume.
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -465,11 +465,9 @@ export function SimulationSheet() {
         <SheetHeader>
           <SheetTitle ref={headingRef} tabIndex={-1} className="flex items-center gap-2 outline-none">
             <FlaskConical aria-hidden="true" className="size-4" />
-            Simulation
+            {m.about_simulation()}
           </SheetTitle>
-          <SheetDescription>
-            Prototype controls. They change the simulated disk outside PlateVault; PlateVault notices on its next read.
-          </SheetDescription>
+          <SheetDescription>{m.simulation_sheet_description()}</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-6">
           <SimulationControls />

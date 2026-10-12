@@ -7639,5 +7639,368 @@
         "countPlural=*": "{label} · {count} arquivos"
       }
     }
-  ]
+  ],
+  "catalogue_feedback_refusal_desc": "Ao lado do controle recusado. O motivo abre os bloqueios num cartão flutuante (passe o cursor, foque ou pressione para entrar nele; Escape fecha). Nada é inserido, nada se move.",
+  "catalogue_feedback_refused_blockers": "recusado · bloqueios",
+  "catalogue_feedback_refused_blockers_actions": "recusado · bloqueios + ações",
+  "catalogue_feedback_standing": "permanente (sem papel alert)",
+  "catalogue_feedback_no_blockers": "sem bloqueios (sem cartão)",
+  "catalogue_feedback_action_error_desc": "Sob o campo ou ao lado do controle que falhou; papel alert.",
+  "catalogue_feedback_with_retry": "com nova tentativa",
+  "catalogue_feedback_message_only": "só mensagem",
+  "catalogue_feedback_notice_slot_desc": "O espaço de aviso do template: um estado permanente da página sob o cabeçalho. Tons info, offline, warning; null não renderiza nada.",
+  "catalogue_feedback_toast_desc": "Resultados fora da tela, no canto inferior final, anunciados pela região polite da viewport. No máximo uma ação de seguimento; pausa com o cursor em cima ou com foco.",
+  "catalogue_feedback_with_undo": "com Desfazer",
+  "catalogue_status_badge_desc": "Glifo mais palavra do registro único STATUS. gate substitui GateLabel; profile, executable, check, write e preparation:unverified substituem T4Badge.",
+  "catalogue_status_label_override": "rótulo substituído",
+  "catalogue_status_pill_desc": "Uma etiqueta inerte (canal, banda, tipo): sem link, sem botão, sem hover. Texto no tom sobre a própria tinta.",
+  "catalogue_status_tones": "tons",
+  "catalogue_status_icon": "ícone",
+  "catalogue_status_truncated": "truncado (title = texto completo)",
+  "catalogue_status_count_desc": "Um número pequeno, limitado a 99+, com rótulo opcional para leitor de tela.",
+  "catalogue_status_count_caption": "tons · limite · rótulo",
+  "catalogue_previews_blockers_desc": "Por que uma ação está indisponível. Em volta de um controle desativado focável, o cartão repete a descrição do controle; sem controle, renderiza o gatilho 'motivo ▸' de uma Refusal (pressionar move o foco para o cartão).",
+  "catalogue_previews_disabled_control": "controle desativado (cursor, foco)",
+  "catalogue_previews_own_trigger": "gatilho próprio + ações",
+  "catalogue_previews_empty_reason": "vazio (motivo simples, sem cartão)",
+  "catalogue_previews_used_by_desc": "'Usado por N ▸' é um link para a lista completa; cursor ou foco mostra uma prévia dos usuários.",
+  "catalogue_previews_with_users": "com usuários",
+  "catalogue_previews_empty_link": "vazio (só o link)",
+  "catalogue_previews_preview_desc": "Preview é o host L2 que as prévias compartilham; HoverCard é a primitiva L1 sobre o preview-card do Base UI.",
+  "catalogue_previews_with_title": "Preview com título",
+  "catalogue_fields_text_caption": "Preenchido com ajuda · vazio com erro (aria-invalid, descrito pela mensagem) · somente leitura · desativado · com uma ação ao lado do campo.",
+  "catalogue_fields_choice_caption": "Número com unidade · número vazio com erro · seleção (uma opção desativada) · seleção desativada · combobox agrupado, vazio · segmentado com uma opção desativada.",
+  "catalogue_fields_switch_caption": "Switch ligado · switch desativado · modos pasta, arquivo (.fits, .xisf) e aplicativo: cada um abre o seletor do sistema; modo arquivo vazio com erro; desativado.",
+  "catalogue_fields_template_caption": "Modelo válido com a opção Omitir (o token filter omitido), prévia com valores e sem eles · token desconhecido e chave solta como erros em linha, sem a opção Omitir · argumentos válidos e com um token desconhecido.",
+  "catalogue_fields_title": "Campos e linhas de configuração",
+  "catalogue_fields_settings_caption": "Campos colocados direto numa SettingsSection viram linhas (coluna do rótulo, depois o controle); SettingsRow contém botões, com ajuda opcional.",
+  "catalogue_shell_goal": "{target} · {channel} {hours} h",
+  "catalogue_shell_nav_desc": "Uma lista de origem para a barra lateral e as Configurações. Linha atual: preenchimento de seleção e aria-current. Retenção: barra à frente e seminegrito. Linhas de menu abrem um menu nomeado ao lado da lista. Recolhida: trilho de ícones com dicas e pontos de selo.",
+  "catalogue_shell_checklist_desc": "Rodapé da barra lateral, acima de Atividade e Configurações. Abre uma checklist não modal à direita: a página continua utilizável; Escape ou um clique fora a fecha. Uma etapa indisponível mostra o motivo sob o rótulo.",
+  "catalogue_shell_issue_desc": "Um problema com sua única ação e Dispensar ×. A próxima etapa de uma execução (execução bloqueada, calibração a revisar) não tem ×. Linhas dispensadas ficam esmaecidas, com Restaurar. O foco fica na lista quando uma linha sai.",
+  "catalogue_shell_theme_desc": "Primeiro o modo (Claro, Escuro, Seguir o sistema), depois os temas desse modo. Vale na hora para o app inteiro. A forma de menu fica no submenu Tema de um menu da barra de ferramentas.",
+  "catalogue_shell_sidebar_current": "barra lateral · atual Sessões",
+  "catalogue_shell_sidebar_recent": "barra lateral · projeto recente aberto (Recentes › Projetos retém)",
+  "catalogue_shell_rail_current": "trilho · atual Início",
+  "catalogue_shell_content_settings": "conteúdo · Configurações, atual Aparência",
+  "catalogue_shell_expanded": "expandido · com Dispensar",
+  "catalogue_shell_rail": "trilho",
+  "catalogue_shell_form": "formulário (Configurações › Aparência)",
+  "catalogue_shell_menu_items": "itens de menu",
+  "ds_color_background": "Fundo da página",
+  "ds_color_card": "Superfície elevada, tabelas",
+  "ds_color_popover": "Menus, diálogos",
+  "ds_color_muted": "Preenchimento discreto, esqueletos",
+  "ds_color_secondary": "Selos neutros, chips",
+  "ds_color_accent": "Superfície de hover e destaque",
+  "ds_color_primary": "O único destaque: ação principal, seleção, foco",
+  "ds_color_success": "Utilizável, verificado, preparado",
+  "ds_color_warning": "Precisa de revisão, offline, parcial",
+  "ds_color_destructive": "Falhou, recusado, bloqueado, ação destrutiva",
+  "ds_color_border": "Divisores e contornos",
+  "ds_type_page_title": "Título da página (h1) · 18/28",
+  "ds_type_section_title": "Título de seção (h2) · 16/24",
+  "ds_type_sub_section": "Subseção (h3) · 14/20",
+  "ds_type_body": "Corpo e controles · 14/20",
+  "ds_type_meta": "Metadados, legendas, cabeçalhos de tabela · 12/16",
+  "ds_type_mono": "{path} · caminhos, hashes",
+  "ds_type_numerals": "208 lights · 17h 20m · 300 s (algarismos tabulares)",
+  "ds_z_page": "Conteúdo da página",
+  "ds_z_pinned_column": "Coluna de tabela fixada (sob a linha de cabeçalho fixa)",
+  "ds_z_sticky_headers": "Cabeçalhos de tabela fixos",
+  "ds_z_shell": "Moldura do shell (cabeçalho)",
+  "ds_z_flyouts": "Painéis flutuantes não modais ancorados ao shell",
+  "ds_z_portalled": "Camadas em portal: diálogos, painéis laterais, menus, popovers, dicas (a ordem no DOM decide)",
+  "ds_col_gain_offset": "Ganho / offset",
+  "ds_filter_placeholder": "Filtrar por canal, OBJECT ou noite",
+  "ds_table_label": "Sessões light (amostra do design system)",
+  "ds_row_label": "Sessão {night} {channel}",
+  "ds_empty_title": "Nenhuma sessão corresponde a estes filtros",
+  "ds_empty_description": "Os filtros mudam a lista, não a seleção. Limpe-os para ver todas as sessões.",
+  "ds_deselect": "Desmarcar",
+  "ds_selection_locked": "A seleção fica bloqueada enquanto a visualização é preparada.",
+  "ds_op_location": "Local a indexar (a indexação nunca altera arquivos)",
+  "ds_op_choose_location": "Escolher um local",
+  "ds_op_choose_first": "Escolha um local primeiro.",
+  "ds_op_no_locations": "Registre um local primeiro; esta biblioteca não tem nenhum.",
+  "ds_op_none": "Nenhuma operação foi executada ainda.",
+  "ds_choose_folder_ellipsis": "Escolher uma pasta…",
+  "ds_no_folder": "Nenhuma pasta escolhida ainda.",
+  "ds_chip_channel": "Canal: {channel}",
+  "ds_chip_quality": "Qualidade: {quality}",
+  "ds_title": "Referência do design system",
+  "ds_description": "Tokens e componentes compartilhados nos seus estados. Mantido pela fundação; as trilhas compõem com eles em vez de estilizar caso a caso.",
+  "prototype_ds_eyebrow": "Fundação · referência do protótipo",
+  "ds_colour_title": "Papéis de cor",
+  "ds_colour_description": "Base neutra, um destaque. Troque o tema no cabeçalho para conferir os dois.",
+  "ds_type_title": "Tipografia, espaçamento, raio, densidade, camadas",
+  "ds_spacing": "O espaçamento usa a escala de 4 px do Tailwind: espaço entre controles 2, preenchimento de cartão 4, preenchimento de página 6 × 5, espaço entre seções 6.",
+  "ds_row_height": "Token de altura de linha --row-h: compacta 24 px, confortável 26 px (padrão), espaçosa 32 px; as células da linha usam --row-py como preenchimento (Configurações › Aparência).",
+  "ds_z_caption": "Escala de z-index",
+  "ds_buttons_title": "Botões",
+  "ds_buttons_description": "Padrão, focus-visible (Tab até um botão), ativo (pressionar), desativado com motivo, carregando, e alternâncias (pressionada mostra preenchimento e barra de destaque).",
+  "ds_inspect_session": "Inspecionar sessão",
+  "ds_send_files_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Enviar {count} arquivo para a Lixeira",
+        "countPlural=*": "Enviar {count} arquivos para a Lixeira"
+      }
+    }
+  ],
+  "ds_reveal_location": "Mostrar local",
+  "ds_prepare_view": "Preparar visualização",
+  "ds_prepare_disabled": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Desativado: aceite ou resolva {count} sugestão de calibração primeiro.",
+        "countPlural=*": "Desativado: aceite ou resolva {count} sugestões de calibração primeiro."
+      }
+    }
+  ],
+  "ds_loading_vs_disabled": "Carregando: opacidade total com spinner e aria-busy; desativado: 50% de opacidade com o motivo ao lado.",
+  "ds_status_title": "Vocabulário de status",
+  "ds_status_description": "Todo estado do domínio: ícone mais rótulo, nunca só a cor.",
+  "ds_feedback_title": "Estados de feedback",
+  "ds_targets_empty_description": "Os alvos aparecem quando a indexação encontra evidência de apontamento. Indexe um local de capturas para começar.",
+  "ds_reconnect": "Reconectar",
+  "ds_offline_body": "{night} conta na integração capturada com os últimos valores observados. Não é oferecida como entrada disponível.",
+  "ds_scan_incomplete_title": "O escopo da varredura está incompleto",
+  "ds_scan_incomplete_body": "Acesso negado: {path}. Os arquivos ali são desconhecidos, não ausentes.",
+  "ds_symlinks_body": "Symlinks precisam do Modo de Desenvolvedor do Windows.",
+  "ds_provisional_title": "Os totais são provisórios",
+  "ds_provisional_body": "A indexação ainda está em andamento; os totais cobrem só as capturas de {volume}.",
+  "ds_target_correction": "Correção de alvo",
+  "ds_save_failed": "A gravação no catálogo falhou. A edição continua na tela.",
+  "ds_save_stale": "Este projeto mudou desde que você o abriu (revisão {from} → {to}).",
+  "ds_loading_sessions": "Carregando sessões",
+  "ds_loading_session_detail": "Carregando detalhes da sessão",
+  "ds_data_title": "Exibição de dados",
+  "ds_pixel_scale": "Escala de pixel",
+  "ds_fov_unknown": "Campo de visão desconhecido",
+  "ds_equipment_not_confirmed": "Equipamento não confirmado",
+  "ds_lights_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} light",
+        "countPlural=*": "{count} lights"
+      }
+    }
+  ],
+  "ds_files_stay": "Os arquivos ficam no disco",
+  "ds_evidence_caption": "Evidência de associação ao alvo",
+  "ds_matching_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão correspondente",
+        "countPlural=*": "{count} sessões correspondentes"
+      }
+    }
+  ],
+  "ds_cleanup_steps": "Etapas da limpeza",
+  "ds_cleanup_choose": "Escolher arquivos",
+  "ds_cleanup_review": "Revisar limpeza",
+  "ds_cleanup_trash": "Enviar para a Lixeira",
+  "ds_table_title": "Tabela de dados",
+  "ds_table_description": "Ordene, selecione, ↑/↓ entre linhas. A seleção é controlada por quem usa a tabela e sobrevive à filtragem. Grupos são linhas de cabeçalho numa só tabela, então as colunas se alinham entre os grupos.",
+  "ds_table_loading": "Estado de carregamento",
+  "ds_table_empty": "Estado vazio",
+  "ds_table_grouped": "Agrupar por canal",
+  "ds_table_pinned": "Larga, primeira coluna fixada",
+  "ds_table_lock": "Bloquear seleção",
+  "ds_confirm_title": "Confirmação",
+  "ds_confirm_description": "Ações destrutivas ou que mudam o escopo sempre pedem confirmação num AlertDialog que nomeia o escopo.",
+  "ds_confirm_trigger": "Marcar frames incluídos como utilizáveis",
+  "ds_confirm_dialog_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Marcar {count} frame incluído como Utilizável na biblioteca?",
+        "countPlural=*": "Marcar {count} frames incluídos como Utilizáveis na biblioteca?"
+      }
+    }
+  ],
+  "ds_confirm_dialog_description": "Esta é uma decisão de qualidade no escopo da biblioteca.",
+  "ds_confirm_change_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame passa a Utilizável na biblioteca",
+        "countPlural=*": "{count} frames passam a Utilizáveis na biblioteca"
+      }
+    }
+  ],
+  "ds_confirm_change_integration": "A integração utilizável de {target} sobe {duration}",
+  "ds_confirm_unchanged_files": "Arquivos de origem e cabeçalhos",
+  "ds_confirm_unchanged_views": "Outras visualizações e seus membros",
+  "ds_confirm_unchanged_rejections": "Rejeições do projeto",
+  "ds_confirm_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Marcar {count} frame como utilizável",
+        "countPlural=*": "Marcar {count} frames como utilizáveis"
+      }
+    }
+  ],
+  "ds_folder_picker_title": "Seletor de pastas",
+  "simulation_ds_folder_picker_description": "Seletor de pastas do sistema simulado. Volumes e pastas, inclusive vazios, vêm do disco simulado; volumes offline e pastas negadas mostram o motivo.",
+  "ds_operation_title": "Operação",
+  "ds_operation_description": "Em andamento com progresso, resultados por item e um status final. Usa uma indexação real.",
+  "simulation_copy_nothing": "Nada para copiar: não há arquivo nem pasta com arquivos em {path}.",
+  "simulation_copy_no_volume": "Não é possível copiar para {path}: nenhum volume montado contém esse caminho.",
+  "simulation_copy_read_only": "Não é possível copiar para {path}: a permissão de gravação foi removida.",
+  "simulation_copy_collision": "Não copiado: {path} já existe. Nada foi sobrescrito.",
+  "simulation_volumes_description": "Desmonte para deixar um local offline. Dois volumes não podem compartilhar um ponto de montagem.",
+  "simulation_volume_impostor": "{name} (outro volume, mesmo nome)",
+  "simulation_no_trash": "sem Lixeira",
+  "simulation_folder_access_title": "Acesso a pastas",
+  "simulation_folder_access_description": "Negue o acesso para deixar uma pasta ilegível na próxima varredura ou operação.",
+  "simulation_filter_folders": "Filtrar pastas",
+  "simulation_filter_folders_placeholder": "ex.: {example}",
+  "simulation_not_registered": "não registrada",
+  "simulation_on_denied": "Ligado = acesso negado.",
+  "simulation_outside_title": "Fora do PlateVault",
+  "simulation_outside_description": "Mudanças que outro aplicativo ou o usuário faz no disco.",
+  "simulation_copy_new_captures": "Copiar capturas de {target} de {night} para {volume}",
+  "simulation_already_copied": "Já copiadas. Varra de novo para indexá-las.",
+  "simulation_device_connected": "{name} conectado",
+  "simulation_device_layout": "Estrutura {label}",
+  "simulation_generic_device": "Dispositivo genérico",
+  "simulation_tool_finished": "Ferramenta terminou o empilhamento",
+  "simulation_path_label": "Caminho de arquivo ou pasta",
+  "simulation_no_file_at": "Nenhum arquivo em {path}. Digite o caminho completo de um arquivo existente.",
+  "simulation_enter_file_path": "Digite primeiro um caminho de arquivo.",
+  "simulation_enter_path": "Digite primeiro um caminho de pasta ou arquivo.",
+  "simulation_overwrote": "{path} sobrescrito com novos bytes. Restaurar bytes originais os devolve.",
+  "simulation_overwrite": "Sobrescrever arquivo existente",
+  "simulation_restored": "Bytes originais de {path} restaurados.",
+  "simulation_nothing_to_restore": "{path} não foi sobrescrito, então não há nada a restaurar.",
+  "simulation_restore_bytes": "Restaurar bytes originais",
+  "simulation_file_exists": "Já existe um arquivo em {path}.",
+  "simulation_created": "{path} criado.",
+  "simulation_create_no_volume": "Não foi possível criar {path}: nenhum volume montado contém esse caminho.",
+  "simulation_create_file": "Criar arquivo não relacionado",
+  "simulation_deleted": "{path} excluído fora do PlateVault. Ele não está na Lixeira do sistema.",
+  "simulation_delete_outside": "Excluir fora do PlateVault",
+  "simulation_access_denied": "Acesso negado: {path}.",
+  "simulation_access_restored": "Acesso restaurado: {path}.",
+  "simulation_restore_read": "Restaurar acesso de leitura",
+  "simulation_deny_read": "Negar acesso de leitura",
+  "simulation_write_removed": "Permissão de gravação removida: {path}.",
+  "simulation_write_restored": "Permissão de gravação restaurada: {path}.",
+  "simulation_restore_write": "Restaurar permissão de gravação",
+  "simulation_remove_write": "Remover permissão de gravação",
+  "simulation_copy_into_label": "Copiar para a pasta",
+  "simulation_copy_enter_source": "Digite o arquivo ou a pasta a copiar em Caminho de arquivo ou pasta.",
+  "simulation_copy_enter_destination": "Digite a pasta de destino em Copiar para a pasta.",
+  "simulation_copied": [
+    {
+      "declarations": [
+        "input count",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} arquivo copiado byte a byte para {path}.",
+        "countPlural=*": "{count} arquivos copiados byte a byte para {path}."
+      }
+    }
+  ],
+  "simulation_copy_bytes": "Copiar byte a byte",
+  "simulation_faults_title": "Falhas",
+  "simulation_fail_catalog_write": "Falhar a próxima gravação no catálogo",
+  "simulation_notification_answer": "Próxima resposta à permissão de notificações",
+  "simulation_allow": "Permitir",
+  "simulation_deny": "Negar",
+  "simulation_fail_hash": "Falhar a próxima verificação de hash",
+  "simulation_fail_hash_detail": "Transferência para arquivo ou adoção de master",
+  "simulation_stale_save": "Próximo salvamento com revisão verificada fica desatualizado",
+  "simulation_stale_save_detail": "Outro gravador altera o registro antes",
+  "simulation_fail_resolver": "Falhar a próxima consulta ao resolvedor de alvos",
+  "simulation_fail_resolver_detail": "Como se a rede estivesse indisponível",
+  "simulation_slow_index": "Indexar devagar",
+  "simulation_slow_index_detail": "Lê 2 arquivos por vez em vez de 14, para que resultados parciais possam ser vistos durante a indexação",
+  "simulation_no_site": "Sem local de observação",
+  "simulation_no_site_detail": "O planejamento não vê nenhum local salvo: Esta noite no Início, Plano e Alvos mostram \"Adicione um local de observação em Configurações\"",
+  "simulation_no_developer_mode": "Windows sem Modo de Desenvolvedor",
+  "simulation_developer_mode_on": "Modo de Desenvolvedor ativado nas configurações do Windows; o PlateVault percebe na próxima verificação",
+  "simulation_developer_mode_off": "Symlinks precisam do Modo de Desenvolvedor: Preparar recusa Symlinks, Configurações › Aplicativos e Início mostram a verificação",
+  "simulation_clock_title": "Relógio",
+  "simulation_clock_set": "Hora do PlateVault: {time} (definida por este controle; mantida após recarregar).",
+  "simulation_clock_system": "Hora do PlateVault: {time} (relógio do sistema).",
+  "simulation_clock_label": "Definir a hora do PlateVault em {zone}",
+  "simulation_clock_enter": "Digite primeiro uma data e hora.",
+  "simulation_clock_set_to": "Hora do PlateVault definida para {time}. Ela continua correndo a partir daí.",
+  "simulation_set_time": "Definir hora",
+  "simulation_clock_reset": "O PlateVault volta a usar o relógio do sistema.",
+  "simulation_use_system_clock": "Usar relógio do sistema",
+  "simulation_data_title": "Dados do protótipo",
+  "simulation_data_demo": "Semente atual: biblioteca de demonstração. Tema e densidade são mantidos.",
+  "simulation_data_empty": "Semente atual: biblioteca vazia (primeira execução). Tema e densidade são mantidos.",
+  "simulation_reset_empty": "Redefinir para biblioteca vazia",
+  "simulation_confirm_demo_title": "Carregar a biblioteca de demonstração?",
+  "simulation_confirm_empty_title": "Redefinir para uma biblioteca vazia?",
+  "simulation_confirm_description": "Isto substitui todos os dados do protótipo neste navegador. Não pode ser desfeito.",
+  "simulation_confirm_demo_change": "Substituir o catálogo pela biblioteca de demonstração ({projects})",
+  "simulation_confirm_empty_change": "Remover todos os locais, sessões, projetos e execuções; a integração inicial recomeça",
+  "simulation_confirm_discard": "Descartar operações em andamento e a Atividade",
+  "simulation_confirm_kept_theme": "Tema e densidade",
+  "simulation_confirm_no_real_files": "Não existem arquivos reais; nada no seu computador é alterado",
+  "simulation_sheet_description": "Controles do protótipo. Eles alteram o disco simulado fora do PlateVault; o PlateVault percebe na próxima leitura.",
+  "prototype_controls_title": "Protótipo: {title}",
+  "prototype_controls_note": "Simula mudanças fora do PlateVault para revisão. Não faz parte do produto.",
+  "seed_project_cygnus_notes": "HOO amplo da região da América do Norte e do Pelicano; o equipamento OSC acrescenta dados dual-band.",
+  "seed_project_m31_notes": "Banda larga primeiro; mistura com banda estreita depois.",
+  "seed_project_heart_notes": "Ha primeiro; OIII quando a Lua permitir.",
+  "seed_dark_exception_reason": "Darks empilhados no PixInsight"
 }

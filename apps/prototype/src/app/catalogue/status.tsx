@@ -7,10 +7,9 @@
 import { Radio } from "lucide-react"
 import { useMessages } from "@/app/preferences"
 import { stepName } from "@/app/run-ui"
-import { Section } from "@/components/app/page"
 import { CountBadge, Pill } from "@/components/app/pill"
 import { STATUS, type StatusKind, StatusBadge, type StatusValue, type Tone } from "@/components/app/status"
-import { Specimen } from "./specimen"
+import { ComponentSection, Specimen } from "./specimen"
 
 const ABSORBED: StatusKind[] = ["gate", "profile", "executable", "check", "write", "preparation"]
 const TONES: Tone[] = ["neutral", "muted", "info", "success", "warning", "danger"]
@@ -19,7 +18,7 @@ export function StatusCatalogue() {
   const m = useMessages()
   return (
     <>
-      <Section title="StatusBadge" description="Glyph plus word from the one STATUS registry. gate replaces GateLabel; profile, executable, check, write and preparation:unverified replace T4Badge.">
+      <ComponentSection components={["StatusBadge"]} description={m.catalogue_status_badge_desc()}>
         <div className="space-y-3">
           {ABSORBED.map((kind) => (
             <Specimen key={kind} caption={kind}>
@@ -28,42 +27,42 @@ export function StatusCatalogue() {
               ))}
             </Specimen>
           ))}
-          <Specimen caption="label override">
+          <Specimen caption={m.catalogue_status_label_override()}>
             <StatusBadge kind="gate" value="blocked" label={m.home_blocked_at({ step: stepName(m, "calibrate") })} />
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="Pill" description="An inert tag (channel, band, kind): no link, no button, no hover. Tone text over its own tint.">
+      <ComponentSection components={["Pill"]} description={m.catalogue_status_pill_desc()}>
         <div className="space-y-3">
-          <Specimen caption="tones">
+          <Specimen caption={m.catalogue_status_tones()}>
             {TONES.map((tone) => (
               <Pill key={tone} tone={tone}>
                 {m.common_runs()}
               </Pill>
             ))}
           </Specimen>
-          <Specimen caption="icon">
+          <Specimen caption={m.catalogue_status_icon()}>
             <Pill tone="info" icon={Radio}>
               {m.status_detected()}
             </Pill>
           </Specimen>
-          <Specimen caption="truncated (title = full text)">
+          <Specimen caption={m.catalogue_status_truncated()}>
             <span className="flex w-24">
               <Pill title={m.apps_badge_writes_unknown()}>{m.apps_badge_writes_unknown()}</Pill>
             </span>
           </Specimen>
         </div>
-      </Section>
+      </ComponentSection>
 
-      <Section title="CountBadge" description="A small number, capped at 99+, with an optional screen-reader label.">
-        <Specimen caption="tones · cap · label">
+      <ComponentSection components={["CountBadge"]} description={m.catalogue_status_count_desc()}>
+        <Specimen caption={m.catalogue_status_count_caption()}>
           {TONES.map((tone) => (
             <CountBadge key={tone} tone={tone} count={3} />
           ))}
           <CountBadge count={140} tone="danger" label={m.rungroup_blocked_count({ count: 140 })} />
         </Specimen>
-      </Section>
+      </ComponentSection>
     </>
   )
 }

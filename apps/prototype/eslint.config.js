@@ -7,24 +7,13 @@ import { defineConfig } from "eslint/config"
 import tseslint from "typescript-eslint"
 import alm from "./eslint-rules/no-user-string.js"
 
-// Not user-facing product copy, so outside the gate (legacy research R4):
-//   - tests and fixtures carry assertion and sample literals; the seed is the
-//     fixture store's sample library (user data, not UI copy);
-//   - the design-system reference is a review surface, like the legacy
-//     component stories: its labels describe states shown to a reviewer;
-//   - the simulation controls are the prototype's dev surface (the legacy
-//     src/dev/**): they fake the outside world and never ship in a product.
-// The composition rules exempt the same files (eslint.composition.config.js).
-export const I18N_IGNORES = [
-  "**/*.test.{ts,tsx}",
-  "**/*.spec.{ts,tsx}",
-  "**/__fixtures__/**",
-  "src/domain/seed.ts",
-  "src/app/design-system-page.tsx",
-  "src/app/catalogue/**",
-  "src/app/simulation-panel.tsx",
-  "src/features/t4/prototype-controls.tsx",
-]
+// Outside the gate: only tests and fixtures, which carry assertion and
+// sample literals (design/I18N.md "The gate"). Everything a user can see,
+// the component catalogue, the design-system page and the simulation and
+// Prototype controls included, goes through the catalogue. A genuinely
+// non-user string (proper name, code identifier) takes a per-line
+// `eslint-disable-next-line alm/no-user-string -- <reason>`.
+export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__fixtures__/**"]
 
 export default defineConfig(
   {

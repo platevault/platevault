@@ -13,6 +13,7 @@ import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { Button } from "@/components/ui/button"
 import { NAMING_TOKENS } from "@/domain/templates"
 import { say } from "@/lib/i18n"
+import { ComponentSection } from "./specimen"
 
 /** Typical values for the naming tokens (sample data, as in a library item). */
 const EXAMPLES: Record<string, string> = {
@@ -38,8 +39,8 @@ function TextFields() {
   const [name, setName] = useState("Backyard")
   const [empty, setEmpty] = useState("")
   return (
-    <Section title="TextField" level={3}>
-      <Caption>Filled with help · empty with an error (aria-invalid, described by the message) · read-only · disabled · with an action beside the input.</Caption>
+    <ComponentSection components={["TextField"]} level={3}>
+      <Caption>{m.catalogue_fields_text_caption()}</Caption>
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <TextField label={m.site_name()} value={name} onChange={setName} description={m.settings_default_named({ name: "Backyard" })} />
         <TextField label={m.site_name()} value={empty} onChange={setEmpty} required error={empty ? undefined : m.settings_name_required()} />
@@ -47,7 +48,7 @@ function TextFields() {
         <TextField label={m.settings_lookup_query()} value="" onChange={() => {}} placeholder={m.target_find_placeholder()} disabled />
         <TextField label={m.settings_lookup_query()} value={name} onChange={setName} action={<Button variant="outline">{m.verb_add()}</Button>} />
       </div>
-    </Section>
+    </ComponentSection>
   )
 }
 
@@ -59,15 +60,11 @@ function NumberAndChoiceFields() {
   const [camera, setCamera] = useState<string | null>(null)
   const [kind, setKind] = useState<"mono" | "osc">("mono")
   const [mode, setMode] = useState<"symlink" | "copy">("symlink")
-  const filters = [
-    { value: "ha", label: "Ha" },
-    { value: "oiii", label: "OIII" },
-    { value: "sii", label: "SII" },
-    { value: "l", label: "L", disabled: true },
-  ]
+  // eslint-disable-next-line alm/no-user-string -- filter names
+  const filters = [{ value: "ha", label: "Ha" }, { value: "oiii", label: "OIII" }, { value: "sii", label: "SII" }, { value: "l", label: "L", disabled: true }]
   return (
-    <Section title="NumberField · SelectField · ComboboxField · SegmentedField" level={3}>
-      <Caption>Number with a unit · number empty with an error · select (one option disabled) · disabled select · grouped combobox, empty · segmented with a disabled option.</Caption>
+    <ComponentSection components={["NumberField", "SelectField", "ComboboxField", "SegmentedField"]} level={3}>
+      <Caption>{m.catalogue_fields_choice_caption()}</Caption>
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <NumberField label={m.domain_criterion_exposure()} unit="s" min={0} step={1} value={exposure} onChange={setExposure} />
         <NumberField label={m.domain_criterion_gain()} value={gain} onChange={setGain} error={gain === null ? m.settings_name_required() : undefined} />
@@ -79,7 +76,9 @@ function NumberAndChoiceFields() {
           onChange={setCamera}
           placeholder={m.target_find_placeholder()}
           groups={[
+            // eslint-disable-next-line alm/no-user-string -- camera model names
             { label: m.equipment_mono(), items: [{ value: "asi2600mm", label: "ASI2600MM Pro" }, { value: "asi1600mm", label: "ASI1600MM" }] },
+            // eslint-disable-next-line alm/no-user-string -- camera model name
             { label: m.equipment_osc(), items: [{ value: "asi2600mc", label: "ASI2600MC Pro" }] },
           ]}
         />
@@ -102,7 +101,7 @@ function NumberAndChoiceFields() {
           ]}
         />
       </div>
-    </Section>
+    </ComponentSection>
   )
 }
 
@@ -113,8 +112,8 @@ function SwitchAndPathFields() {
   const [file, setFile] = useState<string | null>(null)
   const [app, setApp] = useState<string | null>("/Applications/Siril.app")
   return (
-    <Section title="SwitchField · PathField" level={3}>
-      <Caption>Switch on · switch disabled · folder, file (.fits, .xisf) and application modes: each opens the OS chooser; file mode empty with an error; disabled.</Caption>
+    <ComponentSection components={["SwitchField", "PathField"]} level={3}>
+      <Caption>{m.catalogue_fields_switch_caption()}</Caption>
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <SwitchField label={m.shortcuts_single_key()} checked={on} onChange={setOn} />
         <SwitchField label={m.shortcuts_single_key()} checked={false} onChange={() => {}} disabled />
@@ -123,7 +122,7 @@ function SwitchAndPathFields() {
         <PathField label={m.import_type_light()} mode="file" filters={[".fits", ".fit", ".xisf"]} initialPath="/Volumes/Astro/Captures" value={file} onChange={setFile} error={file ? undefined : m.settings_name_required()} />
         <PathField label={m.run_layout_output_folder()} mode="folder" value={folder} onChange={setFolder} disabled />
       </div>
-    </Section>
+    </ComponentSection>
   )
 }
 
@@ -136,8 +135,8 @@ function TemplateFields() {
   const [args, setArgs] = useState('-script="{file}" --dir {folder}')
   const [badArgs, setBadArgs] = useState("--open {project}")
   return (
-    <Section title="TokenTemplateField · ArgumentsField" level={3}>
-      <Caption>Valid template with the Omit option (the filter token omitted), preview with values and with them missing · unknown token and stray brace as inline errors, no Omit option · arguments valid and with an unknown token.</Caption>
+    <ComponentSection components={["TokenTemplateField", "ArgumentsField"]} level={3}>
+      <Caption>{m.catalogue_fields_template_caption()}</Caption>
       <div className="grid max-w-3xl gap-6">
         <TokenTemplateField label={m.naming_as_text()} value={template} onChange={setTemplate} tokens={tokens} omitWhenMissing={omit} onOmitWhenMissingChange={setOmit} prefix="/Volumes/Astro/Captures" description={m.settings_default_named({ name: "{target}/{filter}/{date}/light/" })} />
         <TokenTemplateField label={m.naming_as_text()} value={broken} onChange={setBroken} tokens={tokens} />
@@ -146,7 +145,7 @@ function TemplateFields() {
           <ArgumentsField label={m.apps_launch_arguments()} value={badArgs} onChange={setBadArgs} tokens={["folder", "file"]} />
         </div>
       </div>
-    </Section>
+    </ComponentSection>
   )
 }
 
@@ -163,10 +162,8 @@ function SettingsKit() {
           label={m.session_filter()}
           value={filter}
           onChange={setFilter}
-          options={[
-            { value: "ha", label: "Ha" },
-            { value: "oiii", label: "OIII" },
-          ]}
+          // eslint-disable-next-line alm/no-user-string -- filter names
+          options={[{ value: "ha", label: "Ha" }, { value: "oiii", label: "OIII" }]}
         />
         <PathField label={m.status_role_captures()} mode="folder" value={folder} onChange={setFolder} />
         <SettingsRow label={m.about_first_run_setup()}>
@@ -181,16 +178,18 @@ function SettingsKit() {
 }
 
 export function FieldsCatalogue() {
+  const m = useMessages()
   return (
-    <Section title="Fields and settings rows" description="components/app/fields.tsx · settings.tsx · folder-picker.tsx">
+    // eslint-disable-next-line alm/no-user-string -- the description names the source files
+    <Section title={m.catalogue_fields_title()} description="components/app/fields.tsx · settings.tsx · folder-picker.tsx">
       <TextFields />
       <NumberAndChoiceFields />
       <SwitchAndPathFields />
       <TemplateFields />
-      <Section title="SettingsSection · SettingsRow" level={3}>
-        <Caption>Fields placed directly in a SettingsSection render as rows (label column, then the control); SettingsRow holds buttons, with optional help.</Caption>
+      <ComponentSection components={["SettingsSection", "SettingsRow"]} level={3}>
+        <Caption>{m.catalogue_fields_settings_caption()}</Caption>
         <SettingsKit />
-      </Section>
+      </ComponentSection>
     </Section>
   )
 }
