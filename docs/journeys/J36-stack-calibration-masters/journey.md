@@ -1,13 +1,13 @@
 ---
 id: J36
 title: Stack raw calibration frames into masters and keep the master library
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [calibration, calibration-process, settings, applications, issues, status-bar, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#copy-rules-every-screen-every-slice, P-CAL2, P-CAL3, P-SB3, apps/prototype/src/domain/calibration-process.ts, apps/prototype/src/store/actions/calibration.ts, apps/prototype/src/store/simulation.ts, apps/prototype/src/features/v5/e-targets-plan-settings/calibration.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-calibration.tsx, apps/prototype/messages/en-GB.json, 068-calibration-inputs, specs/068-calibration-inputs/spec.md]
+trace: [HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#copy-rules-every-screen-every-slice, P-CAL2, P-CAL3, P-SB3, apps/prototype/src/domain/calibration-process.ts, apps/prototype/src/store/actions/calibration.ts, apps/prototype/src/store/simulation.ts, apps/prototype/src/features/v5/e-targets-plan-settings/calibration.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-calibration.tsx, apps/prototype/messages/en-GB.json, 068-calibration-inputs, specs/068-calibration-inputs/spec.md, HARNESS-V5-FEEDBACK-R1.md#round-6]
 ---
 
 ## Goal
@@ -160,10 +160,12 @@ Runs are later assigned these masters only (J23). Done means:
 
 ### S12 — Dismiss a master and restore it {#S12}
 
-- **Do:** In the details of the ZWO ASI294MM Pro master dark `MasterDark_2026-09-12.xisf`, click **Dismiss**. Open the Dismissed filter and click **Restore** on it.
-- **Expect:** After Dismiss the dark is listed under the Dismissed filter with **Restore**. After Restore it is listed under Darks again, and the Dismissed filter lists no master.
-- **Expect (negative):** Neither action moves, renames or deletes the master's file. It keeps its storage path and its SHA-256, and nothing goes to the OS Trash. No other master changes.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Domain and seed P-CAL2 (dismiss is reversible) and §Round 5 Calibration (Dismiss and Restore) · HARNESS-V5-IA.md §Screens S14 (Dismissed filter with Restore) · G3
+- **Do:** Open the details of the ZWO ASI294MM Pro master dark `MasterDark_2026-09-12.xisf`, read its Used by, and click **Dismiss**. Read Masters with the All filter, then open the Dismissed filter and click **Restore** on the dark. Read Masters with the All filter again.
+- **Expect:**
+  - Its Used by names no run, so Dismiss is accepted. The dark leaves the master list: with the All filter, Darks lists only the ASI2600MM 300 s master and Masters lists 6 masters. The Dismissed filter lists the dark with **Restore**.
+  - After Restore the dark is listed under Darks again with its storage path, SHA-256 and frame count 30, Masters lists 7 masters as in S10, and the Dismissed filter lists no master.
+- **Expect (negative):** Neither action moves, renames or deletes the master's file. It keeps its storage path and its SHA-256, and nothing goes to the OS Trash. No other master changes, and no confirmation or refusal names a run.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Domain and seed P-CAL2 (dismiss is reversible), §Round 5 Calibration (Dismiss and Restore) and §Round 6 Calibration ("A dismissed master is never matched; Restore brings it back") · HARNESS-V5-IA.md §Screens S14 (Dismissed filter with Restore)
 
 ## Success criteria
 
@@ -173,15 +175,17 @@ Runs are later assigned these masters only (J23). Done means:
 - SC4: Each refusal or failure registers 0 masters, moves 0 raw frames and names its reason: `Siril not set up` (S2), `Name taken` (S4), `Tool output not found` (S6) and `3 already in the library` (S9). Each failed process resumes at its failed step (S5, S6).
 - SC5: The dark watch survives 1 relaunch (S3) and detects its master with 0 user actions (S4). The Ha flat watch registers its master with 0 user actions after Stack (S7).
 - SC6: The P3 sources, `notes.txt` and the S4 file keep their recorded SHA-256 (S4, S5, S9).
-- SC7: Dismiss and Restore change 0 bytes on disk, and after Restore the master is listed under Darks again (S12).
+- SC7: Dismiss and Restore change 0 bytes on disk. While the dark is dismissed Masters lists 6 masters, and after Restore it lists 7 with the dark under Darks again (S12).
 
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe. Its sources are `HARNESS-V5-IA.md` §Screens S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3, §Domain and seed P-CAL2 and §Round 5 Calibration (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), plus the prototype's calibration process. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the P5 stand-in does not exist. The design also does not say how PlateVault hands raw frames to a profile (a script, launch arguments or a watched folder), so S3 asserts only the output folder and the running watch. A real PixInsight or Siril stack is not exercised. Blocks readiness.
-- G3: Unresolved product question: the design does not say what Dismiss does to a library master beyond listing it under Dismissed with Restore. It is open whether a dismissed master leaves All, whether it stops being a candidate for runs, and whether a master that runs use can be dismissed. S12 dismisses a master that no run uses and asserts only the listing and the unchanged file. Blocks readiness.
+- G3: (dissolved 2026-10-12): answered by Round 6 "Dismiss is refused while a run uses the master"; S12 now asserts that a master no run uses dismisses, leaves the master list (6 masters) and returns with Restore (7). No run exists in this journey, so J23/S7c asserts the refusal `Can't dismiss · used by 2 runs ▸`, and J26/S9c asserts that a dismissed master is not matched until restored.
 - G4: Out of scope for this journey: dark flats; Import routing raw calibration frames into a process awaiting Stack (J31); a run's `Stack from <session>` offer and the `?process=` highlight it opens (J23/G6); Import failures for offline storage, `Copy did not verify` and `Write permission removed`; a Raws failure that keeps refused frames; **Trash raws** on kept raws; and a profile that cannot stack. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 
-- No entries (initial draft, version 1).
+- **Δ2** 2026-10-12 · S12 · behavior-change
+  Dismissing a master no run uses takes it out of the master list until Restore brings it back; a master that runs use cannot be dismissed (exercised in J23 and J26).
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Dismiss is refused while a run uses the master" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6D (intent-gated)
