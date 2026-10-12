@@ -128,7 +128,7 @@ function KindMatrix({ actions }: { actions: ReturnType<typeof demoActions> }) {
     <div className="space-y-2">
       <h3 className="text-sm font-semibold">ActionButton</h3>
       <p className="text-xs text-muted-foreground">
-        The kind picks the variant. In a table cell (xs) a primary stays outline. Unavailable: focusable, reason as its description. Start run and Rescan run slowly (busy); Remove is refused;
+        The kind picks the variant. In a table cell (xs) a primary stays outline. Archive is unavailable: point at or Tab to it for its blockers. Start run and Rescan run slowly (busy); Remove is refused;
         the second Rescan fails with Retry.
       </p>
       {(["sm", "default", "xs"] as const).map((size) => (

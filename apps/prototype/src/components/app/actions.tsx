@@ -10,7 +10,9 @@
  *   ConfirmDialog first when it has `confirm`, and keeps a refusal or a
  *   failure as `feedback` for the host to place beside the trigger (P7).
  * - `ActionButton`: one action as a Button. `size="xs"` is for DataTable
- *   cells, where a primary action stays outline (one primary per view).
+ *   cells, where a primary action stays outline (one primary per view). An
+ *   unavailable action stays focusable and opens its BlockersPreview on
+ *   hover and focus; nothing is inserted beside it.
  * - `ActionBar`: header actions. At most one primary (trailing) and three
  *   standard buttons; the rest go to one named menu ("More ▾" by default).
  * - `ActionMenu`: a named pull-down ("Run ▾"); `⋯` is for rows only
@@ -46,6 +48,7 @@ import type { CommitResult } from "@/store/core"
 import { ConfirmDialog } from "./confirm-dialog"
 import type { Action, ActionKind, MenuItem } from "./contracts"
 import { ActionError } from "./feedback"
+import { BlockersPreview } from "./previews"
 import { Refusal, refusalFrom } from "./refusal"
 
 // ---------------------------------------------------------------------------
@@ -224,34 +227,26 @@ function OwnActionButton(props: Omit<ActionButtonProps, "runner">) {
 }
 
 function ActionTrigger({ action, size = "sm", runner }: Omit<ActionButtonProps, "runner"> & { runner: ActionRunner }) {
-  const reasonId = useId()
   const Icon = action.icon
   const busy = runner.pending === action.id
   const unavailable = action.unavailable
-  return (
-    <>
-      <Button
-        variant={variantOf(action.kind ?? "standard", size)}
-        size={size}
-        // Focusable while unavailable, so its reason can be reached (P7).
-        disabled={unavailable !== undefined}
-        focusableWhenDisabled
-        aria-describedby={unavailable ? reasonId : undefined}
-        aria-busy={busy || undefined}
-        data-action={action.id}
-        onClick={() => runner.run(action)}
-      >
-        {busy ? <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} /> : Icon ? <Icon aria-hidden="true" data-icon="inline-start" /> : null}
-        {actionLabel(action)}
-      </Button>
-      {/* Replaced by U4's BlockersPreview hover card at integration, which carries the same description. */}
-      {unavailable ? (
-        <span id={reasonId} hidden>
-          {`${unavailable.action} · ${unavailable.reason}`}
-        </span>
-      ) : null}
-    </>
+  const button = (
+    <Button
+      variant={variantOf(action.kind ?? "standard", size)}
+      size={size}
+      // Focusable while unavailable, so its blockers preview can be reached (P7).
+      disabled={unavailable !== undefined}
+      focusableWhenDisabled
+      aria-busy={busy || undefined}
+      data-action={action.id}
+      onClick={() => runner.run(action)}
+    >
+      {busy ? <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} /> : Icon ? <Icon aria-hidden="true" data-icon="inline-start" /> : null}
+      {actionLabel(action)}
+    </Button>
   )
+  // The preview opens on hover and focus, and describes the button with "<action> · <reason>".
+  return unavailable ? <BlockersPreview {...unavailable}>{button}</BlockersPreview> : button
 }
 
 // ---------------------------------------------------------------------------
