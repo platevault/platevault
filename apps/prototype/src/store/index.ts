@@ -8,6 +8,7 @@ import { CALIBRATION_HANDLERS } from "./actions/calibration"
 import { STORAGE_HANDLERS } from "./actions/storage"
 import { FOUNDATION_HANDLERS } from "./actions/trash"
 import { type PrototypeState, recordActivity, SCHEMA_VERSION, store } from "./core"
+import { pruneDismissedIssues } from "./issues"
 import { ensureTicker, interruptRunningOperations, registerOperationHandlers } from "./operations"
 import { initialSliceStates, SLICES, type SliceId, sliceVersions } from "./slices"
 
@@ -74,6 +75,9 @@ export function initializeStore() {
   registerOperationHandlers([...FOUNDATION_HANDLERS, ...CALIBRATION_HANDLERS, ...STORAGE_HANDLERS])
   for (const slice of Object.values(SLICES)) if (slice.operations) registerOperationHandlers(slice.operations)
   store.replace(launchChecks(interruptRunningOperations(load() ?? fromSeed("empty"))))
+  // A dismissed issue that ends or changes is forgotten, so it comes back if it returns (P-ISS1).
+  pruneDismissedIssues()
+  store.subscribe(pruneDismissedIssues)
   // Work that survives a restart (a stack's output-folder watch) carries on.
   if (Object.values(store.getState().operations).some((op) => op.status === "running")) ensureTicker()
   store.subscribe(() => {

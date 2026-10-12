@@ -11,6 +11,8 @@
   "verb_fix": "Corrigir",
   "verb_open": "Abrir",
   "verb_pause": "Pausar",
+  "verb_dismiss": "Dispensar",
+  "verb_restore": "Restaurar",
   "verb_resume": "Retomar",
   "verb_retry": "Tentar de novo",
   "verb_review": "Revisar",
@@ -147,6 +149,8 @@
   ],
   "issues_group_work": "Trabalho",
   "issues_group_drift": "Alterações",
+  "issues_dismissed": "Dispensados ({count})",
+  "issues_restore_all": "Restaurar todos",
   "issue_needs_target": [
     {
       "declarations": [

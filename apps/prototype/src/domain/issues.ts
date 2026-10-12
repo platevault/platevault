@@ -3,7 +3,8 @@
  * each with one action. The toolbar's Issues button counts them and takes the
  * worst severity's tint; the status bar counts them by severity, each counter
  * opening that severity's issues (P-SB3). Read it through `useIssues()`
- * (src/store/issues.ts). Nothing here writes state.
+ * (src/store/issues.ts). Nothing here writes state. An issue can be dismissed
+ * (P-ISS1) until its `issueFingerprint` changes, except a run's next step.
  *
  * The domain carries no copy: the hub and the status bar word each issue by
  * its `kind`, `count`, `name` and `bytes` from the message catalogue
@@ -60,6 +61,18 @@ export const SEVERITY_ORDER: IssueSeverity[] = ["danger", "warning", "info"]
 
 export function worstSeverity(issues: Issue[]): IssueSeverity | null {
   return SEVERITY_ORDER.find((s) => issues.some((i) => i.severity === s)) ?? null
+}
+
+/** A run's next step: the run waits on the user, and the issue is how they find it (P-ISS1). */
+const UNDISMISSABLE: ReadonlySet<IssueKind> = new Set<IssueKind>(["run-blocked", "calibration-review"])
+
+export function isDismissable(issue: Issue): boolean {
+  return !UNDISMISSABLE.has(issue.kind)
+}
+
+/** What a dismissal hides: the same kind, subject, count and bytes. Any change brings the issue back (P-ISS1). */
+export function issueFingerprint(issue: Issue): string {
+  return [issue.kind, issue.about ?? issue.id, issue.count, issue.bytes ?? ""].join("|")
 }
 
 /** Every issue, in group order and worst first within a group. */
@@ -154,10 +167,4 @@ export function blockedProjectCount(world: World): number {
     if (runs.some((run) => runPipeline(world, run).blocker)) n += 1
   }
   return n
-}
-
-/** Sessions that need attention (a Target, or a Project): the Sessions source-list badge. */
-export function sessionsNeedingAttention(world: World): number {
-  const work = sessionsNeedingWork(world.catalog)
-  return work.needsTarget.length + work.notInProject.length
 }
