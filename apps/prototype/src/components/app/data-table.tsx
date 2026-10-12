@@ -1,52 +1,82 @@
 /**
- * Dense data table (foundation-owned) on native table semantics.
+ * Dense data table (foundation-owned, plan P4) on native table semantics,
+ * drawn with the `components/ui/table` parts.
  *
- * - Sorting: header buttons with `aria-sort`; null values sort last.
+ * - Sorting: a column sorts by its `sortValue` unless it is `static` (row
+ *   actions, a thumbnail). The header is a borderless button with
+ *   `aria-sort`; only the active column shows its arrow, and the arrow's room
+ *   is kept so sorting never moves a header. Null values sort last.
  * - Selection: controlled checkbox column with a select-all for the rows
- *   shown. Filtering is the caller's job: selection ids are never dropped
- *   here, so callers can report "Selected outside current filters: N". The
- *   count also shows in the status bar's context slot (`useStatusSelection`).
+ *   shown. Filtering is the caller's job (`rows` are the rows the filters
+ *   leave): selection ids are never dropped here, and the batch bar counts the
+ *   ones the filters hide. The count also shows in the status bar's context
+ *   slot (`useStatusSelection`).
+ * - Toolbar slot (`toolbar`, `batchActions`): one row of fixed height above
+ *   the table with the FilterBar controls and the toolbar actions. While rows
+ *   are selected the batch bar takes the row's place at the same height
+ *   ("3 selected · 1 hidden by filters [Show] · actions · Clear selection"),
+ *   so selecting never moves the table. Action feedback and the active-filter
+ *   chips sit under the row.
+ * - Row actions (`rowActions`, `primaryRowAction`): a trailing column with at
+ *   most one inline action and the row's ⋯ menu. Right click, Shift+F10 or the
+ *   Menu key on a row open the same items as a context menu named after the
+ *   row (`rowLabel`). One action runner per table holds the confirmations
+ *   and refusals.
+ * - Expand (`expand`): a disclosure in the first cell opens the row's detail
+ *   in a row under it, one level deep (a nested DataTable, a KeyValueList).
  * - Keyboard: ↑/↓ move focus to the same column in the adjacent row, across
- *   groups; Tab order stays natural. Row height and cell padding follow the density tokens `--row-h` and `--row-py`.
+ *   groups; Tab order stays natural. Row height and cell padding follow the
+ *   density tokens `--row-h` and `--row-py`.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
- *   and the first column stay in view while a wide table scrolls sideways.
- * - Context menu (opt-in `contextMenu`): one native-style menu for the table;
- *   right click, Shift+F10 or the Menu key on a row opens that row's items,
- *   in a menu named after the row.
- *   Return `MenuEntry[]` (row-menu.tsx) or ready-made menu items.
+ *   and the first column stay in view while a wide table scrolls sideways,
+ *   and so does the row-actions column at the right edge.
  * - Click to act (opt-in `onRowClick`): a click on the row outside its
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
  */
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { ArrowDown, ArrowUp, ChevronRight, X } from "lucide-react"
+import {
+  type FocusEvent,
+  Fragment,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+  type RefObject,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useMessages } from "@/app/preferences"
 import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
-import { ClearableInput } from "./clearable-input"
-import { type MenuEntry, type MenuRow, menuContent, menuRowAt, openMenuFromKeyboard } from "./row-menu"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { ActionBar, ActionButton, type ActionRunner, MenuItems, useAction } from "./actions"
+import { ClearableInput } from "./clearable-input"
+import type { Action, Column as ColumnContract, MenuItem } from "./contracts"
+import { FilterChips } from "./data"
+import { ActionError } from "./feedback"
+import { type FilterBarProps, FilterControls, TOOLBAR_ROW, useFacetChips } from "./filter-bar"
+import { type MenuRow, menuRowAt, openMenuFromKeyboard, RowActions } from "./row-actions"
+import { type MenuEntry, menuContent } from "./row-menu"
 
 /** Controls inside a row that keep their own click; a click on them never runs `onRowClick`. */
 const ROW_CONTROLS = "a[href], button, input, select, textarea, label, summary, [role=button], [role=link], [role=checkbox], [role=switch], [role=combobox], [role=menuitem], [role=option], [contenteditable=true]"
 
-export interface Column<T> {
-  id: string
-  header: string
-  cell: (row: T) => ReactNode
-  sortValue?: (row: T) => string | number | null
-  align?: "left" | "right"
-  className?: string
-  /** Render this column's cell as the row header (`th scope="row"`). */
-  rowHeader?: boolean
-  /** Truncate long text (paths, names) at 18rem; pair with a `title`. */
-  truncate?: boolean
-}
+/**
+ * @deprecated Import `Column` from `@/components/app/contracts`; W3 moves the
+ * imports and W4 removes this alias.
+ */
+export type Column<T> = ColumnContract<T>
 
 export interface DataTableSelection<T> {
   selected: string[]
@@ -54,6 +84,10 @@ export interface DataTableSelection<T> {
   /** Accessible name fragment for the row checkbox, e.g. the session name. */
   rowLabel: (row: T) => string
   isSelectable?: (row: T) => boolean
+  /** The batch bar's count as one complete message, when the noun must agree ("3 sessões selecionadas"); default "3 selected". */
+  countLabel?: (count: number) => string
+  /** Shows the selected rows the filters hide (clears the filters, or picks a "Selected" facet); the batch bar offers it as Show. */
+  onShowHidden?: () => void
 }
 
 export interface DataTableGrouping<T> {
@@ -65,17 +99,32 @@ export interface DataTableGrouping<T> {
   compare?: (a: string, b: string) => number
 }
 
-export interface DataTableProps<T> {
+/** The toolbar slot's content: the FilterBar controls, then the toolbar actions. `matchCount` defaults to the rows shown. */
+export interface DataTableToolbar extends FilterBarProps {
+  actions?: Action[]
+}
+
+export interface DataTableExpand<T> {
+  /** The detail under an open row, one level deep: a nested DataTable (`scroll="none"`) or a KeyValueList. */
+  render: (row: T) => ReactNode
+  isExpandable?: (row: T) => boolean
+  /** Rows open on first render. */
+  defaultExpanded?: string[]
+}
+
+interface DataTableBaseProps<T> {
   /** Table caption (visually hidden); names the data set. */
   label: string
   rows: T[]
-  columns: Column<T>[]
+  columns: ColumnContract<T>[]
   getRowId: (row: T) => string
   selection?: DataTableSelection<T>
   initialSort?: { columnId: string; direction: "asc" | "desc" }
   /** Shown instead of the body when there are no rows. */
   empty?: ReactNode
   loading?: boolean
+  /** The rows could not load: the body shows the error with Retry. */
+  error?: { message: string; onRetry: () => void }
   /** The row whose detail is open; marked `aria-current`. */
   activeRowId?: string | null
   rowClassName?: (row: T) => string | undefined
@@ -95,10 +144,42 @@ export interface DataTableProps<T> {
    * backgrounds do not reach the pinned cells.
    */
   stickyFirstColumn?: boolean
-  /** The row's context menu: entries (`MenuEntry[]`) or menu items; every item must also be reachable from the row itself. */
+  /**
+   * @deprecated Pass `rowActions`: the row's ⋯ menu and its context menu then
+   * show the same items. W4 removes this prop.
+   */
   contextMenu?: (row: T) => MenuEntry[] | ReactNode
   /** The row's primary action (open, select): a click outside the row's controls, or Enter on the focused row. */
   onRowClick?: (row: T) => void
+  /** The toolbar slot above the table; the batch bar replaces it while rows are selected. */
+  toolbar?: DataTableToolbar
+  /** Actions on the whole selection, the rows the filters hide included; shown in the batch bar (three inline, the rest under More). */
+  batchActions?: (selectedIds: string[]) => Action[]
+}
+
+/** Row actions and expand name each row, so `rowLabel` comes with them. */
+type DataTableRowProps<T> =
+  | { rowLabel?: undefined; rowActions?: undefined; primaryRowAction?: undefined; expand?: undefined }
+  | {
+      /** The row's name ("30 Sep OIII"): it names the row's ⋯ menu, its context menu and its disclosure. */
+      rowLabel: (row: T) => string
+      /** The row's ⋯ menu; right click, Shift+F10 and the Menu key open the same items. */
+      rowActions?: (row: T) => MenuItem[]
+      /** At most one inline action beside the ⋯ ("Make default"); null where it does not apply. */
+      primaryRowAction?: (row: T) => Action | null
+      expand?: DataTableExpand<T>
+    }
+
+export type DataTableProps<T> = DataTableBaseProps<T> & DataTableRowProps<T>
+
+/** What the toolbar slot moves focus to after a swap took the focused control away. */
+const SLOT_FOCUSABLE = "button:not([disabled]), input:not([disabled]), [role=checkbox], [tabindex]:not([tabindex='-1'])"
+
+/** T2 (plan §6.2): a cut-off cell shows its full text on hover, and only while it is cut. */
+function titleWhenCut(event: PointerEvent<HTMLElement>) {
+  const element = event.currentTarget
+  if (element.scrollWidth > element.clientWidth) element.title = element.textContent ?? ""
+  else element.removeAttribute("title")
 }
 
 export function DataTable<T>({
@@ -110,6 +191,7 @@ export function DataTable<T>({
   initialSort,
   empty,
   loading,
+  error,
   activeRowId,
   rowClassName,
   className,
@@ -118,13 +200,32 @@ export function DataTable<T>({
   stickyFirstColumn = false,
   contextMenu,
   onRowClick,
+  toolbar,
+  batchActions,
+  rowLabel,
+  rowActions,
+  primaryRowAction,
+  expand,
 }: DataTableProps<T>) {
   const m = useMessages()
+  const baseId = useId()
+  // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
+  // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
+  // goes to the first control of the toolbar row.
+  const runner = useAction({ focusAfterConfirm: () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE) })
   const [sort, setSort] = useState(initialSort ?? null)
   const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
+  const [expanded, setExpanded] = useState(() => new Set(expand?.defaultExpanded ?? []))
   const frame = useRef<HTMLDivElement>(null)
   const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
-  useStatusSelection(selection?.selected.length ?? 0)
+  const slot = useRef<HTMLDivElement>(null)
+  const slotHadFocus = useRef(false)
+  const selectedCount = selection?.selected.length ?? 0
+  useStatusSelection(selectedCount)
+
+  const hasSlot = toolbar !== undefined || (selection !== undefined && batchActions !== undefined)
+  const batchShown = hasSlot && selectedCount > 0
+  const chips = useFacetChips({ ...toolbar, matchCount: toolbar?.matchCount ?? rows.length })
 
   // Scroll padding the width of the pinned columns, so Tab never leaves a
   // focused cell under them (WCAG 2.4.11); it follows column resizes.
@@ -139,9 +240,18 @@ export function DataTable<T>({
     return () => observer.disconnect()
   }, [stickyFirstColumn])
 
+  // The batch bar and the toolbar row swap in place. When the swap removed the
+  // focused control (Clear selection, a batch action that empties the
+  // selection), focus goes to the first control of what took its place.
+  useLayoutEffect(() => {
+    const active = document.activeElement
+    if (!slotHadFocus.current || (active !== null && active !== document.body)) return
+    slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)?.focus()
+  }, [batchShown])
+
   const sorted = useMemo(() => {
     const column = sort ? columns.find((c) => c.id === sort.columnId) : undefined
-    if (!sort || !column?.sortValue) return rows
+    if (!sort || !column?.sortValue || column.static) return rows
     const factor = sort.direction === "asc" ? 1 : -1
     const value = column.sortValue
     return [...rows].sort((a, b) => {
@@ -186,16 +296,26 @@ export function DataTable<T>({
     selection.onChange(checked ? [...selection.selected, id] : selection.selected.filter((s) => s !== id))
   }
 
+  function toggleExpanded(id: string) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTableSectionElement>) {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+    // A nested table (an expanded row's detail) moved focus already.
+    if (event.defaultPrevented || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return
     const target = event.target as HTMLElement
     if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
     const row = target.closest<HTMLElement>("tr[data-row]")
     // A focused row (click to act) moves to the adjacent row's first control, or the row itself.
     const cell = target === row ? row.children[0] : target.closest("td, th")
     if (!cell || !row) return
-    // Data rows of the whole table, so ↑/↓ also cross group boundaries.
-    const allRows = Array.from(row.closest("table")?.querySelectorAll<HTMLElement>("tbody tr[data-row]") ?? [])
+    // Data rows of the whole table, so ↑/↓ also cross group boundaries; a nested table's rows are its own.
+    const allRows = Array.from(row.closest("table")?.querySelectorAll<HTMLElement>(":scope > tbody > tr[data-row]") ?? [])
     const sibling = allRows[allRows.indexOf(row) + (event.key === "ArrowDown" ? 1 : -1)]
     if (!sibling) return
     const index = Array.from(row.children).indexOf(cell)
@@ -220,7 +340,9 @@ export function DataTable<T>({
     onRowClick?.(row)
   }
 
-  const columnCount = columns.length + (selection ? 1 : 0)
+  const hasRowActions = rowActions !== undefined || primaryRowAction !== undefined
+  const nameOf = (row: T) => rowLabel?.(row) ?? selection?.rowLabel(row) ?? getRowId(row)
+  const columnCount = columns.length + (selection ? 1 : 0) + (hasRowActions ? 1 : 0)
   // Pinned cells are opaque (card plus the row's tint, `--row-bg`) and sit
   // under the sticky header (z-10). The last pinned cell draws the edge.
   const pinned = (position: "first" | "only" | "last", head = false) =>
@@ -234,197 +356,363 @@ export function DataTable<T>({
           !head && position === "only" && "group-aria-[current=true]/row:shadow-[inset_2px_0_0_var(--primary),inset_-1px_0_0_var(--border)]",
         )
       : undefined
+  const pinnedEnd = (head = false) =>
+    stickyFirstColumn
+      ? cn("sticky right-0 shadow-[inset_1px_0_0_var(--border)]", head ? "bg-card" : "z-1 bg-card [background-image:linear-gradient(var(--row-bg),var(--row-bg))]")
+      : undefined
   const columnPin = selection ? "last" : "only"
+
+  const menuEnabled = rowActions !== undefined || contextMenu !== undefined
   // The row under the pointer (or the focused row for Shift+F10) picks the
-  // menu's items; outside a row the browser's own menu stays.
-  const onContextMenu = (event: MouseEvent) => {
-    const found = menuRowAt(event.target, "data-row-id")
+  // menu's items; outside a row, and in a nested table's rows, the browser's
+  // own menu (or the nested table's) stays.
+  const onContextMenu = (event: MouseEvent<HTMLTableElement>) => {
+    const own = event.target instanceof Element && event.target.closest("table") === event.currentTarget
+    const found = own ? menuRowAt(event.target, "data-row-id") : null
     if (found === null) event.stopPropagation()
     else setMenuTarget(found)
   }
-  const menuRow = contextMenu && menuTarget !== null ? rows.find((row) => getRowId(row) === menuTarget.key) : undefined
+  const menuRow = menuEnabled && menuTarget !== null ? rows.find((row) => getRowId(row) === menuTarget.key) : undefined
+  const menuItems = menuRow === undefined ? null : rowActions ? <MenuItems items={rowActions(menuRow)} runner={runner} /> : contextMenu ? menuContent(contextMenu(menuRow)) : null
   const frameClass = cn(
     // The frame is the scroll container in both axes so the header row
     // stays pinned while long tables scroll inside it. Scroll padding the
     // height of that header keeps a focused row out from under it (WCAG 2.4.11).
     "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
     stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
-    // A shown SelectionBar's height is left free (`--selection-bar-h`), so the bar never covers a row.
+    // A shown (deprecated) SelectionBar's height is left free (`--selection-bar-h`), so the bar never covers a row.
     scroll === "frame" && "max-h-[calc(100dvh-14rem-var(--selection-bar-h,0px))]",
     className,
   )
+
+  const sortHeader = (column: ColumnContract<T>, active: boolean, direction: "asc" | "desc") => {
+    const Arrow = active && direction === "desc" ? ArrowDown : ArrowUp
+    return (
+      <button
+        type="button"
+        className={cn("group/sort inline-flex h-6 items-center gap-1 rounded-sm hover:text-foreground", column.align === "right" && "flex-row-reverse", active && "text-foreground")}
+        onClick={() =>
+          setSort((current) =>
+            current?.columnId === column.id ? { columnId: column.id, direction: current.direction === "asc" ? "desc" : "asc" } : { columnId: column.id, direction: "asc" },
+          )
+        }
+      >
+        {column.header}
+        {/* Only the active column shows its arrow; the others keep its room, and hint it on hover and focus. */}
+        <Arrow aria-hidden="true" className={cn("size-3", !active && "opacity-0 group-hover/sort:opacity-50 group-focus-visible/sort:opacity-50")} />
+      </button>
+    )
+  }
+
   const table = (
-      <table className="w-full text-sm" onContextMenu={contextMenu ? onContextMenu : undefined} onKeyDown={contextMenu ? (event) => openMenuFromKeyboard(event, "data-row-id") : undefined}>
-        <caption className="sr-only">{loading ? m.table_loading({ name: label }) : label}</caption>
-        <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
-          <tr>
-            {selection ? (
-              <th scope="col" className={cn("h-(--row-h) w-10 px-3", pinned("first", true))}>
-                <Checkbox
-                  aria-label={m.table_select_all({ count: selectable.length })}
-                  checked={allShownSelected}
-                  indeterminate={shownSelected > 0 && !allShownSelected}
-                  disabled={loading || selectable.length === 0}
-                  onCheckedChange={(checked) => toggleAll(checked)}
-                />
-              </th>
-            ) : null}
-            {columns.map((column, columnIndex) => {
-              const active = sort?.columnId === column.id
-              const ariaSort = active ? (sort.direction === "asc" ? "ascending" : "descending") : column.sortValue ? "none" : undefined
-              return (
-                <th
-                  key={column.id}
-                  ref={columnIndex === 0 ? lastPinnedHeader : undefined}
-                  scope="col"
-                  aria-sort={ariaSort}
-                  className={cn(
-                    "h-(--row-h) px-3 font-medium whitespace-nowrap",
-                    column.align === "right" ? "text-right" : "text-left",
-                    column.className,
-                    columnIndex === 0 && pinned(columnPin, true),
-                  )}
-                >
-                  {column.sortValue ? (
-                    <button
-                      type="button"
-                      className={cn("inline-flex h-6 items-center gap-1 rounded-sm hover:text-foreground", active && "text-foreground")}
-                      onClick={() =>
-                        setSort((current) =>
-                          current?.columnId === column.id
-                            ? { columnId: column.id, direction: current.direction === "asc" ? "desc" : "asc" }
-                            : { columnId: column.id, direction: "asc" },
-                        )
-                      }
-                    >
-                      {column.header}
-                      {active ? (
-                        sort.direction === "asc" ? <ArrowUp aria-hidden="true" className="size-3" /> : <ArrowDown aria-hidden="true" className="size-3" />
-                      ) : (
-                        <ArrowUpDown aria-hidden="true" className="size-3 opacity-50" />
-                      )}
-                    </button>
-                  ) : (
-                    column.header
-                  )}
+    <Table
+      onContextMenu={menuEnabled ? onContextMenu : undefined}
+      onKeyDown={menuEnabled ? (event) => !event.defaultPrevented && openMenuFromKeyboard(event, "data-row-id") : undefined}
+    >
+      <TableCaption>{loading ? m.table_loading({ name: label }) : label}</TableCaption>
+      <TableHeader>
+        <tr>
+          {selection ? (
+            <TableHead className={cn("w-10", pinned("first", true))}>
+              <Checkbox
+                aria-label={m.table_select_all({ count: selectable.length })}
+                checked={allShownSelected}
+                indeterminate={shownSelected > 0 && !allShownSelected}
+                disabled={loading || selectable.length === 0}
+                onCheckedChange={(checked) => toggleAll(checked)}
+              />
+            </TableHead>
+          ) : null}
+          {columns.map((column, columnIndex) => {
+            const sortable = !column.static && column.sortValue !== undefined
+            const active = sortable && sort?.columnId === column.id
+            const ariaSort = active ? (sort.direction === "asc" ? "ascending" : "descending") : sortable ? "none" : undefined
+            return (
+              <TableHead
+                key={column.id}
+                ref={columnIndex === 0 ? lastPinnedHeader : undefined}
+                aria-sort={ariaSort}
+                className={cn(
+                  column.align === "right" && "text-right",
+                  column.className,
+                  // The header text lines up with the cell text after the disclosure.
+                  columnIndex === 0 && expand && "pl-10",
+                  columnIndex === 0 && pinned(columnPin, true),
+                )}
+              >
+                {sortable ? sortHeader(column, active, sort?.direction ?? "asc") : column.header}
+              </TableHead>
+            )
+          })}
+          {hasRowActions ? (
+            <TableHead className={cn("w-px", pinnedEnd(true))}>
+              <span className="sr-only">{m.table_actions_column()}</span>
+            </TableHead>
+          ) : null}
+        </tr>
+      </TableHeader>
+      {loading ? (
+        <TableBody>
+          {Array.from({ length: 6 }, (_, r) => (
+            <TableRow key={r} kind="state">
+              {Array.from({ length: columnCount }, (_, c) => (
+                <td key={c} className="px-3">
+                  <Skeleton className={cn("h-3", c === 0 && selection ? "size-4" : "w-3/4")} />
+                </td>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      ) : error ? (
+        <TableBody>
+          <TableRow kind="state">
+            <td colSpan={columnCount} className="p-4">
+              <ActionError message={error.message} onRetry={error.onRetry} />
+            </td>
+          </TableRow>
+        </TableBody>
+      ) : sorted.length === 0 ? (
+        <TableBody>
+          <TableRow kind="state">
+            <td colSpan={columnCount} className="p-4">
+              {empty ?? <p className="text-sm text-muted-foreground">{m.table_no_rows()}</p>}
+            </td>
+          </TableRow>
+        </TableBody>
+      ) : (
+        bodies.map((body, bodyIndex) => (
+          <TableBody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
+            {body.key !== null && groups ? (
+              <TableRow kind="group">
+                <th scope="rowgroup" colSpan={columnCount} className="px-3 text-left text-xs font-semibold">
+                  {/* The label stays in view while the table scrolls sideways. */}
+                  <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups.label(body.key, body.rows)}</span>
                 </th>
-              )
-            })}
-          </tr>
-        </thead>
-        {loading ? (
-          <tbody>
-            {Array.from({ length: 6 }, (_, r) => (
-              <tr key={r} className="h-(--row-h) border-b last:border-0">
-                {Array.from({ length: columnCount }, (_, c) => (
-                  <td key={c} className="px-3">
-                    <Skeleton className={cn("h-3", c === 0 && selection ? "size-4" : "w-3/4")} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        ) : sorted.length === 0 ? (
-          <tbody>
-            <tr>
-              <td colSpan={columnCount} className="p-4">
-                {empty ?? <p className="text-sm text-muted-foreground">{m.table_no_rows()}</p>}
-              </td>
-            </tr>
-          </tbody>
-        ) : (
-          bodies.map((body, bodyIndex) => (
-            <tbody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
-              {body.key !== null && groups ? (
-                <tr className={cn("border-b bg-muted/40", bodyIndex > 0 && "border-t")}>
-                  <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-3 text-left text-xs font-semibold">
-                    {/* The label stays in view while the table scrolls sideways. */}
-                    <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups.label(body.key, body.rows)}</span>
-                  </th>
-                </tr>
-              ) : null}
-              {body.rows.map((row) => {
-                const id = getRowId(row)
-                const isSelected = selectedSet.has(id)
-                const canSelect = selection?.isSelectable?.(row) ?? true
-                return (
-                  <tr
-                    key={id}
+              </TableRow>
+            ) : null}
+            {body.rows.map((row, rowIndex) => {
+              const id = getRowId(row)
+              const isSelected = selectedSet.has(id)
+              const canSelect = selection?.isSelectable?.(row) ?? true
+              const canExpand = expand !== undefined && (expand.isExpandable?.(row) ?? true)
+              const isExpanded = canExpand && expanded.has(id)
+              const detailId = `${baseId}-detail-${bodyIndex}-${rowIndex}`
+              const primary = primaryRowAction?.(row) ?? null
+              return (
+                <Fragment key={id}>
+                  <TableRow
                     data-row
-                    data-row-id={contextMenu ? id : undefined}
+                    data-row-id={menuEnabled ? id : undefined}
+                    data-alt={rowIndex % 2 === 1 || undefined}
+                    data-selected={isSelected || undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
                     tabIndex={onRowClick ? -1 : undefined}
                     onClick={onRowClick ? rowClick(row) : undefined}
                     onKeyDown={onRowClick ? rowKey(row) : undefined}
-                    data-selected={isSelected || undefined}
-                    className={cn(
-                      // The stripe skips selected rows, so the selected tint always shows.
-                      "group/row h-(--row-h) border-b border-border/50 last:border-0 even:not-data-selected:bg-foreground/[0.022] hover:bg-foreground/[0.06]",
-                      "data-selected:bg-primary/16 data-selected:hover:bg-primary/22",
-                      "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
-                      // The same tints as a variable, for pinned cells that paint over the row.
-                      "[--row-bg:transparent] even:not-data-selected:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_6%,transparent)]",
-                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_22%,transparent)]",
-                      "aria-[current=true]:[--row-bg:var(--accent)]",
-                      onRowClick && "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                      rowClassName?.(row),
-                    )}
+                    className={cn(onRowClick && "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring", rowClassName?.(row))}
                   >
                     {selection ? (
-                      <td className={cn("w-10 px-3", pinned("first"))}>
+                      <TableCell className={cn("w-10", pinned("first"))}>
                         <Checkbox
                           aria-label={m.table_select_row({ name: selection.rowLabel(row) })}
                           checked={isSelected}
                           disabled={!canSelect}
                           onCheckedChange={(checked) => toggleRow(id, checked)}
                         />
-                      </td>
+                      </TableCell>
                     ) : null}
                     {columns.map((column, columnIndex) => {
-                      const Cell = column.rowHeader ? "th" : "td"
+                      const content = column.cell(row)
+                      const disclosure = columnIndex === 0 && expand !== undefined
+                      const truncate = column.truncate ? { className: "truncate", onPointerEnter: titleWhenCut } : undefined
                       return (
-                        <Cell
+                        <TableCell
                           key={column.id}
-                          scope={column.rowHeader ? "row" : undefined}
+                          rowHeader={column.rowHeader}
+                          // The disclosure's own name stays out of the row header's name ("Details for … 30 Sep").
+                          aria-label={disclosure && column.rowHeader ? nameOf(row) : undefined}
                           className={cn(
-                            "px-3 py-(--row-py) font-normal tabular-nums",
-                            column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
-                            column.align === "right" ? "text-right" : "text-left",
+                            column.truncate ? "max-w-72" : "whitespace-nowrap",
+                            !disclosure && truncate?.className,
+                            column.align === "right" && "text-right",
                             column.className,
                             columnIndex === 0 && pinned(columnPin),
                           )}
+                          onPointerEnter={disclosure ? undefined : truncate?.onPointerEnter}
                         >
-                          {column.cell(row)}
-                        </Cell>
+                          {disclosure ? (
+                            <div className="flex min-w-0 items-center gap-1">
+                              {canExpand ? (
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  aria-expanded={isExpanded}
+                                  aria-controls={isExpanded ? detailId : undefined}
+                                  aria-label={m.table_row_details({ name: nameOf(row) })}
+                                  onClick={() => toggleExpanded(id)}
+                                >
+                                  <ChevronRight aria-hidden="true" className={cn("motion-safe:transition-transform motion-safe:duration-150", isExpanded && "rotate-90")} />
+                                </Button>
+                              ) : (
+                                <span aria-hidden="true" className="size-6 shrink-0" />
+                              )}
+                              <div className={cn("min-w-0", truncate?.className)} onPointerEnter={truncate?.onPointerEnter}>
+                                {content}
+                              </div>
+                            </div>
+                          ) : (
+                            content
+                          )}
+                        </TableCell>
                       )
                     })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          ))
-        )}
-      </table>
+                    {hasRowActions ? (
+                      <TableCell className={cn("w-px text-right whitespace-nowrap", pinnedEnd())}>
+                        <div className="inline-flex items-center gap-1 align-middle">
+                          {primary ? <ActionButton action={primary} size="xs" runner={runner} /> : null}
+                          {rowActions ? <RowActions name={nameOf(row)} items={rowActions(row)} runner={runner} /> : null}
+                        </div>
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                  {isExpanded ? (
+                    <TableRow kind="detail">
+                      <td id={detailId} colSpan={columnCount} className="px-3 py-2">
+                        {expand.render(row)}
+                      </td>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
+              )
+            })}
+          </TableBody>
+        ))
+      )}
+    </Table>
   )
   const busy = loading || undefined
-  if (!contextMenu) {
-    return (
-      <div ref={frame} className={frameClass} aria-busy={busy}>
-        {table}
-      </div>
-    )
-  }
-  return (
+  const framed = !menuEnabled ? (
+    <div ref={frame} className={frameClass} aria-busy={busy}>
+      {table}
+    </div>
+  ) : (
     <ContextMenu>
       <ContextMenuTrigger ref={frame} className={frameClass} aria-busy={busy}>
         {table}
       </ContextMenuTrigger>
-      <ContextMenuContent aria-label={menuTarget?.name}>{menuRow ? menuContent(contextMenu(menuRow)) : null}</ContextMenuContent>
+      <ContextMenuContent aria-label={menuRow === undefined ? undefined : rowActions ? nameOf(menuRow) : menuTarget?.name}>{menuItems}</ContextMenuContent>
     </ContextMenu>
+  )
+  if (!hasSlot) {
+    return (
+      <>
+        {framed}
+        {runner.dialog}
+      </>
+    )
+  }
+
+  const hidden = selection ? selection.selected.length - shownSelectedOf(rows, getRowId, selectedSet) : 0
+  const countLabel = selection?.countLabel?.(selectedCount) ?? m.table_selected_count({ count: selectedCount, n: formatCount(selectedCount) })
+  return (
+    <div className="space-y-1.5">
+      <div
+        ref={slot}
+        className={cn("flex min-w-0 items-center gap-2", TOOLBAR_ROW)}
+        onFocus={() => {
+          slotHadFocus.current = true
+        }}
+        onBlur={(event: FocusEvent<HTMLDivElement>) => {
+          // Focus that moved somewhere else; a control removed by the swap blurs to nothing.
+          if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) slotHadFocus.current = false
+        }}
+      >
+        {batchShown && selection ? (
+          <BatchBar
+            countLabel={countLabel}
+            hidden={hidden}
+            onShowHidden={selection.onShowHidden}
+            onClear={() => selection.onChange([])}
+            actions={batchActions?.(selection.selected) ?? []}
+            runner={runner}
+          />
+        ) : toolbar ? (
+          <>
+            <FilterControls {...toolbar} />
+            {toolbar.actions && toolbar.actions.length > 0 ? (
+              <div className="ml-auto shrink-0">
+                <ActionBar actions={toolbar.actions} runner={runner} />
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground tabular-nums">{m.table_row_count({ count: rows.length, n: formatCount(rows.length) })}</span>
+        )}
+        <span className="sr-only" aria-live="polite">
+          {batchShown ? countLabel : null}
+        </span>
+      </div>
+      {runner.feedback}
+      {toolbar ? <FilterChips {...chips} /> : null}
+      {framed}
+      {runner.dialog}
+    </div>
+  )
+}
+
+/** How many of the selected ids are rows shown; the rest are hidden by the filters. */
+function shownSelectedOf<T>(rows: T[], getRowId: (row: T) => string, selected: Set<string>): number {
+  let shown = 0
+  for (const row of rows) if (selected.has(getRowId(row))) shown += 1
+  return shown
+}
+
+/** The toolbar row while rows are selected: the count, what the filters hide, the batch actions and Clear selection. */
+function BatchBar({
+  countLabel,
+  hidden,
+  onShowHidden,
+  onClear,
+  actions,
+  runner,
+}: {
+  countLabel: string
+  hidden: number
+  onShowHidden?: () => void
+  onClear: () => void
+  actions: Action[]
+  runner: ActionRunner
+}) {
+  const m = useMessages()
+  return (
+    <div role="region" aria-label={m.selection_region()} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md border border-primary/40 bg-primary/8 px-2 text-sm">
+      <span className="shrink-0 font-medium tabular-nums">{countLabel}</span>
+      {hidden > 0 ? (
+        <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+          <span className="truncate">· {m.table_selection_hidden({ count: hidden, n: formatCount(hidden) })}</span>
+          {onShowHidden ? (
+            <Button size="xs" variant="ghost" onClick={onShowHidden}>
+              {m.table_selection_show()}
+            </Button>
+          ) : null}
+        </span>
+      ) : null}
+      {/* ActionBar keeps one primary and three standard inline and the rest under More, so the bar stays one row. */}
+      <div className="ml-auto min-w-0">
+        <ActionBar actions={actions} runner={runner} />
+      </div>
+      <Button size="sm" variant="ghost" className="shrink-0" onClick={onClear}>
+        <X data-icon="inline-start" aria-hidden="true" />
+        {m.selection_clear()}
+      </Button>
+    </div>
   )
 }
 
 /**
+ * @deprecated Pass `toolbar` to DataTable: its FilterBar controls and actions
+ * then sit in the toolbar slot the batch bar swaps with. W4 removes this.
+ *
  * Table toolbar: page search (focused by `/`), filter controls and actions,
  * aligned on one row above a DataTable.
  */
@@ -476,6 +764,10 @@ function useReservedBarHeight(bar: RefObject<HTMLElement | null>, shown: boolean
 }
 
 /**
+ * @deprecated Pass `batchActions` (and `selection.onShowHidden`) to
+ * DataTable: its batch bar then replaces the toolbar row in place, at the
+ * same height. W4 removes this.
+ *
  * Selection summary for multi-select tables (VSEL-FR-06): how many are
  * selected, how many of those are hidden by the current filters, and the
  * bulk actions that apply, with any standing refusal of those actions

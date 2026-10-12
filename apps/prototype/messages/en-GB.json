@@ -397,6 +397,117 @@
   "selection_region": "Selection",
   "selection_show": "Show selected",
   "selection_clear": "Clear selection",
+  "table_actions_column": "Actions",
+  "table_selected_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} selected",
+        "countPlural=*": "{n} selected"
+      }
+    }
+  ],
+  "table_selection_hidden": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} hidden by filters",
+        "countPlural=*": "{n} hidden by filters"
+      }
+    }
+  ],
+  "table_selection_show": "Show",
+  "table_row_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} row",
+        "countPlural=*": "{n} rows"
+      }
+    }
+  ],
+  "table_row_details": "Details for {name}",
+  "filter_bar_label": "Filters",
+  "filter_bar_all": "All",
+  "filter_bar_facet_value": "{label}: {value}",
+  "filter_bar_matches": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} match",
+        "countPlural=*": "{n} matches"
+      }
+    }
+  ],
+  "filter_bar_presets": "Presets",
+  "filter_bar_presets_saved": "Saved",
+  "filter_bar_preset_save_ellipsis": "Save current…",
+  "filter_bar_preset_delete": "Delete",
+  "filter_bar_preset_new_title": "New preset",
+  "filter_bar_preset_name": "Name",
+  "filter_bar_preset_create": "Create preset",
+  "filter_bar_preset_name_taken": "Name already in use",
+  "catalogue_datatable_title": "DataTable",
+  "catalogue_datatable_description": "Sorting, filters, presets, selection, batch actions, row actions and expand in one table. The batch bar takes the toolbar row's place at the same height.",
+  "catalogue_datatable_state": "Table state",
+  "catalogue_datatable_state_rows": "Rows",
+  "catalogue_datatable_state_loading": "Loading",
+  "catalogue_datatable_state_empty": "Empty",
+  "catalogue_datatable_state_error": "Error",
+  "catalogue_datatable_wide": "Wide, pinned columns",
+  "catalogue_datatable_restore": "Restore trashed rows",
+  "catalogue_datatable_shift": "Table shift on the last selection change: {px} px",
+  "catalogue_datatable_last_run": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input action",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Last action: {action} · {n} row",
+        "countPlural=*": "Last action: {action} · {n} rows"
+      }
+    }
+  ],
+  "catalogue_datatable_no_action": "Last action: none",
+  "catalogue_datatable_notes": "Target is static (no sort). Camera truncates and shows its full text on hover only when cut.",
+  "catalogue_datatable_label": "Light sessions (catalogue sample)",
+  "catalogue_datatable_preset_long": "Long subs",
+  "catalogue_datatable_filter_bar_title": "FilterBar",
+  "catalogue_datatable_filter_bar_description": "The same controlled filters for a list that is not a table.",
   "save_review_current": "Review current revision",
   "folder_picker_volumes": "Volumes",
   "folder_picker_up": "Up one folder",
