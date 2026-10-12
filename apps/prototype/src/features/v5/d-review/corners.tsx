@@ -88,7 +88,8 @@ export function CornerGrid({ field, stretch, overlay, label, className }: { fiel
   return (
     <div ref={ref} className={cn("relative min-h-0 min-w-0 flex-1 rounded-[3px] bg-mount shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_oklch(0_0_0/0.22)]", className)}>
       {tiles.length > 0 ? (
-        <div role="group" aria-label={m.review_corners_group({ label })} data-corners className="absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 grid-cols-3" style={{ gap: GAP }}>
+        // Centred by auto margins over the whole box: a left-50% offset would cap the grid at half the width and squeeze its columns under the tiles in Compare.
+        <div role="group" aria-label={m.review_corners_group({ label })} data-corners className="absolute inset-0 m-auto grid size-fit grid-cols-3" style={{ gap: GAP }}>
           {tiles.map((t) => (
             <CornerTile key={t.id} field={field} stretch={stretch} tile={t} size={tile} overlay={overlay} centre={t.id === "middle-centre" ? null : centre} />
           ))}
