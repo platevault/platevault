@@ -1,13 +1,12 @@
 /**
  * The Issues hub (foundation-owned): every issue across the app, grouped and
  * each with one action. The toolbar's Issues button counts them and takes the
- * worst severity's tint; Home renders them as pills in bar order
- * (`inBarOrder`), and the status bar shows them as named pills or as chips
- * by kind (`statusIssues`). Read it through `useIssues()` and
- * `useStatusIssues()` (src/store/issues.ts). Nothing here writes state.
+ * worst severity's tint; the status bar counts them by severity, each counter
+ * opening that severity's issues (P-SB3). Read it through `useIssues()`
+ * (src/store/issues.ts). Nothing here writes state.
  *
- * The domain carries no copy: the hub, Home and the status bar word each
- * issue by its `kind`, `count` and `name` from the message catalogue
+ * The domain carries no copy: the hub and the status bar word each issue by
+ * its `kind`, `count`, `name` and `bytes` from the message catalogue
  * (`issueCopy`, src/app/issues-hub.tsx).
  */
 import { inputDrift } from "./calibration"
@@ -15,12 +14,13 @@ import { calibrationProcesses } from "./calibration-process"
 import { runPipeline, runStepLink, type StepLink, sessionsNeedingWork, type World } from "./derive"
 import { locationAvailability, qualityApplicability } from "./library"
 import { sessionRef } from "./membership"
+import { duplicateCopies, lastDuplicateScan } from "./storage"
 import type { MessageRef } from "@/lib/i18n"
 
 export type IssueSeverity = "info" | "warning" | "danger"
 export type IssueGroup = "sessions" | "storage" | "work" | "runs" | "calibration" | "drift"
 
-/** What an issue is about; the status bar's chips group by it (`STATUS_CHIP_OF`). */
+/** What an issue is about; `issueCopy` words it by kind. */
 export type IssueKind =
   | "needs-target"
   | "not-in-project"
@@ -34,6 +34,7 @@ export type IssueKind =
   | "calibration-waiting"
   | "calibration-failed"
   | "drift"
+  | "duplicates"
 
 export const ISSUE_GROUPS: IssueGroup[] = ["sessions", "storage", "work", "runs", "calibration", "drift"]
 
@@ -43,8 +44,10 @@ export interface Issue {
   group: IssueGroup
   kind: IssueKind
   severity: IssueSeverity
-  /** How many things the issue covers (sessions, frames, runs). */
+  /** How many things the issue covers (sessions, frames, runs, duplicate groups). */
   count: number
+  /** Bytes the issue covers: the extra copies of duplicates; absent for other kinds. */
+  bytes?: number
   /** Value for the copy's `{name}`: the location, run or session the issue is about; an operation's title is a ref, worded by `issueCopy`. */
   name: string | MessageRef | null
   /** Id of the one record the issue is about (location, run, session, master, process); null for a count. */
@@ -57,16 +60,6 @@ export const SEVERITY_ORDER: IssueSeverity[] = ["danger", "warning", "info"]
 
 export function worstSeverity(issues: Issue[]): IssueSeverity | null {
   return SEVERITY_ORDER.find((s) => issues.some((i) => i.severity === s)) ?? null
-}
-
-/** Worst first; stable, so equal severities keep their order (the hub's group order). */
-export function bySeverity(a: { severity: IssueSeverity }, b: { severity: IssueSeverity }): number {
-  return SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)
-}
-
-/** Bar order, shared by the status bar and Home: worst first, then hub group order. `issues` is in hub order, as `deriveIssues` returns it. */
-export function inBarOrder(issues: Issue[]): Issue[] {
-  return [...issues].sort(bySeverity)
 }
 
 /** Every issue, in group order and worst first within a group. */
@@ -89,6 +82,18 @@ export function deriveIssues(world: World): Issue[] {
       out.push({ id: `location:denied:${location.id}`, group: "storage", kind: "location-denied", severity: "danger", count: 1, name: location.displayName, about: location.id, link: { to: "/settings/locations" } })
     } else if (locationAvailability(disk, location) === "offline") {
       out.push({ id: `location:offline:${location.id}`, group: "storage", kind: "location-offline", severity: "warning", count: 1, name: location.displayName, about: location.id, link: { to: "/settings/locations" } })
+    }
+  }
+
+  // Duplicates the latest scan found, narrowed to copies still live: counted as the extra copies (every copy beyond the one each group keeps) and their bytes.
+  const scan = lastDuplicateScan(operations)
+  if (scan?.groups && scan.operation.status === "succeeded") {
+    const live = new Map(duplicateCopies(catalog).map((g) => [g.assetId, g]))
+    const groups = scan.groups.flatMap((g) => live.get(g.assetId) ?? [])
+    const copies = groups.reduce((n, g) => n + g.paths.length - 1, 0)
+    if (copies > 0) {
+      const bytes = groups.reduce((n, g) => n + g.extraBytes, 0)
+      out.push({ id: "storage:duplicates", group: "storage", kind: "duplicates", severity: "warning", count: copies, bytes, name: null, about: null, link: { to: "/settings/locations", search: { duplicates: "review" } } })
     }
   }
 
@@ -144,78 +149,6 @@ export function deriveIssues(world: World): Issue[] {
 
   const rank = (i: Issue) => ISSUE_GROUPS.indexOf(i.group) * 10 + SEVERITY_ORDER.indexOf(i.severity)
   return out.sort((a, b) => rank(a) - rank(b))
-}
-
-/** The status bar's chips (P-SB2): each groups one or more issue kinds. */
-export type StatusChipId = "offline" | "failed" | "blocked" | "needs-target" | "not-in-project" | "calibration" | "master-offer" | "drift"
-
-/**
- * The chip each issue kind shows under. Keyed by every `IssueKind`, so a new
- * kind fails to compile until it has a chip. Invariant: every issue lands in
- * exactly one chip, so the issues the chips cover are exactly `useIssues()`
- * and the bar's total agrees with the Issues button.
- */
-export const STATUS_CHIP_OF: Record<IssueKind, StatusChipId> = {
-  "needs-target": "needs-target",
-  "not-in-project": "not-in-project",
-  "location-denied": "offline",
-  "location-offline": "offline",
-  "work-failed": "failed",
-  "work-interrupted": "failed",
-  "calibration-failed": "failed",
-  "calibration-review": "blocked",
-  "run-blocked": "blocked",
-  "master-offer": "master-offer",
-  "calibration-waiting": "calibration",
-  drift: "drift",
-}
-
-export interface StatusChip {
-  id: StatusChipId
-  /** What the chip counts: locations, failed work and calibrations, blocked runs, sessions, processes, offers, changed frames and masters. */
-  count: number
-  severity: IssueSeverity
-  /** In hub order. */
-  issues: Issue[]
-}
-
-/** The status bar's issues at every density, each in bar order: worst first, then hub group order. */
-export interface StatusIssues {
-  /** Each issue as its own named pill. */
-  pills: Issue[]
-  /**
-   * The chips left when the first `k` pills are named: `chipsAfter[k]` groups
-   * the other issues by `STATUS_CHIP_OF`, a chip with no issue left out.
-   * `chipsAfter[0]` groups every issue; `chipsAfter[pills.length]` is empty.
-   */
-  chipsAfter: StatusChip[][]
-}
-
-/** `issues` (in hub order) grouped by `STATUS_CHIP_OF`. A blocked run counts once even when it is held at Calibrate and blocked elsewhere. */
-function groupByChip(issues: Issue[]): StatusChip[] {
-  const grouped = new Map<StatusChipId, Issue[]>()
-  for (const issue of issues) {
-    const id = STATUS_CHIP_OF[issue.kind]
-    grouped.set(id, [...(grouped.get(id) ?? []), issue])
-  }
-  // A chip's first issue fixes its place in hub order; the stable sort keeps that order within a severity.
-  const chips = [...grouped].map(([id, mine]): StatusChip => ({
-    id,
-    count: id === "blocked" ? new Set(mine.map((i) => i.about)).size : mine.reduce((n, i) => n + i.count, 0),
-    severity: worstSeverity(mine)!,
-    issues: mine,
-  }))
-  return chips.sort(bySeverity)
-}
-
-/** The status bar's issues, from the same derivation as the hub, so their numbers agree. */
-export function statusIssues(issues: Issue[]): StatusIssues {
-  const pills = inBarOrder(issues)
-  const chipsAfter = pills.map((_, k) => {
-    const named = new Set(pills.slice(0, k))
-    return groupByChip(issues.filter((issue) => !named.has(issue)))
-  })
-  return { pills, chipsAfter: [...chipsAfter, []] }
 }
 
 /** Open Projects with a blocked run: the Projects source-list badge. */

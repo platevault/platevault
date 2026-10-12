@@ -34,12 +34,10 @@ import { RunGroupPage } from "@/features/v5/c-runs/group"
 import { RunPage } from "@/features/v5/c-runs/run"
 import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
 import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
-import { PlanPage } from "@/features/v5/e-targets-plan-settings/plan"
 import { CalibrationSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-calibration"
 import { EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
 import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-goal-templates"
 import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
-import { StoragePage } from "@/features/v5/e-targets-plan-settings/storage"
 import { TargetPage } from "@/features/v5/e-targets-plan-settings/target"
 import { TargetsPage } from "@/features/v5/e-targets-plan-settings/targets"
 import { runPipeline } from "@/domain/derive"
@@ -112,16 +110,29 @@ const groupIndexRoute = createRoute({
 })
 const groupRoute = page("/projects/$projectId/groups/$groupId/$step", RunGroupPage)
 
-// S10 Targets, S11 Plan.
+// S10 Targets. `/plan` (S11, merged into Targets by P-PLAN2) redirects to the Planned view, or a Project-scoped Plan to that Project's Targets.
 const targetsRoute = page("/targets", TargetsPage)
 const targetRoute = page("/targets/$targetId", TargetPage)
-const planRoute = page("/plan", PlanPage)
+const planRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/plan",
+  validateSearch: looseSearch,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/targets", search: { ...search, view: search.project ? undefined : "planned" } })
+  },
+})
 
-// Library: S12 Sessions, S14 Calibration, S15 Storage. Footer: S17 Activity.
+// Library: S12 Sessions, S14 Calibration; `/storage` (S15, P-STO2) redirects to Settings › Locations. Footer: S17 Activity.
 const sessionsRoute = page("/sessions", SessionsPage)
 const sessionRoute = page("/sessions/$sessionId", SessionPage)
 const calibrationRoute = page("/calibration", CalibrationPage)
-const storageRoute = page("/storage", StoragePage)
+const storageRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/storage",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/locations" })
+  },
+})
 const activityRoute = page("/activity", ActivityPage)
 
 // S16 Settings: v4's settled sections plus Equipment, Goal templates and Naming.

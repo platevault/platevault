@@ -47,7 +47,8 @@ export function SessionPage() {
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const m = useMessages()
   if (!session) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} />
-  return session.imageType === "light" ? <SessionDetail sessionId={sessionId} /> : <CalibrationSession session={session} />
+  // Keyed by session: the Confirm Target / rig choices start from this session's own value, never the previous session's.
+  return session.imageType === "light" ? <SessionDetail key={sessionId} sessionId={sessionId} /> : <CalibrationSession session={session} />
 }
 
 function processPill(m: Messages, status: ProcessStatus): { label: string; tone: Tone } {
@@ -359,6 +360,8 @@ function Metadata({ state, session }: { state: PrototypeState; session: Session 
   const typedAtImport = first && first.imageType !== first.observed.imageType
   const items = [
     { label: m.session_observing_night(), value: formatNight(session.night, true) },
+    // OBJECT is a label and filter, never Target evidence.
+    { label: m.session_header_label(), value: sourced(session.objectLabel ?? m.session_none(), fromHeader("OBJECT")) },
     { label: m.session_started(), value: sourced(formatDateTime(session.startedAt), fromHeader("DATE-OBS")) },
     { label: m.session_ended(), value: formatDateTime(session.endedAt) },
     { label: m.session_frame_type(), value: typedAtImport ? sourced(typeLabel(m, first.imageType), m.session_typed_at_import()) : sourced(typeLabel(m, session.imageType), fromHeader("IMAGETYP")) },
