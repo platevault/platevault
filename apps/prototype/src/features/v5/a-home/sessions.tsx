@@ -281,23 +281,6 @@ export function SessionsPage() {
           }
         />
         {unusableOffer ? <OfferRefusals refusals={unusableOffer.refusals} /> : null}
-        {selectedRows.length > 0 ? (
-          <div className="space-y-1.5">
-            <SelectionBar
-              count={selectedRows.length}
-              hiddenByFilters={hiddenSelected}
-              label={m.project_sessions_selected({ count: selectedRows.length })}
-              onClear={() => setSelected([])}
-              actions={
-                <Button size="sm" variant="outline" disabled={archiveBlocked !== null} onClick={() => setArchiving(true)} data-archive-sessions>
-                  <Archive data-icon="inline-start" aria-hidden="true" />
-                  {m.wrapup_archive_ellipsis()}
-                </Button>
-              }
-            />
-            {archiveBlocked ? <Refusal {...archiveBlocked} /> : null}
-          </div>
-        ) : null}
         <DataTable
           label={m.sessions_table_label({ filter: filterLabel(m, filter) })}
           rows={shown}
@@ -333,6 +316,20 @@ export function SessionsPage() {
             />
           }
         />
+        <SelectionBar
+          count={selectedRows.length}
+          hiddenByFilters={hiddenSelected}
+          label={m.project_sessions_selected({ count: selectedRows.length })}
+          onClear={() => setSelected([])}
+          actions={
+            <Button size="sm" variant="outline" disabled={archiveBlocked !== null} onClick={() => setArchiving(true)} data-archive-sessions>
+              <Archive data-icon="inline-start" aria-hidden="true" />
+              {m.wrapup_archive_ellipsis()}
+            </Button>
+          }
+        >
+          {archiveBlocked ? <Refusal {...archiveBlocked} /> : null}
+        </SelectionBar>
       </PageBody>
       <AddToProjectDialog pending={adding} onClose={() => setAdding(null)} onAdded={setNotice} />
       <ConfirmDialog

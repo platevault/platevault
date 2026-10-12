@@ -20,6 +20,7 @@ import { type Blocker, Refusal } from "@/components/app/refusal"
 import { type MenuEntry, RowContextMenu } from "@/components/app/row-menu"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useMessages } from "@/app/preferences"
 import { gateWord, StepRail, stepName, useFollowLink } from "@/app/run-ui"
@@ -397,6 +398,10 @@ function candidateFilters(m: Messages): Array<[CandidateFilter, string]> {
   ]
 }
 
+function matchesCandidateFilter(row: CandidateRow, filter: CandidateFilter): boolean {
+  return filter === "unreviewed" ? row.unreviewed > 0 : filter === "ready" ? row.runs.length === 0 : true
+}
+
 export function CandidatesSection({ project }: { project: Project }) {
   const m = useMessages()
   const navigate = useNavigate()
@@ -409,9 +414,9 @@ export function CandidatesSection({ project }: { project: Project }) {
   const flagged = useStore((s) =>
     projectRuns(s.catalog, project.id).flatMap((run) => runRefresh(s.catalog, run).noLongerMatching.map((sessionId) => ({ run, session: s.catalog.sessions[sessionId] }))),
   )
-  const shown = rows.filter((r) => (filter === "unreviewed" ? r.unreviewed > 0 : filter === "ready" ? r.runs.length === 0 : true))
+  const shown = rows.filter((r) => matchesCandidateFilter(r, filter))
   const unreviewedFrames = rows.reduce((n, r) => n + r.unreviewed, 0)
-  const ready = rows.filter((r) => r.runs.length === 0).length
+  const ready = rows.filter((r) => matchesCandidateFilter(r, "ready")).length
   const open = project.state === "open"
   const live = selected.filter((id) => rows.some((r) => r.session.id === id))
 
@@ -521,30 +526,17 @@ export function CandidatesSection({ project }: { project: Project }) {
         <Empty>{m.project_no_candidates()}</Empty>
       ) : (
         <div className="space-y-2 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1" role="group" aria-label={m.project_candidates_filter()}>
-              {candidateFilters(m).map(([value, label]) => (
-                <Button key={value} size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>
+          <ToggleGroup aria-label={m.project_candidates_filter()} size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setFilter(value[0] as CandidateFilter)}>
+            {candidateFilters(m).map(([value, label]) => {
+              const count = rows.filter((r) => matchesCandidateFilter(r, value)).length
+              return (
+                <ToggleGroupItem key={value} value={value} className="gap-1.5">
                   {label}
-                </Button>
-              ))}
-            </div>
-            {live.length > 0 ? (
-              <SelectionBar
-                count={live.length}
-                label={m.project_sessions_selected({ count: live.length })}
-                onClear={() => setSelected([])}
-                actions={
-                  open ? (
-                    <Button size="sm" onClick={() => startFrom(live)}>
-                      <Play aria-hidden="true" data-icon="inline-start" />
-                      {m.startrun_title()}
-                    </Button>
-                  ) : null
-                }
-              />
-            ) : null}
-          </div>
+                  <CountBadge count={count} tone={value === "unreviewed" && count > 0 ? "warning" : "neutral"} />
+                </ToggleGroupItem>
+              )
+            })}
+          </ToggleGroup>
           {refusal ? <Refusal {...refusal} /> : null}
           <CommitOutcome result={start.result} action={m.startrun_refusal()} />
           <DataTable
@@ -556,6 +548,19 @@ export function CandidatesSection({ project }: { project: Project }) {
             contextMenu={menu}
             scroll="none"
             empty={<Empty>{filter === "unreviewed" ? m.project_none_unreviewed() : m.project_all_in_runs()}</Empty>}
+          />
+          <SelectionBar
+            count={live.length}
+            label={m.project_sessions_selected({ count: live.length })}
+            onClear={() => setSelected([])}
+            actions={
+              open ? (
+                <Button size="sm" onClick={() => startFrom(live)}>
+                  <Play aria-hidden="true" data-icon="inline-start" />
+                  {m.startrun_title()}
+                </Button>
+              ) : null
+            }
           />
         </div>
       )}

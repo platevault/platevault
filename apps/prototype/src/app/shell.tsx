@@ -143,7 +143,8 @@ function NavLink({ to, label, icon: Icon, collapsed, current, holds, badge }: { 
 
 /**
  * Below 768 px (WCAG 1.4.10 reflow, 1280 px at 200 % and up) the sidebar
- * leaves the layout and opens as an overlay from the header instead.
+ * stays as its icon rail and the header opens the labelled list as an
+ * overlay, so it never leaves the window.
  */
 const NARROW_QUERY = "(max-width: 767.98px)"
 
@@ -316,9 +317,8 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
   )
 }
 
-function Sidebar() {
+function Sidebar({ collapsed }: { collapsed: boolean }) {
   const m = useMessages()
-  const { sidebarCollapsed: collapsed } = useShellUi()
   return (
     <aside className={cn("flex shrink-0 flex-col border-r border-separator bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-60")} aria-label={m.shell_sidebar()}>
       <SidebarContent collapsed={collapsed} />
@@ -327,7 +327,7 @@ function Sidebar() {
 }
 
 /**
- * The sidebar as an overlay below 768 px, opened from the header. Choosing a
+ * The labelled sidebar as an overlay below 768 px, opened from the header over the icon rail. Choosing a
  * link closes it and focus moves to the new page's heading; Escape or the
  * backdrop returns focus to the menu button.
  */
@@ -543,11 +543,11 @@ function routeFocusTarget(anchorId: string | null): HTMLElement | null {
   return target
 }
 
-/** The single scroll container; the skip link targets it. */
+/** The single scroll container; the skip link targets it. Its scroll padding leaves a shown SelectionBar's height free (`--selection-bar-h`). */
 function MainArea({ children }: { children: ReactNode }) {
   const announcement = useRouteFocus()
   return (
-    <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
+    <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col scroll-pb-(--selection-bar-h) overflow-y-auto outline-none">
       <p className="sr-only" aria-live="polite" data-route-announcer="">
         {announcement}
       </p>
@@ -579,7 +579,7 @@ function AppFrame({ children }: { children: ReactNode }) {
     <div className="flex h-dvh flex-col overflow-hidden">
       <SkipLink />
       <div className="flex min-h-0 flex-1">
-        {narrow ? null : <Sidebar />}
+        <Sidebar collapsed={narrow || sidebarCollapsed} />
         <div className="flex min-w-0 flex-1 flex-col">
           <header data-chrome className="z-20 flex h-10 min-w-0 shrink-0 flex-nowrap items-center gap-1.5 border-b border-separator bg-chrome px-2">
             {narrow ? (
