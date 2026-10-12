@@ -1,13 +1,13 @@
 ---
 id: J28
 title: Archive a finished Project's sessions from Wrap up, and a session in no Project from Sessions, with verified transfer and run reference repair
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [archive, wrap-up, projects, sessions, view-review, preparation, locations, activity, status-bar, issues]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W46, D-W72, P-WRAP1, P-ARC1, P-STO2, P-SB3, P-PREP2, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#S17, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W46, D-W72, P-WRAP1, P-ARC1, P-STO2, P-SB3, P-PREP3, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#S17, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd]
 ---
 
 ## Goal
@@ -15,7 +15,7 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 07
 Once every run of Project `NGC 7000 HOO` is Complete, the user archives its
 member sessions from the Archive step of the Project's Wrap up stage, to an
 archive location chosen there, in one reviewed transfer. The transfer also
-repoints the symlinks of the Project's Link to originals run, and the user can
+repoints the symlinks of the Project's runs, and the user can
 trust that no source is retired before its destination copy and every affected
 reference are verified. Later the user archives a session that is in no
 Project from Sessions, through the same reviewed transfer. Done means: 18, 24,
@@ -27,7 +27,7 @@ destination and reference verification, while it still matched its copied
 snapshot. An interrupted, failing or drifted item keeps its source and its
 recorded phase, readable in the transfer's Activity entry. The membership of
 `NGC7000-HOO-Siril` is unchanged, it still leaves out the six rejected 30 Sep
-frames, its cloned entries are untouched, and its archived inputs read Offline
+frames, its symlinks follow its archived inputs, and those inputs read Offline
 when `Archive` is unplugged. `4 Oct M 33`, in no Project, lives on the Default
 `Archive/Long-term` after its own reviewed transfer. When the archive location
 is later retired in Settings › Locations, its copies read Retired, leave
@@ -35,7 +35,7 @@ totals, change no file and stay named in the runs.
 
 ## Preconditions
 
-- P1: Fresh replay of J34 through S5: the `NGC 7000 HOO` Wrap up stage is current, with Clean up runs Skipped (J34/S3b) and Trash and Archive To do. The Archive review was read and cancelled, no frame has been trashed, and the Project is open. Every remaining run of the Project is Complete; J27/S14b and J34/S3a emptied the others from the Project Trash, which is now empty. J25 and run Clean up (J27/S4 to J27/S11a) were not run, so `NGC7000-HOO-Siril` reads Complete and keeps its 208 cloned frame entries and its masters' entries under `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` on `Astro-T7`, and the Link to originals run `26 Sep symlink check` (J34/P1) reads Complete with its 35 symlinks to the 26 Sep captures. The open Project `NGC 7000 Ha deep` has the runs `Ha deep v1` (Complete) and `Ha deep` (Prepared), each with 28 Sep as a member. 30 Sep is only a candidate of the open Project `NGC 7000 SHO`. Siril is not running.
+- P1: Fresh replay of J34 through S5: the `NGC 7000 HOO` Wrap up stage is current, with Clean up runs Skipped (J34/S3b) and Trash and Archive To do. The Archive review was read and cancelled, no frame has been trashed, and the Project is open. Every remaining run of the Project is Complete; J27/S14b and J34/S3a emptied the others from the Project Trash, which is now empty. J25 and run Clean up (J27/S4 to J27/S11a) were not run, so `NGC7000-HOO-Siril` reads Complete and keeps its 208 symlink frame entries and its masters' entries under `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` on `Astro-T7`, and the Symlinks run `26 Sep symlink check` (J34/P1) reads Complete with its 35 symlinks to the 26 Sep captures. The open Project `NGC 7000 Ha deep` has the runs `Ha deep v1` (Complete) and `Ha deep` (Prepared), each with 28 Sep as a member. 30 Sep is only a candidate of the open Project `NGC 7000 SHO`. Siril is not running.
 - P2: The J34/P9 volume `Archive`, with free space for the four archived sessions and `4 Oct M 33`, holds the archive locations `Archive/NGC7000`, marked Default in Settings › Locations, and `Archive/Long-term`. A second disposable volume can be mounted under the same name `Archive`.
 - P3: The J19/P5 manifest and a SHA-256 list of the five member sessions' files are recorded. `Cold-1` stays offline.
 - P4: A fault control makes the repoint of one named symlink of `26 Sep symlink check` fail until it is released: the symlink of the 26 Sep frame F-ref, which is not the P5 frame (fault fixture for S8; G3).
@@ -78,9 +78,9 @@ totals, change no file and stay named in the runs.
 ### S4 — Read the reference updates {#S4}
 
 - **Do:** In the review, open the reference entries of `26 Sep symlink check` and `NGC7000-HOO-Siril`.
-- **Expect:** `26 Sep symlink check` lists its 35 symlinks, each with its current target under `Astro-T7/Captures/` and its new target under `Archive/NGC7000`, to be repointed when 26 Sep moves. `NGC7000-HOO-Siril` is listed as affected, because 152 of its members move, and proposes no update to its prepared entries, because each one is a clone.
-- **Expect (negative):** The review offers no reference-mode choice, and no entry changes kind: no clone is replaced by a link, and no symlink by a copy. No hard link is proposed.
-- **Trace:** flow J · STO-FR-06 · STO-AC-10 · HARNESS-V5-FEEDBACK-R1.md §Input modes (P-PREP2; "Archiving with links": a symlinked entry is repointed when its session moves; hard links removed as a mode) · G7
+- **Expect:** `26 Sep symlink check` lists its 35 symlinks, each with its current target under `Astro-T7/Captures/` and its new target under `Archive/NGC7000`. They are repointed when 26 Sep moves. `NGC7000-HOO-Siril` lists the symlinks of its 152 members that move, each with its current and new target, to be repointed the same way. It lists none for its 56 28 Sep members.
+- **Expect (negative):** The review offers no reference-mode choice, and no entry changes kind: no symlink is replaced by a copy.
+- **Trace:** flow J · STO-FR-06 · STO-AC-10 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("Archiving with links": a symlinked entry is repointed when its session moves), §Round 7 P-PREP3 · G7
 
 ### S5 — Review and approve the transfer {#S5}
 
@@ -118,7 +118,7 @@ totals, change no file and stay named in the runs.
 ### S8 — Inspect a failed reference rebuild {#S8}
 
 - **Do:** When the transfer settles, open its per-item outcomes in its Activity entry, and the P4 frame F-ref.
-- **Expect:** Each affected reference reports completed, blocked, or uncertain. F-ref's symlink repoint reads blocked, its symlink still points at its source path, and its source is retained. The S7a item still reads blocked by drift. Every other archived item reads source retired only after its destination and references verified, and each of the 33 other 26 Sep symlinks points at its `Archive/NGC7000` path. `NGC7000-HOO-Siril` reads 208 lights / 17h 20m, still leaves out the six rejected 30 Sep frames and still reads Complete. Its cloned entries match their J34/P10 listing, and its 28 Sep members still resolve on `Astro-T7`.
+- **Expect:** Each affected reference reports completed, blocked, or uncertain. F-ref's symlink repoint in `26 Sep symlink check` reads blocked: that symlink still points at its source path, and the source is retained. The S7a item still reads blocked by drift. Every other archived item reads source retired only after its destination and references verified. Each of the 33 other 26 Sep symlinks of that run points at its `Archive/NGC7000` path. `NGC7000-HOO-Siril` reads 208 lights / 17h 20m, still leaves out the six rejected 30 Sep frames and still reads Complete. Its symlinks to retired sources point at their `Archive/NGC7000` paths, and its 28 Sep symlinks still resolve on `Astro-T7`.
 - **Expect (negative):** The blocked item's source is not retired. The identity-preserving reference repair reopens neither run and creates no membership or preparation revision, and no prepared entry changes kind.
 - **Trace:** flow J open sequencing detail · STO-FR-07 · STO-AC-10 · root FR-011, SC-007 · D06, D09 · HARNESS-V5-FEEDBACK-R1.md §Input modes (Q-ARCHIVE-LINKS)
 
@@ -131,7 +131,7 @@ totals, change no file and stay named in the runs.
 ### S9a — Resolve the drifted item {#S9a}
 
 - **Do:** Restore the P5 frame's original bytes and recorded mtime, review the item's current evidence, and choose **Retry** for it in the transfer's Activity entry.
-- **Expect:** The current source matches its snapshot again, the destination and its references re-verify, and only then is the source retired. With every item settled, 18, 24, 26 and 30 Sep read Archived, all 35 symlinks of `26 Sep symlink check` point at `Archive/NGC7000`, and the Project still reads open.
+- **Expect:** The current source matches its snapshot again, the destination and its references re-verify, and only then is the source retired. With every item settled, 18, 24, 26 and 30 Sep read Archived, all 35 symlinks of `26 Sep symlink check` and the 152 repointed symlinks of `NGC7000-HOO-Siril` point at `Archive/NGC7000`, and the Project still reads open.
 - **Expect (negative):** The archived copy still matches P3, and no other item changes phase.
 - **Trace:** flow J · HARNESS-V5-IA.md S9 · STO-FR-07 · STO-AC-14 · D06, D19
 
@@ -155,10 +155,10 @@ totals, change no file and stay named in the runs.
 
 ### S10 — Unplug the archive later {#S10}
 
-- **Do:** Unplug `Archive`. Open NGC 7000, then `NGC7000-HOO-Siril`, and read its members. Then open `26 Sep symlink check` and click **Open in Siril**.
-- **Expect:** Captured and usable totals and the membership of `NGC7000-HOO-Siril` are unchanged, and its 152 archived members read Offline. Opening `26 Sep symlink check` is refused because its 35 inputs are unavailable, with the options to reconnect the archive or review another verified location.
-- **Expect (negative):** Unavailable inputs are not omitted from the handoff.
-- **Trace:** flow J · STO-FR-08, VSEL-FR-09 · STO-AC-07 · D-W3 · G10
+- **Do:** Unplug `Archive`. Open NGC 7000, then `NGC7000-HOO-Siril`, read its members and click **Open in Siril**. Then open `26 Sep symlink check` and click **Open in Siril**.
+- **Expect:** Captured and usable totals and the membership of `NGC7000-HOO-Siril` are unchanged, and its 152 archived members read Offline. Opening `NGC7000-HOO-Siril` is refused because its 152 archived inputs are unavailable, and opening `26 Sep symlink check` is refused because its 35 inputs are, each with the options to reconnect the archive or review another verified location.
+- **Expect (negative):** Unavailable inputs are not omitted from the handoff, and neither run opens on a partial folder.
+- **Trace:** flow J · STO-FR-08, VSEL-FR-09 · STO-AC-07 · D-W3 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3
 
 ### S11 — Review retiring the lost archive {#S11}
 
@@ -176,13 +176,13 @@ totals, change no file and stay named in the runs.
 
 ### S12 — Retire the location {#S12}
 
-- **Do:** Confirm the fresh **Retire location** review. Read Settings › Locations and the Wrap up Archive step's Destination. Open Sessions, NGC 7000 and `NGC7000-HOO-Siril`. Then open `26 Sep symlink check` and click **Open in Siril**.
+- **Do:** Confirm the fresh **Retire location** review. Read Settings › Locations and the Wrap up Archive step's Destination. Open Sessions, NGC 7000 and `NGC7000-HOO-Siril`, and click **Open in Siril** there. Then open `26 Sep symlink check` and click **Open in Siril**.
 - **Expect:**
   - The location reads Retired, and its 158 copies read Retired. The Archive step's Destination no longer lists `Archive/NGC7000`, and `Archive/Long-term` keeps its Default pill. Sessions still lists `4 Oct M 33` as Archived at its `Archive/Long-term` path.
   - NGC 7000 captured integration falls by exactly 13h 10m, and its usable integration counts no retired copy.
-  - `NGC7000-HOO-Siril` still lists its 208 members, still leaves out the six rejected 30 Sep frames and reads Complete. Each of its 152 archived members is named unresolved and Retired, and its 56 28 Sep members still resolve. Opening `26 Sep symlink check` is refused and names its 35 retired inputs.
+  - `NGC7000-HOO-Siril` still lists its 208 members, still leaves out the six rejected 30 Sep frames and reads Complete. Each of its 152 archived members is named unresolved and Retired, and its 56 28 Sep members still resolve. Opening it is refused and names its 152 retired inputs. Opening `26 Sep symlink check` is refused and names its 35 retired inputs.
 - **Expect (negative):** No copy reads Missing. Each run's membership, rejections and prepared revision are unchanged, and no retired copy is offered as an input.
-- **Trace:** flow A4 · HARNESS-V5-IA.md S9, S16 · P-ARC1 · LIB-FR-15, VSEL-FR-09 · LIB-AC-16 · D02, D11 · G10
+- **Trace:** flow A4 · HARNESS-V5-IA.md S9, S16 · P-ARC1 · LIB-FR-15, VSEL-FR-09 · LIB-AC-16 · D02, D11 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3
 
 ### S13 — Register the archive folder again {#S13}
 
@@ -196,9 +196,9 @@ totals, change no file and stay named in the runs.
 - SC1: 0 sources are retired before their destination hash and all affected references verify (S6, S8, S9).
 - SC2: After S6, 100% of unretired sources match P3.
 - SC3: `NGC7000-HOO-Siril` reads 208 / 17h 20m, leaves out the 6 rejected 30 Sep frames and stays Complete before and after the transfer (S1, S8, S10).
-- SC4: 0 prepared entries change kind and 0 reference-mode choices are offered. After S9a, 35 of 35 symlinks of `26 Sep symlink check` point at `Archive/NGC7000`, and F-ref's source is retired only after its repoint verifies (S4, S8, S9, S9a).
+- SC4: 0 prepared entries change kind and 0 reference-mode choices are offered. After S9a, 35 of 35 symlinks of `26 Sep symlink check` and 152 of `NGC7000-HOO-Siril` point at `Archive/NGC7000`, and F-ref's source is retired only after its repoint verifies (S4, S8, S9, S9a).
 - SC5: The impostor volume blocks approval (S2).
-- SC6: With `Archive` unplugged, Open of `26 Sep symlink check` is refused and 0 inputs are omitted (S10).
+- SC6: With `Archive` unplugged, Open of `NGC7000-HOO-Siril` and of `26 Sep symlink check` is refused and 0 inputs are omitted (S10).
 - SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
 - SC8: Retiring changes 0 files and 0 copies read Missing (S12). After S13 captured integration rises by exactly 11h 30m, the 18, 26 and 30 Sep lights, so no capture is counted twice and no retired association transfers.
 - SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
@@ -208,16 +208,16 @@ totals, change no file and stay named in the runs.
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S9, S12, S16 and S17; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1 and Round 5 P-STO2, P-SB3 and Sessions, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775; Input modes P-PREP2 @ d609ff55), the specs and the defaults that the authorized autonomous run set in decisions D06, D09, D11 and D19, and the workflow decisions D-W3, D-W20, D-W26 and D-W46. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S9, S12, S16 and S17; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1 and Round 5 P-STO2, P-SB3 and Sessions, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775; Round 7 P-PREP3 @ 12638a7c), the specs and the defaults that the authorized autonomous run set in decisions D06, D09, D11 and D19, and the workflow decisions D-W3, D-W20, D-W26 and D-W46. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised. Blocks readiness.
 - G3: Unresolved implementation qualification: no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification. Blocks readiness.
-- G4: Out of scope for this journey: the file list of a **Give PixInsight the file list** run (P-PREP2, which replaces Direct source), whose paths a move affects, is not exercised because no journey prepares such a run. Blocks readiness until covered by a step or a journey.
+- G4: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: there is no file-list mode, so every run's inputs are links or copies in its run folder.
 - G5: Unresolved implementation qualification: no fault control yet pauses an item after destination verification and before retirement (P5). S7a depends on it, and no source-retirement acceptance is complete until S7a passes. Blocks readiness.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Archive… from Sessions"; S9b and S9c now assert that a session in no Project is archived from Sessions through the same reviewed transfer as Wrap up, to the Default `Archive/Long-term`, with nothing moved before approval. Archiving part of a Project from Sessions stays open as G9.
-- G7: (dissolved 2026-10-12): answered by §Input modes P-PREP2 "Archiving with links" (Q-ARCHIVE-LINKS); hard links are no longer a mode, so S4, S8, S9 and SC4 now assert that the symlinks of `26 Sep symlink check` are repointed, that the clones of `NGC7000-HOO-Siril` need no update, and that no reference-mode choice is offered.
+- G7: (dissolved 2026-10-12): answered by §Input modes "Archiving with links" (Q-ARCHIVE-LINKS) and §Round 7 P-PREP3 (no hard links); S4, S8, S9 and SC4 assert that the symlinks of both `26 Sep symlink check` and `NGC7000-HOO-Siril` are repointed and that no reference-mode choice is offered.
 - G8: Out of scope for this journey: Restore of the Archived sessions after the Project is Reopened is J34's (S12a). Library-wide duplicate copies are J39's.
 - G9: Unresolved product question: Round 6 lets Sessions archive sessions that are in no Project, but says nothing about a selection that also holds a session of a Project, a candidate or a member of a run, or about archiving part of an open Project before its Wrap up (STO-FR-06 still offers Archive for selected sessions). S9b selects only a session in no Project. Blocks readiness until a human decides.
-- G10: Unresolved product question: under P-PREP2 the entries of `NGC7000-HOO-Siril` are independent, read-only clones, so with `Archive` unplugged (S10) or retired (S12) its run folder still holds every verified input. STO-FR-08 and VSEL-FR-09 refuse opening while inputs are Offline or Retired, a guard written for links. Whether **Open in Siril** on that run is refused, or opens from its verified entries while naming its originals Offline or Retired, is not decided, so S10 and S12 check the refusal only on the symlink run `26 Sep symlink check`. Blocks readiness until a human decides.
+- G10: (dissolved 2026-10-12): answered by §Round 7 P-PREP3. The entries of `NGC7000-HOO-Siril` are symlinks, so with `Archive` unplugged or retired its run folder holds no readable input. STO-FR-08 and VSEL-FR-09 refuse Open on it as on `26 Sep symlink check`, and S10 and S12 assert both refusals.
 
 ## Delta log
 
@@ -232,3 +232,6 @@ totals, change no file and stay named in the runs.
   Round 6: a session in no Project is archived from Sessions (select, then Archive…) through the same reviewed transfer as Wrap up (new S9b, S9c; G6 dissolved). The six 30 Sep frames are rejected, not excluded.
   P-PREP2: hard links are gone, so the reference-mode choice is retired. `NGC7000-HOO-Siril` holds clones that need no update, and the Link to originals run `26 Sep symlink check` has its symlinks repointed, with one failed repoint retried (G7 dissolved). Its Open is the one refused while inputs are Offline or Retired (G10).
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Archive… from Sessions", "Reject is library-wide by default" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); §Input modes (user, 2026-10-10) P-PREP2, "Archiving with links" (@ d609ff55); user answers to the PR #1788 journey questions · by: JourneysV5.R6E (intent-gated)
+- **Δ5** 2026-10-12 · S4, S8, S9a, S10, S12 · behavior-change
+  P-PREP3: `NGC7000-HOO-Siril` holds symlinks, so Archive repoints the symlinks of its 152 moved members as well as those of `26 Sep symlink check`, and Open on either run is refused while the archive is Offline or Retired (G10 dissolved).
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c) · by: JourneysV5.R7Prep3 (intent-gated)

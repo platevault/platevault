@@ -1,13 +1,13 @@
 ---
 id: J23
 title: Calibrate a processing run automatically, resolve an exception and choose an application profile
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [calibration, view-review, preparation, projects, applications]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/features/v5/c-runs/calibrate-step.tsx, apps/prototype/src/features/v5/c-runs/prepare-step.tsx, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, P-PREP2]
+trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5-user-2026-10-10, P-CAL3, apps/prototype/src/features/v5/c-runs/calibrate-step.tsx, apps/prototype/src/features/v5/c-runs/prepare-step.tsx, apps/prototype/src/domain/calibration.ts, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3]
 ---
 
 ## Goal
@@ -139,14 +139,14 @@ correction reaches the application. Done means:
 ### S9 — See the generic alternative {#S9}
 
 - **Do:** In the Prepare step of `24 Sep flat check`, choose **Other app** under Application.
-- **Expect:** It reads `Not verified` and `Writes unknown`, and its executable and launch arguments are set in Settings › Applications (J41). Under Input mode, **Automatic** is chosen and picks **Independent copy**, and **Independent copy** and **Link to originals** are offered.
-- **Expect (negative):** **Give PixInsight the file list** is not offered, because Other app is not WBPP. No `Linked run`, `Direct source`, separate `Clone` or hard-link mode is offered.
-- **Trace:** flow E3 alternative · PREP-FR-02, PREP-FR-04 · PREP-AC-11 · D04 · HARNESS-V5-IA.md §Screens S5 (Prepare: mode) · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 · G7
+- **Expect:** It reads `Not verified` and `Writes unknown`, and its executable and launch arguments are set in Settings › Applications (J41). Run view reads **Symlinks**, the Settings default, and offers **Copies**.
+- **Expect (negative):** Run view offers no third mode: no file list, hard link or junction.
+- **Trace:** flow E3 alternative · PREP-FR-02, PREP-FR-04 · PREP-AC-11 · D04 · HARNESS-V5-IA.md §Screens S5 (Prepare: mode) · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 · G7
 
 ### S10 — See a corrected value {#S10}
 
 - **Do:** In `NGC7000-HOO-Siril`, open **Review preparation** and open the 28 Sep entry.
-- **Expect:** The review shows the catalog's effective focal length from the confirmed equipment (J19/S10) next to the value Siril will read from the header (absent). The options are: supported application configuration, patched independent copies, accept the source-header value, or exclude the inputs.
+- **Expect:** The review shows the catalog's effective focal length from the confirmed equipment (J19/S10) next to the value Siril will read from the header (absent). The options are: supported application configuration, patched copies (Copies run view), accept the source-header value, or exclude the inputs.
 - **Trace:** flow E4 · PREP-FR-03 · D15
 
 ### S11 — Accept the source value for this handoff {#S11}
@@ -166,19 +166,19 @@ correction reaches the application. Done means:
 - SC6: 100% of calibration inputs are masters, and the kept raw bias frames are listed as an input or candidate 0 times (S4a).
 - SC7: `MasterFlat_2026-09-30.xisf` is used by exactly 2 runs and `MasterFlat_2026-09-26.xisf` by exactly 1 (S7b).
 - SC8: PlateVault creates 0 calibration files, and the manifest equals P5 at S11.
-- SC9: The Siril profile shows its capability evidence (S8). **Other app** reads Not verified, with **Automatic** picking **Independent copy** and **Give PixInsight the file list** not offered (S9).
+- SC9: The Siril profile shows its capability evidence (S8). **Other app** reads Not verified, with Run view offering exactly **Symlinks** (preselected) and **Copies** (S9).
 - SC10: For 28 Sep the review names the header value as effective and claims no delivered correction (S11).
 - SC11: Dismissing a master that 2 runs use is refused with both runs named, and 0 assignments change (S7c).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe: `HARNESS-V5-IA.md` §Screens S5, S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3 and §Round 5 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), §Round 6 (@ 4f470775) and §Input modes P-PREP2 (@ d609ff55); the prototype does not implement Round 6 or P-PREP2 yet. It also follows the specs, the decisions D04, D13, D15 and D19 set by the authorized autonomous run, and the workflow decisions D-W3 to D-W55 cited above. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe: `HARNESS-V5-IA.md` §Screens S5, S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3 and §Round 5 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), §Round 6 (@ 4f470775) and §Round 7 P-PREP3 (@ 12638a7c); the prototype does not implement Round 6 or P-PREP3 yet. It also follows the specs, the decisions D04, D13, D15 and D19 set by the authorized autonomous run, and the workflow decisions D-W3 to D-W55 cited above. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. The PixInsight/WBPP and SETI Astro Suite Pro profiles are not exercised in this journey. Blocks readiness.
 - G3: Out of scope for this journey: per-panel calibration in a mosaic run group (CAL-FR-11, CAL-AC-13) is covered by J33/S7.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Calibration Off"; S7a now asserts that with **Auto-assign** off the 3 compatible masters read Suggested, none is assigned, and only an accepted one becomes a handoff input.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S7 now asserts that the run starts auto-named `NGC 7000 RedCat` and is renamed `24 Sep flat check` on the run header.
 - G6: Out of scope for this journey: when no master matches a requirement and a raw session that would stack into one awaits Stack, the row offers `Stack from <session>`, which opens that calibration process at `/calibration?process=` (P-CAL3; prototype `stackOffers`). No J36 fixture leaves a requirement without a master. Blocks readiness until covered by a step or a journey.
-- G7: Unresolved product question: P-PREP2 makes **Link to originals** opt-in with a warning and re-hashes the originals after the run, but does not say whether it stays blocked for a profile whose input-write behavior is unknown or write-prone, as PREP-AC-11 and D04 blocked linked modes. S9 asserts only that it is offered beside **Independent copy**, not whether choosing it is refused. Blocks readiness.
+- G7: Unresolved product question: P-PREP3 makes **Symlinks** the default run view. It does not say whether Symlinks stays allowed for a profile whose input-write behavior is unknown or write-prone, as PREP-AC-11 and D04 blocked linked modes. RUN-VIEWS-OPTIONS.md finds that Siril SER inputs write through a symlink. S9 asserts only that Symlinks is preselected for **Other app**, not whether preparing with it is refused. Blocks readiness.
 
 ## Delta log
 
@@ -193,3 +193,6 @@ correction reaches the application. Done means:
   A new run starts auto-named `NGC 7000 RedCat` and is renamed on the run header. With **Auto-assign** off, compatible masters read Suggested and wait for acceptance. Dismissing a master that runs use is refused with the runs named.
   Prepare's input modes are **Automatic**, **Independent copy**, **Link to originals** and **Give PixInsight the file list** (WBPP only); `Linked run`, `Direct source` and `Clone` are gone.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Calibration Off", "Rename runs and Projects", "Dismiss is refused while a run uses the master" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); §Input modes (user, 2026-10-10) P-PREP2 (@ d609ff55); user answers to the PR #1788 journey questions · by: JourneysV5.R6D (intent-gated)
+- **Δ5** 2026-10-12 · S9, S10 · behavior-change
+  Prepare's Run view offers **Symlinks** (the Settings default) and **Copies**; the Automatic, file-list and linked-originals modes are gone. A patched correction reaches the application through Copies.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)

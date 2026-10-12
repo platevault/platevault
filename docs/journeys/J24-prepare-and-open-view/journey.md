@@ -1,27 +1,30 @@
 ---
 id: J24
 title: Prepare a verified run folder beside its Results folder and open the application
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [preparation, view-review, projects, status-bar]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W49, D-W51, D-W67, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes, P-PREP2, INPUT-MODES-RESEARCH.md]
+trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W49, D-W51, D-W67, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#c-run-and-run-group, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-PREP3, RUN-VIEWS-OPTIONS.md]
 ---
 
 ## Goal
 
-The user turns the reviewed run into one verified input layout and opens the
+The user turns the reviewed run into one verified run view and opens the
 application, without omitting any selected input, reusing any existing folder,
-or changing any original. Prepare's input mode is Automatic by default: every
-input gets an independent copy, cloned where the volume can clone and copied
-otherwise, and Prepare shows the real extra space it took. The run prepares
-into `<output>/<Project>/<Run>/`, and its Results go to the sibling
-`<Run> Results/` folder unless the user picks another Results location.
+or changing any original. Prepare's run view is Symlinks by default, as set in
+Settings: the run folder holds symlinks to the catalogue originals and takes no
+space. Copies is the alternative: the run folder holds temporary copies, which
+are removed when the run completes. On Windows, Symlinks need Windows Developer
+Mode. The run prepares into `<output>/<Project>/<Run>/`, and its Results go to
+the sibling `<Run> Results/` folder unless the user picks another Results
+location.
 
 Done means:
-- `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` reads Prepared only after its 208 frame entries match the confirmed membership. Every entry is recorded as cloned, and the footprint reads "0 B extra · cloned".
+- `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` reads Prepared only after its 208 frame entries match the confirmed membership. Every entry is a symlink to its catalogue original, and the footprint reads "Linked · 0 B".
+- On Windows with Developer Mode off, Prepare in Symlinks is refused and creates nothing.
 - Results are recorded at `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril Results/`.
 - Siril opens on that preparation only after its entries re-verify, and quitting Siril leaves the run not Complete.
 - A partial preparation names its blocked inputs and offers no verified Open. Retry completes only the recorded items. While Prepare runs, the run can be neither completed nor moved to the Project's Trash.
@@ -30,36 +33,33 @@ Done means:
 ## Preconditions
 
 - P1: J23 completed.
-- P2: The Siril profile's capability evidence (J23/S8) records that Siril needs a folder of frames and does not write into its input files. If that evidence is unknown or write-prone, Link to originals is blocked (D04), and S3 changes accordingly (G2).
-- P3: Folders `Processing/` and `Outputs/` exist on the `Astro-T7` volume (shown below as `Work/Processing` and `Work/Outputs`), which also holds the captures and the Calibration library. Both are writable, with free space for two full copies of the 28 Sep session. `Astro-T7` clones within one volume (APFS on macOS; Btrfs or XFS with reflink, or ReFS, elsewhere) and supports symbolic links.
-- P4: A network share `Scratch` is mounted with `Processing/` writable. The share supports no links and no OS Trash (macOS deletes immediately there), and a file prepared there from `Astro-T7` is a plain copy. `Scratch/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/keep.txt` exists with unrelated content and a recorded SHA-256.
+- P2: The Siril profile's capability evidence (J23/S8) records that Siril needs a folder of frames and does not write into its input files. If that evidence is unknown or write-prone, whether Symlinks stays choosable is an open product question (J23/G7), and S1 depends on the probe (G2).
+- P3: Folders `Processing/` and `Outputs/` exist on the `Astro-T7` volume (shown below as `Work/Processing` and `Work/Outputs`), which also holds the captures and the Calibration library. Both are writable, with free space for two full copies of the 28 Sep session. `Astro-T7` supports symbolic links.
+- P4: A network share `Scratch` is mounted with `Processing/` writable. The share holds no symlinks and has no OS Trash (macOS deletes immediately there), so a file prepared there from `Astro-T7` is a copy. `Scratch/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/keep.txt` exists with unrelated content and a recorded SHA-256.
 - P5: No run has been prepared in this catalog, so no last-used parent exists.
 - P6: The J19/P5 manifest is available.
 - P7: One of the three 28 Sep frames made unreadable in S15 is named. A backup of its original bytes and nanosecond mtime is kept outside PlateVault, together with a replacement file of identical size and different pixel bytes. A fault control pauses Prepare after that item's source snapshot is recorded and before terminal success (G5).
-- P8: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime is kept outside PlateVault, together with a same-size variant whose pixel bytes differ. The read-only flag of that frame's prepared entry can be cleared outside PlateVault.
+- P8: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime is kept outside PlateVault, together with a same-size variant whose pixel bytes differ.
+- P9: Settings › Applications' Default run view reads Symlinks. On the `desktop-ui` (Windows) lane, Windows Developer Mode is off at the start, and the validator can turn it on in Windows Settings. The `desktop-ui-macos` lane has no Developer Mode prerequisite.
 
 ## Steps
 
-### S1 — Read the input modes {#S1}
+### S1 — Read the run view modes {#S1}
 
-- **Do:** In `NGC7000-HOO-Siril`, open the Prepare step. Read the Application and Input mode sections, then choose Siril under Application.
-- **Expect:** Application lists the application profiles by name, each with Verified or Not verified, Read-only, Write-prone or Writes unknown, and a ① marker whose tooltip holds its capability evidence; Siril reads Verified and Read-only. Once Siril is chosen, the Application profile check reads met. Input mode reads Automatic, chosen by default, and offers Independent copy, Link to originals and Give PixInsight the file list as overrides. Each names its semantics in a help tip: Automatic picks the safest option for each item; Independent copy gives the application its own copy of every input, cloned where the volume can clone and copied otherwise; Link to originals points the run folder at the originals; Give PixInsight the file list places nothing in the run folder. The Input mode check reads met with Automatic.
-- **Expect (negative):** No mode that points at the originals is chosen for the user, and Prepare… is not refused for want of an input mode.
-- **Trace:** flow F1 · PREP-FR-04 · D04 · HARNESS-V5-IA.md S5 Prepare ("profile, mode") · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("three Prepare modes, Automatic by default") · INPUT-MODES-RESEARCH.md §10 · prototype c-runs/prepare-step.tsx ProfileSection
+- **Do:** In `NGC7000-HOO-Siril`, open the Prepare step. Read the Application and Run view sections, then choose Siril under Application.
+- **Expect:** Application lists the application profiles by name, each with Verified or Not verified, Read-only, Write-prone or Writes unknown, and a ① marker whose tooltip holds its capability evidence; Siril reads Verified and Read-only. Once Siril is chosen, the Application profile check reads met. Run view reads Symlinks, the Settings default, and offers Copies. Each names its semantics in a help tip: Symlinks puts symlinks to the catalogue originals in the run folder ("Linked · 0 B"); Copies puts temporary copies there, removed when the run completes ("N frames copied · X GB").
+- **Expect (negative):** Run view offers exactly these two modes. Switching between them links, copies or writes nothing and asks for no confirmation.
+- **Trace:** flow F1 · PREP-FR-04 · D04 · HARNESS-V5-IA.md S5 Prepare ("profile, mode") · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("two view modes, Symlinks by default", "a default in Settings") · RUN-VIEWS-OPTIONS.md · prototype c-runs/prepare-step.tsx ProfileSection
 
-### S2 — Try Give PixInsight the file list {#S2}
+### S1a — Meet the Windows Developer Mode refusal {#S1a}
 
-- **Do:** Try to choose **Give PixInsight the file list** and read why it is unavailable.
-- **Expect:** With Siril chosen it reads not available, because Siril always needs a folder of frames. Input mode stays Automatic, and Independent copy and Link to originals stay choosable.
-- **Expect (negative):** No handoff of the source folders is offered: Siril is never handed the 30 Sep folder, which also holds the six rejected frames.
-- **Trace:** flow F1 direct-source branch, cross-flow "Direct-source exclusion unsupported by tool" · PREP-FR-05 · PREP-AC-04 · root FR-005 · D04 · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("Give PixInsight the file list: WBPP only. Siril always needs a folder.")
-
-### S3 — Read the Link to originals warning {#S3}
-
-- **Do:** Choose **Link to originals**, read its warning and cancel it. Choose it again and confirm the warning. Then choose **Automatic** again.
-- **Expect:** The warning names that the run folder points at the originals, that an application that edits a frame edits the original, and that PlateVault re-hashes the originals after the run. After cancelling, Input mode still reads Automatic. After confirming, the Input mode check reads Link to originals. After choosing Automatic again, it reads Automatic.
-- **Expect (negative):** Input mode does not become Link to originals without that confirmation, and switching modes links, copies or writes nothing. Choosing Automatic asks for no confirmation.
-- **Trace:** flow F1 · PREP-FR-04 · PREP-AC-08 · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("Link to originals (opt-in, with a warning)", "The originals are re-hashed after the run") · G2
+- **Do:** On the `desktop-ui` lane, with Developer Mode off (P9), click **Prepare…** and open the refusal's disclosure. Choose **Use copies for this run**, then read Run view and the Default run view in Settings › Applications. Choose **Symlinks** again and click **Prepare…**. Choose **Open Windows settings**, turn Developer Mode on, return to PlateVault and click **Check again**.
+- **Expect:**
+  - Prepare is refused: "Can't prepare · symlinks need Windows Developer Mode ▸", and the disclosure offers **Open Windows settings**, **Check again** and **Use copies for this run**.
+  - After **Use copies for this run**, Run view reads Copies for this run, and Default run view still reads Symlinks. Choosing Symlinks again brings the refusal back.
+  - **Open Windows settings** opens Windows Settings at its Developer Mode setting. After **Check again**, the refusal clears, Run view reads Symlinks and its check reads met.
+- **Expect (negative):** Nothing is created under `Work/Processing` while Prepare is refused. Run view becomes Copies only when the user chooses **Use copies for this run**, and that choice leaves the Settings default unchanged. On the `desktop-ui-macos` lane the step is skipped: Prepare shows no Developer Mode check and is never refused for it.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Windows prerequisite": checked in setup, in Settings and at Prepare), Copy rules (terse refusals)
 
 ### S4 — Choose a parent where the run folder exists {#S4}
 
@@ -92,8 +92,8 @@ Done means:
 
 - **Do:** Read the Prepare step's Review section, then click **Prepare…** and read the confirmation.
 - **Expect:**
-  - The Review section shows `208 frames` and the count of masters assigned in J23. Its checks read met: Run state, Saved membership (the saved revision), Calibration, Application profile (Siril), Input mode Automatic, Run folder, Free space as "<bytes> of <free> free", Source presence as "N sources readable", and Inputs.
-  - The confirmation is titled "Prepare NGC7000-HOO-Siril?", names Siril and the Automatic input mode, and lists "Creates Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril" and the N entries it writes, with N the 208 frames plus the assigned masters.
+  - The Review section shows `208 frames` and the count of masters assigned in J23. Its checks read met: Run state, Saved membership (the saved revision), Calibration, Application profile (Siril), Run view Symlinks, Run folder, Free space as "<bytes> of <free> free", Source presence as "N sources readable", and Inputs.
+  - The confirmation is titled "Prepare NGC7000-HOO-Siril?", names Siril and the Symlinks run view, and lists "Creates Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril" and the N entries it writes, with N the 208 frames plus the assigned masters.
   - Its button reads "Prepare N inputs" with the same N.
 - **Expect (negative):** Nothing is created under `Work/Processing` before the confirmation is accepted in S9. Unknown or omitted inputs are not counted as prepared. No calibration input that reads Suggested or Needs review is handed off. The confirmation lists no "Unchanged" or "What stays" items.
 - **Trace:** flow F4 · PREP-FR-08 · PREP-AC-01, PREP-AC-13 · CAL-FR-08 · D02, D-W5 · HARNESS-V5-FEEDBACK-R1.md Copy rules ("No 'Unchanged / What stays' lists") · prototype c-runs/prepare-step.tsx prepareChanges
@@ -101,9 +101,9 @@ Done means:
 ### S9 — Prepare the run {#S9}
 
 - **Do:** Click **Prepare N inputs** in the confirmation. Watch the status bar and the Preparation section until it settles.
-- **Expect:** The Preparation section shows the operation as Running with progress, and the status bar's middle shows it as running work with a mini progress bar. It ends Prepared only after the 208 prepared frame entries match the confirmed membership and their source snapshots, and the status bar then reads Idle. The Preparation section reads Prepared, shows the folder `NGC7000-HOO-Siril/`, the mode Automatic with every entry recorded as cloned, the membership revision it prepared and the time, a footprint reading "0 B extra · cloned", "Prepared · N/N", "Blocked · 0" and **Open in Siril**. Each entry is read-only once verified. In the step bar Prepare reads Prepared, and Next reads "Open in application".
-- **Expect (negative):** The start acknowledgment does not read as success. No entry is a link to an original. The manifest still equals P6, and no library quality state changes.
-- **Trace:** flow F5 · PREP-FR-09, PREP-FR-10 · root SC-003 · VSEL-FR-11 · HARNESS-V5-FEEDBACK-R1.md §C ("show the footprint (prepared bytes) there"), Round 5 P-SB3 (running work in the status bar), §Input modes P-PREP2 ("Footprint is real", "Entries are made read-only once verified")
+- **Expect:** The Preparation section shows the operation as Running with progress, and the status bar's middle shows it as running work with a mini progress bar. It ends Prepared only after the 208 prepared frame entries match the confirmed membership and their source snapshots, and the status bar then reads Idle. The Preparation section reads Prepared, shows the folder `NGC7000-HOO-Siril/`, the run view Symlinks with every entry a symlink to its catalogue original, the membership revision it prepared and the time, a footprint reading "Linked · 0 B", "Prepared · N/N", "Blocked · 0" and **Open in Siril**. In the step bar Prepare reads Prepared, and Next reads "Open in application".
+- **Expect (negative):** The start acknowledgment does not read as success. No entry is a copy. The manifest still equals P6, and no library quality state changes.
+- **Trace:** flow F5 · PREP-FR-09, PREP-FR-10 · root SC-003 · VSEL-FR-11 · HARNESS-V5-FEEDBACK-R1.md §C ("show the footprint (prepared bytes) there"), Round 5 P-SB3 (running work in the status bar), §Round 7 P-PREP3 ("Symlinks (default)": "Linked · 0 B")
 
 ### S10 — Open with a missing executable {#S10}
 
@@ -112,16 +112,16 @@ Done means:
 - **Expect (negative):** The run stays Prepared, with its decisions and entries unchanged.
 - **Trace:** flow F6 failure branch · PREP-FR-10 · PREP-AC-10 · HARNESS-V5-FEEDBACK-R1.md Copy rules (terse refusals) · prototype c-runs/actions.ts openPreparation
 
-### S10a — Open after an entry changed {#S10a}
+### S10a — Open after an original changed {#S10a}
 
-- **Do:** Restore Siril to its located path. Overwrite the P8 frame's original in place with its variant, restore its recorded mtime, read its entry in the Preparation section, and compute the entry's SHA-256 outside PlateVault. Then, outside PlateVault, clear the read-only flag on that frame's entry in `NGC7000-HOO-Siril/`, overwrite the entry with the variant, and click **Open in Siril**.
-- **Expect:** The P8 entry reads cloned and read-only. After the original changes, the entry still holds its prepared bytes: its SHA-256 equals the P8 backup's. After the entry itself is overwritten, Siril is not launched. Open is refused with the P8 entry named as "Changed since its preparation snapshot: its SHA-256 differs.". The Preparation section reads Unverified, with "Unverified since <time> · 1 entry changed" naming that entry.
-- **Expect (negative):** Changing the original changes no prepared entry, and Open does not launch on the changed entry. PlateVault writes nothing to the frame or its entry.
-- **Trace:** flow F6 failure branch, cross-flow "External changes" · PREP-FR-10 · PREP-AC-15 · D19 · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("Independent copy", "Entries are made read-only once verified")
+- **Do:** Restore Siril to its located path. Overwrite the P8 frame's original in place with its variant, restore its recorded mtime, read its entry in the Preparation section, and click **Open in Siril**.
+- **Expect:** The P8 entry reads as a symlink to that original. Siril is not launched: Open is refused with the P8 entry named as "Changed since its preparation snapshot: its SHA-256 differs.". The Preparation section reads Unverified, with "Unverified since <time> · 1 entry changed" naming that entry.
+- **Expect (negative):** Open does not launch on the changed entry. PlateVault writes nothing to the frame or its entry.
+- **Trace:** flow F6 failure branch, cross-flow "External changes" · PREP-FR-10 · PREP-AC-15 · D19 · HARNESS-V5-IA.md S5 Prepare ("Open re-verifies") · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 (the run folder holds symlinks to the catalogue originals)
 
 ### S11 — Open Siril {#S11}
 
-- **Do:** Restore the P8 frame's original bytes and recorded mtime, and overwrite its entry with the same backup bytes. Click **Open in Siril**, inspect the prepared inputs in Siril, then quit Siril.
+- **Do:** Restore the P8 frame's original bytes and recorded mtime. Click **Open in Siril**, inspect the prepared inputs in Siril, then quit Siril.
 - **Expect:** Open re-verifies every entry against its preparation snapshot, then Siril opens on the prepared run folder. A notice reads "Opened NGC7000-HOO-Siril in Siril" with "N entries re-verified before launch; Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril.", the Unverified state clears, and the last launch reads "Opened". PlateVault records the launch separately from processing completion.
 - **Expect (negative):** Quitting Siril does not mark the run Complete; its header still reads Open and offers **Complete**.
 - **Trace:** flow F6 · PREP-FR-10 · PREP-AC-10, PREP-AC-15 · root edge "External application exit" · HARNESS-V5-IA.md S5 Prepare ("Open re-verifies")
@@ -135,16 +135,16 @@ Done means:
 
 ### S13 — Meet a destination that cannot link {#S13}
 
-- **Do:** Remount `Scratch`. Choose `Scratch/Processing` as the run folder's parent. Read the Input mode section and the Review checks, then try to choose **Link to originals**.
-- **Expect:** The layout preview reads `Scratch/Processing/NGC 7000 HOO/28 Sep Ha copy check/`. Link to originals reads blocked, with blockers that name the missing link support at that destination, and cannot be chosen. Input mode stays Automatic, and Automatic and Independent copy stay choosable, each with its semantics.
-- **Expect (negative):** Nothing is written to `Scratch` before a preparation is confirmed. No mode silently becomes another: Input mode changes only when the user chooses one.
-- **Trace:** flow F4, cross-flow "Unsupported input mode" · PREP-FR-04, PREP-FR-06, PREP-FR-08 · PREP-AC-03 · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 · INPUT-MODES-RESEARCH.md §10 ("Run folder on NAS, source local": never Link to originals) · prototype c-runs/prepare-step.tsx ModeSection
+- **Do:** Remount `Scratch`. Choose `Scratch/Processing` as the run folder's parent. Read the Run view section and the Review checks, then choose **Copies**.
+- **Expect:** The layout preview reads `Scratch/Processing/NGC 7000 HOO/28 Sep Ha copy check/`. With Symlinks, the Run view check reads blocked with "Scratch: no symlinks", and Prepare cannot start. After choosing Copies, the check reads met, and Run view's help tip reads that the copies are removed when the run completes.
+- **Expect (negative):** Nothing is written to `Scratch` before a preparation is confirmed. Run view does not become Copies until the user chooses it.
+- **Trace:** flow F4, cross-flow "Unsupported input mode" · PREP-FR-04, PREP-FR-06, PREP-FR-08 · PREP-AC-03 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Copies") · prototype c-runs/prepare-step.tsx ModeSection, messages/en-GB.json `run_mode_no_symlinks`
 
 ### S14 — Choose patched copies and another Results parent {#S14}
 
-- **Do:** Read the Results line. Choose **Independent copy**, and in Corrected metadata choose **Patched copy** for the 28 Sep correction. Click **Change Results location...** and choose `Work/Outputs`.
+- **Do:** Read the Results line. In Corrected metadata choose **Patched copy** for the 28 Sep correction. Click **Change Results location...** and choose `Work/Outputs`.
 - **Expect:** Before the change, the Results line reads `28 Sep Ha copy check Results/` beside the run folder, at `Scratch/Processing/NGC 7000 HOO/`, the default. The patched effective focal length shows for every copy, the Corrected metadata check reads met, and the Results location reads `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`.
-- **Expect (negative):** Results are not written to `Work/Outputs` itself, to `Work/Outputs/28 Sep Ha copy check Results/` without the Project level, or inside the run folder. Patched copy is never accepted with Link to originals or Give PixInsight the file list.
+- **Expect (negative):** Results are not written to `Work/Outputs` itself, to `Work/Outputs/28 Sep Ha copy check Results/` without the Project level, or inside the run folder. Patched copy is never accepted with Symlinks.
 - **Trace:** flow E4, F3 · PREP-FR-03, PREP-FR-07 · D15, D-W51 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Results location override stays" (default: beside the run folder)
 
 ### S15 — Prepare with blocked inputs {#S15}
@@ -169,9 +169,9 @@ Done means:
 ### S16 — Retry and verify custody {#S16}
 
 - **Do:** Restore the P7 frame's original bytes and recorded mtime, and choose **Retry**. Then compare a prepared copy's header with its original and recompute the manifest.
-- **Expect:** Retry prepares the journaled entry only after its source matches a fresh snapshot and its copy re-reads to match. The run reads Prepared, with 56 entries matching its membership, every entry recorded as copied, and its footprint reads the 56 copies' size as copied, in the form "12.4 GB copied". The prepared copy carries the patched focal length.
-- **Expect (negative):** No entry reads cloned or linked, because `Scratch` can do neither. The original is byte-identical and the manifest equals P6. Retry does not infer completion from filenames already present.
-- **Trace:** flow F5 · PREP-FR-03, PREP-FR-09 · PREP-AC-06, PREP-AC-14 · D09, D15 · HARNESS-V5-FEEDBACK-R1.md §Input modes P-PREP2 ("Footprint is real": "12.4 GB copied")
+- **Expect:** Retry prepares the journaled entry only after its source matches a fresh snapshot and its copy re-reads to match. The run reads Prepared, with 56 entries matching its membership, every entry a copy, and its footprint reads "56 frames copied · 12.4 GB". The prepared copy carries the patched focal length.
+- **Expect (negative):** No entry is a symlink, because `Scratch` holds none. The original is byte-identical and the manifest equals P6. Retry does not infer completion from filenames already present.
+- **Trace:** flow F5 · PREP-FR-03, PREP-FR-09 · PREP-AC-06, PREP-AC-14 · D09, D15 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Copies": "N frames copied · X GB")
 
 ### S17 — Prepare a second revision {#S17}
 
@@ -193,24 +193,24 @@ Done means:
 - SC3: `keep.txt` and its folder are unchanged (S4), and no drive is substituted silently (S5).
 - SC4: The capture and calibration manifest equals P6 after S9 and after S16. Prepare changes 0 quality states.
 - SC5: The partial outcome reports exactly 53 prepared and 3 blocked, with no verified Open (S15). After Retry the run reads 56 Prepared (S16).
-- SC6: When linking is unsupported, Link to originals reads blocked while Automatic and Independent copy stay choosable, and 0 files reach `Scratch` before a preparation is confirmed (S13).
+- SC6: When the destination holds no symlinks, Symlinks reads blocked until the user chooses Copies, and 0 files reach `Scratch` before a preparation is confirmed (S13).
 - SC7: Launching and quitting Siril leave the run not Complete. A missing executable leaves it Prepared, with Open refused and the launch reading "Not located" (S10, S11).
 - SC8: Only the copies carry the patched value (S16).
 - SC9: The drifted P7 item reads Prepared 0 times while its source differs from its snapshot (S15a), and the manifest equals P6 after S16.
-- SC10: Siril launches 0 times while the P8 entry differs from its snapshot (S10a), and it launches after the S11 re-verification. Changing the P8 original changes its cloned entry 0 times (S10a).
+- SC10: Siril launches 0 times while the P8 entry differs from its snapshot (S10a), and it launches after the S11 re-verification.
 - SC11: Revision 2 lands in a new `(rev 2)` folder, with 55 entries. The first folder still holds its 56 entries, both revisions share one Results folder, and the Project-only reject changes library quality 0 times (S17).
 - SC12: While Prepare runs, **Complete** and **Move to Trash** are each refused with the running preparation named. After S15, `28 Sep Ha copy check` is still on the Project's run list, outside the Project's Trash, with its folders in place.
-- SC13: The footprint reads "0 B extra · cloned" for `NGC7000-HOO-Siril`, with every entry recorded as cloned (S9), and the 56 copies' size as copied for `28 Sep Ha copy check`, with all 56 entries recorded as copied (S16).
-- SC14: Input mode reads Automatic until the user chooses another; Link to originals is chosen only after its warning is confirmed (S3), and Give PixInsight the file list is available for Siril 0 times (S2).
+- SC13: The footprint reads "Linked · 0 B" for `NGC7000-HOO-Siril`, with every entry a symlink (S9), and "56 frames copied · 12.4 GB" for `28 Sep Ha copy check`, with every entry a copy (S16).
+- SC14: Run view reads Symlinks, the Settings default, until the user chooses Copies (S1, S13). On Windows with Developer Mode off, Prepare in Symlinks is refused with its three actions, **Use copies for this run** changes the Settings default 0 times, and **Check again** clears the refusal once Developer Mode is on (S1a).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (`apps/prototype/design/HARNESS-V5-IA.md` S5 and Fix pass, `HARNESS-V5-FEEDBACK-R1.md` Copy rules, §B, §C and Round 5, on `ui-harness-v5` @ b5e813a5, Round 6 @ 4f470775 and §Input modes P-PREP2 @ d609ff55), the specs, the decisions D02, D04, D09, D13, D15 and D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
-- G2: Unresolved implementation qualification: Siril's exact handoff and its input-write behavior (P2) need a profile capability probe (D04). S3 depends on it. Blocks readiness.
-- G3: Out of scope for this journey: Automatic deciding per item across mixed volumes, so that one preparation holds both cloned and copied entries (D04, PREP-FR-08), and the re-hash of the originals after a Link to originals run, are not exercised. Blocks readiness until covered by a step or a journey.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (`apps/prototype/design/HARNESS-V5-IA.md` S5 and Fix pass, `HARNESS-V5-FEEDBACK-R1.md` Copy rules, §B, §C and Round 5, on `ui-harness-v5` @ b5e813a5, Round 6 @ 4f470775 and Round 7 P-PREP3 @ 12638a7c), the specs, the decisions D02, D04, D09, D13, D15 and D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
+- G2: Unresolved implementation qualification: Siril's exact handoff and its input-write behavior (P2) need a profile capability probe (D04). S1 depends on it. Blocks readiness.
+- G3: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: Run view is one mode per run, Symlinks or Copies, so no preparation mixes entry kinds, and no original is re-hashed after a run.
 - G4: Unresolved implementation qualification: the specs do not say which preparation phases offer Cancel or Pause "where safe". The Canceled and Paused outcomes are not exercised. Blocks readiness.
 - G5: Unresolved implementation qualification: no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it. Blocks readiness.
-- G6: (dissolved 2026-10-12): answered by §Input modes P-PREP2 (hard links are no longer a mode of their own, Automatic is the default, Link to originals is opt-in with a warning); S1 now asserts Automatic preselected, S3 the Link to originals warning and its confirmation, S9 and S16 the real footprint ("0 B extra · cloned", the copied size), and S10a an entry that an original's change cannot reach.
+- G6: (dissolved 2026-10-12): answered by §Round 7 P-PREP3 (Symlinks by default from Settings, Copies as the alternative, no hard links or junctions); S1 asserts Symlinks preselected, S1a the Windows Developer Mode refusal, S9 and S16 the footprints ("Linked · 0 B", "56 frames copied · 12.4 GB"), and S10a an original's change caught when Open re-verifies.
 - G7: (dissolved 2026-10-12): answered by Round 6 "Results location override stays"; S14 now asserts the default Results folder beside the run folder and the override to `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`.
 - G8: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S12 now asserts the run starting as `NGC 7000 RedCat` and its rename on the run header to `28 Sep Ha copy check`.
 - G9: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S17 now makes revision 2 with "Reject for this Project only" on one 28 Sep frame, whose library quality stays Usable, as in J22/S11b.
@@ -221,11 +221,14 @@ Done means:
 - **Δ2** 2026-10-06 · S1, S4, S6, S7, S8, S9, S10, S12, S13, S14, S15, +S17 · behavior-change
   Views are processing runs in a Project. A run prepares to `<output>/<Project>/<Run>/`, Results go to the sibling `<Run> Results/`, and each new revision gets a `(rev 2)` folder that shares that one Results folder. The check runs are created in the Project, and their pickers start with every candidate selected. A running preparation refuses Move run to Trash exactly as it refuses Mark processing complete.
   Evidence: specs/069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-11, PREP-AC-01, PREP-AC-21. D-W3, D-W49, D-W51, D-W67 at e4476231. D-W67, D-W72. 069 PREP-FR-06, PREP-FR-07, PREP-FR-11 and PREP-AC-21 as amended. 070 RES-FR-07, RES-FR-10, RES-AC-20 · by: JourneysC (intent-gated)
-- **Δ3** 2026-10-12 · S1, S2, S3, S4, S6, S7, S8, S9, S10, S10a, S11, S12, S13, S14, S15, S15a, S16, S17 · behavior-change
+- **Δ3** 2026-10-12 · S1, old 2, old 3, S4, S6, S7, S8, S9, S10, S10a, S11, S12, S13, S14, S15, S15a, S16, S17 · behavior-change
   Prepare shows Application (profile cards with evidence), Input mode (Linked run, Direct source, Copy, Clone, none preselected) and a layout preview, with checks and a confirmation that names what it creates. The outcome shows the footprint (prepared bytes), "Partial 53/56" with Prepared and Blocked lists, and "(rev 2)".
   Open refuses tersely with its blockers ("Siril not located", changed entries), replacing Choose application / Reveal run folder. The header's actions read Complete and Move to Trash. Start run takes the profile as optional.
   Evidence: HARNESS-V5-IA.md §Screens S5 (Prepare: "profile, mode, layout preview, (rev N), Partial lists, Open re-verifies"; Refusals) and §Fix pass ("Gate words"); HARNESS-V5-FEEDBACK-R1.md §Copy rules, §Screens B (Start run sheet) and C ("show the footprint (prepared bytes)"), §Round 5 P-SB3; prototype src/features/v5/c-runs/prepare-step.tsx, actions.ts, run.tsx and messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U3Runs (intent-gated)
-- **Δ4** 2026-10-12 · S1, S2, S3, S8, S9, S10a, S11, S12, S13, S14, S16, S17 · behavior-change
+- **Δ4** 2026-10-12 · S1, old 2, old 3, S8, S9, S10a, S11, S12, S13, S14, S16, S17 · behavior-change
   Input mode is Automatic by default, with Independent copy, Link to originals (opt-in, with a warning) and Give PixInsight the file list (not for Siril); hard links and Direct source are gone. Entries are cloned or copied, read-only once verified, and the footprint shows the real extra space ("0 B extra · cloned", "12.4 GB copied").
   The check run starts auto-named and is renamed on the run header, keeps the Results location override, and gets revision 2 from a Project-only reject.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Rename runs and Projects", "Results location override stays", "Reject is library-wide by default" (apps/prototype/design/ on ui-harness-v5 @ 4f470775) and §Input modes (user, 2026-10-10) P-PREP2 (@ d609ff55; research INPUT-MODES-RESEARCH.md); user answers to the PR #1788 journey questions · by: JourneysV5.R6B (intent-gated)
+- **Δ5** 2026-10-12 · S1, +S1a, retired old 2 and 3, S8, S9, S10a, S11, S13, S14, S16 · behavior-change
+  Run view replaces Input mode: Symlinks by default from Settings ("Linked · 0 B"), or Copies, which are temporary and removed when the run completes ("56 frames copied · 12.4 GB"). On Windows, Prepare in Symlinks needs Developer Mode and is refused without it, offering Open Windows settings, Check again and Use copies for this run. Old steps 2 (the file-list mode) and 3 (the linked-originals warning) are retired, and no original is re-hashed after a run.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
