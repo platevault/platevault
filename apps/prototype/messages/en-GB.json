@@ -567,7 +567,33 @@
   "fields_token_omit": "Omit",
   "fields_token_omitted": "Omitted",
   "fields_template_preview": "Preview",
-  "confirm_changes": "This will",
+  "dialog_changes": "Changes",
+  "dialog_group": [
+    {
+      "declarations": [
+        "input label",
+        "input count",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{label} · {count} file · {size}",
+        "countPlural=*": "{label} · {count} files · {size}"
+      }
+    }
+  ],
+  "dialog_col_file": "File",
+  "dialog_col_from": "From",
+  "dialog_col_to": "To",
+  "dialog_col_size": "Size",
+  "dialog_col_status": "Status",
+  "dialog_to_trash": "Trash",
+  "dialog_to_unlink": "Link removed",
+  "dialog_to_move": "Moved",
+  "dialog_to_copy": "Copied",
   "confirm_unchanged": "Unchanged",
   "operation_progress_label": "{title} progress",
   "operation_progress_value": "{done} of {total} {unit}, {percent}",
@@ -7679,10 +7705,22 @@
   "theme_picker_theme": "Theme",
   "actions_blocked": "{action} blocked",
   "actions_for": "Actions for {name}",
-  "actions_confirm_group": [
+  "catalogue_dialogs_heading": "Dialogs",
+  "catalogue_dialogs_summary": "Every dialog ends in DialogFooter: Cancel first, then the one action, on every OS. The action is primary, or red when it is destructive.",
+  "catalogue_dialogs_confirm_caption": "Focus starts on Cancel when the action is destructive, else on the action. Escape cancels and focus returns to the button that opened the dialog. Tab to a group and press Enter or Space to unfold its files.",
+  "catalogue_dialogs_form_caption": "Focus starts on the first field and Enter submits, unless the action is destructive. Point at or Tab to an unavailable action for its reason.",
+  "catalogue_dialogs_state_default": "Default",
+  "catalogue_dialogs_state_destructive": "Destructive",
+  "catalogue_dialogs_state_busy": "Busy",
+  "catalogue_dialogs_state_error": "Error with Retry",
+  "catalogue_dialogs_state_unavailable": "Disabled with reason",
+  "catalogue_dialogs_state_folded": "File groups, folded",
+  "catalogue_dialogs_state_unfolded": "File groups, unfolded",
+  "catalogue_dialogs_state_title_only": "Title only",
+  "catalogue_dialogs_state_skip": "Optional step with Skip",
+  "catalogue_dialogs_trash_title": [
     {
       "declarations": [
-        "input label",
         "input count",
         "local countPlural = count: plural"
       ],
@@ -7690,11 +7728,28 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{label} · {count} file",
-        "countPlural=*": "{label} · {count} files"
+        "countPlural=one": "Move {count} file to Trash?",
+        "countPlural=*": "Move {count} files to Trash?"
       }
     }
   ],
+  "catalogue_dialogs_totals": [
+    {
+      "declarations": [
+        "input size",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{size} · {count} location",
+        "countPlural=*": "{size} · {count} locations"
+      }
+    }
+  ],
+  "catalogue_dialogs_proceed": "Proceed",
   "catalogue_actions_heading": "Actions",
   "catalogue_actions_summary": "One Action renders as a header button, a named menu item, a row ⋯ item, a context-menu item and a palette command, with the same label, shortcut and unavailable reason.",
   "catalogue_actions_roles_heading": "Button roles",

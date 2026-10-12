@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { DIALOG_WIDTH, type DialogSize } from "@/components/ui/dialog"
 import { useCloseUnmountFallback } from "@/components/ui/use-close-unmount-fallback"
 
 /** Unmounts on close even when a background tab pauses the exit animation (see useCloseUnmountFallback). */
@@ -44,9 +45,12 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  width = "sm",
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm"
+  /** The width from DIALOG_WIDTH at `size="default"`; default `sm`. `size="sm"` stays compact. */
+  width?: DialogSize
 }) {
   return (
     <AlertDialogPortal>
@@ -56,8 +60,9 @@ function AlertDialogContent({
         aria-modal="true"
         data-size={size}
         className={cn(
-          // Same height bound, inner scroll and footer-aware scroll padding as DialogContent.
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-data-[slot=alert-dialog-footer]:scroll-pb-20 data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // The L2 DialogFooter renders `dialog-footer` here too, so both slots get the footer-aware scroll padding.
+          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-xs -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-data-[slot=alert-dialog-footer]:scroll-pb-20 has-data-[slot=dialog-footer]:scroll-pb-20 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          size === "default" && DIALOG_WIDTH[width],
           className
         )}
         {...props}
@@ -82,6 +87,7 @@ function AlertDialogHeader({
   )
 }
 
+/** The footer's layout only; it decides no button order. Dialogs render the L2 `DialogFooter` (components/app/form-dialog.tsx), Cancel first (C1). */
 function AlertDialogFooter({
   className,
   ...props
