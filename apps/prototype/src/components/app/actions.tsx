@@ -136,8 +136,17 @@ function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
   return value instanceof Promise
 }
 
+export interface UseActionOptions {
+  /**
+   * Where focus goes after a confirmed action, when confirming unmounts its
+   * trigger (a batch action that empties the selection). Cancel and Escape
+   * still return focus to the trigger.
+   */
+  focusAfterConfirm?: () => HTMLElement | null | undefined
+}
+
 /** One runner per host (a header, a menu, a table): the dialog and the feedback of every action the host shows. */
-export function useAction(): ActionRunner {
+export function useAction({ focusAfterConfirm }: UseActionOptions = {}): ActionRunner {
   const m = useMessages()
   const [failure, setFailure] = useState<{ action: Action; result: Failure } | null>(null)
   const [pending, setPending] = useState<string | null>(null)
@@ -193,6 +202,7 @@ export function useAction(): ActionRunner {
         confirmLabel={spec.confirm.label}
         tone={spec.confirm.kind === "destructive" ? "destructive" : "default"}
         onConfirm={() => confirmRun(confirming.action)}
+        focusAfterConfirm={focusAfterConfirm}
       />
     ) : null
 
