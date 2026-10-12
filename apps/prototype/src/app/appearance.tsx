@@ -16,7 +16,10 @@ import { SYSTEM_THEMES, THEMES, type ThemeId, themeInfo } from "./themes"
 
 const OPTION = "flex cursor-default flex-col gap-1.5 rounded-md border border-border p-1.5 hover:bg-accent/60 has-data-checked:border-ring has-data-checked:bg-accent/40 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring"
 
-/** A miniature window in a theme: source list with its selection, toolbar, text, a primary button and the four status tones. */
+/**
+ * A miniature window in a theme: source list with its selection, toolbar, text, a primary button and the four status tones.
+ * @deprecated Use `ThemeSwatch` from `@/components/app/theme-picker`; removed in W4.
+ */
 export function ThemeSwatch({ id, className }: { id: ThemeId; className?: string }) {
   return (
     <span aria-hidden="true" data-theme={id} className={cn("flex h-14 min-w-0 overflow-hidden rounded-sm border border-border bg-background", themeInfo(id).scheme === "dark" && "dark", className)}>
@@ -43,6 +46,7 @@ export function ThemeSwatch({ id, className }: { id: ThemeId; className?: string
   )
 }
 
+/** @deprecated Use `ThemePicker` from `@/components/app/theme-picker` (mode first, then that mode's themes); removed in W4. */
 export function ThemePicker({ className }: { className?: string }) {
   const m = useMessages()
   const { theme } = usePreferences()

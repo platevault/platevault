@@ -228,7 +228,10 @@ function checklist(s: PrototypeState): ChecklistItem[] {
   ]
 }
 
-/** Home's Getting started box, until every step is done or it is dismissed. */
+/**
+ * Home's Getting started box, until every step is done or it is dismissed.
+ * @deprecated The checklist moves to `ChecklistRing` (`@/components/app/checklist`) in the sidebar footer; removed in W4.
+ */
 export function GettingStarted() {
   const m = useMessages()
   const items = useStore(checklist)

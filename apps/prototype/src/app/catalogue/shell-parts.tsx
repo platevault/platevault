@@ -1,0 +1,251 @@
+/**
+ * Catalogue entry (R9-COMPOSITION-PLAN §3.3 P14, §8.3): the shell parts.
+ * NavList (sidebar, rail, Settings; current, holds, badge, menu row),
+ * ChecklistRing (expanded, rail, with an unavailable step), IssueRow (open,
+ * not dismissable, dismissed) and ThemePicker (form and menu). Component
+ * content uses the real catalogue copy; the captions are reviewer labels.
+ * Links lead to real routes.
+ */
+import { Activity, Crosshair, FolderKanban, History, House, Layers, Palette, Settings, SlidersHorizontal } from "lucide-react"
+import { type ReactNode, useState } from "react"
+import { useMessages } from "@/app/preferences"
+import { type ChecklistSection, ChecklistRing } from "@/components/app/checklist"
+import { IssueRow } from "@/components/app/issue-row"
+import { type NavListGroup, NavList } from "@/components/app/nav-list"
+import { Section } from "@/components/app/page"
+import { ThemeMenuItems, ThemePicker } from "@/components/app/theme-picker"
+import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import type { Issue } from "@/domain/issues"
+import { useStore } from "@/store/core"
+
+function Row({ caption, children }: { caption: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[12rem_1fr] items-start gap-3">
+      <span className="pt-0.5 font-mono text-xs text-muted-foreground">{caption}</span>
+      <div className="flex min-w-0 flex-wrap items-start gap-3">{children}</div>
+    </div>
+  )
+}
+
+/** A sidebar-coloured strip, so the sidebar rows show on their own surface. */
+function Sidebar({ collapsed, children }: { collapsed?: boolean; children: ReactNode }) {
+  return <div className={collapsed ? "flex w-12 flex-col rounded-lg border border-border bg-sidebar" : "flex w-60 flex-col rounded-lg border border-border bg-sidebar"}>{children}</div>
+}
+
+function useNavGroups(): NavListGroup[] {
+  const m = useMessages()
+  const projects = useStore((s) => Object.values(s.catalog.projects).slice(0, 3))
+  return [
+    {
+      id: "primary",
+      items: [
+        { id: "home", label: m.nav_home(), icon: House, link: { to: "/" } },
+        { id: "projects", label: m.nav_projects(), icon: FolderKanban, link: { to: "/projects" }, badge: { count: 1, label: m.shell_nav_projects_badge({ count: 1 }), tone: "danger" } },
+        { id: "targets", label: m.nav_targets(), icon: Crosshair, link: { to: "/targets" } },
+      ],
+    },
+    {
+      id: "library",
+      heading: m.nav_library(),
+      items: [
+        { id: "sessions", label: m.nav_sessions(), icon: Layers, link: { to: "/sessions" }, badge: { count: 3, label: m.shell_nav_sessions_badge({ count: 3 }) } },
+        { id: "calibration", label: m.nav_calibration(), icon: SlidersHorizontal, link: { to: "/calibration" } },
+      ],
+    },
+    {
+      id: "recent",
+      heading: m.shell_nav_recent(),
+      items: [
+        {
+          id: "recent-projects",
+          label: m.nav_projects(),
+          icon: History,
+          items: projects.map((project) => ({ id: `project:${project.id}`, label: project.name, icon: FolderKanban, link: { to: "/projects/$projectId", params: { projectId: project.id } } })),
+        },
+      ],
+    },
+  ]
+}
+
+function useUtilityGroups(): NavListGroup[] {
+  const m = useMessages()
+  return [
+    {
+      id: "utility",
+      items: [
+        { id: "activity", label: m.nav_activity(), icon: Activity, link: { to: "/activity" } },
+        { id: "settings", label: m.nav_settings(), icon: Settings, link: { to: "/settings" } },
+      ],
+    },
+  ]
+}
+
+function useSettingsGroups(): NavListGroup[] {
+  const m = useMessages()
+  return [
+    { id: "general", heading: m.settings_group_general(), items: [{ id: "appearance", label: m.settings_appearance(), link: { to: "/settings/appearance" } }] },
+    {
+      id: "library",
+      heading: m.nav_library(),
+      items: [
+        { id: "locations", label: m.common_locations(), link: { to: "/settings/locations" } },
+        { id: "equipment", label: m.settings_equipment(), link: { to: "/settings/equipment" } },
+        { id: "naming", label: m.settings_naming(), link: { to: "/settings/naming" } },
+      ],
+    },
+  ]
+}
+
+function useChecklist(): ChecklistSection[] {
+  const m = useMessages()
+  return [
+    {
+      id: "steps",
+      title: m.calibration_steps(),
+      items: [
+        { id: "locations", label: m.setup_set_up_locations(), done: true },
+        { id: "import", label: m.onboarding_check_import(), done: true },
+        { id: "targets", label: m.onboarding_check_targets(), done: false, action: { id: "review", label: m.verb_review(), run: () => undefined } },
+        { id: "project", label: m.onboarding_check_project(), done: false, action: { id: "new-project", label: m.newproject_open(), run: () => undefined } },
+        {
+          id: "run",
+          label: m.onboarding_check_run(),
+          done: false,
+          action: { id: "start-run", label: m.startrun_open(), run: () => undefined, unavailable: { action: m.startrun_open(), reason: m.onboarding_check_project(), blockers: [] } },
+        },
+      ],
+    },
+    {
+      id: "goals",
+      title: m.home_goals(),
+      items: [
+        { id: "goal-ha", label: "NGC 7000 · Ha 10 h", done: true },
+        { id: "goal-oiii", label: "NGC 7000 · OIII 10 h", done: false },
+      ],
+    },
+  ]
+}
+
+const SAMPLE_ISSUES: Issue[] = [
+  { id: "cat:needs-target", group: "sessions", kind: "needs-target", severity: "warning", count: 2, name: null, about: null, link: { to: "/sessions" } },
+  { id: "cat:location-denied", group: "storage", kind: "location-denied", severity: "danger", count: 1, name: "Captures SSD", about: "loc", link: { to: "/settings/locations" } },
+  { id: "cat:run-blocked", group: "runs", kind: "run-blocked", severity: "warning", count: 1, name: "M 42 · run 1", about: "run", link: { to: "/projects" } },
+  { id: "cat:calibration-review", group: "calibration", kind: "calibration-review", severity: "warning", count: 3, name: "M 42 · run 1", about: "run", link: { to: "/calibration" } },
+  { id: "cat:duplicates", group: "storage", kind: "duplicates", severity: "info", count: 4, bytes: 1_200_000_000, name: null, about: null, link: { to: "/settings/locations" } },
+]
+
+function IssueRows() {
+  const [dismissed, setDismissed] = useState<string[]>(["cat:duplicates"])
+  const open = SAMPLE_ISSUES.filter((issue) => !dismissed.includes(issue.id))
+  const gone = SAMPLE_ISSUES.filter((issue) => dismissed.includes(issue.id))
+  const dismiss = (issue: Issue) => setDismissed((ids) => [...ids, issue.id])
+  const restore = (issue: Issue) => setDismissed((ids) => ids.filter((id) => id !== issue.id))
+  return (
+    <div className="w-88 rounded-lg border border-border bg-popover text-popover-foreground">
+      <ul className="py-1" data-catalogue-issues="open">
+        {open.map((issue) => (
+          <IssueRow key={issue.id} issue={issue} onDismiss={dismiss} />
+        ))}
+      </ul>
+      <ul className="border-t border-border py-1" data-catalogue-issues="dismissed">
+        {gone.map((issue) => (
+          <IssueRow key={issue.id} issue={issue} state="dismissed" onRestore={restore} refocus={(restored) => document.querySelector<HTMLElement>(`[data-catalogue-issues="open"] [data-issue="${CSS.escape(restored.id)}"] [data-dismiss]`)} />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function ShellPartsCatalogue() {
+  const m = useMessages()
+  const navGroups = useNavGroups()
+  const utilityGroups = useUtilityGroups()
+  const settingsGroups = useSettingsGroups()
+  const checklist = useChecklist()
+  const recentId = useStore((s) => {
+    const first = Object.values(s.catalog.projects)[0]
+    return first ? `project:${first.id}` : null
+  })
+  const [dismissedChecklist, setDismissedChecklist] = useState(false)
+  return (
+    <>
+      <Section title="NavList" description="One source list for the sidebar and Settings. Current row: selected fill and aria-current. Holds: a leading bar and semibold. Menu rows open a named menu beside the list. Collapsed: an icon rail with tooltips and badge dots.">
+        <div className="space-y-3">
+          <Row caption="sidebar · current Sessions">
+            <Sidebar>
+              <NavList label={m.shell_nav_main()} groups={navGroups} current="sessions" />
+            </Sidebar>
+          </Row>
+          <Row caption="sidebar · recent Project open (Recent › Projects holds)">
+            <Sidebar>
+              <NavList label={m.shell_nav_main()} groups={navGroups} current={recentId} holds={["projects"]} />
+            </Sidebar>
+          </Row>
+          <Row caption="rail · current Home">
+            <Sidebar collapsed>
+              <NavList label={m.shell_nav_main()} groups={navGroups} current="home" collapsed />
+            </Sidebar>
+          </Row>
+          <Row caption="content · Settings, current Appearance">
+            <div className="w-56 rounded-lg border border-border">
+              <NavList label={m.settings_sections()} groups={settingsGroups} current="appearance" surface="content" />
+            </div>
+          </Row>
+        </div>
+      </Section>
+
+      <Section title="ChecklistRing" description="Sidebar footer, above Activity and Settings. Opens a non-modal checklist to the right: the page stays usable; Escape or an outside click closes it. An unavailable step shows its reason under the label.">
+        <div className="space-y-3">
+          <Row caption="expanded · with Dismiss">
+            <Sidebar>
+              <div className="flex flex-col gap-px p-2">
+                {dismissedChecklist ? (
+                  <Button variant="outline" size="sm" onClick={() => setDismissedChecklist(false)}>
+                    {m.verb_restore()}
+                  </Button>
+                ) : (
+                  <ChecklistRing title={m.onboarding_getting_started()} sections={checklist} onDismiss={() => setDismissedChecklist(true)} />
+                )}
+              </div>
+              <NavList label={m.shell_nav_utilities()} groups={utilityGroups} current={null} />
+            </Sidebar>
+          </Row>
+          <Row caption="rail">
+            <Sidebar collapsed>
+              <div className="flex flex-col gap-px p-2">
+                <ChecklistRing title={m.onboarding_getting_started()} sections={checklist} collapsed />
+              </div>
+              <NavList label={m.shell_nav_utilities()} groups={utilityGroups} current={null} collapsed />
+            </Sidebar>
+          </Row>
+        </div>
+      </Section>
+
+      <Section title="IssueRow" description="One issue with its one action and Dismiss ×. A run's next step (blocked run, calibration to review) has no ×. Dismissed rows are muted with Restore. Focus stays in the list as a row leaves.">
+        <IssueRows />
+      </Section>
+
+      <Section title="ThemePicker" description="Mode first (Light, Dark, Match system), then the themes of that mode. Applies at once to the whole app. The menu form goes in a toolbar menu's Theme submenu.">
+        <div className="space-y-3">
+          <Row caption="form (Settings › Appearance)">
+            <div className="w-full max-w-3xl">
+              <ThemePicker />
+            </div>
+          </Row>
+          <Row caption="menu items">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+                <Palette aria-hidden="true" data-icon="inline-start" />
+                {m.theme_picker_theme()}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-52">
+                <ThemeMenuItems />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Row>
+        </div>
+      </Section>
+    </>
+  )
+}
