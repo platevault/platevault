@@ -229,7 +229,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   /** A refused or failed write as a Refusal; a blocker that names the read-only reason links to where it resolves. */
   function refuse(result: CommitResult, action: string) {
     if (result.ok) return
-    const links: Record<string, StepLink> = scope?.readOnlyReason && scope.readOnlyLink ? { [scope.readOnlyReason]: scope.readOnlyLink } : {}
+    const links: Record<string, StepLink> = scope?.readOnlyReason && scope.readOnlyBlocker ? { [scope.readOnlyReason]: scope.readOnlyBlocker.link } : {}
     setError(refusalFrom(result, action, links) ?? { action, reason: result.message, blockers: [] })
     announce(`${action}: ${result.message}`)
   }
@@ -893,7 +893,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
 
       {scope.readOnlyReason || error ? (
         <div className="shrink-0 space-y-1 border-b border-separator px-3 py-1.5">
-          {scope.readOnlyReason ? <Refusal action={m.review_refusal_marks()} reason={scope.readOnlyReason} blockers={scope.readOnlyLink ? [{ label: m.activity_destination_trash(), link: scope.readOnlyLink }] : []} /> : null}
+          {scope.readOnlyReason ? <Refusal standing action={m.review_refusal_marks()} reason={scope.readOnlyReason} blockers={scope.readOnlyBlocker ? [scope.readOnlyBlocker] : []} /> : null}
           {error ? <Refusal {...error} /> : null}
         </div>
       ) : null}

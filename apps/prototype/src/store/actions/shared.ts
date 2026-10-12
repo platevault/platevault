@@ -5,6 +5,7 @@
  * is read; a refusal's returned message is worded now.
  */
 import { stableHash } from "@/domain/indexing"
+import type { Project } from "@/domain/types"
 import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
 import { type CommitResult, nowIso, recordActivity } from "@/store/core"
 
@@ -25,6 +26,15 @@ export function refuse(title: MessageRef, reasons: MessageRef[], href: string | 
   const detail = joinRefs(reasons, "; ")
   recordActivity({ kind: "refusal", title, detail, operationId: null, href })
   return { ok: false, reason: "refused", message: say(m, msg("store_refusal_message", { title, reasons: detail })), reasons: reasons.map((reason) => say(m, reason)) }
+}
+
+/**
+ * A closed (Done or Archived) Project is read-only: every write to it or to
+ * its runs is refused, naming it, until Reopen. Null while it is open.
+ */
+export function closedRefusal(project: Project | undefined, label: MessageRef): CommitResult | null {
+  if (!project || project.state === "open") return null
+  return refuse(msg("store_refused", { label }), [msg("store_reason_project_done", { project: project.name })], `/projects/${project.id}`)
 }
 
 export const MISSING: CommitResult = {

@@ -1,7 +1,7 @@
 /**
  * S4 New Project (sheet): name and notes, subjects searched across My
- * targets, the catalogues and SIMBAD (D-W17), rigs (D-W37) and a goal
- * template whose values are copied in and stay editable (D-W30, D-W47). A
+ * targets, the catalogues and SIMBAD (D-W17), rigs (D-W37) and goals typed
+ * per channel, optionally prefilled from a goal template (D-W30, D-W47). A
  * mosaic subject is added on the Project page, in the mosaic editor, where
  * the rig's field of view lays out its panels. Opened with
  * `openSheet({ kind: "new-project", fromSessionId?, targetId? })`; a session
@@ -26,7 +26,7 @@ import { closeSheet, useShellUi } from "@/app/ui-state"
 import { rigCameraKind } from "@/domain/derive"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { Catalog, GoalTemplate, GoalTemplateValue, OpticalTrainId } from "@/domain/types"
-import { createProject, goalsFromTemplate, prefillFromSession, setGoals } from "@/store/actions/projects"
+import { createProject, prefillFromSession } from "@/store/actions/projects"
 import { store, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
 import { GoalValuesEditor } from "./goals"
@@ -109,19 +109,18 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
   const [rigIds, setRigIds] = useState<OpticalTrainId[]>(initial.rigIds)
   const [templateId, setTemplateId] = useState<string>("none")
   const [values, setValues] = useState<GoalTemplateValue[]>([])
-  const [edited, setEdited] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const ids = { name: useId(), notes: useId(), rigs: useId() }
   const all = templates(catalog)
-  const template = all.find((t) => t.id === templateId)
   const rigs = Object.values(catalog.opticalTrains).sort((a, b) => a.name.localeCompare(b.name))
   const channels = projectChannels(catalog, rigIds)
 
+  /** A template prefills the goal values, which stay editable; None keeps what is typed. */
   function chooseTemplate(id: string) {
     setTemplateId(id)
-    setValues(all.find((t) => t.id === id)?.values.map((v) => ({ ...v })) ?? [])
-    setEdited(false)
+    const template = all.find((t) => t.id === id)
+    if (template) setValues(template.values.map((v) => ({ ...v })))
   }
 
   function create() {
@@ -137,16 +136,10 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
       }
       subjects.push({ targetId: resolved.targetId, mosaic: null })
     }
-    const { result, projectId } = createProject({ name, notes, subjects, rigIds, goalTemplateId: template?.id ?? null })
+    const { result, projectId } = createProject({ name, notes, subjects, rigIds, goals: values })
     if (!result.ok) {
       setError(result.message)
       return
-    }
-    if (template && edited) {
-      const project = store.getState().catalog.projects[projectId]!
-      const copy = { ...template, values }
-      const goals = setGoals(projectId, project.subjects.flatMap((s) => goalsFromTemplate(copy, s)), project.revision)
-      if (!goals.ok) setError(m.newproject_goals_not_saved({ message: goals.message }))
     }
     closeSheet()
     void navigate({ to: "/projects/$projectId", params: { projectId } })
@@ -206,26 +199,20 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
         </fieldset>
 
         <section aria-labelledby="np-goals" className="space-y-2">
-          <h3 id="np-goals" className="text-sm font-semibold">
-            {m.projects_col_goals()}
-          </h3>
-          <SelectField
-            label={m.newproject_template()}
-            value={templateId}
-            onChange={chooseTemplate}
-            options={[{ value: "none", label: m.newproject_template_none() }, ...all.map((t) => ({ value: t.id, label: t.source === "user" ? m.newproject_template_yours({ name: t.name }) : t.name }))]}
-          />
-          {template ? (
-            <GoalValuesEditor
-              values={values}
-              channels={channels}
-              onChange={(next) => {
-                setValues(next)
-                setEdited(true)
-              }}
+          <div className="flex items-center justify-between gap-2">
+            <h3 id="np-goals" className="text-sm font-semibold">
+              {m.projects_col_goals()}
+            </h3>
+            <SelectField
+              className="w-44 [&>label]:sr-only"
+              label={m.newproject_template()}
+              value={templateId}
+              onChange={chooseTemplate}
+              options={[{ value: "none", label: m.newproject_template_none() }, ...all.map((t) => ({ value: t.id, label: t.source === "user" ? m.newproject_template_yours({ name: t.name }) : t.name }))]}
             />
-          ) : null}
-          {template && drafts.length > 0 ? <p className="text-xs text-muted-foreground tabular-nums">{m.project_goals_count({ count: drafts.length * values.length })}</p> : null}
+          </div>
+          <GoalValuesEditor values={values} channels={channels} onChange={setValues} />
+          {values.length > 0 && drafts.length > 0 ? <p className="text-xs text-muted-foreground tabular-nums">{m.project_goals_count({ count: drafts.length * values.length })}</p> : null}
         </section>
       </div>
       <SheetFooter className="border-t border-separator">

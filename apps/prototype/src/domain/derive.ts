@@ -8,7 +8,7 @@
  * params), worded by the screen with `say(m, …)`, so it follows a language
  * switch; the name helpers that return a string take the caller's `m`.
  */
-import { calibrationPlan, type CalibrationPlan, candidatesFor, reusableSources } from "./calibration"
+import { calibrationPlan, type CalibrationPlan } from "./calibration"
 import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import {
   assetAvailability,
@@ -61,7 +61,7 @@ import type {
   Subject,
   Target,
 } from "./types"
-import { formatCount, formatExposure } from "@/lib/format"
+import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 
 /** The read-only slice of the prototype state derivations need; `PrototypeState` satisfies it. */
@@ -604,65 +604,6 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
 /** "1 frame", "1,200 frames". */
 function framesRef(count: number): MessageRef {
   return msg("project_frames_count", { count, n: formatCount(count) })
-}
-
-export interface ProjectWarning {
-  /** Stable per rig, subject, channel and kind of gap. */
-  id: string
-  kind: "exposure-mismatch" | "missing-calibration"
-  rigId: OpticalTrainId
-  subjectId: string
-  /** The goal channel, or the raw filter when it meets no goal; null without a filter. */
-  channel: string | null
-  message: MessageRef
-}
-
-/**
- * Automatic warnings per rig, subject and channel, from calibration-matching
- * evidence (PRJ-FR-11): an exposure with no compatible dark while darks of
- * other exposures exist (exposure mismatch), or no compatible flat or dark at
- * all (missing calibration). They are not goals and never block a run.
- */
-export function projectWarnings(disk: Disk, catalog: Catalog, project: Project): ProjectWarning[] {
-  const sources = reusableSources(catalog, disk)
-  const seen = new Set<string>()
-  const out: ProjectWarning[] = []
-  for (const candidate of projectCandidates(catalog, project)) {
-    const { session, subject, rigId } = candidate
-    // A warning names the goal channel, or the raw filter when it meets no goal.
-    const channel = goalChannel(catalog, session) ?? session.channel ?? null
-    const channelName = channel === null ? msg("palette_session_no_filter") : verbatim(channel)
-    const exposure = sessionExposureS(session)
-    const key = `${rigId}|${subject.id}|${channel}|${exposure}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    const darks = candidatesFor(catalog, session, "dark", sources)
-    const flats = candidatesFor(catalog, session, "flat", sources)
-    const rig = rigRef(catalog, rigId)
-    const base = { rigId, subjectId: subject.id, channel }
-    if (!darks.some((d) => d.summary.allCompatible)) {
-      const sameCamera = darks.filter((d) => d.criteria.every((c) => c.name === "exposure" || c.result === "compatible"))
-      if (sameCamera.length > 0) {
-        const others = [...new Set(sameCamera.map((d) => d.source.exposureS).filter((e): e is number => e !== null))].sort((a, b) => a - b)
-        out.push({
-          ...base,
-          id: `${key}|dark`,
-          kind: "exposure-mismatch",
-          message: msg("warning_exposure_mismatch", { rig, channel: channelName, exposure: formatExposure(exposure), others: others.map(formatExposure).join(", ") }),
-        })
-      } else {
-        out.push({ ...base, id: `${key}|dark`, kind: "missing-calibration", message: msg("warning_missing_dark", { rig, channel: channelName, exposure: formatExposure(exposure) }) })
-      }
-    }
-    if (!flats.some((f) => f.summary.allCompatible)) {
-      const flatKey = `${rigId}|${subject.id}|${channel}|flat`
-      if (!seen.has(flatKey)) {
-        seen.add(flatKey)
-        out.push({ ...base, id: flatKey, kind: "missing-calibration", message: msg("warning_missing_flat", { rig, channel: channelName }) })
-      }
-    }
-  }
-  return out
 }
 
 // ---------------------------------------------------------------------------

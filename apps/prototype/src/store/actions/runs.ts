@@ -40,7 +40,7 @@ import type {
 import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
-import { freshId, MISSING, recordSaved, refuse } from "./shared"
+import { closedRefusal, freshId, MISSING, recordSaved, refuse } from "./shared"
 import { moveToOsTrash, preparedEntryItems, resultItems } from "./trash"
 
 /** Names the Project's runs and run groups already use: a new run or group never repeats one. */
@@ -110,7 +110,8 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
   if (!project.rigIds.includes(rigId)) {
     return { result: refuse(msg("store_refused", { label: msg("startrun_title") }), [msg("store_reason_rig_not_in_project", { rig: rigRef(catalog, rigId), project: project.name })], `/projects/${projectId}`), runId: null, groupId: null }
   }
-  if (project.state !== "open") return { result: refuse(msg("store_refused", { label: msg("startrun_title") }), [msg("store_reason_project_done", { project: project.name })], `/projects/${projectId}`), runId: null, groupId: null }
+  const closed = closedRefusal(project, msg("startrun_title"))
+  if (closed) return { result: closed, runId: null, groupId: null }
   const chosen = options.sessionIds ? new Set(options.sessionIds) : null
   const candidates = projectCandidates(catalog, project).filter((c) => c.subject.id === subjectId && c.rigId === rigId && (!chosen || chosen.has(c.session.id)))
   const setup: RunSetup = { profileId: null, inputMode: null, calibrationPolicy: "automatic" }
@@ -177,10 +178,13 @@ export interface EditRunOptions {
   also?: (state: PrototypeState) => PrototypeState
 }
 
-/** Patch one run in one commit, guarded by its revision; every run write goes through here. */
+/** Patch one run in one commit, guarded by its revision; every run write goes through here, refused while its Project is closed. */
 export function editRun(runId: RunId, label: MessageRef, update: (run: Run, state: PrototypeState) => Run, options: EditRunOptions = {}): CommitResult {
-  const run = store.getState().catalog.runs[runId]
+  const { catalog } = store.getState()
+  const run = catalog.runs[runId]
   if (!run) return MISSING
+  const closed = closedRefusal(catalog.projects[run.projectId], label)
+  if (closed) return closed
   const href = runHref(run, options.step)
   const result = commit(
     label,
@@ -289,8 +293,11 @@ export function setRunSetup(runId: RunId, patch: Partial<RunSetup>): CommitResul
 }
 
 export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): CommitResult {
-  const group = store.getState().catalog.runGroups[groupId]
+  const { catalog } = store.getState()
+  const group = catalog.runGroups[groupId]
   if (!group) return MISSING
+  const closed = closedRefusal(catalog.projects[group.projectId], msg("store_label_group_setup"))
+  if (closed) return closed
   const href = groupHref(group, "prepare")
   const result = commit(
     msg("store_label_group_setup"),
@@ -365,6 +372,8 @@ export function restoreRun(runId: RunId): CommitResult {
  */
 export function emptyTrash(projectId: ProjectId, runIds: RunId[], tickedResults: RunId[]): CommitResult {
   const state = store.getState()
+  const closed = closedRefusal(state.catalog.projects[projectId], msg("trash_empty"))
+  if (closed) return closed
   const runs = runIds.map((id) => state.catalog.runs[id]).filter((r): r is Run => r !== undefined && r.projectId === projectId && r.trashedAt !== null)
   if (runs.length === 0) return refuse(msg("store_refused", { label: msg("trash_empty") }), [msg("store_reason_no_trashed_run")], `/projects/${projectId}/trash`)
   const items = runs.flatMap((run) => [...preparedEntryItems(state, run.id), ...(tickedResults.includes(run.id) ? resultItems(state, run.id) : [])])
