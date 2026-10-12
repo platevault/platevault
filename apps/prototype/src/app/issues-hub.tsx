@@ -2,20 +2,23 @@
  * The Issues hub (foundation-owned): a toolbar button with a count badge,
  * tinted by the worst severity, opening a panel that lists every issue
  * grouped, each with its one action. `IssueRow` is one issue with its
- * action, shared with the status bar's severity popouts.
+ * action and × (Dismiss, P-ISS1), shared with the status bar's severity
+ * popouts. The hub ends with "Dismissed (N)", where each can be restored.
  */
 import { Link } from "@tanstack/react-router"
-import { CircleAlert, CircleCheck, Info, type LucideIcon, OctagonX, TriangleAlert } from "lucide-react"
-import { useState } from "react"
+import { ChevronRight, CircleAlert, CircleCheck, Info, type LucideIcon, OctagonX, TriangleAlert, X } from "lucide-react"
+import { useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { CountBadge } from "@/components/app/pill"
 import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ISSUE_GROUPS, type Issue, type IssueGroup, type IssueSeverity } from "@/domain/issues"
+import { ISSUE_GROUPS, type Issue, type IssueGroup, type IssueSeverity, isDismissable } from "@/domain/issues"
 import { formatBytes } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { useIssues } from "@/store/issues"
+import { dismissIssue, restoreAllIssues, restoreIssue, useIssues } from "@/store/issues"
 import { useMessages } from "./preferences"
 
 const SEVERITY_TONE: Record<IssueSeverity, Tone> = { danger: "danger", warning: "warning", info: "info" }
@@ -74,13 +77,29 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
   }
 }
 
-/** One issue with its action, as a list row; `onNavigate` closes the popover that holds it. */
-export function IssueRow({ issue, onNavigate }: { issue: Issue; onNavigate: () => void }) {
+/**
+ * One issue with its action and, unless it is a run's next step, its ×
+ * (Dismiss), as a row of a `[data-issue-list]`. `onNavigate` closes the
+ * popover that holds it; `refocus` names where focus goes when the list's
+ * last row is dismissed.
+ */
+export function IssueRow({ issue, onNavigate, refocus }: { issue: Issue; onNavigate: () => void; refocus: (list: Element | null) => HTMLElement | null | undefined }) {
   const m = useMessages()
+  const row = useRef<HTMLLIElement>(null)
   const copy = issueCopy(m, issue)
   const Glyph = SEVERITY_ICON[issue.severity]
+  // Focus stays in the list as the row goes (WCAG 2.4.3): on the next issue, else the previous one, else where `refocus` says.
+  const dismiss = () => {
+    const list = row.current?.closest("[data-issue-list]") ?? null
+    const rows = [...(list?.querySelectorAll<HTMLElement>("[data-issue]") ?? [])]
+    const at = rows.findIndex((r) => r === row.current)
+    const near = rows[at + 1] ?? rows[at - 1]
+    flushSync(() => dismissIssue(issue))
+    const target = near?.querySelector<HTMLElement>("[data-dismiss]") ?? near?.querySelector<HTMLElement>("a") ?? refocus(list)
+    target?.focus()
+  }
   return (
-    <li className="flex min-h-(--row-h) items-center gap-2 px-3 py-0.5 text-sm" data-issue={issue.id}>
+    <li ref={row} className="flex min-h-(--row-h) items-center gap-2 py-0.5 pr-1.5 pl-3 text-sm" data-issue={issue.id}>
       <Glyph aria-hidden="true" className={cn("size-3.5 shrink-0", SEVERITY_TEXT[issue.severity])} />
       <span className="min-w-0 flex-1 truncate" title={copy.text}>
         {copy.text}
@@ -95,13 +114,75 @@ export function IssueRow({ issue, onNavigate }: { issue: Issue; onNavigate: () =
         {copy.action}
         <span className="sr-only">: {copy.text}</span>
       </Button>
+      {isDismissable(issue) ? (
+        <Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-label={`${m.verb_dismiss()}: ${copy.text}`} title={m.verb_dismiss()} onClick={dismiss} data-dismiss>
+          <X aria-hidden="true" />
+        </Button>
+      ) : (
+        <span aria-hidden="true" className="size-6 shrink-0" />
+      )}
     </li>
+  )
+}
+
+/** The hub's footer: "Dismissed (N)", opening the dismissed issues, each with Restore; and Restore all. */
+function DismissedIssues({ issues }: { issues: Issue[] }) {
+  const m = useMessages()
+  const root = useRef<HTMLDivElement>(null)
+  if (issues.length === 0) return null
+  // Focus moves before a restored row leaves (WCAG 2.4.3): to the next dismissed issue, else the restored issue's ×.
+  const restore = (issue: Issue) => {
+    const rows = [...(root.current?.querySelectorAll<HTMLElement>("[data-issue-dismissed]") ?? [])]
+    const at = rows.findIndex((r) => r.dataset.issueDismissed === issue.id)
+    const near = rows[at + 1] ?? rows[at - 1]
+    const list = root.current?.closest("[data-issue-list]")
+    flushSync(() => restoreIssue(issue))
+    const target = near?.querySelector<HTMLElement>("button") ?? list?.querySelector<HTMLElement>(`[data-issue="${CSS.escape(issue.id)}"] [data-dismiss]`)
+    target?.focus()
+  }
+  const restoreAll = () => {
+    const list = root.current?.closest("[data-issue-list]")
+    flushSync(restoreAllIssues)
+    list?.querySelector<HTMLElement>("[data-issue] [data-dismiss]")?.focus()
+  }
+  return (
+    <Collapsible ref={root} className="border-t border-border" data-issues-dismissed={issues.length}>
+      <div data-chrome className="flex items-center gap-2 px-1.5 py-1">
+        <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="text-muted-foreground" />} data-issues-dismissed-trigger>
+          <ChevronRight aria-hidden="true" className="transition-transform group-data-panel-open/button:rotate-90 motion-reduce:transition-none" />
+          {m.issues_dismissed({ count: issues.length })}
+        </CollapsibleTrigger>
+        <Button variant="ghost" size="xs" className="ml-auto text-link" onClick={restoreAll} data-restore-all>
+          {m.issues_restore_all()}
+        </Button>
+      </div>
+      <CollapsibleContent>
+        <ul className="pb-1">
+          {issues.map((issue) => {
+            const copy = issueCopy(m, issue)
+            const Glyph = SEVERITY_ICON[issue.severity]
+            return (
+              <li key={issue.id} className="flex min-h-(--row-h) items-center gap-2 py-0.5 pr-1.5 pl-3 text-sm text-muted-foreground" data-issue-dismissed={issue.id}>
+                <Glyph aria-hidden="true" className={cn("size-3.5 shrink-0", SEVERITY_TEXT[issue.severity])} />
+                <span className="min-w-0 flex-1 truncate" title={copy.text}>
+                  {copy.text}
+                </span>
+                <Button variant="ghost" size="xs" className="shrink-0 text-link" onClick={() => restore(issue)}>
+                  {m.verb_restore()}
+                  <span className="sr-only">: {copy.text}</span>
+                </Button>
+              </li>
+            )
+          })}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
 export function IssuesButton() {
   const m = useMessages()
-  const { issues, worst } = useIssues()
+  const { issues, dismissed, worst } = useIssues()
   const [open, setOpen] = useState(false)
   const Icon = worst ? CircleAlert : CircleCheck
   const label = issues.length === 0 ? m.issues_none() : m.issues_count({ count: issues.length })
@@ -113,7 +194,7 @@ export function IssuesButton() {
         <Icon aria-hidden="true" />
         {issues.length > 0 ? <CountBadge count={issues.length} tone={worst ? SEVERITY_TONE[worst] : "neutral"} /> : null}
       </PopoverTrigger>
-      <PopoverContent align="end" className="max-h-[min(32rem,var(--available-height))] w-88 gap-0 overflow-y-auto p-0" aria-label={m.issues_title()}>
+      <PopoverContent align="end" className="max-h-[min(32rem,var(--available-height))] w-88 gap-0 overflow-y-auto p-0" aria-label={m.issues_title()} data-issue-list>
         <div data-chrome className="flex items-center gap-2 border-b border-border px-3 py-2">
           <h2 className="flex-1 text-sm font-semibold">{m.issues_title()}</h2>
           <span className="text-xs text-muted-foreground tabular-nums">{label}</span>
@@ -125,19 +206,20 @@ export function IssuesButton() {
             const rows = issues.filter((i) => i.group === group)
             if (rows.length === 0) return null
             return (
-              <section key={group} aria-label={groupName(m, group)} className="border-b border-border py-1 last:border-0">
+              <section key={group} aria-label={groupName(m, group)} className="border-b border-border py-1 last-of-type:border-0">
                 <h3 data-chrome className="px-3 py-1 text-[0.6875rem] font-semibold text-muted-foreground">
                   {groupName(m, group)}
                 </h3>
                 <ul>
                   {rows.map((issue) => (
-                    <IssueRow key={issue.id} issue={issue} onNavigate={() => setOpen(false)} />
+                    <IssueRow key={issue.id} issue={issue} onNavigate={() => setOpen(false)} refocus={(list) => list?.querySelector<HTMLElement>("[data-issues-dismissed-trigger]")} />
                   ))}
                 </ul>
               </section>
             )
           })
         )}
+        <DismissedIssues issues={dismissed} />
       </PopoverContent>
     </Popover>
   )

@@ -30,6 +30,8 @@ export interface PrototypeState extends SeedData {
   slices: SliceStates
   /** Ids of the notifications the user has seen (`store/notifications.ts`); absent until the history is first opened. */
   noticesRead?: string[]
+  /** Fingerprints of the issues the user dismissed (`store/issues.ts`, P-ISS1); one that leaves the issues is dropped. */
+  issuesDismissed?: string[]
 }
 
 type Listener = () => void

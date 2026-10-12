@@ -205,8 +205,8 @@ function counterLabel(m: Messages, severity: IssueSeverity, count: number): stri
   return m.status_bar_info({ count })
 }
 
-/** One severity's count with its glyph, opening a popout of its issues in hub order. */
-function SeverityCounter({ severity, issues }: { severity: IssueSeverity; issues: Issue[] }) {
+/** One severity's count with its glyph, opening a popout of its issues in hub order; `refocus` takes focus when its last issue is dismissed. */
+function SeverityCounter({ severity, issues, refocus }: { severity: IssueSeverity; issues: Issue[]; refocus: () => HTMLElement | null | undefined }) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const label = counterLabel(m, severity, issues.length)
@@ -223,13 +223,13 @@ function SeverityCounter({ severity, issues }: { severity: IssueSeverity; issues
         <Glyph aria-hidden="true" className={cn("size-3", SEVERITY_TEXT[severity])} />
         {issues.length}
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="max-h-[min(28rem,var(--available-height))] w-88 gap-0 overflow-y-auto p-0" aria-label={label} data-status-popout={severity}>
+      <PopoverContent side="top" align="end" className="max-h-[min(28rem,var(--available-height))] w-88 gap-0 overflow-y-auto p-0" aria-label={label} data-status-popout={severity} data-issue-list>
         <div data-chrome className="border-b border-border px-3 py-1.5">
           <h2 className="text-sm font-semibold">{label}</h2>
         </div>
         <ul className="py-1">
           {issues.map((issue) => (
-            <IssueRow key={issue.id} issue={issue} onNavigate={() => setOpen(false)} />
+            <IssueRow key={issue.id} issue={issue} onNavigate={() => setOpen(false)} refocus={refocus} />
           ))}
         </ul>
       </PopoverContent>
@@ -240,8 +240,11 @@ function SeverityCounter({ severity, issues }: { severity: IssueSeverity; issues
 function IssueCounters() {
   const m = useMessages()
   const { issues } = useIssues()
+  const group = useRef<HTMLDivElement>(null)
+  // Once a severity's last issue is dismissed its counter goes: focus moves to the next counter, else the notifications trigger (WCAG 2.4.3).
+  const refocus = () => group.current?.querySelector<HTMLElement>("[data-status-counter]") ?? group.current?.closest("footer")?.querySelector<HTMLElement>("[data-status-notice]")
   return (
-    <div role="group" aria-label={m.issues_title()} className="flex shrink-0 items-center gap-0.5" data-status-issues={issues.length === 0 ? "none" : issues.length}>
+    <div ref={group} role="group" aria-label={m.issues_title()} className="flex shrink-0 items-center gap-0.5" data-status-issues={issues.length === 0 ? "none" : issues.length}>
       {issues.length === 0 ? (
         <span role="img" aria-label={m.issues_none()} title={m.issues_none()} className="inline-flex px-1 text-muted-foreground">
           <CircleCheck aria-hidden="true" className="size-3" />
@@ -249,7 +252,7 @@ function IssueCounters() {
       ) : (
         SEVERITY_ORDER.map((severity) => {
           const mine = issues.filter((i) => i.severity === severity)
-          return mine.length > 0 ? <SeverityCounter key={severity} severity={severity} issues={mine} /> : null
+          return mine.length > 0 ? <SeverityCounter key={severity} severity={severity} issues={mine} refocus={refocus} /> : null
         })
       )}
     </div>

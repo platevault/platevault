@@ -11,6 +11,8 @@
   "verb_fix": "Fix",
   "verb_open": "Open",
   "verb_pause": "Pause",
+  "verb_dismiss": "Dismiss",
+  "verb_restore": "Restore",
   "verb_resume": "Resume",
   "verb_retry": "Retry",
   "verb_review": "Review",
@@ -147,6 +149,8 @@
   ],
   "issues_group_work": "Work",
   "issues_group_drift": "Drift",
+  "issues_dismissed": "Dismissed ({count})",
+  "issues_restore_all": "Restore all",
   "issue_needs_target": [
     {
       "declarations": [
