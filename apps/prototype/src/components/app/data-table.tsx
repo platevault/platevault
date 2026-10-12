@@ -36,7 +36,7 @@
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
  */
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react"
+import { ArrowDown, ArrowUp, ChevronRight, X } from "lucide-react"
 import {
   type FocusEvent,
   Fragment,
@@ -56,19 +56,18 @@ import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { CommitResult } from "@/store/core"
+import { ActionBar, ActionButton, type ActionRunner, MenuItems, useAction } from "./actions"
 import { ClearableInput } from "./clearable-input"
-import { ConfirmDialog } from "./confirm-dialog"
 import type { Action, Column as ColumnContract, MenuItem } from "./contracts"
 import { FilterChips } from "./data"
 import { ActionError } from "./feedback"
 import { type FilterBarProps, FilterControls, TOOLBAR_ROW, useFacetChips } from "./filter-bar"
-import { type MenuEntry, MenuEntries, type MenuRow, menuContent, menuRowAt, openMenuFromKeyboard } from "./row-menu"
+import { type MenuRow, menuRowAt, openMenuFromKeyboard, RowActions } from "./row-actions"
+import { type MenuEntry, menuContent } from "./row-menu"
 
 /** Controls inside a row that keep their own click; a click on them never runs `onRowClick`. */
 const ROW_CONTROLS = "a[href], button, input, select, textarea, label, summary, [role=button], [role=link], [role=checkbox], [role=switch], [role=combobox], [role=menuitem], [role=option], [contenteditable=true]"
@@ -210,7 +209,10 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const m = useMessages()
   const baseId = useId()
-  const runner = useAction()
+  // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
+  // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
+  // goes to the first control of the toolbar row.
+  const runner = useAction({ focusAfterConfirm: () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE) })
   const [sort, setSort] = useState(initialSort ?? null)
   const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
   const [expanded, setExpanded] = useState(() => new Set(expand?.defaultExpanded ?? []))
@@ -527,6 +529,8 @@ export function DataTable<T>({
                         <TableCell
                           key={column.id}
                           rowHeader={column.rowHeader}
+                          // The disclosure's own name stays out of the row header's name ("Details for … 30 Sep").
+                          aria-label={disclosure && column.rowHeader ? nameOf(row) : undefined}
                           className={cn(
                             column.truncate ? "max-w-72" : "whitespace-nowrap",
                             !disclosure && truncate?.className,
@@ -636,10 +640,8 @@ export function DataTable<T>({
           <>
             <FilterControls {...toolbar} />
             {toolbar.actions && toolbar.actions.length > 0 ? (
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                {toolbar.actions.map((action) => (
-                  <ActionButton key={action.id} action={action} size="sm" runner={runner} />
-                ))}
+              <div className="ml-auto shrink-0">
+                <ActionBar actions={toolbar.actions} runner={runner} />
               </div>
             ) : null}
           </>
@@ -682,9 +684,6 @@ function BatchBar({
   runner: ActionRunner
 }) {
   const m = useMessages()
-  // Three inline keep the bar one row high; the rest go under More.
-  const inline = actions.slice(0, 3)
-  const more = actions.slice(3)
   return (
     <div role="region" aria-label={m.selection_region()} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md border border-primary/40 bg-primary/8 px-2 text-sm">
       <span className="shrink-0 font-medium tabular-nums">{countLabel}</span>
@@ -698,169 +697,15 @@ function BatchBar({
           ) : null}
         </span>
       ) : null}
-      <div className="ml-auto flex min-w-0 items-center gap-2">
-        {inline.map((action) => (
-          <ActionButton key={action.id} action={action} size="sm" runner={runner} />
-        ))}
-        {more.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
-              {m.common_more()}
-              <ChevronDown data-icon="inline-end" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-auto min-w-48">
-              <MenuItems items={more} runner={runner} />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+      {/* ActionBar keeps one primary and three standard inline and the rest under More, so the bar stays one row. */}
+      <div className="ml-auto min-w-0">
+        <ActionBar actions={actions} runner={runner} />
       </div>
       <Button size="sm" variant="ghost" className="shrink-0" onClick={onClear}>
         <X data-icon="inline-start" aria-hidden="true" />
         {m.selection_clear()}
       </Button>
     </div>
-  )
-}
-
-/*
- * Interim stand-ins for the action rendering of plan P1/P2 (unit U2:
- * actions.tsx, row-actions.tsx), with the same names and props. On
- * integration this section goes and DataTable imports
- * `{ ActionButton, MenuItems, useAction, type ActionRunner }` from
- * "./actions" and `{ RowActions }` from "./row-actions".
- */
-
-interface ActionRunner {
-  run: (action: Action) => void
-  /** The last run's error, placed beside the triggers. */
-  feedback: ReactNode
-  /** The ConfirmDialog of an action with `confirm`; mounted once. */
-  dialog: ReactNode
-  clear: () => void
-}
-
-function isAction(item: MenuItem): item is Action {
-  return "run" in item
-}
-
-function useAction(): ActionRunner {
-  const [confirming, setConfirming] = useState<Action | null>(null)
-  const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const settle = (result: CommitResult | void) => setError(result && !result.ok ? result.message : null)
-  const spec = confirming?.confirm
-  return {
-    run: (action) => {
-      if (action.unavailable) return
-      if (action.confirm) {
-        setConfirming(action)
-        setOpen(true)
-        return
-      }
-      const result = action.run()
-      if (result instanceof Promise) void result.then(settle)
-      else settle(result)
-    },
-    feedback: error === null ? null : <ActionError message={error} className="min-w-0" />,
-    dialog:
-      confirming && spec ? (
-        <ConfirmDialog
-          open={open}
-          onOpenChange={setOpen}
-          title={spec.title}
-          description={spec.summary ?? null}
-          changes={spec.groups?.map((group) => group.label) ?? []}
-          confirmLabel={spec.confirm.label}
-          tone={spec.confirm.kind === "destructive" ? "destructive" : "default"}
-          onConfirm={() => {
-            const result = confirming.run()
-            if (!(result instanceof Promise)) return result
-            void result.then(settle)
-          }}
-        />
-      ) : null,
-    clear: () => setError(null),
-  }
-}
-
-function menuEntries(items: MenuItem[], runner: ActionRunner): MenuEntry[] {
-  return items.flatMap((item): MenuEntry[] => {
-    if (!isAction(item)) return "submenu" in item ? [{ heading: item.submenu }, ...menuEntries(item.items, runner)] : [item]
-    return [
-      {
-        label: item.opensDialog || item.confirm ? `${item.label}…` : item.label,
-        onSelect: () => runner.run(item),
-        icon: item.icon,
-        shortcut: item.shortcut,
-        destructive: item.kind === "destructive",
-        disabled: item.unavailable !== undefined,
-      },
-    ]
-  })
-}
-
-function MenuItems({ items, runner }: { items: MenuItem[]; runner: ActionRunner }) {
-  return <MenuEntries entries={menuEntries(items, runner)} />
-}
-
-function ActionButton({ action, size = "default", runner }: { action: Action; size?: "sm" | "default" | "xs"; runner?: ActionRunner }) {
-  const own = useAction()
-  const reasonId = useId()
-  const kind = action.kind ?? "standard"
-  // One primary per view: in a table cell a primary action renders outline.
-  const variant = kind === "destructive" ? "destructive" : kind === "primary" && size !== "xs" ? "default" : "outline"
-  const Icon = action.icon
-  return (
-    <>
-      <Button
-        size={size}
-        variant={variant}
-        className="shrink-0"
-        disabled={action.unavailable !== undefined}
-        focusableWhenDisabled
-        aria-describedby={action.unavailable ? reasonId : undefined}
-        onClick={() => (runner ?? own).run(action)}
-      >
-        {Icon ? <Icon data-icon="inline-start" aria-hidden="true" /> : null}
-        {action.label}
-        {action.opensDialog || action.confirm ? "…" : null}
-      </Button>
-      {action.unavailable ? (
-        <span id={reasonId} className="min-w-0 truncate text-xs text-muted-foreground">
-          {action.unavailable.reason}
-        </span>
-      ) : null}
-      {runner ? null : (
-        <>
-          {own.feedback}
-          {own.dialog}
-        </>
-      )}
-    </>
-  )
-}
-
-function RowActions({ name, items, runner }: { name: string; items: MenuItem[]; runner?: ActionRunner }) {
-  const m = useMessages()
-  const own = useAction()
-  if (!items.some(isAction)) return null
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={m.location_more_actions({ name })} />}>
-          <MoreHorizontal aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-auto min-w-48">
-          <MenuItems items={items} runner={runner ?? own} />
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {runner ? null : (
-        <>
-          {own.feedback}
-          {own.dialog}
-        </>
-      )}
-    </>
   )
 }
 

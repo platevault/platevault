@@ -475,6 +475,39 @@
   "filter_bar_preset_name": "Nome",
   "filter_bar_preset_create": "Criar preset",
   "filter_bar_preset_name_taken": "Nome já em uso",
+  "catalogue_datatable_title": "DataTable",
+  "catalogue_datatable_description": "Ordenação, filtros, presets, seleção, ações em lote, ações de linha e expansão numa só tabela. A barra de lote ocupa o lugar da linha de ferramentas, na mesma altura.",
+  "catalogue_datatable_state": "Estado da tabela",
+  "catalogue_datatable_state_rows": "Linhas",
+  "catalogue_datatable_state_loading": "Carregando",
+  "catalogue_datatable_state_empty": "Vazia",
+  "catalogue_datatable_state_error": "Erro",
+  "catalogue_datatable_wide": "Colunas largas e fixadas",
+  "catalogue_datatable_restore": "Restaurar linhas excluídas",
+  "catalogue_datatable_shift": "Deslocamento da tabela na última mudança de seleção: {px} px",
+  "catalogue_datatable_last_run": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input action",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Última ação: {action} · {n} linha",
+        "countPlural=*": "Última ação: {action} · {n} linhas"
+      }
+    }
+  ],
+  "catalogue_datatable_no_action": "Última ação: nenhuma",
+  "catalogue_datatable_notes": "Alvo não ordena (estática). Câmera trunca e mostra o texto inteiro ao passar o ponteiro, só quando cortado.",
+  "catalogue_datatable_label": "Sessões de luz (amostra do catálogo)",
+  "catalogue_datatable_preset_long": "Exposições longas",
+  "catalogue_datatable_filter_bar_title": "FilterBar",
+  "catalogue_datatable_filter_bar_description": "Os mesmos filtros controlados para uma lista que não é uma tabela.",
   "save_review_current": "Ver a revisão atual",
   "folder_picker_volumes": "Volumes",
   "folder_picker_up": "Subir uma pasta",
