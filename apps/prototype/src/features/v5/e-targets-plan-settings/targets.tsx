@@ -144,7 +144,7 @@ function useSimbad(query: string): [SimbadState | null, () => void] {
 }
 
 interface ColumnDef {
-  id: SortColumn | "star" | "actions" | "order" | "window" | "moon" | "goals"
+  id: SortColumn | "star" | "actions" | "window" | "moon" | "goals"
   header: string
   /** Sorts in the All view; the Planned view keeps the plan's order. */
   sortable: boolean
@@ -433,11 +433,10 @@ export function TargetsPage() {
   const filters: ColumnDef = { id: "tonight", header: m.targets_filters(), sortable: true, panel: true, help: m.targets_filters_help(), cell: (v) => skyCell(v, (sky) => <FilterChips chips={v.tonight} empty={noWindow(sky)} />) }
   // Fit sits beside the filter chips: both follow the rig selector (D-W23).
   const fit: ColumnDef[] = rigIds.length > 0 ? [{ id: "fit", header: rigIds.length > 1 ? m.targets_fit_per_rig() : m.targets_fit(), sortable: true, cell: (v) => <FitCell fits={v.fits} /> }] : []
-  const actions: ColumnDef = { id: "actions", header: m.tonight_actions(), sortable: false, panel: true, className: "w-px", cell: (v) => <RowActions label={m.targets_more_for({ name: v.row.designation })} entries={rowMenu(v.row.key)} /> }
+  const actions: ColumnDef = { id: "actions", header: m.tonight_actions(), sortable: false, panel: true, className: "w-px px-1", cell: (v) => <RowActions label={m.targets_more_for({ name: v.row.designation })} entries={rowMenu(v.row.key)} /> }
 
   const columns: ColumnDef[] = planned
     ? [
-        { id: "order", header: m.plan_order(), sortable: false, align: "right", className: "w-8", cell: (v) => (v.row.panelOf ? null : <span className="text-muted-foreground">{order.indexOf(v.row.key) + 1}</span>) },
         designation,
         altitude,
         { id: "window", header: m.tonight_window(), sortable: false, panel: true, cell: (v) => skyCell(v, (sky, c) => (sky.windows.length > 0 ? sky.windows.map((w) => clockRange(w.start, w.end, c.site)).join(", ") : dash(noWindow(sky)))) },
@@ -938,7 +937,7 @@ export function TargetsPage() {
                               <span aria-hidden="true">★</span>
                               <span className="sr-only">{m.targets_favourite()}</span>
                             </span>
-                          ) : c.id === "actions" || c.id === "order" ? (
+                          ) : c.id === "actions" ? (
                             <span className="sr-only">{c.header}</span>
                           ) : (
                             c.header

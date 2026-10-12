@@ -169,7 +169,7 @@ export function AddSiteButton({ returnTo }: { returnTo: string }) {
   )
 }
 
-/** The planning criteria behind every window, for a timeline's method note. */
+/** The planning criteria behind every window, for the night's method note. */
 export function criteriaText(m: Messages, c: PlanCriteria): string {
   const parts = [
     m.tonight_criteria_altitude({ altitude: c.minAltitudeDeg }),
@@ -190,8 +190,8 @@ const GRADE_SHAPE: Record<FilterGrade, string> = {
   poor: "bg-transparent line-through decoration-foreground/50",
 }
 
-/** A grade-tinted chip: a filter's band, or a legend word. */
-export function GradePill({ grade, title, className, children }: { grade: FilterGrade; title?: string; className?: string; children: string }) {
+/** A grade-tinted chip: a filter's band. */
+function GradePill({ grade, title, className, children }: { grade: FilterGrade; title?: string; className?: string; children: string }) {
   return (
     <Pill tone={GRADE_TONE[grade]} title={title} className={cn("h-4 min-w-5 justify-center gap-0 px-1 text-[0.625rem] leading-none", GRADE_SHAPE[grade], className)}>
       {children}
