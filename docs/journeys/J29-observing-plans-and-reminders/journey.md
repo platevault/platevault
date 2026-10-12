@@ -1,83 +1,103 @@
 ---
 id: J29
-title: Plan observing windows from Targets and Projects, opt into default-site reminders, see Tonight on Home, and export a calendar snapshot
-version: 2
+title: Plan nights on the Targets page's Planned view, opt into default-site reminders, see Tonight on Home, and export every planned night to a calendar
+version: 4
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [planning, targets, projects, home, settings]
+surfaces: [planning, targets, projects, home, settings, observing-sites]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D07, D17, D18, D-W16, D-W36, D-W37, D-W39, D-W60, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-k-observing-plans-and-reminders]
+trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D07, D17, D18, D-W16, D-W36, D-W37, D-W39, D-W60, D-W63, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-k-observing-plans-and-reminders, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S11, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation Sites, Planning", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/plan.tsx @b5e813a5, apps/prototype/src/features/v5/a-home/home.tsx @b5e813a5, apps/prototype/src/features/t1/settings/sites-page.tsx @b5e813a5, apps/prototype/src/domain/planning.ts @b5e813a5, apps/prototype/messages/en-GB.json @4f470775]
 ---
 
 ## Goal
 
-The user checks when NGC 7000 has a suitable observing window, compares planning
-sites, deliberately enables reminders for the default site, and saves a one-time
-calendar snapshot. They also plan M 31, which belongs to no Project, plan from
-the `NGC 7000 HOO` Project page through **Open in Planner**, and read tonight's
-best windows on Home. Done means windows name their site and time-zone basis.
-Reminders need opt-in, a default site, criteria and lead time, and each names
-Backyard. A delivered reminder is not delivered again after a restart. The saved
-`.ics` contains exactly the confirmed windows and remains unchanged afterwards.
-Home's Tonight lists NGC 7000 and M 31 at Backyard. Planning changes no library,
-Project or session data and starts no indexing.
+The user plans nights on the Targets page, where each night has its own plan.
+They add NGC 7000 to tonight's plan, read its windows on the Planned view for
+the night the header date picker sets, find tomorrow's plan empty and add
+NGC 7000 to it as well, compare planning sites, and grade each filter against
+the Moon. From the Planned view header they deliberately enable reminders for
+the default site and export every upcoming planned window to a calendar file.
+They also plan M 31, which belongs to no Project, plan from the `NGC 7000 HOO`
+Project page through its **Planner** button, and read tonight's best windows on
+Home. Done means windows name their site and time-zone basis, and the date
+picker names the night they belong to. Adding a Target to one night's plan
+leaves every other night's plan unchanged. Reminders need opt-in, a default
+site, criteria and lead time, and each names Backyard and a planned window. A
+delivered reminder is not delivered again after a restart. The saved `.ics`
+contains exactly the upcoming windows of every planned night, here tonight's
+and tomorrow's, and remains unchanged afterwards. Home's Tonight lists NGC 7000
+and M 31 at the picked planning site. Moving the default site while reminders
+are on asks first. Planning changes no library, Project or session data and
+starts no indexing.
 
 ## Preconditions
 
-- P1: J15 and J20 completed (J21 to J28 are not required). Settings holds Backyard and `Remote site`, and no site is designated default. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, seven candidate sessions, and the run `NGC7000-HOO-Siril` at Select with no saved membership. It is the only Project. No Target is marked ★, so M 31 is not in My targets.
+- P1: J15 and J20 completed (J21 to J28 are not required). Settings holds Backyard and `Remote site`, and no site is designated default. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, seven candidate sessions, and the run `NGC7000-HOO-Siril` at Select with no saved membership. It is the only Project. No Target is marked ★, so M 31 is not in My targets, and no night has a plan.
 - P2: The OS has not yet been asked for notification permission for PlateVault, so the first request can be denied.
 - P3: No calendar provider account is configured.
-- P4: A development-build clock control (D17) sets PlateVault's clock so that the first upcoming Backyard window reaches its reminder lead time while the app runs. The control keeps the clock inside that lead time across a relaunch, on a night when NGC 7000 and M 31 both have a window at Backyard (G3).
+- P4: A development-build clock control (D17) sets PlateVault's clock so that the first upcoming Backyard window reaches its reminder lead time while the app runs. The control keeps the clock inside that lead time across a relaunch, on a night when NGC 7000 and M 31 both have a window at Backyard and at `Remote site`, and NGC 7000 also has a window at both sites on the following night (G3). The header date picker reads tonight, its default.
 
 ## Steps
 
-### S1 — Open the Plan area {#S1}
+### S1 — Add NGC 7000 to tonight's plan and open the Planned view {#S1}
 
-- **Do:** On the Targets page, select the NGC 7000 row to open its Plan area, and choose Backyard as planning site.
-- **Expect:** Calculated windows show their site and time-zone basis, and the active planning site reads Backyard. Beside the coverage, Project `NGC 7000 HOO` shows its per-channel goal gap with labeled numbers. Ha reads 0h 00m "in project" and 12h 35m "captured" against the 10h goal, and OIII reads 0h 00m "in project" and 10h 35m "captured" against the 12h goal. "captured" counts all seven candidate sessions on both rigs. Notifications read disabled.
-- **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The gap never says "not in a run" and never shows "in project" above "captured".
-- **Trace:** flow K · PLAN-FR-02, PLAN-FR-05, PLAN-TGT-FR-14 · PRJ-FR-04, PRJ-FR-21 · root FR-023 · D07, D-W16, D-W36, D-W66
+- **Do:** On the Targets page, with the date picker on tonight, choose **Add to plan** on the NGC 7000 row. Switch to the Planned view and choose Backyard in the site picker. Then open NGC 7000's Target detail and go back.
+- **Expect:** The site picker lists Backyard and `Remote site`. After Backyard is chosen, the Planned view lists NGC 7000 with its best window, Img time, Moon separation and altitude sparkline, and the page shows Backyard, its IANA time zone, tonight's darkness window and the Moon. Calculated windows show their site and time-zone basis. NGC 7000's row menu offers **Remove from plan** instead of **Add to plan**. The Target detail lists Project `NGC 7000 HOO` with its goal lines: Ha reads 0h 00m "in project" and 12h 35m "captured" against the 10h goal, and OIII reads 0h 00m "in project" and 10h 35m "captured" against the 12h goal. "captured" counts all seven candidate sessions on both rigs. The Planned view header offers **Enable notifications** and **Export calendar**, and notifications read off.
+- **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The goal lines never say "not in a run" and never show "in project" above "captured". Adding NGC 7000 to the plan changes no ★, Project or session record.
+- **Trace:** flow K · PLAN-FR-02, PLAN-FR-05, PLAN-TGT-FR-14 · PRJ-FR-04, PRJ-FR-21 · root FR-023 · D07, D-W16, D-W36, D-W66 · HARNESS-V5-IA.md S10 (Target detail), S11 · Round 5 P-PLAN2 · Round 6 "Reminders and calendar export stay" (both in the Planned view header)
 
-### S2 — Set criteria {#S2}
+### S2 — Grade the filters and edit a Moon limit {#S2}
 
-- **Do:** Set altitude, darkness, Moon, and minimum-duration criteria.
-- **Expect:** The window list recalculates; every listed window meets the stated criteria.
-- **Trace:** flow K · PLAN-FR-02
+- **Do:** In the Planned view, expand NGC 7000's Per filter sub-rows. Open the Moon limits and raise OIII's minimum Moon separation by 30°.
+- **Expect:** Per filter shows one sub-row for each band the saved rigs capture, R, G, B, Ha and OIII, each graded Good, Marginal or Poor, with that band's Moon-clear windows. After the change OIII's sub-row recalculates, and every OIII window it lists keeps the Moon at least the new separation away or below the horizon.
+- **Expect (negative):** The R, G, B and Ha sub-rows are unchanged. Editing a Moon limit changes no rig filter list and no Project goal.
+- **Trace:** flow K · PLAN-FR-02 · HARNESS-V5-IA.md S10 (per-band good tonight with its Moon limits editable in place), S11 (Per filter, Moon limits) · HARNESS-V5-FEEDBACK-R1.md Domain and seed (Planning: per-filter Moon constraints) · Round 5 P-PLAN2
 
 ### S3 — Switch the planning site {#S3}
 
-- **Do:** Choose `Remote site` in the planning site selector.
-- **Expect:** Windows recalculate and name `Remote site` and its time zone.
+- **Do:** Choose `Remote site` in the site picker.
+- **Expect:** Windows, sparklines and Max alt recalculate and name `Remote site` and its time zone.
 - **Expect (negative):** Project subjects, the sessions in each processing run, and session capture sites are unchanged.
-- **Trace:** flow K, B3 · PLAN-FR-01 · PLAN-AC-01 · root FR-014 · D-W16
+- **Trace:** flow K, B3 · PLAN-FR-01 · PLAN-AC-01 · root FR-014 · D-W16 · HARNESS-V5-IA.md S11 (a site picker when there are several)
+
+### S3a — Plan another night with its own plan {#S3a}
+
+- **Do:** Set the header date picker to tomorrow's night and read the Planned view. Switch to the All view, read NGC 7000's row and choose **Add to plan** on it, then return to the Planned view. Then set the date picker back to tonight and read the Planned view.
+- **Expect:**
+  - The date picker names tomorrow's night. Tomorrow's Planned view reads `Plan list empty`, and NGC 7000's row menu offers **Add to plan**, although tonight's plan holds it.
+  - NGC 7000's best window, Img time, sparkline and Per filter grades are those of tomorrow's night at `Remote site`, with window times on that date.
+  - After **Add to plan**, tomorrow's Planned view lists exactly NGC 7000, with tomorrow's values.
+  - Back on tonight, the Planned view lists exactly NGC 7000, and every value equals its S3 value.
+- **Expect (negative):** Changing the night alone writes nothing. Adding NGC 7000 to tomorrow's plan adds nothing to and removes nothing from tonight's plan, changes no ★, Project or session record, and starts no indexing.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md Round 5 P-PLAN2 (a date picker in the page header, default tonight, sets the night that suitability, altitude and windows use), Round 6 "Per-night plans" · messages plan_list_empty, targets_add_to_plan @ 4f470775
 
 ### S4 — Try to enable reminders without a default site {#S4}
 
-- **Do:** Mark NGC 7000 **Planned** and click **Enable notifications**.
-- **Expect:** NGC 7000 reads Planned. PlateVault directs the user to set a default site in Settings and does not enable notifications.
+- **Do:** With NGC 7000 in tonight's plan, click **Enable notifications** in the Planned view header.
+- **Expect:** PlateVault directs the user to set a default site in Settings → Observing sites and does not enable notifications.
 - **Expect (negative):** No reminder is scheduled.
-- **Trace:** flow K · PLAN-FR-03 · PLAN-AC-04 · D07
+- **Trace:** flow K · PLAN-FR-03 · PLAN-AC-04 · D07 · Round 6 "Reminders and calendar export stay"
 
 ### S5 — Set the default site and reminder values {#S5}
 
-- **Do:** In Settings, make Backyard the default site, then return to the Plan area (planning site still `Remote site`) and set the reminder lead time.
-- **Expect:** **Enable notifications** names Backyard as the reminder site, the active criteria, and the lead time, while the window list still names `Remote site`.
-- **Trace:** flow K · PLAN-FR-01, PLAN-FR-03, PLAN-FR-06 · PLAN-AC-06 · D07
+- **Do:** In Settings → Observing sites, choose **Make default** on Backyard. Return to the Targets page's Planned view (planning site still `Remote site`) and set the reminder lead time in its header.
+- **Expect:** Backyard carries the one Default pill and the "No default site" notice is gone. In the Planned view header, **Enable notifications** names Backyard as the reminder site, the active criteria, and the lead time, while the Planned view still names `Remote site`.
+- **Trace:** flow K · PLAN-FR-01, PLAN-FR-03, PLAN-FR-06 · PLAN-AC-06 · D07 · HARNESS-V5-IA.md S16 (Sites: one Default pill, Make default)
 
 ### S6 — Deny notification permission {#S6}
 
-- **Do:** Click **Enable notifications** and deny the OS permission request.
-- **Expect:** The denial stays visible and offers **Settings** and **Retry**; notifications read not enabled.
+- **Do:** In the Planned view header, click **Enable notifications** and deny the OS permission request.
+- **Expect:** The denial stays visible in the Planned view header and offers **Settings** and **Retry**; notifications read not enabled.
 - **Expect (negative):** No delivery success is claimed.
 - **Trace:** flow K · PLAN-FR-07 · PLAN-AC-08 · D07
 
 ### S7 — Enable reminders {#S7}
 
 - **Do:** Grant the permission in the OS settings and click **Retry**.
-- **Expect:** Notifications read enabled for Backyard. Every reminder names Backyard and its window.
-- **Expect (negative):** No reminder is created for `Remote site`. Enabling reminders starts no indexing or processing.
-- **Trace:** flow K · PLAN-FR-03 · PLAN-AC-02, PLAN-AC-05 · D07
+- **Expect:** The Planned view header reads notifications on for Backyard. Reminders exist only for planned windows: each names NGC 7000, Backyard and one of its windows on tonight's or tomorrow's night, the two nights whose plan holds NGC 7000.
+- **Expect (negative):** No reminder is created for `Remote site`, for a night without a plan, or for a Target in no plan. Enabling reminders starts no indexing or processing.
+- **Trace:** flow K · PLAN-FR-03 · PLAN-AC-02, PLAN-AC-05 · D07 · Round 6 "Reminders and calendar export stay" (a notification before a planned window), "Per-night plans"
 
 ### S7a — Receive one reminder {#S7a}
 
@@ -88,65 +108,86 @@ Project or session data and starts no indexing.
 
 ### S8 — Restart without duplicate reminders {#S8}
 
-- **Do:** Quit and relaunch PlateVault with the P4 clock still inside the S7a window's lead time, then open the Plan area.
+- **Do:** Quit and relaunch PlateVault with the P4 clock still inside the S7a window's lead time, then open the Targets page's Planned view.
 - **Expect:** Upcoming windows are recomputed and each Backyard window has at most one reminder. The S7a reminder still reads delivered.
 - **Expect (negative):** No second notification arrives for the S7a target/site/window identity; the OS notification list holds exactly one for it.
 - **Trace:** flow K · PLAN-FR-06 · PLAN-AC-07 · D07
 
-### S9 — Export a calendar snapshot {#S9}
+### S9 — Export every planned night to a calendar file {#S9}
 
-- **Do:** Click **Export calendar**, confirm the displayed planning site, date range, time zone, and selected windows, and save the `.ics` with the native save dialog.
-- **Expect:** The saved file contains exactly the selected windows with the displayed site and time-zone basis.
-- **Expect (negative):** No provider account, calendar authorization, or hosted subscription is requested.
-- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · root FR-015, D18
+- **Do:** With the date picker on tonight, click **Export calendar** in the Planned view header. Read the confirmation of the planning site, date range, time zone and windows, confirm it, and save the `.ics` with the native save dialog.
+- **Expect:** The confirmation covers everything upcoming, not only the night the date picker shows: its date range runs from tonight to tomorrow's night, it names `Remote site` and its time zone, and it lists exactly NGC 7000's windows on those two nights. The saved file contains exactly those windows with the displayed site and time-zone basis.
+- **Expect (negative):** The export leaves out no planned night, and it holds no window of an unplanned Target or of a night without a plan. No provider account, calendar authorization, or hosted subscription is requested.
+- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · root FR-015, D18 · Round 6 "Reminders and calendar export stay" (a calendar export of everything upcoming, all planned nights)
 
 ### S10 — Change criteria after export {#S10}
 
-- **Do:** Raise the minimum-duration criterion and compare the saved `.ics` with its S9 bytes.
-- **Expect:** The window list changes; the saved file is byte-identical to S9 and a new export is needed to reflect the change.
-- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03
+- **Do:** In Settings → Observing sites, raise `Remote site`'s Min. altitude by 10°. Return to the Planned view and compare the saved `.ics` with its S9 bytes.
+- **Expect:** The window list changes: every listed window now stays above the new minimum altitude. The saved file is byte-identical to S9, and a new export is needed to reflect the change.
+- **Expect (negative):** Raising the minimum altitude changes no field of Backyard.
+- **Trace:** flow K calendar · PLAN-FR-04 · PLAN-AC-03 · apps/prototype src/features/t1/settings/sites-page.tsx (Min. altitude, Darkness) and src/domain/planning.ts defaultCriteria @ b5e813a5
 
 ### S11 — Plan a Target outside any Project {#S11}
 
-- **Do:** On the Targets page, search `m 31` and choose **Add to targets** on the M 31 result. Select the M 31 row to open its Plan area.
-- **Expect:** M 31 is listed in My targets. Its Plan area computes windows that name the active planning site and its time zone, and offers **Mark Planned**, **Enable notifications** and **Export calendar**.
-- **Expect (negative):** No step asks for a Project or creates one, and the Plan area shows no Project goal gap for M 31.
-- **Trace:** flow K · PLAN-FR-09, PLAN-TGT-FR-03 · PLAN-AC-09 · root FR-013 · D-W16, D-W17
+- **Do:** On the Targets page, search `m 31` and click the M 31 result. Choose **Add to plan** on the M 31 row and read the Planned view.
+- **Expect:** M 31 is listed in My targets with ★ set. The Planned view lists NGC 7000 and M 31 in order of their best window's start, and M 31's windows name the active planning site and its time zone.
+- **Expect (negative):** No step asks for a Project or creates one, and M 31's Target detail lists no Project and no goal line. M 31 joins tonight's plan only: tomorrow's plan still lists exactly NGC 7000.
+- **Trace:** flow K · PLAN-FR-09, PLAN-TGT-FR-03 · PLAN-AC-09 · root FR-013 · D-W16, D-W17 · Round 5 P-PLAN2 (Planned: the night's schedule in order), "Click a result to act" · Round 6 "Per-night plans", "Clicking a result" (a catalogue result is added)
 
 ### S12 — Plan from the Project page {#S12}
 
-- **Do:** Open the `NGC 7000 HOO` Project page and read its planning. Click **Open in Planner**, then clear the Project context.
-- **Expect:** The Project page lists windows for NGC 7000 only, at the active planning site. **Open in Planner** opens the Targets page limited to NGC 7000, with the `NGC 7000 HOO` context shown and the rig selector set to "this Project's rigs". Clearing the context returns the list to My targets, which lists M 31 and NGC 7000, with NGC 7000 carrying the `NGC 7000 HOO` badge.
+- **Do:** Open the `NGC 7000 HOO` Project page and read its Planning section. Click **Planner**, read the Planned view, then clear the Project scope.
+- **Expect:** The Project page's Planning lists NGC 7000 only, with its best window tonight at the active planning site and its goal gaps. **Planner** opens the Targets page scoped to the Project (`?project=`), with the `NGC 7000 HOO` context shown and the rig selector reading "This Project's rigs (2)". Its Planned view lists only NGC 7000, with its 2 unmet goals ("2 short"). Clearing the scope returns the Planned view to the Plan list, which lists NGC 7000 and M 31.
 - **Expect (negative):** M 31 appears in no Project planning list, and planning from the Project page writes no Project record.
-- **Trace:** flow K · PLAN-FR-09, PLAN-FR-10, PLAN-TGT-FR-01 · PLAN-AC-10 · PRJ-FR-07 · root FR-013 · D-W16, D-W37, D-W60
+- **Trace:** flow K · PLAN-FR-09, PLAN-FR-10, PLAN-TGT-FR-01 · PLAN-AC-10 · PRJ-FR-07 · root FR-013 · D-W16, D-W37, D-W60 · HARNESS-V5-IA.md S3 (Planning), S11 (`?project=` scopes the page to that Project's subjects with their unmet goals)
 
 ### S13 — Read Tonight on Home {#S13}
 
-- **Do:** With the planning site selector still on `Remote site`, open Home and read its Tonight section.
-- **Expect:** Tonight names Backyard and its time zone. It lists the best window tonight for NGC 7000 and for M 31, each with start, end and peak altitude. Each matches the best window that the Target's Plan area lists for Backyard tonight under the same criteria. It also shows the Moon's illumination, phase, rise and set, and tonight's darkness window.
-- **Expect (negative):** No Tonight value is computed for `Remote site`, and no Target without a window tonight is listed. Reading Tonight schedules no reminder and starts no indexing.
-- **Trace:** Home Tonight · PLAN-FR-08, PLAN-FR-11 · PLAN-AC-11 · PRJ-FR-17 · PV-PLAN-SC-04 · D-W39
+- **Do:** With the planning site still on `Remote site`, open Home and read its Tonight box. Then follow its Plan link.
+- **Expect:** Tonight names `Remote site` and its time zone, and shows tonight's darkness window and the Moon's phase, illumination, rise and set. Its windows list NGC 7000 and ★ M 31, each with start, end, peak altitude and Moon separation, and each matches the best window that the Planned view lists for that Target at `Remote site` tonight. The Plan link opens the Targets page's Planned view.
+- **Expect (negative):** No Tonight value is computed for Backyard while `Remote site` is the picked planning site. Reading Tonight schedules no reminder and starts no indexing.
+- **Trace:** Home Tonight · PLAN-FR-08, PLAN-FR-11 · PLAN-AC-11 · PRJ-FR-17 · PV-PLAN-SC-04 · D-W39 · HARNESS-V5-IA.md S1 (Tonight) · HARNESS-V5-FEEDBACK-R1.md Domain and seed (Sites: Plan and Tonight use the default unless one is picked)
+
+### S14 — Confirm before the default site takes the reminders {#S14}
+
+- **Do:** In Settings → Observing sites, choose **Make default** on `Remote site`, read the confirmation, and cancel it.
+- **Expect:** The confirmation "Make Remote site the default?" lists "Default: Remote site" and "Reminders: Backyard → Remote site". After cancelling, Backyard still carries the Default pill and the Planned view header's notifications still name Backyard.
+- **Expect (negative):** Nothing changes before the confirmation is accepted: no default moves and no reminder moves to `Remote site`.
+- **Trace:** PLAN-FR-03 · HARNESS-V5-IA.md S16 (Sites) · apps/prototype src/features/t1/settings/sites-page.tsx, messages/en-GB.json site_make_default_title, settings_default_named, site_reminders_change @ b5e813a5 · Round 6 "Reminders and calendar export stay"
 
 ## Success criteria
 
 - SC1: Every window lists its site and time zone, and capture sites are unchanged through S3.
-- SC2: 0 reminders exist before S7; after S7 100% of reminders name Backyard and 0 name `Remote site`.
-- SC3: The `.ics` contains exactly the S9 selected windows and is unchanged after S10.
-- SC4: 0 indexing operations start from planning, reminder or Tonight steps (S7, S13).
+- SC2: 0 reminders exist before S7; after S7 100% of reminders name Backyard and a window on a planned night (tonight or tomorrow), and 0 name `Remote site`.
+- SC3: The `.ics` contains exactly the S9 windows, NGC 7000's on tonight's and tomorrow's nights at `Remote site`, spans 2 nights, and is unchanged after S10.
+- SC4: 0 indexing operations start from planning, night, reminder or Tonight steps (S3a, S7, S13).
 - SC5: A permission denial stays visible with Settings and Retry (S6).
 - SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 - SC7: M 31 is planned with 0 Projects created or chosen (S11), and the Project page plans exactly 1 subject, NGC 7000 (S12).
-- SC8: Tonight lists exactly 2 Targets, NGC 7000 and M 31, at Backyard, and each best window equals the Plan area's best Backyard window for that Target (S13).
+- SC8: Tonight lists exactly 2 Targets with a window, NGC 7000 and M 31, at `Remote site`, and each best window equals the Planned view's best `Remote site` window for that Target (S13).
+- SC9: Per filter shows exactly 5 bands for NGC 7000, and raising OIII's Moon separation changes 0 of the other 4 (S2). Returning the date picker to tonight restores 100% of the S3 values (S3a).
+- SC10: Making `Remote site` the default asks first and, when cancelled, moves 0 defaults and 0 reminders (S14).
+- SC11: Tomorrow's plan holds 0 Targets before the S3a add and exactly 1, NGC 7000, after it; tonight's plan holds exactly NGC 7000 throughout S3a, and adding M 31 at S11 leaves tomorrow's plan at exactly 1.
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D07 and D18, and the workflow decisions D-W16, D-W36, D-W37, D-W39, D-W60 and D-W66. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S1, S3, S10, S11 and S16; HARNESS-V5-FEEDBACK-R1.md Domain and seed and Round 5 P-PLAN2, at ui-harness-v5 b5e813a5, and Round 6 at 4f470775), the specs and the defaults that the authorized autonomous run set in decisions D07 and D18, and the workflow decisions D-W16, D-W36, D-W37, D-W39, D-W60 and D-W66. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: how a scheduled reminder is observed before delivery is unspecified, and so is delivery while the app is closed, which is not claimed without an installed, tested scheduler (D07). S7 and S8 depend on it. Blocks readiness.
 - G3: Unresolved implementation qualification: no development clock control yet brings a window to its lead time or holds it there across a relaunch (P4). S7a, S8 and S13 depend on it. Blocks readiness.
-- G4: Out of scope for this journey: a mosaic subject's Plan area listing each panel (PLAN-FR-02, D-W63) is not exercised. Blocks readiness until covered by a step or a journey. J32/S5 and J32/S7 cover Home's **Plan tonight** Next action (PRJ-FR-18) and the mosaic's centre-based Tonight window (PLAN-FR-11), and J19/S6a covers Tonight without a saved site (PLAN-AC-12).
+- G4: Out of scope for this journey: a mosaic subject's Planned row using its centre and listing each panel (PLAN-FR-02, D-W63, HARNESS-V5-IA.md S11) is not exercised. Blocks readiness until covered by a step or a journey. J32/S5 and J32/S7 cover Home's **Plan tonight** Next action (PRJ-FR-18) and the mosaic's centre-based Tonight window (PLAN-FR-11), and J19/S6a covers Tonight without a saved site (PLAN-AC-12).
+- G5: (dissolved 2026-10-12): answered by Round 6 "Reminders and calendar export stay"; S1, S4 to S7 and S14 now assert **Enable notifications**, its lead time and its state in the Planned view header with reminders only for planned windows at the default site, and S9 and S10 assert **Export calendar** there with an export of every upcoming planned night (tonight's and tomorrow's).
+- G6: (dissolved 2026-10-12): answered by Round 6 "Per-night plans"; S3a now asserts that tomorrow's plan starts empty, **Add to plan** adds NGC 7000 to tomorrow only and tonight keeps its list, and S11 asserts that M 31 joins tonight's plan only.
 
 ## Delta log
 
+- **Δ4** 2026-10-12 · S1, S3a, S4, S5, S6, S7, S9, S11, S14 · behavior-change
+  Each night has its own plan: tomorrow starts empty and Add to plan adds to the chosen night only. Enable notifications, its lead time and Export calendar sit in the Planned view header.
+  Reminders come before planned windows, and the export covers every upcoming planned night, not just the one the date picker shows.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Per-night plans", "Reminders and calendar export stay", "Clicking a result" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6F (intent-gated)
+- **Δ3** 2026-10-12 · S1, S2, S3, +S3a, S4, S5, S8, S10, S11, S12, S13, +S14 · behavior-change
+  The Plan area and Plan page are gone: Targets are added to the plan from their row and read on the Targets page's Planned view, for the night a header date picker sets (default tonight), with a site picker, sparklines and Per filter grades under editable Moon limits. Altitude and darkness come from the site.
+  Home's Tonight follows the picked planning site, and making a site default while reminders are on asks first.
+  Evidence: HARNESS-V5-IA.md §Screens S1, S3, S10, S11, S16; HARNESS-V5-FEEDBACK-R1.md §Domain and seed (Sites, Planning), §Round 5 P-PLAN2, "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); prototype home.tsx TonightBox, sites-page.tsx, planning.ts defaultCriteria @ b5e813a5; user instruction 2026-10-12 · by: JourneysV5.U6Targets (intent-gated)
 - **Δ2** 2026-10-06 · S1, S3, S5, S6, +S11, +S12, +S13 · behavior-change
   The Plan area opens from a Targets row and shows the Project goal gap as "in project" and "captured". A Target outside any Project is planned without a Project. The Project page plans its own subjects and opens the Planner in its context. Home's Tonight lists the best windows at the default site.
   Evidence: D-W16, D-W36, D-W37, D-W39, D-W60 (workflow decisions, settled 2026-10-06); 072 PLAN-FR-02, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-AC-09, PLAN-AC-10, PLAN-AC-11 at e4476231; D-W66, 065 PRJ-FR-04, PRJ-FR-21 at d45a22ad · by: agent (intent-gated, user instruction)

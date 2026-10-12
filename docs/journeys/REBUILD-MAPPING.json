@@ -9,7 +9,7 @@
     },
     {
       "old": "J02",
-      "successor": "J31 (Import replaces the inbox move; it is not equivalent)",
+      "successor": "J31 (Import replaces the inbox move; it is not equivalent), J37 (confirming and culling a new night's sessions after an import)",
       "recommendation": "Leave unchanged pending a decision; if deprecated, point to J31 and say Import is not equivalent to the inbox move."
     },
     {
@@ -19,27 +19,27 @@
     },
     {
       "old": "J04",
-      "successor": "J19, J21",
-      "recommendation": "Deprecate with a pointer to J19/J21 once intent is recorded."
+      "successor": "J19, J21, J37",
+      "recommendation": "Deprecate with a pointer to J19/J21/J37 once intent is recorded."
     },
     {
       "old": "J05",
       "successor": "J20, J24, J26, J27, J34",
-      "recommendation": "Deprecate with pointers once intent is recorded. J20 holds the required-Project setup and J34 the Project Done / Archive sheet."
+      "recommendation": "Deprecate with pointers once intent is recorded. J20 holds the required-Project setup and J34 the Project's Wrap up stage."
     },
     {
       "old": "J06",
-      "successor": "J27 for run Clean up of prepared entries; J34 for rejected raw frames, processing intermediates and a Done Project's duplicate copies, offered only on the Done / Archive sheet (STO-FR-14, STO-FR-16)",
-      "recommendation": "Deprecate with pointers to J27 and J34 once intent is recorded. Whole-library raw-sub reclaim outside a Done Project has no successor."
+      "successor": "J27 for run Clean up of prepared entries; J34 for rejected raw frames, processing intermediates and a Project's duplicate copies in its Wrap up stage (P-WRAP1, STO-FR-14, STO-FR-16); J39 for library-wide duplicate copies found by the automatic scan; J44 for the library clean-up of Unusable (rejected) frames outside a Project's Wrap up (Round 6)",
+      "recommendation": "Deprecate with pointers to J27, J34, J39 and J44 once intent is recorded."
     },
     {
       "old": "J07",
-      "successor": "J28 for verified archive transfer, J34 for Project Archive and its keep rule (permanent delete has no successor)",
+      "successor": "J28 for verified archive transfer, J34 for the Project's Wrap up Archive step and its keep rule (permanent delete has no successor)",
       "recommendation": "Deprecate with pointers to J28 and J34 and say permanent delete was removed."
     },
     {
       "old": "J08",
-      "successor": "J23 (automatic calibration), J26/S8 to J26/S9b (master offered once in the Results step, adoption)",
+      "successor": "J36 (stacking raw calibration frames into masters, Import masters, master details and Dismiss), J23 (automatic assignment of masters), J26/S8 to J26/S9b (master offered once in the Results step, adoption)",
       "recommendation": "Deprecate with pointers once intent is recorded."
     },
     {
@@ -49,18 +49,18 @@
     },
     {
       "old": "J10",
-      "successor": "none",
-      "recommendation": "Leave unchanged; settings, appearance, and i18n are outside flow A–L."
+      "successor": "J40 (appearance and language), J41 (naming, goal templates, locations and applications)",
+      "recommendation": "Deprecate with pointers to J40 and J41 once intent is recorded."
     },
     {
       "old": "J11",
-      "successor": "partial: J19/S10, J23/S6",
-      "recommendation": "Leave unchanged pending a decision; inbox mistake recovery has no successor."
+      "successor": "J43 (routine recoveries in v5), J44 (putting a trashed Unusable frame back); partial: J19/S10, J23/S6",
+      "recommendation": "Deprecate with a pointer to J43 once intent is recorded; inbox mistake recovery has no successor."
     },
     {
       "old": "J12",
-      "successor": "distributed across the J19, J24, J27, and J28 failure branches",
-      "recommendation": "Leave unchanged pending a decision."
+      "successor": "J38 (issues and refusals surfaced in the status bar and the Issues hub), J43 (acting on a refusal, Retry); distributed across the J19, J24, J27 and J28 failure branches",
+      "recommendation": "Deprecate with pointers to J38 and J43 once intent is recorded."
     },
     {
       "old": "J13",
@@ -79,8 +79,8 @@
     },
     {
       "old": "J16",
-      "successor": "none",
-      "recommendation": "Leave unchanged."
+      "successor": "J42 (keyboard-first in v5)",
+      "recommendation": "Deprecate with a pointer to J42 once intent is recorded."
     },
     {
       "old": "J17",
@@ -89,8 +89,8 @@
     },
     {
       "old": "J18",
-      "successor": "none (J18 is itself a rebuild journey, v3); J19/S1 to J19/S4 own the onboarding Locations step",
-      "recommendation": "Keep as a rebuild journey for the Home-first orientation walk and the Getting-started checklist."
+      "successor": "none (J18 is itself a rebuild journey, v4): Round 6 keeps an orientation walk after setup and a four-item Getting started checklist on Home; J19/S1 to J19/S4 own the onboarding Locations step",
+      "recommendation": "Keep as a rebuild journey for the walk and the Home checklist (Round 6, user, 2026-10-10)."
     },
     {
       "old": "J30",
@@ -100,172 +100,249 @@
   ],
   "readiness": {
     "common": {
-      "goalObservableDone": "pass (all 19 rebuild journeys, per the authoring audit of each slice)",
-      "expectsFalsifiable": "pass (all 19, per the authoring audit of each slice)",
-      "successCriteriaConcrete": "pass (all 19; each SC has a count, value, or state)",
-      "negativesAtTrustPoints": "pass (all 19; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
-      "actorsSurfacesInterfacesTrace": "pass (all 19 fill actors, surfaces, interfaces and trace; README lists the rebuild surface keys, including home, import, view-review and done-archive-sheet)",
+      "goalObservableDone": "pass (all 28 rebuild journeys, per the authoring audit of each slice)",
+      "expectsFalsifiable": "pass for every journey except those where a blocker below leaves an Expect undecided or not yet observable: J19 (G10), J29 (G2), J32 (G6) and J35 (G6)",
+      "successCriteriaConcrete": "pass (all 28; each SC has a count, value, or state)",
+      "negativesAtTrustPoints": "pass (all 28; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
+      "actorsSurfacesInterfacesTrace": "pass (all 28 fill actors, surfaces, interfaces and trace; README lists the rebuild and harness v5 surface keys and maps the v5 prototype paths)",
       "preconditionsEstablishable": "fail where a G entry names an unresolved implementation qualification",
-      "errorBranchesScoped": "pass only together with the G entries that scope acceptance scenarios no step observes (J19/G6-G7, J20/G4, J21/G4, J22/G3-G4, J25/G4, J26/G3, J28/G6, J31/G3, J33/G4, J35/G3 and J35/G5: LIB-AC-03, LIB-AC-12, LIB-AC-13, VSEL-AC-12, VSEL-AC-13, VSEL-AC-17, PIX-AC-08, PIX-AC-12, PIX-AC-13, RES-AC-12, STO-AC-12, STO-AC-14, STO-IMP-AC-03, PLAN-TGT-AC-06, PLAN-TGT-AC-07, PLAN-TGT-AC-08); each of those entries blocks readiness",
-      "statusOutcome": "All 19 rebuild journeys (J14, J15, J18 to J29, J31 to J35) remain status: draft. The not-validated gap in each (G1, or J15/G4) says the rebuilt application does not exist and nothing has been validated. Promotion needs a fresh validation run in which every step passes. J30 is retired (status: deprecated, successor J31) and has no readiness entry."
+      "errorBranchesScoped": "pass only together with the G entries that scope branches no step observes; every \"out of scope\" entry below blocks readiness until a step covers it or the user accepts it",
+      "statusOutcome": "All 28 rebuild journeys (J14, J15, J18 to J29, J31 to J44) remain status: draft. Round 6 (user, 2026-10-10) and §Input modes P-PREP2 answered the earlier product questions; the answered gaps are dissolved. The not-validated gap in each (G1, or J15/G4) still holds, and FORMAT.md promotes a journey only through a validation run in which every step passes. J30 is retired (status: deprecated, successor J31) and has no readiness entry."
     },
     "perJourney": [
       {
         "id": "J14",
         "blocking": [
-          "G2 catalogued major axis behind the S1 Fit reading not checked"
+          "G2 (implementation qualification) S1 assumes NGC 7000's catalogued major axis is about 2°."
         ]
       },
       {
         "id": "J15",
         "blocking": [
-          "G5 filter-list save fault control (P4)",
-          "G6 site removal and default-site reassignment not exercised",
-          "G7 Import-preview unknown-filter prompt (STO-IMP-FR-03) not exercised",
-          "G8 observing-sites pane label and first-site default rule unspecified"
+          "G5 (implementation qualification) no fault control yet fails a filter-list save (P4).",
+          "G7 (out of scope) the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here.",
+          "G10 (product question) the v5 prototype's session detail offers no \"Add {value} to {rig}\", and the v5 design (HARNESS-V5-IA.md S16) does not say either way, so S4b and S4c keep the contract text (PLAN-EQ-FR-04).",
+          "G11 (implementation qualification) the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs)."
         ]
       },
       {
         "id": "J18",
         "blocking": [
-          "G2 no spec owner for the orientation walk and the Getting-started checklist",
-          "G3 prepared run, Siril launch and failing-executable profile for S9b"
+          "G3 (implementation qualification) S9b needs a prepared run and a working Siril launch, as J24 sets up; a failing-executable profile for the negative case is not specified.",
+          "G4 (product question) Round 6 decides only that there is \"an orientation walk after setup\".",
+          "G5 (product question) Round 6 names the four items but not the outcome that ticks two of them, and leaves one import case open.",
+          "G6 (product question) Round 6 says the checklist shows \"until done\", and all four items tick from real outcomes."
         ]
       },
       {
         "id": "J19",
         "blocking": [
-          "G2 no point where the rigs `RedCat` and `Esprit` are created in this catalog (J15 owns the controls); locate/remap not exercised",
-          "G3 catalog-write fault fixture",
-          "G4 re-index control",
-          "G5 indexing duration for S6",
-          "G6 same-night Ha/OIII fixture for LIB-AC-03",
-          "G7 release-build exclusion of the development bridge (LIB-AC-13)",
-          "G8 whether agreeing pointing evidence confirms a Target without Confirm Target"
+          "G3 (implementation qualification) no fault-injection mechanism exists yet for the S11 catalog-write failure (P6).",
+          "G5 (implementation qualification) S6 needs indexing to run long enough to observe.",
+          "G6 (out of scope) the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised.",
+          "G7 (out of scope) the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes.",
+          "G9 (implementation qualification) same-asset locate/remap (LIB-FR-07, D11) and \"locate a known copy\" are not exercised in this journey.",
+          "G10 (product question) Round 6 defines My targets as \"yours plus favourites\", while HARNESS-V5-IA.md S10 says \"the ★ favourites plus open-Project subjects\"."
         ]
       },
       {
         "id": "J20",
         "blocking": [
-          "G3 observing-sites pane and label (J15/G8)",
-          "G4 resolver enrichment and failure (LIB-AC-12)"
+          "G4 (out of scope) external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised.",
+          "G7 (out of scope) the Goals section's exposure-mismatch and missing-calibration warnings per rig (HARNESS-V5-IA.md S3) are not exercised."
         ]
       },
       {
         "id": "J21",
         "blocking": [
-          "G2 overlap value used to order footprint candidates (D01)",
-          "G3 stale-overwrite concurrency not exercised (D08)",
-          "G4 choosing one subject among several (VSEL-AC-17) not exercised"
+          "G2 (implementation qualification) the footprint overlap used for ordering (D01) has no fixed value.",
+          "G3 (out of scope) D08 stale-overwrite refusal with reload/review needs a second concurrent writer and is not exercised."
         ]
       },
       {
         "id": "J22",
         "blocking": [
-          "G2 PIX numerical method and tolerance qualification; CFA not exercised",
-          "G3 invalid-sample fixture (PIX-AC-08)",
-          "G4 cross-Project display of a rejected frame (PIX-AC-12 other Projects, PIX-AC-13) and library-Unusable frames starting excluded in a new draft (VSEL-AC-13) not exercised"
+          "G2 (implementation qualification) numerical measurement methods, metric set, masks, saturation, background, aperture and tolerances need fixture qualification in PIX planning (D03).",
+          "G3 (out of scope) no fixture holds NaN, infinity or masked samples, so PIX-AC-08's invalid-sample evidence is not exercised.",
+          "G4 (out of scope) a frame shared with a second Project's candidates (PIX-AC-13) and its Rejected state in other Projects' runs (PIX-AC-12) are not observed, because the fixture has one NGC 7000 Project.",
+          "G5 (out of scope) no frame is trashed before this journey.",
+          "G8 (product question) Round 6 asks for confirmation on large bulk marks (\"⌘A then P/X/U on many frames\", \"Mark 120 frames Unusable?\") but sets no size.",
+          "G9 (product question) what **Discard** does to a Review draft made by X."
         ]
       },
       {
         "id": "J23",
         "blocking": [
-          "G2 Siril capability probe (D04); other profiles not exercised"
+          "G2 (implementation qualification) Siril profile capability probes (D04) must exist before S8 can show verified evidence.",
+          "G6 (out of scope) when no master matches a requirement and a raw session that would stack into one awaits Stack, the row offers `Stack from <session>`, which opens that calibration process at…",
+          "G7 (product question) P-PREP2 makes **Link to originals** opt-in with a warning and re-hashes the originals after the run, but does not say whether it stays blocked for a profile whose input-write behavior is unknown…"
         ]
       },
       {
         "id": "J24",
         "blocking": [
-          "G2 Siril handoff and input-write probe (D04)",
-          "G3 per-item input-mode changes not exercised",
-          "G4 Cancel/Pause phases unspecified",
-          "G5 fault control pausing Prepare between snapshot and success"
+          "G2 (implementation qualification) Siril's exact handoff and its input-write behavior (P2) need a profile capability probe (D04).",
+          "G3 (out of scope) Automatic deciding per item across mixed volumes, so that one preparation holds both cloned and copied entries (D04, PREP-FR-08), and the re-hash of the originals after a Link to originals run,…",
+          "G4 (implementation qualification) the specs do not say which preparation phases offer Cancel or Pause \"where safe\".",
+          "G5 (implementation qualification) no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it.",
+          "G10 (product question) what a rejection made in one run does to another open run of the same Project whose saved revision holds the frame."
         ]
       },
       {
         "id": "J25",
         "blocking": [
-          "G2 preparing revision 3 into `NGC7000-HOO-Siril (rev 2)/` with the shared Results folder (PREP-AC-21) and cleanup of replaced entries (STO-FR-10) not exercised",
-          "G4 Refresh while the application runs (VSEL-AC-12) and D09 manual-inclusion pinning not exercised"
+          "G2 (out of scope) preparing revision 3 into `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril (rev 2)/`, with both revisions sending their Results to `NGC7000-HOO-Siril Results/` (D09, PREP-FR-07, PREP-AC-21), and…",
+          "G4 (out of scope) Refresh while the external application is running on the prepared revision (VSEL-AC-12) is not exercised, and no member is a manual inclusion, so the D09 pinning of manual inclusions is not observed."
         ]
       },
       {
         "id": "J26",
         "blocking": [
-          "G2 Siril product-input capability (D04)",
-          "G3 mixed raw and product inputs, Add accepted results and a run group with no group Result (RES-AC-12) not exercised",
-          "G4 fault control pausing adoption before registration",
-          "G5 whether adopting a master re-ranks a prepared run's assignments",
-          "G6 how a discovered Result's prepared revision is decided (RES-FR-01, RES-AC-16)"
+          "G2 (implementation qualification) Siril's product-input capability (D04) decides which S5 branch applies.",
+          "G3 (out of scope) picking a product from another Project into a run (RES-AC-13) is only read in S4a, not prepared.",
+          "G4 (implementation qualification) no fault control yet pauses adoption between destination verification and registration (P6), and S8c depends on it.",
+          "G9 (product question) S8c leaves a verified copy, named unregistered, at the one fixed destination `Astro-T7/Calibration/Flats/RedCat/Ha/2026-10-01/MasterFlat_2026-10-01.fit`, and S9 adopts to that same path."
         ]
       },
       {
         "id": "J27",
         "blocking": [
-          "G2 Direct-source Clean up not exercised",
-          "G3 removing replaced entries before the run is Complete (STO-FR-10) not exercised"
+          "G2 (out of scope) Clean up of a **Give PixInsight the file list** run (P-PREP2, which replaces Direct source) needs such a run, and no journey prepares one yet.",
+          "G3 (out of scope) removing replaced prepared entries before the run is Complete (STO-FR-10, D09) is not exercised.",
+          "G5 (implementation qualification) no fault control yet holds a run's Clean up operation Running (P9).",
+          "G6 (out of scope) P-PREP2 re-hashes the originals of a **Link to originals** run after the run."
         ]
       },
       {
         "id": "J28",
         "blocking": [
-          "G2 hash-mismatch fault fixture",
-          "G3 run layout for P4 and the source-retirement method",
-          "G4 Direct-source path updates not exercised",
-          "G5 fault control pausing an item before source retirement",
-          "G6 Storage availability, run footprints and duplicate candidates (STO-AC-12) and Archive started from Storage (STO-FR-06) not exercised"
+          "G2 (implementation qualification) no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised.",
+          "G3 (implementation qualification) no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification.",
+          "G4 (out of scope) the file list of a **Give PixInsight the file list** run (P-PREP2, which replaces Direct source), whose paths a move affects, is not exercised because no journey prepares such a run.",
+          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5).",
+          "G9 (product question) Round 6 lets Sessions archive sessions that are in no Project, but says nothing about a selection that also holds a session of a Project, a candidate or a member of a run, or about archiving part…",
+          "G10 (product question) under P-PREP2 the entries of `NGC7000-HOO-Siril` are independent, read-only clones, so with `Archive` unplugged (S10) or retired (S12) its run folder still holds every verified input."
         ]
       },
       {
         "id": "J29",
         "blocking": [
-          "G2 reminder observability and the scheduler (D07)",
-          "G3 development clock control (S7a, S8 and S13)",
-          "G4 a mosaic Plan area listing each panel (PLAN-FR-02, D-W63) not exercised"
+          "G2 (implementation qualification) how a scheduled reminder is observed before delivery is unspecified, and so is delivery while the app is closed, which is not claimed without an installed, tested scheduler (D07).",
+          "G3 (implementation qualification) no development clock control yet brings a window to its lead time or holds it there across a relaunch (P4).",
+          "G4 (out of scope) a mosaic subject's Planned row using its centre and listing each panel (PLAN-FR-02, D-W63, HARNESS-V5-IA.md S11) is not exercised."
         ]
       },
       {
         "id": "J31",
         "blocking": [
-          "G2 growing-file writer and share-unmount fixture tooling",
-          "G3 failed destination verification and source drift (STO-IMP-AC-03, STO-AC-14) not exercised",
-          "G4 role with no location (STO-IMP-FR-02) and the Import-preview unknown-filter prompt (STO-IMP-FR-03) not exercised",
-          "G5 `{target}` sanitizing rule (STO-IMP-FR-07)"
+          "G2 (implementation qualification) the growing-file writer (P2) and unmounting the share at a known point (S10) need fixture tooling that does not exist yet.",
+          "G3 (out of scope) a failed destination verification and a source that changes after its snapshot (STO-IMP-AC-03, STO-AC-14) need fault injection.",
+          "G4 (out of scope) a role with no location, which blocks its items with the missing role named (STO-IMP-FR-02; `No Captures location`), and the unknown-filter prompt in the preview (STO-IMP-FR-03, PLAN-EQ-FR-04) are…",
+          "G8 (product question) P-IMP2 prefills a session's Target from its pointing, but Round 6 does not say what the preview shows for a session whose pointing is missing or that no Target's footprint contains (`2 Oct OIII`,…"
         ]
       },
       {
         "id": "J32",
         "blocking": [
-          "G2 seeded catalog fixture builder at a fixed local time",
-          "G3 rescan control for a registered location",
-          "G4 where the Actions section's Plan tonight opens; one session in several New sessions groups"
+          "G2 (implementation qualification) P1 and P2 need a seeded catalog in a known state at a fixed local time.",
+          "G5 (out of scope) a session that qualifies for two Sessions groups at once (the v5 prototype lists a candidate in no run with Unreviewed frames under both Unreviewed and Ready to add), and the Work box's Pause,…",
+          "G6 (product question) Round 6 asks for confirmation on large bulk marks (\"⌘A then P/X/U on many frames\", \"Mark 120 frames Unusable?\") but sets no size, so S4 cannot say whether ⌘A then P on 48 frames asks first."
         ]
       },
       {
         "id": "J33",
         "blocking": [
-          "G2 WBPP capability probe (D04); no named control for naming a mosaic or entering panel centres and rotation",
-          "G3 panel-assignment geometry tolerance (D-W38) not fixed",
-          "G4 Cancel/Pause of Prepare all, all panels failing, cleanup of the previous group folder and RES-AC-12 with no group Result not exercised",
-          "G5 how a discovered Result's prepared revision is decided (RES-FR-01, RES-AC-16)"
+          "G2 (implementation qualification) the WBPP profile's capability probe (D04) and the folder input it uses are not qualified.",
+          "G3 (implementation qualification) the panel-assignment geometry rule (pointing inside a panel's footprint drawn from the rig's field of view, D-W38) has no fixed tolerance, and the overlap between the editor's panels is not specified.",
+          "G4 (out of scope) Cancel or Pause of Prepare all, a group whose every panel fails, cleanup of the previous `Veil Mosaic/` folder (which must leave `Veil Mosaic Results/` in place), a run group with no group Result…",
+          "G7 (implementation qualification) P-CAL3 files master flats by optical train, filter and night (`Flats/<train>/<filter>/<night>/`, HARNESS-V5-IA.md Round 2b), but the S7 edge case needs a 17 Aug Ha master flat with no…"
         ]
       },
       {
         "id": "J34",
         "blocking": [
-          "G3 archive transfer failures, interruption and reference repair belong to J28",
-          "G4 Tool-recorded input lineage for F-res (P4)",
-          "G5 approving the restore of an Archived session after Reopen (STO-FR-13) not exercised"
+          "G3 (out of scope) archive transfer failures, interruption and a symlink that cannot be repointed are J28's.",
+          "G4 (implementation qualification) P4 needs Tool-recorded input lineage from a processing tool for F-res.",
+          "G5 (out of scope) approving the restore of an Archived session after Reopen (STO-FR-13) is not exercised, because S12a stops at the review.",
+          "G6 (out of scope) Next reading Wrap up (D-W35, HARNESS-V5-IA.md S1) is not observed, because the Project's candidates keep library-Unreviewed frames (P2), so Review N new frames comes first.",
+          "G7 (out of scope) approving Clean up runs (Clean up all…) in Wrap up is not exercised, because S3b skips it so that J28 keeps the prepared clones and symlinks."
         ]
       },
       {
         "id": "J35",
         "blocking": [
-          "G2 SIMBAD-only network block and Add-to-targets failure control",
-          "G3 Moon and darkness zero reasons and a Target without coordinates (PLAN-TGT-AC-06, PLAN-TGT-AC-07) not exercised",
-          "G4 Size unknown and Field of view unknown Fit reasons (PLAN-EQ-FR-05) not exercised",
-          "G5 a wholly Trashed session leaving Sessions and Captured (PLAN-TGT-AC-08) not exercised",
-          "G6 catalogue angular sizes behind the Fit readings"
+          "G2 (implementation qualification) no network control yet blocks SIMBAD alone (P3), and no fault control fails adding a Target from a result to exercise its Retry (PLAN-TGT-FR-03).",
+          "G3 (out of scope) the Moon and darkness reasons for a zero Img time (PLAN-TGT-AC-06) and a Target without catalogued coordinates (PLAN-TGT-AC-07) need fixture nights and Targets that are not specified.",
+          "G4 (out of scope) Fit's \"Size unknown\" and \"Field of view unknown\" reasons (072 edge cases, PLAN-EQ-FR-05) are not exercised.",
+          "G5 (out of scope) no session is Trashed here.",
+          "G6 (implementation qualification) the bundled catalogue's angular sizes for NGC 7000, IC 1396 and M 57 are assumed to place them as S10, S11 and S12 state for the J15 fields of view."
+        ]
+      },
+      {
+        "id": "J36",
+        "blocking": [
+          "G2 (implementation qualification) the P5 stand-in does not exist.",
+          "G4 (out of scope) dark flats; Import routing raw calibration frames into a process awaiting Stack (J31); a run's `Stack from <session>` offer and the `?process=` highlight it opens (J23/G6); Import failures for…"
+        ]
+      },
+      {
+        "id": "J37",
+        "blocking": [
+          "G2 (implementation qualification) P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2).",
+          "G3 (implementation qualification) P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05).",
+          "G5 (out of scope) a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, Create Project from a session with no Target, which…",
+          "G6 (product question) Unresolved product question, shared with J22 G8: Round 6 asks for confirmation on large bulk marks (\"Mark 120 frames Unusable?\") but sets no size.",
+          "G7 (product question) P-IMP2 says an Unclassified session \"can be filed later with one reviewed move\" but not whether Confirm Target and the move are one action."
+        ]
+      },
+      {
+        "id": "J38",
+        "blocking": [
+          "G2 (implementation qualification) P1 and P6 need seeded catalogs in a known state, including a pending master offer, a raw flat session awaiting Stack and a drifted frame.",
+          "G3 (implementation qualification) S8 needs the import interrupted at a known point, and S10 needs a rescan that runs long enough to focus.",
+          "G4 (out of scope) failed work (`… failed`, ⛔, from an operation that fails) and an unreadable location (`… unreadable`, ⛔, Fix)."
+        ]
+      },
+      {
+        "id": "J39",
+        "blocking": [
+          "G2 (implementation qualification) P1 to P4 need a seeded catalog with indexed copies on `Cold-1` and `Scratch` and no scan recorded after them.",
+          "G5 (out of scope) a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a scan canceled from the status bar.",
+          "G7 (product question) which copy is the keeper when two or more copies of a group sit in the same earliest-registered location (for example a session folder duplicated inside `Astro-T7 captures`)?"
+        ]
+      },
+      {
+        "id": "J40",
+        "blocking": [
+          "G2 (implementation qualification) SC2 needs a contrast measurement over computed colours in the real webview; no validator script exists for it, and the harness figures in themes-contrast.md were computed from tokens, not from the…",
+          "G3 (implementation qualification) S4 needs the validator to switch the OS appearance during a run on each desktop lane."
+        ]
+      },
+      {
+        "id": "J41",
+        "blocking": [
+          "G2 (implementation qualification) P1 needs a seeded catalog (J32's fixture world plus P3's three Archive locations and the Wrap up destination)."
+        ]
+      },
+      {
+        "id": "J42",
+        "blocking": [
+          "G2 (implementation qualification) S7 needs a rescan that runs long enough to focus (P6).",
+          "G3 (implementation qualification) SC1 needs a driver that sends only key events and records any pointer event, on both interface profiles."
+        ]
+      },
+      {
+        "id": "J43",
+        "blocking": [
+          "G2 (implementation qualification) S1 needs the rescan to run long enough to quit PlateVault mid-way, cancel the quit prompt and quit again, and S6 needs Measure frames to run long enough to try Move to Trash.",
+          "G6 (product question) Unresolved product question, shared with J22 G9: Round 6 makes X a library-wide Unusable mark under which the frame \"leaves every run\", and the Review draft that X makes offers Discard."
+        ]
+      },
+      {
+        "id": "J44",
+        "blocking": [
+          "G3 (out of scope) an unreadable copy, a stale review, a location whose OS removal deletes immediately (STO-FR-15) and a ChangedContent frame (LIB-FR-09) are not exercised in the library clean-up.",
+          "G4 (implementation qualification) F-res needs Tool-recorded input lineage from a processing tool (J34/G4), and S1's F-res refusal depends on it."
         ]
       }
     ]

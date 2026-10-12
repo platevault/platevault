@@ -51,7 +51,7 @@
     {
       "flowStep": "B2",
       "owner": "065-project-goals",
-      "journeyStep": "J20/S2, J20/S3, J20/S4, J20/S5, J14/S4, J22/S12",
+      "journeyStep": "J20/S2, J20/S3, J20/S4, J20/S5, J14/S2a, J22/S12",
       "spec": "065-project-goals PRJ-FR-01, PRJ-FR-02, PRJ-FR-03, PRJ-FR-04, PRJ-FR-05, PRJ-FR-08, PRJ-FR-09, PRJ-FR-12, PRJ-FR-21, PRJ-AC-01, PRJ-AC-02, PRJ-AC-03, PRJ-AC-09, PRJ-AC-14; D10, D12, D-W30, D-W36, D-W37, D-W66",
       "action": "Create Project NGC 7000 HOO from the Target with rig RedCat and the HOO goal template, read its derived candidates and goals, edit a goal and add rig Esprit. Later, lower the Ha goal until it reads met and set it back.",
       "expect": "The Project starts with NGC 7000 as its subject and Ha 10h and OIII 10h goals. Candidates are exactly the sessions whose confirmed Target and rig match the Project, and each goal shows in project and captured, where captured counts the candidates plus run members. A met goal leaves the Project open.",
@@ -69,10 +69,10 @@
     {
       "flowStep": "B4",
       "owner": "066-view-selection",
-      "journeyStep": "J14/S3, J14/S4, J20/S8",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02, VSEL-FR-03, VSEL-AC-01, VSEL-AC-16, VSEL-AC-18; 065-project-goals PRJ-FR-10, PRJ-FR-20; D-W1, D-W8, D-W37, D-W50",
-      "action": "Choose Start a processing run from a Target that is in no Project, then create the Project and the run. From the Project page, start a run on subject NGC 7000 and rig RedCat.",
-      "expect": "From the Target, PlateVault first asks for Create Project or Add to Project. The run is created inside the Project with only the Project's subject and rig as choices, opens at Select with its candidates preselected, and the stage rail lists it at Select although every goal is unmet.",
+      "journeyStep": "J14/S2a, J14/S2b, J20/S8",
+      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02, VSEL-FR-03, VSEL-AC-01, VSEL-AC-17, VSEL-AC-18; 065-project-goals PRJ-FR-10, PRJ-FR-20; D-W1, D-W8, D-W37, D-W50; harness v5 S10 (a Target page starts no run; VSEL-AC-16 needs a contract amendment)",
+      "action": "From a Target page, add the Target to an existing Project after its preview, then start a run there on subject NGC 7000 and rig RedCat. From the Project page of NGC 7000 HOO, start a run on subject NGC 7000 and rig RedCat.",
+      "expect": "The Target page offers Add to Plan, Add to Project and New Project, and never a run. The run is created inside the Project with only the Project's subjects and rigs as choices, opens at Select with its candidates preselected, and the Runs table lists it at Select although every goal is unmet.",
       "negative": "No standalone or Target-only run is offered. Starting a run creates no folder on disk, changes no quality state and lists no session from another rig."
     },
     {
@@ -186,10 +186,10 @@
     {
       "flowStep": "E1",
       "owner": "068-calibration-inputs",
-      "journeyStep": "J23/S1, J23/S2, J23/S3, J23/S4, J23/S7a",
-      "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-02, CAL-FR-03, CAL-FR-04, CAL-FR-09, CAL-FR-10, CAL-AC-01, CAL-AC-11, CAL-AC-14; D13, D-W5, D-W37, D-W55",
-      "action": "Move the run to Calibrate, open Review matches, read Why this match for an automatic flat, and inspect the raw flat handoff. In a second run, turn automatic assignment off and accept a suggestion.",
-      "expect": "Every fully compatible match is assigned automatically and the readiness line reads every group matched. Review matches lists each light group and calibration type as Automatic with its compatible, incompatible and unknown criteria, and raw flats go to the application to build its own masters. With automatic assignment off, matches read Suggested until accepted, then Accepted.",
+      "journeyStep": "J23/S1, J23/S2, J23/S3, J23/S4a, J23/S7a",
+      "spec": "068-calibration-inputs CAL-FR-01, CAL-FR-02, CAL-FR-03, CAL-FR-09, CAL-FR-10, CAL-AC-01, CAL-AC-11, CAL-AC-14; D13, D-W5, D-W37, D-W55; P-CAL3 (harness v5, masters only; supersedes the CAL-FR-04 raw-set handoff)",
+      "action": "Move the run to Calibrate, open Review matches, read Why this match for an automatic flat, and check that every assigned input is a master. In a second run, turn automatic assignment off and accept a suggestion.",
+      "expect": "Every fully compatible match is assigned automatically and the readiness line reads every group matched. Review matches lists each light group and calibration type as Automatic with its compatible, incompatible and unknown criteria, and every assigned input is a master from the Calibration library. With automatic assignment off, matches read Suggested until accepted, then Accepted.",
       "negative": "No match with an unknown or incompatible criterion is assigned automatically, and another camera's inputs are never candidates. No temperature tolerance is applied unless shown, no suggestion is a handoff input before acceptance, and no master is written."
     },
     {
@@ -510,7 +510,7 @@
     {
       "flowStep": "Settings > Goal templates",
       "owner": "065-project-goals",
-      "journeyStep": "J20/S2, J20/S4, J14/S4, J15/S4e",
+      "journeyStep": "J20/S2, J20/S4, J15/S4e",
       "spec": "065-project-goals PRJ-FR-12, PRJ-AC-14; 072-observing-plans PLAN-EQ-AC-05; D-W30, D-W31",
       "action": "Apply the built-in HOO template to a new Project, edit a copied goal, and open Settings > Goal templates with each rig selected.",
       "expect": "The same built-in templates are listed whichever rig is selected, and applying HOO copies Ha 10h and OIII 10h into the Project as goals.",
@@ -555,11 +555,11 @@
     {
       "flowStep": "Start a processing run inside a Project (subject and rig)",
       "owner": "066-view-selection",
-      "journeyStep": "J14/S3, J14/S4, J20/S8, J32/S5, J33/S2",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-18, VSEL-AC-16, VSEL-AC-21; 065-project-goals PRJ-FR-10, PRJ-AC-05; D-W1, D-W8, D-W37, D-W38, D-W50",
-      "action": "Choose Start a processing run from a Target in no Project, from a Project page, from Home's Next action, and on a mosaic subject.",
-      "expect": "Outside any Project PlateVault first asks for Create Project or Add to Project. Inside a Project it asks for one subject and one rig of that Project and creates the run there; a mosaic subject creates a run group with one panel run per panel.",
-      "negative": "No run exists outside a Project, no whole-mosaic run is offered, and cancelling creates no run."
+      "journeyStep": "J14/S2b, J20/S8, J32/S5, J33/S2",
+      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-18, VSEL-AC-21; 065-project-goals PRJ-FR-10, PRJ-AC-05; D-W1, D-W8, D-W37, D-W38, D-W50; harness v5 S3, S10 (VSEL-AC-16 needs a contract amendment)",
+      "action": "Choose Start a run from a Project page after adding a Target to it, from a Project page, from Home's Next action, and on a mosaic subject.",
+      "expect": "Inside a Project the Start run sheet asks for one subject and one rig of that Project, with an optional profile, and creates the run there; a mosaic subject creates a run group with one panel run per included panel.",
+      "negative": "No run exists outside a Project, a Target page offers no run, no whole-mosaic run is offered, and cancelling creates no run."
     },
     {
       "flowStep": "Add N new sessions (refresh), including Reopen of a Complete run",
@@ -573,10 +573,10 @@
     {
       "flowStep": "Mosaic run group: panel assignment, shared setup, Review all",
       "owner": "066-view-selection",
-      "journeyStep": "J33/S2, J33/S3, J33/S4, J33/S5, J33/S6",
-      "spec": "066-view-selection VSEL-FR-07, VSEL-FR-08, VSEL-FR-15, VSEL-FR-16, VSEL-FR-18, VSEL-FR-19, VSEL-AC-21, VSEL-AC-22; 067-frame-review PIX-FR-17, PIX-AC-18; 065-project-goals PRJ-FR-04; D-W38, D-W41, D-W73",
-      "action": "Start a run on the mosaic subject and confirm its panels, read panel coverage, assign the flagged sessions to panels, set the shared setup once and save, then open Review all.",
-      "expect": "After the user confirms the panels, one panel run per panel is created, sessions join a panel by pointing, and flagged sessions wait for the user's choice. The shared setup shows on every panel run, each panel run saves its own revision, and Review all lists every panel's frames with a Panel column.",
+      "journeyStep": "J33/S1c, J33/S2, J33/S3, J33/S5, J33/S6",
+      "spec": "066-view-selection VSEL-FR-07, VSEL-FR-08, VSEL-FR-15, VSEL-FR-16, VSEL-FR-18, VSEL-FR-19, VSEL-AC-21, VSEL-AC-22; 067-frame-review PIX-FR-17, PIX-AC-18; 065-project-goals PRJ-FR-04; D-W38, D-W41, D-W73; harness v5 mosaic editor (HARNESS-V5-FEEDBACK-R1.md §B Mosaic flow)",
+      "action": "In the mosaic editor, assign the flagged sessions to panels and start the group with its included panels, read panel coverage, set the shared setup once and save, then open Review all.",
+      "expect": "Sessions are placed on a panel by pointing, flagged sessions wait for the user's choice in the editor, and starting the group creates one panel run per included panel. The shared setup shows on every panel run, each panel run saves its own revision, and Review all lists every panel's frames with a Panel column.",
       "negative": "No whole-mosaic run is offered, no session joins a panel without pointing or a user choice, and assigning a panel changes no header or Target."
     },
     {
