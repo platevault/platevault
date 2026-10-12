@@ -71,6 +71,7 @@ import { confirmTarget } from "@/store/actions/library"
 import { nowIso, type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { cancelOperation, pauseOperation, resumeOperation } from "@/store/operations"
 import { SessionReview } from "../d-review/review"
+import { wrapUpOf } from "../b-projects/model"
 import { AddToProjectDialog, AddToProjectMenu, type AddedNotice, addToProjectEntries, type PendingAdd, refusalOf } from "./parts"
 import { runToJoin } from "./session-model"
 
@@ -231,7 +232,7 @@ function GoalLines({ goals }: { goals: ChannelGoal[] }) {
 function NextButton({ state, project }: { state: PrototypeState; project: Project }) {
   const follow = useFollowLink()
   const m = useMessages()
-  const next = projectNext(state, project, Date.parse(nowIso()))
+  const next = projectNext(state, project, Date.parse(nowIso()), (p) => wrapUpOf(state, p))
   if (!next) return <span className="text-muted-foreground">–</span>
   const runId = next.step ? next.link.params?.runId : undefined
   const run = runId ? state.catalog.runs[runId] : undefined
@@ -303,7 +304,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
     { id: "next", header: m.home_column_next(), className: "w-[12rem] align-top", cell: (p) => <div className="py-1"><NextButton state={state} project={p} /></div> },
   ]
   const menu = (p: Project): MenuEntry[] => {
-    const next = projectNext(state, p, Date.parse(nowIso()))
+    const next = projectNext(state, p, Date.parse(nowIso()), (x) => wrapUpOf(state, x))
     return [
       { heading: p.name },
       ...(next ? [{ label: say(m, next.label), onSelect: () => follow(next.link) }] : []),

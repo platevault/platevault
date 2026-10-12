@@ -19,7 +19,7 @@ export interface BState {
   archiveOrigins: ArchiveOrigins
   /** The latest operation of each approval, per Project. */
   approvals: Record<ProjectId, Partial<Record<WrapUpApproval, OperationId>>>
-  /** Wrap up trash offers the user skipped, per Project (the shared `wrapUp.trash` record settles once each is moved or skipped). */
+  /** Wrap up trash offers the user skipped, per Project; with the approvals and what is left they give the Trash step's state (`trashStep`). */
   skippedOffers: Record<ProjectId, OfferKind[]>
 }
 

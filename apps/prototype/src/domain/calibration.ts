@@ -20,6 +20,7 @@ import type {
   CalibrationPolicy,
   Catalog,
   Disk,
+  IsoDateTime,
   MatchCriterion,
   MembershipContent,
   Run,
@@ -378,7 +379,7 @@ export interface CalibrationPlan {
   rows: RequirementRow[]
   groups: Array<{ key: string; parts: MessageRef[]; rows: RequirementRow[] }>
   counts: Record<RowState, number>
-  /** Rows that need the user: no compatible input, deferred, or a drifted input (CAL-AC-06). With the policy off, drifted inputs only. */
+  /** Rows that need the user: no compatible input, deferred, or a drifted input (CAL-AC-06). With the policy off, drifted inputs only; a Complete run's, none. */
   needsReview: RequirementRow[]
 }
 
@@ -390,12 +391,15 @@ const HANDED_OFF = new Set<RowState>(["automatic", "accepted", "exception"])
  * assignment keeps its master when a better one appears (no silent re-rank);
  * rows with no compatible input, deferred rows and drifted inputs need
  * review. With the policy off compatible masters are Suggested and nothing is
- * handed off until accepted (D-W55, round 6).
+ * handed off until accepted (D-W55, round 6). A Complete run's calibration is
+ * what it recorded (Complete records its automatic choices, `automaticAssignments`):
+ * nothing is matched or judged again, and nothing needs review, until Reopen.
  */
 export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: CalibrationPolicy, content: MembershipContent | null): CalibrationPlan {
   const counts: Record<RowState, number> = { automatic: 0, suggested: 0, accepted: 0, exception: 0, deferred: 0, unresolved: 0 }
   const members = content ? memberSessions(catalog, content) : []
-  const sources = reusableSources(catalog, disk)
+  const frozen = run.completion === "complete"
+  const sources = frozen ? [] : reusableSources(catalog, disk)
   const rows: RequirementRow[] = []
   for (const member of members) {
     const group = groupOf(catalog, member.session)
@@ -416,7 +420,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
         input = assignment.input
         const live = assignment.input ? candidates.find((c) => sameInput(c.source.input, assignment.input)) : undefined
         criteria = assignment.criteria.length > 0 ? assignment.criteria : (live?.criteria ?? [])
-        if (assignment.input && HANDED_OFF.has(state)) {
+        if (!frozen && assignment.input && HANDED_OFF.has(state)) {
           drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, assignment)
           if (suggestion && !sameInput(suggestion.source.input, assignment.input) && (!live || compareCandidates(member.session.night, suggestion, live) < 0)) better = suggestion
         }
@@ -456,8 +460,21 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
     else groups.push({ key: row.groupKey, parts: row.groupParts, rows: [row] })
   }
   for (const row of rows) counts[row.state] += 1
-  const needsReview = rows.filter((r) => r.drift !== null || (policy === "automatic" && (r.state === "suggested" || r.state === "deferred" || r.state === "unresolved")))
+  const needsReview = frozen ? [] : rows.filter((r) => r.drift !== null || (policy === "automatic" && (r.state === "suggested" || r.state === "deferred" || r.state === "unresolved")))
   return { policy, rows, groups, counts, needsReview }
+}
+
+/**
+ * The plan's automatic choices as stored assignments, each with the SHA-256
+ * its files have now: recorded before a master joins the matched set (no
+ * silent re-rank) and on Complete, which freezes what the run handed off.
+ */
+export function automaticAssignments(catalog: Catalog, disk: Disk, runId: string, plan: CalibrationPlan, at: IsoDateTime): CalibrationAssignment[] {
+  return plan.rows.flatMap((row): CalibrationAssignment[] =>
+    row.state === "automatic" && row.assignment === null && row.input
+      ? [{ id: assignmentId(runId, row.member.session.id, row.kind), lightSessionId: row.member.session.id, kind: row.kind, input: row.input, state: "automatic", criteria: row.criteria, exception: null, basis: { at, files: basisFiles(catalog, disk, row.input) } }]
+      : [],
+  )
 }
 
 /** Handed-off calibration inputs, deduplicated (one master can serve many sessions). */

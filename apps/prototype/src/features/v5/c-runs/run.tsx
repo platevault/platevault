@@ -69,16 +69,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
             ) : null}
           </>
         }
-        meta={
-          <>
-            <RunStatusLabel status={runStatus(pipeline)} at />
-            {pipeline.status === "complete" && pipeline.calibration.needsReview.length > 0 ? (
-              <Pill tone="warning" link={runStepLink(run, "calibrate")}>
-                {m.domain_status_unresolved({ count: pipeline.calibration.needsReview.length })}
-              </Pill>
-            ) : null}
-          </>
-        }
+        meta={<RunStatusLabel status={runStatus(pipeline)} at />}
         description={
           <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
             <Pill tone="muted" icon={Telescope} title={m.run_subject_fixed()}>

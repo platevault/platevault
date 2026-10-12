@@ -20,10 +20,13 @@ import {
   projectGroups,
   projectMemberSessionIds,
   projectRuns,
+  type ProjectWrapUp,
+  projectWrapUp,
   rigCameraKind,
   sessionNamingValues,
   sessionTargetId,
   type StepLink,
+  type WrapUpStep,
 } from "@/domain/derive"
 import { qualityApplicability } from "@/domain/library"
 import { keptCopy, keptViewLinks, runViewLinks, type RunViewLinks, type TrashBlock, trashBlock } from "@/domain/storage"
@@ -157,7 +160,7 @@ function resultInputs(catalog: Catalog): Map<AssetId, string> {
  * given frames, those whose applicable library quality is Unusable.
  * Project-only rejects, ChangedContent and Trashed frames never enter. Every
  * copy moves, and one refused copy refuses the frame (D-W57). Wrap up offers
- * a Project's candidate frames; Sessions' Unusable filter offers any.
+ * the Project's frames; Sessions' Unusable filter offers any.
  */
 export function unusableFramesOffer(state: PrototypeState, assetIds: Iterable<AssetId>): TrashOffer {
   const { catalog, disk } = state
@@ -206,11 +209,11 @@ export function unusableFramesOffer(state: PrototypeState, assetIds: Iterable<As
   return offer("rejected-frames", disk, links, entries, refusals, items)
 }
 
-/** Wrap up's rejected-frames offer: the Project's candidate frames that are library Unusable. */
+/** Wrap up's rejected-frames offer: the library-Unusable frames of the Project's sessions (candidates and run members, as duplicates read them). */
 export function rejectedFramesOffer(state: PrototypeState, project: Project): TrashOffer {
   return unusableFramesOffer(
     state,
-    projectCandidates(state.catalog, project).flatMap((candidate) => liveAssetIds(state.catalog, candidate.session)),
+    projectSessions(state.catalog, project).flatMap((session) => liveAssetIds(state.catalog, session)),
   )
 }
 
@@ -308,12 +311,68 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
   return offer("duplicate-copies", disk, links, entries, refusals, items)
 }
 
+/** The order Wrap up lists its trash offers in. */
+export const OFFER_KINDS: OfferKind[] = ["rejected-frames", "intermediates", "duplicate-copies"]
+
 export function trashOffers(state: PrototypeState, project: Project): Record<OfferKind, TrashOffer> {
   return {
     "rejected-frames": rejectedFramesOffer(state, project),
     intermediates: intermediatesOffer(state, project),
     "duplicate-copies": duplicatesOffer(state, project),
   }
+}
+
+/**
+ * One Wrap up trash offer by what is left: "skipped" by the user; "moving"
+ * while its approved move runs; "left" while it holds items to trash, also
+ * after an earlier move (frames marked Unusable, intermediates or duplicates
+ * found since); "moved" once its move left nothing; otherwise "none".
+ * Refusals never count as left: nothing can move them.
+ */
+export type OfferState = "left" | "moving" | "moved" | "skipped" | "none"
+
+export interface TrashKindState {
+  offer: TrashOffer
+  state: OfferState
+  /** The latest approved move of this kind. */
+  operationId: string | null
+}
+
+export interface TrashStepState {
+  kinds: Record<OfferKind, TrashKindState>
+  /** To do while anything is left or moving; Skipped when the user skipped what was left and nothing moved; otherwise Done (nothing left to trash). */
+  state: WrapUpStep["state"]
+  /** Bytes still offered. */
+  sizeBytes: number
+}
+
+/**
+ * Wrap up's Trash step (P-WRAP1), derived from what is left to trash rather
+ * than recorded, so its state, the Project's Next and the offers agree.
+ */
+export function trashStep(state: PrototypeState, project: Project): TrashStepState {
+  const offers = trashOffers(state, project)
+  const approvals = state.slices.b.approvals[project.id] ?? {}
+  const skipped = state.slices.b.skippedOffers[project.id] ?? []
+  const kindState = (kind: OfferKind): TrashKindState => {
+    const offer = offers[kind]
+    const operationId = approvals[kind] ?? null
+    const status = operationId ? state.operations[operationId]?.status : undefined
+    const left: OfferState = skipped.includes(kind) ? "skipped" : status === "running" || status === "paused" ? "moving" : offer.count > 0 ? "left" : operationId ? "moved" : "none"
+    return { offer, state: left, operationId }
+  }
+  const kinds: Record<OfferKind, TrashKindState> = { "rejected-frames": kindState("rejected-frames"), intermediates: kindState("intermediates"), "duplicate-copies": kindState("duplicate-copies") }
+  const states = OFFER_KINDS.map((kind) => kinds[kind].state)
+  return {
+    kinds,
+    state: states.some((s) => s === "left" || s === "moving") ? "todo" : states.includes("skipped") && !states.includes("moved") ? "skipped" : "done",
+    sizeBytes: OFFER_KINDS.reduce((n, kind) => n + (kinds[kind].state === "left" ? kinds[kind].offer.sizeBytes : 0), 0),
+  }
+}
+
+/** The Project's Wrap up with its Trash step derived (`trashStep`): what Wrap up and the Project's Next read. */
+export function wrapUpOf(state: PrototypeState, project: Project): ProjectWrapUp {
+  return projectWrapUp(state.catalog, project, { trash: trashStep(state, project).state })
 }
 
 // ---------------------------------------------------------------------------

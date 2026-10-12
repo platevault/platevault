@@ -28,6 +28,7 @@ import type { Project } from "@/domain/types"
 import { say } from "@/lib/i18n"
 import { nowIso, updateSlice, useStore } from "@/store/core"
 import { ProjectDetailsDialog } from "./details-dialog"
+import { wrapUpOf } from "./model"
 
 interface Row {
   project: Project
@@ -59,7 +60,7 @@ export function ProjectsPage() {
           openRuns: runs.filter((r) => r.completion === "open").length,
           groups: projectGroups(s.catalog, project.id).length,
           stage: projectStage(s, project),
-          next: projectNext(s, project, now),
+          next: projectNext(s, project, now, (p) => wrapUpOf(s, p)),
           wrapUp: project.state === "done" || projectWrapUp(s.catalog, project).available,
           trashed: Object.values(s.catalog.runs).filter((r) => r.projectId === project.id && r.trashedAt).length,
         }

@@ -6,8 +6,8 @@
  * 1. Clean up runs: every Complete run's prepared entries (its footprint)
  *    through the run's own Clean up (slice C's `startCleanup`).
  * 2. Trash: rejects, intermediates and duplicates, each its own approval
- *    through the shared OS Trash engine; the shared `trash` step settles once
- *    each is moved or skipped.
+ *    through the shared OS Trash engine; the step's state is derived from
+ *    what is left to trash (`trashStep`), so anything left is offered.
  * 3. Archive: member sessions to the chosen archive location (the Default
  *    unless the Project picks another).
  * 4. Done: Mark Done.
@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useMessages } from "@/app/preferences"
 import { GateLabel } from "@/app/run-ui"
-import { archiveLocations, defaultArchiveLocation, projectRuns, projectWrapUp, runStepLink, type WrapUpStep } from "@/domain/derive"
+import { archiveLocations, defaultArchiveLocation, projectRuns, runStepLink, type WrapUpStep } from "@/domain/derive"
 import { OPERATION_UNIT_NAME } from "@/domain/labels"
 import { runFootprint } from "@/domain/storage"
 import type { Operation, Project, Run, WrapUpStepId } from "@/domain/types"
@@ -40,11 +40,10 @@ import { type CommitResult, type PrototypeState, store, updateSlice, useStore } 
 import { startCleanup } from "@/features/v5/c-runs/actions"
 import { cleanupReview } from "@/features/v5/c-runs/model"
 import { startArchiveTransfer } from "./actions"
-import { archivePlan, type OfferKind, sessionLabel, type TrashOffer, trashOffers } from "./model"
+import { archivePlan, OFFER_KINDS, type OfferKind, sessionLabel, type TrashOffer, trashStep, wrapUpOf } from "./model"
 import { CommitOutcome, OfferRefusals, offerChanges, useCommitError } from "./parts"
 import { rememberApproval } from "./trash"
 
-const OFFER_ORDER: OfferKind[] = ["rejected-frames", "intermediates", "duplicate-copies"]
 const OFFER_NAME: Record<OfferKind, MessageRef> = { "rejected-frames": msg("wrapup_offer_rejects"), intermediates: msg("run_results_intermediates"), "duplicate-copies": msg("wrapup_offer_duplicates_label") }
 
 function offerLabel(m: Messages, kind: OfferKind): string {
@@ -88,19 +87,9 @@ function cleanupRows(state: PrototypeState, project: Project): CleanupRow[] {
   }))
 }
 
-/** Each trash offer is settled once moved, skipped or empty; returns the shared step's state when all three are. */
-function trashSettlement(state: PrototypeState, project: Project): "done" | "skipped" | null {
-  const offers = trashOffers(state, project)
-  const approvals = state.slices.b.approvals[project.id] ?? {}
-  const skipped = state.slices.b.skippedOffers[project.id] ?? []
-  const settled = OFFER_ORDER.every((k) => approvals[k] || skipped.includes(k) || (offers[k].count === 0 && offers[k].refusals.length === 0))
-  if (!settled) return null
-  return OFFER_ORDER.some((k) => approvals[k]) ? "done" : "skipped"
-}
-
 export function WrapUpStage({ project }: { project: Project }) {
   const m = useMessages()
-  const wrap = useStore((s) => projectWrapUp(s.catalog, project))
+  const wrap = useStore((s) => wrapUpOf(s, project))
   const done = project.state === "done"
   const waiting = wrap.waitingOn
   const record = useCommitError()
@@ -120,7 +109,7 @@ export function WrapUpStage({ project }: { project: Project }) {
       ) : null}
       <CommitOutcome result={record.result} action={m.wrapup_refusal_record_step()} />
       <CleanupStep project={project} step={step("cleanup")} pill={pillFor(step("cleanup"))} editable={editable} current={wrap.current === "cleanup"} settle={(s) => settle("cleanup", s)} />
-      <TrashStep project={project} step={step("trash")} pill={pillFor(step("trash"))} editable={editable} current={wrap.current === "trash"} settle={(s) => settle("trash", s)} />
+      <TrashStep project={project} step={step("trash")} pill={pillFor(step("trash"))} editable={editable} current={wrap.current === "trash"} />
       <ArchiveStep project={project} step={step("archive")} pill={pillFor(step("archive"))} editable={editable} current={wrap.current === "archive"} settle={(s) => settle("archive", s)} />
       <DoneStep project={project} ready={wrap.available && wrap.current === null} available={wrap.available} />
     </div>
@@ -274,37 +263,20 @@ interface StepProps {
 // 2. Trash: rejects, intermediates, duplicates
 // ---------------------------------------------------------------------------
 
-function TrashStep({ project, step, pill, editable, current, settle }: StepProps) {
+/** Each offer and the step's state come from `trashStep`: what is left to trash, never a stored record. */
+function TrashStep({ project, step, pill, editable, current }: Omit<StepProps, "settle">) {
   const m = useMessages()
-  const offers = useStore((s) => trashOffers(s, project))
-  const approvals = useStore((s) => s.slices.b.approvals[project.id] ?? {})
-  const skipped = useStore((s) => s.slices.b.skippedOffers[project.id] ?? [])
-  const bytes = OFFER_ORDER.reduce((n, k) => n + (approvals[k] || skipped.includes(k) ? 0 : offers[k].sizeBytes), 0)
-  const firstOpen = OFFER_ORDER.find((k) => !approvals[k] && !skipped.includes(k) && offers[k].count > 0)
+  const trash = useStore((s) => trashStep(s, project))
+  const skipped = OFFER_KINDS.filter((k) => trash.kinds[k].state === "skipped")
+  const firstOpen = OFFER_KINDS.find((k) => trash.kinds[k].state === "left")
 
-  const afterChange = () => {
-    const state = store.getState()
-    const project_ = state.catalog.projects[project.id]
-    if (!project_ || project_.wrapUp.trash) return
-    const result = trashSettlement(state, project_)
-    if (result) settle(result)
-  }
-  const skip = (kind: OfferKind) => {
-    updateSlice("b", (b) => ({ ...b, skippedOffers: { ...b.skippedOffers, [project.id]: [...new Set([...(b.skippedOffers[project.id] ?? []), kind])] } }))
-    afterChange()
-  }
-  const resetAll = () => {
-    updateSlice("b", (b) => ({ ...b, skippedOffers: { ...b.skippedOffers, [project.id]: [] } }))
-    settle(null)
-  }
-  const skipAll = () => {
-    updateSlice("b", (b) => ({ ...b, skippedOffers: { ...b.skippedOffers, [project.id]: OFFER_ORDER.filter((k) => !approvals[k]) } }))
-    settle(OFFER_ORDER.some((k) => approvals[k]) ? "done" : "skipped")
-  }
+  const setSkipped = (kinds: OfferKind[]) => updateSlice("b", (b) => ({ ...b, skippedOffers: { ...b.skippedOffers, [project.id]: kinds } }))
+  const skip = (kind: OfferKind) => setSkipped([...new Set([...skipped, kind])])
+  const resetAll = () => setSkipped([])
+  const skipAll = () => setSkipped([...skipped, ...OFFER_KINDS.filter((k) => trash.kinds[k].state === "left")])
   const move = (offer: TrashOffer) => {
     const operationId = moveToOsTrash({ kind: offer.kind, title: msg("op_offer_to_trash", { offer: OFFER_NAME[offer.kind], name: project.name }), projectId: project.id, runIds: [], items: offer.items, href: `/projects/${project.id}?stage=wrap-up` })
     rememberApproval(project.id, offer.kind, operationId)
-    afterChange()
   }
 
   return (
@@ -312,7 +284,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
       id="wrap-trash"
       n={2}
       title={m.trash_title()}
-      size={bytes > 0 ? formatBytes(bytes) : null}
+      size={trash.sizeBytes > 0 ? formatBytes(trash.sizeBytes) : null}
       pill={pill}
       flush
       actions={
@@ -330,24 +302,27 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
       }
     >
       <ul className="divide-y divide-separator text-sm">
-        {OFFER_ORDER.map((kind) => {
-          const offer = offers[kind]
-          const operationId = approvals[kind] ?? null
-          const isSkipped = skipped.includes(kind)
-          const empty = offer.count === 0 && offer.refusals.length === 0
+        {OFFER_KINDS.map((kind) => {
+          const { offer, state, operationId } = trash.kinds[kind]
           return (
             <li key={kind} className="space-y-1.5 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="w-28 font-medium">{offerLabel(m, kind)}</span>
-                {offer.count > 0 && !operationId ? (
+                {state === "left" ? (
                   <>
                     <CountBadge count={offer.count} tone="neutral" label={m.wrapup_items({ count: offer.count })} />
                     <span className="text-xs text-muted-foreground tabular-nums">{formatBytes(offer.sizeBytes)}</span>
                   </>
                 ) : null}
                 <span className="flex-1" />
-                {operationId ? <ApprovalOutcome operationId={operationId} label={m.wrapup_moved()} /> : isSkipped ? <Pill tone="muted">{m.status_skipped()}</Pill> : empty ? <Pill tone="muted">{m.wrapup_none()}</Pill> : null}
-                {editable && !operationId && !isSkipped && offer.count > 0 ? (
+                {(state === "moving" || state === "moved") && operationId ? (
+                  <ApprovalOutcome operationId={operationId} label={m.wrapup_moved()} />
+                ) : state === "skipped" ? (
+                  <Pill tone="muted">{m.status_skipped()}</Pill>
+                ) : state === "none" && offer.refusals.length === 0 ? (
+                  <Pill tone="muted">{m.wrapup_none()}</Pill>
+                ) : null}
+                {editable && state === "left" ? (
                   <>
                     <ConfirmDialog
                       trigger={
@@ -370,7 +345,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
                   </>
                 ) : null}
               </div>
-              {!operationId && !isSkipped ? <OfferRefusals refusals={offer.refusals} /> : null}
+              {state !== "skipped" && state !== "moving" ? <OfferRefusals refusals={offer.refusals} /> : null}
             </li>
           )
         })}
