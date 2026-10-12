@@ -38,6 +38,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
+import { wrapUpOf } from "@/features/v5/b-projects/model"
 import { LOCALE_META, LOCALES, type Locale, say } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
@@ -175,7 +176,7 @@ function useContextNext(): { next: NextAction | null; steps: RunStepState[] | nu
     // The mosaic editor (Start group) and Wrap up (its steps) hold their own primary action.
     const ownsPrimary = Boolean(active.search.mosaic) || active.search.stage === "wrap-up"
     if (project && !ownsPrimary) {
-      const next = projectNext(state, project, Date.parse(nowIso()))
+      const next = projectNext(state, project, Date.parse(nowIso()), (p) => wrapUpOf(state, p))
       // On the screen it names (the candidate review), the Project's Next has nothing more to open.
       const search = next?.link.search ?? {}
       const onIt = Object.keys(search).length > 0 && Object.entries(search).every(([key, value]) => active.search[key] === value)

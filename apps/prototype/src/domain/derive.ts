@@ -935,14 +935,13 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     },
   ]
   if (offers > 0) calibrateItems.push({ label: msg("domain_gate_master_found"), met: "advisory", detail: msg("domain_gate_masters_offered", { count: offers }) })
-  // A Complete run is a recorded fact (RES-FR-06) that nothing blocks: rows that still need review read
-  // "N unresolved" as advisory, the same words the run header shows beside Complete.
+  // A Complete run's calibration is what it recorded (`calibrationPlan`): none of it needs review.
   const calibrate: RunStepState = {
     ...STEP("calibrate"),
-    state: needReview > 0 ? (complete ? "review" : "blocked") : off ? "done" : calibration.rows.length === 0 ? "idle" : "done",
+    state: needReview > 0 ? "blocked" : off ? "done" : calibration.rows.length === 0 ? "idle" : "done",
     status:
       needReview > 0
-        ? msg(complete ? "domain_status_unresolved" : "domain_status_need_review", { count: needReview })
+        ? msg("domain_status_need_review", { count: needReview })
         : off
           ? msg("run_cal_off")
           : calibration.rows.length === 0
@@ -1330,9 +1329,10 @@ export function planningSite(world: Pick<World, "catalog" | "settings" | "faults
  * 3. every run is Complete: "Wrap up" (P-WRAP1), until its steps are done or skipped;
  * 4. a goal is unmet in project and tonight has a window for that subject: "Plan tonight";
  * 5. otherwise "Start a processing run".
- * A Done Project has no Next.
+ * A Done Project has no Next. `wrapUpOf` gives the Project's Wrap up (slice
+ * B's `wrapUpOf`, whose Trash step is derived from what is left to trash).
  */
-export function projectNext(world: World, project: Project, nowMs: number): NextAction | null {
+export function projectNext(world: World, project: Project, nowMs: number, wrapUpOf: (project: Project) => ProjectWrapUp): NextAction | null {
   const { catalog } = world
   if (project.state === "done") return null
   const candidates = projectCandidates(catalog, project)
@@ -1358,7 +1358,7 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
       }
     }
   }
-  const wrapUp = projectWrapUp(catalog, project)
+  const wrapUp = wrapUpOf(project)
   if (wrapUp.available) {
     const step = wrapUp.steps.find((s) => s.id === wrapUp.current)
     return {
@@ -1448,14 +1448,17 @@ export interface ProjectWrapUp {
  * The Project's Wrap up stage: Clean up runs, Trash (rejects, intermediates,
  * duplicates) and Archive, each optional and skippable, then Done. A run's own
  * Clean up stays on its Done step; sizes come from `preparationFootprint`
- * (storage.ts) and the slice's trash and archive plans.
+ * (storage.ts) and the slice's trash and archive plans. `derived` holds the
+ * states a caller derives from what is left (the Trash step, from slice B's
+ * offers: `wrapUpOf`); the other steps read their record.
  */
-export function projectWrapUp(catalog: Catalog, project: Project): ProjectWrapUp {
+export function projectWrapUp(catalog: Catalog, project: Project, derived: Partial<Record<WrapUpStepId, WrapUpStep["state"]>> = {}): ProjectWrapUp {
   const runs = projectRuns(catalog, project.id)
   const waitingOn = runs.filter((r) => r.completion !== "complete")
   const steps = WRAP_UP_STEPS.map((id): WrapUpStep => {
     const record = project.wrapUp[id]
-    return { id, label: WRAP_UP_NAME[id], state: record?.state ?? "todo", at: record?.at ?? null }
+    const state = derived[id]
+    return state ? { id, label: WRAP_UP_NAME[id], state, at: null } : { id, label: WRAP_UP_NAME[id], state: record?.state ?? "todo", at: record?.at ?? null }
   })
   return {
     available: project.state === "open" && runs.length > 0 && waitingOn.length === 0,

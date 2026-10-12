@@ -40,14 +40,14 @@ import {
   stackRefusals,
   stepRecord,
 } from "@/domain/calibration-process"
-import { assignmentId, basisFiles, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
+import { automaticAssignments, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
 import { dismissBlockers, masterUsage } from "@/domain/calibration-library"
 import { createFolder, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder, nightOf, readFiles, stableHash } from "@/domain/indexing"
 import { runSetup, workingContent } from "@/domain/derive"
 import { unitCount } from "@/domain/labels"
 import { headerNamingValues } from "@/domain/templates"
-import type { CalibrationAssignment, CalibrationKind, CalibrationMaster, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
+import type { CalibrationKind, CalibrationMaster, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
 import { fileName } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
@@ -64,7 +64,8 @@ const IMPORT_BLOCKED = msg("store_blocked", { label: CALIBRATION_STEP_NAME.impor
 /**
  * Record every automatic choice runs show now as their assignment, before a
  * master joins the matched set: a run with masters assigned keeps them, and
- * a better master is offered instead of taking over (no silent re-rank).
+ * a better master is offered instead of taking over (no silent re-rank). A
+ * Complete run shows none: it recorded its choices on Complete.
  */
 export function pinAutomaticChoices(state: PrototypeState): PrototypeState {
   const { catalog, disk } = state
@@ -72,11 +73,7 @@ export function pinAutomaticChoices(state: PrototypeState): PrototypeState {
   let runs: PrototypeState["catalog"]["runs"] | null = null
   for (const run of Object.values(catalog.runs)) {
     if (runSetup(catalog, run).calibrationPolicy !== "automatic") continue
-    const pins: CalibrationAssignment[] = calibrationPlan(catalog, disk, run, "automatic", workingContent(run)).rows.flatMap((row) =>
-      row.state === "automatic" && row.assignment === null && row.input
-        ? [{ id: assignmentId(run.id, row.member.session.id, row.kind), lightSessionId: row.member.session.id, kind: row.kind, input: row.input, state: "automatic", criteria: row.criteria, exception: null, basis: { at, files: basisFiles(catalog, disk, row.input) } }]
-        : [],
-    )
+    const pins = automaticAssignments(catalog, disk, run.id, calibrationPlan(catalog, disk, run, "automatic", workingContent(run)), at)
     if (pins.length === 0) continue
     runs ??= { ...catalog.runs }
     runs[run.id] = { ...run, calibration: [...run.calibration, ...pins] }

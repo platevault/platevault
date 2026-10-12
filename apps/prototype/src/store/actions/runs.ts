@@ -17,9 +17,12 @@ import {
   runHref,
   runPipeline,
   runSetup,
+  savedContent,
   subjectRef,
   trashRefusals,
+  workingContent,
 } from "@/domain/derive"
+import { automaticAssignments, calibrationPlan } from "@/domain/calibration"
 import { addSessions, contentEquals, contentOf, describeDiff, diffContent, emptyContent, removeSessions } from "@/domain/membership"
 import type {
   MembershipContent,
@@ -301,7 +304,9 @@ export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): Co
 /**
  * Complete (RES-FR-06, RES-FR-07): records completion even with no accepted
  * Result and removes nothing. Refused only while an operation affecting the
- * run is Running. The current step is kept so Reopen returns there.
+ * run is Running. The current step is kept so Reopen returns there, and the
+ * run's automatic calibration choices are recorded: a Complete run keeps what
+ * it handed off whatever the library holds later.
  */
 export function completeRun(runId: RunId): CommitResult {
   const state = store.getState()
@@ -311,7 +316,16 @@ export function completeRun(runId: RunId): CommitResult {
   const blockers = completeRefusals(state, run)
   if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_complete_named", { name: run.name }) }), blockers, runHref(run, "done"))
   const stage = runPipeline(state, run).current.id
-  return editRun(runId, msg("run_complete"), (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
+  const at = nowIso()
+  return editRun(
+    runId,
+    msg("run_complete"),
+    (current, s) => {
+      const plan = calibrationPlan(s.catalog, s.disk, current, runSetup(s.catalog, current).calibrationPolicy, savedContent(current) ?? workingContent(current))
+      return { ...current, calibration: [...current.calibration, ...automaticAssignments(s.catalog, s.disk, current.id, plan, at)], completion: "complete", completedAt: at, stageBeforeComplete: stage }
+    },
+    { step: "done" },
+  )
 }
 
 /** Reopen returns the run to the step it was in (D-W71 as kept by D-W72); returns that step. */

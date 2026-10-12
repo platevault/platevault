@@ -104,7 +104,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
           )}
           {plan.policy === "off" && plan.counts.suggested > 0 ? <Pill tone="info">{m.run_cal_suggested_count({ count: plan.counts.suggested })}</Pill> : null}
           {better > 0 ? <Pill tone="info">{m.run_cal_better_count({ count: better })}</Pill> : null}
-          {plan.needsReview.length > 0 ? <Pill tone="warning">{run.completion === "complete" ? m.domain_status_unresolved({ count: plan.needsReview.length }) : m.run_cal_to_review({ count: plan.needsReview.length })}</Pill> : null}
+          {plan.needsReview.length > 0 ? <Pill tone="warning">{m.run_cal_to_review({ count: plan.needsReview.length })}</Pill> : null}
           {group ? (
             <Pill tone="info" icon={Layers} link={{ to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: group.projectId, groupId: group.id, step: "calibrate" } }} title={m.run_cal_policy_shared()}>
               {group.name}

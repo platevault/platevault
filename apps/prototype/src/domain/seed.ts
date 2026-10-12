@@ -15,7 +15,8 @@
  *   Trash and Archive still to do (rejected frames, intermediates, duplicate
  *   copies); it archives to the NAS archive, not the Default. Its goals use
  *   every kind: integration with a quality bar, frame counts, Usable only.
- *   A master dark from its Results was dismissed (Restore offer).
+ *   A master dark from its Results was dismissed (Restore offer); its run
+ *   recorded flats and bias and no master dark (darks stacked in PixInsight).
  * - "Heart and Soul" (open): no runs, candidates waiting.
  * - Library: sessions that need a Target, sessions in no Project, a Trashed
  *   session, an offline volume (Cold-1) and a running scan of a network share;
@@ -33,6 +34,7 @@
  */
 import { fileName, formatCount } from "@/lib/format"
 import { joinRefs, msg, verbatim } from "@/lib/i18n"
+import { assignmentId, automaticAssignments, calibrationPlan } from "./calibration"
 import { CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
 import { DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
 import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
@@ -47,6 +49,7 @@ import type {
   ApplicationProfile,
   Asset,
   AssetId,
+  CalibrationAssignment,
   Catalog,
   Disk,
   DiskFile,
@@ -1121,6 +1124,20 @@ function demoSeed(): SeedData {
     steps: { ...processOf(flatOiii).steps, stack: stepRecord("done", "2026-09-27T08:00:00.000Z"), detect: stepRecord("failed", "2026-09-27T09:10:00.000Z", msg("store_cal_tool_output_not_found")) },
     updatedAt: "2026-09-27T09:10:00.000Z",
   }
+
+  // What the Complete runs handed off, as Complete records it (a Complete run is never matched again): Run A's
+  // automatic masters; M 31's flats and bias and no master dark, its 120 s darks stacked in PixInsight (the master its Results hold).
+  const recordHandoff = (r: Run, at: string, withoutMaster: CalibrationAssignment[] = []) => {
+    const plan = calibrationPlan(catalog, disk, { ...r, completion: "open" }, "automatic", r.revisions[0]!)
+    catalog.runs[r.id] = { ...r, calibration: [...automaticAssignments(catalog, disk, r.id, plan, at), ...withoutMaster] }
+  }
+  recordHandoff(runA, runA.completedAt!)
+  const noDarkAt = "2026-09-07T17:55:00.000Z"
+  recordHandoff(
+    m31Run,
+    m31Run.completedAt!,
+    m31Run.revisions[0]!.sessions.map(({ sessionId }): CalibrationAssignment => ({ id: assignmentId(m31Run.id, sessionId, "dark"), lightSessionId: sessionId, kind: "dark", input: null, state: "exception", criteria: [], exception: { reason: "Darks stacked in PixInsight", at: noDarkAt }, basis: { at: noDarkAt, files: [] } })),
+  )
 
   // One drifted-content frame: an M 31 L frame changed on disk after review (LIB-FR-09).
   const driftedId = s.m31.L.assetIds[6]!
