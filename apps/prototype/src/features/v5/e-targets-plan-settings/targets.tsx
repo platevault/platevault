@@ -6,17 +6,21 @@
  * - Night: the header's date picker (default tonight, `?night=`) sets the
  *   night that suitability, altitude, the Moon and windows use; the
  *   planning site sits beside it when there are several.
- * - Views: All (`?view` unset) and Planned (`?view=planned`).
- * - All: My targets (★ favourites plus open-Project subjects with a Project
- *   badge) or Browse catalogues, which lists nothing until a catalogue or a
- *   preset is chosen. "Open in Planner" (`?project=`) limits the list to the
+ * - Views, one toggle in the header (Round 6): My targets (the default),
+ *   Browse catalogues (`?mode=browse`) and Planned (`?view=planned`).
+ * - My targets: ★ favourites plus open-Project subjects with a Project
+ *   badge. Browse catalogues lists nothing until a catalogue or a preset is
+ *   chosen. "Open in Planner" (`?project=`) limits the list to the
  *   Project's subjects, with their unmet goals, and sets the rig to this
  *   Project's rigs (PLAN-FR-10). Search (clearable) covers My targets, the
  *   library, the bundled catalogues and SIMBAD; with SIMBAD unreachable or
  *   lookup off the results say SIMBAD was not searched.
- * - Planned: the Plan list in the user's order (Move up and Move down, or
- *   Alt+↑/↓), else by first window, with each one's windows and the Moon in
- *   its best window; Remove from Plan.
+ * - Planned: the chosen night's own plan (each night has one; Add to plan
+ *   adds to the chosen night) in the user's order (Move up and Move down,
+ *   or Alt+↑/↓), else by first window, with each one's windows and the Moon
+ *   in its best window; Remove from plan. Its header holds Reminders (a
+ *   toggle and a lead time) and Export calendar… (every upcoming planned
+ *   night, previewed before the download).
  * - Columns: ★, Designation, Type, Altitude (a sparkline of the night with
  *   the peak in darkness), Lunar, Img time, Filters (one chip per filter,
  *   graded good tonight), Opposition, Sessions, Captured; Fit with a rig
@@ -54,9 +58,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatHours, goalProgress, planList } from "@/domain/derive"
+import { formatHours, goalProgress } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
-import { shiftNight } from "@/domain/planning"
+import { nightPlan, shiftNight } from "@/domain/planning"
 import { CATALOGUES, type CatalogueId } from "@/domain/sky"
 import type { OpticalTrainId } from "@/domain/types"
 import { save } from "@/features/t1/lib/writes"
@@ -70,7 +74,8 @@ import type { SavedTargetPreset } from "@/store/slices/e"
 import { NameDialog } from "./dialogs"
 import { BAND_ORDER, limitText } from "./good-tonight"
 import { MoonLimits, MoonLimitsButton } from "./moon-limits"
-import { AddSiteButton, AltitudeSpark, CapturedCell, clockRange, criteriaText, DarkLine, FilterChips, FitCell, MoonLine, ProjectBadge, SiteLine, useSkyContext } from "./parts"
+import { AddSiteButton, AltitudeSpark, CapturedCell, clockRange, criteriaText, DarkLine, FilterChips, FitCell, MoonLine, planNight, ProjectBadge, SiteLine, useSkyContext } from "./parts"
+import { ExportCalendarButton, RemindersControl } from "./planned-tools"
 import {
   addToMyTargets,
   allRows,
@@ -255,8 +260,11 @@ export function TargetsPage() {
   const [renaming, setRenaming] = useState<SavedTargetPreset | null>(null)
   const [deleting, setDeleting] = useState<SavedTargetPreset | null>(null)
 
+  // One toggle: My targets (the default), Browse catalogues, or the night's plan (Round 6).
   const view: "all" | "planned" = search.view === "planned" ? "planned" : "all"
   const planned = view === "planned"
+  /** The night the page plans for: Add to plan adds to it, and Planned lists its plan. */
+  const night = planNight(ctx)
   const query = planned ? "" : (search.q ?? "")
   // The field keeps its own value while focused, so fast typing never races the URL update.
   const [draftQuery, setDraftQuery] = useState(query)
@@ -271,6 +279,7 @@ export function TargetsPage() {
   const project = search.project ? catalog.projects[search.project] : undefined
   const scope = planned ? undefined : project
   const mode: "my" | "browse" = search.mode === "browse" ? "browse" : "my"
+  const shownView: "my" | "browse" | "planned" = planned ? "planned" : mode
   const catalogues = (search.cat ?? "").split(",").filter((c): c is CatalogueId => (CATALOGUES as readonly string[]).includes(c))
   const rigParam = search.rig ?? (project ? "project" : "none")
   const rigIds: OpticalTrainId[] = rigParam === "project" ? (project?.rigIds ?? []) : rigParam !== "none" && catalog.opticalTrains[rigParam] ? [rigParam] : []
@@ -297,7 +306,7 @@ export function TargetsPage() {
   }
 
   const rows = useMemo(() => allRows(catalog), [catalog])
-  const plannedIds = useMemo(() => new Set(planList(catalog).map((t) => t.id)), [catalog])
+  const plannedIds = useMemo(() => new Set(nightPlan(catalog, night).map((t) => t.id)), [catalog, night])
   const searched = useMemo(() => (query.trim() ? searchRows(rows, query, simbad?.status === "searched" && simbad.query === query.trim()) : null), [rows, query, simbad])
   const catKey = catalogues.join(",")
   const browsing = catalogues.length > 0 || Boolean(activePreset) || Boolean(activeGood)
@@ -311,11 +320,12 @@ export function TargetsPage() {
   const counts = useMemo(() => sessionCountsByTarget(catalog), [catalog])
   const rigKey = rigIds.join(",")
   const views = useMemo(() => baseRows.map((row) => rowView(catalog, disk, ctx, row, rigIds, counts, constraints)), [baseRows, catalog, disk, ctx, rigKey, counts, constraints])
+  const nightOrder = planOrder[night]
   const parents = useMemo(() => {
-    if (planned) return plannedOrder(views, planOrder)
+    if (planned) return plannedOrder(views, nightOrder ?? [])
     const filtered = goodFor(activePreset ? views.filter(activePreset.match) : views, activeGood)
     return sortViews(filtered, sort, activeGood)
-  }, [planned, views, planOrder, activePreset, activeGood, sort.column, sort.direction])
+  }, [planned, views, nightOrder, activePreset, activeGood, sort.column, sort.direction])
   // A mosaic subject's panels follow it; `locale`: a panel row's name is worded ("Panel 2").
   const shown = useMemo(
     () => parents.flatMap((v) => [v, ...panelRows(v.row).map((row) => rowView(catalog, disk, ctx, row, rigIds, counts, constraints))]),
@@ -367,7 +377,7 @@ export function TargetsPage() {
     add(v.row)
   }
   function move(targetId: string, delta: -1 | 1) {
-    movePlanned(order, targetId, delta)
+    movePlanned(night, order, targetId, delta)
     // The row moves in the DOM; its name keeps the focus.
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(targetId)}"] [data-row-link]`)?.focus())
   }
@@ -575,7 +585,7 @@ export function TargetsPage() {
     }
     const target = v.row.target
     const inPlan = target ? plannedIds.has(target.id) : false
-    const plan: MenuEntry = inPlan ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => unplan(target!.id)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => planRow(v.row)) }
+    const plan: MenuEntry = inPlan ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => unplan(target!.id, night)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => planRow(v.row, night)) }
     if (!target) return [{ label: m.targets_add_to_targets(), onSelect: () => add(v.row) }, plan]
     const at = order.indexOf(target.id)
     return [
@@ -625,7 +635,7 @@ export function TargetsPage() {
   const currentView: SavedTargetPreset["view"] = { mode, cat: catalogues.join(",") || undefined, preset: activePreset?.id, good: activeGood ?? undefined, rig: rigParam !== "none" && rigParam !== "project" ? rigParam : undefined, sort: search.sort }
 
   const emptyState = (() => {
-    if (planned) return <EmptyState icon={CalendarClock} title={m.plan_list_empty()} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ view: undefined })}>{m.plan_show_all()}</Button>} />
+    if (planned) return <EmptyState icon={CalendarClock} title={m.plan_night_empty({ night: formatNight(night) })} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ view: undefined })}>{m.project_search_my_targets()}</Button>} />
     if (searched) return <EmptyState icon={Search} title={m.targets_no_match({ query })} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ q: undefined })}>{m.sessions_clear_search()}</Button>} />
     if (mode === "browse" && !scope && catalogues.length === 0 && !activePreset && !activeGood)
       return <EmptyState icon={Crosshair} title={m.targets_choose_catalogue()} description={null} action={<Button size="sm" onClick={() => setParams({ cat: "Messier" })}>{m.targets_browse_messier()}</Button>} />
@@ -676,10 +686,11 @@ export function TargetsPage() {
         meta={
           <Segmented
             label={m.targets_view()}
-            value={view}
-            onChange={(next) => setParams({ view: next === "planned" ? "planned" : undefined })}
+            value={shownView}
+            onChange={(next) => setParams(next === "planned" ? { view: "planned" } : { view: undefined, mode: next === "browse" ? "browse" : undefined, project: undefined, rig: scope ? undefined : search.rig, saved: undefined })}
             options={[
-              { value: "all", label: m.targets_view_all() },
+              { value: "my", label: m.project_search_my_targets() },
+              { value: "browse", label: m.targets_browse_catalogues() },
               {
                 value: "planned",
                 label: (
@@ -717,9 +728,11 @@ export function TargetsPage() {
         }
       />
       {planned ? (
-        <div data-chrome className="flex flex-wrap items-center gap-2 border-b border-separator px-5 py-2">
+        <div data-chrome className="flex flex-wrap items-center gap-2 border-b border-separator px-5 py-2" data-planned-header>
           {rigSelect}
           <MoonLimitsButton bands={bands} />
+          <RemindersControl />
+          <ExportCalendarButton />
           <div className="flex-1" />
           {skyLines}
         </div>
@@ -735,17 +748,7 @@ export function TargetsPage() {
                   <X aria-hidden="true" />
                 </Button>
               </span>
-            ) : (
-              <Segmented
-                label={m.targets_show()}
-                value={mode}
-                onChange={(option) => setParams({ mode: option === "my" ? undefined : "browse", saved: undefined })}
-                options={[
-                  { value: "my", label: m.project_search_my_targets() },
-                  { value: "browse", label: m.targets_browse_catalogues() },
-                ]}
-              />
-            )}
+            ) : null}
             <ClearableInput
               search
               aria-label={m.targets_search_label()}

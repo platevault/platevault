@@ -1,11 +1,13 @@
 /**
  * Settings › About this prototype. Names the build as a prototype, shows
- * where its data lives, offers Restart first-run setup and embeds the
- * simulation controls, including Reset to a seed.
+ * where its data lives, offers Restart first-run setup and Restart walk (the
+ * orientation walk, Round 6) and embeds the simulation controls, including
+ * Reset to a seed.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { FlaskConical } from "lucide-react"
 import { useState } from "react"
+import { restartWalk } from "@/app/onboarding"
 import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList } from "@/components/app/data"
@@ -78,6 +80,19 @@ export function AboutPage() {
             <span className="text-sm font-medium">{m.about_first_run_setup()}</span>
             <Button variant="outline" onClick={() => setConfirmRestart(true)}>
               {m.about_restart_setup()}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+            <span className="text-sm font-medium">{m.onboarding_walk_name()}</span>
+            <Button
+              variant="outline"
+              onClick={() => {
+                restartWalk()
+                void navigate({ to: "/" })
+              }}
+              data-restart-walk
+            >
+              {m.onboarding_restart_walk()}
             </Button>
           </div>
         </Section>

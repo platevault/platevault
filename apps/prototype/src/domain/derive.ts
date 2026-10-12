@@ -1557,15 +1557,6 @@ export function isMosaicCandidate(fit: Fit): boolean {
   return fit.kind === "panels" && fit.panels >= 2
 }
 
-/** The Plan list (Planning): Targets the user added, by name. "Show all" lists My targets instead. */
-export function planList(catalog: Catalog): Target[] {
-  return Object.values(catalog.plans)
-    .filter((p) => p.planned)
-    .map((p) => catalog.targets[p.targetId])
-    .filter((t): t is Target => t !== undefined)
-    .sort((a, b) => a.name.localeCompare(b.name))
-}
-
 /**
  * Which filters are good for a Target on a night ("good tonight"): per band,
  * whether a window of the minimum duration meets that band's Moon constraint

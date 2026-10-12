@@ -1127,12 +1127,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Move {n} rejected frame to Trash ({size})",
-        "countPlural=*": "Move {n} rejected frames to Trash ({size})"
+        "countPlural=one": "Move {n} Unusable frame to Trash ({size})",
+        "countPlural=*": "Move {n} Unusable frames to Trash ({size})"
       }
     }
   ],
-  "wrapup_offer_rejected_none": "Move rejected frames to Trash: none left",
+  "wrapup_offer_rejected_none": "Move Unusable frames to Trash: none left",
   "wrapup_offer_intermediates": [
     {
       "declarations": [
@@ -1845,7 +1845,7 @@
   "trash_empty_description": "Files go to the OS Trash after each is re-verified.",
   "trash_empty_run": "Empty run",
   "trash_empty": "Empty Trash",
-  "wrapup_offer_rejects": "Rejects",
+  "wrapup_offer_rejects": "Unusable frames",
   "wrapup_offer_duplicates_label": "Duplicates",
   "wrapup_blocked": "Wrap up blocked",
   "wrapup_runs_not_complete": [
@@ -4644,7 +4644,7 @@
   "review_quality_library_title": "Library: {word}",
   "review_member_included": "Included",
   "review_member_rejected": "Out of draft · Rejected",
-  "review_member_excluded": "Excluded from run",
+  "review_member_excluded": "Out of run · Unusable",
   "review_key_prev_next": "Previous or next frame",
   "review_key_pick": "Pick",
   "review_key_reject": "Reject",
@@ -4767,22 +4767,7 @@
     }
   ],
   "review_clear_project_reject": "Clear Project reject",
-  "review_reject_for_project": "Reject for this Project",
-  "review_reject_for_project_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Reject for this Project: {count} frame",
-        "countPlural=*": "Reject for this Project: {count} frames"
-      }
-    }
-  ],
+  "review_reject_for_project": "Reject for this Project only…",
   "review_mark_scope_help": "Mark scope",
   "review_mark_scope_tip": "P, X and U mark the library, in every Project. A Project reject stays in this Project.",
   "review_no_pixels": "No pixels",
@@ -7202,6 +7187,255 @@
     }
   ],
   "duplicates_trash_title": "Move duplicate copies to the OS Trash",
+  "import_source_disconnected": "Source disconnected · {name}",
+  "session_file_into": "File into {name}",
+  "session_filed_into": "{session} filed into {target}",
+  "session_frames_moved": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame moved",
+        "countPlural=*": "{n} frames moved"
+      }
+    }
+  ],
+  "session_cant_file": "Can't file",
+  "session_file_into_target_ellipsis": "File into Target…",
+  "session_file_into_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "File {n} frame into {name}?",
+        "countPlural=*": "File {n} frames into {name}?"
+      }
+    }
+  ],
+  "session_file_moves": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Moves {n} frame ({size})",
+        "countPlural=*": "Moves {n} frames ({size})"
+      }
+    }
+  ],
+  "session_confirms_target": "Confirms {name} as the Target",
+  "session_pointing_mismatch": "Pointing mismatch",
+  "review_bulk_mark_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mark {n} frame {quality}?",
+        "countPlural=*": "Mark {n} frames {quality}?"
+      }
+    }
+  ],
+  "sessions_empty_unusable": "No Unusable frames",
+  "sessions_cant_archive": "Can't archive",
+  "sessions_in_a_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session in a Project",
+        "countPlural=*": "{count} sessions in a Project"
+      }
+    }
+  ],
+  "sessions_already_archived": "already in the archive",
+  "sessions_unusable_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Unusable",
+        "countPlural=*": "{n} Unusable"
+      }
+    }
+  ],
+  "sessions_trash_unusable_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} Unusable frame to Trash?",
+        "countPlural=*": "Move {n} Unusable frames to Trash?"
+      }
+    }
+  ],
+  "plan_add_night_named": "Add {name} to the plan for {night}",
+  "plan_remove_night_named": "Remove {name} from the plan for {night}",
+  "plan_reminders": "Reminders",
+  "plan_reason_notifications_denied": "notifications not allowed",
+  "plan_reminder_lead": "Reminder lead time",
+  "plan_reminder_notice": "{name} window in {minutes} min",
+  "plan_reminder_detail": "{night} · {site}",
+  "plan_export_calendar": "Export calendar",
+  "plan_exported_calendar": "Exported {file}",
+  "plan_ics_calendar": "PlateVault plan at {site}",
+  "plan_ics_summary": "{name} observing window",
+  "plan_ics_description": "Max altitude {altitude}° · Moon {moon}%, {separation}° away",
+  "duplicates_scope_help": "Library locations only; capture cards are never scanned. Keeps the copy in the earliest-registered location.",
+  "plan_night_empty": "Nothing planned for {night}",
+  "plan_lead_option": "{minutes} min before",
+  "plan_cant_turn_on_reminders": "Can't turn on reminders",
+  "plan_next_reminder": "Next {time}",
+  "plan_proto_next_reminder": "Prototype: jump to the next reminder",
+  "plan_export_calendar_open": "Export calendar…",
+  "plan_export_summary": "{events} on {nights} · {site}",
+  "plan_events_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} event",
+        "countPlural=*": "{count} events"
+      }
+    }
+  ],
+  "plan_nights_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} night",
+        "countPlural=*": "{count} nights"
+      }
+    }
+  ],
+  "plan_nothing_upcoming": "Nothing planned from tonight on",
+  "plan_event_max_alt": "max {altitude}°",
+  "plan_download_ics": "Download .ics",
+  "plan_reminder_badge": "Reminder",
+  "target_library_caption": "Integration of {name} in the library, per channel",
+  "equipment_add_camera": "Add camera",
+  "equipment_add_telescope": "Add telescope",
+  "equipment_saved_named": "Saved {name}",
+  "equipment_add_camera_open": "Add camera…",
+  "equipment_add_telescope_open": "Add telescope…",
+  "equipment_add_rig_open": "Add rig…",
+  "equipment_name": "Name",
+  "equipment_native_focal_length": "Focal length (mm)",
+  "equipment_aperture": "Aperture (mm)",
+  "equipment_aperture_short": "Aperture",
+  "equipment_rig_suggested": "{telescope} · {camera}",
+  "equipment_error_choose": "Choose one",
+  "equipment_error_reducer": "0.2–3×",
+  "equipment_reducer_field": "Reducer (×)",
+  "equipment_source": "Source",
+  "equipment_cameras": "Cameras",
+  "equipment_telescopes": "Telescopes",
+  "equipment_with_reducer": "with {factor}× reducer",
+  "shell_quit_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Quit while {n} task runs?",
+        "countPlural=*": "Quit while {n} tasks run?"
+      }
+    }
+  ],
+  "shell_quit_resume": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "It resumes next launch.",
+        "countPlural=*": "They resume next launch."
+      }
+    }
+  ],
+  "shell_quit": "Quit",
+  "shell_quit_app": "Quit PlateVault",
+  "onboarding_walk_sources_title": "Navigation",
+  "onboarding_walk_sources": "Home, Projects, Targets and the library, plus your recent Projects.",
+  "onboarding_walk_issues": "Everything that needs you, in one list.",
+  "onboarding_walk_next": "Each Project's next step. Click it to do it.",
+  "onboarding_walk_status_title": "Status bar",
+  "onboarding_walk_status": "Running work, issue counters and notifications.",
+  "onboarding_walk_targets": "Your Targets, the catalogues and each night's plan.",
+  "onboarding_walk_step": "{step} of {total}",
+  "onboarding_walk_skip": "Skip",
+  "onboarding_walk_done": "Done",
+  "onboarding_getting_started": "Getting started",
+  "onboarding_check_progress": "{done} of {total} done",
+  "onboarding_check_import": "Import your first captures",
+  "onboarding_check_targets": "Confirm Targets",
+  "onboarding_check_project": "Create your first Project",
+  "onboarding_check_run": "Start your first run",
+  "onboarding_dismiss_checklist": "Dismiss Getting started",
+  "onboarding_walk_name": "Orientation walk",
+  "onboarding_restart_walk": "Restart walk",
   "domain_mode_automatic": "Automatic",
   "domain_mode_file_list": "Give PixInsight the file list",
   "run_mode_semantics_automatic": "PlateVault picks the safest option that fits. Your originals are never changed.",

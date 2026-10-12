@@ -2,9 +2,10 @@
  * Duplicates review (P-STO2), a sheet over Settings › Locations opened by
  * `?duplicates=review` (the ⚠ duplicates issue links there). It lists the
  * byte-identical copies the latest automatic duplicate scan found that are
- * still live, one group per frame, with the copy to keep preselected
- * (`keepChoice`: library storage over a capture card, then the oldest; a copy
- * that cannot go to the OS Trash is kept, so the others can). Per group:
+ * still live, one group per frame. The scan covers registered library
+ * locations only, never a capture card (Round 6), and the copy to keep is
+ * preselected (`keepChoice`: the one in the earliest-registered location; a
+ * copy that cannot go to the OS Trash is kept, so the others can). Per group:
  * Move others to Trash; for every group: Move all to Trash. Each move is
  * confirmed with its count and bytes and runs through the shared OS Trash
  * engine: nothing is deleted permanently, and the issue clears as the copies
@@ -19,6 +20,7 @@ import { EmptyState } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { Pill } from "@/components/app/pill"
 import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
+import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -84,6 +86,7 @@ function ReviewBody() {
     <>
       <SheetHeader className="flex-row flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator py-2 pr-12" data-chrome>
         <SheetTitle>{m.storage_duplicates()}</SheetTitle>
+        <HelpTip>{m.duplicates_scope_help()}</HelpTip>
         {findings && findings.copies > 0 ? <Pill tone="warning">{m.issue_duplicates({ count: findings.copies, bytes: formatBytes(findings.bytes) })}</Pill> : null}
         {findings ? <span className="text-xs text-muted-foreground tabular-nums">{m.duplicates_scanned({ date: formatDateTime(findings.scan.settledAt ?? findings.scan.createdAt) })}</span> : null}
         <Button size="sm" variant="outline" className="ml-auto" disabled={scanning !== null} onClick={scanAgain} data-scan-again>

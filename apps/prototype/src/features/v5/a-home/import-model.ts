@@ -5,7 +5,10 @@
  *
  * The plan sorts every file under the source into exactly one bucket:
  * - a destination, resolved from the per-type naming template: lights go to
- *   Captures and become sessions; raw calibration frames go to Calibration
+ *   Captures and become sessions, each filed under the Target it confirms
+ *   (P-IMP2: prefilled from pointing, the footprint that contains it with the
+ *   nearest centre; OBJECT is only a hint; Unclassified files it under the
+ *   Unclassified folder); raw calibration frames go to Calibration
  *   (`Raw/…`) and each new raw session becomes a calibration process awaiting
  *   Stack (P-CAL3, routed by `readFiles`); a master stacked elsewhere goes
  *   straight to structured calibration storage (`masterStoragePath`) and is a
@@ -19,7 +22,7 @@
  */
 import { masterStoragePath } from "@/domain/calibration-process"
 import { fileAt, freeBytes, volumeForPath } from "@/domain/disk"
-import { isUnder, nightOf } from "@/domain/indexing"
+import { isUnder, nightOf, sessionGroupingKey, targetAtPointing } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/refusal"
@@ -38,6 +41,7 @@ import type {
   NamingFrameType,
   NamingToken,
   SessionId,
+  TargetId,
   Volume,
 } from "@/domain/types"
 import type { PrototypeState } from "@/store/core"
@@ -95,6 +99,26 @@ export interface PlanItem {
   destFolder: string
   destPath: string
   fallbacks: NamingToken[]
+  /** The incoming session a light belongs to; null for calibration frames and masters. */
+  session: IncomingSession | null
+}
+
+/** A Target an incoming session files under. */
+export interface TargetChoice {
+  id: TargetId
+  name: string
+}
+
+/** An incoming light session (P-IMP2): its frames, grouped as indexing groups them, file under its Target. */
+export interface IncomingSession {
+  /** The session grouping key; the draft's Target choice is keyed by it. */
+  key: string
+  /** OBJECT: a hint only, never the Target. */
+  objectLabel: string | null
+  /** The Target whose footprint contains the session's pointing (nearest centre); null without one. */
+  suggested: TargetChoice | null
+  /** Where the frames file and what Import confirms; null files them as Unclassified. */
+  target: TargetChoice | null
 }
 
 export interface DestinationGroup {
@@ -108,6 +132,8 @@ export interface DestinationGroup {
   items: PlanItem[]
   bytes: number
   fallbacks: NamingToken[]
+  /** Light groups are one incoming session each, so each carries its own Target. */
+  session: IncomingSession | null
 }
 
 export interface UnclassifiedHold {
@@ -242,8 +268,14 @@ export function freshFrameCount(state: PrototypeState, path: string): number {
   return sourceFiles(state.disk, volume, path).filter((f) => isImage(f) && !known.has(f.sha256) && !before.has(f.sha256)).length
 }
 
-/** Where a planned frame is written: the type's naming template, or structured storage for a master. */
-function destinationFor(state: PrototypeState, location: Location, file: DiskFile, type: Exclude<ImageType, "unknown">): { destFolder: string; destPath: string; fallbacks: NamingToken[] } {
+/** The source folder can be read now: its volume is mounted and the folder is not denied. Import pauses as Interrupted when it cannot. */
+export function sourceOnline(disk: Disk, path: string): boolean {
+  const volumeId = volumeForPath(disk, path)
+  return Boolean(volumeId && disk.volumes[volumeId]?.mounted) && !disk.deniedPaths.some((p) => isUnder(path, p))
+}
+
+/** Where a planned frame is written: the type's naming template, or structured storage for a master. A light resolves `{target}` to its session's Target. */
+function destinationFor(state: PrototypeState, location: Location, file: DiskFile, type: Exclude<ImageType, "unknown">, target: string | null): { destFolder: string; destPath: string; fallbacks: NamingToken[] } {
   const header = file.header!
   if (routeFor(type) === "masters") {
     const kind = type.slice("master-".length) as CalibrationKind
@@ -252,9 +284,37 @@ function destinationFor(state: PrototypeState, location: Location, file: DiskFil
     const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
     return { destFolder: destPath.slice(0, destPath.lastIndexOf("/") + 1), destPath, fallbacks: resolved.fallbacks }
   }
-  const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
+  const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type, target))
   const destFolder = joinPath(location.path, resolved.path.endsWith("/") ? resolved.path : `${resolved.path}/`)
-  return { destFolder, destPath: `${destFolder}${file.path.slice(file.path.lastIndexOf("/") + 1)}`, fallbacks: resolved.fallbacks }
+  // Unclassified is the user's choice, not missing metadata: the Target column shows it.
+  const fallbacks = type === "light" ? resolved.fallbacks.filter((t) => t !== "target") : resolved.fallbacks
+  return { destFolder, destPath: `${destFolder}${file.path.slice(file.path.lastIndexOf("/") + 1)}`, fallbacks }
+}
+
+/** A light's session grouping key; a file typed as a light groups as one. */
+function lightKey(file: DiskFile): string {
+  return sessionGroupingKey({ ...file.header!, imageType: "light" })
+}
+
+/**
+ * The incoming light sessions (P-IMP2), by grouping key: each prefilled with
+ * the Target its mean pointing associates, unless the draft chose another
+ * Target or Unclassified (null).
+ */
+function incomingSessions(catalog: Catalog, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
+  const byKey = new Map<string, DiskFile[]>()
+  for (const file of lights) byKey.set(lightKey(file), [...(byKey.get(lightKey(file)) ?? []), file])
+  const out = new Map<string, IncomingSession>()
+  for (const [key, files] of byKey) {
+    const pointed = files.map((f) => f.header!).filter((h) => h.ra !== null && h.dec !== null)
+    const suggested =
+      pointed.length > 0 ? targetAtPointing(catalog, pointed.reduce((n, h) => n + h.ra!, 0) / pointed.length, pointed.reduce((n, h) => n + h.dec!, 0) / pointed.length) : null
+    const chosen = key in draft.targets ? draft.targets[key] : suggested?.id
+    const record = chosen ? catalog.targets[chosen] : undefined
+    const target = !chosen ? null : chosen === suggested?.id ? suggested : record ? { id: record.id, name: record.name } : suggested
+    out.set(key, { key, objectLabel: files[0]!.header!.object, suggested, target })
+  }
+  return out
 }
 
 export function planImport(state: PrototypeState, draft: ImportDraft): ImportPlan | null {
@@ -263,7 +323,7 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
   const { disk, catalog } = state
   const volumeId = volumeForPath(disk, source.path)
   const volume = volumeId ? (disk.volumes[volumeId] ?? null) : null
-  const online = Boolean(volume?.mounted) && !disk.deniedPaths.some((p) => isUnder(source.path, p))
+  const online = sourceOnline(disk, source.path)
   const plan: ImportPlan = {
     sourcePath: source.path,
     sourceLabel: source.label,
@@ -287,6 +347,7 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
   const groups = new Map<string, DestinationGroup>()
   // Destination paths this plan already writes, so two sources never land on one name.
   const planned = new Map<string, string>()
+  const accepted: Array<{ file: DiskFile; type: Exclude<ImageType, "unknown">; typed: boolean; role: ImportRole; location: Location }> = []
 
   for (const file of files) {
     if (!isImage(file)) {
@@ -316,19 +377,28 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     }
     const role = roleFor(type)
     const location = destinations[role]
-    if (!location) continue
-    const { destFolder, destPath, fallbacks } = destinationFor(state, location, file, type)
+    if (location) accepted.push({ file, type, typed: typedAs !== undefined, role, location })
+  }
+  // A light's folder follows its session's Target, so sessions are known before any destination.
+  const sessions = incomingSessions(
+    catalog,
+    draft,
+    accepted.filter((a) => a.type === "light").map((a) => a.file),
+  )
+  for (const { file, type, typed, role, location } of accepted) {
+    const session = type === "light" ? sessions.get(lightKey(file))! : null
+    const { destFolder, destPath, fallbacks } = destinationFor(state, location, file, type, session?.target?.name ?? null)
     const existing = fileAt(disk, destPath)?.sha256 ?? planned.get(destPath)
     if (existing !== undefined && existing !== file.sha256) {
       plan.skipped.nameTaken.push({ file, destPath })
       continue
     }
     planned.set(destPath, file.sha256)
-    const item: PlanItem = { file, type, typed: typedAs !== undefined, role, location, destFolder, destPath, fallbacks }
+    const item: PlanItem = { file, type, typed, role, location, destFolder, destPath, fallbacks, session }
     plan.items.push(item)
     plan.bytes += file.sizeBytes
-    const key = `${location.id}|${destFolder}|${type}`
-    const group = groups.get(key) ?? { key, role, route: routeFor(type), location, relative: destFolder.slice(location.path.length + 1), type, items: [], bytes: 0, fallbacks: [] }
+    const key = session ? `${location.id}|${session.key}` : `${location.id}|${destFolder}|${type}`
+    const group = groups.get(key) ?? { key, role, route: routeFor(type), location, relative: destFolder.slice(location.path.length + 1), type, items: [], bytes: 0, fallbacks: [], session }
     group.items.push(item)
     group.bytes += file.sizeBytes
     group.fallbacks = [...new Set([...group.fallbacks, ...fallbacks])]

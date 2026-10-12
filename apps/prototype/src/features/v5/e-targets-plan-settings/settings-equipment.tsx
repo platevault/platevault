@@ -7,15 +7,19 @@
  * strip, the narrowband presets and Fit; it never filters Goal templates.
  * A FILTER value seen on a rig's sessions that matches no filter prompts
  * "Add {value} to {rig}"; declining keeps the prompt available.
+ *
+ * Round 6: rigs come from detection plus manual add. The header adds a
+ * camera, a telescope or a rig by hand (Manual; equipment-records.tsx), and
+ * the Cameras and Telescopes tables rename and edit detected ones.
  */
-import { Link, useSearch } from "@tanstack/react-router"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Camera, Pencil, Plus, Trash2 } from "lucide-react"
 import { type FormEvent, useEffect, useId, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList } from "@/components/app/data"
 import { ActionError, EmptyState, Notice } from "@/components/app/feedback"
-import { PageBody, PageHeader } from "@/components/app/page"
+import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { CountBadge, Pill } from "@/components/app/pill"
 import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
@@ -29,13 +33,14 @@ import { fieldOfView } from "@/domain/sky"
 import type { Band, CameraKind, Catalog, OpticalTrain, RigFilter } from "@/domain/types"
 import { TextField, parseAliases, parseNumber } from "@/features/t1/components/form-field"
 import { ReturnNotice } from "@/features/t1/settings/settings-layout"
-import { formatCount, formatDegrees } from "@/lib/format"
+import { formatCount, formatDecimal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { addFilterToRig, renameRig, setRigFilters } from "@/store/actions/settings"
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, useStore } from "@/store/core"
 import { NameDialog } from "./dialogs"
+import { AddRigDialog, CameraDialog, CameraKindField, CamerasTable, formatFov, TelescopeDialog, TelescopesTable } from "./equipment-records"
 import { updateRigOptics } from "./settings-actions"
 
 /** Bands a header value most likely passes, to prefill "Add {value}". The user confirms them. */
@@ -60,11 +65,6 @@ function guessBands(value: string): Band[] {
 
 function sessionsWithValue(catalog: Catalog, rigId: string, value: string): number {
   return liveLightSessions(catalog).filter((s) => sessionRigId(s) === rigId && s.channel === value).length
-}
-
-/** "1.23° × 0.82° · 1.45″/px": units only, not translated. */
-function formatFov(fov: { widthDeg: number; heightDeg: number; pixelScaleArcsec: number } | null): string {
-  return fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)} · ${fov.pixelScaleArcsec.toFixed(2)}″/px` : "–"
 }
 
 interface FilterDraft {
@@ -215,18 +215,7 @@ function OpticsDialog({ rig, open, onClose }: { rig: OpticalTrain; open: boolean
           </DialogHeader>
           {camera ? (
             <>
-              <fieldset className="space-y-1.5">
-                <legend id={ids.kind} className="text-sm font-medium">
-                  {m.equipment_camera_kind()}
-                </legend>
-                <div role="radiogroup" aria-labelledby={ids.kind} className="inline-flex rounded-md border border-separator p-px">
-                  {(["mono", "osc"] as const).map((k) => (
-                    <button key={k} type="button" role="radio" aria-checked={values.kind === k} onClick={() => setValues({ ...values, kind: k })} className={cn("h-6 rounded-[4px] px-2 text-sm", values.kind === k ? "bg-selected text-selected-foreground" : "hover:bg-foreground/[0.06]")}>
-                      {k === "mono" ? m.equipment_mono() : m.equipment_osc_colour()}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
+              <CameraKindField value={values.kind as CameraKind} onChange={(kind) => setValues({ ...values, kind })} />
               <div className="grid grid-cols-3 gap-3">
                 <TextField id={ids.width} label={m.equipment_sensor_width()} inputMode="numeric" value={values.width} onChange={(width) => setValues({ ...values, width })} error={errors.width} />
                 <TextField id={ids.height} label={m.equipment_sensor_height()} inputMode="numeric" value={values.height} onChange={(height) => setValues({ ...values, height })} error={errors.height} />
@@ -340,7 +329,7 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
           { label: m.equipment_camera(), value: camera ? `${camera.name} · ${camera.kind === "osc" ? m.equipment_osc() : m.equipment_mono()}` : "–" },
           { label: m.equipment_sensor(), value: camera ? `${camera.widthPx} × ${camera.heightPx} px · ${camera.pixelSizeUm} µm` : "–" },
           { label: m.equipment_telescope(), value: telescope ? `${telescope.name}${telescope.apertureMm ? ` · ${telescope.apertureMm} mm` : ""}` : "–" },
-          { label: m.run_field_focal_length(), value: `${rig.effectiveFocalLengthMm} mm` },
+          { label: m.run_field_focal_length(), value: `${rig.effectiveFocalLengthMm} mm`, source: rig.reducer !== undefined && rig.reducer !== 1 ? m.equipment_with_reducer({ factor: formatDecimal(rig.reducer, 2) }) : undefined },
           {
             label: m.equipment_field_of_view(),
             value: formatFov(fov),
@@ -481,22 +470,54 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
 export function EquipmentSettingsPage() {
   const m = useMessages()
   const search = useSearch({ strict: false }) as SearchParams
+  const navigate = useNavigate()
   const rigs = useStore((s) => Object.values(s.catalog.opticalTrains).sort((a, b) => a.name.localeCompare(b.name)))
+  const [adding, setAdding] = useState<"camera" | "telescope" | "rig" | null>(null)
   return (
     <div>
-      <PageHeader level={2} title={m.settings_equipment()} />
+      <PageHeader
+        level={2}
+        title={m.settings_equipment()}
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => setAdding("camera")} data-add-camera>
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              {m.equipment_add_camera_open()}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setAdding("telescope")} data-add-telescope>
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              {m.equipment_add_telescope_open()}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setAdding("rig")} data-add-rig>
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              {m.equipment_add_rig_open()}
+            </Button>
+          </>
+        }
+      />
       <PageBody>
         <ReturnNotice />
-        {rigs.length === 0 ? (
-          <EmptyState
-            icon={Camera}
-            title={m.equipment_no_rigs()}
-            action={<Button render={<Link to="/settings/locations" />}>{m.storage_add_location()}</Button>}
-          />
-        ) : (
-          rigs.map((rig) => <RigBlock key={rig.id} rig={rig} highlighted={search.rig === rig.id} />)
-        )}
+        <Section title={m.project_rigs()} level={3} id="equipment-rigs">
+          {rigs.length === 0 ? (
+            <EmptyState
+              icon={Camera}
+              title={m.equipment_no_rigs()}
+              action={<Button render={<Link to="/settings/locations" />}>{m.storage_add_location()}</Button>}
+            />
+          ) : (
+            rigs.map((rig) => <RigBlock key={rig.id} rig={rig} highlighted={search.rig === rig.id} />)
+          )}
+        </Section>
+        <Section title={m.equipment_cameras()} level={3} id="equipment-cameras">
+          <CamerasTable />
+        </Section>
+        <Section title={m.equipment_telescopes()} level={3} id="equipment-telescopes">
+          <TelescopesTable />
+        </Section>
       </PageBody>
+      <CameraDialog open={adding === "camera"} camera={null} onClose={() => setAdding(null)} />
+      <TelescopeDialog open={adding === "telescope"} telescope={null} onClose={() => setAdding(null)} />
+      <AddRigDialog open={adding === "rig"} onClose={() => setAdding(null)} onAdded={(rig) => void navigate({ to: "/settings/equipment", search: { rig } as never, replace: true })} />
     </div>
   )
 }

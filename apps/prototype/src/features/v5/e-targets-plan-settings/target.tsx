@@ -3,10 +3,11 @@
  * the Target. The detail holds, in boxes: the chosen night at the planning
  * site (the Targets page's `?night=`, else tonight: the altitude sparkline,
  * best window, Img time, Moon, filters graded good tonight), identity, Fit
- * on every rig, the Projects that use it with their goal lines, and captured
- * time per channel with its sessions. The header adds it to the Plan list,
- * adds it to an open Project (previewed first) or opens New Project with
- * this Target as the subject.
+ * on every rig, the Projects that use it with their goal lines, and the
+ * library's facts: Usable, Unreviewed and Offline integration per channel,
+ * library-wide, over its sessions with their capture site. The header adds
+ * it to the chosen night's plan, adds it to an open Project (previewed
+ * first) or opens New Project with this Target as the subject.
  */
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { ChevronDown, Star } from "lucide-react"
@@ -26,8 +27,10 @@ import type { Tone } from "@/components/app/status"
 import { HelpTip, NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { formatHours, goalProgress, liveLightSessions, planList, projectGoalSet, projectStatus, rigFieldOfView, sessionRigId, sessionTargetId, subjectName, rigName } from "@/domain/derive"
+import { formatHours, goalProgress, liveLightSessions, projectGoalSet, projectStatus, rigFieldOfView, sessionRigId, sessionTargetId, subjectName, rigName } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
+import { captureSite, targetCoverage } from "@/domain/library"
+import { nightPlan } from "@/domain/planning"
 import { matchesQuery } from "@/domain/sky"
 import type { Project } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa } from "@/lib/format"
@@ -38,9 +41,14 @@ import { setFavourite } from "@/store/actions/library"
 import { addToPlan } from "@/store/actions/planning"
 import { addSubject } from "@/store/actions/projects"
 import { type CommitResult, useStore } from "@/store/core"
-import { AddSiteButton, AltitudeSpark, clockRange, criteriaText, DarkLine, FilterChips, FitCell, MoonLine, SiteLine, useSkyContext } from "./parts"
+import { AddSiteButton, AltitudeSpark, clockRange, criteriaText, DarkLine, FilterChips, FitCell, MoonLine, planNight, SiteLine, useSkyContext } from "./parts"
 import { allRows, rowView, sessionCountsByTarget, type TargetRow, unplan, zeroReasonText } from "./targets-model"
 import { keepSearch } from "./targets"
+
+/** Integration as "2h 10m"; "–" for none. */
+function hoursOrDash(seconds: number): string {
+  return seconds > 0 ? formatHours(seconds) : "–"
+}
 
 function coordinateSource(m: Messages, source: string): string {
   return source === "catalog" ? m.target_source_catalogue() : source === "user" ? m.target_source_user() : source === "resolver" ? m.target_source_resolver() : m.status_unknown()
@@ -70,7 +78,8 @@ function TargetFinder({ activeId }: { activeId: string }) {
   const catalog = useStore((s) => s.catalog)
   const { error, run } = useWrite()
   const rows = useMemo(() => allRows(catalog).filter((r) => r.target), [catalog])
-  const planned = useMemo(() => new Set(planList(catalog).map((t) => t.id)), [catalog])
+  const night = planNight(useSkyContext(search.night))
+  const planned = useMemo(() => new Set(nightPlan(catalog, night).map((t) => t.id)), [catalog, night])
   // Local while typing; the URL keeps it for the way back to the table.
   const [query, setQuery] = useState(search.q ?? "")
   const shown = (query ? rows.filter((r) => matchesQuery([r.designation, ...r.aliases], query)) : rows.filter((r) => r.mine)).sort((a, b) => a.designation.localeCompare(b.designation, "en-GB", { numeric: true }))
@@ -82,7 +91,7 @@ function TargetFinder({ activeId }: { activeId: string }) {
     return [
       { label: m.verb_open(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: key }, search: keep }) },
       { label: target.favourite ? m.targets_unstar() : m.targets_star(), onSelect: () => run(() => setFavourite(key, !target.favourite)) },
-      planned.has(key) ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => unplan(key)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => addToPlan(key)) },
+      planned.has(key) ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => unplan(key, night)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => addToPlan(key, night)) },
       { separator: true },
       { label: m.newproject_open(), onSelect: () => openSheet({ kind: "new-project", targetId: key }) },
     ]
@@ -185,12 +194,14 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const row = useMemo(() => allRows(catalog).find((r) => r.key === targetId) as TargetRow, [catalog, targetId])
   const rigIds = Object.keys(catalog.opticalTrains)
   const view = useMemo(() => rowView(catalog, disk, ctx, row, rigIds, sessionCountsByTarget(catalog), constraints), [catalog, disk, ctx, row, constraints])
-  const inPlan = catalog.plans[targetId]?.planned ?? false
+  const night = planNight(ctx)
+  const inPlan = catalog.plans[targetId]?.nights.includes(night) ?? false
   const projects = Object.values(catalog.projects).filter((p) => p.subjects.some((s) => s.targetId === targetId))
   const openWithout = Object.values(catalog.projects).filter((p) => p.state === "open" && !p.subjects.some((s) => s.targetId === targetId))
   const sessions = liveLightSessions(catalog)
     .filter((s) => sessionTargetId(s) === targetId)
     .sort((a, b) => b.night.localeCompare(a.night))
+  const coverage = useMemo(() => targetCoverage(disk, catalog, targetId).channels, [disk, catalog, targetId])
 
   const sky = view.sky
   const addingGoals = adding ? projectGoalSet(adding) : []
@@ -273,7 +284,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
         }
         actions={
           <>
-            <Button variant="outline" aria-pressed={inPlan} onClick={() => run(() => (inPlan ? unplan(targetId) : addToPlan(targetId)))}>
+            <Button variant="outline" aria-pressed={inPlan} title={formatNight(night, true)} onClick={() => run(() => (inPlan ? unplan(targetId, night) : addToPlan(targetId, night)))}>
               {inPlan ? m.targets_remove_from_plan() : m.targets_add_to_plan()}
             </Button>
             <DropdownMenu>
@@ -475,18 +486,42 @@ function TargetDetail({ targetId }: { targetId: string }) {
             )}
           </Box>
 
-          <Box id="tgt-captured" title={m.coverage_captured()} flush>
-            <div className="flex flex-wrap gap-1 border-b border-border px-3 py-2">
-              {view.captured.length === 0 ? (
-                <span className="text-sm text-muted-foreground">–</span>
-              ) : (
-                view.captured.map((c) => (
-                  <Pill key={c.channel} tone="neutral">
-                    {`${c.channel} ${formatHours(c.seconds)}`}
-                  </Pill>
-                ))
-              )}
-            </div>
+          <Box id="tgt-captured" title={m.nav_library()} flush>
+            {coverage.length === 0 ? (
+              <p className="border-b border-border px-3 py-2 text-sm text-muted-foreground">–</p>
+            ) : (
+              <table className="w-full border-b border-border text-sm" data-library-facts>
+                <caption className="sr-only">{m.target_library_caption({ name: target.name })}</caption>
+                <thead className="text-[0.6875rem] text-muted-foreground">
+                  <tr className="border-b">
+                    <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
+                      {m.target_channel()}
+                    </th>
+                    <th scope="col" className="px-3 text-right font-medium">
+                      {m.status_usable()}
+                    </th>
+                    <th scope="col" className="px-3 text-right font-medium">
+                      {m.status_unreviewed()}
+                    </th>
+                    <th scope="col" className="px-3 text-right font-medium">
+                      {m.status_offline()}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coverage.map((c) => (
+                    <tr key={c.channel} className="h-(--row-h) border-b border-border/50 last:border-0">
+                      <th scope="row" className="px-3 text-left font-medium">
+                        {c.channel}
+                      </th>
+                      <td className="px-3 text-right tabular-nums">{hoursOrDash(c.breakdown.usable.seconds)}</td>
+                      <td className="px-3 text-right tabular-nums">{hoursOrDash(c.breakdown.unreviewed.seconds)}</td>
+                      <td className={cn("px-3 text-right tabular-nums", c.breakdown.unavailable.seconds > 0 && "text-warning")}>{hoursOrDash(c.breakdown.unavailable.seconds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             {sessions.length === 0 ? (
               <p className="p-3 text-sm text-muted-foreground">{m.run_cal_no_sessions()}</p>
             ) : (
@@ -507,6 +542,9 @@ function TargetDetail({ targetId }: { targetId: string }) {
                       <th scope="col" className="px-3 text-left font-medium">
                         {m.targets_rig()}
                       </th>
+                      <th scope="col" className="px-3 text-left font-medium">
+                        {m.session_capture_site()}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -520,6 +558,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                         <td className="px-3">{s.channel ?? "–"}</td>
                         <td className="px-3 text-right tabular-nums">{s.assetIds.filter((id) => !catalog.assets[id]?.trashed).length}</td>
                         <td className="px-3">{rigName(m, catalog, sessionRigId(s))}</td>
+                        <td className="px-3">{captureSite(catalog, s)?.name ?? "–"}</td>
                       </tr>
                     ))}
                   </tbody>

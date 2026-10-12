@@ -1,7 +1,8 @@
 /**
  * S17 Activity (`/activity`, slice E), carried over from v4: running,
  * paused and interrupted operations with their controls, then every
- * recorded outcome (operations, refusals, failed and refused writes, saves),
+ * recorded outcome (operations, refusals, failed and refused writes, saves,
+ * delivered reminders),
  * each linking to the surface that owns it (LIB-FR-10). A refusal names its
  * reasons, as the store recorded them. Transfers (imports, archive moves and
  * OS Trash moves) are Activity entries with their own filter, since the
@@ -105,6 +106,8 @@ function Outcome({ event, operation }: { event: ActivityEvent; operation: Operat
       return <StatusBadge kind="item" value="blocked" label={m.activity_refused()} />
     case "saved":
       return <StatusBadge kind="save" value="saved" />
+    case "reminder":
+      return <StatusBadge kind="reminders" value="enabled" label={m.plan_reminder_badge()} />
   }
 }
 

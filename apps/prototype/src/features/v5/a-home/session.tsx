@@ -2,11 +2,13 @@
  * S12 Session detail (slice A): one library light session.
  *
  * Two views in the same header (`?view=review` switches): Detail, with the
- * Target and rig evidence (Confirm Target / Confirm rig), the Projects that
- * consider it a candidate, the runs that use it, its frames and headers, and
- * Add to Project (also adds the rig, D-W59) or Create Project prefilled; and
- * Review, which mounts slice D's `SessionReview` as the full-height review
- * region (library marks only, PIX-FR-18).
+ * Target and rig evidence (Confirm Target / Confirm rig; a session imported
+ * as Unclassified offers File into Target instead, P-IMP2, and a confirmed
+ * Target the pointing disagrees with reads a mismatch warning), the Projects
+ * that consider it a candidate, the runs that use it, its frames and
+ * headers, and Add to Project (also adds the rig, D-W59) or Create Project
+ * prefilled; and Review, which mounts slice D's `SessionReview` as the
+ * full-height review region (library marks only, PIX-FR-18).
  *
  * A raw calibration session is not a library session: it reads where its
  * calibration process stands (P-CAL3) and links to the Calibration library.
@@ -30,16 +32,18 @@ import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { CALIBRATION_STEP_NAME, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
 import { formatHours, rigName, runPipeline, runStepLink, sessionRigId, sessionTargetId } from "@/domain/derive"
+import { pointingAgainst } from "@/domain/indexing"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
 import { sessionLongLabel } from "@/domain/membership"
 import type { Asset, Session } from "@/domain/types"
-import { formatCount, formatDateTime, formatDec, formatExposure, formatNight, formatRa } from "@/lib/format"
+import { formatCount, formatDateTime, formatDec, formatDegrees, formatExposure, formatNight, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
+import { filedUnclassified } from "@/store/actions/library"
 import { type PrototypeState, useStore } from "@/store/core"
 import { SessionReview } from "../d-review/review"
 import { typeLabel } from "./import-model"
-import { AddToProjectMenu, type AddedNotice, ConfirmRigControl, ConfirmTargetControl, CreateProjectButton } from "./parts"
+import { AddToProjectMenu, type AddedNotice, ConfirmRigControl, ConfirmTargetControl, CreateProjectButton, FileIntoTargetControl } from "./parts"
 import { sessionReviewSearch, sessionRows } from "./session-model"
 
 export function SessionPage() {
@@ -178,6 +182,10 @@ function DetailBody({
   const m = useMessages()
   const [targetNote, setTargetNote] = useState<string | null>(null)
   const targetId = sessionTargetId(session)
+  const target = targetId ? catalog.targets[targetId] : undefined
+  // Confirming a Target the pointing disagrees with is allowed (round 6); the box says so.
+  const against = target && session.target.status === "confirmed" ? pointingAgainst(target, session.pointing) : null
+  const unclassified = !row?.trashed && filedUnclassified(state, session)
   const rigId = sessionRigId(session)
   const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is Asset => a !== undefined)
   return (
@@ -194,11 +202,21 @@ function DetailBody({
           id="target"
           level={2}
           title={m.sessions_column_target()}
-          actions={targetId ? <Pill tone={session.target.status === "confirmed" ? "success" : "info"}>{catalog.targets[targetId]?.name ?? targetId}</Pill> : <Pill tone="warning">{m.session_unsettled()}</Pill>}
+          actions={
+            <span className="flex items-center gap-1.5">
+              {targetId ? <Pill tone={session.target.status === "confirmed" ? "success" : "info"}>{target?.name ?? targetId}</Pill> : <Pill tone="warning">{unclassified ? m.import_type_unclassified() : m.session_unsettled()}</Pill>}
+              {target && against && !against.inside ? (
+                <span className="flex items-center gap-0.5" data-target-mismatch>
+                  <Pill tone="warning">{m.session_pointing_mismatch()}</Pill>
+                  <NoteMarker label={m.session_pointing_mismatch()} rows={[{ label: m.evidence_source_pointing(), value: m.indexing_pointing_from_centre({ angle: formatDegrees(against.separationDeg), name: target.name }) }]} />
+                </span>
+              ) : null}
+            </span>
+          }
         >
           <div className="space-y-2">
             {session.target.evidence.length > 0 ? <EvidenceList evidence={session.target.evidence} caption={m.session_target_evidence({ name: sessionLongLabel(m, session) })} /> : <p className="text-xs text-muted-foreground">{m.session_no_evidence()}</p>}
-            {!row?.trashed ? <ConfirmTargetControl sessionId={session.id} onDone={setTargetNote} /> : null}
+            {row?.trashed ? null : unclassified ? <FileIntoTargetControl sessionId={session.id} onDone={setTargetNote} /> : <ConfirmTargetControl sessionId={session.id} onDone={setTargetNote} />}
             {targetNote ? <p className="text-xs text-success" role="status">{targetNote}</p> : null}
           </div>
         </Box>

@@ -1,11 +1,14 @@
 /**
- * Slice E shell contribution (see `src/app/shell-contract.ts`): palette
- * actions for Plan tonight (the Targets page's Planned view), each built-in
- * Targets preset and each saved preset. Slice E owns this file.
+ * Slice E shell contribution (see `src/app/shell-contract.ts`): the reminder
+ * scheduler, which delivers planning reminders to the status bar's bell
+ * while PlateVault is open, and palette actions for Plan tonight (the
+ * Targets page's Planned view), each built-in Targets preset and each saved
+ * preset. Slice E owns this file.
  */
 import { useMessages } from "@/app/preferences"
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
 import { useStore } from "@/store/core"
+import { ReminderScheduler } from "./planned-tools"
 import { BUILT_IN_PRESETS } from "./targets-model"
 
 function useCommands(): PaletteCommand[] {
@@ -22,4 +25,4 @@ function useCommands(): PaletteCommand[] {
   ]
 }
 
-export const eShell: ShellContribution = { useCommands }
+export const eShell: ShellContribution = { Overlay: ReminderScheduler, useCommands }

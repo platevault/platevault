@@ -2,25 +2,30 @@
  * S13 Import as an operation (slice A, D-W11, D-W24). The "import" handler
  * copies each planned file to its destination, verifies the copy's SHA-256
  * against the source, then reads the copies into the library: lights become
- * sessions, each new raw calibration session becomes a calibration process
- * awaiting Stack (P-CAL3, through `readFiles`), and a master in structured
- * calibration storage is a library master. Move hands the verified sources
- * to the foundation OS Trash engine ("import-move" episode) once every copy
- * has verified; a source whose copy failed is never trashed. Also: saving an
- * Import source and "Add existing library folder" (index in place).
+ * sessions with the Targets the preview chose confirmed (P-IMP2; an
+ * Unclassified session waits for File into Target), each new raw calibration
+ * session becomes a calibration process awaiting Stack (P-CAL3, through
+ * `readFiles`), and a master in structured calibration storage is a library
+ * master. A source that vanishes mid-copy (card pulled, share dropped)
+ * pauses the import as Interrupted with its queue intact; Retry resumes it
+ * once the source is back. Move hands the verified sources to the foundation
+ * OS Trash engine ("import-move" episode) once every copy has verified; a
+ * source whose copy failed is never trashed. Also: saving an Import source
+ * and "Add existing library folder" (index in place).
  */
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
-import { readFiles } from "@/domain/indexing"
+import { bundledTarget, readFiles } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
 import { registerLocation, type LocationDraft } from "@/features/t1/lib/locations"
 import { formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { sessionWithTarget } from "@/store/actions/library"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startIndexing, startOperation } from "@/store/operations"
 import type { ImportDraft } from "@/store/slices/a"
-import { type ImportPlan, routeFor, TYPE_NAME } from "./import-model"
+import { type ImportPlan, routeFor, sourceOnline, type TargetChoice, TYPE_NAME } from "./import-model"
 
 interface QueueItem {
   src: string
@@ -31,6 +36,8 @@ interface QueueItem {
   typed: boolean
   /** Operation item id: one per destination folder and type. */
   group: string
+  /** A light's Target, confirmed once it is read (P-IMP2); null is Unclassified. Absent for calibration frames and masters. */
+  target?: TargetChoice | null
 }
 
 export interface ImportPayload {
@@ -65,6 +72,8 @@ function groupItems(payload: ImportPayload, items: OperationItem[]): OperationIt
 }
 
 function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayload): PrototypeState {
+  // The source went away mid-import: pause with the queue intact, so Retry resumes once it is back.
+  if (!sourceOnline(state.disk, payload.sourcePath)) return patchOperation(state, opId, { status: "interrupted", summary: msg("import_source_disconnected", { name: payload.sourceLabel }) })
   let disk = state.disk
   const queue = [...payload.queue]
   const copied = [...payload.copied]
@@ -120,16 +129,33 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
   const assets = { ...catalog.assets }
   const sessions = { ...catalog.sessions }
   const sessionIds = new Set<SessionId>()
+  const chosen = new Map<SessionId, TargetChoice | null>()
   for (const asset of Object.values(assets)) {
     const item = asset.copies.map((c) => destPaths.get(c.path)).find((q) => q !== undefined)
     if (!item) continue
     if (item.typed) assets[asset.id] = { ...asset, observed: { ...asset.observed, imageType: "unknown" } }
     if (asset.sessionId) sessionIds.add(asset.sessionId)
+    if (asset.sessionId && item.target !== undefined) chosen.set(asset.sessionId, item.target)
   }
   // The import read every frame it wrote: its new sessions are complete, not provisional.
   for (const id of sessionIds) {
     const session = sessions[id]
     if (session?.scope === "provisional") sessions[id] = { ...session, scope: "complete" }
+  }
+  // P-IMP2: importing confirms the Targets the preview chose, as Confirm Target does. An Unclassified
+  // session keeps its pointing evidence but no Target until File into Target.
+  let targets = catalog.targets
+  for (const [id, choice] of chosen) {
+    const session = sessions[id]
+    if (!session) continue
+    if (!choice) {
+      if (session.target.status !== "confirmed") sessions[id] = { ...session, target: { ...session.target, value: null, status: "unresolved", confirmedAt: null } }
+      continue
+    }
+    const target = targets[choice.id] ?? bundledTarget(choice.name, now)
+    if (!target) continue
+    if (!targets[target.id]) targets = { ...targets, [target.id]: target }
+    sessions[id] = sessionWithTarget({ ...catalog, targets }, session, target, now)
   }
   const importSources = { ...catalog.importSources }
   if (payload.sourceId && importSources[payload.sourceId]) {
@@ -137,7 +163,7 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
     importSources[payload.sourceId] = { ...source, lastImportedAt: now, importedSha256: [...new Set([...source.importedSha256, ...payload.copied.map((c) => c.sha256)])] }
   }
   const next: ImportPayload = { ...payload, sessionIds: [...sessionIds], phase: "trash" }
-  return patchOperation({ ...state, catalog: { ...catalog, assets, sessions, importSources } }, opId, { payload: next as unknown as Record<string, unknown> })
+  return patchOperation({ ...state, catalog: { ...catalog, assets, sessions, targets, importSources } }, opId, { payload: next as unknown as Record<string, unknown> })
 }
 
 /** "31 frames · 1.2 GB · 3 sessions · 20 calibration → stack · 12 duplicates skipped": one terse line. */
@@ -208,15 +234,18 @@ export const importHandler: OperationHandler = {
 
 /** Start the previewed import. The plan must be free of blockers. */
 export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
-  const queue: QueueItem[] = plan.items.map((item) => ({
-    src: item.file.path,
-    dest: item.destPath,
-    destVolumeId: item.location.volumeId,
-    locationId: item.location.id,
-    type: item.type,
-    typed: item.typed,
-    group: `${item.location.id}|${item.destFolder}|${item.type}`,
-  }))
+  const queue: QueueItem[] = plan.groups.flatMap((g) =>
+    g.items.map((item) => ({
+      src: item.file.path,
+      dest: item.destPath,
+      destVolumeId: item.location.volumeId,
+      locationId: item.location.id,
+      type: item.type,
+      typed: item.typed,
+      group: g.key,
+      ...(item.session ? { target: item.session.target } : {}),
+    })),
+  )
   const payload: ImportPayload = {
     sourceId: plan.saved?.id ?? null,
     sourceLabel: plan.sourceLabel,
@@ -256,7 +285,7 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
     canPause: true,
     canCancel: true,
   })
-  updateSlice("a", (a) => ({ ...a, lastImport: { kind: "import", operationId: id }, importDraft: { ...a.importDraft, typed: {} } }))
+  updateSlice("a", (a) => ({ ...a, lastImport: { kind: "import", operationId: id }, importDraft: { ...a.importDraft, typed: {}, targets: {} } }))
   return id
 }
 
