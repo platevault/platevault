@@ -146,10 +146,10 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
 /// Poll the durable status until the run leaves Running, failing only once no
 /// frame has settled for two minutes.
 ///
-/// Each frame's contained read probes the volume three times (root, file,
-/// root). On Windows a probe is a PowerShell CIM query bounded at 30 s, so a
-/// 100-frame run on a loaded runner outlasts any fixed total budget while still
-/// settling frame after frame; a worker settles its frame within 90 s or fails it.
+/// A loaded runner can outlast any fixed total budget while still settling
+/// frame after frame. A frame's contained read probes its volume at most three
+/// times (root, file, root), and on Windows a probe is a PowerShell CIM query
+/// bounded at 30 s, so a worker settles its frame within 90 s or fails it.
 async fn finished(review: &FrameReview, run: Uuid) -> MeasurementRun {
     const STALLED: Duration = Duration::from_secs(120);
     let mut remaining = None;
@@ -403,7 +403,9 @@ async fn frame_states_come_from_the_catalog_and_a_run_queues_only_frames_without
     let prioritized = review.prioritize(second.operation_id, &[moved]).await.unwrap();
     assert_eq!(prioritized.operation_id, second.operation_id);
 
-    // Preview of a queued frame is served while the run is Running.
+    // Preview of a queued frame is served while the run is Running. It reads
+    // through the run's probe, so it costs one frame of the queue on every
+    // platform and the frame is still queued when it is served.
     let preview = review.open_frame(previewed).await.unwrap();
     assert_eq!((preview.width, preview.height), (64, 64));
     assert!(!preview.matches_record);

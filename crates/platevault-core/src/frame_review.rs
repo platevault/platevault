@@ -624,10 +624,11 @@ impl FrameReview {
         let container = container_of(asset.format).ok_or_else(|| {
             LibraryError::UnsupportedFormat(format!("asset {asset_id} is not FITS or XISF"))
         })?;
+        let probe = self.shared.probe().await;
         let read = self
             .shared
             .catalog
-            .open_contained(asset_id, InventoryProbe::default(), move |reader| {
+            .open_contained(asset_id, probe, move |reader| {
                 px::decode::decode(container, reader, &NEVER).map_err(pixel_error)
             })
             .await?;
@@ -651,6 +652,17 @@ impl FrameReview {
 }
 
 impl Shared {
+    /// The Running run's source probe, so a read made during the run, such as
+    /// a preview, shares the probe of each root's volume and costs no more
+    /// than one of its frames; a fresh probe when no run is Running.
+    async fn probe(&self) -> InventoryProbe {
+        self.run
+            .lock()
+            .await
+            .as_ref()
+            .map_or_else(InventoryProbe::default, |active| active.probe.clone())
+    }
+
     async fn frame_states(&self, assets: &[Uuid]) -> Result<Vec<FrameState>, LibraryError> {
         let records = self.catalog.frame_records(assets, &self.method).await?;
         let mut imported = self.imported(assets).await?;
