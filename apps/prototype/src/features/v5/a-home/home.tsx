@@ -1,864 +1,660 @@
 /**
- * S1 Home (slice A), the start page: the control-panel dashboard (D-W39).
+ * S1 Home (slice A, decision C8, 2026-10-13): one dashboard of what needs
+ * you, what runs and when to capture next. Each row leads to the page that
+ * owns it; a section shows at most 5 rows, then "All N ›" to that page.
  *
- * No issues strip: the toolbar's Issues button and the status bar's counters
- * carry the issues (P-SB3). Boxes with one-word headings:
- * - Projects: goals per channel (in project / captured), stage and the one
- *   Next action (D-W35 rule order; a blocked run reads "Blocked at <step>"
- *   with its reason in the note and opens that step); Done Projects behind
- *   Show done (D-W48). Clicking a row opens the Project; its row menu holds
- *   the other actions.
- * - Sessions: sessions that need work, each with one action. An Unreviewed
- *   session is reviewed in place: `?review=<sessionId>` opens `SessionReview`
- *   in a sheet over Home (library marks only).
- * - Tonight: darkness, the Moon and the best windows for subjects and
- *   favourites, or the no-site state.
- * - Goals: unmet goals of open Projects per subject and channel.
- * - Work: running operations.
+ * A DetailPage with no header buttons. From 1280 px the sections stand in
+ * two columns: Pending ingestions, Pending work and Open work on the left;
+ * Status, Tonight and the calendar on the right. Narrower, one column in
+ * that order.
+ *
+ * - Pending ingestions: per Captures location, new files since its last
+ *   scan, a location never scanned or whose last scan did not finish, a
+ *   stopped or failed import (Retry), or a running one with its progress.
+ * - Pending work: sessions that need a Target, wait for review, sit in no
+ *   Project or are ready to add to a run; Finished runs awaiting Clean up,
+ *   with the space each frees.
+ * - Open work: open Projects and calibration processes, where each stands
+ *   and its next step, deadline or season first with "N nights left".
+ * - Status: locations (online, free space) and background
+ *   jobs other than imports.
+ * - Tonight: unfinished goals graded for tonight at the planning site, which
+ *   Home names and Targets changes.
+ * - Calendar: 5 weeks from the start of this week (the locale's first day).
+ *   Each night opens its card on hover or focus and leads to Targets set to
+ *   that night.
+ *
+ * Problems show on the row they affect (`issueCopy` words them as Issues
+ * does). Row actions are Action descriptors: one click only where nothing
+ * more is asked and the action can be undone (Add to run, Add to Plan),
+ * each with an Undo toast; everything else opens its page. Status lists no
+ * job that can pause (only scans and imports can, and they show in Pending
+ * ingestions), so its jobs only open where their work lives.
  */
-import { Link, useLocation, useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarClock, Download, Eye, FolderPlus, ListChecks, Pause, Play, Target, X } from "lucide-react"
-import { type ReactNode, useId, useState } from "react"
+import { FolderPlus, Import, MapPin } from "lucide-react"
+import { useMemo } from "react"
 import { useMessages } from "@/app/preferences"
-import { GateLabel, StepGlyph, stepName, useFollowLink } from "@/app/run-ui"
+import { useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
-import { Box } from "@/components/app/box"
-import { type Column, DataTable } from "@/components/app/data-table"
-import { announce, EmptyState } from "@/components/app/feedback"
-import { PageBody, PageHeader } from "@/components/app/page"
-import { CountBadge, Pill } from "@/components/app/pill"
-import { Refusal, type RefusalProps } from "@/components/app/refusal"
-import { RowActions } from "@/components/app/row-actions"
-import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
+import { ActionButton, ActionMenu } from "@/components/app/actions"
+import { BoxTable } from "@/components/app/box"
+import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import { KeyValueList } from "@/components/app/data"
+import { EmptyState, toast } from "@/components/app/feedback"
+import { issueCopy } from "@/components/app/issue-row"
+import { Pill } from "@/components/app/pill"
+import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
-import { NoteMarker } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Switch } from "@/components/ui/switch"
+import { GradeBadges } from "@/components/domain/grade-badges"
+import { type CalendarNight, NightCalendar } from "@/components/domain/night-calendar"
+import { siteTimeRange, siteTime } from "@/components/domain/sky-lines"
+import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import { CALIBRATION_STEP_NAME, type ProcessStatus } from "@/domain/calibration-process"
 import {
-  findPanel,
+  calibrationStepLink,
+  findSubject,
   formatHours,
-  goalProgress,
+  liveLightSessions,
   planningSite,
-  projectNext,
-  projectRuns,
-  projectStage,
-  projectStatus,
+  projectLink,
   runCandidates,
-  runHref,
-  runningWork,
-  runPipeline,
-  runStepLink,
-  sessionsNeedingWork,
-  sessionTargetId,
-  subjectCentre,
+  sessionIntakeEntry,
+  sessionIntakeLink,
+  type StepLink,
   subjectName,
-  targetStatus,
-  type GoalProgress,
+  type World,
 } from "@/domain/derive"
-import { OPERATION_UNIT_NAME } from "@/domain/labels"
-import { sessionLabel, sessionLongLabel } from "@/domain/membership"
-import { bestWindowTonight, defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
-import type { Operation, Project, Session, SessionId } from "@/domain/types"
-import { formatCount, formatTime } from "@/lib/format"
-import { type Messages, msg, say } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
-import type { SearchParams } from "@/routes"
-import { addRunSessions } from "@/store/actions/runs"
-import { confirmTarget } from "@/store/actions/library"
-import { nowIso, type PrototypeState, updateSlice, useStore } from "@/store/core"
-import { cancelOperation, pauseOperation, resumeOperation } from "@/store/operations"
-import { SessionReview } from "../d-review/review"
-import { wrapUpOf } from "../b-projects/model"
-import { addToProjectItems, refusalOf } from "./parts"
+import { cleanUpLink, homeStatus, type IngestionRow, type LocationStatus, openWork, type OpenWork, operationLink, pendingIngestions, type PendingWork, pendingWork } from "@/domain/home"
+import type { Issue } from "@/domain/issues"
+import { sessionLongLabel } from "@/domain/membership"
+import { type GoalOutlook, goalHorizon, goalsTonight, type NightOutlook, nightOutlooks } from "@/domain/outlook"
+import { nightPlan, upcomingNight } from "@/domain/planning"
+import type { Catalog, NightDate, ObservingSite, Operation, Project, TargetId } from "@/domain/types"
+import { formatBytes, formatCount, formatNight } from "@/lib/format"
+import { getLocale, type Messages, msg, say } from "@/lib/i18n"
+import { dayInWeek, WEEK_START } from "@/lib/week"
+import { addToPlan, removeFromPlan } from "@/store/actions/planning"
+import { addRunSessions, removeRunSessions } from "@/store/actions/runs"
+import { nowIso, useStore } from "@/store/core"
 import { runToJoin } from "./session-model"
 
-const ROWS_PER_GROUP = 4
+/** Rows a section shows before "All N ›" (C8). */
+const ROWS = 5
 
-/** The search keys the in-place review owns: the session, plus the review's own filter and position. */
-const REVIEW_KEYS = ["review", "filter", "panel", "assetId"] as const
+/** The calendar's weeks, from the start of this week. */
+const CALENDAR_WEEKS = 5
 
-function useInPlaceReview() {
-  const search = useSearch({ strict: false }) as SearchParams
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const open = (sessionId: SessionId) => void navigate({ to: pathname as never, search: { review: sessionId, filter: "unreviewed" } as never })
-  const close = () =>
-    void navigate({
-      to: pathname as never,
-      search: ((prev: SearchParams) => {
-        const next = { ...prev }
-        for (const key of REVIEW_KEYS) delete next[key]
-        return next
-      }) as never,
-      replace: true,
-    })
-  return { sessionId: search.review ?? null, open, close }
+type Follow = (link: StepLink) => void
+
+interface HomeContext {
+  world: World
+  /** The planning site Targets uses too; null without one. */
+  site: ObservingSite | null
+  nowMs: number
+  /** Tonight at the site, else today's date. */
+  tonight: NightDate
+}
+
+/**
+ * Home's reading of the store. The site, the clock and tonight re-derive
+ * only when the catalogue, the settings or a 10-minute step of the
+ * (simulated) clock changes, so a running operation's progress never redoes
+ * the 5-week horizon.
+ */
+function useHomeContext(): HomeContext {
+  const disk = useStore((s) => s.disk)
+  const catalog = useStore((s) => s.catalog)
+  const operations = useStore((s) => s.operations)
+  const settings = useStore((s) => s.settings)
+  const faults = useStore((s) => s.faults)
+  const bucket = Math.floor((Date.now() + faults.clockOffsetMs) / 600_000)
+  const sky = useMemo(() => {
+    const site = planningSite({ catalog, settings, faults })
+    const nowMs = Date.parse(nowIso())
+    return { site, nowMs, tonight: site ? upcomingNight(site, nowMs) : nowIso().slice(0, 10) }
+    // `bucket` re-derives tonight as the clock moves on.
+  }, [catalog, settings, faults, bucket])
+  return useMemo(() => ({ world: { disk, catalog, operations, settings, faults }, ...sky }), [disk, catalog, operations, settings, faults, sky])
+}
+
+function locationLink(locationId: string): StepLink {
+  return { to: "/settings/locations", search: { locationId } }
+}
+
+/** Targets on a night: no `night` for tonight, as Targets reads an absent night. */
+function targetsLink(night: NightDate, tonight: NightDate): StepLink {
+  return { to: "/targets", search: night === tonight ? {} : { night } }
+}
+
+/** "All 12 ›": the owning page, from a section that shows only its first rows. */
+function allAction(m: Messages, follow: Follow, id: string, count: number, link: StepLink): Action[] {
+  return count > ROWS ? [{ id: `${id}-all`, label: m.home_all({ count: formatCount(count) }), run: () => follow(link) }] : []
+}
+
+/** One click with an Undo toast (C8): the change commits at once and the toast offers its inverse. */
+function withUndo(m: Messages, message: string, undo: () => unknown): void {
+  toast({ message, action: { id: "undo", label: m.wrapup_undo(), run: () => void undo() } })
+}
+
+/** The goal's subject, with its panel for a mosaic panel's goal: "IC 5070 · Panel 2". */
+function goalSubject(m: Messages, catalog: Catalog, project: Project, subjectId: string, panelId: string | null): string {
+  const subject = findSubject(project, subjectId)
+  const name = subject ? subjectName(m, catalog, subject) : m.plan_unknown_target()
+  const panel = panelId ? subject?.mosaic?.panels.find((p) => p.id === panelId) : undefined
+  return panel ? m.home_panel({ name, n: panel.n }) : name
+}
+
+function goalName(m: Messages, catalog: Catalog, g: GoalOutlook): string {
+  return m.home_goal_item({ subject: goalSubject(m, catalog, g.subject.project, g.progress.goal.subjectId, g.progress.goal.panelId), channel: g.progress.goal.channel })
+}
+
+/** The row's problems, worded as Issues words them, each a link to where it is fixed. */
+function Problems({ issues }: { issues: Issue[] }) {
+  const m = useMessages()
+  const [first, ...rest] = issues
+  if (!first) return null
+  return <UsedByPreview label={issueCopy(m, first).text} link={first.link} items={rest.map((i) => ({ label: issueCopy(m, i).text, link: i.link }))} />
 }
 
 export function HomePage() {
-  const state = useStore((s) => s)
-  const review = useInPlaceReview()
   const m = useMessages()
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title={m.nav_home()}
-        actions={
-          <>
-            <Button size="sm" variant="outline" render={<Link to="/targets" search={{ view: "planned" }} />}>
-              <CalendarClock data-icon="inline-start" aria-hidden="true" />
-              {m.target_plan_tonight()}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
-              <FolderPlus data-icon="inline-start" aria-hidden="true" />
-              {m.newproject_open()}
-            </Button>
-            <Button size="sm" render={<Link to="/import" />}>
-              <Download data-icon="inline-start" aria-hidden="true" />
-              {m.import_open()}
-            </Button>
-          </>
-        }
-      />
-      <PageBody className="space-y-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <ProjectsBox state={state} className="xl:col-start-1 xl:row-start-1" />
-          <SessionsBox state={state} onReview={review.open} className="xl:col-start-1 xl:row-start-2" />
-          <TonightBox state={state} className="xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-start" />
-          <GoalsBox state={state} className="xl:col-start-1 xl:row-start-3" />
-          <WorkBox state={state} className="xl:col-start-2 xl:row-start-3 xl:self-start" />
-        </div>
-      </PageBody>
-      <ReviewSheet sessionId={review.sessionId} onClose={review.close} />
-    </div>
-  )
-}
-
-// Review in place -------------------------------------------------------------
-
-function ReviewSheet({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
-  const session = useStore((s) => (sessionId ? s.catalog.sessions[sessionId] : undefined))
-  const m = useMessages()
-  return (
-    <Sheet open={session !== undefined} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="right" className="gap-0 p-0 data-[side=right]:w-[96vw] data-[side=right]:max-w-[96vw] data-[side=right]:sm:max-w-[96vw]" data-home-review>
-        {session ? (
-          <>
-            <SheetHeader className="flex-row items-center gap-2 border-b border-separator py-2 pr-12" data-chrome>
-              <SheetTitle className="truncate">{sessionLongLabel(m, session)}</SheetTitle>
-              <Button size="xs" variant="ghost" render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} search={{ view: "review" }} />}>
-                {m.project_open_session()}
-              </Button>
-            </SheetHeader>
-            <div className="flex min-h-0 flex-1 flex-col">
-              <SessionReview sessionId={session.id} />
-            </div>
-          </>
-        ) : null}
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-// Projects --------------------------------------------------------------------
-
-interface ChannelGoal {
-  channel: string
-  inProject: number
-  captured: number
-  goal: number | null
-  unit: "seconds" | "frames"
-  met: boolean
-}
-
-/** Goals summed per channel across subjects and panels: in project / captured / goal. */
-function channelGoals(progress: GoalProgress[]): ChannelGoal[] {
-  const out = new Map<string, ChannelGoal>()
-  for (const p of progress) {
-    const unit = p.goal.integrationS !== null ? "seconds" : "frames"
-    const entry = out.get(p.goal.channel) ?? { channel: p.goal.channel, inProject: 0, captured: 0, goal: null, unit, met: true }
-    entry.inProject += unit === "seconds" ? p.inProject.seconds : p.inProject.frames
-    entry.captured += unit === "seconds" ? p.captured.seconds : p.captured.frames
-    const target = unit === "seconds" ? p.goal.integrationS : p.goal.frameCount
-    if (target !== null) entry.goal = (entry.goal ?? 0) + target
-    entry.met = entry.met && p.met
-    out.set(p.goal.channel, entry)
-  }
-  return [...out.values()]
-}
-
-function amount(value: number, unit: ChannelGoal["unit"]): string {
-  return unit === "seconds" ? formatHours(value) : formatCount(value)
-}
-
-function goalLine(m: Messages, g: ChannelGoal): string {
-  const inProject = amount(g.inProject, g.unit)
-  const captured = amount(g.captured, g.unit)
-  return g.goal !== null ? m.home_goal_line_goal({ inProject, captured, goal: amount(g.goal, g.unit) }) : m.home_goal_line({ inProject, captured })
-}
-
-function GoalLines({ goals }: { goals: ChannelGoal[] }) {
-  const m = useMessages()
-  if (goals.length === 0) return <span className="text-xs text-muted-foreground">{m.projects_no_goals()}</span>
-  return (
-    <ul className="space-y-1 py-1">
-      {goals.map((g) => {
-        const scale = Math.max(g.goal ?? 0, g.captured, 1)
-        const line = goalLine(m, g)
-        return (
-          <li key={g.channel} className="grid grid-cols-[2.5rem_3rem_auto] items-center gap-2 text-xs whitespace-nowrap tabular-nums" title={`${g.channel}: ${line}`}>
-            <span className="font-medium">{g.channel}</span>
-            <span className="relative h-1.5 overflow-hidden rounded-full bg-foreground/10" aria-hidden="true">
-              <span className="absolute inset-y-0 left-0 rounded-full bg-link/35" style={{ width: `${(g.captured / scale) * 100}%` }} />
-              <span className={cn("absolute inset-y-0 left-0 rounded-full", g.met ? "bg-success" : "bg-link")} style={{ width: `${(g.inProject / scale) * 100}%` }} />
-            </span>
-            <span className="text-muted-foreground">
-              <span className="sr-only">{g.channel}: </span>
-              <span className="text-foreground">{amount(g.inProject, g.unit)}</span> / {amount(g.captured, g.unit)}
-              {g.goal !== null ? ` · ${amount(g.goal, g.unit)}` : ""}
-              <span className="sr-only">{` (${line})`}</span>
-            </span>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-function NextButton({ state, project }: { state: PrototypeState; project: Project }) {
   const follow = useFollowLink()
-  const m = useMessages()
-  const next = projectNext(state, project, Date.parse(nowIso()), (p) => wrapUpOf(state, p))
-  if (!next) return <span className="text-muted-foreground">–</span>
-  const runId = next.step ? next.link.params?.runId : undefined
-  const run = runId ? state.catalog.runs[runId] : undefined
-  const blocked = run ? runPipeline(state, run).blocker !== null : false
-  return (
-    <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" onClick={() => follow(next.link)} title={`${say(m, next.label)}: ${say(m, next.reason)}`} data-next={project.id}>
-      {blocked ? <StepGlyph state="blocked" /> : null}
-      <span className="truncate">{say(m, next.label)}</span>
-      <span className="sr-only"> {m.projects_next_for({ name: project.name })}</span>
-    </Button>
+  const ctx = useHomeContext()
+  const weekStart = WEEK_START[getLocale()]
+  const { world, site, nowMs, tonight } = ctx
+  const { catalog } = world
+  // Tonight and the nights left of this week and the next four.
+  const horizon = useMemo(
+    () => (site ? goalHorizon(catalog, site, nowMs, tonight, CALENDAR_WEEKS * 7 - dayInWeek(tonight, weekStart)) : null),
+    [catalog, site, nowMs, tonight, weekStart],
   )
-}
+  const ingestions = useMemo(() => pendingIngestions(world), [world])
+  const work = useMemo(() => pendingWork(world), [world])
+  const open = useMemo(() => openWork(world, nowMs, tonight), [world, nowMs, tonight])
+  const status = useMemo(() => homeStatus(world, nowMs), [world, nowMs])
 
-/** Stage; a blocked run reads "Blocked at <step>", opens that step, and carries its reason in the note (D-W35, PRJ-FR-18). */
-function StageCell({ state, project }: { state: PrototypeState; project: Project }) {
-  const follow = useFollowLink()
-  const m = useMessages()
-  const stage = projectStage(state, project)
-  if (stage.state === "blocked") {
-    for (const run of projectRuns(state.catalog, project.id)) {
-      const blocker = runPipeline(state, run).blocker
-      if (!blocker) continue
-      return (
-        <span className="mt-1 inline-flex items-center gap-1">
-          <button type="button" className="rounded-sm underline-offset-2 hover:underline" onClick={() => follow(runStepLink(run, blocker.step))} data-gate="blocked">
-            <GateLabel state="blocked" label={m.home_blocked_at({ step: stepName(m, blocker.step) })} className="text-destructive" />
-          </button>
-          <NoteMarker label={m.home_why_blocked({ name: run.name })} rows={[{ label: run.name, value: say(m, blocker.message) }]} />
-        </span>
-      )
-    }
-  }
-  return <GateLabel state={stage.state} label={say(m, stage.label)} className="mt-1" />
-}
-
-function ProjectsBox({ state, className }: { state: PrototypeState; className?: string }) {
-  const follow = useFollowLink()
-  const navigate = useNavigate()
-  const m = useMessages()
-  const showDone = state.slices.a.showDone
-  const switchId = useId()
-  const all = Object.values(state.catalog.projects).sort((a, b) => Number(a.state === "done") - Number(b.state === "done") || a.name.localeCompare(b.name))
-  const done = all.filter((p) => p.state === "done")
-  const rows = showDone ? all : all.filter((p) => p.state !== "done")
-  const setShowDone = (value: boolean) => updateSlice("a", (a) => ({ ...a, showDone: value }))
-  const columns: Column<Project>[] = [
+  const sections: DetailSection[] = [
     {
-      id: "project",
-      header: m.home_column_project(),
-      rowHeader: true,
-      className: "w-[40%] align-top whitespace-normal",
-      sortValue: (p) => p.name,
-      cell: (p) => (
-        <div className="min-w-0 py-1">
-          <div className="flex flex-wrap items-center gap-x-2">
-            <Link to="/projects/$projectId" params={{ projectId: p.id }} className="font-medium underline-offset-2 hover:underline">
-              {p.name}
-            </Link>
-            {p.state === "done" ? <Pill tone="muted">{projectStatus(p) === "archived" ? m.status_archived() : m.status_done()}</Pill> : null}
-          </div>
-          <div className="text-xs text-pretty text-muted-foreground">
-            {p.subjects.map((s) => subjectName(m, state.catalog, s)).join(", ") || m.projects_no_subjects()} · {m.home_rig_count({ count: p.rigIds.length })}
-          </div>
-          <StageCell state={state} project={p} />
-        </div>
-      ),
+      id: "home-ingestions",
+      title: m.home_ingestions(),
+      count: ingestions.length,
+      flush: true,
+      actions: allAction(m, follow, "home-ingestions", ingestions.length, { to: "/settings/locations" }),
+      content: <IngestionsTable rows={ingestions} follow={follow} />,
     },
-    { id: "goals", header: m.home_goals(), className: "align-top", cell: (p) => <GoalLines goals={channelGoals(goalProgress(state.catalog, p))} /> },
-    { id: "next", header: m.home_column_next(), className: "w-[12rem] align-top", cell: (p) => <div className="py-1"><NextButton state={state} project={p} /></div> },
+    {
+      id: "home-pending",
+      title: m.home_pending_work(),
+      count: work.length,
+      flush: true,
+      actions: pendingAllActions(m, follow, work, catalog),
+      content: <PendingTable rows={work} follow={follow} />,
+    },
+    {
+      id: "home-open",
+      title: m.home_open_work(),
+      count: open.length,
+      flush: true,
+      actions: allAction(m, follow, "home-open", open.length, { to: "/projects" }),
+      content: <OpenWorkTable rows={open} follow={follow} />,
+    },
   ]
-  const menu = (p: Project): MenuEntry[] => {
-    const next = projectNext(state, p, Date.parse(nowIso()), (x) => wrapUpOf(state, x))
-    return [
-      { heading: p.name },
-      ...(next ? [{ label: say(m, next.label), onSelect: () => follow(next.link) }] : []),
-      ...(p.state === "open"
-        ? [
-            { separator: true } as const,
-            { label: m.startrun_open(), icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: p.id }) },
-            { label: m.nav_plan(), icon: CalendarClock, onSelect: () => void navigate({ to: "/targets", search: { project: p.id } }) },
-          ]
-        : []),
-    ]
-  }
-  return (
-    <Box
-      id="home-projects"
-      level={2}
-      flush
-      className={className}
-      title={
-        <span className="flex items-center gap-1.5">
-          {m.nav_projects()} <CountBadge count={rows.length} label={m.home_project_count({ count: rows.length })} />
-        </span>
-      }
-      actions={
-        <div className="flex items-center gap-2" data-chrome>
-          <Switch id={switchId} size="sm" checked={showDone} onCheckedChange={setShowDone} />
-          <Label htmlFor={switchId} className="text-xs font-normal">
-            {m.projects_show_done()}
-          </Label>
-          {!showDone && done.length > 0 ? <Pill tone="muted">{m.home_hidden_count({ count: done.length })}</Pill> : null}
-        </div>
-      }
-    >
-      {all.length === 0 ? (
-        <EmptyState
-          icon={FolderPlus}
-          title={m.home_projects_none()}
-          description={null}
-          className="m-3"
-          action={
-            <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
-              {m.newproject_open()}
-            </Button>
-          }
-        />
-      ) : (
-        <DataTable
-          label={m.nav_projects()}
-          rows={rows}
-          columns={columns}
-          getRowId={(p) => p.id}
-          scroll="none"
-          className="rounded-none border-0"
-          contextMenu={menu}
-          onRowClick={(p) => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } })}
-          empty={
-            <div className="flex items-center gap-2 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">{m.home_all_done()}</span>
-              <Button size="xs" variant="outline" onClick={() => setShowDone(true)}>
-                {m.projects_show_done()}
-              </Button>
-            </div>
-          }
-        />
-      )}
-    </Box>
-  )
-}
-
-// Sessions --------------------------------------------------------------------
-
-type SessionFilterLink = "needs-target" | "not-in-project"
-
-function WorkGroup({ title, count, filter, children }: { title: string; count: number; filter?: SessionFilterLink; children: ReactNode }) {
-  const m = useMessages()
-  return (
-    <div className="min-w-0">
-      <div className="flex min-h-7 items-center justify-between gap-2 border-b border-separator" data-chrome>
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          {title} <CountBadge count={count} label={m.session_count({ count })} />
-        </h3>
-        {filter && count > ROWS_PER_GROUP ? (
-          <Link to="/sessions" search={{ filter }} className="text-xs text-link underline-offset-2 hover:underline">
-            {m.home_all_count({ count: formatCount(count) })}
-          </Link>
-        ) : null}
-      </div>
-      {count === 0 ? <p className="py-1.5 text-xs text-muted-foreground">{m.home_none()}</p> : <ul className="divide-y divide-border/60">{children}</ul>}
-    </div>
-  )
-}
-
-function WorkRow({ session, detail, action }: { session: Session; detail: ReactNode; action: ReactNode }) {
-  const m = useMessages()
-  return (
-    <li {...menuKey(session.id)} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-x-3 gap-y-1 py-(--row-py) text-sm">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="truncate font-medium underline-offset-2 hover:underline">
-          {sessionLongLabel(m, session)}
-        </Link>
-        <span className="flex min-w-0 shrink items-center gap-1 truncate text-xs text-muted-foreground">{detail}</span>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">{action}</div>
-    </li>
-  )
-}
-
-function SessionsBox({ state, onReview, className }: { state: PrototypeState; onReview: (sessionId: SessionId) => void; className?: string }) {
-  const { catalog } = state
-  const follow = useFollowLink()
-  const navigate = useNavigate()
-  const m = useMessages()
-  const work = sessionsNeedingWork(catalog)
-  const [refusal, setRefusal] = useState<RefusalProps | null>(null)
-  const projectName = (id: string) => catalog.projects[id]?.name ?? m.home_column_project()
-  // A session can be a candidate of several Projects; its library review is one.
-  const unreviewed = [...new Map(work.unreviewed.map((u) => [u.session.id, u])).values()]
-  const total = work.needsTarget.length + work.notInProject.length + unreviewed.length + work.readyToAdd.length
-
-  const openSession = (sessionId: string, hash?: string) => void navigate({ to: "/sessions/$sessionId", params: { sessionId }, hash })
-  const menu = (sessionId: string): MenuEntry[] => {
-    const session = catalog.sessions[sessionId]
-    if (!session) return []
-    return [
-      { heading: sessionLabel(m, session) },
-      { label: m.verb_open(), icon: Eye, onSelect: () => openSession(sessionId) },
-      { label: m.session_review_frames(), icon: ListChecks, onSelect: () => onReview(sessionId) },
-      ...(sessionTargetId(session) ? [] : [{ separator: true } as const, { label: m.session_choose_target(), icon: Target, onSelect: () => openSession(sessionId, "target") }]),
-    ]
-  }
-
-  return (
-    <Box
-      id="home-sessions"
-      level={2}
-      className={className}
-      title={
-        <span className="flex items-center gap-1.5">
-          {m.nav_sessions()} <CountBadge count={total} tone={total > 0 ? "warning" : "neutral"} label={m.home_sessions_need_work({ count: total })} />
-        </span>
-      }
-      actions={
-        <Button size="xs" variant="ghost" render={<Link to="/sessions" />}>
-          {m.home_all_sessions()}
-        </Button>
-      }
-    >
-      <div className="space-y-3">
-        {refusal ? <Refusal {...refusal} /> : null}
-        {total === 0 ? (
-          <p className="text-sm text-muted-foreground">{m.home_nothing_to_do()}</p>
-        ) : (
-          <ContextMenuArea menu={menu}>
-            <div className="grid gap-x-6 gap-y-3 2xl:grid-cols-2">
-              <WorkGroup title={m.sessions_filter_needs_target()} count={work.needsTarget.length} filter="needs-target">
-                {work.needsTarget.slice(0, ROWS_PER_GROUP).map((session) => {
-                  const suggestion = session.target.value ? catalog.targets[session.target.value] : undefined
-                  return (
-                    <WorkRow
-                      key={session.id}
-                      session={session}
-                      detail={session.objectLabel ? m.session_object({ name: session.objectLabel }) : m.session_no_object()}
-                      action={
-                        suggestion ? (
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            title={m.home_suggested()}
-                            onClick={() => {
-                              const result = confirmTarget(session.id, suggestion.id, session.revision)
-                              setRefusal(refusalOf(result, m.session_cant_confirm()))
-                              if (result.ok) announce(m.session_target_confirmed({ name: suggestion.name }))
-                            }}
-                          >
-                            {m.home_confirm_target({ name: suggestion.name })}
-                          </Button>
-                        ) : (
-                          <Button size="xs" variant="outline" render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} hash="target" />}>
-                            {m.session_choose_target()}
-                          </Button>
-                        )
-                      }
-                    />
-                  )
-                })}
-              </WorkGroup>
-              <WorkGroup title={m.sessions_filter_not_in_project()} count={work.notInProject.length} filter="not-in-project">
-                {work.notInProject.slice(0, ROWS_PER_GROUP).map((session) => (
-                  <WorkRow
-                    key={session.id}
-                    session={session}
-                    detail={session.target.value ? (catalog.targets[session.target.value]?.name ?? "") : ""}
-                    action={<RowActions name={sessionLabel(m, session)} items={addToProjectItems(m, catalog, session.id)} />}
-                  />
-                ))}
-              </WorkGroup>
-              <WorkGroup title={m.status_unreviewed()} count={unreviewed.length}>
-                {unreviewed.slice(0, ROWS_PER_GROUP).map(({ session, projectId, frames }) => (
-                  <WorkRow
-                    key={session.id}
-                    session={session}
-                    detail={
-                      <>
-                        <CountBadge count={frames} tone="warning" label={m.session_frames_unreviewed({ count: frames, frames: formatCount(frames) })} />
-                        <span className="truncate">{projectName(projectId)}</span>
-                      </>
-                    }
-                    action={
-                      <Button size="xs" variant="outline" onClick={() => onReview(session.id)} data-review-session={session.id}>
-                        {m.verb_review()}
-                      </Button>
-                    }
-                  />
-                ))}
-              </WorkGroup>
-              <WorkGroup title={m.home_group_ready_to_add()} count={work.readyToAdd.length}>
-                {work.readyToAdd.slice(0, ROWS_PER_GROUP).map(({ session, projectId }) => {
-                  const run = runToJoin(catalog, projectId, session.id)
-                  return (
-                    <WorkRow
-                      key={`${projectId}-${session.id}`}
-                      session={session}
-                      detail={run ? `${projectName(projectId)} · ${run.name}` : projectName(projectId)}
-                      action={
-                        run ? (
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            title={m.target_add_to_named({ name: run.name })}
-                            onClick={() => {
-                              const reason = runCandidates(catalog, run).find((c) => c.session.id === session.id)?.reason ?? msg("home_candidate_of", { name: run.name })
-                              const result = addRunSessions(run.id, [session.id], { kind: "candidate", detail: reason })
-                              setRefusal(refusalOf(result, m.session_cant_add()))
-                              if (!result.ok) return
-                              announce(m.home_added_to_draft({ session: sessionLabel(m, session), run: run.name }))
-                              follow(runStepLink(run, "select"))
-                            }}
-                          >
-                            {m.run_select_add_to_run()}
-                          </Button>
-                        ) : (
-                          <Button size="xs" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId })}>
-                            {m.startrun_title()}
-                          </Button>
-                        )
-                      }
-                    />
-                  )
-                })}
-              </WorkGroup>
-            </div>
-          </ContextMenuArea>
-        )}
-      </div>
-    </Box>
-  )
-}
-
-// Tonight ---------------------------------------------------------------------
-
-function TonightBox({ state, className }: { state: PrototypeState; className?: string }) {
-  const site = planningSite(state)
-  const m = useMessages()
-  if (!site) {
-    return (
-      <Box id="home-tonight" level={2} title={m.home_tonight()} className={className}>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">{m.home_no_site()}</span>
-          <Button size="xs" variant="outline" render={<Link to="/settings/sites" />}>
-            {m.tonight_add_site()}
-          </Button>
-        </div>
-      </Box>
-    )
-  }
-  const nowMs = Date.parse(nowIso())
-  const tonight = tonightAt(site, nowMs)
-  const tz = site.timeZone
-  const zone = (iso: string) => zoneAbbreviation(iso, tz)
-  const criteria = defaultCriteria(site)
-  // Subjects of open Projects plus ★ favourites; a mosaic uses its centre (D-W63).
-  const entries = new Map<string, { name: string; ra: number; dec: number; favourite: boolean; projects: string[] }>()
-  for (const target of Object.values(state.catalog.targets)) {
-    if (target.favourite && target.ra !== null && target.dec !== null) entries.set(target.id, { name: target.name, ra: target.ra, dec: target.dec, favourite: true, projects: [] })
-  }
-  for (const project of Object.values(state.catalog.projects)) {
-    if (project.state !== "open") continue
-    for (const subject of project.subjects) {
-      const centre = subjectCentre(state.catalog, subject)
-      if (!centre) continue
-      const key = subject.mosaic ? `${subject.targetId}#mosaic` : subject.targetId
-      const entry = entries.get(key) ?? { name: subjectName(m, state.catalog, subject), ra: centre.ra, dec: centre.dec, favourite: Boolean(state.catalog.targets[subject.targetId]?.favourite), projects: [] }
-      if (!entry.projects.includes(project.name)) entry.projects.push(project.name)
-      entries.set(key, entry)
-    }
-  }
-  const rows = [...entries.entries()].map(([key, e]) => {
-    const target = state.catalog.targets[key.replace("#mosaic", "")]
-    const window = target ? bestWindowTonight({ ...target, ra: e.ra, dec: e.dec }, site, criteria, nowMs) : null
-    return { key, ...e, window }
-  })
-  const withWindow = rows.filter((r) => r.window).sort((a, b) => a.window!.start.localeCompare(b.window!.start))
-  const without = rows.filter((r) => !r.window).sort((a, b) => a.name.localeCompare(b.name))
-
-  return (
-    <Box
-      id="home-tonight"
-      level={2}
-      title={m.home_tonight()}
-      className={className}
-      actions={
+  const aside: DetailSection[] = [
+    {
+      id: "home-status",
+      title: m.home_status(),
+      flush: true,
+      actions: [
+        ...(status.locations.length > ROWS ? [{ id: "home-locations-all", label: m.home_all_locations({ count: formatCount(status.locations.length) }), run: () => follow({ to: "/settings/locations" }) }] : []),
+        ...(status.jobs.length > ROWS ? [{ id: "home-jobs-all", label: m.home_all_jobs({ count: formatCount(status.jobs.length) }), run: () => follow({ to: "/activity" }) }] : []),
+      ],
+      content: (
         <>
-          <Pill tone="muted" title={tz}>
-            {site.name}
-          </Pill>
-          <Button size="xs" variant="ghost" render={<Link to="/targets" search={{ view: "planned" }} />}>
-            {m.nav_plan()}
-          </Button>
+          <LocationsTable rows={status.locations} follow={follow} />
+          <JobsTable jobs={status.jobs} follow={follow} />
         </>
-      }
-    >
-      <div className="space-y-2">
-        <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm tabular-nums">
-          <dt className="text-muted-foreground">{m.home_darkness()}</dt>
-          <dd>{tonight.darkness ? `${formatTime(tonight.darkness.start, tz)}–${formatTime(tonight.darkness.end, tz)} ${zone(tonight.darkness.start)}` : m.project_none_tonight()}</dd>
-          <dt className="text-muted-foreground">{m.home_moon()}</dt>
-          <dd>
-            {say(m, tonight.moon.phase)}, {Math.round(tonight.moon.illuminationPct)}%
-            <span className="text-muted-foreground">
-              {tonight.moon.rise ? ` · ${m.tonight_moon_rises({ time: formatTime(tonight.moon.rise, tz) })}` : ""}
-              {tonight.moon.set ? ` · ${m.tonight_moon_sets({ time: formatTime(tonight.moon.set, tz) })}` : ""}
-            </span>
-          </dd>
-        </dl>
-        <h3 className="border-b border-separator pt-1 pb-1 text-xs font-semibold text-muted-foreground" data-chrome>
-          {m.home_windows()}
-        </h3>
-        {rows.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{m.home_no_subjects_or_favourites()}</span>
-            <Button size="xs" variant="outline" render={<Link to="/targets" />}>
-              {m.nav_targets()}
-            </Button>
-          </div>
-        ) : (
-          <ul className="divide-y divide-border/60 text-sm" data-tonight-windows>
-            {withWindow.map((r) => (
-              <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-(--row-py)">
-                <span className="min-w-0 truncate" title={r.projects.join(", ") || m.project_search_favourite()}>
-                  {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
-                  {r.name}
-                </span>
-                <span className="text-xs tabular-nums">
-                  {formatTime(r.window!.start, tz)}–{formatTime(r.window!.end, tz)}
-                  <span className="text-muted-foreground"> · {m.home_window_detail({ altitude: Math.round(r.window!.maxAltitudeDeg), separation: Math.round(r.window!.moonSeparationDeg) })}</span>
-                </span>
-              </li>
-            ))}
-            {without.map((r) => (
-              <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-(--row-py) text-muted-foreground">
-                <span className="min-w-0 truncate">
-                  {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
-                  {r.name}
-                </span>
-                <span className="text-xs">{m.home_no_window()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Box>
+      ),
+    },
+    tonightSection(m, follow, ctx, horizon),
+    {
+      id: "home-calendar",
+      title: m.home_calendar(),
+      content: site && horizon ? <Calendar ctx={{ ...ctx, site }} nights={nightOutlooks(catalog, site, horizon)} /> : <NoSite />,
+    },
+  ]
+  return <DetailPage title={m.nav_home()} sections={sections} aside={aside} />
+}
+
+function NoSite() {
+  const m = useMessages()
+  const follow = useFollowLink()
+  return <EmptyState icon={MapPin} title={m.home_no_site_yet()} action={<ActionButton action={{ id: "add-site", label: m.tonight_add_site(), run: () => follow({ to: "/settings/sites" }) }} />} />
+}
+
+// Pending ingestions -----------------------------------------------------------
+
+function ingestionText(m: Messages, row: IngestionRow): string {
+  const { state } = row
+  switch (state.kind) {
+    case "importing": {
+      const { total } = state.operation.progress
+      return state.operation.status === "paused"
+        ? m.home_import_paused({ percent: state.percent })
+        : m.home_importing({ count: total, files: formatCount(total), percent: state.percent })
+    }
+    case "stopped":
+      return state.operation.status === "failed" || state.operation.status === "partial" ? m.home_import_failed() : m.home_import_stopped()
+    case "never-scanned":
+      return m.home_never_scanned()
+    case "incomplete":
+      return m.home_scan_unfinished()
+    case "new-files":
+      return m.home_new_files({ count: state.count, files: formatCount(state.count) })
+  }
+}
+
+function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follow }) {
+  const m = useMessages()
+  const capture = useStore((s) => Object.values(s.catalog.locations).some((l) => l.role === "captures" && !l.retiredAt))
+  const columns: Column<IngestionRow>[] = [
+    { id: "location", header: m.home_column_location(), rowHeader: true, truncate: true, sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
+    {
+      id: "state",
+      header: m.home_column_state(),
+      sortValue: (r) => ingestionText(m, r),
+      cell: (r) =>
+        r.state.kind === "stopped" ? <StatusBadge kind="operation" value={r.state.operation.status} label={ingestionText(m, r)} /> : ingestionText(m, r),
+    },
+  ]
+  const primary = (r: IngestionRow): Action | null => {
+    const open = () => follow(locationLink(r.location.id))
+    // Import and Retry open Import with the location as its source (Q17); a scan cannot be undone, so Scan and Rescan open the location.
+    const importFrom = () => follow({ to: "/import", search: { step: "source", location: r.location.id } })
+    switch (r.state.kind) {
+      case "new-files":
+        return { id: "import", label: m.import_open(), opensDialog: true, run: importFrom }
+      case "stopped":
+        return { id: "retry", label: m.verb_retry(), run: importFrom }
+      case "never-scanned":
+        return { id: "scan", label: m.home_scan(), run: open }
+      case "incomplete":
+        return { id: "rescan", label: m.location_rescan(), run: open }
+      case "importing":
+        return null
+    }
+  }
+  const empty = capture ? (
+    m.home_everything_imported()
+  ) : (
+    <EmptyState icon={FolderPlus} title={m.home_add_captures_location()} action={<ActionButton action={{ id: "add-location", label: m.storage_add_location(), run: () => follow({ to: "/settings/locations", search: { add: "captures" } }) }} />} />
+  )
+  return (
+    <BoxTable
+      label={m.home_ingestions()}
+      rows={rows.slice(0, ROWS)}
+      columns={columns}
+      getRowId={(r) => r.location.id}
+      rowLabel={(r) => r.location.displayName}
+      primaryRowAction={primary}
+      rowActions={(r) => [{ id: "open", label: m.verb_open(), run: () => follow(locationLink(r.location.id)) }]}
+      onRowClick={(r) => follow(locationLink(r.location.id))}
+      empty={empty}
+    />
   )
 }
 
-// Goals -----------------------------------------------------------------------
+// Pending work -----------------------------------------------------------------
 
-interface GoalRow {
-  key: string
-  subject: string
-  project: Project
-  progress: GoalProgress
+/**
+ * "All N ›" per kind of pending work the first rows leave out, each to its
+ * owning page filtered to those items: Sessions by facet, a run to its
+ * Project, Clean up to its Project's Clean up.
+ */
+function pendingAllActions(m: Messages, follow: Follow, work: PendingWork[], catalog: Catalog): Action[] {
+  const shown = new Set(work.slice(0, ROWS).map(workKey))
+  const kinds: PendingWork["kind"][] = ["needs-target", "unreviewed", "not-in-project", "ready-to-add", "clean-up"]
+  return kinds.flatMap((kind): Action[] => {
+    const rows = work.filter((w) => w.kind === kind)
+    const hidden = rows.filter((w) => !shown.has(workKey(w)))
+    const first = hidden[0]
+    if (!first) return []
+    const group: Record<PendingWork["kind"], () => string> = {
+      "needs-target": m.sessions_filter_needs_target,
+      unreviewed: m.status_needs_review,
+      "not-in-project": m.sessions_filter_not_in_project,
+      "ready-to-add": m.home_group_ready,
+      "clean-up": m.wrapup_cleanup_title,
+    }
+    const link: StepLink =
+      first.kind === "needs-target"
+        ? { to: "/sessions", search: { filter: "needs-target" } }
+        : first.kind === "unreviewed"
+          ? { to: "/sessions", search: { filter: "needs-review" } }
+          : first.kind === "not-in-project"
+            ? { to: "/sessions", search: { filter: "not-in-project" } }
+            : first.kind === "ready-to-add"
+              ? projectLink(first.projectId)
+              : cleanUpLink({ catalog }, first.run, first.project)
+    return [{ id: `home-pending-all-${kind}`, label: m.home_all_group({ group: group[kind](), count: formatCount(rows.length) }), run: () => follow(link) }]
+  })
 }
 
-function GoalsBox({ state, className }: { state: PrototypeState; className?: string }) {
+function workKey(w: PendingWork): string {
+  return w.kind === "clean-up" ? `clean-up:${w.run.id}` : `${w.kind}:${w.session.id}${w.kind === "ready-to-add" ? `:${w.projectId}` : ""}`
+}
+
+function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow }) {
   const m = useMessages()
-  const rows: GoalRow[] = targetStatus(state.catalog).map(({ project, subject, progress }) => {
-    const panel = findPanel(subject, progress.goal.panelId)
-    const name = subjectName(m, state.catalog, subject)
-    return { key: `${project.id}-${progress.goal.id}`, subject: panel ? m.home_panel({ name, n: panel.n }) : name, project, progress }
-  })
-  const unit = (p: GoalProgress) => (p.goal.integrationS !== null ? "seconds" : "frames")
-  const val = (p: GoalProgress, t: { frames: number; seconds: number }) => (unit(p) === "seconds" ? formatHours(t.seconds) : formatCount(t.frames))
-  const columns: Column<GoalRow>[] = [
-    {
-      id: "subject",
-      header: m.home_column_subject(),
-      rowHeader: true,
-      sortValue: (r) => r.subject,
-      cell: (r) => (
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate">{r.subject}</span>
-          <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="truncate text-xs text-muted-foreground underline-offset-2 hover:underline">
-            {r.project.name}
-          </Link>
-        </span>
-      ),
+  const catalog = useStore((s) => s.catalog)
+  const firstRun = useStore((s) => liveLightSessions(s.catalog).length === 0)
+  const name = (w: PendingWork) => (w.kind === "clean-up" ? w.run.name : sessionLongLabel(m, w.session))
+  const needs = (w: PendingWork): string => {
+    switch (w.kind) {
+      case "needs-target":
+        return m.sessions_filter_needs_target()
+      case "unreviewed":
+        return m.session_frames_unreviewed({ count: w.frames, frames: formatCount(w.frames) })
+      case "not-in-project":
+        return m.sessions_filter_not_in_project()
+      case "ready-to-add": {
+        const run = runToJoin(catalog, w.projectId, w.session.id)
+        return m.home_ready_for({ name: run?.name ?? catalog.projects[w.projectId]?.name ?? "–" })
+      }
+      case "clean-up":
+        return w.bytes > 0 ? m.home_clean_up_frees({ bytes: formatBytes(w.bytes) }) : m.home_clean_up_links({ count: w.entries, n: formatCount(w.entries) })
+    }
+  }
+  const page = (w: PendingWork): StepLink => (w.kind === "clean-up" ? cleanUpLink({ catalog }, w.run, w.project) : { to: "/sessions/$sessionId", params: { sessionId: w.session.id } })
+  const primary = (w: PendingWork): Action | null => {
+    switch (w.kind) {
+      case "needs-target":
+        return { id: "choose-target", label: m.session_choose_target(), run: () => follow(sessionIntakeLink(w.session.id, "target")) }
+      case "unreviewed":
+        return { id: "review", label: m.session_review_frames(), run: () => follow(sessionIntakeEntry(catalog, w.session)) }
+      case "not-in-project":
+        return { id: "open-session", label: m.project_open_session(), run: () => follow(page(w)) }
+      case "ready-to-add":
+        return addToRunAction(m, catalog, w)
+      case "clean-up":
+        return { id: "clean-up", label: m.wrapup_cleanup_title(), run: () => follow(page(w)) }
+    }
+  }
+  const columns: Column<PendingWork>[] = [
+    { id: "item", header: m.home_column_item(), rowHeader: true, truncate: true, sortValue: name, cell: name },
+    { id: "needs", header: m.home_column_needs(), sortValue: needs, cell: needs },
+  ]
+  return (
+    <BoxTable
+      label={m.home_pending_work()}
+      rows={rows.slice(0, ROWS)}
+      columns={columns}
+      getRowId={workKey}
+      rowLabel={name}
+      primaryRowAction={primary}
+      rowActions={(w) => [{ id: "open", label: w.kind === "clean-up" ? m.wrapup_cleanup_title() : m.project_open_session(), run: () => follow(page(w)) }]}
+      onRowClick={(w) => follow(page(w))}
+      empty={
+        firstRun ? <EmptyState icon={Import} title={m.home_import_to_start()} action={<ActionButton action={{ id: "import", label: m.import_open(), opensDialog: true, run: () => follow({ to: "/import" }) }} />} /> : m.home_nothing_to_sort()
+      }
+    />
+  )
+}
+
+/** Add to the open run's draft: one click, undone by taking the session out again. Without an open run, Start run… asks for the rest. */
+function addToRunAction(m: Messages, catalog: Catalog, w: Extract<PendingWork, { kind: "ready-to-add" }>): Action {
+  const run = runToJoin(catalog, w.projectId, w.session.id)
+  if (!run) return { id: "start-run", label: m.startrun_open(), opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: w.projectId }) }
+  return {
+    id: "add-to-run",
+    label: m.target_add_to_named({ name: run.name }),
+    run: () => {
+      const reason = runCandidates(catalog, run).find((c) => c.session.id === w.session.id)?.reason ?? msg("home_candidate_of", { name: run.name })
+      const result = addRunSessions(run.id, [w.session.id], { kind: "candidate", detail: reason })
+      if (result.ok) withUndo(m, m.home_added_to_draft({ session: sessionLongLabel(m, w.session), run: run.name }), () => removeRunSessions(run.id, [w.session.id]))
+      return result
     },
-    { id: "channel", header: m.home_column_channel(), sortValue: (r) => r.progress.goal.channel, cell: (r) => <Pill tone="neutral">{r.progress.goal.channel}</Pill> },
-    { id: "in", header: m.home_column_in_project(), align: "right", sortValue: (r) => r.progress.inProject.seconds, cell: (r) => val(r.progress, r.progress.inProject) },
-    { id: "captured", header: m.coverage_captured(), align: "right", sortValue: (r) => r.progress.captured.seconds, cell: (r) => val(r.progress, r.progress.captured) },
+  }
+}
+
+// Open work --------------------------------------------------------------------
+
+const PROCESS_STATUS: Record<ProcessStatus, (m: Messages) => string> = {
+  "awaiting-stack": (m) => m.import_route_stack(),
+  stacking: (m) => m.session_process_stacking(),
+  importing: (m) => m.session_process_importing(),
+  "trashing-raws": (m) => m.session_process_trashing(),
+  failed: (m) => m.status_failed(),
+  done: (m) => m.session_process_done(),
+}
+
+function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
+  const m = useMessages()
+  const name = (r: OpenWork) => (r.kind === "project" ? r.project.name : say(m, r.view.name))
+  const stands = (r: OpenWork): string => {
+    if (r.kind === "calibration") return PROCESS_STATUS[r.view.status](m)
+    return r.goals.total === 0 ? m.projects_no_goals() : m.home_goals_met({ met: r.goals.met, total: r.goals.total })
+  }
+  const page = (r: OpenWork): StepLink => (r.kind === "project" ? projectLink(r.project.id) : r.view.current ? calibrationStepLink(r.view.process.id, r.view.current) : { to: "/calibration" })
+  const next = (r: OpenWork): Action | null => {
+    if (r.kind === "calibration") return r.view.current ? { id: "next", label: say(m, CALIBRATION_STEP_NAME[r.view.current]), run: () => follow(page(r)) } : null
+    const step = r.next
+    return step ? { id: "next", label: say(m, step.label), run: () => follow(step.link) } : null
+  }
+  // Two columns and the ⋯ fit the 1280 px column and a 768 px window: the deadline leads the progress cell, the next step closes it, and a row click takes the next step.
+  const columns: Column<OpenWork>[] = [
+    { id: "name", header: m.home_column_name(), rowHeader: true, truncate: true, sortValue: name, cell: name },
     {
-      id: "goal",
-      header: m.home_column_goal(),
-      align: "right",
+      id: "stands",
+      header: m.home_column_progress(),
+      truncate: true,
+      sortValue: (r) => r.window?.nightsLeft ?? null,
       cell: (r) => {
-        const { integrationS, frameCount } = r.progress.goal
-        if (integrationS !== null) return formatHours(integrationS)
-        return frameCount !== null ? m.session_frame_count({ count: frameCount, frames: formatCount(frameCount) }) : m.home_quality_bar()
-      },
-    },
-    {
-      id: "needs",
-      header: m.home_column_needs(),
-      sortValue: (r) => r.progress.remainingS ?? 0,
-      cell: (r) => {
-        const p = r.progress
-        if (p.remainingS === null) {
-          const short = Math.max(0, (p.goal.frameCount ?? 0) - p.inProject.frames)
-          return short > 0 ? <span className="tabular-nums">{m.session_frame_count({ count: short, frames: formatCount(short) })}</span> : <Pill tone="muted">{m.home_quality_bar()}</Pill>
-        }
-        const toCapture = Math.max(0, (p.goal.integrationS ?? 0) - p.captured.seconds)
+        const step = next(r)
         return (
-          <span className="flex items-center gap-1.5 whitespace-nowrap tabular-nums">
-            {formatHours(p.remainingS)}
-            {toCapture === 0 ? (
-              <Pill tone="info" title={m.home_captured_covers()}>
-                {m.coverage_captured()}
-              </Pill>
-            ) : (
-              <Pill tone="muted" title={m.home_still_to_capture()}>
-                +{formatHours(toCapture)}
-              </Pill>
-            )}
-          </span>
+          <>
+            {r.window ? (
+              <>
+                <Pill tone={r.priority > 0 ? "warning" : "muted"}>{say(m, r.window.line)}</Pill>{" "}
+              </>
+            ) : null}
+            {stands(r)}
+            {r.issues.length > 0 ? " · " : step ? ` · ${m.home_next_step({ step: step.label })}` : null}
+            <Problems issues={r.issues} />
+          </>
         )
       },
     },
   ]
-  const hasGoals = Object.values(state.catalog.projects).some((p) => p.state === "open" && p.goals.length > 0)
   return (
-    <Box
-      id="home-goals"
-      level={2}
-      flush
-      className={className}
-      title={
-        <span className="flex items-center gap-1.5">
-          {m.home_goals()} <CountBadge count={rows.length} label={m.home_goals_unmet({ count: rows.length })} />
-        </span>
-      }
-    >
-      <DataTable
-        label={m.home_unmet_goals()}
-        rows={rows}
-        columns={columns}
-        getRowId={(r) => r.key}
-        scroll="none"
-        className="rounded-none border-0"
-        empty={<p className="px-3 py-2 text-sm text-muted-foreground">{hasGoals ? m.home_all_met() : m.projects_no_goals()}</p>}
-      />
-    </Box>
+    <BoxTable
+      label={m.home_open_work()}
+      rows={rows.slice(0, ROWS)}
+      columns={columns}
+      getRowId={(r) => (r.kind === "project" ? r.project.id : r.view.process.id)}
+      rowLabel={name}
+      rowActions={(r) => [...[next(r)].filter((a) => a !== null), { id: "open", label: r.kind === "project" ? m.target_open_project() : m.verb_open(), run: () => follow(page(r)) }]}
+      onRowClick={(r) => {
+        const step = next(r)
+        if (step) void step.run()
+        else follow(page(r))
+      }}
+      empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />} />}
+    />
   )
 }
 
-// Work ------------------------------------------------------------------------
+// Status -----------------------------------------------------------------------
 
-function operationHref(state: PrototypeState, op: Operation): string {
-  const runId = op.scope.runIds?.[0]
-  const run = runId ? state.catalog.runs[runId] : undefined
-  if (op.kind === "import") return `/sessions?import=${op.id}`
-  if (op.kind === "index") return "/settings/locations"
-  if (op.kind === "stack-master") return "/calibration"
-  if (run) return runHref(run, runPipeline(state, run).current.id)
-  if (op.scope.projectId) return `/projects/${op.scope.projectId}`
-  return "/activity"
+function LocationStatusBadge({ row }: { row: LocationStatus }) {
+  if (row.issue?.kind === "location-denied") return <StatusBadge kind="access" value="denied" />
+  if (row.availability === "offline") return <StatusBadge kind="availability" value="offline" />
+  if (row.location.unreadablePaths.length > 0) return <StatusBadge kind="availability" value="unreadable" />
+  return <StatusBadge kind="availability" value="online" />
 }
 
-function WorkBox({ state, className }: { state: PrototypeState; className?: string }) {
-  const ops = runningWork(state.operations)
+function LocationsTable({ rows, follow }: { rows: LocationStatus[]; follow: Follow }) {
   const m = useMessages()
+  const columns: Column<LocationStatus>[] = [
+    { id: "location", header: m.home_column_location(), rowHeader: true, truncate: true, sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
+    { id: "status", header: m.home_column_status(), sortValue: (r) => r.availability, cell: (r) => <LocationStatusBadge row={r} /> },
+    {
+      id: "free",
+      header: m.run_check_space(),
+      align: "right",
+      sortValue: (r) => r.space?.freeBytes ?? null,
+      // A low-space flag goes here once the owner sets the threshold (D1, pending).
+      cell: (r) => (r.space ? formatBytes(r.space.freeBytes) : "–"),
+    },
+  ]
   return (
-    <Box
-      id="home-work"
-      level={2}
-      title={
-        <span className="flex items-center gap-1.5">
-          {m.issues_group_work()} {ops.length > 0 ? <CountBadge count={ops.length} tone="info" label={m.home_running_count({ count: ops.length })} /> : null}
-        </span>
-      }
-      className={className}
-      actions={
-        <Button size="xs" variant="ghost" render={<Link to="/activity" />}>
-          {m.nav_activity()}
-        </Button>
-      }
-    >
-      {ops.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{m.activity_nothing_running()}</p>
-      ) : (
-        <ul className="space-y-2.5" data-running-work>
-          {ops.map((op) => {
-            const href = operationHref(state, op)
-            const value = op.progress.total > 0 ? Math.min(100, (op.progress.done / op.progress.total) * 100) : null
-            const title = say(m, op.title)
-            const unit = say(m, OPERATION_UNIT_NAME[op.progress.unit])
-            return (
-              <li key={op.id} className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <a href={`#${href}`} className="min-w-0 truncate text-sm font-medium underline-offset-2 hover:underline">
-                    {title}
-                  </a>
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <StatusBadge kind="operation" value={op.status} />
-                    {op.status === "running" && op.canPause ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={m.home_pause_named({ name: title })} onClick={() => pauseOperation(op.id)}>
-                        <Pause aria-hidden="true" />
-                      </Button>
-                    ) : null}
-                    {op.status === "paused" || op.status === "interrupted" ? (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={op.status === "paused" ? m.home_resume_named({ name: title }) : m.home_retry_named({ name: title })}
-                        onClick={() => resumeOperation(op.id)}
-                      >
-                        <Play aria-hidden="true" />
-                      </Button>
-                    ) : null}
-                    {op.canCancel ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={m.home_cancel_named({ name: title })} onClick={() => cancelOperation(op.id)}>
-                        <X aria-hidden="true" />
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-                <Progress value={value} aria-label={m.operation_progress_label({ title })} className="gap-1">
-                  <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
-                    {value === null ? unit : m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit })}
-                  </span>
-                </Progress>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </Box>
+    <BoxTable
+      label={m.home_locations()}
+      rows={rows.slice(0, ROWS)}
+      columns={columns}
+      getRowId={(r) => r.location.id}
+      rowLabel={(r) => r.location.displayName}
+      rowActions={(r) => [{ id: "open", label: m.verb_open(), run: () => follow(locationLink(r.location.id)) }]}
+      onRowClick={(r) => follow(locationLink(r.location.id))}
+      empty={m.storage_no_locations()}
+    />
   )
+}
+
+function JobsTable({ jobs, follow }: { jobs: Operation[]; follow: Follow }) {
+  const m = useMessages()
+  const world = useStore((s) => s)
+  const title = (op: Operation) => say(m, op.title)
+  const percent = (op: Operation) => (op.progress.total > 0 ? Math.min(100, Math.round((op.progress.done / op.progress.total) * 100)) : null)
+  const columns: Column<Operation>[] = [
+    { id: "job", header: m.home_column_job(), rowHeader: true, truncate: true, sortValue: title, cell: title },
+    { id: "progress", header: m.home_column_progress(), align: "right", sortValue: percent, cell: (op) => (percent(op) === null ? "–" : m.home_percent({ percent: percent(op)! })) },
+    { id: "status", header: m.home_column_status(), sortValue: (op) => op.status, cell: (op) => <StatusBadge kind="operation" value={op.status} /> },
+  ]
+  return (
+    <BoxTable
+      label={m.home_jobs()}
+      rows={jobs.slice(0, ROWS)}
+      columns={columns}
+      getRowId={(op) => op.id}
+      rowLabel={title}
+      rowActions={(op) => [{ id: "open", label: m.verb_open(), run: () => follow(operationLink(world, op)) }]}
+      onRowClick={(op) => follow(operationLink(world, op))}
+      empty={m.home_nothing_running()}
+    />
+  )
+}
+
+// Tonight ----------------------------------------------------------------------
+
+function tonightSection(m: Messages, follow: Follow, ctx: HomeContext, horizon: ReturnType<typeof goalHorizon> | null): DetailSection {
+  const { site, tonight } = ctx
+  if (!site || !horizon) return { id: "home-tonight", title: m.home_tonight(), content: <NoSite /> }
+  const graded = goalsTonight(horizon)
+  return {
+    id: "home-tonight",
+    title: m.home_tonight_at({ site: site.name }),
+    count: graded.goals.length,
+    flush: true,
+    actions: allAction(m, follow, "home-tonight", graded.goals.length, targetsLink(tonight, tonight)),
+    content: <TonightTable ctx={ctx} goals={graded.goals} nextGood={graded.nextGood} anyGoal={horizon.goals.length > 0} />,
+  }
+}
+
+function TonightTable({ ctx, goals, nextGood, anyGoal }: { ctx: HomeContext; goals: GoalOutlook[]; nextGood: NightDate | null; anyGoal: boolean }) {
+  const m = useMessages()
+  const follow = useFollowLink()
+  const { world, tonight } = ctx
+  const { catalog } = world
+  const planned = new Set(nightPlan(catalog, tonight).map((t) => t.id))
+  const name = (g: GoalOutlook) => goalName(m, catalog, g)
+  const targetLink = (targetId: TargetId): StepLink => ({ to: "/targets/$targetId", params: { targetId } })
+  const columns: Column<GoalOutlook>[] = [
+    { id: "goal", header: m.home_column_goal(), rowHeader: true, truncate: true, sortValue: name, cell: (g) => goalSubject(m, catalog, g.subject.project, g.progress.goal.subjectId, g.progress.goal.panelId) },
+    {
+      id: "grade",
+      header: m.home_column_grade(),
+      sortValue: (g) => g.grades?.[0] ?? null,
+      cell: (g) => <GradeBadges grades={g.grades ? [{ band: g.progress.goal.channel, grade: g.grades[0]! }] : null} />,
+    },
+    { id: "time", header: m.tonight_img_time(), align: "right", sortValue: (g) => g.subject.minutes[0] ?? 0, cell: (g) => formatHours((g.subject.minutes[0] ?? 0) * 60) },
+  ]
+  const addToPlanAction = (g: GoalOutlook): Action | null => {
+    const target = g.subject.target
+    if (planned.has(target.id)) return null
+    return {
+      id: "add-to-plan",
+      label: m.targets_add_to_plan(),
+      run: () => {
+        const result = addToPlan(target.id, tonight)
+        if (result.ok) withUndo(m, m.home_added_to_plan({ name: target.name }), () => removeFromPlan(target.id, tonight))
+        return result
+      },
+    }
+  }
+  return (
+    <BoxTable
+      label={m.home_tonight()}
+      rows={goals.slice(0, ROWS)}
+      columns={columns}
+      getRowId={(g) => g.progress.goal.id}
+      rowLabel={name}
+      primaryRowAction={addToPlanAction}
+      rowActions={(g) => [
+        { id: "target", label: m.project_open_target(), run: () => follow(targetLink(g.subject.target.id)) },
+        { id: "project", label: m.target_open_project(), run: () => follow(projectLink(g.subject.project.id)) },
+      ]}
+      onRowClick={(g) => follow(targetLink(g.subject.target.id))}
+      empty={anyGoal ? (nextGood ? m.home_no_goals_suit_next({ date: formatNight(nextGood) }) : m.home_no_goals_suit()) : <NoGoals />}
+    />
+  )
+}
+
+/** "No unfinished goals." with Add a Goal (the owner's label): the open Projects, then that Project's add-goal dialog; without one, New Project…. */
+function NoGoals() {
+  const m = useMessages()
+  const follow = useFollowLink()
+  const projects = useStore((s) => Object.values(s.catalog.projects).filter((p) => p.state === "open"))
+  const items: MenuItem[] = [...projects]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => ({ id: `add-goal-${p.id}`, label: p.name, opensDialog: true, run: () => follow(projectLink(p.id, { add: "goal" })) }))
+  const action = items.length > 0 ? <ActionMenu label={m.home_add_a_goal()} items={items} /> : <ActionButton action={{ id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />
+  return <EmptyState icon={FolderPlus} title={m.home_no_unfinished_goals()} action={action} />
+}
+
+// Calendar ---------------------------------------------------------------------
+
+function moonText(m: Messages, n: NightOutlook, timeZone: string): string {
+  const moon = n.summary.moon
+  return [
+    m.calendar_moon({ illumination: moon.illuminationPct, phase: say(m, moon.phase) }),
+    moon.rise ? m.tonight_moon_rises({ time: siteTime(moon.rise, timeZone) }) : m.tonight_moon_no_rise(),
+    moon.set ? m.tonight_moon_sets({ time: siteTime(moon.set, timeZone) }) : m.tonight_moon_no_set(),
+  ].join(" · ")
+}
+
+function Calendar({ ctx, nights }: { ctx: HomeContext & { site: ObservingSite }; nights: NightOutlook[] }) {
+  const m = useMessages()
+  const { world, site, tonight } = ctx
+  const names = (goals: GoalOutlook[]) => (goals.length === 0 ? "–" : goals.map((g) => goalName(m, world.catalog, g)).join(", "))
+  const calendar: CalendarNight[] = nights.map((n) => ({
+    night: n.night,
+    moon: n.summary.moon,
+    waxing: n.waxing,
+    darkS: n.darkS,
+    goals: n.suited.length,
+    planned: n.planned.length,
+    link: targetsLink(n.night, tonight),
+    card: (
+      <KeyValueList
+        items={[
+          { label: m.plan_dark(), value: n.summary.darkness ? siteTimeRange(n.summary.darkness.start, n.summary.darkness.end, site.timeZone) : m.calendar_never_dark() },
+          { label: m.tonight_moon(), value: moonText(m, n, site.timeZone) },
+          { label: m.calendar_legend_goals(), value: names(n.suited) },
+          { label: m.home_moon_rules_out(), value: names(n.moonLimited) },
+          { label: m.calendar_legend_planned(), value: n.planned.length === 0 ? "–" : n.planned.map((t) => t.name).join(", ") },
+        ]}
+      />
+    ),
+  }))
+  return <NightCalendar label={m.home_calendar_label({ site: site.name })} today={tonight} nights={calendar} />
 }

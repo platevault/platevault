@@ -48,7 +48,7 @@ export const CATALOGUE: CatalogueEntry[] = [
   { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },
   {
     id: "domain",
-    components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "MosaicField", "SiteMap", "CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"],
+    components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "NightCalendar", "MoonPhase", "MosaicField", "SiteMap", "CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"],
     Entry: DomainCatalogue,
   },
   { id: "step-flow", components: ["StepStrip", "StepFooter"], Entry: StepFlowCatalogue },

@@ -6,17 +6,16 @@
  *
  * Search params are loose string maps so screens can add keys without a
  * foundation change. Documented keys: `/projects/$projectId?start=run`
- * (open Start a run), `?stage=wrap-up` (the Wrap up stage),
- * `?candidates=unreviewed`, `?mosaic=new|<subjectId>` (the mosaic editor);
- * `/projects/$projectId/runs/$runId/review?filter=unreviewed`;
+ * (open Start a run), `?add=goal` (open Add goal), `?stage=wrap-up` (the
+ * Wrap up stage), `?candidates=unreviewed`, `?mosaic=new|<subjectId>` (the
+ * mosaic editor); `/projects/$projectId/runs/$runId/review?filter=unreviewed`;
  * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
  * planning values use; tonight when absent or past), `?project=`;
  * `/settings/locations?duplicates=review` (the Duplicates review sheet);
  * `/import?step=` and `/sessions/$sessionId?step=` (the staged Import and
- * intake flows; without `step` the plain view shows); `/home-concepts?concept=`
- * with `night` and `period` (the Home concepts, HomeConceptsPage).
+ * intake flows; without `step` the plain view shows).
  */
-import { createHashHistory, createRootRoute, createRoute, createRouter, lazyRouteComponent, redirect, useSearch } from "@tanstack/react-router"
+import { createHashHistory, createRootRoute, createRoute, createRouter, redirect, useSearch } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { DesignSystemPage } from "@/app/design-system-page"
 import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
@@ -102,14 +101,6 @@ const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path
 // S1 Home is the start page (D-W39); S13 Import is a StepPage at `/import` (`?step=source|preview`).
 const homeRoute = page("/", HomePage)
 const importRoute = page("/import", ImportPage)
-
-// Home concepts for the C8 choice (bead astro-plan-5kpyp): a lazy chunk, removed once C8 is decided.
-const homeConceptsRoute = createRoute({
-  getParentRoute: () => appLayout,
-  path: "/home-concepts",
-  component: lazyRouteComponent(() => import("@/features/v5/a-home/concepts/home-concepts"), "HomeConceptsPage"),
-  validateSearch: looseSearch,
-})
 
 // S2, S3, S8: Projects. S4 New Project is a sheet; Wrap up is S3's `?stage=wrap-up`.
 const projectsRoute = page("/projects", ProjectsPage)
@@ -199,7 +190,6 @@ const routeTree = rootRoute.addChildren([
   setupLayout.addChildren([setupLanguageRoute, welcomeRoute, setupLocationsRoute, setupIndexingRoute]),
   appLayout.addChildren([
     homeRoute,
-    homeConceptsRoute,
     importRoute,
     projectsRoute,
     projectRoute,
