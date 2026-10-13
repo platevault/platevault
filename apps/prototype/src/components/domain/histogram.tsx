@@ -95,7 +95,10 @@ export function Histogram({ data, readout = null }: HistogramProps) {
   }
 
   const extremes = data.min != null && data.max != null ? m.review_histogram_extremes({ min: formatCount(Math.round(data.min)), max: formatCount(Math.round(data.max)) }) : null
-  const second = [extremes, data.saturated > 0 ? m.review_histogram_saturated({ count: data.saturated }) : null, data.invalid > 0 ? m.review_histogram_invalid({ count: data.invalid }) : null].filter((part): part is string => part !== null)
+  const second: string[] = []
+  if (extremes) second.push(extremes)
+  if (data.saturated > 0) second.push(m.review_histogram_saturated({ count: data.saturated }))
+  if (data.invalid > 0) second.push(m.review_histogram_invalid({ count: data.invalid }))
   const samples = formatCount(data.samples)
   return (
     <figure className="space-y-1" data-histogram>

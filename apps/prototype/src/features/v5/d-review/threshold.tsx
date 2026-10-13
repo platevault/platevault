@@ -78,7 +78,7 @@ export function ThresholdDialog({
       <KeyValueList
         items={[
           { label: m.review_threshold_matches(), value: formatCount(matches.length) },
-          ...(missing > 0 ? [{ label: m.review_threshold_not_measured(), value: formatCount(missing) }] : []),
+          ...(missing > 0 ? [{ label: m.status_not_measured(), value: formatCount(missing) }] : []),
         ]}
       />
     </FormDialog>

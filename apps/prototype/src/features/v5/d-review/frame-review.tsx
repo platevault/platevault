@@ -20,7 +20,7 @@
  *   session (C10); every mark control then names why and where it resolves.
  */
 import { useSearch } from "@tanstack/react-router"
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, FolderOpen, ImageOff, ListFilter, Minimize, X } from "lucide-react"
+import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, FolderOpen, ImageOff, Minimize, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { getPreferences, useMessages } from "@/app/preferences"
@@ -41,7 +41,7 @@ import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots
 import { type WorkspaceAside, type WorkspacePane, Workspace } from "@/components/templates/workspace"
 import { sessionUnreviewedFrames } from "@/domain/derive"
 import { currentFile, previewUnavailableReason } from "@/domain/membership"
-import type { AssetId, QualityValue, SessionId } from "@/domain/types"
+import type { AssetId, QualityValue } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { formatMetric, METRIC_LABEL } from "@/store/actions/measure"
@@ -52,9 +52,9 @@ import { frameColumns } from "./columns"
 import { registerReviewCommands } from "./commands"
 import { ImportDialog, ImportedMeasurementsDialog } from "./import-dialog"
 import { Inspector, type InspectorTab } from "./inspector"
-import { framesWhat, MARK_WORD, markAnnouncement, markLibrary } from "./marks"
+import { MARK_WORD, markAnnouncement, markLibrary } from "./marks"
 import { MeasureStatus } from "./measure-bar"
-import { bucketAfterMark, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewFrame, reviewScope } from "./model"
+import { bucketAfterMark, contextKey, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
 import { displayName, NAME_PRESETS, namePreset } from "./names"
 import { setReviewPrefs, type TableHeight, useReviewPrefs } from "./prefs"
 import { QualityLabel, qualityWord } from "./quality"
@@ -103,20 +103,20 @@ function popupOpen(): boolean {
   return [...document.querySelectorAll("[role=dialog]:not([data-workspace-aside]):not([data-workspace-fullscreen]), [role=alertdialog], [role=menu], [role=listbox]")].some((el) => el.checkVisibility())
 }
 
-const SHORTCUT = (key: string) => key
 const withKey = (m: Messages, label: string, key: string) => m.shell_with_shortcut({ label, shortcut: key })
 
-export interface SessionReviewProps {
-  sessionId: SessionId
+export interface ReviewWorkspaceProps {
+  context: ReviewContext
   /** Finish review, as the host's Proceed runs it; the workspace calls it from its own Finish command once no frame is Unreviewed. */
   onFinished?: () => void
 }
 
-export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewProps) {
+export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const m = useMessages()
   const state = useStore((s) => s)
   const { catalog, disk } = state
-  const scope = useMemo(() => reviewScope(state, sessionId), [state, sessionId])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the context is rebuilt by its parent every render; its key identifies it.
+  const scope = useMemo(() => reviewScope(state, context), [state, contextKey(context)])
   const prefs = useReviewPrefs()
   const search: Record<string, unknown> = useSearch({ strict: false })
   const runner = useAction()
@@ -167,7 +167,7 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
   const hiddenSelected = selectedFrames.filter((f) => !shown.includes(f)).length
   const targets = selectedFrames.length > 1 ? selectedFrames : current ? [current] : []
   const reference = compare ? (frames.find((f) => f.asset.id === refId) ?? null) : null
-  const unreviewed = scope ? sessionUnreviewedFrames(catalog, scope.session) : 0
+  const unreviewed = scope ? (scope.session ? sessionUnreviewedFrames(catalog, scope.session) : frames.filter((f) => f.bucket === "unreviewed").length) : 0
   const lock = scope?.lock ?? null
   const blocked = (action: string): Action["unavailable"] => (lock ? { action, reason: say(m, lock.reason), blockers: lock.blockers.map((b) => ({ label: say(m, b.label), link: b.link })) } : undefined)
 
@@ -302,8 +302,9 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
     setThreshold(null)
   }
 
+  /** Finish review: only a session review finishes, and only once no frame is Unreviewed (C10). */
   function finish() {
-    if (unreviewed > 0 || !onFinished) return
+    if (!scope?.session || unreviewed > 0 || !onFinished) return
     onFinished()
   }
 
@@ -468,7 +469,10 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
     }
   }, [])
 
-  if (!scope) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} />
+  if (!scope) {
+    return context.kind === "session" ? <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
+  }
+  const session = scope.session
 
   // Row ⋯, right click and thumbnails: the selection when the frame is in it, else that frame.
   const rowItems = (id: AssetId): MenuItem[] => {
@@ -494,7 +498,7 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
     unavailable: unreviewed === 0 ? { action: m.review_pick_rest(), reason: m.review_pick_rest_none(), blockers: [] } : blocked(m.review_pick_rest()),
     confirm: { title: m.review_pick_rest_title({ count: unreviewed, n: formatCount(unreviewed) }), confirm: { label: m.review_pick_rest_confirm({ count: unreviewed, n: formatCount(unreviewed) }) } },
     run: () => {
-      const result = markRestUsable(scope.session.id)
+      const result = session ? markRestUsable(session.id) : ({ ok: true } as const)
       if (result.ok) announce(m.review_announce_rest_picked({ count: unreviewed }))
       return result
     },
@@ -514,7 +518,7 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
         onRowClick={(f) => select(f.asset.id)}
         rowLabel={(f) => names.get(f.asset.id) ?? f.asset.fileName}
         rowActions={(f) => rowItems(f.asset.id)}
-        toolbar={{ actions: [selectByThreshold, pickRest] }}
+        toolbar={{ actions: session ? [selectByThreshold, pickRest] : [selectByThreshold] }}
         batchActions={(ids) => marksFor(frames.filter((f) => ids.includes(f.asset.id)))}
         empty={emptyList}
         scroll="fill"
@@ -636,7 +640,7 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
       options: [
         { value: "table", label: m.review_view_table() },
         { value: "filmstrip", label: m.review_view_filmstrip() },
-        { value: "grid", label: m.review_view_grid(), shortcut: REVIEW_KEY.grid },
+        { value: "grid", label: m.review_view_grid() },
       ],
       onChange: (v) => chooseView(v as ListView),
     },
@@ -670,7 +674,7 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
         else setCornerOverlay((o) => (id === "fwhm" ? { ...o, fwhm: on } : { ...o, eccentricity: on }))
       },
     },
-    { kind: "radio", id: "names", label: m.review_frame_names(), value: prefs.namePreset, options: NAME_PRESETS.map((p) => ({ value: p.id, label: p.label, hint: p.template })), onChange: (id) => setReviewPrefs({ namePreset: id }) },
+    { kind: "radio", id: "names", label: m.review_frame_names(), value: prefs.namePreset, options: NAME_PRESETS.map((p) => ({ value: p.id, label: p.label, detail: p.template })), onChange: (id) => setReviewPrefs({ namePreset: id }) },
     {
       kind: "columns",
       id: "columns",
@@ -721,8 +725,8 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
         <IconButton label={m.review_dismiss_path()} icon={X} onClick={() => setRevealed(null)} />
       </>
     ) : null,
-    <ActionButton action={{ id: "import", label: m.review_import_measurements(), opensDialog: true, run: () => setImportOpen(true) }} />,
-    records.length > 0 ? <ActionButton action={{ id: "imports", label: m.review_imported_measurements({ count: records.length }), opensDialog: true, run: () => setImportsOpen(true) }} /> : null,
+    <ActionButton action={{ id: "import", label: m.review_import_measurements_ellipsis(), opensDialog: true, run: () => setImportOpen(true) }} />,
+    records.length > 0 ? <ActionButton action={{ id: "imports", label: m.review_imported_measurements_ellipsis({ count: records.length }), opensDialog: true, run: () => setImportsOpen(true) }} /> : null,
     runner.feedback,
   ]
 
@@ -796,8 +800,3 @@ export function SessionReviewWorkspace({ sessionId, onFinished }: SessionReviewP
     </>
   )
 }
-
-/** Unused glyph helper kept out: see REVIEW_KEY. */
-void SHORTCUT
-void ListFilter
-void framesWhat
