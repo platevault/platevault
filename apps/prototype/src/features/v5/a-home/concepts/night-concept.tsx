@@ -224,7 +224,7 @@ export function NightConcept({ ctx, requestedNight, onNight }: { ctx: ConceptCon
 
       <Section
         id="home-concept-up-next"
-        title={m.home_concept_up_next()}
+        title={m.common_up_next()}
         actions={
           steps.length > 0 ? (
             <UsedByPreview
@@ -236,7 +236,7 @@ export function NightConcept({ ctx, requestedNight, onNight }: { ctx: ConceptCon
         }
       >
         <DataTable
-          label={m.home_concept_up_next()}
+          label={m.common_up_next()}
           rows={steps.slice(0, UP_NEXT_ROWS)}
           columns={stepColumns}
           getRowId={(s) => s.project.id}

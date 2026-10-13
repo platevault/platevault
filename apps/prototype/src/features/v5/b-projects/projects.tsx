@@ -89,7 +89,7 @@ export function ProjectsPage() {
     { id: "state", header: m.projects_col_state(), cell: (r) => <StatusBadge kind="project" value={r.status} label={statusLabel(r)} />, sortValue: statusLabel },
     {
       id: "next",
-      header: m.home_concept_up_next(),
+      header: m.common_up_next(),
       static: true,
       cell: (r) => {
         const action = nextAction(r)
