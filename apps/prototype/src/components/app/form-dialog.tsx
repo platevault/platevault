@@ -19,7 +19,7 @@
  *   the action into Retry; a promise shows the action busy and keeps the
  *   dialog open until it settles.
  */
-import { type ReactElement, type ReactNode, type SubmitEvent, useId, useRef, useState } from "react"
+import { type ReactElement, type ReactNode, type SubmitEvent, useId, useLayoutEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import {
@@ -270,7 +270,7 @@ function StepsFormDialog({ steps, children, cancel, open, onOpenChange, ...dialo
     if (open) setShown(null)
   }
   const viewing = shown?.at === steps.current ? shown.step : steps.current
-  const { proceed, skip, reopen } = useStepActions(steps, viewing)
+  const { access, proceed, skip, reopen } = useStepActions(steps, viewing)
   const last = steps.steps.at(-1)?.id === steps.current
   return (
     <DialogFrame
@@ -285,6 +285,7 @@ function StepsFormDialog({ steps, children, cancel, open, onOpenChange, ...dialo
       confirm={proceed ?? reopen}
       skip={skip}
       closeOnConfirm={proceed !== null && last}
+      actionsKey={`${viewing}:${access}:${proceed?.unavailable ? "unavailable" : "available"}:${skip ? "skip" : ""}`}
     >
       {children({ step: viewing, editable: stepEditable(steps, viewing) })}
     </DialogFrame>
@@ -296,12 +297,26 @@ interface DialogFrameProps extends FormDialogBaseProps {
   strip?: ReactNode
   skip?: Action
   closeOnConfirm?: boolean
+  /** Changes when the footer's controls swap (a flow step moves on, a gate clears); a removed control's focus goes to the action. */
+  actionsKey?: string
   children: ReactNode
 }
 
-function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip, closeOnConfirm = true, children, ...options }: DialogFrameProps) {
+/** What can take focus in a step's fields. */
+const FOCUSABLE = "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])"
+
+function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip, closeOnConfirm = true, actionsKey, children, ...options }: DialogFrameProps) {
   const formId = useId()
+  const form = useRef<HTMLFormElement>(null)
   const { isOpen, setOpen, commit, busy, error, finalFocus } = useDialogCommit(options)
+
+  // Skip leaves with its step, and a gate wraps or unwraps the action; focus then stays in the footer, on its last control.
+  useLayoutEffect(() => {
+    const popup = form.current?.closest<HTMLElement>("[data-slot=dialog-content]")
+    const active = document.activeElement
+    if (!popup || (active !== null && active !== document.body && active !== popup)) return
+    ;[...popup.querySelectorAll<HTMLElement>("[data-slot=dialog-footer] button")].at(-1)?.focus()
+  }, [actionsKey])
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -309,13 +324,16 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
     commit(confirm.run, closeOnConfirm)
   }
 
+  // Under a strip, focus starts on the step's first field rather than on the strip.
+  const initialFocus = strip ? () => form.current?.querySelector<HTMLElement>(FOCUSABLE) ?? true : undefined
+
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger render={trigger} /> : null}
-      <DialogContent size={size} showCloseButton={false} finalFocus={finalFocus}>
+      <DialogContent size={size} showCloseButton={false} initialFocus={initialFocus} finalFocus={finalFocus}>
         <DialogTitle className="text-balance">{title}</DialogTitle>
         {strip}
-        <form id={formId} noValidate onSubmit={submit} className="flex min-w-0 flex-col gap-3">
+        <form ref={form} id={formId} noValidate onSubmit={submit} className="flex min-w-0 flex-col gap-3">
           {/* Only there to disable every field while a commit runs; it is no named group. */}
           <fieldset role="none" disabled={busy} className="flex min-w-0 flex-col gap-3">
             {children}

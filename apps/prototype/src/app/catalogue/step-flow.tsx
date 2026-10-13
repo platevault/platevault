@@ -557,7 +557,8 @@ function DialogDemo() {
           }
         >
           {({ step, editable }) => (
-            <>
+            // One body height on every step, as StepPane gives a page: the centred dialog then never moves.
+            <div className="h-28 space-y-3" data-dialog-step-body="">
               <BodyState editable={editable} />
               {step === "folder" ? <PathField label={m.import_column_folder()} mode="folder" value={folder} onChange={setFolder} disabled={!editable} /> : null}
               {step === "mode" ? <SegmentedField label={m.import_copy_or_move()} value={mode} options={modes} onChange={setMode} disabled={!editable} /> : null}
@@ -569,7 +570,7 @@ function DialogDemo() {
                   ]}
                 />
               ) : null}
-            </>
+            </div>
           )}
         </FormDialog>
         {imported ? (
