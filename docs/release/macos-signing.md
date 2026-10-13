@@ -136,20 +136,32 @@ certificate, with PlateVault v0.6.1 installed from its GitHub release.
    start and open the library.
 3. On the Mac with v0.6.1, replace the app the way an update does. v0.6.1
    checks a fixed update address, so you cannot point it at a test build.
-   Instead:
-   1. Quit PlateVault v0.6.1.
-   2. In Terminal, fetch the candidate's updater bundle,
-      `PlateVault_<version>_aarch64.app.tar.gz`, with `curl -LO` or
-      `gh run download`, not a browser, so it carries no quarantine
-      attribute, just like an in-app update. Extract it over the installed
-      app:
+   The updater swaps in a whole new bundle from an `.app.tar.gz` that
+   carries no quarantine attribute. Do the same in Terminal:
+   1. Pack the signed `.app` from step 1 in the bundler's layout.
+      `--no-mac-metadata` leaves out extended attributes, so a quarantine
+      attribute from the download does not travel with it:
 
       ```sh
-      tar -xzf PlateVault_<version>_aarch64.app.tar.gz -C /Applications
+      tar --no-mac-metadata -czf candidate.app.tar.gz -C <folder with the step 1 .app> PlateVault.app
       ```
 
-   3. Open PlateVault again. It must start and open the library.
-   4. Run `codesign -dv --verbose=2 /Applications/PlateVault.app`. It must
+   2. Quit PlateVault v0.6.1.
+   3. Extract the bundle into a new temporary folder, remove the installed
+      app, and move the new one into its place. Do not extract over the
+      installed app: files left from v0.6.1 would sit outside the new
+      signature, and overwriting a signed binary in place can get it killed.
+
+      ```sh
+      tmp="$(mktemp -d)"
+      tar -xzf candidate.app.tar.gz -C "$tmp"
+      rm -rf /Applications/PlateVault.app
+      mv "$tmp/PlateVault.app" /Applications/
+      xattr -lr /Applications/PlateVault.app | grep quarantine # must print nothing
+      ```
+
+   4. Open PlateVault again. It must start and open the library.
+   5. Run `codesign -dv --verbose=2 /Applications/PlateVault.app`. It must
       show `Authority=PlateVault Self-Signed`.
 4. Check that macOS asks once for folder and drive access, and not again
    after a second launch.
@@ -160,4 +172,4 @@ signing.
 
 The in-app updater path itself, from v0.6.1 to the first self-signed
 release, can only be checked after that release is published. Install the
-update from inside v0.6.1, then repeat steps 3.3 to 4.
+update from inside v0.6.1, then repeat steps 3.4 to 4.
