@@ -4144,6 +4144,7 @@
   "setup_step_welcome": "Welcome",
   "setup_step_index": "Index",
   "setup_progress": "Setup progress",
+  "setup_language_title": "Choose your language",
   "setup_welcome_title": "Welcome to PlateVault",
   "setup_welcome_description": "PlateVault catalogs your astrophotography captures where they already are, groups them into sessions and prepares exact inputs for PixInsight, Siril and other processing apps.",
   "setup_does_title": "What PlateVault does",
