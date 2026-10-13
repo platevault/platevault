@@ -621,7 +621,7 @@
   "tips_note": "Note {number}",
   "page_step_done": "(done)",
   "ui_breadcrumb": "Breadcrumb",
-  "import_open": "Import…",
+  "import_open": "Import",
   "home_goal_line": "{inProject} in project / {captured} captured",
   "home_goal_line_goal": "{inProject} in project / {captured} captured · goal {goal}",
   "home_blocked_at": "Blocked at {step}",
@@ -697,7 +697,6 @@
     }
   ],
   "home_all_sessions": "All sessions",
-  "session_dismiss": "Dismiss",
   "home_nothing_to_do": "Nothing to do",
   "sessions_filter_needs_target": "Needs a Target",
   "sessions_filter_not_in_project": "Not in any Project",
@@ -784,7 +783,6 @@
   "home_retry_named": "Retry {name}",
   "home_cancel_named": "Cancel {name}",
   "session_add_to_project": "Add to Project",
-  "session_create_project_menu": "Create Project…",
   "session_label": "Session",
   "session_adds_subject": "Adds subject {name}, with the Project's goals",
   "session_adds_rig": "Adds rig {name}",
@@ -793,19 +791,11 @@
   "session_no_rig": "no rig",
   "session_no_target": "No Target",
   "session_add_session": "Add session",
-  "session_choose_project": "Choose a Project.",
   "session_added_to_project": "Added {session} to {project}",
-  "session_add_to": "Add {name} to",
-  "session_plus_rig": "+ rig {name}",
-  "session_no_open_project": "No open Project",
-  "session_prefilled": "Prefilled with this Target and rig",
-  "session_confirm_to_prefill": "Confirm a Target to prefill it",
   "session_no_target_chosen": "no Target chosen",
-  "session_target_value": "Target: {name}",
   "session_target_for": "Target for {name}",
   "session_choose_a_target": "Choose a Target",
   "session_confirm_target": "Confirm Target",
-  "session_no_rig_chosen": "no rig chosen",
   "session_rig_confirmed": "Rig confirmed: {name}",
   "session_rig_for": "Rig for {name}",
   "session_choose_a_rig": "Choose a rig",
@@ -821,7 +811,6 @@
   "sessions_rig_needs_review": "Rig needs review",
   "sessions_column_frames": "Frames",
   "sessions_column_projects_runs": "Projects · runs",
-  "sessions_run_named": "Run {name}",
   "sessions_no_run": "no run",
   "sessions_run_count": [
     {
@@ -859,8 +848,6 @@
   "sessions_search": "Search sessions",
   "sessions_search_placeholder": "OBJECT, Target, rig, night",
   "sessions_filter": "Filter sessions",
-  "sessions_trashed_help_label": "About Trashed sessions",
-  "sessions_trashed_help": "Kept for traceability; hidden from pickers, candidates, goals and totals. Put back from the OS Trash and rescan to restore them as Unusable.",
   "sessions_table_label": "Sessions: {filter}",
   "sessions_no_match": "No match",
   "sessions_clear_search": "Clear search",
@@ -894,14 +881,10 @@
   "session_process_done": "Master registered",
   "session_open_calibration": "Open Calibration",
   "session_step_failed": "{step} failed",
-  "session_view": "Session view",
-  "session_detail": "Detail",
   "session_in_os_trash": "In the OS Trash",
-  "session_unsettled": "Unsettled",
   "session_target_evidence": "Target evidence for {name}",
   "session_no_evidence": "No evidence",
   "session_rig_evidence": "Rig evidence for {name}",
-  "session_why_candidate": "Why {name} considers it",
   "session_reason": "Reason",
   "session_needs_target_first": "Needs a Target first",
   "session_none": "None",
@@ -944,11 +927,8 @@
       }
     }
   ],
-  "import_tab_source": "From a source",
-  "import_tab_folder": "Library folder",
   "import_name_list": "{first} and {last}",
   "import_cant_import": "Can't import",
-  "import_cant_move": "Can't move",
   "import_choose_source": "Choose a source",
   "import_move": "Move",
   "import_verifies_copies": "Verifies each copy (SHA-256)",
@@ -956,19 +936,12 @@
   "import_choose_folder": "Choose folder…",
   "import_new": "Import new",
   "import_all": "Import all",
-  "import_removable_devices": "Removable devices",
   "import_none_connected": "None connected",
-  "import_how_recognised": "How {name} was recognised",
-  "import_layout": "Layout",
-  "import_saved_sources": "Saved sources",
-  "import_none_saved": "None saved",
   "import_last_import": "Last import {date}",
   "import_never_imported": "Never imported",
   "import_source_name": "Source name",
   "import_name_placeholder": "Name",
-  "import_cant_save": "Can't save",
   "import_save_source": "Save source",
-  "import_prototype_controls": "Prototype controls",
   "import_choose_folder_title": "Choose folder",
   "import_choose_folder_description": "Device, folder or mounted share",
   "import_from_verb": "Import from",
@@ -983,8 +956,6 @@
   "import_destinations": "Import destinations",
   "import_nothing_to_import": "Nothing to import",
   "import_destination": "Destination",
-  "import_lights": "Lights",
-  "import_naming_of": "{name} naming",
   "import_captures_location": "Captures location",
   "import_calibration_location": "Calibration location",
   "import_no_location": "No location",
@@ -993,12 +964,10 @@
   "import_free": "{size} free",
   "import_needs": "needs {size}",
   "import_held": "Held",
-  "import_why_held": "Why it is held",
-  "import_type_as": "Type as…",
+  "import_type_as": "Type as",
   "import_typed_as": "Typed {type}",
   "import_undo": "Undo",
   "import_writing": "Writing",
-  "import_until_settled": "until the file stops changing",
   "import_import_frames": [
     {
       "declarations": [
@@ -1114,61 +1083,10 @@
       }
     }
   ],
-  "import_new_count": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} new",
-        "countPlural=*": "{frames} new"
-      }
-    }
-  ],
   "import_imported_before": "{count} imported before",
-  "import_held_count": [
-    {
-      "declarations": [
-        "input count",
-        "input files",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{files} held file",
-        "countPlural=*": "{files} held files"
-      }
-    }
-  ],
-  "import_type_files_as": [
-    {
-      "declarations": [
-        "input count",
-        "input folder",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Type the {count} file in {folder} as",
-        "countPlural=*": "Type the {count} files in {folder} as"
-      }
-    }
-  ],
   "import_skipped": "Skipped",
   "import_duplicates": "Duplicates",
-  "import_match": "Match",
   "import_match_sha": "SHA-256 of a library frame",
-  "import_hide_sessions": "Hide sessions",
-  "import_show_sessions": "Show sessions",
   "import_name_taken": "Name taken",
   "import_name_taken_detail": "holds different bytes; nothing is overwritten",
   "import_library_frames": "Library frames · {count}",
@@ -1176,72 +1094,11 @@
   "import_copy": "Copy",
   "import_copy_detail": "verified by SHA-256; the source stays",
   "import_move_detail": "verified by SHA-256, then the source goes to the OS Trash",
-  "import_no_longer_recorded": "No longer recorded",
-  "import_start_again": "Start again",
   "import_imported": "Imported",
-  "import_target_set": "Target set",
   "import_more": "Import more",
-  "import_add_another": "Add another",
   "import_show_in_calibration": "Show in Calibration",
   "import_show_in_sessions": "Show in Sessions",
-  "import_index_help_label": "About indexing in place",
-  "import_index_help": "Indexed where it is: nothing in it is copied, moved or renamed, and no naming template applies.",
-  "import_role": "Role",
-  "import_library_role": "Library role",
   "import_choose_a_folder": "Choose a folder",
-  "import_add_and_index": "Add and index",
-  "import_choose_library_folder": "Choose library folder",
-  "import_indexed_in_place": "Indexed in place",
-  "import_skipped_count": [
-    {
-      "declarations": [
-        "input count",
-        "input files",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{files} skipped file",
-        "countPlural=*": "{files} skipped files"
-      }
-    }
-  ],
-  "import_duplicate_count": [
-    {
-      "declarations": [
-        "input count",
-        "input files",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{files} duplicate",
-        "countPlural=*": "{files} duplicates"
-      }
-    }
-  ],
-  "import_name_taken_count": "{count} name taken",
-  "import_other_file_count": [
-    {
-      "declarations": [
-        "input count",
-        "input files",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{files} other file",
-        "countPlural=*": "{files} other files"
-      }
-    }
-  ],
-  "import_imported_count": "{count} imported",
   "import_master_count": [
     {
       "declarations": [
@@ -1254,22 +1111,6 @@
       "match": {
         "countPlural=one": "{count} master",
         "countPlural=*": "{count} masters"
-      }
-    }
-  ],
-  "import_image_file_count": [
-    {
-      "declarations": [
-        "input count",
-        "input files",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{files} image file",
-        "countPlural=*": "{files} image files"
       }
     }
   ],
@@ -7337,8 +7178,6 @@
       }
     }
   ],
-  "session_cant_file": "Can't file",
-  "session_file_into_target_ellipsis": "File into Target…",
   "session_file_into_title": [
     {
       "declarations": [
@@ -7353,23 +7192,6 @@
       "match": {
         "countPlural=one": "File {n} frame into {name}?",
         "countPlural=*": "File {n} frames into {name}?"
-      }
-    }
-  ],
-  "session_file_moves": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input size",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Moves {n} frame ({size})",
-        "countPlural=*": "Moves {n} frames ({size})"
       }
     }
   ],
@@ -7738,7 +7560,6 @@
   "onboarding_check_developer_mode": "Turn on Windows Developer Mode",
   "location_symlinks_supported": "Supported",
   "import_flow_title": "Import",
-  "session_intake_title": "Session",
   "calibration_process_title": "Process",
   "settings_help": "Help",
   "checklist_ring_name": "{title}, {done} of {total} done",
@@ -8647,5 +8468,89 @@
   "catalogue_templates_step_shift": "Layout shift on the last step change: {px} px",
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
-  "catalogue_templates_rescan_on_open": "Rescan when the app opens"
+  "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "sessions_empty_needs_review": "None need review",
+  "sessions_cant_trash": "Can't move to Trash",
+  "sessions_all_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame kept",
+        "countPlural=*": "{count} frames kept"
+      }
+    }
+  ],
+  "sessions_kept": "Kept",
+  "sessions_column_review": "Review",
+  "sessions_facet_status": "Status",
+  "session_process": "Process",
+  "session_intake": "Intake",
+  "session_choose_rig": "Choose rig",
+  "session_target_status": "Target status",
+  "session_rig_status": "Rig status",
+  "session_project_state": "State",
+  "session_run": "Run",
+  "session_run_step": "Step",
+  "session_run_status": "Status",
+  "session_no_copies": "No copies",
+  "session_integration": "Integration",
+  "session_details": "Details",
+  "session_intake_steps": "Intake steps",
+  "session_chosen_target": "Chosen Target",
+  "session_pointing_offset": "Pointing offset",
+  "session_from_centre": "{angle} from centre",
+  "session_filing": "Imported as",
+  "session_evidence": "Evidence",
+  "session_open_equipment": "Open Equipment",
+  "session_unknown_filter": "{value} not in the rig's filters",
+  "session_correction_field": "Field",
+  "session_correction_recorded": "Recorded",
+  "session_correction_corrected": "Corrected",
+  "session_corrections": "Corrections",
+  "import_import_frames_title": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Import {frames} frame?",
+        "countPlural=*": "Import {frames} frames?"
+      }
+    }
+  ],
+  "import_from_pointing": "From pointing",
+  "import_file_unclassified": "File as Unclassified",
+  "import_change_target_title": "Target of {name}",
+  "import_use_this_target": "Use Target",
+  "import_column_files": "Files",
+  "import_column_state": "State",
+  "import_skip_imported_before": "Imported before",
+  "import_skip_other": "Other files",
+  "import_skip_imported_detail": "From this source",
+  "import_skip_other_detail": "Not FITS or XISF",
+  "import_column_reason": "Reason",
+  "import_column_detail": "Detail",
+  "import_step_source": "Source",
+  "import_steps": "Import steps",
+  "import_chosen_folder": "Chosen folder",
+  "import_kind_device": "Removable device",
+  "import_kind_saved": "Saved source",
+  "import_kind_folder": "Folder",
+  "import_column_source": "Source",
+  "import_column_new": "New",
+  "import_use_source": "Use source",
+  "import_add_library_folder": "Add library folder",
+  "import_sources": "Sources",
+  "import_review_sessions": "Review sessions"
 }

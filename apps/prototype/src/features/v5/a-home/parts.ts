@@ -30,7 +30,7 @@ function openProjects(catalog: Catalog, sessionId: SessionId): Project[] {
 
 /** Create Project…, prefilled with the session's Target and rig (LIB-FR-17). */
 export function createProjectAction(m: Messages, sessionId: SessionId): Action {
-  return { id: `create-project-${sessionId}`, label: m.session_create_project_menu(), opensDialog: true, run: () => openSheet({ kind: "new-project", fromSessionId: sessionId }) }
+  return { id: `create-project-${sessionId}`, label: m.newproject_create(), opensDialog: true, run: () => openSheet({ kind: "new-project", fromSessionId: sessionId }) }
 }
 
 /** Adding one session to one Project: the confirm names what the Project gains, the outcome is a toast. */

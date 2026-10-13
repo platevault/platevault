@@ -41,7 +41,7 @@ import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
 import type { CorrectionField, OpticalTrainId, Session, TargetId } from "@/domain/types"
 import { formatBytes, formatCount, formatDegrees } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
+import type { Messages } from "@/lib/i18n"
 import { sessionIntake } from "@/store/actions/flows"
 import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget, filingMoves } from "@/store/actions/library"
 import { type PrototypeState, useStore } from "@/store/core"
@@ -261,11 +261,11 @@ function RigStep({ state, session, rigId, onRig, current }: { state: PrototypeSt
 
 function fieldName(m: Messages, field: CorrectionField): string {
   const name: Record<CorrectionField, () => string> = {
-    target: m.sessions_column_target,
-    equipment: m.sessions_column_rig,
-    filter: m.session_filter,
-    exposure: m.session_column_exposure,
-    "focal-length": m.session_focal_length,
+    target: m.run_field_target,
+    equipment: m.run_field_equipment,
+    filter: m.run_field_filter,
+    exposure: m.run_field_exposure,
+    "focal-length": m.run_field_focal_length,
   }
   return name[field]()
 }

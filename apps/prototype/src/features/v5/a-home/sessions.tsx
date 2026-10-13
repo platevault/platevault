@@ -27,13 +27,13 @@ import { EmptyState, type PageNotice } from "@/components/app/feedback"
 import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
 import { ListPage } from "@/components/templates/list-page"
+import { type ArchivePlan, sessionsArchivePlan, unusableFramesOffer } from "@/domain/archive"
 import { formatHours, sessionIntakeEntry, sessionIntakeLink } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
-import { type ArchivePlan, sessionsArchivePlan, unusableFramesOffer } from "@/features/v5/b-projects/model"
-import { startArchiveTransfer } from "@/features/v5/b-projects/actions"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
+import { offerFileRows, startArchiveTransfer } from "@/store/actions/archive"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
 import type { ImportPayload } from "./import-run"
@@ -105,8 +105,7 @@ function archiveAction(m: Messages, state: PrototypeState, selected: SessionRow[
 function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionRow[], onDone: () => void): Action | null {
   const offer = unusableFramesOffer(state, scope.flatMap((r) => r.unusable))
   if (offer.count === 0 && offer.refusals.length === 0) return null
-  const trashed: FileRow[] = offer.entries.map((e) => ({ file: e.label, from: folderOf(e.path), action: "trash", size: e.sizeBytes }))
-  const kept: FileRow[] = offer.refusals.map((r) => ({ file: r.label, from: r.path ? folderOf(r.path) : "–", action: "trash", size: 0, status: { label: say(m, r.reason), link: r.link } }))
+  const { moved, kept } = offerFileRows(m, offer)
   return {
     id: "trash-unusable",
     label: m.run_move_to_trash(),
@@ -116,7 +115,7 @@ function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionR
     confirm: {
       title: m.sessions_trash_unusable_title({ count: offer.count, n: formatCount(offer.count) }),
       summary: formatBytes(offer.sizeBytes),
-      groups: [{ label: m.status_unusable(), rows: trashed }, ...(kept.length > 0 ? [{ label: m.sessions_kept(), rows: kept }] : [])],
+      groups: [{ label: m.status_unusable(), rows: moved }, ...(kept.length > 0 ? [{ label: m.sessions_kept(), rows: kept }] : [])],
       confirm: { label: m.run_move_to_trash(), kind: "destructive" },
     },
     run: () => {
