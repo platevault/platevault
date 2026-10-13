@@ -31,7 +31,6 @@
   "nav_library": "Biblioteca",
   "nav_sessions": "Sessões",
   "nav_calibration": "Calibração",
-  "nav_storage": "Armazenamento",
   "nav_activity": "Atividade",
   "nav_settings": "Configurações",
   "nav_welcome": "Boas-vindas e configuração",
@@ -2560,7 +2559,6 @@
   "targets_clear_search_first": "Limpe a pesquisa primeiro",
   "targets_save_preset": "Salvar preset",
   "targets_clear_project": "Limpar Projeto",
-  "targets_show": "Mostrar",
   "targets_search_label": "Pesquisar alvos, catálogos e SIMBAD",
   "targets_search_placeholder": "Alvos, catálogos, SIMBAD",
   "targets_rig": "Equipamento",
@@ -2742,8 +2740,6 @@
   "storage_no_duplicates": "Nenhuma duplicata",
   "storage_transfers": "Transferências",
   "storage_no_transfers": "Nenhuma transferência",
-  "calibration_action_blocked": "{action}: bloqueado",
-  "calibration_action_not_saved": "{action}: não salvo",
   "calibration_kind_dark": "Dark",
   "calibration_kind_flat": "Flat",
   "calibration_kind_bias": "Bias",
@@ -2759,10 +2755,8 @@
   "calibration_step_todo": "A fazer",
   "calibration_steps_of": "Etapas de {name}",
   "calibration_raws_kept": "Mantidos",
-  "calibration_raws_restore": "Na Lixeira do sistema. Restaure-os e reescaneie para recuperá-los.",
   "calibration_keep_raws": "Manter brutos",
   "calibration_stack_again": "Empilhar de novo",
-  "calibration_detect_now": "Detectar agora",
   "calibration_trash_raws": "Descartar brutos",
   "calibration_show_master": "Mostrar master",
   "calibration_process": "Processo",
@@ -2776,8 +2770,6 @@
   "calibration_detected": "Detectado",
   "calibration_ncombine": "NCOMBINE {count}",
   "calibration_stored": "Armazenado",
-  "calibration_folders_of": "Pastas de {name}",
-  "calibration_tool_for": "Ferramenta para {name}",
   "calibration_heading_flats": "Flats",
   "calibration_heading_darks": "Darks",
   "calibration_heading_bias": "Bias",
@@ -2786,61 +2778,23 @@
   "calibration_caption_darks": "Masters de dark",
   "calibration_caption_bias": "Masters de bias",
   "calibration_caption_dark_flats": "Masters de dark flat",
-  "calibration_key_train": "Trem óptico",
   "calibration_key_camera": "Câmera",
   "calibration_key_exposure": "Exposição",
-  "calibration_key_gain": "Ganho",
-  "calibration_key_offset": "Offset",
   "calibration_key_temp": "Temp.",
   "calibration_origin_indexed": "Indexado",
   "calibration_origin_results": "Resultados da execução",
   "calibration_origin_stacked": "Empilhado",
   "calibration_origin_imported": "Importado",
-  "calibration_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} execução",
-        "countPlural=*": "{count} execuções"
-      }
-    }
-  ],
-  "calibration_sessions_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} sessão",
-        "countPlural=*": "{count} sessões"
-      }
-    }
-  ],
   "calibration_open_offer": "Abrir oferta",
   "calibration_used_by": "Usado por",
   "calibration_open_raw_session": "Abrir sessão bruta",
-  "calibration_offered_in": "Oferecido em {name}",
   "calibration_offered": "Oferecido",
   "calibration_restore": "Restaurar",
   "calibration_offer_restored": "Oferta restaurada",
   "calibration_open_run": "Abrir execução",
   "calibration_dismissed": "Dispensados",
-  "calibration_no_dismissed": "Nenhum master dispensado",
-  "calibration_dismissed_caption": "Masters e ofertas dispensados",
   "calibration_master": "Master",
   "calibration_run": "Execução",
-  "calibration_refused_reason": "recusado",
-  "calibration_import_refused_same": "{count} {reason}",
   "calibration_masters_count": [
     {
       "declarations": [
@@ -4591,14 +4545,9 @@
   "apps_move_away": "Remover",
   "apps_put_back": "Devolver",
   "apps_fail_next_launch": "Falhar próxima abertura",
-  "settings_keep_raws_not_saved": "Manter brutos não salvo",
   "settings_raw_frames": "Frames brutos",
   "settings_keep_raws": "Manter frames brutos de calibração",
-  "settings_keep_raws_about": "Sobre manter frames brutos de calibração",
   "settings_keep_raws_help": "Desativado: os brutos vão para a Lixeira do sistema quando o master é registrado.",
-  "settings_masters": "Masters",
-  "settings_layout": "Estrutura",
-  "settings_tools": "Ferramentas",
   "template_frames": [
     {
       "declarations": [
@@ -7346,7 +7295,6 @@
     }
   ],
   "calibration_created": "Criado",
-  "calibration_cant_dismiss": "Não é possível dispensar",
   "calibration_dismiss_master": "Dispensar master",
   "calibration_restore_master": "Restaurar master",
   "calibration_restored_master": "{name} restaurado",
@@ -8703,5 +8651,98 @@
   "catalogue_templates_step_shift": "Deslocamento do layout na última mudança de etapa: {px} px",
   "catalogue_templates_settings_desc": "Uma área de Configurações: o título, linhas de configuração e uma seção de lista com um Adicionar no cabeçalho.",
   "catalogue_templates_indexing": "Indexação",
-  "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app"
+  "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app",
+  "calibration_process_gone": "Processo desconhecido",
+  "calibration_processes": "Processos",
+  "calibration_on": "Ligado",
+  "calibration_off": "Desligado",
+  "calibration_views": "Visões da calibração",
+  "calibration_hidden": "Ocultos",
+  "calibration_settings": "Configurações de calibração",
+  "calibration_settings_saved": "Configurações de calibração salvas",
+  "calibration_unit_days": "dias",
+  "calibration_master_age_help": "Darks, bias e dark flats mais antigos que isso aparecem como Antigo. Flats não envelhecem.",
+  "calibration_replace": "Substituir",
+  "calibration_replace_file": "Arquivo master",
+  "calibration_replace_file_help": "Um master FITS ou XISF do mesmo tipo.",
+  "calibration_replace_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Reaponta {count} execução aberta",
+        "countPlural=*": "Reaponta {count} execuções abertas"
+      }
+    }
+  ],
+  "calibration_replace_no_runs": "Nenhuma execução aberta usa este master",
+  "calibration_replace_finished_keep": "Execuções concluídas mantêm o master que registraram.",
+  "calibration_import_none_imported": "Nenhum master importado",
+  "calibration_import_partly": "{imported} importados · {refused} não importados",
+  "calibration_import_select_files": "Selecione pelo menos um arquivo",
+  "calibration_import_folder_help": "Lista os masters FITS e XISF da pasta com a correspondência de cada um.",
+  "calibration_import_files": "Arquivos master em {folder}",
+  "calibration_files_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} arquivo selecionado",
+        "countPlural=*": "{count} arquivos selecionados"
+      }
+    }
+  ],
+  "calibration_import_no_files": "Nenhum arquivo master nesta pasta",
+  "calibration_processes_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} processo",
+        "countPlural=*": "{count} processos"
+      }
+    }
+  ],
+  "calibration_no_processes_help": "Importe darks, flats ou bias brutos para iniciar um processo.",
+  "calibration_open_process": "Abrir processo",
+  "calibration_search_processes": "Filtrar processos",
+  "calibration_hidden_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} oculto",
+        "countPlural=*": "{count} ocultos"
+      }
+    }
+  ],
+  "calibration_hidden_caption": "Masters ocultos e ofertas dispensadas",
+  "calibration_nothing_hidden": "Nada oculto",
+  "calibration_age": "Idade",
+  "calibration_age_old": "Antigo",
+  "calibration_age_days": "{n} d",
+  "calibration_replaced_by": "Substituído por {name}",
+  "calibration_replaced_by_label": "Substituído por",
+  "calibration_offer_dismissed": "Oferta dispensada",
+  "calibration_hidden_on": "Oculto em"
 }
