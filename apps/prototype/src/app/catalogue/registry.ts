@@ -76,6 +76,8 @@ export const CATALOGUE: CatalogueEntry[] = [
     components: [
       "Field",
       "TextField",
+      "TextAreaField",
+      "FieldGroup",
       "NumberField",
       "SelectField",
       "ComboboxField",
