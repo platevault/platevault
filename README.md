@@ -73,8 +73,11 @@ signed with an OS-level code-signing certificate yet, so:
 - **Windows**: SmartScreen will show an "unrecognized publisher" warning
   ("Windows protected your PC") — choose "More info" → "Run anyway".
 - **macOS**: Gatekeeper will refuse to open the app as "from an unidentified
-  developer" — right-click the app → "Open", or clear the quarantine
-  attribute (`xattr -d com.apple.quarantine PlateVault.app`).
+  developer". Since macOS 15 Sequoia, right-click › "Open" no longer gets past
+  this: try to open the app once, then go to System Settings › Privacy &
+  Security and click "Open Anyway" next to the PlateVault message. Or clear the
+  quarantine attribute (`xattr -d com.apple.quarantine /Applications/PlateVault.app`),
+  which also fixes an "app is damaged" message.
 
 ### Verifying a download
 
