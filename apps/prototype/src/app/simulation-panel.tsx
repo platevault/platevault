@@ -5,8 +5,10 @@
  * filesystem. Opened from the toolbar "Prototype" button; Settings › About
  * embeds `SimulationControls`.
  */
+import { useParams } from "@tanstack/react-router"
 import { FlaskConical, RotateCcw } from "lucide-react"
 import { useId, useMemo, useRef, useState } from "react"
+import { ActionButton } from "@/components/app/actions"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
@@ -25,6 +27,7 @@ import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
 import { removableDevices } from "@/domain/devices"
+import { runSimulations } from "@/features/v5/c-runs/actions"
 import {
   connectDevice,
   copyFolderExternally,
@@ -78,6 +81,25 @@ function ToggleRow({
   )
 }
 
+/** The run or run group on screen: its prototype simulations (c-runs `runSimulations`), which change the simulated application and disk. */
+function ThisRunSection() {
+  const m = useMessages()
+  const { runId, groupId } = useParams({ strict: false }) as { runId?: string; groupId?: string }
+  const run = useStore((s) => (runId ? s.catalog.runs[runId] : undefined))
+  const group = useStore((s) => (groupId ? s.catalog.runGroups[groupId] : undefined))
+  const target = run ? { runId: run.id } : group ? { groupId: group.id } : null
+  if (!target) return null
+  return (
+    <Section title={m.simulation_this_run_title({ name: run?.name ?? group?.name ?? "" })} level={3} description={m.simulation_this_run_description()}>
+      <div className="flex flex-wrap gap-2">
+        {runSimulations(target, m).map((action) => (
+          <ActionButton key={action.id} action={action} />
+        ))}
+      </div>
+    </Section>
+  )
+}
+
 export function SimulationControls() {
   const volumes = useStore((s) => s.disk.volumes)
   const denied = useStore((s) => s.disk.deniedPaths)
@@ -124,6 +146,7 @@ export function SimulationControls() {
 
   return (
     <div className="space-y-6">
+      <ThisRunSection />
       <Section title={m.folder_picker_volumes()} level={3} description={m.simulation_volumes_description()}>
         <div className="divide-y rounded-md border px-3">
           {Object.values(volumes).map((volume) => (

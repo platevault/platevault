@@ -5,9 +5,13 @@
  * notes. Every variant and the applicable states: default, filled, help,
  * error, disabled, read-only, empty, selected and the in-row layout.
  */
+import { X } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ArgumentsField, ComboboxField, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextField, TokenTemplateField } from "@/components/app/fields"
+import { IconButton } from "@/components/app/actions"
+import type { Column } from "@/components/app/contracts"
+import { DataTable } from "@/components/app/data-table"
+import { ArgumentsField, ComboboxField, FieldGroup, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTemplateField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { Button } from "@/components/ui/button"
@@ -38,8 +42,9 @@ function TextFields() {
   const m = useMessages()
   const [name, setName] = useState("Backyard")
   const [empty, setEmpty] = useState("")
+  const [notes, setNotes] = useState<string>(() => m.catalogue_fields_notes_sample())
   return (
-    <ComponentSection components={["TextField"]} level={3}>
+    <ComponentSection components={["TextField", "TextAreaField"]} level={3}>
       <Caption>{m.catalogue_fields_text_caption()}</Caption>
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <TextField label={m.site_name()} value={name} onChange={setName} description={m.settings_default_named({ name: "Backyard" })} />
@@ -47,6 +52,10 @@ function TextFields() {
         <TextField label={m.settings_lookup_query()} value="NGC 7000" onChange={() => {}} readOnly />
         <TextField label={m.settings_lookup_query()} value="" onChange={() => {}} placeholder={m.target_find_placeholder()} disabled />
         <TextField label={m.settings_lookup_query()} value={name} onChange={setName} action={<Button variant="outline">{m.verb_add()}</Button>} />
+        <TextAreaField label={m.newproject_notes()} value={notes} onChange={setNotes} />
+        <TextAreaField label={m.newproject_notes()} value={notes} onChange={setNotes} rows={2} error={m.catalogue_fields_notes_error()} />
+        <TextAreaField label={m.newproject_notes()} value={notes} onChange={() => {}} readOnly />
+        <TextAreaField label={m.newproject_notes()} value="" onChange={() => {}} disabled />
       </div>
     </ComponentSection>
   )
@@ -100,6 +109,64 @@ function NumberAndChoiceFields() {
             { value: "copy", label: m.domain_mode_copy(), disabled: true },
           ]}
         />
+      </div>
+    </ComponentSection>
+  )
+}
+
+function GroupFields() {
+  const m = useMessages()
+  const [goals, setGoals] = useState<Array<{ channel: string; hours: number | null; frames: number | null }>>([
+    { channel: "Ha", hours: 10, frames: null },
+    { channel: "OIII", hours: 8, frames: 120 },
+  ])
+  const edit = (channel: string, patch: Partial<{ hours: number | null; frames: number | null }>) => setGoals((list) => list.map((g) => (g.channel === channel ? { ...g, ...patch } : g)))
+  return (
+    <ComponentSection components={["FieldGroup"]} level={3}>
+      <Caption>{m.catalogue_fields_group_caption()}</Caption>
+      <div className="grid max-w-3xl gap-4">
+        {goals.map((goal) => (
+          <FieldGroup
+            key={goal.channel}
+            label={m.goal_channel_goal({ channel: goal.channel })}
+            action={<IconButton label={m.goal_remove_goal({ channel: goal.channel })} icon={X} onClick={() => setGoals((list) => list.filter((g) => g.channel !== goal.channel))} />}
+          >
+            <NumberField label={m.goal_hours()} min={0} step={0.5} value={goal.hours} onChange={(hours) => edit(goal.channel, { hours })} />
+            <NumberField label={m.goal_frames()} min={0} step={1} value={goal.frames} onChange={(frames) => edit(goal.channel, { frames })} error={goal.hours === null && goal.frames === null ? m.goal_hours_or_frames() : undefined} />
+          </FieldGroup>
+        ))}
+        <FieldGroup label={m.goal_channel_goal({ channel: "SII" })}>
+          <NumberField label={m.goal_hours()} value={6} onChange={() => {}} disabled />
+          <NumberField label={m.goal_frames()} value={null} onChange={() => {}} disabled />
+        </FieldGroup>
+      </div>
+    </ComponentSection>
+  )
+}
+
+function CellFields() {
+  const m = useMessages()
+  const [rows, setRows] = useState([{ id: "1", file: "masterLight_Ha.xisf", kind: "light" }, { id: "2", file: "masterFlat_Ha.xisf", kind: "flat" }])
+  const kinds = [
+    { value: "light", label: m.naming_type_lights() },
+    { value: "flat", label: m.naming_type_flats() },
+  ]
+  const columns: Column<(typeof rows)[number]>[] = [
+    { id: "file", header: m.dialog_col_file(), cell: (r) => r.file, sortValue: (r) => r.file, rowHeader: true },
+    {
+      id: "kind",
+      header: m.catalogue_fields_cell_kind(),
+      static: true,
+      cell: (r) => (
+        <SelectField label={m.catalogue_fields_cell_kind_of({ name: r.file })} hideLabel value={r.kind} options={kinds} onChange={(kind) => setRows((list) => list.map((x) => (x.id === r.id ? { ...x, kind } : x)))} />
+      ),
+    },
+  ]
+  return (
+    <ComponentSection components={["Field hideLabel"]} level={3}>
+      <Caption>{m.catalogue_fields_cell_caption()}</Caption>
+      <div className="max-w-xl">
+        <DataTable label={m.catalogue_fields_cell_kind()} rows={rows} columns={columns} getRowId={(r) => r.id} scroll="none" />
       </div>
     </ComponentSection>
   )
@@ -184,6 +251,8 @@ export function FieldsCatalogue() {
     <Section title={m.catalogue_fields_title()} description="components/app/fields.tsx · settings.tsx · folder-picker.tsx">
       <TextFields />
       <NumberAndChoiceFields />
+      <GroupFields />
+      <CellFields />
       <SwitchAndPathFields />
       <TemplateFields />
       <ComponentSection components={["SettingsSection", "SettingsRow"]} level={3}>

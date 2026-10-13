@@ -1,13 +1,15 @@
 /**
  * Slice C store actions: calibration decisions and master offers, the run
  * folder parent, Prepare and Prepare all, Open (re-verifies first), Results
- * discovery, attach, inspect, accept and reject, Clean
- * up and the group's Complete all. Every write goes through `commit()`; a
- * contract refusal names each blocker and records it in Activity. A few
- * clearly labelled prototype controls make the simulated disk change (an
- * application writing outputs, a source frame changing) so the review can
- * exercise discovery and re-verification.
+ * discovery, attach, inspect, accept and reject. Every write goes through
+ * `commit()`; a contract refusal names each blocker and records it in
+ * Activity. Finish run and Finish all panels are the flows' Proceed
+ * (store/actions/flows.ts). A few clearly labelled prototype controls make
+ * the simulated disk change (an application writing outputs, a source frame
+ * changing) so the review can exercise discovery and re-verification; the
+ * Prototype panel offers them through `runSimulations`.
  */
+import type { Action } from "@/components/app/contracts"
 import { assignmentId, basisFiles, type CalSource, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
 import { calibrationStorage, masterStoragePath } from "@/domain/calibration-process"
 import { completeRefusals, groupHref, groupPipeline, latestRevision, runHref, runPreparations, runSetup, workingContent } from "@/domain/derive"
@@ -25,7 +27,6 @@ import type {
   DiskFile,
   InputMode,
   MatchCriterion,
-  MetadataDecision,
   OperationItem,
   Preparation,
   ProfileId,
@@ -36,15 +37,13 @@ import type {
   RunSetup,
 } from "@/domain/types"
 import { fileName, formatCount } from "@/lib/format"
-import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
-import { type CommitResult, commit, nowIso, type PrototypeState, store, updateSlice, withCatalog } from "@/store/core"
-import { completeRun, editRun, setGroupSetup, setRunSetup } from "@/store/actions/runs"
+import { joinRefs, type MessageRef, type Messages, msg, verbatim } from "@/lib/i18n"
+import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
+import { editRun, setGroupSetup, setRunSetup } from "@/store/actions/runs"
 import { pinAutomaticChoices } from "@/store/actions/calibration"
 import { closedRefusal, freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
-import { moveToOsTrash } from "@/store/actions/trash"
-import { runIntermediatesOffer } from "@/features/v5/b-projects/model"
 import { startOperation } from "@/store/operations"
-import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultChannel, resultsFolders, runLock, scanResultsFolders, type VerifyOutcome, verifyPreparation } from "./model"
+import { currentPreparation, groupAssembledPath, livePanelRuns, nextGroupRevision, preparePlan, recognize, resultChannel, resultsFolders, runLock, scanResultsFolders, type VerifyOutcome, verifyPreparation } from "./model"
 import type { PreparePayload } from "./operations"
 
 // ---------------------------------------------------------------------------
@@ -87,14 +86,6 @@ export function chooseProfile(runOrGroup: { runId?: string; groupId?: string }, 
 
 export function chooseMode(runOrGroup: { runId?: string; groupId?: string }, mode: InputMode): CommitResult {
   return runOrGroup.groupId ? changeGroupSetup(runOrGroup.groupId, { inputMode: mode }) : changeRunSetup(runOrGroup.runId!, { inputMode: mode })
-}
-
-export function prepareChoices(state: PrototypeState, key: string): PrepareChoices {
-  return state.slices.c.prepare[key] ?? DEFAULT_CHOICES
-}
-
-export function updatePrepareChoices(key: string, patch: Partial<PrepareChoices>) {
-  updateSlice("c", (c) => ({ ...c, prepare: { ...c.prepare, [key]: { ...DEFAULT_CHOICES, ...c.prepare[key], ...patch } } }))
 }
 
 export function setOutputParent(target: { runId?: string; groupId?: string }, path: string): CommitResult {
@@ -154,14 +145,9 @@ export function acceptCalibration(runId: string, sessionIds: readonly string[], 
   return decide(runId, sessionIds, kind, { input: source.input, state: "accepted", criteria, exception: null, basis: basisOf(source.input) }, msg("run_use_named", { name: source.name }))
 }
 
-/** An exception: an incompatible input, or no input of this kind, with the user's reason (CAL-FR-08). */
-export function calibrationException(runId: string, sessionIds: readonly string[], kind: CalibrationKind, source: CalSource | null, criteria: MatchCriterion[], reason: string): CommitResult {
-  const trimmed = reason.trim()
-  if (!trimmed) {
-    const run = store.getState().catalog.runs[runId]
-    return refuse(msg("store_refused", { label: msg("status_exception") }), [msg("store_reason_no_reason")], run ? runHref(run, "calibrate") : null)
-  }
-  return decide(runId, sessionIds, kind, { input: source?.input ?? null, state: "exception", criteria, exception: { reason: trimmed, at: nowIso() }, basis: basisOf(source?.input ?? null) }, source ? msg("run_cal_exception_title", { name: source.name }) : msg("store_label_exception_no_kind", { kind: KIND_NOUN[kind] }))
+/** An exception: an incompatible master, or No calibration of this kind (CAL-FR-08). Asks for no reason (user item 147). */
+export function calibrationException(runId: string, sessionIds: readonly string[], kind: CalibrationKind, source: CalSource | null, criteria: MatchCriterion[]): CommitResult {
+  return decide(runId, sessionIds, kind, { input: source?.input ?? null, state: "exception", criteria, exception: null, basis: basisOf(source?.input ?? null) }, source ? msg("run_cal_exception_title", { name: source.name }) : msg("store_label_exception_no_kind", { kind: KIND_NOUN[kind] }))
 }
 
 export function deferCalibration(runId: string, sessionIds: readonly string[], kind: CalibrationKind): CommitResult {
@@ -277,12 +263,12 @@ function blockingReasons(plan: ReturnType<typeof preparePlan>): MessageRef[] {
   return reasons
 }
 
-/** Start one preparation revision of a run as an operation; returns its operation id. */
-export function startPrepare(runId: string, choices: PrepareChoices, options: { groupRevision?: number } = {}): { result: CommitResult; operationId: string | null } {
+/** Start one preparation revision of a run as an operation; returns its operation id. The corrections the inputs carry are applied as `runCorrections` decides (C15). */
+export function startPrepare(runId: string, options: { groupRevision?: number } = {}): { result: CommitResult; operationId: string | null } {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return { result: MISSING, operationId: null }
-  const plan = preparePlan(state, run, choices, options)
+  const plan = preparePlan(state, run, options)
   const href = runHref(run, "prepare")
   const refused = msg("store_refused", { label: msg("store_label_prepare_named", { name: run.name }) })
   if (!plan.ready || !plan.revision || !plan.profile || !plan.layout.folderPath || !plan.layout.resultsPath) {
@@ -292,9 +278,6 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
   if (running.length > 0) return { result: refuse(refused, running, href), operationId: null }
   const at = nowIso()
   const id = freshId("prep", `${run.id}|${plan.layout.prepRevision}`)
-  const decisions: MetadataDecision[] = plan.diffs.flatMap((d) =>
-    d.assetIds.map((assetId) => ({ assetId, field: d.field, observed: d.sourceValue, corrected: d.catalogValue, decision: plan.metadata[d.key]! })),
-  )
   const record: Preparation = {
     id,
     runId: run.id,
@@ -312,7 +295,7 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     preparedAssetIds: [],
     preparedCalibrationCount: 0,
     blocked: [],
-    metadataDecisions: decisions,
+    metadataDecisions: plan.corrections.decisions,
     launches: [],
     unverified: null,
     createdAt: at,
@@ -363,17 +346,16 @@ export function prepareAll(groupId: string): { result: CommitResult; operationId
   const href = groupHref(group, "prepare")
   const refused = msg("store_refused", { label: msg("store_label_prepare_all_named", { name: group.name }) })
   if (panels.length === 0) return { result: refuse(refused, [msg("rungroup_every_panel_complete")], href), operationIds: [] }
-  const groupRevision = Math.max(0, ...Object.values(state.catalog.preparations).filter((p) => p.groupId === group.id).map((p) => p.prepRevision)) + 1
-  const choices = prepareChoices(state, group.id)
+  const groupRevision = nextGroupRevision(state, group)
   const blockers: MessageRef[] = []
   for (const run of panels) {
-    const plan = preparePlan(state, run, choices, { groupRevision })
+    const plan = preparePlan(state, run, { groupRevision })
     if (!plan.ready) blockers.push(...blockingReasons(plan).map((r) => joinRefs([verbatim(run.name), r], ": ")))
   }
   if (blockers.length > 0) return { result: refuse(refused, blockers, href), operationIds: [] }
   const operationIds: string[] = []
   for (const run of panels) {
-    const { result, operationId } = startPrepare(run.id, choices, { groupRevision })
+    const { result, operationId } = startPrepare(run.id, { groupRevision })
     if (!result.ok) return { result, operationIds }
     if (operationId) operationIds.push(operationId)
   }
@@ -670,78 +652,6 @@ export function setResultKind(resultId: string, kind: ResultKind): CommitResult 
 }
 
 // ---------------------------------------------------------------------------
-// Clean up (PREP-FR-14) and Complete all
-// ---------------------------------------------------------------------------
-
-/** Clean up (D-W26, PREP-FR-14): the chosen prepared entries go to the OS Trash through the shared trash engine. */
-export function startCleanup(runId: string, paths: string[]): { result: CommitResult; operationId: string | null } {
-  const state = store.getState()
-  const run = state.catalog.runs[runId]
-  if (!run) return { result: MISSING, operationId: null }
-  const closed = closedRefusal(state.catalog.projects[run.projectId], msg("store_label_clean_up_named", { name: run.name }))
-  if (closed) return { result: closed, operationId: null }
-  const href = runHref(run, "done")
-  const title = msg("store_refused", { label: msg("store_label_clean_up_named", { name: run.name }) })
-  if (run.trashedAt) return { result: refuse(title, [msg("run_lock_trashed")], href), operationId: null }
-  if (run.completion !== "complete") return { result: refuse(title, [msg("store_reason_not_complete_short")], href), operationId: null }
-  const running = completeRefusals(state, run)
-  if (running.length > 0) return { result: refuse(title, running, href), operationId: null }
-  const review = cleanupReview(state, run)
-  const allowed = new Set(review.entries.map((e) => e.path))
-  const chosen = paths.filter((p) => allowed.has(p))
-  if (chosen.length === 0) return { result: refuse(title, [msg("store_reason_nothing_selected")], href), operationId: null }
-  const operationId = moveToOsTrash({
-    kind: "run-cleanup",
-    title: msg("store_label_clean_up_named", { name: run.name }),
-    projectId: run.projectId,
-    runIds: [run.id],
-    items: chosen.map((path) => ({ path })),
-    pruneFolders: [...new Set(review.entries.map((e) => e.prep.folderPath))],
-    unit: "prepared-entries",
-    href,
-  })
-  return { result: { ok: true }, operationId }
-}
-
-/** The run's intermediates offer from its Complete confirmation (P-PREP3): what `runIntermediatesOffer` lists now goes to the OS Trash. */
-export function startRunIntermediatesCleanup(runId: string): { result: CommitResult; operationId: string | null } {
-  const state = store.getState()
-  const run = state.catalog.runs[runId]
-  if (!run) return { result: MISSING, operationId: null }
-  const closed = closedRefusal(state.catalog.projects[run.projectId], msg("run_results_intermediates"))
-  if (closed) return { result: closed, operationId: null }
-  const href = runHref(run, "done")
-  const offer = runIntermediatesOffer(state, run)
-  if (offer.items.length === 0) return { result: refuse(msg("store_refused", { label: msg("run_results_intermediates") }), [msg("store_reason_nothing_selected")], href), operationId: null }
-  const operationId = moveToOsTrash({
-    kind: "intermediates",
-    title: msg("op_offer_to_trash", { offer: msg("run_results_intermediates"), name: run.name }),
-    projectId: run.projectId,
-    runIds: [run.id],
-    items: offer.items,
-    href,
-  })
-  return { result: { ok: true }, operationId }
-}
-
-/** Complete every live panel that is not Complete; a trashed panel is skipped (D-W75). */
-export function completeAllPanels(groupId: string): CommitResult {
-  const state = store.getState()
-  const group = state.catalog.runGroups[groupId]
-  if (!group) return MISSING
-  const open = livePanelRuns(state, group).filter((r) => r.completion !== "complete")
-  const refused = msg("store_refused", { label: msg("store_label_complete_all_named", { name: group.name }) })
-  if (open.length === 0) return refuse(refused, [msg("rungroup_every_panel_complete")], groupHref(group, "done"))
-  const blockers = open.flatMap((r) => completeRefusals(state, r).map((reason) => joinRefs([verbatim(r.name), reason], ": ")))
-  if (blockers.length > 0) return refuse(refused, blockers, groupHref(group, "done"))
-  for (const run of open) {
-    const result = completeRun(run.id)
-    if (!result.ok) return result
-  }
-  return { ok: true }
-}
-
-// ---------------------------------------------------------------------------
 // Prototype controls: the simulated application and disk
 // ---------------------------------------------------------------------------
 
@@ -756,7 +666,7 @@ function uniquePath(state: PrototypeState, path: string): string {
 }
 
 /** Prototype: the application writes into the recorded Results folder (a stack, a file still being written, intermediates, a master dark). */
-export function simulateApplicationOutput(target: { runId?: string; groupId?: string }): CommitResult {
+function simulateApplicationOutput(target: { runId?: string; groupId?: string }): CommitResult {
   const state = store.getState()
   const run = target.runId ? state.catalog.runs[target.runId] : undefined
   const group = target.groupId ? state.catalog.runGroups[target.groupId] : undefined
@@ -792,7 +702,7 @@ export function simulateApplicationOutput(target: { runId?: string; groupId?: st
  * joins the calibration library. The run keeps the master it has (its
  * automatic choices are recorded first) and Calibrate shows "Better match available".
  */
-export function simulateBetterMaster(runId: string): CommitResult {
+function simulateBetterMaster(runId: string): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
@@ -826,7 +736,7 @@ export function simulateBetterMaster(runId: string): CommitResult {
 }
 
 /** Prototype: a file still being written finishes; its listing is inspected again on settle. */
-export function finishWriting(resultId: string): CommitResult {
+function finishWriting(resultId: string): CommitResult {
   const state = store.getState()
   const record = state.catalog.results[resultId]
   if (!record) return MISSING
@@ -842,7 +752,7 @@ export function finishWriting(resultId: string): CommitResult {
 }
 
 /** Prototype: record a catalog OBJECT correction on the run's first member session (PREP-FR-03). */
-export function simulateObjectCorrection(runId: string): CommitResult {
+function simulateObjectCorrection(runId: string): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
@@ -865,7 +775,7 @@ export function simulateObjectCorrection(runId: string): CommitResult {
 }
 
 /** Prototype: an external tool rewrites one prepared source frame, so the next Open finds drift. */
-export function simulateSourceDrift(runId: string): CommitResult {
+function simulateSourceDrift(runId: string): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
@@ -878,4 +788,28 @@ export function simulateSourceDrift(runId: string): CommitResult {
   if (!file || !path) return refuse(msg("store_refused", { label: msg("store_label_simulated_change") }), [msg("store_reason_no_prepared_source")], href)
   const changed = { ...file, previousSha256: file.sha256, sha256: fakeSha256(path, 9), modifiedAt: nowIso() }
   return commit(msg("store_label_proto_source_changed"), (s) => ({ ...s, disk: writeFiles(s.disk, [changed]) }), { href })
+}
+
+/** Prototype: every file of the run still being written finishes. */
+function finishRunWriting(runId: string): CommitResult {
+  const pending = Object.values(store.getState().catalog.results).filter((r) => r.runId === runId && !r.trashed && r.processingState === "pending")
+  return pending.map((r) => finishWriting(r.id)).find((r) => !r.ok) ?? { ok: true }
+}
+
+/**
+ * The run's or the run group's prototype simulations, for the Prototype
+ * panel's "This run" section (§3.3 P1): they change the simulated
+ * application and disk, so they never sit among the run's own actions.
+ * Worded with the caller's `m` during render.
+ */
+export function runSimulations(target: { runId: string } | { groupId: string }, m: Messages): Action[] {
+  if ("groupId" in target) return [{ id: "sim-group-output", label: m.simulation_group_writes_mosaic(), run: () => simulateApplicationOutput({ groupId: target.groupId }) }]
+  const { runId } = target
+  return [
+    { id: "sim-run-output", label: m.simulation_run_writes_outputs(), run: () => simulateApplicationOutput({ runId }) },
+    { id: "sim-finish-writing", label: m.simulation_run_finish_writing(), run: () => finishRunWriting(runId) },
+    { id: "sim-better-master", label: m.simulation_run_better_master(), run: () => simulateBetterMaster(runId) },
+    { id: "sim-object-correction", label: m.simulation_run_object_correction(), run: () => simulateObjectCorrection(runId) },
+    { id: "sim-source-drift", label: m.simulation_run_source_drift(), run: () => simulateSourceDrift(runId) },
+  ]
 }

@@ -1,38 +1,39 @@
 /**
- * S3 Project (`/projects/$projectId`; D-W9, D-W16, D-W26, D-W29, D-W33,
- * D-W36, D-W37, D-W38, D-W46, D-W59, D-W65, D-W69, D-W72, P-WRAP1). The
- * header carries the stage strip, Open → Runs → Wrap up → Done (or
- * Archived), from `projectStageStrip`; Runs opens the Project's work and
- * Wrap up its stage page. A Done Project offers Reopen, which moves no file.
- * The toolbar Next is the one primary action, so the header has none.
+ * S3 Project (`/projects/$projectId`; DetailPage with tabs Runs · Wrap up,
+ * D10, §5.7). The header carries the path, the StatusBadge (Open, Closed or
+ * Archived), Start run… as the one primary, and the Project ▾ menu: Edit…
+ * (unavailable while closed, "Project closed · Reopen ▸") and, for a closed
+ * Project, Reopen project…. A closed Project shows its standing state in the
+ * notice slot and reads its frozen goal figures (§5.6, C7).
  *
  * Search keys (routes.tsx): `?start=run` opens Start run; `?stage=wrap-up`
- * opens the Wrap up stage; `?candidates=unreviewed|all` opens frame review
- * over the candidates (PIX-FR-18, with `&filter=` and `&assetId=`);
- * `?mosaic=new|<subjectId>` opens the mosaic editor (`&rig=`, `&profile=`,
- * `&sessions=`).
+ * (with `&step=`) shows the Wrap up tab, a StepPage; `?mosaic=new|<subjectId>`
+ * opens the mosaic editor (`&rig=`, `&profile=`, `&sessions=`).
  */
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { Check, ChevronRight, Pencil, RotateCcw } from "lucide-react"
-import { useEffect, useState } from "react"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { PageBody, PageHeader } from "@/components/app/page"
-import { Pill } from "@/components/app/pill"
-import type { Tone } from "@/components/app/status"
-import { Button } from "@/components/ui/button"
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
+import { PackageCheck, Pencil, Play, RotateCcw } from "lucide-react"
+import { type ReactNode, useEffect, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
-import { type ProjectStageId, projectGroups, projectLink, projectRuns, projectStageStrip, projectWrapUp, type StepLink } from "@/domain/derive"
+import { ActionButton } from "@/components/app/actions"
+import type { Action } from "@/components/app/contracts"
+import { EmptyState, type PageNotice } from "@/components/app/feedback"
+import type { PathItem } from "@/components/app/page"
+import { BlockersPreview } from "@/components/app/previews"
+import { StatusBadge } from "@/components/app/status"
+import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import type { ObjectMenu, PageViews } from "@/components/templates/parts"
+import { PROJECT_STATUS_NAME, projectStatus, projectTabs } from "@/domain/derive"
 import type { Project } from "@/domain/types"
+import { formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { reopenProject } from "@/store/actions/projects"
 import { useStore } from "@/store/core"
-import { CandidateReview } from "../d-review/review"
-import { MosaicEditor } from "./mosaic-editor"
-import { ArchivedSection, CandidatesSection, GoalsSection, PlanningSection, RigsSection, RunsSection, SubjectsSection } from "./project-sections"
 import { ProjectDetailsDialog } from "./details-dialog"
-import { WrapUpStage } from "./wrap-up"
+import { MosaicEditor } from "./mosaic-editor"
+import { useArchivedSection, useCandidatesSection, useGoalsSection, usePlanningSection, useRigsSection, useRunsSection, useSubjectsSection } from "./project-sections"
+import { WrapUpPage } from "./wrap-up"
 
 type View = "runs" | "wrap-up"
 
@@ -43,7 +44,7 @@ export function ProjectPage() {
   const m = useMessages()
   const project = useStore((s) => s.catalog.projects[projectId])
 
-  // `?start=run` opens its sheet once, then leaves a clean URL.
+  // `?start=run` opens its dialog once, then leaves a clean URL.
   useEffect(() => {
     if (!project || search.start !== "run") return
     openSheet({ kind: "start-run", projectId: project.id })
@@ -51,7 +52,6 @@ export function ProjectPage() {
   }, [project, search.start, navigate])
 
   if (!project) return <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
-  if (search.candidates) return <CandidateReviewPage project={project} />
   if (search.mosaic) {
     return (
       <MosaicEditor
@@ -64,118 +64,114 @@ export function ProjectPage() {
       />
     )
   }
-  return <ProjectDetail project={project} view={search.stage === "wrap-up" ? "wrap-up" : "runs"} />
+  return <ProjectView project={project} view={search.stage === "wrap-up" ? "wrap-up" : "runs"} step={search.step} />
 }
 
-function ProjectDetail({ project, view }: { project: Project; view: View }) {
+/** The header every view of the Project shares: path, status, Start run…, Project ▾ and the closed notice. */
+export interface ProjectChrome {
+  path: PathItem[]
+  status: ReactNode
+  actions: Action[]
+  menu: ObjectMenu
+  notice: PageNotice | null
+  views: PageViews
+}
+
+function useProjectChrome(project: Project, view: View, onEdit: () => void): ProjectChrome {
   const m = useMessages()
+  const navigate = useNavigate()
+  const tabs = useStore((s) => projectTabs(s, project))
+  const status = projectStatus(project)
+  const open = project.state === "open"
   const archived = project.archive?.sessionIds.length ?? 0
+  const editLabel = m.project_edit()
+  const reopen: Action = {
+    id: "reopen",
+    label: m.project_reopen_project(),
+    icon: RotateCcw,
+    confirm: {
+      title: m.project_reopen_title({ name: project.name }),
+      summary: archived > 0 ? m.project_reopen_summary_archived({ count: archived }) : m.project_reopen_summary(),
+      confirm: { label: m.project_reopen_project() },
+    },
+    run: () => reopenProject(project.id),
+  }
+  const edit: Action = {
+    id: "edit",
+    label: editLabel,
+    icon: Pencil,
+    opensDialog: true,
+    unavailable: open ? undefined : { action: m.actions_blocked({ action: editLabel }), reason: m.project_closed(), blockers: [{ label: m.project_reopen_project() }] },
+    run: onEdit,
+  }
+  return {
+    path: [{ label: m.nav_projects(), link: { to: "/projects" } }],
+    status: <StatusBadge kind="project" value={status} label={say(m, PROJECT_STATUS_NAME[status])} />,
+    actions: open ? [{ id: "start-run", label: m.startrun_title(), icon: Play, kind: "primary", opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: project.id }) }] : [],
+    menu: { label: m.project_noun(), items: open ? [edit] : [edit, reopen] },
+    notice: open
+      ? null
+      : {
+          tone: "info",
+          title: project.doneAt ? m.project_closed_notice({ date: formatDateTime(project.doneAt) }) : m.project_closed(),
+          actions: <ActionButton action={reopen} />,
+        },
+    views: {
+      label: m.project_views(),
+      value: view,
+      items: tabs.tabs.map((tab) => ({ id: tab.id, label: say(m, tab.label), count: tab.count ?? undefined })),
+      onChange: (id) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: id === "wrap-up" ? { stage: "wrap-up" } : {} }),
+    },
+  }
+}
+
+function ProjectView({ project, view, step }: { project: Project; view: View; step?: string }) {
   const [editing, setEditing] = useState(false)
+  const chrome = useProjectChrome(project, view, () => setEditing(true))
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        eyebrow={
-          <Link to="/projects" className="underline-offset-2 hover:underline">
-            {m.nav_projects()}
-          </Link>
-        }
-        title={project.name}
-        meta={<StageStrip project={project} view={view} />}
-        description={project.notes || undefined}
-        actions={
-          <>
-            {project.state === "open" ? (
-              <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-                <Pencil aria-hidden="true" data-icon="inline-start" />
-                {m.project_edit_details()}
-              </Button>
-            ) : (
-              <ConfirmDialog
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                    {m.project_reopen_ellipsis()}
-                  </Button>
-                }
-                title={m.project_reopen_title({ name: project.name })}
-                description={m.project_reopen_no_file_moves()}
-                changes={[m.project_reopen_change()]}
-                unchanged={archived > 0 ? [m.project_reopen_stay_archived({ count: archived })] : undefined}
-                confirmLabel={m.project_reopen()}
-                onConfirm={() => reopenProject(project.id)}
-              />
-            )}
-            <ProjectDetailsDialog project={project} open={editing} onOpenChange={setEditing} />
-          </>
-        }
-      />
-      <PageBody className="space-y-4">
-        {view === "wrap-up" ? (
-          <WrapUpStage project={project} />
-        ) : (
-          <>
-            <RunsSection project={project} />
-            <CandidatesSection project={project} />
-            <GoalsSection project={project} />
-            <div className="grid gap-4 xl:grid-cols-2">
-              <SubjectsSection project={project} />
-              <RigsSection project={project} />
-            </div>
-            <PlanningSection project={project} />
-            <ArchivedSection project={project} />
-          </>
-        )}
-      </PageBody>
-    </div>
+    <>
+      {view === "wrap-up" ? <WrapUpView project={project} chrome={chrome} step={step} /> : <RunsView project={project} chrome={chrome} />}
+      <ProjectDetailsDialog project={project} open={editing} onOpenChange={setEditing} />
+    </>
   )
 }
 
-const STAGE_TONE: Record<"done" | "current" | "todo", Tone> = { done: "success", current: "info", todo: "muted" }
-
-/** Open → Runs → Wrap up → Done / Archived; Runs and Wrap up switch the page between the Project's work and its Wrap up stage. */
-function StageStrip({ project, view }: { project: Project; view: View }) {
+/** The Runs tab: runs first, then candidates, goals, subjects, rigs, tonight and the archived sessions. */
+function RunsView({ project, chrome }: { project: Project; chrome: ProjectChrome }) {
   const m = useMessages()
-  const strip = useStore((s) => projectStageStrip(s.catalog, project))
-  const runs = useStore((s) => projectRuns(s.catalog, project.id).filter((r) => !r.groupId).length + projectGroups(s.catalog, project.id).length)
-  const wrapOpen = useStore((s) => projectWrapUp(s.catalog, project).available) || project.state === "done"
-  const link = (id: ProjectStageId): StepLink | undefined => (id === "runs" && view !== "runs" ? projectLink(project.id) : id === "wrap-up" && wrapOpen && view !== "wrap-up" ? projectLink(project.id, { stage: "wrap-up" }) : undefined)
-  return (
-    <ol aria-label={m.project_stage_label()} className="flex flex-wrap items-center gap-1">
-      {strip.stages.map((stage, index) => (
-        <li key={stage.id} aria-current={stage.state === "current" ? "step" : undefined} className="flex items-center gap-1">
-          {index > 0 ? <ChevronRight aria-hidden="true" className="size-3 text-muted-foreground" /> : null}
-          <Pill tone={STAGE_TONE[stage.state]} icon={stage.state === "done" ? Check : undefined} link={link(stage.id)} className={view === stage.id ? "ring-2 ring-ring/60" : undefined}>
-            {stage.id === "runs" ? `${m.common_runs()} · ${runs}` : say(m, stage.label)}
-            {stage.state === "current" ? <span className="sr-only"> {m.project_stage_current()}</span> : null}
-          </Pill>
-        </li>
-      ))}
-    </ol>
-  )
+  const runs = useRunsSection(project)
+  const candidates = useCandidatesSection(project)
+  const goals = useGoalsSection(project)
+  const subjects = useSubjectsSection(project)
+  const rigs = useRigsSection(project)
+  const planning = usePlanningSection(project)
+  const archived = useArchivedSection(project)
+  const notes: DetailSection | null = project.notes.trim() ? { id: "notes", title: m.newproject_notes(), content: project.notes } : null
+  const sections = [notes, runs, candidates, goals, subjects, rigs, planning, archived].filter((s): s is DetailSection => s !== null)
+  return <DetailPage {...chrome} title={project.name} sections={sections} />
 }
 
-// ---------------------------------------------------------------------------
-// Candidate review (`?candidates=`, PIX-FR-18)
-// ---------------------------------------------------------------------------
-
-function CandidateReviewPage({ project }: { project: Project }) {
+/** The Wrap up tab: its StepPage once every run is Finished or Trashed; before then, one line and the runs it waits on (§5.5). */
+function WrapUpView({ project, chrome, step }: { project: Project; chrome: ProjectChrome; step?: string }) {
   const m = useMessages()
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        eyebrow={
-          <Link to="/projects/$projectId" params={{ projectId: project.id }} className="underline-offset-2 hover:underline">
-            {project.name}
-          </Link>
-        }
-        title={m.project_candidate_frames()}
-        actions={
-          <Button size="sm" variant="outline" render={<Link to="/projects/$projectId" params={{ projectId: project.id }} />}>
-            {m.project_candidates_done()}
-          </Button>
+  const unavailable = useStore((s) => projectTabs(s, project).wrapUpUnavailable)
+  if (!unavailable) return <WrapUpPage project={project} chrome={chrome} step={step} />
+  const section: DetailSection = {
+    id: "wrap-up",
+    title: m.wrapup_action(),
+    content: (
+      <EmptyState
+        icon={PackageCheck}
+        title={say(m, unavailable.reason)}
+        action={
+          unavailable.blockers.length > 0 ? (
+            <BlockersPreview action={m.wrapup_action()} reason={m.wrapup_show_open_runs()} blockers={unavailable.blockers.map((b) => ({ label: say(m, b.label), link: b.link }))} />
+          ) : (
+            <ActionButton action={{ id: "start-run", label: m.startrun_title(), opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: project.id }) }} />
+          )
         }
       />
-      <CandidateReview projectId={project.id} />
-    </div>
-  )
+    ),
+  }
+  return <DetailPage {...chrome} title={project.name} sections={[section]} />
 }

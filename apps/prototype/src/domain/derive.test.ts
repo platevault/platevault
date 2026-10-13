@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest"
 import { m, say } from "@/lib/i18n"
-import { freezeGoals, goalProgress, nearestPanel, panelBalance, planningPriorities, subjectProgress, type GoalProgress } from "./derive"
+import { freezeGoals, goalProgress, groupFlowState, latestRevision, nearestPanel, panelBalance, planningPriorities, runStepLink, subjectProgress, type GoalProgress, type World } from "./derive"
 import { defaultCriteria, seasonWindow } from "./planning"
 import { createSeed } from "./seed"
 import { qualityBarFor, subjectConditionsFrom } from "./templates"
@@ -319,5 +319,65 @@ describe("nearestPanel", () => {
   it("is null without pointing or panels", () => {
     expect(nearestPanel(null, panels)).toBeNull()
     expect(nearestPanel(at(315, 44), [])).toBeNull()
+  })
+})
+
+describe("run group flow (§5.2)", () => {
+  const GROUP = "grp_ic5070"
+  const P1 = "run_ic5070_p1"
+  const P2 = "run_ic5070_p2"
+
+  /** The demo world: Panel 1 waits at Results, Panel 2 is Partial at Prepare, Panel 3's run is in the Trash. */
+  function world(): World {
+    return { ...structuredClone(createSeed("demo")), operations: {} }
+  }
+  const group = (w: World) => groupFlowState(w, w.catalog.runGroups[GROUP]!)
+  const states = (w: World) => group(w).steps.map((s) => `${s.id}:${s.state}`)
+  /** A draft without sessions: that panel's Select is blocked by "Select at least one session". */
+  function emptyDraft(w: World, runId: string) {
+    const run = w.catalog.runs[runId]!
+    const latest = latestRevision(run)!
+    w.catalog.runs[runId] = { ...run, draft: { ...latest, sessions: [], included: [], baseRevision: latest.revision, updatedAt: latest.savedAt } }
+  }
+
+  it("reads each step as the worst state of its live panels, the trashed panel left out", () => {
+    const w = world()
+    const flow = group(w)
+    expect(flow.panels.map((p) => p.panel.n)).toEqual([1, 2])
+    expect(flow.current).toBe("prepare")
+    expect(states(w)).toEqual(["select:finished", "calibrate:finished", "prepare:current", "results:todo"])
+    expect(say(m, flow.steps[2]!.summary!)).toMatch(/^Panel 1: .+ · Panel 2: .+$/)
+    expect(flow.finishedAt).toBeNull()
+  })
+
+  it("makes the earliest unfinished step current, and a later step a panel settled before reads Redo", () => {
+    const w = world()
+    emptyDraft(w, P1)
+    expect(group(w).current).toBe("select")
+    expect(states(w)).toEqual(["select:blocked", "calibrate:redo", "prepare:redo", "results:todo"])
+  })
+
+  it("names each panel's gate on the current step", () => {
+    const w = world()
+    emptyDraft(w, P1)
+    const one = group(w).steps[0]!.gate!
+    expect(say(m, one.reason)).toBe("Panel 1 · Select at least one session")
+    expect(one.blockers.map((b) => ({ label: say(m, b.label), link: b.link }))).toEqual([{ label: "Panel 1 · Select at least one session", link: runStepLink(w.catalog.runs[P1]!, "select") }])
+    emptyDraft(w, P2)
+    const both = group(w).steps[0]!.gate!
+    expect(say(m, both.reason)).toBe("2 panels blocked")
+    expect(both.blockers.map((b) => say(m, b.label))).toEqual(["Panel 1 · Select at least one session", "Panel 2 · Select at least one session"])
+  })
+
+  it("is finished once every live panel is: Results reads the last finish", () => {
+    const w = world()
+    w.catalog.runs[P1] = { ...w.catalog.runs[P1]!, completion: "complete", completedAt: "2026-10-11T20:00:00.000Z" }
+    expect(group(w).finishedAt).toBeNull()
+    w.catalog.runs[P2] = { ...w.catalog.runs[P2]!, completion: "complete", completedAt: "2026-10-12T20:00:00.000Z" }
+    const flow = group(w)
+    expect(flow.finishedAt).toBe("2026-10-12T20:00:00.000Z")
+    expect(states(w)).toEqual(["select:finished", "calibrate:finished", "prepare:finished", "results:finished"])
+    expect(say(m, flow.steps[3]!.summary!)).toMatch(/^Finished /)
+    expect(flow.steps.every((s) => s.gate === null)).toBe(true)
   })
 })

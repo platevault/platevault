@@ -2188,6 +2188,89 @@ export function runFlowState(world: World, run: Run): RunFlowState {
   return { steps, current, finishedAt: finishedRun ? run.completedAt : null, trashed: run.trashedAt !== null, calibration, corrections }
 }
 
+// --- Run group flow (§5.2) --------------------------------------------------
+
+/** One live panel of a run group, with its run's flow. */
+export interface GroupFlowPanel {
+  panel: MosaicPanel
+  run: Run
+  flow: RunFlowState
+}
+
+export interface GroupFlowState {
+  steps: Array<DerivedStep<RunFlowStepId>>
+  /** The first step some live panel has not finished; Results once every live panel is Finished. */
+  current: RunFlowStepId
+  /** Set once every live panel is Finished: the last panel's finish. Every step is then read-only. */
+  finishedAt: IsoDateTime | null
+  /** The panels outside the Trash, in panel order: the steps aggregate these and Proceed acts on them (D-W75). */
+  panels: GroupFlowPanel[]
+}
+
+function settledState(state: FlowStepState): boolean {
+  return state === "finished" || state === "skipped"
+}
+
+/** "Panel 2 · Select at least one session": a panel's own words, named by its panel. */
+function panelNamed(panel: MosaicPanel, ref: MessageRef): MessageRef {
+  return joinRefs([panelRef(panel), ref], " · ")
+}
+
+/**
+ * The run group flow: the run flow's steps, each the worst state its live
+ * panels' runs hold it in (§5.2). A step is finished once every panel
+ * finished it. The current step is the first one some panel has not
+ * finished; its gate collects the panels' gates, each named "Panel N ·
+ * reason", so Proceed waits until every panel passes. A later step reads
+ * Redo when a panel settled it before, else To do: a panel further on is
+ * never shown as a second current step. A trashed panel is left out of
+ * every step (D-W75).
+ */
+export function groupFlowState(world: World, group: RunGroup): GroupFlowState {
+  const project = world.catalog.projects[group.projectId]
+  const subject = project ? findSubject(project, group.subjectId) : undefined
+  const panels = group.runIds
+    .flatMap((id): GroupFlowPanel[] => {
+      const run = world.catalog.runs[id]
+      const panel = findPanel(subject, run?.panelId ?? null)
+      return run && panel && !run.trashedAt ? [{ panel, run, flow: runFlowState(world, run) }] : []
+    })
+    .sort((a, b) => a.panel.n - b.panel.n)
+  const stateOf = (p: GroupFlowPanel, id: RunFlowStepId) => p.flow.steps.find((s) => s.id === id)!
+  const finishedAt = panels.length > 0 && panels.every((p) => p.flow.finishedAt !== null) ? panels.map((p) => p.flow.finishedAt!).sort().at(-1)! : null
+  const current: RunFlowStepId = finishedAt ? "results" : (RUN_FLOW_STEPS.find((id) => panels.length === 0 || panels.some((p) => !settledState(stateOf(p, id).state))) ?? "results")
+  const summaryOf = (id: RunFlowStepId): MessageRef | null => {
+    if (finishedAt && id === "results") return finishedOn(finishedAt)
+    const parts = panels.flatMap((p) => {
+      const summary = stateOf(p, id).summary
+      return summary ? [joinRefs([panelRef(p.panel), summary], ": ")] : []
+    })
+    return parts.length > 0 ? joinRefs(parts, " · ") : null
+  }
+  const gateOf = (id: RunFlowStepId): FlowGate | null => {
+    if (panels.length === 0) return { reason: msg("flow_group_no_live_panels"), blockers: [] }
+    const held = panels.flatMap((p) => {
+      const gate = stateOf(p, id).gate
+      return gate ? [{ p, gate }] : []
+    })
+    if (held.length === 0) return null
+    return {
+      reason: held.length === 1 ? panelNamed(held[0]!.p.panel, held[0]!.gate.reason) : msg("flow_panels_blocked", { count: held.length }),
+      blockers: held.map(({ p, gate }) => ({ label: panelNamed(p.panel, gate.reason), link: runStepLink(p.run, id) })),
+    }
+  }
+  const steps = RUN_FLOW_STEPS.map((id): DerivedStep<RunFlowStepId> => {
+    const summary = summaryOf(id)
+    if (finishedAt || (panels.length > 0 && panels.every((p) => settledState(stateOf(p, id).state)))) return { id, state: "finished", gate: null, summary }
+    if (id === current) {
+      const gate = gateOf(id)
+      return { id, state: gate ? "blocked" : "current", gate, summary }
+    }
+    return { id, state: panels.some((p) => stateOf(p, id).state === "redo") ? "redo" : "todo", gate: null, summary }
+  })
+  return { steps, current, finishedAt, panels }
+}
+
 // --- Session intake (P-REV2, C10, C14, C15) ---------------------------------
 
 export type SessionIntakeStepId = "target" | "rig" | "review"

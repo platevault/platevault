@@ -49,7 +49,7 @@ import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings
 import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
 import { TargetPage } from "@/features/v5/e-targets-plan-settings/target"
 import { TargetsPage } from "@/features/v5/e-targets-plan-settings/targets"
-import { runPipeline } from "@/domain/derive"
+import { groupFlowState, runFlowState } from "@/domain/derive"
 import { store } from "@/store/core"
 
 export type SearchParams = Record<string, string | undefined>
@@ -114,14 +114,14 @@ const projectsRoute = page("/projects", ProjectsPage)
 const projectRoute = page("/projects/$projectId", ProjectPage)
 const projectTrashRoute = page("/projects/$projectId/trash", ProjectTrashPage)
 
-// S5 Run (S6 Review is its review step) and S7 Run group. A bare run or group opens its current step.
+// S5 Run and S7 Run group (§5.4): a bare run or group opens its flow's current step.
 const runIndexRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/projects/$projectId/runs/$runId",
   beforeLoad: ({ params }) => {
     const state = store.getState()
     const run = state.catalog.runs[params.runId]
-    const step = run ? runPipeline(state, run).current.id : "select"
+    const step = run ? runFlowState(state, run).current : "select"
     throw redirect({ to: "/projects/$projectId/runs/$runId/$step", params: { ...params, step } })
   },
 })
@@ -130,7 +130,10 @@ const groupIndexRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/projects/$projectId/groups/$groupId",
   beforeLoad: ({ params }) => {
-    throw redirect({ to: "/projects/$projectId/groups/$groupId/$step", params: { ...params, step: "select" } })
+    const state = store.getState()
+    const group = state.catalog.runGroups[params.groupId]
+    const step = group ? groupFlowState(state, group).current : "select"
+    throw redirect({ to: "/projects/$projectId/groups/$groupId/$step", params: { ...params, step } })
   },
 })
 const groupRoute = page("/projects/$projectId/groups/$groupId/$step", RunGroupPage)
