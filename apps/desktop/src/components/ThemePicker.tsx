@@ -34,7 +34,7 @@ const MODE_ORDER: Record<ThemeMeta['mode'], number> = { light: 0, dark: 1 };
 function toChoice(theme: ThemeMeta): ThemePickerChoice {
   return {
     id: theme.id,
-    label: () => theme.label,
+    label: theme.label,
     mode: theme.mode,
   };
 }
@@ -67,8 +67,8 @@ function themeAccessibleLabel(
   modeLabel: string,
 ): string {
   const label = choice.label();
-  const modeSuffix = ` · ${choice.mode}`;
-  const baseLabel = label.toLowerCase().endsWith(modeSuffix)
+  const modeSuffix = ` · ${modeLabel}`.toLocaleLowerCase();
+  const baseLabel = label.toLocaleLowerCase().endsWith(modeSuffix)
     ? label.slice(0, -modeSuffix.length)
     : label;
   return `${baseLabel} · ${modeLabel}`;

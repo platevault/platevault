@@ -7,7 +7,6 @@ export const mockSearchResults: SearchResult[] = [
   {
     id: 'ses-001',
     kind: 'session',
-    // eslint-disable-next-line alm/no-user-string -- mock fixture, not i18n-rendered
     label: 'M31 L 2026-05-18',
     sublabel: '120 frames',
     route: '/sessions/ses-001',
@@ -16,7 +15,6 @@ export const mockSearchResults: SearchResult[] = [
   {
     id: 'target-001',
     kind: 'target',
-    // eslint-disable-next-line alm/no-user-string -- mock fixture, not i18n-rendered
     label: 'M31 - Andromeda Galaxy',
     sublabel: '5 sessions',
     route: '/targets/target-001',
@@ -25,7 +23,6 @@ export const mockSearchResults: SearchResult[] = [
   {
     id: 'proj-001',
     kind: 'project',
-    // eslint-disable-next-line alm/no-user-string -- mock fixture, not i18n-rendered
     label: 'M31 LRGB',
     sublabel: 'Processing',
     route: '/projects/proj-001',
@@ -34,7 +31,6 @@ export const mockSearchResults: SearchResult[] = [
   {
     id: 'nav-sessions',
     kind: 'page',
-    // eslint-disable-next-line alm/no-user-string -- mock fixture, not i18n-rendered
     label: 'Sessions',
     sublabel: 'Browse all sessions',
     route: '/sessions',

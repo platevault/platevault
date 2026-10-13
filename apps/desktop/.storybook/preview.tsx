@@ -16,7 +16,7 @@ import { ToastContainer } from '../src/ui/ToastContainer';
 import { applyDensity, THEMES, type ThemeId } from '../src/data/theme';
 
 /** Appearance choices a reviewer can flip from the toolbar, per story. */
-const THEME_OPTIONS = THEMES.map((t) => ({ value: t.id, title: t.label }));
+const THEME_OPTIONS = THEMES.map((t) => ({ value: t.id, title: t.label() }));
 
 const withAppearance: Decorator = (Story, context) => {
   const theme = context.globals['theme'] as ThemeId;

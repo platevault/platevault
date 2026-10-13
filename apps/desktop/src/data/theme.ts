@@ -27,6 +27,7 @@
 // path.
 import { useSyncExternalStore } from 'react';
 import { getPreferences, subscribePreferences } from '@/data/preferences';
+import { m } from '@/lib/i18n';
 
 /**
  * Memoized dynamic import of the Tauri core API (`isTauri()`). Several
@@ -59,7 +60,8 @@ export type ThemeChoice = ThemeId | 'system';
 
 export interface ThemeMeta {
   id: ThemeId;
-  label: string;
+  /** Display name in the active locale (a thunk, so a locale switch re-reads it). */
+  label: () => string;
   mode: 'light' | 'dark';
   /** Picker grouping (handoff 03) — Warm Slate/Observatory Dark form the warm
    *  family, the two Observatory Cool themes form the cool family. */
@@ -77,7 +79,7 @@ export interface ThemeMeta {
 export const THEMES: ThemeMeta[] = [
   {
     id: 'warm-clay',
-    label: 'Warm Clay',
+    label: () => m.settings_theme_name_warm_clay(),
     mode: 'light',
     family: 'warm',
     enabled: false,
@@ -85,7 +87,7 @@ export const THEMES: ThemeMeta[] = [
   },
   {
     id: 'warm-slate',
-    label: 'Warm Slate',
+    label: () => m.settings_theme_name_warm_slate(),
     mode: 'light',
     family: 'warm',
     enabled: true,
@@ -93,7 +95,7 @@ export const THEMES: ThemeMeta[] = [
   },
   {
     id: 'observatory-dark',
-    label: 'Observatory',
+    label: () => m.settings_theme_name_observatory(),
     mode: 'dark',
     family: 'warm',
     enabled: true,
@@ -101,7 +103,7 @@ export const THEMES: ThemeMeta[] = [
   },
   {
     id: 'espresso-dark',
-    label: 'Espresso',
+    label: () => m.settings_theme_name_espresso(),
     mode: 'dark',
     family: 'warm',
     enabled: false,
@@ -109,7 +111,7 @@ export const THEMES: ThemeMeta[] = [
   },
   {
     id: 'observatory-cool-light',
-    label: 'Observatory Cool · Light',
+    label: () => m.settings_theme_name_observatory_cool_light(),
     mode: 'light',
     family: 'cool',
     enabled: true,
@@ -117,7 +119,7 @@ export const THEMES: ThemeMeta[] = [
   },
   {
     id: 'observatory-cool',
-    label: 'Observatory Cool',
+    label: () => m.settings_theme_name_observatory_cool(),
     mode: 'dark',
     family: 'cool',
     enabled: true,
