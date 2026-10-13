@@ -5,8 +5,8 @@
  */
 import "@/index.css"
 import type { Decorator, Preview } from "@storybook/react-vite"
-import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from "@tanstack/react-router"
-import { useLayoutEffect } from "react"
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router"
+import { type ComponentType, createContext, useContext, useLayoutEffect, useState } from "react"
 import { setLocale, setTheme, type ThemePreference } from "@/app/preferences"
 import { DEFAULT_THEME, isThemeId, THEMES } from "@/app/themes"
 import { Toaster } from "@/components/ui/toast"
@@ -17,8 +17,22 @@ import { initializeStore } from "@/store"
 // The entries read the prototype store, as the design-system page does.
 initializeStore()
 
-// The entries' links (blockers, used-by previews) need a router; this one stays on its root.
-const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() })
+/** The story the router's one route renders: the decorator provides it, so the route always shows the current story. */
+const CurrentStory = createContext<ComponentType>(() => null)
+
+function StoryRoute() {
+  const Story = useContext(CurrentStory)
+  return <Story />
+}
+
+/**
+ * The entries are written for the design-system page: their links and step flows read and write that page's
+ * search params (`useSearch`, `navigate({ to: "/design-system" })`), which needs a matched route. Each story gets
+ * its own router on that path, so one story's params never reach the next. Every path renders the story.
+ */
+function createStoryRouter() {
+  return createRouter({ routeTree: createRootRoute({ component: StoryRoute }), history: createMemoryHistory({ initialEntries: ["/design-system"] }) })
+}
 
 const withPreferences: Decorator = (Story, { globals }) => {
   const locale = isLocale(globals.locale) ? globals.locale : DEFAULT_LOCALE
@@ -30,14 +44,17 @@ const withPreferences: Decorator = (Story, { globals }) => {
 }
 
 // The shell's RootLayout providers that the entries use.
-const withShell: Decorator = (Story) => (
-  <RouterContextProvider router={router}>
+const withShell: Decorator = (Story) => {
+  const [router] = useState(createStoryRouter)
+  return (
     <TooltipProvider delay={400}>
-      <Story />
+      <CurrentStory.Provider value={Story}>
+        <RouterProvider router={router} />
+      </CurrentStory.Provider>
       <Toaster />
     </TooltipProvider>
-  </RouterContextProvider>
-)
+  )
+}
 
 const preview: Preview = {
   decorators: [withPreferences, withShell],
