@@ -6530,6 +6530,7 @@
   "catalogue_status_bar_desc": "A barra inferior: locais, seleção, trabalho em andamento, contadores de problemas e notificações, cada lista num ListPopover.",
   "catalogue_palette_desc": "A paleta de comandos: lugares, registros e Ações registradas numa só lista pesquisável.",
   "catalogue_run_step_desc": "Os glifos de etapa de uma execução e as suas seis etapas numa linha.",
+  "catalogue_run_step_rail_of": "Etapas de {name}",
   "catalogue_walk_desc": "O tour de orientação modal: um recorte em volta de cada âncora, Voltar, Próximo e Pular. Uma etapa sem âncora é ignorada.",
   "catalogue_walk_start": "Iniciar o tour",
   "theme_picker_mode": "Modo",
