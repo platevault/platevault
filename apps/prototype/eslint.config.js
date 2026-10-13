@@ -56,6 +56,18 @@ export const COMPOSITION_ENFORCED = [
     area: { dir: "v5/a-home", depth: 0 },
     files: ["src/features/v5/a-home/{sessions,session,session-intake,import,import-preview,import-model,import-run,parts,session-model,shell}.{ts,tsx}"],
   },
+  {
+    // b-projects is P5's alone.
+    unit: "P5 Projects",
+    area: { dir: "v5/b-projects", depth: 0 },
+    files: ["src/features/v5/b-projects/**/*.{ts,tsx}"],
+  },
+  {
+    // c-runs is P6's alone.
+    unit: "P6 Runs",
+    area: { dir: "v5/c-runs", depth: 0 },
+    files: ["src/features/v5/c-runs/**/*.{ts,tsx}"],
+  },
 ]
 
 export default defineConfig(
