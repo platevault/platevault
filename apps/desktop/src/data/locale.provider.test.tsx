@@ -11,6 +11,7 @@
 
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { nativeMenuLabels } from './nativeMenu';
 
 const isTauriMock = vi.fn<() => boolean>();
 const settingsGetMock =
@@ -19,6 +20,8 @@ const settingsUpdateMock =
   vi.fn<
     (scope: string, values: unknown) => Promise<{ status: string; data: null }>
   >();
+const nativeMenuSetLabelsMock =
+  vi.fn<(labels: unknown) => Promise<{ status: string; data: null }>>();
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => isTauriMock(),
@@ -29,6 +32,7 @@ vi.mock('@/bindings/index', () => ({
     settingsGet: (scope: string) => settingsGetMock(scope),
     settingsUpdate: (scope: string, values: unknown) =>
       settingsUpdateMock(scope, values),
+    nativeMenuSetLabels: (labels: unknown) => nativeMenuSetLabelsMock(labels),
   },
 }));
 
@@ -60,10 +64,16 @@ describe('LocaleProvider / useLocale', () => {
     settingsGetMock.mockReset();
     settingsUpdateMock.mockReset();
     settingsUpdateMock.mockResolvedValue({ status: 'ok', data: null });
+    nativeMenuSetLabelsMock.mockReset();
+    nativeMenuSetLabelsMock.mockResolvedValue({ status: 'ok', data: null });
     localStorage.clear();
     document.documentElement.lang = 'en';
 
     const mod = await import('./locale');
+    // The provider loads the menu catalogue lazily. Loading this registry's
+    // copy now lets every send settle inside its own test instead of landing
+    // in the next one.
+    await import('./nativeMenu');
     mod.registerLocaleStrategy();
     useLocaleUnderTest = mod.useLocale;
     LocaleProviderUnderTest = mod.LocaleProvider;
@@ -143,5 +153,53 @@ describe('LocaleProvider / useLocale', () => {
       expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
     });
     expect(document.documentElement.lang).toBe('pt-BR');
+  });
+
+  it('sends the pt-BR native menu labels when switching from en-GB', async () => {
+    isTauriMock.mockReturnValue(true);
+    localStorage.setItem('pv.locale', 'en-GB');
+    settingsGetMock.mockResolvedValue({
+      status: 'ok',
+      data: { scope: 'general', values: { locale: 'en-GB' } },
+    });
+
+    render(
+      <LocaleProviderUnderTest>
+        <Probe />
+      </LocaleProviderUnderTest>,
+    );
+
+    await waitFor(() => {
+      expect(nativeMenuSetLabelsMock).toHaveBeenCalledTimes(1);
+    });
+    expect(nativeMenuSetLabelsMock).toHaveBeenLastCalledWith(
+      nativeMenuLabels('en-GB'),
+    );
+    expect(nativeMenuSetLabelsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ about: 'About PlateVault' }),
+    );
+
+    act(() => {
+      screen.getByRole('button', { name: 'switch' }).click();
+    });
+
+    await waitFor(() => {
+      expect(nativeMenuSetLabelsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(nativeMenuSetLabelsMock).toHaveBeenLastCalledWith({
+      about: 'Sobre o PlateVault',
+      settings: 'Configurações…',
+      quit: 'Encerrar PlateVault',
+      edit: 'Editar',
+      undo: 'Desfazer',
+      redo: 'Refazer',
+      cut: 'Recortar',
+      copy: 'Copiar',
+      paste: 'Colar',
+      selectAll: 'Selecionar tudo',
+      window: 'Janela',
+      minimise: 'Minimizar',
+      closeWindow: 'Fechar janela',
+    });
   });
 });

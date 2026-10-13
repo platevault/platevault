@@ -1415,6 +1415,10 @@ const mockHandlers = {
     // Mock mode has no updater and never defers a quit, so nothing may install.
     return false;
   },
+  native_menu_set_labels: async () => {
+    // Mock mode has no native menu to relabel.
+    return null;
+  },
   cleanup_policy_get: async () => {
     return mockCleanupPolicy;
   },

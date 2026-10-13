@@ -28,6 +28,7 @@
 
 use tauri_specta::{collect_commands, Builder};
 
+use crate::bootstrap::menu::native_menu_set_labels;
 use crate::commands::artifacts::{
     artifact_classify, artifact_list, artifact_mark_resolved, artifact_watcher_attach,
     artifact_watcher_detach, artifact_watcher_refresh,
@@ -360,6 +361,8 @@ macro_rules! app_commands {
             native_directory_pick,
             native_file_pick,
             native_reveal,
+            // native menu labels from the message catalogue (astro-plan-bw4s6)
+            native_menu_set_labels,
             // equipment CRUD (spec 030)
             equipment_cameras_list,
             equipment_cameras_create,

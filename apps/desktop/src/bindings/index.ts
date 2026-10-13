@@ -1305,6 +1305,16 @@ export const commands = {
 	 */
 	nativeReveal: (request: RevealRequest_Deserialize) => typedError<RevealResponse, ContractError_Serialize>(__TAURI_INVOKE("native_reveal", { request })),
 	/**
+	 *  `native_menu_set_labels` — the frontend sends the active locale's menu
+	 *  labels from its catalogue, at startup and on every locale change. Without
+	 *  an installed menu there is nothing to relabel, which is not an error.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The platform refused to change an entry's text.
+	 */
+	nativeMenuSetLabels: (labels: NativeMenuLabels) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("native_menu_set_labels", { labels })),
+	/**
 	 *  `equipment.cameras.list` — list all cameras.
 	 * 
 	 *  # Errors
@@ -7023,6 +7033,23 @@ export type MoonOppositionTargetInput = {
 	id: string,
 	raDeg: number | null,
 	decDeg: number | null,
+};
+
+/**  The visible text of every native menu entry, in one locale. */
+export type NativeMenuLabels = {
+	about: string,
+	settings: string,
+	quit: string,
+	edit: string,
+	undo: string,
+	redo: string,
+	cut: string,
+	copy: string,
+	paste: string,
+	selectAll: string,
+	window: string,
+	minimise: string,
+	closeWindow: string,
 };
 
 /**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */

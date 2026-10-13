@@ -31,7 +31,7 @@ use tauri::{Emitter, Manager};
 use crate::bootstrap::background::{
     spawn_ingest_resolution_drain, spawn_stale_dependent_propagator,
 };
-use crate::bootstrap::menu::{build_native_menu, MENU_ID_QUIT, MENU_ID_SETTINGS};
+use crate::bootstrap::menu::{install_native_menu, MENU_ID_QUIT, MENU_ID_SETTINGS};
 use crate::bootstrap::window::{enforce_min_window_size, recenter_if_offscreen};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::CallBuffer;
@@ -317,17 +317,11 @@ pub fn build_app() -> tauri::App {
 
             // Spec 051 US5 (T032): native application menu — App submenu
             // (About/Settings/Quit), Window submenu, and a standard Edit
-            // submenu (copy/cut/paste/select-all/undo/redo). Does not touch
-            // any existing native/React context-menu code path (T035 — none
-            // exists in this crate to touch).
-            match build_native_menu(app) {
-                Ok(menu) => {
-                    if let Err(e) = app.set_menu(menu) {
-                        tracing::warn!("failed to set native application menu: {e:?}");
-                    }
-                }
-                Err(e) => tracing::warn!("failed to build native application menu: {e:?}"),
-            }
+            // submenu (copy/cut/paste/select-all/undo/redo), labelled from
+            // the message catalogue. Does not touch any existing native/React
+            // context-menu code path (T035 — none exists in this crate to
+            // touch).
+            install_native_menu(app);
 
             Ok(())
         })
