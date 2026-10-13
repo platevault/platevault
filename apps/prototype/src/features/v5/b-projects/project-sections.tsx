@@ -7,9 +7,9 @@
  * refusal shows beside the action that was refused. A closed Project is
  * read-only (§5.6): its sections keep their Open and Restore actions only.
  */
-import { useNavigate } from "@tanstack/react-router"
+import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Crosshair, Eye, Grid2x2Plus, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/app/run-ui"
 import { BoxTable } from "@/components/app/box"
@@ -293,10 +293,13 @@ function goalStatus(p: GoalProgress): "met" | "partial" | "missing" {
  * Goals: one row per goal, its counted progress and what the bar leaves out.
  * Add goal… and Edit… share one dialog; Apply template… copies a template's
  * values and conditions in (D-W30, C7). A closed Project reads its frozen
- * figures (`goalProgress`, C7) and offers no edit.
+ * figures (`goalProgress`, C7) and offers no edit. `?add=goal` (Home's Add
+ * a Goal) opens Add goal; closing the dialog clears it.
  */
 export function useGoalsSection(project: Project): DetailSection {
   const m = useMessages()
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as Record<string, string | undefined>
   const catalog = useStore((s) => s.catalog)
   const progress = useStore((s) => (s.catalog.projects[project.id] ? goalProgressOf(s, project) : []))
   const [draft, setDraft] = useState<GoalDraft | null>(null)
@@ -305,6 +308,25 @@ export function useGoalsSection(project: Project): DetailSection {
   const channels = projectChannels(catalog, project.rigIds)
 
   const targets = project.subjects.flatMap((s) => (s.mosaic ? s.mosaic.panels.map((p) => ({ value: targetKey(s.id, p.id), label: subjectLabel(m, catalog, project, s.id, p.id) })) : [{ value: targetKey(s.id, null), label: subjectName(m, catalog, s) }]))
+  const newGoal = (): GoalDraft => ({ goalId: null, target: targets[0]?.value ?? "", channel: channels[0] ?? "L", kinds: DEFAULT_GOAL })
+  // `?add=goal` opens Add goal once per link; the flag drops when the param does.
+  const linked = open && targets.length > 0 && search.add === "goal"
+  const openedFromLink = useRef(false)
+  useEffect(() => {
+    if (!linked) {
+      openedFromLink.current = false
+      return
+    }
+    if (openedFromLink.current) return
+    openedFromLink.current = true
+    setDraft(newGoal())
+    // Only the link's arrival opens the dialog; a re-render while it stands does not reopen it.
+  }, [linked])
+  function closeDraft() {
+    setDraft(null)
+    if (search.add === undefined) return
+    void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: ({ add: _, ...rest }: Record<string, string | undefined>) => rest, replace: true } as never)
+  }
   const subjectOf = (p: GoalProgress) => subjectLabel(m, catalog, project, p.goal.subjectId, p.goal.panelId)
   const columns: Column<GoalProgress>[] = [
     { id: "subject", header: m.project_col_subject(), cell: subjectOf, sortValue: subjectOf, rowHeader: true, truncate: true },
@@ -331,7 +353,7 @@ export function useGoalsSection(project: Project): DetailSection {
           icon: Plus,
           opensDialog: true,
           unavailable: targets.length === 0 ? { action: m.actions_blocked({ action: m.goal_add() }), reason: m.startrun_no_subject(), blockers: [] } : undefined,
-          run: () => setDraft({ goalId: null, target: targets[0]?.value ?? "", channel: channels[0] ?? "L", kinds: DEFAULT_GOAL }),
+          run: () => setDraft(newGoal()),
         },
         { id: "apply-template", label: m.goal_apply_template(), opensDialog: true, run: () => setApplying(true) },
       ]
@@ -356,7 +378,7 @@ export function useGoalsSection(project: Project): DetailSection {
         <BoxTable label={m.project_goals_of({ name: project.name })} rows={progress} columns={columns} getRowId={(p) => p.goal.id} rowLabel={(p) => `${subjectOf(p)} · ${p.goal.channel}`} rowActions={rowActions} empty={m.projects_no_goals()} />
         <FormDialog
           open={draft !== null}
-          onOpenChange={(next) => !next && setDraft(null)}
+          onOpenChange={(next) => !next && closeDraft()}
           title={draft?.goalId ? m.goal_edit_title({ channel: draft.channel }) : m.goal_add()}
           size="sm"
           confirm={{

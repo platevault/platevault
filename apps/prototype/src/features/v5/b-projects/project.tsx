@@ -6,9 +6,10 @@
  * Project, Reopen project…. A closed Project shows its standing state in the
  * notice slot and reads its frozen goal figures (§5.6, C7).
  *
- * Search keys (routes.tsx): `?start=run` opens Start run; `?stage=wrap-up`
- * (with `&step=`) shows the Wrap up tab, a StepPage; `?mosaic=new|<subjectId>`
- * opens the mosaic editor (`&rig=`, `&profile=`, `&sessions=`).
+ * Search keys (routes.tsx): `?start=run` opens Start run; `?add=goal` opens
+ * Add goal (the Goals section); `?stage=wrap-up` (with `&step=`) shows the
+ * Wrap up tab, a StepPage; `?mosaic=new|<subjectId>` opens the mosaic editor
+ * (`&rig=`, `&profile=`, `&sessions=`).
  */
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { PackageCheck, Pencil, Play, RotateCcw } from "lucide-react"
