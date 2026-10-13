@@ -98,7 +98,8 @@ export function ProjectTrashPage() {
       results: resultItems(state, run.id).length,
     }
   })
-  const shown = rows.filter((r) => matchesQuery([r.run.name, r.where], query))
+  // An empty search matches every row (`matchesQuery` reads an empty query as no match).
+  const shown = rows.filter((r) => query.trim() === "" || matchesQuery([r.run.name, r.where], query))
   const back = () => void navigate({ to: "/projects/$projectId", params: { projectId } })
 
   const columns: Column<Row>[] = [
