@@ -1,119 +1,25 @@
 /**
- * Slice B UI parts shared by the Project screens and sheets: the subject
- * search (My targets, the bundled catalogues and SIMBAD, D-W17), the commit
- * outcome beside a control (a refusal reads as the terse `Refusal` line with
- * its blocker chips, any other failure as an inline error) and a trash
- * offer's review: what it moves and the items it keeps, each linked to where
- * it can be resolved. The Project state is the shared
- * `StatusBadge kind="project"`; a run's six-step rail is `StepRail` in
- * `src/app/run-ui.tsx`.
+ * Slice B parts shared by New Project, Add subject, Edit subject and the
+ * mosaic editor: the results a TargetPicker shows for a subject search (My
+ * targets, the bundled catalogues and, after a short wait, SIMBAD; D-W17),
+ * and the pick each result stands for. A pick of a catalogue or resolver
+ * entry becomes a Target record on save (`resolvePick`).
  */
-import { Loader, Plus, Search } from "lucide-react"
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ClearableInput } from "@/components/app/clearable-input"
-import { ActionError, Notice } from "@/components/app/feedback"
-import type { Blocker } from "@/components/app/contracts"
-import { Refusal, refusalFrom } from "@/components/app/refusal"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import type { TargetOption, TargetResultGroup, TargetSource } from "@/components/app/pickers"
 import { myTargets } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { BUNDLED_CATALOGUE, type CatalogueEntry, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
-import type { Catalog, TargetId } from "@/domain/types"
-import { formatBytes, formatDec, formatRa } from "@/lib/format"
+import type { Catalog, Target, TargetId } from "@/domain/types"
+import { formatDec, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import type { CommitResult } from "@/store/core"
 import { store, useStore } from "@/store/core"
-import type { OfferRefusal, TrashOffer } from "./model"
 
-// ---------------------------------------------------------------------------
-// Commit outcome beside the control
-// ---------------------------------------------------------------------------
-
-/** Runs a store action and keeps its refusal or failure next to the control (D08). */
-export function useCommitError() {
-  const [result, setResult] = useState<CommitResult | null>(null)
-  function run(action: () => CommitResult): boolean {
-    const next = action()
-    setResult(next.ok ? null : next)
-    return next.ok
-  }
-  const error = result && !result.ok ? result.message : null
-  const setError = (message: string | null) => setResult(message ? { ok: false, reason: "write-failed", message } : null)
-  return { error, result, setError, run }
-}
-
-export function InlineError({ message, className }: { message: string | null; className?: string }) {
-  return message ? <ActionError message={message} className={className} /> : null
-}
-
-/**
- * A failed store action: a refusal as `<action> · <reason> ▸` with its
- * blockers as chips, anything else as an inline error. `reason` words the
- * count ("used by 6 runs"); `blockers` maps the action's reasons to chips.
- */
-export function CommitOutcome({
-  result,
-  action,
-  reason,
-  blockers,
-  className,
-}: {
-  result: CommitResult | null
-  action: string
-  reason?: (count: number) => string
-  blockers?: (reasons: string[]) => Blocker[]
-  className?: string
-}) {
-  if (!result || result.ok) return null
-  const refusal = refusalFrom(result, action)
-  if (!refusal || result.reason !== "refused") return <ActionError message={result.message} className={className} />
-  const chips = blockers ? blockers(result.reasons) : refusal.blockers
-  return <Refusal {...refusal} reason={reason ? reason(chips.length) : refusal.reason} blockers={chips} className={className} />
-}
-
-// ---------------------------------------------------------------------------
-// Trash offer review (D-W43, P-TRASH2)
-// ---------------------------------------------------------------------------
-
-/** The terse reason an offer's items stay put ("no write permission", "linked by M 31 LRGB"); mixed reasons read as a blocker count. */
-function trashRefusalReason(m: Messages, refusals: OfferRefusal[]): string {
-  const keys = new Set(refusals.map((r) => ("key" in r.reason ? r.reason.key : null)))
-  if (keys.size === 1) {
-    const [key] = keys
-    if (key === "domain_trash_read_only") return m.wrapup_reason_no_write()
-    if (key === "domain_trash_no_volume") return m.wrapup_reason_no_volume()
-    if (key === "domain_trash_unsupported") return m.wrapup_reason_no_trash()
-    if (key === "domain_trash_not_found") return m.wrapup_reason_not_found()
-    if (key === "run_cleanup_volume_offline") return m.wrapup_reason_offline()
-    const reasons = new Set(refusals.map((r) => say(m, r.reason)))
-    if (key === "domain_trash_linked_by" && reasons.size === 1) return [...reasons][0]!
-  }
-  return m.refusal_blockers({ count: keys.size })
-}
-
-/** "Can't trash 2 · linked by M 31 LRGB ▸": the items an offer keeps, each a chip leading to where it can be resolved. */
-export function OfferRefusals({ refusals, className }: { refusals: OfferRefusal[]; className?: string }) {
-  const m = useMessages()
-  if (refusals.length === 0) return null
-  return <Refusal standing className={className} action={m.wrapup_cant_trash({ n: refusals.length })} reason={trashRefusalReason(m, refusals)} blockers={refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}`, link: r.link }))} />
-}
-
-/** What approving the offer changes: the items it moves, the items it keeps and the kept-view links that go with them. */
-export function offerChanges(m: Messages, offer: TrashOffer): string[] {
-  return [
-    m.wrapup_items_to_trash({ count: offer.count, size: formatBytes(offer.sizeBytes) }),
-    ...(offer.refusals.length > 0 ? [m.wrapup_items_kept_reason({ count: offer.refusals.length })] : []),
-    ...(offer.keptLinks > 0 ? [m.trash_also_removes_links({ count: offer.keptLinks })] : []),
-  ]
-}
-
-// ---------------------------------------------------------------------------
-// Subject search: My targets, catalogues and SIMBAD (D-W17)
-// ---------------------------------------------------------------------------
-
+/** SIMBAD answers after this wait, so the local results follow the typing at once. */
 const LOOKUP_MS = 600
+/** SIMBAD is asked from this many characters on. */
+const LOOKUP_MIN = 3
 /** The resolver's name: a proper noun, not translated. */
 const SIMBAD = "SIMBAD"
 
@@ -122,183 +28,123 @@ export type SubjectPick =
   | { kind: "target"; targetId: TargetId; name: string; ra: number | null; dec: number | null; size: { width: number; height: number } | null }
   | { kind: "new"; entry: CatalogueEntry; resolver: string | null; name: string; ra: number; dec: number; size: { width: number; height: number } | null }
 
+export function pickFromTarget(target: Target): SubjectPick {
+  return { kind: "target", targetId: target.id, name: target.name, ra: target.ra, dec: target.dec, size: target.sizeDeg }
+}
+
+function pickFromEntry(entry: CatalogueEntry, resolver: string | null): SubjectPick {
+  return { kind: "new", entry, resolver, name: entry.designation, ra: entry.ra, dec: entry.dec, size: entry.sizeDeg }
+}
+
+interface Result {
+  id: string
+  pick: SubjectPick
+  aliases: string[]
+  /** The object type, or where the result comes from ("Subject of Cygnus HOO"). */
+  kind: string | null
+}
+
+/** One line under a result: an alias, the kind and the position, or where a new Target comes from. */
+function detailOf(m: Messages, result: Result): string {
+  const { pick } = result
+  const position = pick.ra !== null && pick.dec !== null ? `${formatRa(pick.ra)} ${formatDec(pick.dec)}` : m.project_search_position_unknown()
+  const origin = pick.kind === "new" ? (pick.resolver ? m.project_search_new_from({ source: pick.resolver }) : m.project_search_new_from_catalogue()) : null
+  return [result.aliases[0], result.kind, position, origin].filter((part): part is string => Boolean(part)).join(" · ")
+}
+
 function matches(query: string, name: string, aliases: string[]): boolean {
   return matchesQuery([name, ...aliases], query)
 }
 
-function fromEntry(entry: CatalogueEntry, resolver: string | null): SubjectPick {
-  return { kind: "new", entry, resolver, name: entry.designation, ra: entry.ra, dec: entry.dec, size: entry.sizeDeg }
+/** My targets, then the bundled catalogues plus Target records in neither (created by indexing). */
+function localResults(m: Messages, catalog: Catalog, query: string): { mine: Result[]; catalogue: Result[] } {
+  if (!query.trim()) return { mine: [], catalogue: [] }
+  const mine = myTargets(catalog)
+  const mineIds = new Set(mine.map((t) => t.target.id))
+  const own = mine
+    .filter(({ target }) => matches(query, target.name, target.aliases))
+    .map(({ target, projects }): Result => ({
+      id: `target:${target.id}`,
+      pick: pickFromTarget(target),
+      aliases: target.aliases,
+      kind: projects.length > 0 ? m.project_search_subject_of({ names: projects.map((p) => p.name).join(", ") }) : m.project_search_favourite(),
+    }))
+  const byName = new Map(Object.values(catalog.targets).map((t) => [t.name, t]))
+  const bundled = BUNDLED_CATALOGUE.filter((o) => matches(query, o.designation, o.aliases) && !mineIds.has(byName.get(o.designation)?.id ?? "")).map((o): Result => {
+    const record = byName.get(o.designation)
+    return { id: `sky:${o.designation}`, pick: record ? pickFromTarget(record) : pickFromEntry(o, null), aliases: o.aliases, kind: say(m, objectTypeRef(o.objectType)) }
+  })
+  const others = Object.values(catalog.targets)
+    .filter((t) => !mineIds.has(t.id) && !BUNDLED_CATALOGUE.some((o) => o.designation === t.name) && matches(query, t.name, t.aliases))
+    .map((t): Result => ({ id: `target:${t.id}`, pick: pickFromTarget(t), aliases: t.aliases, kind: m.project_search_library_target() }))
+  return { mine: own, catalogue: [...bundled, ...others] }
 }
 
-interface ResultRow {
-  key: string
-  pick: SubjectPick
-  aliases: string[]
-  type: string | null
-}
+type Lookup = { query: string; status: "loading" | "off" | "error" } | { query: string; status: "done"; results: Result[] } | null
 
-type LookupState = { query: string; status: "running" } | { query: string; status: "done"; rows: ResultRow[] } | { query: string; status: "off" | "failed"; message: string } | null
+export interface TargetSearch {
+  query: string
+  setQuery: (query: string) => void
+  /** The TargetPicker's results for `query`, by source. */
+  groups: TargetResultGroup[]
+  /** The pick a chosen result stands for. */
+  pickOf: (option: TargetOption) => SubjectPick | null
+}
 
 /**
- * Search across My targets, the bundled catalogues and, on request, SIMBAD.
- * Each result row is a button: clicking it (or Enter) adds it. `taken` names
- * subjects already chosen; they read "Added".
+ * The subject search behind a TargetPicker. `taken` names the subjects
+ * already chosen; they read "Added". SIMBAD is asked once the query has
+ * three characters and has rested for a moment; with online lookup off its
+ * group says so (Settings › Target lookup).
  */
-export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: string[]; onPick: (pick: SubjectPick) => void; autoFocus?: boolean }) {
+export function useTargetSearch(taken: readonly string[]): TargetSearch {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const lookup = useStore((s) => s.settings.targetLookup)
-  const [query, setQuery] = useState("")
-  const [simbad, setSimbad] = useState<LookupState>(null)
+  const [query, setQueryState] = useState("")
+  const [remote, setRemote] = useState<Lookup>(null)
   const timer = useRef<number | null>(null)
-  const inputId = useId()
   useEffect(() => () => window.clearTimeout(timer.current ?? undefined), [])
 
-  const groups = useMemo(() => localResults(m, catalog, query), [m, catalog, query])
+  const local = localResults(m, catalog, query)
   const providerName = lookup.provider === "simbad" ? SIMBAD : m.project_lookup_sesame()
 
-  function searchSimbad() {
-    const text = query.trim()
-    if (!text || simbad?.status === "running") return
-    if (!lookup.enabled) {
-      setSimbad({ query: text, status: "off", message: m.project_lookup_turn_on({ path: `${m.nav_settings()} › ${m.settings_target_lookup()}` }) })
+  function setQuery(next: string) {
+    setQueryState(next)
+    window.clearTimeout(timer.current ?? undefined)
+    const text = next.trim()
+    if (text.length < LOOKUP_MIN) {
+      setRemote(null)
       return
     }
-    setSimbad({ query: text, status: "running" })
+    if (!lookup.enabled) {
+      setRemote({ query: text, status: "off" })
+      return
+    }
+    setRemote({ query: text, status: "loading" })
     timer.current = window.setTimeout(() => {
       const state = store.getState()
       if (state.faults.failNextResolverLookup) {
         store.setState((s) => ({ ...s, faults: { ...s.faults, failNextResolverLookup: false } }))
-        setSimbad({ query: text, status: "failed", message: m.project_lookup_no_response({ provider: providerName }) })
+        setRemote({ query: text, status: "error" })
         return
       }
-      const known = new Set(groups.flatMap((g) => g.rows.map((r) => normalizeName(r.pick.name))))
-      const rows = SIMBAD_FIXTURE.filter((o) => matches(text, o.designation, o.aliases) && !known.has(normalizeName(o.designation))).map(
-        (o): ResultRow => ({ key: `simbad:${o.designation}`, pick: fromEntry(o, providerName), aliases: o.aliases, type: o.objectType }),
+      const found = localResults(m, state.catalog, text)
+      const known = new Set([...found.mine, ...found.catalogue].map((r) => normalizeName(r.pick.name)))
+      const results = SIMBAD_FIXTURE.filter((o) => matches(text, o.designation, o.aliases) && !known.has(normalizeName(o.designation))).map(
+        (o): Result => ({ id: `simbad:${o.designation}`, pick: pickFromEntry(o, providerName), aliases: o.aliases, kind: say(m, objectTypeRef(o.objectType)) }),
       )
-      setSimbad({ query: text, status: "done", rows })
+      setRemote({ query: text, status: "done", results })
     }, LOOKUP_MS)
   }
 
-  const simbadCurrent = simbad && simbad.query === query.trim() ? simbad : null
-  const shown = query.trim() !== ""
+  const current = remote && remote.query === query.trim() ? remote : null
+  const remoteResults = current?.status === "done" ? current.results : []
+  const all = [...local.mine, ...local.catalogue, ...remoteResults]
+  const option = (result: Result): TargetOption => ({ id: result.id, name: result.pick.name, detail: detailOf(m, result), added: taken.includes(result.pick.name) })
+  const group = (source: TargetSource, results: Result[], status?: TargetResultGroup["status"]): TargetResultGroup => ({ source, items: results.map(option), status })
+  const groups: TargetResultGroup[] = [group("mine", local.mine), group("catalogue", local.catalogue)]
+  if (current) groups.push(group("simbad", remoteResults, current.status === "done" ? undefined : current.status))
 
-  return (
-    <div className="space-y-2">
-      <div className="grid gap-1.5">
-        <Label htmlFor={inputId}>{m.project_target_label()}</Label>
-        <div className="flex gap-2">
-          <ClearableInput
-            id={inputId}
-            wrapperClassName="flex-1"
-            value={query}
-            autoFocus={autoFocus}
-            placeholder={m.project_search_placeholder()}
-            onValueChange={setQuery}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault()
-                searchSimbad()
-              }
-            }}
-          />
-          <Button variant="outline" onClick={searchSimbad} disabled={!shown} aria-busy={simbadCurrent?.status === "running" || undefined}>
-            {simbadCurrent?.status === "running" ? <Loader aria-hidden="true" className="motion-safe:animate-spin" data-icon="inline-start" /> : <Search aria-hidden="true" data-icon="inline-start" />}
-            {SIMBAD}
-          </Button>
-        </div>
-      </div>
-      {shown ? (
-        <div className="max-h-72 overflow-y-auto rounded-md border" role="group" aria-label={m.project_search_results()}>
-          {groups.map((group) => (
-            <ResultGroup key={group.title} title={group.title} rows={group.rows} taken={taken} onPick={onPick} />
-          ))}
-          {simbadCurrent?.status === "done" ? <ResultGroup title={`${SIMBAD} (${providerName})`} rows={simbadCurrent.rows} taken={taken} onPick={onPick} empty={m.project_search_no_new_match()} /> : null}
-          {groups.every((g) => g.rows.length === 0) && !simbadCurrent ? <p className="px-3 py-2 text-sm text-muted-foreground">{m.project_search_no_match()}</p> : null}
-          {simbadCurrent?.status === "running" ? (
-            <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
-              {m.project_lookup_asking({ provider: providerName })}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {simbadCurrent && (simbadCurrent.status === "off" || simbadCurrent.status === "failed") ? (
-        <Notice tone={simbadCurrent.status === "failed" ? "offline" : "info"} title={simbadCurrent.status === "failed" ? m.project_lookup_failed() : m.project_lookup_off()}>
-          {simbadCurrent.message}
-        </Notice>
-      ) : null}
-    </div>
-  )
-}
-
-function localResults(m: Messages, catalog: Catalog, query: string): Array<{ title: string; rows: ResultRow[] }> {
-  if (!query.trim()) return []
-  const mine = myTargets(catalog)
-  const mineIds = new Set(mine.map((t) => t.target.id))
-  const myRows = mine
-    .filter(({ target }) => matches(query, target.name, target.aliases))
-    .map(({ target, projects }): ResultRow => ({
-      key: target.id,
-      pick: { kind: "target", targetId: target.id, name: target.name, ra: target.ra, dec: target.dec, size: target.sizeDeg },
-      aliases: target.aliases,
-      type: projects.length > 0 ? m.project_search_subject_of({ names: projects.map((p) => p.name).join(", ") }) : m.project_search_favourite(),
-    }))
-  const byName = new Map(Object.values(catalog.targets).map((t) => [t.name, t]))
-  const catalogueRows = BUNDLED_CATALOGUE.filter((o) => matches(query, o.designation, o.aliases) && !(byName.get(o.designation) && mineIds.has(byName.get(o.designation)!.id))).map((o): ResultRow => {
-    const record = byName.get(o.designation)
-    return {
-      key: `sky:${o.designation}`,
-      pick: record ? { kind: "target", targetId: record.id, name: record.name, ra: record.ra, dec: record.dec, size: record.sizeDeg } : fromEntry(o, null),
-      aliases: o.aliases,
-      type: o.objectType,
-    }
-  })
-  // Target records outside My targets and the bundled list (for example created by indexing).
-  const otherRows = Object.values(catalog.targets)
-    .filter((t) => !mineIds.has(t.id) && !BUNDLED_CATALOGUE.some((o) => o.designation === t.name) && matches(query, t.name, t.aliases))
-    .map((t): ResultRow => ({ key: t.id, pick: { kind: "target", targetId: t.id, name: t.name, ra: t.ra, dec: t.dec, size: t.sizeDeg }, aliases: t.aliases, type: m.project_search_library_target() }))
-  return [
-    { title: m.project_search_my_targets(), rows: myRows },
-    { title: m.project_search_catalogues(), rows: [...catalogueRows, ...otherRows] },
-  ]
-}
-
-function ResultGroup({ title, rows, taken, onPick, empty }: { title: string; rows: ResultRow[]; taken: string[]; onPick: (pick: SubjectPick) => void; empty?: string }) {
-  const m = useMessages()
-  if (rows.length === 0 && !empty) return null
-  return (
-    <div className="border-b last:border-0">
-      <p className="bg-chrome px-3 py-1 text-[0.6875rem] font-semibold text-muted-foreground" data-chrome>
-        {title}
-      </p>
-      {rows.length === 0 ? <p className="px-3 py-1.5 text-sm text-muted-foreground">{empty}</p> : null}
-      <ul>
-        {rows.map((row) => {
-          const added = taken.includes(row.pick.name)
-          return (
-            <li key={row.key} className="odd:bg-foreground/[0.02]">
-              <button
-                type="button"
-                disabled={added}
-                onClick={() => onPick(row.pick)}
-                title={added ? undefined : m.verb_add()}
-                className="flex min-h-(--row-h) w-full items-center gap-3 px-3 py-(--row-py) text-left text-sm outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-default disabled:hover:bg-transparent"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">{row.pick.name}</span>
-                  {row.aliases[0] ? <span className="ml-2 text-muted-foreground">{row.aliases[0]}</span> : null}
-                  <span className="block text-xs text-muted-foreground tabular-nums">
-                    {row.type ? `${say(m, objectTypeRef(row.type))} · ` : ""}
-                    {row.pick.ra !== null && row.pick.dec !== null ? `${formatRa(row.pick.ra)} ${formatDec(row.pick.dec)}` : m.project_search_position_unknown()}
-                    {row.pick.kind === "new" ? ` · ${row.pick.resolver ? m.project_search_new_from({ source: row.pick.resolver }) : m.project_search_new_from_catalogue()}` : ""}
-                  </span>
-                </span>
-                {added ? <span className="shrink-0 text-xs text-muted-foreground">{m.project_search_added()}</span> : <Plus aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
+  return { query, setQuery, groups, pickOf: (picked) => all.find((r) => r.id === picked.id)?.pick ?? null }
 }
