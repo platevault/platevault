@@ -55,6 +55,8 @@ import {
 
 const ARM_EVENT = 'update:install-on-quit-armed';
 const INSTALL_EVENT = 'update:install-on-quit';
+const STARTED = 'emit:update:install-on-quit-started:undefined';
+const FINISHED = 'emit:update:install-on-quit-finished:undefined';
 
 /** Records the order of every updater/process side effect. */
 let calls: string[] = [];
@@ -228,14 +230,17 @@ describe('installUpdateOnQuit', () => {
     });
     expect(exitHandler).not.toBeNull();
 
-    // The backend deferred the user's quit: install, then exit.
+    // The backend deferred the user's quit: acknowledge, install, report the
+    // install over, then exit.
     exitHandler?.();
     await settle();
 
     expect(calls).toEqual([
       'download',
       `emit:${ARM_EVENT}:true`,
+      STARTED,
       'install',
+      FINISHED,
       'exit',
     ]);
     expect(mockRelaunch).not.toHaveBeenCalled();
@@ -250,7 +255,49 @@ describe('installUpdateOnQuit', () => {
     exitHandler?.();
     await settle();
 
+    expect(calls.slice(-2)).toEqual([FINISHED, 'exit']);
     expect(mockExit).toHaveBeenCalledWith(0);
+  });
+
+  it('never installs on quit when the acknowledgement cannot be sent', async () => {
+    const update = makeUpdate();
+    await checkFinds(update);
+    await installUpdateOnQuit();
+    mockEmit.mockImplementationOnce(() =>
+      Promise.reject(new Error('ipc down')),
+    );
+
+    exitHandler?.();
+    await settle();
+
+    expect(update.install).not.toHaveBeenCalled();
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+
+  it('drops a download superseded by teardown instead of arming the gate', async () => {
+    const update = makeUpdate();
+    let finishDownload: () => void = () => {};
+    update.download.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDownload = () => {
+            calls.push('download');
+            resolve();
+          };
+        }),
+    );
+    await checkFinds(update);
+
+    const choosing = installUpdateOnQuit();
+    await settle();
+    stopUpdateSubscription(); // e.g. the Shell unmounts mid-download
+    finishDownload();
+    await choosing;
+    await settle();
+
+    expect(calls).toEqual(['download']);
+    expect(mockEmit).not.toHaveBeenCalledWith(ARM_EVENT, true);
+    expect(getUpdateSnapshot().phase).toBe('idle');
   });
 
   it('does not arm the gate when the download fails', async () => {

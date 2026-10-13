@@ -6,12 +6,20 @@
 /// Menu id for the native "Settings…" application-menu item (spec 051 US5).
 pub const MENU_ID_SETTINGS: &str = "menu-settings";
 
+/// Menu id for the app's own Quit item. `PredefinedMenuItem::quit` is not
+/// used: on macOS it sends `terminate:` and on Windows it posts
+/// `PostQuitMessage`, and neither reaches `RunEvent::ExitRequested`, so the
+/// install-on-quit gate (`update_exit_gate`) would never see it.
+/// `on_menu_event` answers this id with `app.exit(0)`, which does.
+pub const MENU_ID_QUIT: &str = "menu-quit";
+
 /// Build the native application menu (spec 051 US5, T032): an App submenu
 /// (About, Settings, Quit), a Window submenu, and a standard Edit submenu
 /// (copy/cut/paste/select-all/undo/redo). The "Settings…" item has no native
 /// dialog of its own — its click is handled by `on_menu_event` in
 /// `build_app()`, which emits a frontend event for the existing Settings
-/// route to handle (T033: reuse existing UI, no new native dialog).
+/// route to handle (T033: reuse existing UI, no new native dialog). Quit is
+/// handled there too (see [`MENU_ID_QUIT`]).
 pub fn build_native_menu(
     app: &tauri::App<tauri::Wry>,
 ) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -20,7 +28,7 @@ pub fn build_native_menu(
     let about = PredefinedMenuItem::about(app, Some("About PlateVault"), None)?;
     let settings =
         MenuItem::with_id(app, MENU_ID_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
-    let quit = PredefinedMenuItem::quit(app, None)?;
+    let quit = MenuItem::with_id(app, MENU_ID_QUIT, "Quit PlateVault", true, Some("CmdOrCtrl+Q"))?;
     let app_menu = Submenu::with_items(
         app,
         "PlateVault",

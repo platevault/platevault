@@ -41,6 +41,12 @@ const ARM_EVENT = 'update:install-on-quit-armed';
 /** Backend → main window: the user is quitting with the gate armed. Mirrors
  * `update_exit_gate::INSTALL_EVENT`. */
 const INSTALL_EVENT = 'update:install-on-quit';
+/** Frontend → backend: the install at quit is starting, so the backend holds
+ * further quits. Mirrors `update_exit_gate::STARTED_EVENT`. */
+const STARTED_EVENT = 'update:install-on-quit-started';
+/** Frontend → backend: the install at quit is over; the exit may proceed.
+ * Mirrors `update_exit_gate::FINISHED_EVENT`. */
+const FINISHED_EVENT = 'update:install-on-quit-finished';
 
 // E2E test-injection seam: a journey spec can set this before navigation to
 // seed a specific update phase without a real Tauri updater host. Only
@@ -170,7 +176,8 @@ export async function checkForUpdate(): Promise<void> {
 }
 
 /** Download and signature-verify the pending update once; later calls reuse
- * the verified bytes. Returns false (state set to 'download-failed') on error. */
+ * the verified bytes. Returns false on error (state set to 'download-failed')
+ * or when a re-check or teardown replaced `update` meanwhile. */
 async function ensureDownloaded(update: Update): Promise<boolean> {
   if (downloaded) return true;
   setState({
@@ -180,9 +187,11 @@ async function ensureDownloaded(update: Update): Promise<boolean> {
   });
   try {
     await update.download();
+    if (pending !== update) return false;
     downloaded = true;
     return true;
   } catch (err) {
+    if (pending !== update) return false;
     setState({
       ...current,
       phase: 'download-failed',
@@ -238,6 +247,10 @@ export async function installUpdateOnQuit(): Promise<void> {
     unlistenExit ??= await listen(INSTALL_EVENT, () => {
       void installOnExit();
     });
+    if (pending !== update) {
+      await disarmInstallOnQuit();
+      return;
+    }
     await emit(ARM_EVENT, true);
   } catch (err) {
     await disarmInstallOnQuit();
@@ -246,6 +259,10 @@ export async function installUpdateOnQuit(): Promise<void> {
       phase: 'install-failed',
       error: pluginErrMessage(err),
     });
+    return;
+  }
+  if (pending !== update) {
+    await disarmInstallOnQuit();
     return;
   }
   setState({
@@ -257,15 +274,17 @@ export async function installUpdateOnQuit(): Promise<void> {
 
 /**
  * The exit path: the backend deferred a quit because the gate was armed.
- * Install the staged update, then let the app exit. The user asked to quit,
- * so an install failure still exits; the next launch's check offers the
- * update again.
+ * Acknowledge first, so the backend holds further quits while installing
+ * (and only install once it has), then install the staged update, report
+ * the install over, and exit. The user asked to quit, so an install failure
+ * still exits; the next launch's check offers the update again.
  */
 async function installOnExit(): Promise<void> {
   const update = pending;
   unlistenExit?.();
   unlistenExit = null;
-  if (update && downloaded) {
+  const { emit } = await import('@tauri-apps/api/event');
+  if (update && downloaded && (await emitted(emit, STARTED_EVENT))) {
     setState({
       phase: 'installing',
       version: update.version,
@@ -278,8 +297,23 @@ async function installOnExit(): Promise<void> {
       console.warn('[updateSubscription] install on quit failed:', err);
     }
   }
+  await emitted(emit, FINISHED_EVENT);
   const { exit } = await import('@tauri-apps/plugin-process');
   await exit(0);
+}
+
+/** Emit `event` to the backend; `false` (logged) when the emit failed. */
+async function emitted(
+  emit: (event: string) => Promise<void>,
+  event: string,
+): Promise<boolean> {
+  try {
+    await emit(event);
+    return true;
+  } catch (err) {
+    console.warn(`[updateSubscription] emit ${event} failed:`, err);
+    return false;
+  }
 }
 
 async function relaunchInto(): Promise<void> {

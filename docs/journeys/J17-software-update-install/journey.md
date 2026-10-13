@@ -71,11 +71,14 @@ install) leaves the previously running install completely untouched.
   relaunches or asks for elevation: no installer runs and the app does not
   quit on Windows, and no pkexec/polkit prompt appears on deb/rpm, until the
   user picks Install now or Install on quit. **Later** hides the notice for
-  that version for the session and installs nothing. No OS notification is
-  shown. A check that fails (unreachable feed, network error) is a distinct
-  "check failed" state (#873) surfaced with the specific error message in
-  the Software Update section — never conflated with "up to date". The
-  section displays the currently running app version (#845).
+  that version for the session and installs nothing. The offer is shown
+  in-app only for now. A check that fails (unreachable feed, network error)
+  is a distinct "check failed" state (#873) surfaced with the specific error
+  message in the Software Update section — never conflated with "up to
+  date". The section displays the currently running app version (#845).
+- **Planned:** a system notification carrying both Install now and Install
+  on quit (owner, 2026-10-13), built per OS in the shared Rust updater and
+  tracked separately.
 
 ### S2 — Install now {#S2}
 - **Do:** With "Update available" shown, choose **Install now**.
@@ -92,16 +95,24 @@ install) leaves the previously running install completely untouched.
 
 ### S3 — Install on quit {#S3}
 - **Do:** With "Update available" shown, choose **Install on quit**, keep
-  working, then quit PlateVault (native Quit, or close the main window).
+  working, then quit PlateVault (the app menu's Quit PlateVault or
+  Cmd/Ctrl+Q, or close the main window).
 - **Expect:** The click downloads and signature-verifies the update; the
   notice and section then read "Update {version} will install when you quit
   PlateVault." and still offer Install now. Nothing is installed and nothing
   asks for elevation while the app keeps running. On quit, the app installs
   the verified update and then exits; the next launch runs the new version.
+  While the install runs (for example during a deb/rpm password prompt),
+  further quit attempts are held so the install is not cut short; after
+  five minutes the app exits regardless.
 - **Expect (negative):** A failed download or verification leaves nothing
   staged and reports the failure (S4). If the install at quit fails, the app
   still exits, the previous version stays installed, and the next launch's
-  check offers the update again. A second quit attempt always exits.
+  check offers the update again. If the app does not start installing within
+  a few seconds of the quit, it exits without installing, and a second quit
+  before then exits at once. On macOS, quitting from the Dock and logging out
+  bypass the install: the app exits without installing, and a later check
+  offers the update again. It is never installed at launch.
 
 ### S4 — Recover from a failed download or install {#S4}
 - **Do:** Choose Install now or Install on quit after the update endpoint
@@ -159,4 +170,6 @@ install) leaves the previously running install completely untouched.
   quit the app; deb/rpm raised a pkexec prompt). The check now only reports;
   an in-app notice and Settings → Advanced offer Install now and Install on
   quit. S1 rewritten, S2 is Install now, new S3 Install on quit, old S3/S4
-  renumbered S4/S5, SC1–SC4 and P1–P3 updated, `shell` surface added.
+  renumbered S4/S5, SC1–SC4 and P1–P3 updated, `shell` surface added. S3
+  records which quit routes install (app-menu Quit, Cmd/Ctrl+Q, closing the
+  main window), the hold while installing, and the macOS Dock/logout bypass.

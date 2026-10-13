@@ -31,7 +31,7 @@ use tauri::{Emitter, Manager};
 use crate::bootstrap::background::{
     spawn_ingest_resolution_drain, spawn_stale_dependent_propagator,
 };
-use crate::bootstrap::menu::{build_native_menu, MENU_ID_SETTINGS};
+use crate::bootstrap::menu::{build_native_menu, MENU_ID_QUIT, MENU_ID_SETTINGS};
 use crate::bootstrap::window::{enforce_min_window_size, recenter_if_offscreen};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::CallBuffer;
@@ -303,10 +303,13 @@ pub fn build_app() -> tauri::App {
                     }
                 }
             }
-            // Quit (T034): `PredefinedMenuItem::quit` already calls
-            // `app.exit(0)` internally — no separate handling needed here.
-            // The only gate on it is `update_exit_gate`, which defers one
-            // quit to install an update the user chose to install on quit.
+            // Quit (T034): the app's own item, not `PredefinedMenuItem::quit`,
+            // whose macOS `terminate:` and Windows `PostQuitMessage` never
+            // reach `ExitRequested`. `app.exit(0)` does, so an armed
+            // "Install on quit" (`update_exit_gate`) can install first.
+            if event.id() == MENU_ID_QUIT {
+                app.exit(0);
+            }
         })
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
@@ -470,7 +473,7 @@ pub fn run_app(
 
     // astro-plan-mkkgi: an armed "Install on quit" defers the first quit to the
     // main window, which installs the staged update and then exits.
-    update_exit_gate::register(app.handle());
+    update_exit_gate::register(app.handle(), exit_data_dir.clone());
 
     app.run(move |handle, event| {
         update_exit_gate::on_run_event(handle, &event);
