@@ -1,484 +1,388 @@
 /**
- * Wrap up (P-WRAP1, P-ARC1): the Project stage after every run is Complete,
- * at `/projects/$projectId?stage=wrap-up`. It replaces the Done / Archive
- * sheet. Steps run in order, each optional and skippable, each with its size:
- *
- * 1. Clean up runs: every Complete run's prepared entries (its footprint)
- *    through the run's own Clean up (slice C's `startCleanup`).
- * 2. Trash: rejects, intermediates and duplicates, each its own approval
- *    through the shared OS Trash engine; the step's state is derived from
- *    what is left to trash (`trashStep`), so anything left is offered.
- * 3. Archive: member sessions to the chosen archive location (the Default
- *    unless the Project picks another).
- * 4. Done: Mark Done.
- *
- * Nothing moves until an approval; every item is re-verified as it moves.
+ * Wrap up (§5.5, C3, P-WRAP1, P-ARC1): the Project's Wrap up tab, a StepPage
+ * driven by the domain's `wrapUpFlowState` through U11's `wrapUpFlow`:
+ * Clean up runs → Trash → Archive, strictly in that order. Each step is a
+ * selection step: its DataTable preselects the recommended rows, a row
+ * expands to its files, and rows that cannot move say why in their Status
+ * cell. Proceed confirms the selection with its file groups and starts the
+ * step's work; the step reads Finished once that work succeeds (F2). With
+ * nothing selected Proceed records the step Skipped, and with nothing left it
+ * records it Finished ("Nothing to clean up"). Archive's Proceed is Close
+ * project…: the Project closes when its transfer succeeds, or at once with
+ * nothing to move. A settled step shows its record; an earlier one reopens
+ * from the footer until Close (F5). A closed Project's Wrap up is read-only.
  */
-import { Link } from "@tanstack/react-router"
-import { Archive, CheckCheck, Eraser, SkipForward, Trash2, Undo2 } from "lucide-react"
-import { type ReactNode, useId, useState } from "react"
-import { Box } from "@/components/app/box"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { NoteMarker } from "@/components/app/tips"
-import { CountBadge, Pill } from "@/components/app/pill"
-import { Refusal } from "@/components/app/refusal"
-import type { Tone } from "@/components/app/status"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { GateLabel } from "@/app/run-ui"
-import { archiveLocations, defaultArchiveLocation, projectRuns, runStepLink, type WrapUpStep } from "@/domain/derive"
-import { OPERATION_UNIT_NAME } from "@/domain/labels"
-import { runFootprint } from "@/domain/storage"
-import type { Operation, Project, Run, WrapUpStepId } from "@/domain/types"
-import { formatBytes } from "@/lib/format"
-import { type MessageRef, type Messages, msg, say } from "@/lib/i18n"
-import { markProjectDone, setProjectArchiveLocation, setWrapUpStep } from "@/store/actions/projects"
-import { moveToOsTrash } from "@/store/actions/trash"
-import { type CommitResult, type PrototypeState, store, updateSlice, useStore } from "@/store/core"
-import { startCleanup } from "@/features/v5/c-runs/actions"
-import { cleanupReview } from "@/features/v5/c-runs/model"
-import { startArchiveTransfer } from "./actions"
-import { archivePlan, OFFER_KINDS, type OfferKind, sessionLabel, type TrashOffer, trashStep, wrapUpOf } from "./model"
-import { CommitOutcome, OfferRefusals, offerChanges, useCommitError } from "./parts"
-import { rememberApproval } from "./trash"
+import { UsedByPreview } from "@/components/app/previews"
+import type { Column, ConfirmSpec, FileRow } from "@/components/app/contracts"
+import { KeyValueList } from "@/components/app/data"
+import { DataTable, type DataTableToolbar } from "@/components/app/data-table"
+import { EmptyState } from "@/components/app/feedback"
+import { StatusBadge } from "@/components/app/status"
+import { stepEditable } from "@/components/app/step-flow"
+import { StepPage } from "@/components/templates/step-page"
+import { type ArchiveRow, archivePlan, type OfferKind, type OfferRefusal } from "@/domain/archive"
+import { fileAt } from "@/domain/disk"
+import { archiveLocations, defaultArchiveLocation, projectRuns, runSetup, type StepLink, wrapUpFlowState } from "@/domain/derive"
+import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
+import type { TrashItem } from "@/domain/storage"
+import type { InputMode, OperationId, Project, Run, WrapUpStepId } from "@/domain/types"
+import { fileName, formatBytes, formatCount, formatDateTime } from "@/lib/format"
+import { type Messages, msg, say } from "@/lib/i18n"
+import { startArchiveTransfer } from "@/store/actions/archive"
+import { type WrapUpSelection, wrapUpFlow } from "@/store/actions/flows"
+import { setProjectArchiveLocation } from "@/store/actions/projects"
+import { startRunViewRemoval } from "@/store/actions/runs"
+import { moveToOsTrash, preparedEntryItems } from "@/store/actions/trash"
+import { type PrototypeState, useStore } from "@/store/core"
+import { CheckCheck, Package, Trash2 } from "lucide-react"
+import { useNavigate } from "@tanstack/react-router"
+import { ActionButton } from "@/components/app/actions"
+import { entryItems, OFFER_KINDS, trashOffers } from "./model"
+import type { ProjectChrome } from "./project"
 
-const OFFER_NAME: Record<OfferKind, MessageRef> = { "rejected-frames": msg("wrapup_offer_rejects"), intermediates: msg("run_results_intermediates"), "duplicate-copies": msg("wrapup_offer_duplicates_label") }
+const OFFER_NAME: Record<OfferKind, ReturnType<typeof msg>> = { "rejected-frames": msg("wrapup_offer_rejects"), intermediates: msg("run_results_intermediates"), "duplicate-copies": msg("wrapup_offer_duplicates_label") }
 
-function offerLabel(m: Messages, kind: OfferKind): string {
-  return say(m, OFFER_NAME[kind])
+/** The folder holding a path. */
+function folderOf(path: string): string {
+  return path.split("/").slice(0, -1).join("/")
 }
 
-type StepPill = { label: string; tone: Tone }
-
-function statePill(m: Messages, state: WrapUpStep["state"] | "next"): StepPill {
-  const pills: Record<WrapUpStep["state"] | "next", StepPill> = {
-    done: { label: m.status_done(), tone: "success" },
-    skipped: { label: m.status_skipped(), tone: "muted" },
-    todo: { label: m.calibration_step_todo(), tone: "neutral" },
-    next: { label: m.projects_col_next(), tone: "info" },
-  }
-  return pills[state]
+/** A row that cannot move: its reason, linked to where it can be resolved (P-TRASH2). */
+function StatusCell({ status }: { status: { label: string; link?: StepLink } | null }) {
+  if (!status) return "–"
+  return status.link ? <UsedByPreview label={status.label} link={status.link} items={[]} /> : status.label
 }
 
-/** The latest operation of a kind that touches a run. */
-function latestRunOperation(state: PrototypeState, run: Run, kind: Operation["kind"]): Operation | null {
-  return (
-    Object.values(state.operations)
-      .filter((op) => op.kind === kind && op.scope.runIds?.includes(run.id))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
-  )
-}
+// ---------------------------------------------------------------------------
+// The rows of each step
+// ---------------------------------------------------------------------------
 
 interface CleanupRow {
+  id: string
   run: Run
-  paths: string[]
+  view: InputMode
+  items: TrashItem[]
+  links: number
+  copies: number
   bytes: number
-  operation: Operation | null
+  status: { label: string } | null
 }
 
-function cleanupRows(state: PrototypeState, project: Project): CleanupRow[] {
-  return projectRuns(state.catalog, project.id).map((run) => ({
-    run,
-    paths: cleanupReview(state, run).entries.map((e) => e.path),
-    bytes: runFootprint(state.disk, state.catalog, run.id).preparedBytes,
-    operation: latestRunOperation(state, run, "cleanup"),
-  }))
+/** Finished runs whose view was kept (F6): their links are unlinked and their copies go to the OS Trash. */
+function cleanupRows(m: Messages, state: PrototypeState, project: Project): CleanupRow[] {
+  return projectRuns(state.catalog, project.id)
+    .filter((run) => run.completion === "complete")
+    .flatMap((run): CleanupRow[] => {
+      const items = preparedEntryItems(state, run.id)
+      if (items.length === 0) return []
+      const refused = items.find((i) => i.refusedReason)
+      const files = items.filter((i) => !i.refusedReason).map((i) => fileAt(state.disk, i.path))
+      const links = files.filter((f) => f?.linkTarget).length
+      return [
+        {
+          id: run.id,
+          run,
+          view: runSetup(state.catalog, run).inputMode ?? state.settings.defaultRunView,
+          items: items.filter((i) => !i.refusedReason),
+          links,
+          copies: files.length - links,
+          bytes: files.reduce((n, f) => n + (f && !f.linkTarget ? f.sizeBytes : 0), 0),
+          status: refused?.refusedReason ? { label: say(m, refused.refusedReason) } : null,
+        },
+      ]
+    })
 }
 
-export function WrapUpStage({ project }: { project: Project }) {
+function cleanupFiles(state: PrototypeState, row: CleanupRow): FileRow[] {
+  return row.items.map((item) => {
+    const file = fileAt(state.disk, item.path)
+    return file?.linkTarget ? { file: fileName(item.path), from: folderOf(item.path), action: "unlink", size: 0 } : { file: fileName(item.path), from: folderOf(item.path), action: "trash", size: file?.sizeBytes ?? 0 }
+  })
+}
+
+interface TrashRow {
+  id: string
+  kind: OfferKind
+  label: string
+  path: string | null
+  detail: string | null
+  size: number
+  items: TrashItem[]
+  status: { label: string; link?: StepLink } | null
+}
+
+/** Each offered file of the three groups, then the files that stay, with why (no Project-only rejects: P-REJ2). */
+function trashRows(m: Messages, state: PrototypeState, project: Project): TrashRow[] {
+  const offers = trashOffers(state, project)
+  return OFFER_KINDS.flatMap((kind) => {
+    const offer = offers[kind]
+    const moved = offer.entries.map((entry): TrashRow => ({ id: `${kind}:${entry.key}`, kind, label: entry.label, path: entry.path, detail: entry.detail, size: entry.sizeBytes, items: entryItems(offer, entry), status: null }))
+    const kept = offer.refusals.map(
+      (refusal: OfferRefusal): TrashRow => ({ id: `${kind}:kept:${refusal.key}`, kind, label: refusal.label, path: refusal.path, detail: null, size: 0, items: [], status: { label: say(m, refusal.reason), link: refusal.link } }),
+    )
+    return [...moved, ...kept]
+  })
+}
+
+interface ArchiveTableRow {
+  id: string
+  label: string
+  row: ArchiveRow | null
+  from: string
+  to: string
+  size: number
+  status: { label: string } | null
+}
+
+function archiveRows(m: Messages, state: PrototypeState, project: Project): { rows: ArchiveTableRow[]; blocked: string | null } {
+  const plan = archivePlan(state, project)
+  const label = (session: ArchiveRow["session"]) => `${session.objectLabel ?? m.project_unknown_subject()} · ${session.channel ?? m.palette_session_no_filter()}`
+  const name = (session: ArchiveRow["session"]) => {
+    const target = session.target.value ? state.catalog.targets[session.target.value]?.name : undefined
+    return target ? `${target} · ${session.channel ?? m.palette_session_no_filter()}` : label(session)
+  }
+  const rows: ArchiveTableRow[] = [
+    ...plan.rows.map((row) => ({ id: row.session.id, label: name(row.session), row, from: row.moves[0] ? folderOf(row.moves[0].from.path) : "–", to: row.folder, size: row.sizeBytes, status: null })),
+    ...plan.refused.map((r) => ({ id: r.session.id, label: name(r.session), row: null, from: "–", to: "–", size: 0, status: { label: say(m, r.reason) } })),
+    ...plan.kept.map((k) => ({ id: k.session.id, label: name(k.session), row: null, from: "–", to: "–", size: 0, status: { label: m.wrapup_stays_used_by({ names: k.projects.join(", ") }) } })),
+  ]
+  return { rows, blocked: plan.blocked ? say(m, plan.blocked) : null }
+}
+
+function moveFiles(row: ArchiveRow): FileRow[] {
+  return row.moves.map((move) => ({ file: fileName(move.from.path), from: folderOf(move.from.path), to: folderOf(move.to.path), action: "move", size: move.sizeBytes }))
+}
+
+// ---------------------------------------------------------------------------
+// The page
+// ---------------------------------------------------------------------------
+
+/** Each step's selection; null keeps the recommended rows (every row that can move). */
+type Picked = Record<WrapUpStepId, string[] | null>
+
+export function WrapUpPage({ project, chrome, step }: { project: Project; chrome: ProjectChrome; step?: string }) {
   const m = useMessages()
-  const wrap = useStore((s) => wrapUpOf(s, project))
-  const done = project.state === "done"
-  const waiting = wrap.waitingOn
-  const record = useCommitError()
-  const step = (id: WrapUpStepId) => wrap.steps.find((s) => s.id === id)!
-  const pillFor = (s: WrapUpStep): StepPill => statePill(m, s.state === "todo" && wrap.current === s.id && !done ? "next" : s.state)
-  const settle = (id: WrapUpStepId, state: "done" | "skipped" | null) => record.run(() => setWrapUpStep(project.id, id, state))
-  const editable = !done && wrap.available
+  const state = useStore((s) => s)
+  const [picked, setPicked] = useState<Picked>({ cleanup: null, trash: null, archive: null })
 
-  return (
-    <div className="space-y-4">
-      {!done && waiting.length > 0 ? (
-        <Refusal standing
-          action={m.wrapup_blocked()}
-          reason={m.wrapup_runs_not_complete({ count: waiting.length })}
-          blockers={waiting.map((run) => ({ label: run.name, link: runStepLink(run, "done") }))}
-        />
-      ) : null}
-      <CommitOutcome result={record.result} action={m.wrapup_refusal_record_step()} />
-      <CleanupStep project={project} step={step("cleanup")} pill={pillFor(step("cleanup"))} editable={editable} current={wrap.current === "cleanup"} settle={(s) => settle("cleanup", s)} />
-      <TrashStep project={project} step={step("trash")} pill={pillFor(step("trash"))} editable={editable} current={wrap.current === "trash"} />
-      <ArchiveStep project={project} step={step("archive")} pill={pillFor(step("archive"))} editable={editable} current={wrap.current === "archive"} settle={(s) => settle("archive", s)} />
-      <DoneStep project={project} ready={wrap.available && wrap.current === null} available={wrap.available} />
-    </div>
-  )
-}
+  const cleanup = cleanupRows(m, state, project)
+  const trash = trashRows(m, state, project)
+  const archive = archiveRows(m, state, project)
+  const movable = {
+    cleanup: cleanup.filter((r) => !r.status).map((r) => r.id),
+    trash: trash.filter((r) => !r.status).map((r) => r.id),
+    archive: archive.rows.filter((r) => r.row).map((r) => r.id),
+  }
+  const chosen = (id: WrapUpStepId) => (picked[id] ?? movable[id]).filter((rowId) => movable[id].includes(rowId))
 
-function StepBox({ n, title, size, pill, actions, children, id, flush = false }: { n: number; title: string; size: string | null; pill: StepPill; actions?: ReactNode; children?: ReactNode; id: string; flush?: boolean }) {
-  return (
-    <Box
-      id={id}
-      level={2}
-      title={
-        <span className="flex items-center gap-2">
-          <span className="tabular-nums">{n}</span>
-          <span className="text-foreground">{title}</span>
-          {size ? <Pill tone="muted">{size}</Pill> : null}
-          <Pill tone={pill.tone}>{pill.label}</Pill>
-        </span>
+  /** The selection Proceed acts on, for the step the flow is at. */
+  function selectionFor(id: WrapUpStepId): WrapUpSelection {
+    const ids = chosen(id)
+    if (id === "cleanup") {
+      const rows = cleanup.filter((r) => ids.includes(r.id))
+      const confirm: ConfirmSpec = {
+        title: m.wrapup_cleanup_confirm_title({ count: rows.length }),
+        summary: m.wrapup_cleanup_summary({ links: formatCount(rows.reduce((n, r) => n + r.links, 0)), copies: formatCount(rows.reduce((n, r) => n + r.copies, 0)), size: formatBytes(rows.reduce((n, r) => n + r.bytes, 0)) }),
+        groups: rows.map((r) => ({ label: r.run.name, rows: cleanupFiles(state, r) })),
+        confirm: { label: m.run_clean_up() },
       }
-      actions={actions}
-      flush={flush || children === undefined}
-    >
-      {children ?? null}
-    </Box>
-  )
-}
-
-/** An approval's operation: its progress while it runs, then the outcome pill with the summary in a note. */
-function ApprovalOutcome({ operationId, label }: { operationId: string; label: string }) {
-  const m = useMessages()
-  const op = useStore((s) => s.operations[operationId])
-  if (!op) return null
-  if (op.status === "running" || op.status === "paused") return <GateLabel state="running" label={`${op.progress.done}/${op.progress.total} ${say(m, OPERATION_UNIT_NAME[op.progress.unit])}`} />
-  return (
-    <span className="inline-flex items-center gap-1">
-      <Pill tone={op.status === "succeeded" ? "success" : "warning"}>{op.status === "succeeded" ? label : op.status === "partial" ? m.status_partial() : m.status_failed()}</Pill>
-      {op.summary ? <NoteMarker label={m.wrapup_summary({ label })}>{say(m, op.summary)}</NoteMarker> : null}
-    </span>
-  )
-}
-
-/** Skip on a step to do; Undo on a skipped one (a done step's files have moved). */
-function SettleButtons({ step, editable, settle }: { step: WrapUpStep; editable: boolean; settle: (state: "skipped" | null) => void }) {
-  const m = useMessages()
-  if (!editable || step.state === "done") return null
-  return step.state === "todo" ? (
-    <Button size="sm" variant="ghost" onClick={() => settle("skipped")}>
-      <SkipForward aria-hidden="true" data-icon="inline-start" />
-      {m.wrapup_skip()}
-    </Button>
-  ) : (
-    <Button size="sm" variant="ghost" onClick={() => settle(null)}>
-      <Undo2 aria-hidden="true" data-icon="inline-start" />
-      {m.wrapup_undo()}
-    </Button>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// 1. Clean up runs
-// ---------------------------------------------------------------------------
-
-function CleanupStep({ project, step, pill, editable, current, settle }: StepProps) {
-  const m = useMessages()
-  const rows = useStore((s) => cleanupRows(s, project))
-  const [refused, setRefused] = useState<CommitResult | null>(null)
-  const pending = rows.filter((r) => r.paths.length > 0 && r.operation?.status !== "running")
-  const bytes = rows.reduce((n, r) => n + (r.paths.length > 0 ? r.bytes : 0), 0)
-
-  function cleanUp(list: CleanupRow[]): CommitResult {
-    const reasons: string[] = []
-    for (const row of list) {
-      const started = startCleanup(row.run.id, row.paths)
-      if (!started.result.ok) reasons.push(`${row.run.name}: ${started.result.reason === "refused" ? started.result.reasons.join(", ") : started.result.message}`)
+      return { offered: movable.cleanup.length, selected: rows.length, confirm, start: () => rows.flatMap((r) => startRunViewRemoval(r.run.id).operationId ?? []) }
     }
-    const result: CommitResult = reasons.length > 0 ? { ok: false, reason: "refused", message: reasons.join("; "), reasons } : { ok: true }
-    setRefused(result.ok ? null : result)
-    if (store.getState().catalog.projects[project.id]?.wrapUp.cleanup === undefined && reasons.length < list.length) settle("done")
-    return { ok: true }
+    if (id === "trash") {
+      const rows = trash.filter((r) => ids.includes(r.id))
+      const kinds = OFFER_KINDS.filter((kind) => rows.some((r) => r.kind === kind))
+      const confirm: ConfirmSpec = {
+        title: m.wrapup_trash_confirm_title({ count: rows.length }),
+        summary: formatBytes(rows.reduce((n, r) => n + r.size, 0)),
+        groups: kinds.map((kind) => ({
+          label: say(m, OFFER_NAME[kind]),
+          rows: rows.filter((r) => r.kind === kind).map((r): FileRow => ({ file: r.label, from: r.path ? folderOf(r.path) : "", action: "trash", size: r.size })),
+        })),
+        confirm: { label: m.run_move_to_trash(), kind: "destructive" },
+      }
+      const start = (): OperationId[] =>
+        kinds.map((kind) =>
+          moveToOsTrash({
+            kind,
+            title: msg("op_offer_to_trash", { offer: OFFER_NAME[kind], name: project.name }),
+            projectId: project.id,
+            runIds: [],
+            items: rows.filter((r) => r.kind === kind).flatMap((r) => r.items),
+            href: `/projects/${project.id}?stage=wrap-up&step=trash`,
+          }),
+        )
+      return { offered: movable.trash.length, selected: rows.length, confirm, start }
+    }
+    const rows = archive.rows.filter((r) => ids.includes(r.id) && r.row).map((r) => r.row!)
+    return {
+      offered: movable.archive.length,
+      selected: rows.length,
+      confirm: { title: "", groups: [{ label: m.wrapup_archive_moves(), rows: rows.flatMap(moveFiles) }], confirm: { label: m.stepflow_close_project() } },
+      start: () => [startArchiveTransfer(project.id, rows, "archive")],
+    }
   }
 
+  const current = wrapUpFlowState(state, project).current
+  const flow = wrapUpFlow(state, project, m, selectionFor(current))
+  const viewing = (WRAP_UP_STEPS as string[]).includes(step ?? "") ? (step as WrapUpStepId) : (flow.current as WrapUpStepId)
+  const viewed = flow.steps.find((s) => s.id === viewing)
+  const editable = stepEditable(flow, viewing)
+  const settled = viewed?.state === "finished" || viewed?.state === "skipped" || (Boolean(viewed?.gate) && (project.wrapUp[viewing]?.operationIds.length ?? 0) > 0 && !project.wrapUp[viewing]?.redo)
+  const select = (id: WrapUpStepId) => (editable ? { selected: chosen(id), onChange: (ids: string[]) => setPicked((p) => ({ ...p, [id]: ids })) } : null)
+
+  const body = settled ? (
+    <StepRecord project={project} step={viewing} summary={viewed?.summary ?? null} />
+  ) : viewing === "cleanup" ? (
+    <CleanupTable rows={cleanup} select={select("cleanup")} />
+  ) : viewing === "trash" ? (
+    <TrashTable rows={trash} select={select("trash")} />
+  ) : (
+    <ArchiveTable project={project} rows={archive.rows} blocked={archive.blocked} select={select("archive")} editable={editable} />
+  )
+
   return (
-    <StepBox
-      id="wrap-cleanup"
-      n={1}
-      title={m.wrapup_cleanup_title()}
-      size={bytes > 0 ? formatBytes(bytes) : null}
-      flush
-      pill={pill}
-      actions={
-        <>
-          {editable && pending.length > 0 ? (
-            <ConfirmDialog
-              trigger={
-                <Button size="sm" variant={current ? "default" : "outline"}>
-                  <Eraser aria-hidden="true" data-icon="inline-start" />
-                  {m.wrapup_cleanup_all()}
-                </Button>
-              }
-              title={m.wrapup_cleanup_confirm_title({ count: pending.length })}
-              description={m.wrapup_cleanup_description()}
-              changes={pending.map((r) => m.wrapup_cleanup_change({ name: r.run.name, count: r.paths.length, size: formatBytes(r.bytes) }))}
-              confirmLabel={m.run_clean_up()}
-              tone="destructive"
-              onConfirm={() => cleanUp(pending)}
-            />
-          ) : null}
-          {editable && step.state === "todo" && pending.length === 0 ? (
-            <Button size="sm" variant={current ? "default" : "outline"} onClick={() => settle("done")}>
-              {m.wrapup_mark_done()}
-            </Button>
-          ) : null}
-          <SettleButtons step={step} editable={editable} settle={settle} />
-        </>
-      }
-    >
-      <CommitOutcome result={refused} action={m.run_clean_up_blocked()} reason={(count) => m.project_runs_count({ count })} className="border-b border-border px-3 py-2" />
-      <ul className="divide-y divide-separator text-sm">
-        {rows.map((row) => (
-          <li key={row.run.id} className="flex flex-wrap items-center gap-2 px-3 py-1.5">
-            <Link to={runStepLink(row.run, "done").to as never} params={runStepLink(row.run, "done").params as never} className="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline">
-              {row.run.name}
-            </Link>
-            {row.operation?.status === "running" ? (
-              <GateLabel state="running" label={m.wrapup_cleaning_up()} />
-            ) : row.paths.length === 0 ? (
-              <GateLabel state="done" label={m.wrapup_clean()} />
-            ) : (
-              <>
-                <Pill tone="muted">{m.trash_entries({ count: row.paths.length })}</Pill>
-                <span className="text-xs text-muted-foreground tabular-nums">{formatBytes(row.bytes)}</span>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-    </StepBox>
+    <StepPage
+      path={chrome.path}
+      title={project.name}
+      status={chrome.status}
+      menu={chrome.menu}
+      notice={chrome.notice}
+      views={chrome.views}
+      flow={flow}
+      viewing={viewing}
+      stepsLabel={m.wrapup_steps()}
+      step={body}
+    />
   )
 }
 
-interface StepProps {
-  project: Project
-  step: WrapUpStep
-  pill: StepPill
-  editable: boolean
-  current: boolean
-  settle: (state: "done" | "skipped" | null) => void
+interface Select {
+  selected: string[]
+  onChange: (ids: string[]) => void
 }
 
-// ---------------------------------------------------------------------------
-// 2. Trash: rejects, intermediates, duplicates
-// ---------------------------------------------------------------------------
-
-/** Each offer and the step's state come from `trashStep`: what is left to trash, never a stored record. */
-function TrashStep({ project, step, pill, editable, current }: Omit<StepProps, "settle">) {
+function CleanupTable({ rows, select }: { rows: CleanupRow[]; select: Select | null }) {
   const m = useMessages()
-  const trash = useStore((s) => trashStep(s, project))
-  const skipped = OFFER_KINDS.filter((k) => trash.kinds[k].state === "skipped")
-  const firstOpen = OFFER_KINDS.find((k) => trash.kinds[k].state === "left")
-
-  const setSkipped = (kinds: OfferKind[]) => updateSlice("b", (b) => ({ ...b, skippedOffers: { ...b.skippedOffers, [project.id]: kinds } }))
-  const skip = (kind: OfferKind) => setSkipped([...new Set([...skipped, kind])])
-  const resetAll = () => setSkipped([])
-  const skipAll = () => setSkipped([...skipped, ...OFFER_KINDS.filter((k) => trash.kinds[k].state === "left")])
-  const move = (offer: TrashOffer) => {
-    const operationId = moveToOsTrash({ kind: offer.kind, title: msg("op_offer_to_trash", { offer: OFFER_NAME[offer.kind], name: project.name }), projectId: project.id, runIds: [], items: offer.items, href: `/projects/${project.id}?stage=wrap-up` })
-    rememberApproval(project.id, offer.kind, operationId)
-  }
-
+  const state = useStore((s) => s)
+  const view = (r: CleanupRow) => (r.view === "symlink" ? m.domain_mode_symlink() : m.domain_mode_copy())
+  const columns: Column<CleanupRow>[] = [
+    { id: "run", header: m.project_run_noun_capital(), cell: (r) => r.run.name, sortValue: (r) => r.run.name, rowHeader: true, truncate: true },
+    { id: "view", header: m.wrapup_col_view(), cell: view, sortValue: view },
+    { id: "items", header: m.wrapup_col_items(), cell: (r) => formatCount(r.items.length), sortValue: (r) => r.items.length, align: "right" },
+    { id: "size", header: m.dialog_col_size(), cell: (r) => formatBytes(r.bytes), sortValue: (r) => r.bytes, align: "right" },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
+  ]
   return (
-    <StepBox
-      id="wrap-trash"
-      n={2}
-      title={m.trash_title()}
-      size={trash.sizeBytes > 0 ? formatBytes(trash.sizeBytes) : null}
-      pill={pill}
-      flush
-      actions={
-        editable && step.state === "todo" ? (
-          <Button size="sm" variant="ghost" onClick={skipAll}>
-            <SkipForward aria-hidden="true" data-icon="inline-start" />
-            {m.wrapup_skip()}
-          </Button>
-        ) : editable && skipped.length > 0 ? (
-          <Button size="sm" variant="ghost" onClick={resetAll}>
-            <Undo2 aria-hidden="true" data-icon="inline-start" />
-            {m.wrapup_undo()}
-          </Button>
-        ) : null
-      }
-    >
-      <ul className="divide-y divide-separator text-sm">
-        {OFFER_KINDS.map((kind) => {
-          const { offer, state, operationId } = trash.kinds[kind]
-          return (
-            <li key={kind} className="space-y-1.5 px-3 py-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-28 font-medium">{offerLabel(m, kind)}</span>
-                {state === "left" ? (
-                  <>
-                    <CountBadge count={offer.count} tone="neutral" label={m.wrapup_items({ count: offer.count })} />
-                    <span className="text-xs text-muted-foreground tabular-nums">{formatBytes(offer.sizeBytes)}</span>
-                  </>
-                ) : null}
-                <span className="flex-1" />
-                {(state === "moving" || state === "moved") && operationId ? (
-                  <ApprovalOutcome operationId={operationId} label={m.wrapup_moved()} />
-                ) : state === "skipped" ? (
-                  <Pill tone="muted">{m.status_skipped()}</Pill>
-                ) : state === "none" && offer.refusals.length === 0 ? (
-                  <Pill tone="muted">{m.wrapup_none()}</Pill>
-                ) : null}
-                {editable && state === "left" ? (
-                  <>
-                    <ConfirmDialog
-                      trigger={
-                        <Button size="sm" variant={current && firstOpen === kind ? "default" : "outline"}>
-                          <Trash2 aria-hidden="true" data-icon="inline-start" />
-                          {m.wrapup_trash_ellipsis()}
-                        </Button>
-                      }
-                      title={m.wrapup_trash_offer_title({ offer: offerLabel(m, kind).toLowerCase(), name: project.name })}
-                      description={m.wrapup_trash_offer_description()}
-                      changes={offerChanges(m, offer)}
-                      confirmLabel={m.run_move_to_trash()}
-                      tone="destructive"
-                      onConfirm={() => move(offer)}
-                    />
-                    <Button size="sm" variant="ghost" onClick={() => skip(kind)}>
-                      {m.wrapup_skip()}
-                      <span className="sr-only"> {offerLabel(m, kind)}</span>
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-              {state !== "skipped" && state !== "moving" ? <OfferRefusals refusals={offer.refusals} /> : null}
-            </li>
-          )
-        })}
-      </ul>
-    </StepBox>
+    <DataTable
+      label={m.wrapup_cleanup_title()}
+      rows={rows}
+      columns={columns}
+      getRowId={(r) => r.id}
+      scroll="none"
+      rowLabel={(r) => r.run.name}
+      expand={{ render: (r) => <FileTable label={r.run.name} rows={cleanupFiles(state, r)} /> }}
+      selection={select ? { ...select, rowLabel: (r) => r.run.name, isSelectable: (r) => !r.status, countLabel: (count) => m.project_runs_count({ count }) } : undefined}
+      empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />}
+    />
   )
 }
 
-// ---------------------------------------------------------------------------
-// 3. Archive (P-ARC1)
-// ---------------------------------------------------------------------------
-
-function ArchiveStep({ project, step, pill, editable, current, settle }: StepProps) {
+function TrashTable({ rows, select }: { rows: TrashRow[]; select: Select | null }) {
   const m = useMessages()
-  const plan = useStore((s) => archivePlan(s, project))
+  const columns: Column<TrashRow>[] = [
+    { id: "item", header: m.dialog_col_file(), cell: (r) => r.label, sortValue: (r) => r.label, rowHeader: true, truncate: true },
+    { id: "detail", header: m.wrapup_col_detail(), cell: (r) => r.detail ?? "–", sortValue: (r) => r.detail, truncate: true },
+    { id: "from", header: m.dialog_col_from(), cell: (r) => (r.path ? folderOf(r.path) : "–"), sortValue: (r) => r.path, truncate: true },
+    { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
+  ]
+  return (
+    <DataTable
+      label={m.trash_title()}
+      rows={rows}
+      columns={columns}
+      getRowId={(r) => r.id}
+      scroll="none"
+      groups={{ key: (r) => r.kind, label: (kind, group) => m.wrapup_group_line({ name: say(m, OFFER_NAME[kind as OfferKind]), count: group.length }), compare: (a, b) => OFFER_KINDS.indexOf(a as OfferKind) - OFFER_KINDS.indexOf(b as OfferKind) }}
+      selection={select ? { ...select, rowLabel: (r) => r.label, isSelectable: (r) => !r.status, countLabel: (count) => m.wrapup_items({ count }) } : undefined}
+      empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />}
+    />
+  )
+}
+
+function ArchiveTable({ project, rows, blocked, select, editable }: { project: Project; rows: ArchiveTableRow[]; blocked: string | null; select: Select | null; editable: boolean }) {
+  const m = useMessages()
+  const navigate = useNavigate()
   const locations = useStore((s) => archiveLocations(s))
   const fallback = useStore((s) => defaultArchiveLocation(s))
-  const catalog = useStore((s) => s.catalog)
-  const volumes = useStore((s) => s.disk.volumes)
-  const operationId = useStore((s) => s.slices.b.approvals[project.id]?.archive ?? null)
-  const choose = useCommitError()
-  const groupId = useId()
-  const dest = plan.destination
-
+  const destination = project.archiveLocationId ?? fallback?.id ?? ""
+  const toolbar: DataTableToolbar = {
+    select:
+      locations.length > 0
+        ? {
+            label: m.wrapup_destination(),
+            value: destination,
+            options: locations.map((l) => ({ value: l.id, label: l.id === fallback?.id ? m.wrapup_location_default({ name: l.displayName }) : l.displayName })),
+            onChange: (value) => void setProjectArchiveLocation(project.id, value === fallback?.id ? null : value),
+            disabled: !editable,
+          }
+        : undefined,
+  }
+  const columns: Column<ArchiveTableRow>[] = [
+    { id: "session", header: m.project_col_session(), cell: (r) => r.label, sortValue: (r) => r.label, rowHeader: true, truncate: true },
+    { id: "from", header: m.dialog_col_from(), cell: (r) => r.from, sortValue: (r) => r.from, truncate: true },
+    { id: "to", header: m.dialog_col_to(), cell: (r) => r.to, sortValue: (r) => r.to, truncate: true },
+    { id: "size", header: m.dialog_col_size(), cell: (r) => (r.row ? formatBytes(r.size) : "–"), sortValue: (r) => r.size, align: "right" },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
+  ]
   return (
-    <StepBox
-      id="wrap-archive"
-      n={3}
-      title={m.wrapup_archive_title()}
-      size={plan.sizeBytes > 0 ? formatBytes(plan.sizeBytes) : null}
-      pill={pill}
-      actions={
-        <>
-          {editable && step.state === "todo" && plan.rows.length > 0 && !plan.blocked ? (
-            <ConfirmDialog
-              trigger={
-                <Button size="sm" variant={current ? "default" : "outline"}>
-                  <Archive aria-hidden="true" data-icon="inline-start" />
-                  {m.wrapup_archive_ellipsis()}
-                </Button>
-              }
-              title={m.wrapup_archive_confirm_title({ name: project.name })}
-              description={m.wrapup_archive_description()}
-              changes={[m.wrapup_archive_change({ count: plan.rows.length, dest: dest?.displayName ?? m.wrapup_archive_fallback(), size: formatBytes(plan.sizeBytes) }), m.wrapup_archive_links_follow()]}
-              unchanged={plan.kept.length > 0 ? [m.wrapup_used_by_other({ count: plan.kept.length })] : undefined}
-              confirmLabel={m.wrapup_archive_title()}
-              onConfirm={() => {
-                rememberApproval(project.id, "archive", startArchiveTransfer(project.id, plan.rows, "archive"))
-                settle("done")
-              }}
-            />
-          ) : null}
-          <SettleButtons step={step} editable={editable} settle={settle} />
-        </>
+    <DataTable
+      label={m.wrapup_archive_title()}
+      rows={rows}
+      columns={columns}
+      getRowId={(r) => r.id}
+      scroll="none"
+      toolbar={toolbar}
+      rowLabel={(r) => r.label}
+      expand={{ isExpandable: (r) => r.row !== null, render: (r) => (r.row ? <FileTable label={r.label} rows={moveFiles(r.row)} /> : null) }}
+      selection={select ? { ...select, rowLabel: (r) => r.label, isSelectable: (r) => r.row !== null, countLabel: (count) => m.project_sessions_selected({ count }) } : undefined}
+      empty={
+        <EmptyState
+          icon={Package}
+          title={blocked ?? m.wrapup_nothing_to_archive()}
+          action={blocked ? <ActionButton action={{ id: "locations", label: `${m.nav_settings()} › ${m.common_locations()}`, run: () => void navigate({ to: "/settings/locations" }) }} /> : null}
+        />
       }
-    >
-      <div className="space-y-3 text-sm">
-        <fieldset className="space-y-1.5">
-          <legend id={groupId} className="text-xs font-medium text-muted-foreground">
-            {m.wrapup_destination()}
-          </legend>
-          {locations.length === 0 ? (
-            <Refusal standing action={m.wrapup_archive_blocked()} reason={m.wrapup_no_archive_location()} blockers={[{ label: `${m.nav_settings()} › ${m.common_locations()}`, link: { to: "/settings/locations" } }]} />
-          ) : (
-            <RadioGroup
-              aria-labelledby={groupId}
-              value={dest?.id ?? ""}
-              disabled={!editable || step.state !== "todo"}
-              onValueChange={(value) => choose.run(() => setProjectArchiveLocation(project.id, value === fallback?.id ? null : String(value)))}
-            >
-              {locations.map((l) => {
-                const volume = volumes[l.volumeId]
-                return (
-                  <div key={l.id} className="flex items-center gap-2">
-                    <RadioGroupItem id={`${groupId}-${l.id}`} value={l.id} />
-                    <Label htmlFor={`${groupId}-${l.id}`} className="font-normal">
-                      <span className="font-medium">{l.displayName}</span>
-                    </Label>
-                    {l.id === fallback?.id ? <Pill tone="info">{m.wrapup_default()}</Pill> : null}
-                    {volume && !volume.mounted ? <Pill tone="warning">{m.status_offline()}</Pill> : null}
-                    <span className="truncate font-mono text-xs text-muted-foreground">{l.path}</span>
-                  </div>
-                )
-              })}
-            </RadioGroup>
-          )}
-          <CommitOutcome result={choose.result} action={m.wrapup_refusal_destination()} />
-        </fieldset>
-        {plan.blocked && locations.length > 0 ? <Refusal standing action={m.wrapup_archive_blocked()} reason={say(m, plan.blocked)} blockers={[]} /> : null}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {plan.rows.length > 0 ? <Pill tone="neutral">{m.wrapup_sessions_to_move({ count: plan.rows.length })}</Pill> : null}
-          {operationId ? <ApprovalOutcome operationId={operationId} label={m.status_archived()} /> : project.archive ? <Pill tone="success">{m.wrapup_sessions_archived({ count: project.archive.sessionIds.length })}</Pill> : null}
-        </div>
-        {plan.refused.length > 0 ? (
-          <Refusal standing action={m.wrapup_sessions_stay({ count: plan.refused.length })} reason={m.wrapup_refused()} blockers={plan.refused.map((r) => ({ label: `${sessionLabel(catalog, r.session)} · ${say(m, r.reason)}` }))} />
-        ) : null}
-        {plan.kept.length > 0 ? (
-          <Refusal standing action={m.wrapup_sessions_kept({ count: plan.kept.length })} reason={m.wrapup_used_by_other_reason()} blockers={plan.kept.map((k) => ({ label: `${sessionLabel(catalog, k.session)} · ${k.projects.join(", ")}` }))} />
-        ) : null}
-      </div>
-    </StepBox>
+    />
   )
 }
 
-// ---------------------------------------------------------------------------
-// 4. Done
-// ---------------------------------------------------------------------------
-
-function DoneStep({ project, ready, available }: { project: Project; ready: boolean; available: boolean }) {
+/** The files a row moves, one level under it: File · From · To · Size. */
+function FileTable({ label, rows }: { label: string; rows: FileRow[] }) {
   const m = useMessages()
-  const done = useCommitError()
-  const isDone = project.state === "done"
+  const action = (r: FileRow) => (r.action === "unlink" ? m.dialog_to_unlink() : r.action === "move" ? (r.to ?? "–") : m.dialog_to_trash())
+  const columns: Column<FileRow & { key: string }>[] = [
+    { id: "file", header: m.dialog_col_file(), cell: (r) => r.file, sortValue: (r) => r.file, rowHeader: true, truncate: true },
+    { id: "from", header: m.dialog_col_from(), cell: (r) => r.from, sortValue: (r) => r.from, truncate: true },
+    { id: "to", header: m.dialog_col_to(), cell: action, sortValue: action, truncate: true },
+    { id: "size", header: m.dialog_col_size(), cell: (r) => (r.size > 0 ? formatBytes(r.size) : "–"), sortValue: (r) => r.size, align: "right" },
+  ]
+  return <DataTable label={m.wrapup_files_of({ name: label })} rows={rows.map((r, i) => ({ ...r, key: String(i) }))} columns={columns} getRowId={(r) => r.key} scroll="none" />
+}
+
+/** A settled step's record: how it ended and what its work moved (§5.6: Finished or Skipped, with date and moved bytes). */
+function StepRecord({ project, step, summary }: { project: Project; step: WrapUpStepId; summary: string | null }) {
+  const m = useMessages()
+  const operations = useStore((s) => (project.wrapUp[step]?.operationIds ?? []).map((id) => s.operations[id]).filter((op) => op !== undefined))
+  const record = project.wrapUp[step]
   return (
-    <StepBox
-      id="wrap-done"
-      n={4}
-      title={m.status_done()}
-      size={null}
-      pill={statePill(m, isDone ? "done" : ready ? "next" : "todo")}
-      actions={
-        !isDone && available ? (
-          <Button size="sm" variant={ready ? "default" : "outline"} onClick={() => done.run(() => markProjectDone(project.id))}>
-            <CheckCheck aria-hidden="true" data-icon="inline-start" />
-            {m.wrapup_mark_done()}
-          </Button>
-        ) : null
-      }
-    >
-      {done.result ? (
-        <div className="p-3">
-          <CommitOutcome result={done.result} action={m.wrapup_refusal_mark_done()} reason={(count) => m.wrapup_runs_not_complete({ count })} />
-        </div>
-      ) : undefined}
-    </StepBox>
+    <KeyValueList
+      items={[
+        { label: say(m, WRAP_UP_NAME[step]), value: summary ?? (record ? formatDateTime(record.at) : "–") },
+        ...operations.map((op) => ({ label: say(m, op.title), value: op.summary ? say(m, op.summary) : <StatusBadge kind="operation" value={op.status} /> })),
+      ]}
+    />
   )
 }

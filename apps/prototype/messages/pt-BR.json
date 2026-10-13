@@ -8751,5 +8751,155 @@
   "goal_hours_or_frames": "Informe horas ou frames",
   "catalogue_fields_cell_kind": "Tipo",
   "catalogue_fields_cell_kind_of": "Tipo de {name}",
-  "catalogue_fields_cell_caption": "Modo célula (hideLabel): o rótulo nomeia o controle só para leitores de tela; a linha mantém a altura."
+  "catalogue_fields_cell_caption": "Modo célula (hideLabel): o rótulo nomeia o controle só para leitores de tela; a linha mantém a altura.",
+  "goal_add": "Adicionar meta",
+  "goal_from_template": "Do modelo",
+  "project_goals_title": "Metas",
+  "project_edit": "Editar",
+  "startrun_mosaic_subject": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · mosaico de {count} painel",
+        "countPlural=*": "{name} · mosaico de {count} painéis"
+      }
+    }
+  ],
+  "startrun_rig_ready": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} sessão pronta",
+        "countPlural=*": "{name} · {count} sessões prontas"
+      }
+    }
+  ],
+  "projects_search": "Buscar Projetos",
+  "projects_search_placeholder": "Projeto ou objeto",
+  "projects_no_match": "Nenhum Projeto corresponde",
+  "goal_counts": "Conta",
+  "goal_unit_time": "Tempo",
+  "goal_change_new": "Nova: {line}",
+  "goal_change_removed": "Removida: {line}",
+  "goal_change_from_to": "{from} → {to}",
+  "goal_edit_title": "Editar meta de {channel}",
+  "mosaic_apply_layout": "Distribuir",
+  "mosaic_col_placement": "Posição",
+  "mosaic_edit": "Editar mosaico",
+  "mosaic_exclude": "Excluir",
+  "mosaic_include": "Incluir",
+  "mosaic_layout_grid": "{cols} × {rows}",
+  "mosaic_no_free_slot": "nenhuma posição livre",
+  "project_all_rigs_added": "todo setup já está no Projeto",
+  "project_closed": "Projeto fechado",
+  "project_closed_notice": "Fechado em {date} · números das metas congelados",
+  "project_col_below_bar": "Abaixo da barra",
+  "project_col_channel_ratio": "Proporção de canais",
+  "project_col_panel_balance": "Equilíbrio dos painéis",
+  "project_col_progress": "Progresso",
+  "project_col_window": "Janela",
+  "project_darkness": "Escuridão",
+  "project_goals_of": "Metas de {name}",
+  "project_moon": "Lua",
+  "project_reopen_project": "Reabrir projeto",
+  "project_reopen_summary": "Nenhum arquivo é movido · as metas voltam a ler a biblioteca",
+  "project_reopen_summary_archived": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Nenhum arquivo é movido · {count} sessão arquivada continua arquivada",
+        "countPlural=*": "Nenhum arquivo é movido · {count} sessões arquivadas continuam arquivadas"
+      }
+    }
+  ],
+  "project_restore_all": "Restaurar todas as sessões",
+  "project_target_chosen": "Escolhido: {name}",
+  "project_views": "Abas do projeto",
+  "project_window_line": "{start}–{end} · {alt}° · Lua {moon}°",
+  "project_site": "Local",
+  "trash_empty_named_title": "Esvaziar {name}?",
+  "trash_empty_summary": "As pastas preparadas vão para a Lixeira do sistema · os Resultados ficam",
+  "trash_empty_summary_results": "As pastas preparadas e os Resultados vão para a Lixeira do sistema",
+  "trash_empty_with_results": "Esvaziar com Resultados",
+  "trash_no_match": "Nenhuma execução corresponde",
+  "trash_search": "Buscar na Lixeira",
+  "trash_search_placeholder": "Execução, objeto ou setup",
+  "trash_results_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} arquivo",
+        "countPlural=*": "{count} arquivos"
+      }
+    }
+  ],
+  "wrapup_archive_moves": "Movimentos do arquivamento",
+  "wrapup_cleanup_summary": "{links} links · {copies} cópias · {size}",
+  "wrapup_col_detail": "Detalhe",
+  "wrapup_col_items": "Itens",
+  "wrapup_col_view": "Vista",
+  "wrapup_files_of": "Arquivos de {name}",
+  "wrapup_group_line": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} item",
+        "countPlural=*": "{name} · {count} itens"
+      }
+    }
+  ],
+  "wrapup_location_default": "{name} (padrão)",
+  "wrapup_nothing_to_archive": "Nada para arquivar",
+  "wrapup_nothing_to_trash": "Nada para a Lixeira",
+  "wrapup_show_open_runs": "Execuções a concluir",
+  "wrapup_stays_used_by": "Fica · usada por {names}",
+  "wrapup_steps": "Etapas da finalização",
+  "wrapup_trash_confirm_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {count} item para a Lixeira?",
+        "countPlural=*": "Mover {count} itens para a Lixeira?"
+      }
+    }
+  ]
 }
