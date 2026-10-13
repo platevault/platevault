@@ -7056,6 +7056,30 @@
   "catalogue_domain_night_window": "with a window",
   "catalogue_domain_night_low": "no window (stays low)",
   "catalogue_domain_night_no_dark": "no darkness (midsummer, 70° N)",
+  "catalogue_domain_calendar_desc": "Nights ahead at a site, a week per row from the locale's first day of the week (Monday in en-GB, Sunday in pt-BR). Each night is a link wrapped in Preview: its card opens on hover and on keyboard focus, stays open while hovered, and Escape closes it. The card holds no controls, so it takes no focus. One Tab stop: the arrow keys move a night or a week, Home and End go to the week's ends. Nights before today show their date only.",
+  "catalogue_domain_calendar_filled": "30 nights from today, some suiting no goal and some with no plan",
+  "calendar_night_name": "{date}: {moon}, {dark}, {goals}, {planned}",
+  "calendar_moon": "Moon {illumination}% {phase}",
+  "calendar_dark": "{time} dark",
+  "calendar_never_dark": "never dark",
+  "calendar_goals_suit": [
+    {
+      "declarations": ["input count", "input n", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{n} goal suits it", "countPlural=*": "{n} goals suit it" }
+    }
+  ],
+  "calendar_planned": [
+    {
+      "declarations": ["input count", "input n", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{n} Target planned", "countPlural=*": "{n} Targets planned" }
+    }
+  ],
+  "calendar_legend_moon": "Moon phase",
+  "calendar_legend_dark": "Hours of darkness",
+  "calendar_legend_goals": "Goals it suits",
+  "calendar_legend_planned": "Targets planned",
   "catalogue_domain_mosaic_desc": "Panels north up, east left. A panel is a checkbox and takes a dragged session; a dashed slot adds a panel.",
   "catalogue_domain_mosaic_layout": "2 × 2, one excluded, slots shown",
   "catalogue_domain_map_desc": "OpenStreetMap tiles in a lazy chunk. The marker follows the fields; a click or a drag reports a position.",

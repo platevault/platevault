@@ -7084,6 +7084,30 @@
   "catalogue_domain_night_window": "com janela",
   "catalogue_domain_night_low": "sem janela (fica baixo)",
   "catalogue_domain_night_no_dark": "sem escuridão (solstício de verão, 70° N)",
+  "catalogue_domain_calendar_desc": "Noites à frente num local, uma semana por linha a partir do primeiro dia da semana do idioma (segunda-feira em en-GB, domingo em pt-BR). Cada noite é um link envolvido em Preview: o cartão abre ao passar o ponteiro e ao receber o foco do teclado, fica aberto enquanto o ponteiro está sobre ele, e Escape o fecha. O cartão não tem controles, então não recebe foco. Uma parada de Tab: as setas movem uma noite ou uma semana, Home e End vão para as pontas da semana. As noites antes de hoje mostram só a data.",
+  "catalogue_domain_calendar_filled": "30 noites a partir de hoje, algumas sem meta adequada e algumas sem plano",
+  "calendar_night_name": "{date}: {moon}, {dark}, {goals}, {planned}",
+  "calendar_moon": "Lua {illumination}% {phase}",
+  "calendar_dark": "{time} de escuridão",
+  "calendar_never_dark": "nunca escurece",
+  "calendar_goals_suit": [
+    {
+      "declarations": ["input count", "input n", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{n} meta combina", "countPlural=*": "{n} metas combinam" }
+    }
+  ],
+  "calendar_planned": [
+    {
+      "declarations": ["input count", "input n", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{n} Alvo planejado", "countPlural=*": "{n} Alvos planejados" }
+    }
+  ],
+  "calendar_legend_moon": "Fase da Lua",
+  "calendar_legend_dark": "Horas de escuridão",
+  "calendar_legend_goals": "Metas que combinam",
+  "calendar_legend_planned": "Alvos planejados",
   "catalogue_domain_mosaic_desc": "Painéis com o norte para cima e o leste à esquerda. Um painel é uma caixa de seleção e aceita uma sessão arrastada; um espaço tracejado adiciona um painel.",
   "catalogue_domain_mosaic_layout": "2 × 2, um excluído, espaços visíveis",
   "catalogue_domain_map_desc": "Blocos do OpenStreetMap em um pacote carregado sob demanda. O marcador segue os campos; um clique ou arrasto informa uma posição.",
