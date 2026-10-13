@@ -121,8 +121,12 @@ function headsItems(next: MenuItem | undefined): boolean {
 type Failure = Exclude<CommitResult, { ok: true }>
 
 export interface ActionRunner {
-  /** Runs the action: nothing while it is unavailable or already running; its ConfirmDialog first when it has `confirm`. */
-  run: (action: Action) => void
+  /**
+   * Runs the action: nothing while it is unavailable or already running; its ConfirmDialog first when it has `confirm`.
+   * `opener` is the button that ran it: Cancel and Escape return focus there (WCAG 2.4.3), also where a click does not
+   * focus the button it lands on (WebKit).
+   */
+  run: (action: Action, opener?: HTMLElement) => void
   /** The id of the action whose `run` promise has not settled yet. */
   pending: string | null
   /** The last run's refusal (Refusal) or failure (ActionError), else null. Place it beside the trigger, never above a list. */
@@ -139,18 +143,22 @@ function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
 export interface UseActionOptions {
   /**
    * Where focus goes after a confirmed action, when confirming unmounts its
-   * trigger (a batch action that empties the selection). Cancel and Escape
-   * still return focus to the trigger.
+   * trigger (a batch action that empties the selection).
    */
   focusAfterConfirm?: () => HTMLElement | null | undefined
+  /**
+   * Where focus goes after Cancel or Escape when the button that opened the
+   * dialog is gone; while it is there, focus goes back to it.
+   */
+  focusAfterCancel?: () => HTMLElement | null | undefined
 }
 
 /** One runner per host (a header, a menu, a table): the dialog and the feedback of every action the host shows. */
-export function useAction({ focusAfterConfirm }: UseActionOptions = {}): ActionRunner {
+export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOptions = {}): ActionRunner {
   const m = useMessages()
   const [failure, setFailure] = useState<{ action: Action; result: Failure } | null>(null)
   const [pending, setPending] = useState<string | null>(null)
-  const [confirming, setConfirming] = useState<{ action: Action; open: boolean } | null>(null)
+  const [confirming, setConfirming] = useState<{ action: Action; open: boolean; opener?: HTMLElement } | null>(null)
 
   function settle(action: Action, result: CommitResult | void) {
     setFailure(result && !result.ok ? { action, result } : null)
@@ -169,14 +177,20 @@ export function useAction({ focusAfterConfirm }: UseActionOptions = {}): ActionR
       .finally(() => setPending((current) => (current === action.id ? null : current)))
   }
 
-  function run(action: Action) {
+  function run(action: Action, opener?: HTMLElement) {
     if (action.unavailable || pending === action.id) return
     setFailure(null)
     if (action.confirm) {
-      setConfirming({ action, open: true })
+      setConfirming({ action, open: true, opener })
       return
     }
     settle(action, execute(action))
+  }
+
+  // Without an opener (a menu item, a shortcut) the dialog keeps its default: the element focused before it opened.
+  function cancelTarget(opener: HTMLElement | undefined): HTMLElement | null | undefined {
+    if (opener === undefined) return undefined
+    return opener.isConnected ? opener : focusAfterCancel?.()
   }
 
   // A refusal closes the dialog and shows beside the trigger (nothing to retry); a failed write stays in the dialog with Retry.
@@ -195,9 +209,10 @@ export function useAction({ focusAfterConfirm }: UseActionOptions = {}): ActionR
       <ConfirmDialog
         {...spec}
         open={confirming.open}
-        onOpenChange={(open) => setConfirming({ action: confirming.action, open })}
+        onOpenChange={(open) => setConfirming({ ...confirming, open })}
         onConfirm={() => confirmRun(confirming.action)}
         focusAfterConfirm={focusAfterConfirm}
+        focusAfterCancel={() => cancelTarget(confirming.opener)}
       />
     ) : null
 
@@ -244,7 +259,7 @@ function ActionTrigger({ action, size = "sm", runner }: Omit<ActionButtonProps, 
       focusableWhenDisabled
       aria-busy={busy || undefined}
       data-action={action.id}
-      onClick={() => runner.run(action)}
+      onClick={(event) => runner.run(action, event.currentTarget)}
     >
       {busy ? <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} /> : Icon ? <Icon aria-hidden="true" data-icon="inline-start" /> : null}
       {actionLabel(action)}

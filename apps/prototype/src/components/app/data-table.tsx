@@ -292,8 +292,10 @@ export function DataTable<T>({
   const baseId = useId()
   // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
   // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
-  // goes to the first control of the toolbar row.
-  const runner = useAction({ focusAfterConfirm: () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE) })
+  // goes to the first control of the toolbar row. Cancel and Escape return focus to the button that opened
+  // the confirmation, or to the first control of the batch bar (or toolbar row) when that button is gone (WCAG 2.4.3).
+  const slotFirst = () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)
+  const runner = useAction({ focusAfterConfirm: slotFirst, focusAfterCancel: slotFirst })
   const [ownSort, setOwnSort] = useState(initialSort ?? null)
   const sort = controlledSort === undefined ? ownSort : controlledSort
   const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)

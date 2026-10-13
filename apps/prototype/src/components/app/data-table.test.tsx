@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
@@ -213,7 +213,17 @@ describe("DataTable", () => {
     const toolbar = { search: { label: "Search frames", value: "", onChange: vi.fn() } }
     const batch = () => [{ id: "trash", label: "Move to Trash", run: vi.fn() }]
 
-    function Selectable({ membership, initial = [], onShowHidden }: { membership?: boolean; initial?: string[]; onShowHidden?: () => void }) {
+    function Selectable({
+      membership,
+      initial = [],
+      onShowHidden,
+      batchActions = batch,
+    }: {
+      membership?: boolean
+      initial?: string[]
+      onShowHidden?: () => void
+      batchActions?: (ids: string[]) => Action[]
+    }) {
       const [selected, setSelected] = useState<string[]>(initial)
       return (
         <DataTable
@@ -222,7 +232,7 @@ describe("DataTable", () => {
           columns={COLUMNS}
           getRowId={(row) => row.id}
           toolbar={toolbar}
-          batchActions={batch}
+          batchActions={batchActions}
           selection={{ selected, onChange: setSelected, rowLabel: (row) => row.name, membership, countLabel: membership ? (count) => `${count} frames in the run` : undefined, onShowHidden }}
         />
       )
@@ -251,6 +261,47 @@ describe("DataTable", () => {
       expect(within(bar).getByText(m.table_selected_count({ count: 1, n: "1" }))).toBeInTheDocument()
       expect(within(bar).getByRole("button", { name: "Move to Trash" })).toBeInTheDocument()
       expect(screen.queryByRole("searchbox", { name: "Search frames" })).not.toBeInTheDocument()
+    })
+
+    describe("a batch action's confirmation", () => {
+      const reject = (id = "reject"): ((ids: string[]) => Action[]) => (ids) => [{ id, label: "Reject", confirm: { title: `Reject ${ids.length} frames?`, confirm: { label: "Reject" } }, run: vi.fn() }]
+
+      // The row checkbox holds focus and the batch button is clicked without taking it, as a click does in WebKit.
+      async function openFromCheckbox(batchActions: (ids: string[]) => Action[]) {
+        const user = userEvent.setup()
+        const view = render(<Selectable batchActions={batchActions} />)
+        const checkbox = screen.getByRole("checkbox", { name: m.table_select_row({ name: "Vega" }) })
+        await user.click(checkbox)
+        expect(checkbox).toHaveFocus()
+        const button = within(screen.getByRole("region", { name: m.selection_region() })).getByRole("button", { name: "Reject…" })
+        fireEvent.click(button)
+        const dialog = await screen.findByRole("alertdialog", { name: "Reject 1 frames?" })
+        return { user, view, button, dialog }
+      }
+
+      it("returns focus to the batch action on Escape", async () => {
+        const { user, button } = await openFromCheckbox(reject())
+        await user.keyboard("{Escape}")
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+        await waitFor(() => expect(button).toHaveFocus())
+      })
+
+      it("returns focus to the batch action on Cancel", async () => {
+        const { user, button, dialog } = await openFromCheckbox(reject())
+        await user.click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+        await waitFor(() => expect(button).toHaveFocus())
+      })
+
+      it("returns focus to the batch bar's first control when the action's button is gone", async () => {
+        const { user, view, button, dialog } = await openFromCheckbox(reject())
+        view.rerender(<Selectable batchActions={reject("reject-all")} />)
+        expect(button).not.toBeInTheDocument()
+        await user.click(within(dialog).getByRole("button", { name: m.verb_cancel() }))
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+        const bar = screen.getByRole("region", { name: m.selection_region() })
+        await waitFor(() => expect(within(bar).getAllByRole("button")[0]).toHaveFocus())
+      })
     })
   })
 })

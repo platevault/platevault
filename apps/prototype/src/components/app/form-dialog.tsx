@@ -117,6 +117,12 @@ export interface DialogCommitOptions {
    * dialog; Cancel and Escape still return focus to the opener.
    */
   focusAfterConfirm?: () => HTMLElement | null | undefined
+  /**
+   * Where focus goes after Cancel or Escape, for a dialog without a trigger
+   * of its own (a runner's): the control that opened it. Nothing (or no
+   * option) keeps the default, the element focused before it opened.
+   */
+  focusAfterCancel?: () => HTMLElement | null | undefined
 }
 
 export interface DialogCommitState {
@@ -132,7 +138,7 @@ export interface DialogCommitState {
   finalFocus: () => HTMLElement | boolean
 }
 
-export function useDialogCommit({ open, onOpenChange, focusAfterConfirm }: DialogCommitOptions): DialogCommitState {
+export function useDialogCommit({ open, onOpenChange, focusAfterConfirm, focusAfterCancel }: DialogCommitOptions): DialogCommitState {
   const [internalOpen, setInternalOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -183,9 +189,8 @@ export function useDialogCommit({ open, onOpenChange, focusAfterConfirm }: Dialo
   }
 
   function finalFocus(): HTMLElement | boolean {
-    if (!confirmed.current || !focusAfterConfirm) return true
+    const target = (confirmed.current ? focusAfterConfirm : focusAfterCancel)?.()
     confirmed.current = false
-    const target = focusAfterConfirm()
     if (!target) return true
     // Headings and regions are not focusable until they carry a tabindex.
     if (!target.hasAttribute("tabindex") && target.tabIndex < 0) target.tabIndex = -1
