@@ -46,8 +46,9 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      # The body with the code signing policy link (see the `notes` step).
-      release_body: ${{ steps.notes.outputs.body }}
+      # The body with the code signing policy link (see the `notes` step),
+      # or release-please's own body if that step wrote none.
+      release_body: ${{ steps.notes.outputs.body || steps.release.outputs.body }}
     steps:
       # Mint a short-lived GitHub App installation token from the shared org
       # release app (contents:write + pull_requests:write). This is the
@@ -79,6 +80,9 @@ jobs:
       # pull-request-header and pull-request-footer), so this step appends the
       # link to the body release-please wrote and saves it to the release. The
       # build job passes the same body to tauri-action, so no leg drops it.
+      # The output is written first and the edit is best-effort: if the edit
+      # fails, tauri-action still saves the linked body when the first build
+      # leg updates the release, and the release itself goes ahead.
       - name: Link the code signing policy from the release notes
         id: notes
         if: steps.release.outputs.release_created == 'true'
@@ -90,9 +94,10 @@ jobs:
           set -euo pipefail
           body="$(printf '%s\n\n%s' "${RELEASE_PLEASE_BODY}" \
             '[Code signing policy](https://github.com/platevault/platevault/blob/main/docs/release/code-signing-policy.md)')"
-          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes "${body}"
           delimiter="BODY_$(openssl rand -hex 16)"
           printf 'body<<%s\n%s\n%s\n' "${delimiter}" "${body}" "${delimiter}" >> "${GITHUB_OUTPUT}"
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes "${body}" \
+            || echo "::warning::could not add the code signing policy link to ${TAG} now; the build legs save it through tauri-action"
 
   build:
     name: Build & sign (${{ matrix.os }})
