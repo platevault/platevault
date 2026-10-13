@@ -12,7 +12,7 @@
  */
 import { inputDrift } from "./calibration"
 import { calibrationProcesses } from "./calibration-process"
-import { runPipeline, runStepLink, type StepLink, sessionsNeedingWork, type World } from "./derive"
+import { oldMastersInUse, runPipeline, runStepLink, type StepLink, sessionsNeedingWork, type World } from "./derive"
 import { locationAvailability, qualityApplicability } from "./library"
 import { sessionRef } from "./membership"
 import { duplicateFindings } from "./storage"
@@ -32,6 +32,7 @@ export type IssueKind =
   | "calibration-review"
   | "run-blocked"
   | "master-offer"
+  | "master-old"
   | "calibration-waiting"
   | "calibration-failed"
   | "drift"
@@ -75,8 +76,12 @@ export function issueFingerprint(issue: Issue): string {
   return [issue.kind, issue.about ?? issue.id, issue.count, issue.bytes ?? ""].join("|")
 }
 
-/** Every issue, in group order and worst first within a group. */
-export function deriveIssues(world: World): Issue[] {
+/**
+ * Every issue, in group order and worst first within a group. `nowMs` dates
+ * the masters' age (C9); it defaults to the clock the user sees, the
+ * simulated offset included.
+ */
+export function deriveIssues(world: World, nowMs: number = Date.now() + world.faults.clockOffsetMs): Issue[] {
   const { catalog, disk, operations } = world
   const out: Issue[] = []
 
@@ -133,6 +138,14 @@ export function deriveIssues(world: World): Issue[] {
   if (awaiting.length > 0) {
     out.push({ id: "calibration:awaiting-stack", group: "calibration", kind: "calibration-waiting", severity: "info", count: awaiting.length, name: null, about: null, link: { to: "/calibration" } })
   }
+
+  // Old masters (C9, Q9 (b) C): darks, bias and dark flats past the age limit, raised only while an open Project's unfinished run hands one off.
+  for (const { master, runs } of oldMastersInUse(world, nowMs)) {
+    const open = runs.filter((run) => catalog.projects[run.projectId]?.state === "open")
+    if (open.length === 0) continue
+    out.push({ id: `calibration:old:${master.id}`, group: "calibration", kind: "master-old", severity: "warning", count: open.length, name: master.path.split("/").pop() ?? master.id, about: master.id, link: { to: "/calibration" } })
+  }
+
   for (const view of processes) {
     if (view.status !== "failed") continue
     out.push({ id: `calibration:failed:${view.process.id}`, group: "calibration", kind: "calibration-failed", severity: "danger", count: 1, name: view.name, about: view.process.id, link: { to: "/calibration" } })
