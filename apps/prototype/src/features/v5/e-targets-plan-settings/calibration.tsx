@@ -396,7 +396,7 @@ function processColumns(m: Messages, catalog: Catalog): Column<ProcessView>[] {
     { id: "night", header: m.tonight_night(), cell: (p) => formatNight(night(p), true), sortValue: night },
     { id: "frames", header: m.calibration_frames(), cell: (p) => formatCount(p.frames), sortValue: (p) => p.frames, align: "right" },
     { id: "step", header: m.project_col_step(), cell: step, sortValue: step },
-    { id: "tool", header: m.calibration_tool(), cell: tool, sortValue: tool },
+    { id: "tool", header: m.calibration_tool(), cell: tool, sortValue: tool, truncate: true },
     {
       id: "state",
       header: m.calibration_state(),
@@ -416,7 +416,7 @@ function hiddenColumns(m: Messages, catalog: Catalog): Column<Dismissal>[] {
   }
   return [
     { id: "master", header: m.calibration_master(), cell: label, sortValue: label, rowHeader: true, truncate: true },
-    { id: "run", header: m.calibration_run(), cell: run, sortValue: run },
+    { id: "run", header: m.calibration_run(), cell: run, sortValue: run, truncate: true },
     { id: "state", header: m.calibration_state(), cell: state, sortValue: state },
     { id: "at", header: m.calibration_hidden_on(), cell: (d) => formatDateTime(d.at), sortValue: (d) => d.at },
   ]

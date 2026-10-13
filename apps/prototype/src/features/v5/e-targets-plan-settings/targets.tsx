@@ -241,7 +241,7 @@ export function TargetsPage() {
   // ------------------------------------------------------------------
   // Columns
   // ------------------------------------------------------------------
-  const designation: Column<RowView> = { id: "designation", header: m.targets_designation(), rowHeader: true, sortValue: okSort("designation"), cell: (v) => v.row.designation }
+  const designation: Column<RowView> = { id: "designation", header: m.targets_designation(), rowHeader: true, truncate: true, sortValue: okSort("designation"), cell: (v) => v.row.designation }
   const altitude: Column<RowView> = {
     id: "maxAlt",
     header: m.tonight_altitude(),

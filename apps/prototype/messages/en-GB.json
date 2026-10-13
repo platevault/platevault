@@ -489,6 +489,7 @@
   "filter_bar_presets_saved": "Saved",
   "filter_bar_preset_save_ellipsis": "Save current…",
   "filter_bar_preset_delete": "Delete",
+  "filter_bar_preset_delete_title": "Delete the {name} preset?",
   "filter_bar_preset_new_title": "New preset",
   "filter_bar_preset_name": "Name",
   "filter_bar_preset_create": "Create preset",
@@ -1369,6 +1370,23 @@
   "goal_no_changes": "No goal changes",
   "goal_apply_template": "Apply template",
   "goal_remove_goal": "Remove {channel} goal",
+  "goal_remove_title": "Remove the {channel} goal of {subject}?",
+  "project_remove_from_title": "Remove {name} from {project}?",
+  "project_remove_subject_goals": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Also removes {count} goal.",
+        "countPlural=*": "Also removes {count} goals."
+      }
+    }
+  ],
   "project_open_target": "Open Target",
   "mosaic_make": "Make mosaic",
   "project_remove": "Remove",
