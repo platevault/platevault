@@ -22,6 +22,7 @@ members = [
   "crates/calibration/master-detect",
   "crates/contracts/core",
   "crates/e2e-tests",
+  "crates/desktop/services",
   "crates/domain/core",
   "crates/fs/executor",
   "crates/fs/inventory",
@@ -120,7 +121,6 @@ tauri-plugin-mcp-bridge = "0.11"
 tauri-plugin-single-instance = "2.4.2"
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-log = "2.8.0"
-tauri-plugin-notification = "2.3.3"
 tauri-plugin-updater = "2.10.1"
 # Needed by the updater's relaunch-to-apply step (`process:default`
 # capability); matches the `@tauri-apps/plugin-process` npm version already
@@ -133,6 +133,9 @@ schemars = { version = "1", features = ["uuid1"] }
 # validate serialized Rust instances against the canonical packages/contracts/schemas/*.json.
 # resolve-http is disabled for offline determinism; all schemas are local files.
 jsonschema = { version = "0.48", default-features = false }
+# OS notification delivery for desktop_services: notification center on macOS,
+# toast on Windows, the D-Bus notification daemon on Linux.
+notify-rust = "4.18.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Canonicalizes without the Windows `\\?\` verbatim prefix, so a canonicalized

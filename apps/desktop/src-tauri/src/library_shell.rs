@@ -31,20 +31,16 @@ compile_error!(
      release builds must not enable `dev-tools`"
 );
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 #[cfg(feature = "dev-tools")]
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use desktop_services::jobs::{MeasurementProgressFeed, ScanProgressFeed};
 use platevault_core::library::Library;
 use platevault_core::targets::SimbadConfig;
-use platevault_core::{LibraryError, NativePath, Revision, ScanOperation, ScanProgress, ScanState};
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::broadcast::error::RecvError;
-use uuid::Uuid;
+use tauri::Manager;
 
 use crate::commands::library as ipc;
 
@@ -64,12 +60,6 @@ pub const SCAN_PROGRESS_EVENT: &str = "library_scan_progress";
 /// Optional IPv4 loopback address for the development bridge.
 #[cfg(feature = "dev-tools")]
 pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
-
-/// Newest operations re-read from durable status after the progress channel lagged.
-const RESYNC_PAGE: u32 = 64;
-/// Most recent terminal snapshots a resync recovered whose channel terminal has
-/// not arrived yet; older ones are forgotten so a lost terminal cannot leak.
-const RETAINED_FINISHED: usize = 256;
 
 /// Build the shell, open its catalog and run the event loop.
 ///
@@ -320,8 +310,30 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let clock = Arc::new(platevault_core::notifier::SystemClock);
     tauri::async_runtime::block_on(library.attach_notifier(notifier, clock))
         .map_err(|error| format!("cannot attach the reminder notifier: {error}"))?;
-    ProgressBridge::spawn(app.handle().clone(), Arc::clone(&library));
-    crate::commands::frame_review::spawn_measurement_bridge(app.handle().clone(), &library);
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        SCAN_PROGRESS_EVENT,
+        ScanProgressFeed::subscribe(Arc::clone(&library)),
+        |event, error| {
+            tracing::error!(
+                operation = %event.operation_id(),
+                %error,
+                "scan progress event not delivered"
+            );
+        },
+    ));
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.handle().clone(),
+        crate::commands::frame_review::MEASUREMENT_PROGRESS_EVENT,
+        MeasurementProgressFeed::subscribe(Arc::clone(&library)),
+        |progress, error| {
+            tracing::error!(
+                run = %progress.operation_id,
+                %error,
+                "measurement progress event not delivered"
+            );
+        },
+    ));
     app.manage(library);
     app.run(|_, _| {});
     Ok(())
@@ -398,224 +410,14 @@ fn loopback_bind(requested: Option<&str>) -> Result<Ipv4Addr, String> {
     }
 }
 
-/// [`SCAN_PROGRESS_EVENT`] payload: one committed operation snapshot.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ScanProgressEvent<'a> {
-    operation_id: Uuid,
-    revision: Revision,
-    location_id: Uuid,
-    state: ScanState,
-    progress: &'a ScanProgress,
-    complete_scopes: &'a [NativePath],
-    incomplete_scopes: &'a [NativePath],
-}
-
-/// Forwards committed scan snapshots to the webview. After broadcast lag it
-/// re-reads durable status; per-operation revisions keep it from emitting an
-/// older snapshot after a newer one.
-struct ProgressBridge {
-    app: AppHandle,
-    library: Arc<Library>,
-    emitted: Emitted,
-}
-
-impl ProgressBridge {
-    fn spawn(app: AppHandle, library: Arc<Library>) {
-        let mut events = library.subscribe_scan_progress();
-        let mut bridge = Self { app, library, emitted: Emitted::default() };
-        tauri::async_runtime::spawn(async move {
-            loop {
-                match events.recv().await {
-                    Ok(operation) => bridge.forward(&operation, true),
-                    Err(RecvError::Lagged(skipped)) => {
-                        tracing::warn!(skipped, "scan progress lagged; re-reading durable status");
-                        if let Err(error) = bridge.resync().await {
-                            tracing::error!(
-                                %error,
-                                "scan progress resync failed; clients must poll library_scan_status"
-                            );
-                        }
-                    }
-                    Err(RecvError::Closed) => return,
-                }
-            }
-        });
-    }
-
-    /// Emit unless a same-or-newer revision of the operation was emitted.
-    fn forward(&mut self, operation: &ScanOperation, from_channel: bool) {
-        if !self.emitted.admit(operation, from_channel) {
-            return;
-        }
-        let event = ScanProgressEvent {
-            operation_id: operation.id,
-            revision: operation.revision,
-            location_id: operation.location_id,
-            state: operation.state,
-            progress: &operation.progress,
-            complete_scopes: &operation.complete_scopes,
-            incomplete_scopes: &operation.incomplete_scopes,
-        };
-        if let Err(error) = self.app.emit(SCAN_PROGRESS_EVENT, event) {
-            tracing::error!(operation = %operation.id, %error, "scan progress event not delivered");
-        }
-    }
-
-    /// Re-emit durable status of every tracked operation and of Running ones
-    /// among the newest; anything else missed is recovered by polling.
-    async fn resync(&mut self) -> Result<(), LibraryError> {
-        let library = Arc::clone(&self.library);
-        let catalog = library.catalog();
-        let recent = catalog.list_operations(None, 0, RESYNC_PAGE).await?;
-        let mut refreshed = HashSet::with_capacity(recent.len());
-        for operation in &recent {
-            if operation.state == ScanState::Running || self.emitted.tracks(operation.id) {
-                refreshed.insert(operation.id);
-                self.forward(operation, false);
-            }
-        }
-        for id in self.emitted.rereads(&refreshed) {
-            self.forward(&catalog.scan_status(id).await?, false);
-        }
-        Ok(())
-    }
-}
-
-/// Emitted revision of each operation that may still send a snapshot.
-///
-/// A terminal snapshot from the channel is its operation's last message, so it
-/// ends tracking. `run_scan` commits a terminal state before it sends it, so a
-/// terminal a resync read from durable status may still be followed by its
-/// channel terminal and by older queued snapshots: its revision is kept until
-/// that channel terminal arrives, or until [`RETAINED_FINISHED`] later recovered
-/// terminals displace it when the channel never delivers one.
-#[derive(Default)]
-struct Emitted {
-    revisions: HashMap<Uuid, Revision>,
-    /// Recovered terminals still awaiting their channel terminal.
-    finished: HashSet<Uuid>,
-    /// Recovery order of `finished`; entries a channel terminal already ended
-    /// are skipped when popped.
-    recovered: VecDeque<Uuid>,
-}
-
-impl Emitted {
-    /// Whether `operation` is newer than its emitted revision, recording it.
-    fn admit(&mut self, operation: &ScanOperation, from_channel: bool) -> bool {
-        let newer = self.revisions.get(&operation.id).is_none_or(|&seen| operation.revision > seen);
-        if from_channel && operation.state != ScanState::Running {
-            self.revisions.remove(&operation.id);
-            self.finished.remove(&operation.id);
-            return newer;
-        }
-        if newer {
-            self.revisions.insert(operation.id, operation.revision);
-        }
-        if operation.state != ScanState::Running && self.finished.insert(operation.id) {
-            self.recovered.push_back(operation.id);
-            while self.recovered.len() > RETAINED_FINISHED {
-                if let Some(oldest) = self.recovered.pop_front() {
-                    if self.finished.remove(&oldest) {
-                        self.revisions.remove(&oldest);
-                    }
-                }
-            }
-        }
-        newer
-    }
-
-    fn tracks(&self, id: Uuid) -> bool {
-        self.revisions.contains_key(&id)
-    }
-
-    /// Tracked operations a resync re-reads by id: those outside `refreshed`
-    /// that are still running. A recovered terminal has nothing newer to read.
-    fn rereads(&self, refreshed: &HashSet<Uuid>) -> Vec<Uuid> {
-        self.revisions
-            .keys()
-            .filter(|id| !refreshed.contains(*id) && !self.finished.contains(*id))
-            .copied()
-            .collect()
-    }
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "dev-tools"))]
 mod tests {
-    #[cfg(feature = "dev-tools")]
     use std::net::Ipv4Addr;
 
-    use std::collections::HashSet;
-
-    use platevault_core::{ScanOperation, ScanProgress, ScanState};
-    use uuid::Uuid;
-
-    #[cfg(feature = "dev-tools")]
     use super::loopback_bind;
-    use super::{Emitted, RETAINED_FINISHED};
-
-    fn snapshot(id: Uuid, revision: u64, state: ScanState) -> ScanOperation {
-        ScanOperation {
-            id,
-            revision,
-            location_id: Uuid::nil(),
-            state,
-            progress: ScanProgress::default(),
-            issues: Vec::new(),
-            complete_scopes: Vec::new(),
-            incomplete_scopes: Vec::new(),
-            started_at: "2026-10-06T00:00:00Z".into(),
-            finished_at: None,
-        }
-    }
-
-    /// A terminal snapshot recovered by a resync is emitted once; a stale
-    /// snapshot still queued from before that resync never follows it.
-    #[test]
-    fn no_stale_snapshot_follows_a_terminal_recovered_by_resync() {
-        let id = Uuid::new_v4();
-        let mut emitted = Emitted::default();
-        assert!(emitted.admit(&snapshot(id, 1, ScanState::Running), true));
-        // The channel lagged past the terminal snapshot; resync reads it.
-        assert!(emitted.admit(&snapshot(id, 3, ScanState::Completed), false));
-        assert!(!emitted.admit(&snapshot(id, 3, ScanState::Completed), false), "emitted once");
-        assert!(!emitted.admit(&snapshot(id, 2, ScanState::Running), true), "stale queued");
-    }
-
-    /// `run_scan` commits the terminal state before it sends it: a resync in
-    /// that window emits the committed terminal, and the channel's own terminal
-    /// that follows is the same revision and is not emitted again.
-    #[test]
-    fn a_terminal_committed_before_its_channel_send_is_emitted_once() {
-        let id = Uuid::new_v4();
-        let mut emitted = Emitted::default();
-        assert!(emitted.admit(&snapshot(id, 1, ScanState::Running), true));
-        assert!(emitted.admit(&snapshot(id, 2, ScanState::Completed), false), "resync emits");
-        assert!(!emitted.admit(&snapshot(id, 2, ScanState::Completed), true), "emitted twice");
-        assert!(!emitted.tracks(id), "its channel terminal ends tracking");
-    }
-
-    /// A terminal whose channel message was lost is never re-read by later
-    /// resyncs, and retention of such terminals is bounded.
-    #[test]
-    fn finished_operations_recovered_by_resync_do_not_leak() {
-        let mut emitted = Emitted::default();
-        let running = Uuid::new_v4();
-        assert!(emitted.admit(&snapshot(running, 1, ScanState::Running), true));
-        let lost: Vec<Uuid> = (0..=RETAINED_FINISHED).map(|_| Uuid::new_v4()).collect();
-        for id in &lost {
-            assert!(emitted.admit(&snapshot(*id, 1, ScanState::Running), true));
-            assert!(emitted.admit(&snapshot(*id, 2, ScanState::Failed), false));
-        }
-        assert_eq!(emitted.rereads(&HashSet::new()), vec![running], "terminals are not re-read");
-        assert!(!emitted.tracks(lost[0]), "the oldest lost terminal is forgotten");
-        assert!(lost[1..].iter().all(|id| emitted.tracks(*id)));
-        assert!(emitted.revisions.len() <= RETAINED_FINISHED + 1, "bounded");
-    }
 
     /// Only IPv4 loopback literals pass. Unspecified, private, IPv6 (including
     /// `::1` and v4-mapped loopback), hostnames and socket addresses are refused.
-    #[cfg(feature = "dev-tools")]
     #[test]
     fn bridge_binds_ipv4_loopback_only() {
         for unset in [None, Some(""), Some("   ")] {

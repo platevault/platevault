@@ -1,0 +1,37 @@
+[package]
+name = "desktop_services"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+# Framework-agnostic desktop backend services: notifications, logging, the log
+# viewer stream and job-progress feeds. A UI host (the Tauri shell today) adapts
+# them to its own event mechanism. No Tauri framework crate (`tauri*`),
+# `flutter_rust_bridge` or `raw-window-handle` may enter this dependency graph;
+# `tests/dependency_boundary.rs` enforces that and documents its one exemption.
+
+[dependencies]
+app_core = { path = "../../app/core" }
+audit = { path = "../../audit" }
+contracts_core = { path = "../../contracts/core" }
+persistence_lifecycle = { path = "../../persistence/lifecycle" }
+platevault_core = { path = "../../platevault-core" }
+notify-rust = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+persistence_core = { path = "../../persistence/core" }
+# Real FITS frames for the measurement feed tests.
+platevault_pixels = { path = "../../platevault-pixels", features = ["fixtures"] }
+tokio = { workspace = true, features = ["time"] }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

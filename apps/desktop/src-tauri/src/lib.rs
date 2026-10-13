@@ -256,28 +256,20 @@ pub fn build_app() -> tauri::App {
         // triggered from this Rust process.
         .plugin(build_updater_plugin())
         .plugin(tauri_plugin_process::init())
-        // Spec 051 US8 (T045): OS notifications on long-running task
-        // completion. `notification:default` is granted in
-        // `capabilities/default.json`. The plugin's desktop backend needs no
-        // runtime permission request — `permission_state()` is
-        // unconditionally `Granted` there and delivery failures (denied at the
-        // OS level, no Linux notification daemon) surface as an `Err` from
-        // `show()`, which every call site in `bootstrap::notify` logs at
-        // `debug` and ignores (FR-025).
-        .plugin(tauri_plugin_notification::init())
         // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
         // required here — this app already installs a global `tracing`
-        // subscriber (in `main.rs`, right after `build_app()` returns, once
-        // the platform log directory is resolvable) that owns the single
-        // process-wide `log`-facade logger slot via `tracing-subscriber`'s
-        // default `tracing-log` bridge feature. Without `skip_logger()`, this
-        // plugin would try to install a SECOND global logger and panic/lose
-        // the race (FR-021's "not duplicated or dropped" requirement). With
-        // it, the plugin still registers its `log` Tauri command (so
-        // `@tauri-apps/plugin-log` calls from the frontend reach the ambient
-        // logger), it just never owns that logger itself — the rotating file
-        // target itself is `main.rs`'s `tracing_appender` layer, not this
-        // plugin's own (skipped) fern dispatch.
+        // subscriber (`desktop_services::Services::start` in `main.rs`, right
+        // after `build_app()` returns, once the platform log directory is
+        // resolvable) that owns the single process-wide `log`-facade logger
+        // slot via `tracing-subscriber`'s default `tracing-log` bridge
+        // feature. Without `skip_logger()`, this plugin would try to install a
+        // SECOND global logger and panic/lose the race (FR-021's "not
+        // duplicated or dropped" requirement). With it, the plugin still
+        // registers its `log` Tauri command (so `@tauri-apps/plugin-log` calls
+        // from the frontend reach the ambient logger), it just never owns that
+        // logger itself — the rotating file target itself is the services'
+        // `tracing_appender` layer, not this plugin's own (skipped) fern
+        // dispatch.
         .plugin(tauri_plugin_log::Builder::new().skip_logger().build());
 
     #[cfg(feature = "dev-tools")]
@@ -442,7 +434,14 @@ fn apply_dev_url_override(context: &mut tauri::Context) {
 /// task from there, and the main window is built only once that task has
 /// finished — so a long migration is visible instead of being a windowless
 /// pause, and the UI still cannot reach an unmigrated database.
-pub fn run_app(app: tauri::App, db_url: String, data_dir: std::path::PathBuf) {
+///
+/// `services` lives until the exit hook shuts it down.
+pub fn run_app(
+    app: tauri::App,
+    db_url: String,
+    data_dir: std::path::PathBuf,
+    services: desktop_services::Services,
+) {
     // Developer diagnostics call buffer (spec 021).
     // Always managed so the type is available; only populated when dev-tools
     // feature is compiled in and devMode is on at runtime. No database
@@ -464,14 +463,19 @@ pub fn run_app(app: tauri::App, db_url: String, data_dir: std::path::PathBuf) {
     // astro-plan-kyo7.48: the exit hook writes the clean-shutdown marker, so it
     // needs its own copy of the data root before `data_dir` moves into boot.
     let exit_data_dir = data_dir.clone();
-    std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir)));
+    let services = Arc::new(services);
+    let boot_services = Arc::clone(&services);
+    std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir, boot_services)));
 
     app.run(move |_handle, event| {
         // `RunEvent::Exit` is the final, non-cancellable event-loop hook — it
         // fires on graceful shutdown but never on SIGKILL/crash/power loss, so
         // a present marker at next boot reliably means "exited cleanly".
+        // Services shut down last, so the marker write still reaches the log
+        // file before it is flushed.
         if let tauri::RunEvent::Exit = event {
             clean_shutdown::write(&exit_data_dir);
+            services.shutdown();
         }
     });
 }
@@ -609,7 +613,12 @@ fn prune_old_backups(db_path: &std::path::Path) {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBuf) {
+async fn boot(
+    app: tauri::AppHandle,
+    db_url: String,
+    data_dir: std::path::PathBuf,
+    services: Arc<desktop_services::Services>,
+) {
     let db = match Database::connect(&db_url).await {
         Ok(db) => db,
         Err(e) => return fatal(&app, &format!("failed to connect to SQLite at {db_url}: {e}")),
@@ -714,7 +723,7 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     // `#[tokio::main]` establishes around `run_app`.
     //  - spec 005: inbox plan listener → marks inbox items `resolved` once their
     //    split/restructure plan is applied.
-    //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
+    //  - spec 019: log stream → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
     app_core::inbox::plan_listener::start_inbox_plan_listener(
@@ -722,16 +731,26 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
         &bus,
         resolve_cache.clone(),
     );
-    drop(crate::commands::log::start_log_forwarder(
+    // A `log:entry` the webview cannot take is logged at debug only. Durable
+    // audit rows come back through the `log.recent` pull; a lag diagnostic
+    // (`dia:N`, never persisted) is lost, and the next lag raises a new one.
+    drop(tokio::spawn(crate::bootstrap::feeds::forward(
         app.clone(),
-        &bus,
-        contracts_core::log::LogLevel::Debug,
-        pool.clone(),
-    ));
+        crate::commands::log::LOG_ENTRY_EVENT,
+        desktop_services::log_stream::LogFeed::subscribe(
+            &bus,
+            pool.clone(),
+            contracts_core::log::LogLevel::Debug,
+        ),
+        |entry, error| tracing::debug!(entry = %entry.id, %error, "log entry event not delivered"),
+    )));
     drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
     // spec 051 US8: OS notifications for the `plan.applying.completed` and
     // `workflow.run_completed` topics, both already published on this bus.
-    drop(crate::bootstrap::notify::spawn_completion_notifier(app.clone(), &bus));
+    services.spawn_completion_notifier(&bus, {
+        let app = app.clone();
+        move || crate::bootstrap::notify::main_window_focused(&app)
+    });
     // spec 056 (R5): backend-authoritative onboarding tick subscriber →
     // persists auto-ticks from domain-completion topics and emits
     // `onboarding:state-changed`. Started here, before the webview can invoke,
@@ -931,7 +950,13 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     // spec 035 US4/T043: background ingest-resolution drain + session target
     // back-fill on an interval. Non-blocking; transient/offline outcomes leave
     // rows pending for the next pass.
-    spawn_ingest_resolution_drain(app.clone(), pool.clone(), bus.clone(), resolve_cache.clone());
+    spawn_ingest_resolution_drain(
+        app.clone(),
+        services.notifier().clone(),
+        pool.clone(),
+        bus.clone(),
+        resolve_cache.clone(),
+    );
 
     // spec 051 US10: the startup update check moved to the frontend
     // (`updateSubscription.ts`'s `startUpdateSubscription()`, #888 staged

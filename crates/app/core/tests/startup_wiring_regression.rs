@@ -25,11 +25,9 @@
 //!    `plan.applying.completed` event → the inbox item transitions to
 //!    `"resolved"`.
 //!
-//! These tests do NOT test `start_log_forwarder` directly because that
-//! function requires a `tauri::AppHandle` (not constructible in unit tests).
-//! The log-forwarder call in `run_app` is covered structurally — if it were
-//! removed, the function signature change would cause a compile error in the
-//! Tauri binary (which `cargo build --workspace` would catch).
+//! These tests do NOT cover the log stream: `start_log_forwarder` became
+//! `desktop_services::log_stream::LogFeed`, whose own tests
+//! (`crates/desktop/services/tests/log_stream.rs`) pin its startup contracts.
 //!
 //! See:
 //!   - docs/development/autonomous-run-2026-06-validation-findings.md  § Backlog A-1

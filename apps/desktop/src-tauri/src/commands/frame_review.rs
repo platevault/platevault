@@ -8,22 +8,21 @@
 //! [`platevault_core::frame_review::FrameReview`] and reports failures with the
 //! library [`platevault_core::ErrorResponse`] conventions, naming the asset,
 //! run or import. No command writes a source file, a preview file or a non-PIX
-//! catalog record. Progress is published as `pix_measurement_progress`;
-//! `pix_measurement_status` and `pix_review_frames` are the durable truth.
+//! catalog record. Progress is published as `pix_measurement_progress` from
+//! `desktop_services::jobs::MeasurementProgressFeed`; `pix_measurement_status`
+//! and `pix_review_frames` are the durable truth.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
     ConfirmedImport, CutoutRequest, DisplayName, FrameDetail, FramePreview, FrameStars, FrameState,
-    ImportReview, MeasurementProgress, MeasurementRun, NameTemplate, NativePath, PreviewTile,
-    RegionsRequest, ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort,
-    Revision, RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry,
-    TileRequest,
+    ImportReview, MeasurementRun, NameTemplate, NativePath, PreviewTile, RegionsRequest,
+    ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort, Revision,
+    RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry, TileRequest,
 };
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
-use tokio::sync::broadcast::error::RecvError;
+use tauri::State;
 use uuid::Uuid;
 
 use super::library::{fail, Reply};
@@ -31,52 +30,6 @@ use super::library::{fail, Reply};
 /// Settled frames and run state changes; polling `pix_measurement_status` and
 /// `pix_review_frames` stays the durable truth.
 pub const MEASUREMENT_PROGRESS_EVENT: &str = "pix_measurement_progress";
-
-/// Forwards measurement snapshots to the webview. Each channel event is one
-/// settled frame or state change, so all are forwarded; after broadcast lag
-/// the Running run's durable status is re-emitted without a frame.
-pub fn spawn_measurement_bridge(app: AppHandle, library: &Arc<Library>) {
-    let library = Arc::clone(library);
-    let mut events = library.frame_review().subscribe_measurement_progress();
-    tauri::async_runtime::spawn(async move {
-        loop {
-            match events.recv().await {
-                Ok(progress) => emit_measurement(&app, &progress),
-                Err(RecvError::Lagged(skipped)) => {
-                    tracing::warn!(
-                        skipped,
-                        "measurement progress lagged; re-reading durable status"
-                    );
-                    match library.frame_review().running_run().await {
-                        Ok(Some(run)) => emit_measurement(
-                            &app,
-                            &MeasurementProgress {
-                                operation_id: run.operation_id,
-                                revision: run.revision,
-                                state: run.state,
-                                counters: run.counters,
-                                asset_id: None,
-                                frame_state: None,
-                            },
-                        ),
-                        Ok(None) => {}
-                        Err(error) => tracing::error!(
-                            %error,
-                            "measurement progress resync failed; clients must poll pix_measurement_status"
-                        ),
-                    }
-                }
-                Err(RecvError::Closed) => return,
-            }
-        }
-    });
-}
-
-fn emit_measurement(app: &AppHandle, progress: &MeasurementProgress) {
-    if let Err(error) = app.emit(MEASUREMENT_PROGRESS_EVENT, progress) {
-        tracing::error!(run = %progress.operation_id, %error, "measurement progress event not delivered");
-    }
-}
 
 /// `pix_review_frames` response: one state per requested asset, in request
 /// order, and the Running run if any.

@@ -5,8 +5,10 @@
 **Created**: 2026-07-05
 
 **Status**: Partial (verified 2026-08-24 against `origin/main` a52c637f2). Nine of
-ten user stories ship; US9 does not. The five shell-integration plugins are
-non-optional dependencies at `apps/desktop/src-tauri/Cargo.toml:59-67`.
+ten user stories ship; US9 does not. The shell-integration plugins are
+non-optional dependencies in `apps/desktop/src-tauri/Cargo.toml`. Since
+2026-10-12, OS notifications and the diagnostics log file are served by the
+framework-agnostic `crates/desktop/services` crate rather than by plugins.
 
 Shipped:
 
@@ -24,9 +26,13 @@ Shipped:
 - **US6** native window chrome follows the theme —
   `apps/desktop/src/data/theme.ts:313` calls `getCurrentWindow().setTheme(mode)`
   (`decorations: false` at `tauri.conf.json:30`).
-- **US7** shareable diagnostics log file — `tauri-plugin-log`.
-- **US8** OS notification on long-task completion — `tauri-plugin-notification`,
-  initialised at `src/bootstrap/notify.rs:18`.
+- **US7** shareable diagnostics log file — the stdout and daily-rotating file
+  subscriber in `desktop_services` (`crates/desktop/services/src/logging.rs`),
+  started from `apps/desktop/src-tauri/src/main.rs`; `tauri-plugin-log` stays
+  registered (with `skip_logger()`) so frontend `log` calls reach it.
+- **US8** OS notification on long-task completion — `desktop_services`
+  notifications (`crates/desktop/services/src/notifications.rs`, delivered with
+  `notify-rust`); `tauri-plugin-notification` was removed.
 - **US10** signed in-app updates — `tauri-plugin-updater` (builder at
   `lib.rs:60-64`) plus `tauri-plugin-process` for the relaunch step.
 
