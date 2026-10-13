@@ -7,7 +7,7 @@
 import { formatCount, formatDecimal } from "@/lib/format"
 import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { Band, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
+import type { ApplicationProfile, Band, Catalog, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 export const RUN_STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
 
@@ -173,4 +173,16 @@ export function unitCount(unit: OperationUnit, count: number): MessageRef {
     case "items":
       return msg("op_count_items", { count, n })
   }
+}
+
+/** Application profiles in choice order: the applications by name, then the generic launcher last. */
+export function orderedProfiles(catalog: Pick<Catalog, "profiles">): ApplicationProfile[] {
+  const profiles = Object.values(catalog.profiles)
+  const apps = profiles.filter((p) => p.application !== "generic").sort((a, b) => a.name.localeCompare(b.name))
+  return [...apps, ...profiles.filter((p) => p.application === "generic")]
+}
+
+/** A profile's name as a choice: an application's own name; the generic launcher reads "Other app" (`startrun_profile_other`). */
+export function profileRef(profile: ApplicationProfile): MessageRef {
+  return profile.application === "generic" ? msg("startrun_profile_other") : verbatim(profile.name)
 }

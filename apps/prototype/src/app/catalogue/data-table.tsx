@@ -8,7 +8,9 @@
  * menu), expand with a nested table, and the loading, empty and error
  * states. Reviewer controls switch the wide pinned layout and the
  * states; the shift line measures how far the table moved when the
- * selection last appeared or went (it must read 0 px).
+ * selection last appeared or went (it must read 0 px). A second table
+ * fills a fixed-height body (`scroll="fill"`) under a toolbar with one
+ * labelled select (Destination) and an action.
  *
  * Every string, reviewer captions included, comes from the messages (m.*).
  */
@@ -71,6 +73,7 @@ export function DataTableCatalogue() {
   const [selected, setSelected] = useState<string[]>([])
   const [trashed, setTrashed] = useState<string[]>([])
   const [lastAction, setLastAction] = useState<{ action: string; count: number } | null>(null)
+  const [destination, setDestination] = useState("nas")
 
   const live = sessions.filter((s) => !trashed.includes(s.id))
   const channels = distinct(live.map((s) => s.channel ?? "–")).sort()
@@ -275,6 +278,30 @@ export function DataTableCatalogue() {
               }}
             />
           </div>
+        </div>
+      </Section>
+      {/* scroll="fill": the table takes a fixed-height flex column and scrolls inside it; the toolbar's one labelled select. */}
+      <Section title={m.catalogue_datatable_fill()}>
+        <div className="flex h-72 flex-col">
+          <DataTable
+            label={m.catalogue_datatable_fill()}
+            rows={live}
+            columns={columns.slice(0, 4)}
+            getRowId={(s) => s.id}
+            scroll="fill"
+            toolbar={{
+              select: {
+                label: m.wrapup_destination(),
+                value: destination,
+                options: [
+                  { value: "nas", label: m.catalogue_datatable_destination_nas() },
+                  { value: "cold", label: m.catalogue_datatable_destination_cold() },
+                ],
+                onChange: setDestination,
+              },
+              actions: [{ id: "archive", label: m.status_role_archive(), run: () => note(m.status_role_archive(), live.length) }],
+            }}
+          />
         </div>
       </Section>
       <Section title={m.catalogue_datatable_filter_bar_title()} description={m.catalogue_datatable_filter_bar_description()}>

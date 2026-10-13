@@ -12,7 +12,7 @@ import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
 import { runPreparations, runStepLink, type StepLink, type World } from "./derive"
 import { isUnder } from "./indexing"
 import { type MessageRef, msg } from "@/lib/i18n"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Preparation, Run, RunId } from "./types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Preparation, ResultId, Run, RunId } from "./types"
 
 export interface Footprint {
   /** Bytes the prepared folder holds itself: a Copies view's copies; symlinks count zero. */
@@ -79,6 +79,15 @@ export function runViewLinks(catalog: Catalog, disk: Disk): RunViewLinks {
 export interface TrashBlock {
   reason: MessageRef
   link?: StepLink
+}
+
+/** One path to move to the OS Trash (`store/actions/trash.ts`). Items sharing an `assetId` move together or not at all. */
+export interface TrashItem {
+  path: string
+  assetId?: AssetId
+  resultId?: ResultId
+  /** Refused before the move, for example "Offline" for a folder that cannot be listed. */
+  refusedReason?: MessageRef
 }
 
 /**

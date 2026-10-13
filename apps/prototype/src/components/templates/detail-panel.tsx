@@ -9,10 +9,11 @@
  *   panel keeps its size: switching rows moves nothing.
  * - DetailPanel is a complementary region named by its heading. One header
  *   row holds the title, a status, the Display menu with the dock choice
- *   (Automatic, Bottom, Right) and Close (Esc); the actions row under it
- *   holds standard actions and the object menu. Only its body scrolls
- *   (FR-009). The side panel's leading edge resizes it by pointer or arrow
- *   keys.
+ *   (Automatic, Bottom, Right) and, on the side, the width presets (Narrow,
+ *   Medium, Wide), and Close (Esc); the actions row under it holds
+ *   standard actions and the object menu. Only its body scrolls (FR-009).
+ *   The side panel's leading edge resizes it by pointer or arrow keys; the
+ *   presets do it with one click (WCAG 2.5.7).
  * - Escape closes the panel from anywhere in the dock except a text field;
  *   menus and dialogs keep their own Escape. Focus that was in the panel
  *   returns to the open row (`aria-current`), so the list keeps its place.
@@ -22,9 +23,9 @@ import { type CSSProperties, type PointerEvent, type ReactNode, useEffect, useId
 import { useMessages } from "@/app/preferences"
 import { ActionBar, IconButton } from "@/components/app/actions"
 import type { Action } from "@/components/app/contracts"
-import { DisplayMenu } from "@/components/app/display-menu"
+import { type DisplayGroup, DisplayMenu } from "@/components/app/display-menu"
 import { cn } from "@/lib/utils"
-import { type AdaptiveDock, clampDockWidth, DOCK_MIN_WIDTH_PX, type DockPin, useAdaptiveDock } from "./dock"
+import { type AdaptiveDock, clampDockWidth, DOCK_MIN_WIDTH_PX, DOCK_WIDTH_PRESETS, type DockPin, presetDockWidth, useAdaptiveDock } from "./dock"
 import { asStandard, type ObjectMenu } from "./parts"
 
 /** The open detail of a page: what its DetailPanel shows. Null or absent while nothing is open. */
@@ -145,6 +146,20 @@ export function DetailPanel({ detail, dock, maxWidth, level, onClose }: DetailPa
     { value: "bottom", label: m.dock_bottom() },
     { value: "side", label: m.dock_right() },
   ]
+  const presetLabels = { narrow: m.dock_width_narrow(), medium: m.dock_width_medium(), wide: m.dock_width_wide() }
+  // The preset the current width matches, else none (a dragged width).
+  const preset = DOCK_WIDTH_PRESETS.find((item) => presetDockWidth(item, maxWidth) === width) ?? ""
+  const widthGroup: DisplayGroup = {
+    kind: "radio",
+    id: "dock-width",
+    label: m.dock_width(),
+    value: preset,
+    options: DOCK_WIDTH_PRESETS.map((item) => ({ value: item, label: presetLabels[item] })),
+    onChange: (value) => {
+      const item = DOCK_WIDTH_PRESETS.find((option) => option === value)
+      if (item) dock.setWidth(presetDockWidth(item, maxWidth))
+    },
+  }
   return (
     <aside
       aria-labelledby={headingId}
@@ -181,6 +196,7 @@ export function DetailPanel({ detail, dock, maxWidth, level, onClose }: DetailPa
               options: pinOptions,
               onChange: (value) => dock.setPin(pinOptions.find((option) => option.value === value)?.value ?? "auto"),
             },
+            ...(side ? [widthGroup] : []),
           ]}
         />
         <IconButton label={m.dock_close()} icon={X} shortcut={m.key_escape()} onClick={onClose} />
