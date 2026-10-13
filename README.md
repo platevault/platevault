@@ -95,6 +95,24 @@ auto-updater checks against the app's embedded public key, and they work offline
 attestation records where a build came from; the `.sig` establishes that an update is
 genuine. Neither replaces the other.
 
+### Code signing policy
+
+Windows releases are not code-signed yet. The [code signing policy](docs/release/code-signing-policy.md)
+describes the planned signing through SignPath Foundation, who holds which
+role, and what will be signed.
+
+### Privacy
+
+PlateVault sends nothing to the maintainer. It contacts GitHub to check for
+updates, CDS SIMBAD to look up target names, and OpenStreetMap for the
+observing-site map. [Privacy and network access](docs/manual/11-privacy.md)
+lists what each request sends and how to turn it off.
+
+### Uninstalling
+
+[Uninstalling PlateVault](docs/manual/12-uninstalling.md) covers every package
+type and where PlateVault keeps your data.
+
 ## Build from source
 
 Requires [pnpm](https://pnpm.io) and a [Rust](https://www.rust-lang.org)
