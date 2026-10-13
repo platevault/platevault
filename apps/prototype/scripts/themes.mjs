@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
- * Theme generator: `pnpm themes` (node scripts/themes.mjs).
+ * Token generator: `pnpm themes` (node scripts/themes.mjs).
  *
- * Maps each theme's published palette onto the prototype's one token set,
- * then raises every text and tone token until it meets WCAG 2.x contrast on
- * every surface of that theme, and writes:
- * - src/themes.css: one `[data-theme]` block per theme (generated; edit here);
+ * Reads the sys and comp tiers from tokens/*.json (DTCG Format 2025.10),
+ * maps each theme's published palette onto the prototype's one colour token
+ * set, then raises every text and tone token until it meets WCAG 2.x contrast
+ * on every surface of that theme, and writes:
+ * - src/themes.css: the `@theme` blocks and `:root` variables of the sys and
+ *   comp tiers, then one `[data-theme]` block per theme (generated; edit the
+ *   token source or this script);
  * - design/themes-contrast.md: the computed table.
  *
  * Colour maths: OKLCH -> OKLab -> linear sRGB with Björn Ottosson's OKLab
@@ -13,12 +16,133 @@
  * paints is what is measured. Tints (`bg-warning/12` and the like) composite
  * in gamma-encoded sRGB, as the browser blends an alpha fill over its surface.
  */
-import { writeFileSync } from "node:fs"
+import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { THEMES } from "../src/app/themes.ts"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
+
+// ---------------------------------------------------------------------------
+// Token source: tokens/*.json, the sys and comp tiers (DTCG Format 2025.10)
+// ---------------------------------------------------------------------------
+
+/**
+ * DTCG has no arithmetic, so a derived token states its `$value` and names
+ * its derivation here; the build fails when the two disagree.
+ */
+const CALC = "app.platevault.calc"
+const ALIAS = /^\{([^}]+)\}$/
+/** One file per tier, `tokens/<tier>.json`, holding that tier's group; comp tokens alias sys ones. */
+const TIERS = ["sys", "comp"]
+
+/** Every token of the source by dotted path, with `$type` inherited from its groups. */
+function readTokens() {
+  const tokens = new Map()
+  const walk = (node, path, type) => {
+    const own = node.$type ?? type
+    if ("$value" in node) {
+      const id = path.join(".")
+      if (!own) throw new Error(`Token ${id} has no $type`)
+      tokens.set(id, { id, path, type: own, raw: node.$value, description: node.$description, calc: node.$extensions?.[CALC] })
+      return
+    }
+    for (const [key, child] of Object.entries(node)) if (!key.startsWith("$") || key === "$root") walk(child, [...path, key], own)
+  }
+  const dir = join(ROOT, "tokens")
+  const strays = readdirSync(dir).filter((name) => !TIERS.includes(name.replace(/\.json$/, "")))
+  if (strays.length > 0) throw new Error(`tokens/ holds one file per tier (${TIERS.join(", ")}); unexpected: ${strays.join(", ")}`)
+  for (const tier of TIERS) {
+    const file = JSON.parse(readFileSync(join(dir, `${tier}.json`), "utf8"))
+    const other = Object.keys(file).filter((key) => !key.startsWith("$") && key !== tier)
+    if (other.length > 0) throw new Error(`tokens/${tier}.json holds the ${tier} tier only; found ${other.join(", ")}`)
+    walk(file, [], undefined)
+  }
+  return tokens
+}
+
+/** A token's value with aliases followed; an alias must point at a token of the same type. */
+function resolveToken(tokens, id, seen = []) {
+  const token = tokens.get(id)
+  if (!token) throw new Error(`Unknown token {${id}}${seen.length ? ` (from ${seen.at(-1)})` : ""}`)
+  if (seen.includes(id)) throw new Error(`Alias cycle: ${[...seen, id].join(" -> ")}`)
+  const ref = typeof token.raw === "string" && token.raw.match(ALIAS)
+  if (!ref) return token.raw
+  const target = tokens.get(ref[1])
+  if (target && target.type !== token.type) throw new Error(`${id} is ${token.type} but aliases ${target.id} (${target.type})`)
+  return resolveToken(tokens, ref[1], [...seen, id])
+}
+
+/** The number a calc expression works with: a dimension in the token's own unit, or a plain number. */
+function magnitude(value, type, unit, where) {
+  if (type === "number") return value
+  if (type !== "dimension") throw new Error(`${where}: calc works on dimensions and numbers, not ${type}`)
+  if (value.unit !== unit) throw new Error(`${where}: mixes ${value.unit} with ${unit}`)
+  return value.value
+}
+
+function checkCalc(tokens, token, value) {
+  const unit = value.unit
+  const expr = token.calc.replace(/\{([^}]+)\}/g, (_, ref) => String(magnitude(resolveToken(tokens, ref), tokens.get(ref).type, unit, token.id)))
+  if (!/^[\d.\s+\-*/()]+$/.test(expr)) throw new Error(`${token.id}: calc "${token.calc}" is not arithmetic over tokens`)
+  const expected = Function(`"use strict"; return (${expr})`)()
+  const actual = magnitude(value, token.type, unit, token.id)
+  if (Math.abs(expected - actual) > 1e-9) throw new Error(`${token.id}: $value is ${actual} but ${token.calc} gives ${expected}`)
+}
+
+const dimension = (d) => (d.value === 0 ? "0" : `${d.value}${d.unit}`)
+
+function oklchColor(c) {
+  if (c.colorSpace !== "oklch") throw new Error(`Colour space ${c.colorSpace} is not supported; use oklch`)
+  const alpha = c.alpha ?? 1
+  return `oklch(${c.components.join(" ")}${alpha === 1 ? "" : ` / ${alpha}`})`
+}
+
+const shadowLayer = (s) => `${s.inset ? "inset " : ""}${[s.offsetX, s.offsetY, s.blur, s.spread].map(dimension).join(" ")} ${oklchColor(s.color)}`
+
+const CSS_VALUE = {
+  dimension,
+  number: String,
+  color: oklchColor,
+  fontFamily: (f) => [f].flat().map((name) => (/\s/.test(name) ? `"${name}"` : name)).join(", "),
+  shadow: (s) => [s].flat().map(shadowLayer).join(", "),
+}
+
+/** The CSS custom property of a token path: the tier and `$root` drop out; a line height pairs with its size as Tailwind's `--text-xs--line-height`. */
+const cssName = (path) => `--${path.slice(1).filter((segment) => segment !== "$root").join("-").replace(/-line-height$/, "--line-height")}`
+
+/** Tailwind's own theme namespaces: these are declared inside `@theme`, so Tailwind builds the utilities and emits the variables. */
+const TAILWIND_NATIVE = /^--(?:font-|text-|radius-|spacing$)/
+
+/** The rest are plain `:root` variables; these prefixes also get a Tailwind namespace through `@theme inline` (`shadow-elevation-2`, `z-shell`, `max-w-dialog-md`). */
+const TAILWIND_BRIDGE = [
+  ["--elevation-", "--shadow-elevation-"],
+  ["--z-", "--z-index-"],
+  ["--dialog-w-", "--container-dialog-"],
+]
+
+function tokenBlocks() {
+  const tokens = readTokens()
+  const theme = []
+  const bridge = []
+  const root = []
+  const names = new Map()
+  for (const token of tokens.values()) {
+    const value = resolveToken(tokens, token.id)
+    if (token.calc) checkCalc(tokens, token, value)
+    const toCss = CSS_VALUE[token.type]
+    if (!toCss) throw new Error(`${token.id}: type ${token.type} has no CSS form`)
+    const name = cssName(token.path)
+    if (names.has(name)) throw new Error(`${token.id} and ${names.get(name)} both emit ${name}`)
+    names.set(name, token.id)
+    const lines = TAILWIND_NATIVE.test(name) ? theme : root
+    if (token.description) lines.push(`  /* ${token.description} */`)
+    lines.push(`  ${name}: ${toCss(value)};`)
+    const bridged = TAILWIND_BRIDGE.find(([prefix]) => name.startsWith(prefix))
+    if (bridged) bridge.push(`  ${bridged[1]}${name.slice(bridged[0].length)}: var(${name});`)
+  }
+  return [`@theme {\n${theme.join("\n")}\n}`, `@theme inline {\n${bridge.join("\n")}\n}`, `:root {\n${root.join("\n")}\n}`]
+}
 
 // ---------------------------------------------------------------------------
 // Colour maths
@@ -462,14 +586,15 @@ const results = THEMES.map((theme) => {
 for (const id of Object.keys(SPECS)) if (!THEMES.some((theme) => theme.id === id)) throw new Error(`Palette ${id} is not in src/app/themes.ts`)
 
 const header = `/*
- * Theme tokens: generated by scripts/themes.mjs from each theme's published
- * palette. Do not edit by hand; change the script and run \`pnpm themes\`.
+ * Tokens: generated by scripts/themes.mjs from tokens/*.json (the sys and
+ * comp tiers) and each theme's published palette. Do not edit by hand;
+ * change the token source or the script and run \`pnpm themes\`.
  * Every text and tone token meets 4.5:1 on every surface of its theme (UI
  * glyphs 3:1); the computed table is design/themes-contrast.md.
  */`
 // `:root` (PlateVault Light) comes first: every `[data-theme]` block has the same specificity and must win by order.
 const cssOrder = [...results].sort((a, b) => Number(b.id === "platevault-light") - Number(a.id === "platevault-light"))
-writeFileSync(join(ROOT, "src/themes.css"), `${header}\n\n${cssOrder.map(block).join("\n\n")}\n`)
+writeFileSync(join(ROOT, "src/themes.css"), `${header}\n\n${[...tokenBlocks(), ...cssOrder.map(block)].join("\n\n")}\n`)
 
 const fmt = (v) => v.toFixed(2)
 const min = (rows, kinds) => Math.min(...rows.filter((r) => kinds.includes(r.kind)).map((r) => r.value))

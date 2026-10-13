@@ -26,7 +26,7 @@
  *   in a row under it, one level deep (a nested DataTable, a KeyValueList).
  * - Keyboard: ↑/↓ move focus to the same column in the adjacent row, across
  *   groups; Tab order stays natural. Row height and cell padding follow the
- *   density tokens `--row-h` and `--row-py`.
+ *   row tokens `--row-h` and `--row-py`.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column

@@ -1,8 +1,8 @@
 /**
- * Shell preferences: theme (a registry theme or "system"), language, density,
- * and whether single-key shortcuts are on (WCAG 2.1.4). Stored outside the
+ * Shell preferences: theme (a registry theme or "system"), language, and
+ * whether single-key shortcuts are on (WCAG 2.1.4). Stored outside the
  * prototype catalog so Reset keeps them; the pre-paint script in index.html
- * reads theme, scheme, density and language so the first frame is correct.
+ * reads theme, scheme and language so the first frame is correct.
  *
  * The saved language is the active Paraglide locale: the "custom-preferences"
  * strategy below hands it to `m.*()`, and `useMessages()` re-renders a
@@ -14,13 +14,11 @@ import { defineCustomClientStrategy } from "@/paraglide/runtime"
 import { DEFAULT_THEME, isThemeId, SYSTEM_THEMES, type ThemeId, type ThemeScheme, themeInfo } from "./themes"
 
 export type ThemePreference = ThemeId | "system"
-export type Density = "compact" | "comfortable" | "spacious"
 
 const THEME_KEY = "platevault.theme"
 /** The resolved theme's scheme, so the pre-paint script can set `html.dark` without the registry. */
 const SCHEME_KEY = "platevault.themeScheme"
 const LOCALE_KEY = "platevault.locale"
-const DENSITY_KEY = "platevault.density"
 const SINGLE_KEY_SHORTCUTS_KEY = "platevault.singleKeyShortcuts"
 
 interface Preferences {
@@ -30,7 +28,6 @@ interface Preferences {
   /** Dark or light, from the resolved theme. */
   scheme: ThemeScheme
   locale: Locale
-  density: Density
   /** ?, /, [ and G-sequences. Modifier shortcuts such as ⌘K stay on. */
   singleKeyShortcuts: boolean
 }
@@ -80,7 +77,6 @@ let current: Preferences = (() => {
   const locale = stored(LOCALE_KEY)
   return snapshot(readTheme(), {
     locale: locale && isLocale(locale) ? locale : DEFAULT_LOCALE,
-    density: read<Density>(DENSITY_KEY, ["compact", "comfortable", "spacious"], "comfortable"),
     singleKeyShortcuts: read(SINGLE_KEY_SHORTCUTS_KEY, ["on", "off"], "on") === "on",
   })
 })()
@@ -99,7 +95,6 @@ function apply() {
   const root = document.documentElement
   root.dataset.theme = current.resolvedTheme
   root.classList.toggle("dark", current.scheme === "dark")
-  root.dataset.density = current.density
   root.lang = current.locale
   store(SCHEME_KEY, current.scheme)
   const meta = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
@@ -108,7 +103,7 @@ function apply() {
 
 function update(next: Partial<Omit<Preferences, "resolvedTheme" | "scheme">>) {
   const { theme, ...rest } = { ...current, ...next }
-  current = snapshot(theme, { locale: rest.locale, density: rest.density, singleKeyShortcuts: rest.singleKeyShortcuts })
+  current = snapshot(theme, { locale: rest.locale, singleKeyShortcuts: rest.singleKeyShortcuts })
   apply()
   for (const listener of listeners) listener()
 }
@@ -126,11 +121,6 @@ export function setTheme(theme: ThemePreference) {
 export function setLocale(locale: Locale) {
   store(LOCALE_KEY, locale)
   update({ locale })
-}
-
-export function setDensity(density: Density) {
-  store(DENSITY_KEY, density)
-  update({ density })
 }
 
 export function setSingleKeyShortcuts(enabled: boolean) {

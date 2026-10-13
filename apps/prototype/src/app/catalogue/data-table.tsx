@@ -6,7 +6,7 @@
  * and Delete), selection with batch actions (one unavailable, one
  * confirmed, the rest under More), row actions (inline primary, ⋯, context
  * menu), expand with a nested table, and the loading, empty and error
- * states. Reviewer controls switch density, the wide pinned layout and the
+ * states. Reviewer controls switch the wide pinned layout and the
  * states; the shift line measures how far the table moved when the
  * selection last appeared or went (it must read 0 px).
  *
@@ -28,7 +28,6 @@ import type { Asset, Session } from "@/domain/types"
 import { formatBytes, formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
 
-type Density = "compact" | "comfortable" | "spacious"
 type TableState = "rows" | "loading" | "empty" | "error"
 
 interface Filters {
@@ -64,7 +63,6 @@ export function DataTableCatalogue() {
   const m = useMessages()
   const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light" && x.supersededBy === null))
   const assets = useStore((s) => s.catalog.assets)
-  const [density, setDensity] = useState<Density>("comfortable")
   const [wide, setWide] = useState(false)
   const [state, setState] = useState<TableState>("rows")
   const [query, setQuery] = useState("")
@@ -204,11 +202,6 @@ export function DataTableCatalogue() {
       <Section title={m.catalogue_datatable_title()} description={m.catalogue_datatable_description()}>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <ToggleGroup aria-label={m.settings_density()} variant="outline" size="sm" spacing={0} value={[density]} onValueChange={(value) => value[0] && setDensity(value[0] as Density)}>
-              <ToggleGroupItem value="compact">{m.settings_density_compact()}</ToggleGroupItem>
-              <ToggleGroupItem value="comfortable">{m.settings_density_comfortable()}</ToggleGroupItem>
-              <ToggleGroupItem value="spacious">{m.settings_density_spacious()}</ToggleGroupItem>
-            </ToggleGroup>
             <ToggleGroup aria-label={m.catalogue_datatable_state()} variant="outline" size="sm" spacing={0} value={[state]} onValueChange={(value) => value[0] && setState(value[0] as TableState)}>
               <ToggleGroupItem value="rows">{m.catalogue_datatable_state_rows()}</ToggleGroupItem>
               <ToggleGroupItem value="loading">{m.catalogue_datatable_state_loading()}</ToggleGroupItem>
@@ -227,7 +220,7 @@ export function DataTableCatalogue() {
             <p>{lastAction ? m.catalogue_datatable_last_run({ action: lastAction.action, count: lastAction.count, n: formatCount(lastAction.count) }) : m.catalogue_datatable_no_action()}</p>
             <p>{m.catalogue_datatable_notes()}</p>
           </div>
-          <div ref={host} data-density={density}>
+          <div ref={host}>
             <DataTable
               label={m.catalogue_datatable_label()}
               rows={state === "empty" ? [] : shown}
