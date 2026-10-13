@@ -53,7 +53,8 @@ test.describe('Journey 17 · Software update check (mock-mode, spec 051)', () =>
       "You're running the latest version.",
     );
 
-    // No action buttons visible in the up-to-date state.
+    // No restart or retry action in the up-to-date state; only the manual
+    // "Check for updates" button (astro-plan-bzzbp) is offered.
     await expect(page.getByTestId('update-restart-btn')).toHaveCount(0);
     await expect(page.getByTestId('update-retry-btn')).toHaveCount(0);
   });

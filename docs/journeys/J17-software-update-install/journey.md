@@ -1,7 +1,7 @@
 ---
 id: J17
 title: Learn about, install, and restart into a signed software update
-version: 3
+version: 4
 status: active
 last_reviewed: 2026-10-13
 actors: [astrophotographer]
@@ -15,6 +15,7 @@ trace:
   - docs/development/journey-run-2026-07-14.md (2026-07-14 Windows validation pass)
   - astro-plan-mkkgi (owner decision 2026-10-12: install only on the user's choice)
   - apps/prototype/design/R9-UPDATER-OPTIONS.md §1 D1 (ui-harness-v5)
+  - astro-plan-bzzbp (owner decision 2026-10-13, D8: "Check for updates automatically" setting)
 ---
 
 ## Goal
@@ -60,13 +61,19 @@ install) leaves the previously running install completely untouched.
   update notice at the top of the main area; or open Settings → Advanced and
   locate the Software Update section.
 - **Expect:** A single background check runs automatically once at app
-  startup. When it finds a newer release, an in-app notice reads "Update
-  {version} is available." with that release's notes and offers
-  **Install now**, **Install on quit** and **Later**; the Software Update
-  section reads the same and offers the same two install choices. Otherwise
-  the section reads "You're running the latest version." The check never
-  blocks the UI, never repeats later in the session, and never interrupts
-  in-progress library work.
+  startup while **Check for updates automatically** (in the Software Update
+  section, on by default) is on. When it finds a newer release, an in-app
+  notice reads "Update {version} is available." with that release's notes
+  and offers **Install now**, **Install on quit** and **Later**; the Software
+  Update section reads the same and offers the same two install choices.
+  Otherwise the section reads "You're running the latest version." and
+  offers **Check for updates**. The check never blocks the UI, never repeats
+  later in the session, and never interrupts in-progress library work.
+- **Expect (setting off):** With **Check for updates automatically** off,
+  launching the app sends no request to the update endpoint; the section
+  reads "PlateVault hasn't checked for updates yet." The setting survives a
+  restart. **Check for updates** still runs one check on each click and
+  lands on the same outcomes as the startup check.
 - **Expect (negative):** The check alone never downloads, stages, installs,
   relaunches or asks for elevation: no installer runs and the app does not
   quit on Windows, and no pkexec/polkit prompt appears on deb/rpm, until the
@@ -179,3 +186,8 @@ install) leaves the previously running install completely untouched.
   main window), the hold while installing, and the quits from outside the
   app (Dock, sign-out, shutdown, force quit, crash) that exit without
   installing.
+- 2026-10-13 (v4): Owner decision D8 (astro-plan-bzzbp): a "Check for
+  updates automatically" setting in Settings → Advanced → Software Update, on
+  by default and persisted. Off skips the startup check; the new **Check for
+  updates** action checks on request either way. S1 updated with the
+  setting-off branch and the not-yet-checked status.

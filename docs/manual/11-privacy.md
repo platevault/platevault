@@ -7,36 +7,60 @@ reporting or advertising. Your data stays in local folders, listed in
 
 The app connects to the internet for three features:
 
-- the update check;
+- update checks;
 - target lookups;
 - the observing-site map.
 
 Each section says what the request sends, when it runs, and how to turn it
 off or avoid it in the current release.
 
-## Update check (GitHub)
+## Update checks (GitHub)
+
+PlateVault checks for updates in two ways: automatically at startup, and
+manually when you ask. Both send the same request to the same place.
 
 - **Where:** `https://github.com/platevault/platevault/releases/latest/download/latest.json`.
   GitHub may answer from its own download hosts, such as
   `release-assets.githubusercontent.com`.
-- **When:** once every time PlateVault starts. After a failed check or
-  download, **Settings → Advanced → Software Update → Check again** runs it
-  once more.
 - **What is sent:** a plain HTTPS request for that file. It carries the
   updater's name and version as its user agent, plus your IP address, as any
   web request does. It does not carry your PlateVault version, your library
   or anything about your files.
-- **What follows:** this depends on the version you run.
-  - Up to and including the 0.6.x releases, PlateVault downloads and installs
-    the update for your platform from GitHub as soon as the check finds one,
-    at launch. On Windows the installer starts and PlateVault quits.
-  - From 0.7.0, PlateVault tells you about the update and downloads nothing
-    until you choose **Install now** or **Install on quit**. It then downloads
-    the update package from GitHub and checks its signature before
-    installing it.
-- **How to turn it off:** the current release has no setting for this. To
-  stop it, block `github.com` for PlateVault in your firewall.
-- **GitHub's policy:** [GitHub General Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+
+### Automatic check
+
+- **When:** once every time PlateVault starts. It does not repeat on a
+  schedule while the app runs.
+- **What is sent:** the request described above, to `github.com`.
+- **How to turn it off:** switch off **Settings → Advanced → Software Update
+  → Check for updates automatically**. It is on by default. With it off,
+  PlateVault sends no update request at startup or at any other time unless
+  you check manually. **Reset preferences** in **Settings → Advanced** turns
+  it back on.
+- **Releases without the setting:** up to and including the 0.6.x releases,
+  the check runs at every start and cannot be turned off. To stop it there,
+  block `github.com` for PlateVault in your firewall.
+
+### Manual check
+
+- **When:** only when you click **Check for updates**, or **Check again**
+  after a failed check, in **Settings → Advanced → Software Update**. It works
+  whether the automatic check is on or off.
+- **What is sent:** the same request, to `github.com`, once per click.
+
+### What follows a check
+
+This depends on the version you run.
+
+- Up to and including the 0.6.x releases, PlateVault downloads and installs
+  the update for your platform from GitHub as soon as the check finds one, at
+  launch. On Windows the installer starts and PlateVault quits.
+- From 0.7.0, PlateVault tells you about the update and downloads nothing
+  until you choose **Install now** or **Install on quit**. It then downloads
+  the update package from GitHub and checks its signature before installing
+  it.
+
+**GitHub's policy:** [GitHub General Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
 
 ## Target lookups (CDS SIMBAD, Strasbourg)
 

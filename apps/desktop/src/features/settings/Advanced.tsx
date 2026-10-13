@@ -13,13 +13,17 @@
 import { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Btn } from '@/ui';
+import { Btn, Toggle } from '@/ui';
 import { parseSettingsValues, restartFirstRun } from './settingsIpc';
 import { settingsQueryOptions } from './settingsQueries';
 import { AdvancedSettingsSchema, type LOG_LEVELS } from './settingsSchemas';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
-import { setPreference, resetPreferences } from '@/data/preferences';
+import {
+  setPreference,
+  resetPreferences,
+  usePreference,
+} from '@/data/preferences';
 import {
   resetWizardStateWithSources,
   type SourceEntry,
@@ -66,6 +70,8 @@ export function Advanced({ save }: AdvancedProps) {
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
   const updateState = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
   const [runningVersion, setRunningVersion] = useState<string | null>(null);
+  const [checkUpdatesAutomatically, setCheckUpdatesAutomatically] =
+    usePreference('checkUpdatesAutomatically');
   const [resetConfirming, setResetConfirming] = useState(false);
   const [resetDone, setResetDone] = useState(false);
 
@@ -260,8 +266,21 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Signed auto-update (spec 051 US10, #869/#873, astro-plan-mkkgi) */}
+      {/* Signed auto-update (spec 051 US10, #869/#873, astro-plan-mkkgi).
+          The toggle only gates the startup check (astro-plan-bzzbp); the
+          manual check in UpdateActions works either way. */}
       <SettingsSection title={m.settings_advanced_updates_title()}>
+        <SettingsRow
+          label={m.settings_advanced_updates_auto_check()}
+          info={m.settings_advanced_updates_auto_check_info()}
+        >
+          <Toggle
+            aria-label={m.settings_advanced_updates_auto_check()}
+            checked={checkUpdatesAutomatically}
+            onChange={setCheckUpdatesAutomatically}
+            data-testid="update-auto-check-toggle"
+          />
+        </SettingsRow>
         <SettingsRow label={m.settings_advanced_updates_title()}>
           <div className={controlCol}>
             {runningVersion && (

@@ -2209,6 +2209,11 @@ export type AppPreferences = {
 	setupCompleted: boolean,
 	/**  Keyed by `dockId` (the adopting list page, e.g. `"sessions"`). */
 	detailDock: { [key in string]: DetailDockPref },
+	/**
+	 *  Whether the app checks for updates at startup. Off: only a manual check
+	 *  in Settings › Advanced contacts the update endpoint.
+	 */
+	checkUpdatesAutomatically: boolean,
 };
 
 /**

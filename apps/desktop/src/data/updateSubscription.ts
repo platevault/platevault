@@ -23,15 +23,19 @@
  * 'install-failed', and 'restart-failed' when the update is installed but the
  * relaunch failed.
  *
- * `startUpdateSubscription()` runs one check at app start. The update notice
- * (`features/update/UpdateBanner.tsx`) and Settings > Advanced subscribe to
- * the resulting state and offer the actions for each phase.
+ * `startUpdateSubscription()` runs one check at app start, unless the user
+ * turned off "Check for updates automatically" (AppPreferences
+ * `checkUpdatesAutomatically`, astro-plan-bzzbp). `checkForUpdate()` ignores
+ * that setting, so a manual "Check for updates" always works. The update
+ * notice (`features/update/UpdateBanner.tsx`) and Settings > Advanced
+ * subscribe to the resulting state and offer the actions for each phase.
  *
  * In mock/test mode (VITE_USE_MOCKS=true) the Tauri updater/process APIs are
  * unavailable; every exported action is a no-op and the phase stays 'idle'.
  */
 
 import type { Update } from '@tauri-apps/plugin-updater';
+import { getPreferences } from './preferences';
 
 const IS_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
@@ -377,7 +381,11 @@ async function releasePending(): Promise<void> {
   }
 }
 
-/** Start the update-check subscription (idempotent): runs one check now. */
+/**
+ * Start the update-check subscription (idempotent): runs one check now when
+ * "Check for updates automatically" is on. With it off, nothing contacts the
+ * update endpoint until the user checks manually.
+ */
 export async function startUpdateSubscription(): Promise<void> {
   if (subscribed) return;
   subscribed = true;
@@ -389,6 +397,7 @@ export async function startUpdateSubscription(): Promise<void> {
     return;
   }
   if (IS_MOCK) return;
+  if (!getPreferences().checkUpdatesAutomatically) return;
   await checkForUpdate();
 }
 

@@ -39,6 +39,7 @@ const AppPreferencesSchema = z.object({
   ),
   sessionsView: optional(z.enum(['list', 'calendar'])),
   setupCompleted: optional(z.boolean()),
+  checkUpdatesAutomatically: optional(z.boolean()),
   detailDock: optional(z.record(z.string(), DetailDockPrefSchema)),
 });
 
@@ -56,6 +57,7 @@ const defaults: AppPreferences = {
   sessionsView: 'list',
   setupCompleted: false,
   detailDock: {},
+  checkUpdatesAutomatically: true,
 };
 
 function notify(): void {
