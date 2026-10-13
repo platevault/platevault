@@ -2386,6 +2386,7 @@
   "project_lookup_sesame": "CDS Sesame (SIMBAD)",
   "project_panel_short": "P{n}",
   "tonight_limit": "Lua ≥ {separation}° · ≤ {illumination}%",
+  "tonight_avoidance": "Lua ≥ {separation}° na cheia · {width} d",
   "tonight_moon_position": "Lua {separation}° · {illumination}%",
   "tonight_moon_down": "Lua abaixo",
   "tonight_reason_good": "{band} bom · {hours} · {moon}",

@@ -5,7 +5,9 @@
  * grid, enough to show plausible, criteria-consistent windows. Suitability is
  * astronomical only (PLAN-FR-05). Tonight (PLAN-FR-11) supplies Home's
  * Tonight section and the Plan area: the Moon, the darkness window and the
- * best window per Target.
+ * best window per Target. The Moon rule (C6) is one Moon-avoidance curve per
+ * filter (`MoonAvoidance`, design/R10-MOON-MODEL.md); `nightImaging` grades
+ * the filters and sums Img time from it in one pass.
  */
 import { angularSeparationDeg } from "./sky"
 import type { Band, CalendarExport, Catalog, MoonConstraint, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
@@ -32,17 +34,21 @@ function equatorial(lambdaDeg: number, betaDeg: number, epsDeg: number): { ra: n
   return { ra: norm360(ra / RAD), dec: dec / RAD }
 }
 
-/** Low-precision Sun position (about 0.01°). */
-export function sunPosition(jd: number): { ra: number; dec: number } {
+/** Low-precision Sun ecliptic longitude in degrees (about 0.01°). */
+function sunLongitudeDeg(jd: number): number {
   const n = jd - 2_451_545
   const L = norm360(280.46 + 0.985_647_4 * n)
   const g = norm360(357.528 + 0.985_600_3 * n) * RAD
-  const lambda = L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)
-  return equatorial(lambda, 0, 23.439 - 0.000_000_4 * n)
+  return L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)
 }
 
-/** Low-precision Moon position (Astronomical Almanac, about 0.3°). */
-export function moonPosition(jd: number): { ra: number; dec: number } {
+/** Low-precision Sun position (about 0.01°). */
+export function sunPosition(jd: number): { ra: number; dec: number } {
+  return equatorial(sunLongitudeDeg(jd), 0, 23.439 - 0.000_000_4 * (jd - 2_451_545))
+}
+
+/** Low-precision Moon ecliptic longitude and latitude in degrees (Astronomical Almanac, about 0.3°). */
+function moonEcliptic(jd: number): { lambda: number; beta: number } {
   const T = (jd - 2_451_545) / 36_525
   const s = (deg: number) => Math.sin(deg * RAD)
   const lambda =
@@ -55,7 +61,22 @@ export function moonPosition(jd: number): { ra: number; dec: number } {
     0.19 * s(357.5 + 35_999.05 * T) -
     0.11 * s(186.5 + 966_404.03 * T)
   const beta = 5.13 * s(93.3 + 483_202.02 * T) + 0.28 * s(228.2 + 960_400.89 * T) - 0.28 * s(318.3 + 6_003.15 * T) - 0.17 * s(217.6 - 407_332.21 * T)
-  return equatorial(norm360(lambda), beta, 23.439)
+  return { lambda: norm360(lambda), beta }
+}
+
+/** Low-precision Moon position (Astronomical Almanac, about 0.3°). */
+export function moonPosition(jd: number): { ra: number; dec: number } {
+  const { lambda, beta } = moonEcliptic(jd)
+  return equatorial(lambda, beta, 23.439)
+}
+
+/**
+ * The Moon's age at `jd`: days since new Moon, 0 to `SYNODIC_MONTH_DAYS`,
+ * from its lead over the Sun in ecliptic longitude (Target Scheduler reads
+ * age the same way, from the Moon's phase angle).
+ */
+export function moonAgeDays(jd: number): number {
+  return (norm360(moonEcliptic(jd).lambda - sunLongitudeDeg(jd)) / 360) * SYNODIC_MONTH_DAYS
 }
 
 /** Altitude in degrees of a fixed position at a site and instant. */
@@ -67,6 +88,7 @@ export function altitudeDeg(ra: number, dec: number, latDeg: number, lonDeg: num
   return Math.asin(Math.sin(d) * Math.sin(lat) + Math.cos(d) * Math.cos(lat) * Math.cos(ha)) / RAD
 }
 
+/** The criteria behind Img time's altitude, darkness and duration. The Moon fields stay null: the Moon rule is per filter (C6, `nightImaging`). */
 export function defaultCriteria(site: ObservingSite | null): PlanCriteria {
   return {
     minAltitudeDeg: site?.minAltitudeDeg ?? 30,
@@ -308,6 +330,61 @@ export function windowsOnNight(target: Target, site: ObservingSite, criteria: Pl
   return computeWindows(target, site, criteria, nowMs, 1, night)
 }
 
+// ---------------------------------------------------------------------------
+// Moon avoidance (C6): one Lorentzian curve per filter
+// ---------------------------------------------------------------------------
+
+/** Days from new Moon to new Moon (the mean synodic month, Target Scheduler's `DAYS_IN_LUNAR_CYCLE`). */
+export const SYNODIC_MONTH_DAYS = 29.530_59
+
+/**
+ * One filter's Moon-avoidance curve (C6): the Moon-avoidance Lorentzian of
+ * ACP Scheduler's MoonAvoid and N.I.N.A. Target Scheduler's classic
+ * avoidance (design/R10-MOON-MODEL.md). The Moon must keep `separationDeg`
+ * from the position at full Moon, half that `widthDays` before or after full,
+ * and less still as it thins towards new Moon.
+ */
+export interface MoonAvoidance {
+  separationDeg: number
+  widthDays: number
+}
+
+/** The ranges a curve keeps, Target Scheduler's: separation 0 to 180°, width 1 to 14 days. */
+export const MOON_AVOIDANCE_LIMITS = {
+  separationDeg: { min: 0, max: 180 },
+  widthDays: { min: 1, max: 14 },
+} as const
+
+/** A curve inside `MOON_AVOIDANCE_LIMITS`: what an edit stores, so the width never reaches zero. */
+export function clampMoonAvoidance(curve: MoonAvoidance): MoonAvoidance {
+  const { separationDeg: sep, widthDays: width } = MOON_AVOIDANCE_LIMITS
+  return {
+    separationDeg: Math.min(sep.max, Math.max(sep.min, curve.separationDeg)),
+    widthDays: Math.min(width.max, Math.max(width.min, curve.widthDays)),
+  }
+}
+
+/**
+ * The separation a curve asks at a Moon age, in degrees: the Lorentzian
+ * separation / (1 + ((0.5 − age / P) / (width / P))²) with P the synodic
+ * month, as ACP's help page computes it and Target Scheduler's
+ * `GetMoonAvoidanceLorentzianSeparation` does.
+ */
+export function requiredMoonSeparationDeg(curve: MoonAvoidance, ageDays: number): number {
+  const x = (0.5 - ageDays / SYNODIC_MONTH_DAYS) / (curve.widthDays / SYNODIC_MONTH_DAYS)
+  return curve.separationDeg / (1 + x * x)
+}
+
+/**
+ * Whether the Moon lets a filter image a position at one sample (C6): it is
+ * below the horizon, or at least the curve's separation away at its age.
+ * Below the horizon the curve does not apply, as Target Scheduler's
+ * relaxation turns avoidance off for a low Moon (design/R10-MOON-MODEL.md).
+ */
+export function moonAllows(curve: MoonAvoidance, sample: Pick<SkySample, "moonAlt" | "moonAgeDays">, separationDeg: number): boolean {
+  return sample.moonAlt <= 0 || separationDeg >= requiredMoonSeparationDeg(curve, sample.moonAgeDays)
+}
+
 /** One sample of a night on the `computeWindows` grid: the Sun and the Moon at that instant. */
 export interface SkySample {
   ms: number
@@ -317,6 +394,8 @@ export interface SkySample {
   moonDec: number
   /** Moon illumination, 0-100, rounded. */
   moonIllum: number
+  /** Moon age in days since new Moon (`moonAgeDays`). */
+  moonAgeDays: number
 }
 
 /** A night's samples and the Sun altitude below which a sample counts as dark. */
@@ -342,6 +421,7 @@ export function skyNight(site: ObservingSite, night: string, darkness: PlanCrite
       moonRa: moon.ra,
       moonDec: moon.dec,
       moonIllum: Math.round(((1 - Math.cos(elongation * RAD)) / 2) * 100),
+      moonAgeDays: moonAgeDays(jd),
     })
   }
   return { samples, sunLimit: darkness === "astronomical" ? -18 : -12 }
@@ -354,34 +434,58 @@ export interface Stretch {
   minutes: number
 }
 
+/** Consecutive samples by index, `first` to `last` inclusive. */
+interface Run {
+  first: number
+  last: number
+}
+
+/** The runs of samples `0 … count - 1` that `keep` passes, in order. */
+function runsWhere(count: number, keep: (index: number) => boolean): Run[] {
+  const out: Run[] = []
+  let first: number | null = null
+  for (let i = 0; i <= count; i += 1) {
+    if (i < count && keep(i)) first ??= i
+    else if (first !== null) {
+      out.push({ first, last: i - 1 })
+      first = null
+    }
+  }
+  return out
+}
+
+function runMinutes(run: Run): number {
+  return (run.last - run.first + 1) * SAMPLE_MIN
+}
+
+function runEndMs(sky: SkyNight, run: Run): number {
+  return sky.samples[run.first]!.ms + runMinutes(run) * 60_000
+}
+
+function stretchOf(sky: SkyNight, run: Run): Stretch {
+  return { start: new Date(sky.samples[run.first]!.ms).toISOString(), end: new Date(runEndMs(sky, run)).toISOString(), minutes: runMinutes(run) }
+}
+
 /**
  * The stretches of a night in which a position is dark, at or above
  * `minAltitudeDeg`, and clear of the Moon under `limit`: the Moon down, or
  * up but at least the minimum separation away and lit no more than the
  * maximum. Without a limit the Moon is ignored. `altitudes` is the
  * position's altitude at each sample.
+ * @deprecated The two independent limits give way to one curve per filter (C6): use `nightImaging`. W3 moves the Targets page; W4 removes this.
  */
 export function clearStretches(sky: SkyNight, altitudes: number[], ra: number, dec: number, minAltitudeDeg: number, limit: MoonConstraint | null): Stretch[] {
-  const stepMs = SAMPLE_MIN * 60_000
-  const out: Stretch[] = []
-  let first: number | null = null
-  const close = (endIndex: number) => {
-    if (first === null) return
-    const startMs = sky.samples[first]!.ms
-    out.push({ start: new Date(startMs).toISOString(), end: new Date(startMs + (endIndex - first) * stepMs).toISOString(), minutes: (endIndex - first) * SAMPLE_MIN })
-    first = null
-  }
-  sky.samples.forEach((s, i) => {
-    let ok = s.sunAlt <= sky.sunLimit && altitudes[i]! >= minAltitudeDeg
-    if (ok && limit && s.moonAlt > 0) ok = angularSeparationDeg(ra, dec, s.moonRa, s.moonDec) >= limit.minSeparationDeg && s.moonIllum <= limit.maxIlluminationPct
-    if (ok) first ??= i
-    else close(i)
-  })
-  close(sky.samples.length)
-  return out
+  return runsWhere(sky.samples.length, (i) => {
+    const s = sky.samples[i]!
+    if (s.sunAlt > sky.sunLimit || altitudes[i]! < minAltitudeDeg) return false
+    return !limit || s.moonAlt <= 0 || (angularSeparationDeg(ra, dec, s.moonRa, s.moonDec) >= limit.minSeparationDeg && s.moonIllum <= limit.maxIlluminationPct)
+  }).map((run) => stretchOf(sky, run))
 }
 
-/** One band's verdict for one Target and night (`filterSuitability`). */
+/**
+ * One band's verdict for one Target and night (`filterSuitability`).
+ * @deprecated Use `FilterNight` from `nightImaging` (C6). W4 removes this.
+ */
 export interface FilterTonight {
   band: Band
   /** A stretch of at least the minimum duration meets the band's Moon constraint that night. */
@@ -403,6 +507,7 @@ export interface FilterTonight {
  * The night's samples are computed once (`skyNight`); each band's verdict
  * reads its `clearStretches` under the band's Moon constraint, so broadband
  * needs a dark Moon and narrowband tolerates more.
+ * @deprecated Grades and Img time come from one Moon curve per filter (C6): use `nightImaging`. W3 moves its callers; W4 removes this.
  */
 export function filterSuitability(target: Target, site: ObservingSite, night: string, criteria: PlanCriteria, constraints: Record<Band, MoonConstraint>, bands: Band[]): FilterTonight[] {
   const { ra, dec } = target
@@ -430,6 +535,104 @@ export function filterSuitability(target: Target, site: ObservingSite, night: st
       stretches,
     }
   })
+}
+
+/** How a filter fares on a night: good; marginal, when the Moon takes more than a quarter of the dark time; poor, without a window. */
+export type FilterGrade = "good" | "marginal" | "poor"
+
+/** Share of the night's dark time a filter's longest window must keep to grade good. */
+const GOOD_SHARE = 0.75
+
+/** A filter's grade from its longest Moon-clear stretch and the night's longest dark stretch, in minutes. */
+export function filterGrade(clearMinutes: number, darkMinutes: number, minDurationMin: number): FilterGrade {
+  if (clearMinutes < minDurationMin) return "poor"
+  return clearMinutes < darkMinutes * GOOD_SHARE ? "marginal" : "good"
+}
+
+/** The Moon seen from a position at its highest sample in darkness above the altitude limit (`nightImaging`). */
+export interface MoonReading {
+  up: boolean
+  separationDeg: number
+  /** Illumination, 0-100. */
+  illuminationPct: number
+  ageDays: number
+}
+
+/** One filter's night under its Moon-avoidance curve (`nightImaging`). */
+export interface FilterNight {
+  band: Band
+  grade: FilterGrade
+  /** Longest stretch the curve allows in darkness above the altitude limit, of any length, in minutes. */
+  minutes: number
+  /** The stretches of at least the minimum duration: the filter's windows, in order. */
+  windows: Stretch[]
+  /** The separation the curve asks at the reading's Moon age (`NightImaging.moon`); null without a reading. */
+  requiredSeparationDeg: number | null
+}
+
+/** A position's night under the Moon rule: each filter's grade and Img time, from the same windows. */
+export interface NightImaging {
+  filters: FilterNight[]
+  /** Longest stretch in darkness above the altitude limit, the Moon aside, in minutes: what a grade measures against. */
+  darkMinutes: number
+  moon: MoonReading | null
+  /** Img time's windows: every filter's windows, merged. */
+  windows: Stretch[]
+  /** Img time in minutes, the merged windows' total: zero exactly when every filter grades poor. */
+  minutes: number
+}
+
+/**
+ * One position on one night under the Moon rule (C6), so the filter grades
+ * and Img time cannot disagree. A filter's windows are the stretches of at
+ * least `minDurationMin` in darkness above `minAltitudeDeg` that its curve
+ * allows (`moonAllows`); Img time is every filter's windows merged. As in
+ * `computeWindows`, only stretches that end after `nowMs` count. `sky` and
+ * `altitudes` (the position's altitude at each sample) are computed once per
+ * night by the caller.
+ */
+export function nightImaging(
+  sky: SkyNight,
+  altitudes: number[],
+  position: { ra: number; dec: number },
+  criteria: Pick<PlanCriteria, "minAltitudeDeg" | "minDurationMin">,
+  curves: Record<Band, MoonAvoidance>,
+  bands: Band[],
+  nowMs: number,
+): NightImaging {
+  const count = sky.samples.length
+  const dark = sky.samples.map((s, i) => s.sunAlt <= sky.sunLimit && altitudes[i]! >= criteria.minAltitudeDeg)
+  const separation = sky.samples.map((s) => angularSeparationDeg(position.ra, position.dec, s.moonRa, s.moonDec))
+  const ahead = (runs: Run[]) => runs.filter((run) => runEndMs(sky, run) > nowMs)
+  const longest = (runs: Run[]) => Math.max(0, ...runs.map(runMinutes))
+  const darkMinutes = longest(ahead(runsWhere(count, (i) => dark[i]!)))
+  // The position's highest dark sample: where a verdict reads the Moon.
+  let peak = -1
+  for (let i = 0; i < count; i += 1) if (dark[i] && (peak < 0 || altitudes[i]! > altitudes[peak]!)) peak = i
+  const at = peak < 0 ? null : sky.samples[peak]!
+  const inWindow = new Array<boolean>(count).fill(false)
+  const filters = bands.map((band): FilterNight => {
+    const curve = curves[band]
+    const clear = ahead(runsWhere(count, (i) => dark[i]! && moonAllows(curve, sky.samples[i]!, separation[i]!)))
+    const windows = clear.filter((run) => runMinutes(run) >= criteria.minDurationMin)
+    for (const run of windows) inWindow.fill(true, run.first, run.last + 1)
+    const minutes = longest(clear)
+    return {
+      band,
+      grade: filterGrade(minutes, darkMinutes, criteria.minDurationMin),
+      minutes,
+      windows: windows.map((run) => stretchOf(sky, run)),
+      requiredSeparationDeg: at ? requiredMoonSeparationDeg(curve, at.moonAgeDays) : null,
+    }
+  })
+  const imaging = runsWhere(count, (i) => inWindow[i]!)
+  return {
+    filters,
+    darkMinutes,
+    moon: at ? { up: at.moonAlt > 0, separationDeg: separation[peak]!, illuminationPct: at.moonIllum, ageDays: at.moonAgeDays } : null,
+    windows: imaging.map((run) => stretchOf(sky, run)),
+    minutes: imaging.reduce((sum, run) => sum + runMinutes(run), 0),
+  }
 }
 
 /** Short zone name at an instant, e.g. "CEST". */
