@@ -8136,5 +8136,107 @@
   "seed_project_cygnus_notes": "HOO amplo da região da América do Norte e do Pelicano; o equipamento OSC acrescenta dados dual-band.",
   "seed_project_m31_notes": "Banda larga primeiro; mistura com banda estreita depois.",
   "seed_project_heart_notes": "Ha primeiro; OIII quando a Lua permitir.",
-  "seed_dark_exception_reason": "Darks empilhados no PixInsight"
+  "seed_dark_exception_reason": "Darks empilhados no PixInsight",
+  "stepflow_steps": "Etapas",
+  "stepflow_proceed": "Prosseguir",
+  "stepflow_skip": "Pular",
+  "stepflow_reopen_step": "Reabrir etapa",
+  "stepflow_finish_run": "Concluir execução",
+  "stepflow_finish_run_title": "Concluir {name}?",
+  "stepflow_close_project": "Fechar projeto",
+  "stepflow_close_project_title": "Fechar {name}?",
+  "stepflow_finish_review": "Concluir revisão",
+  "stepflow_finished_on": "Concluído em {date}",
+  "stepflow_closed_on": "Fechado em {date}",
+  "stepflow_step_todo": "{step}, a fazer",
+  "stepflow_step_current": "{step}, etapa atual",
+  "stepflow_step_finished": "{step}, concluída",
+  "stepflow_step_skipped": "{step}, ignorada",
+  "stepflow_step_blocked": "{step}, bloqueada",
+  "stepflow_step_blocked_by": "{step}, bloqueada · {reason}",
+  "stepflow_step_redo": "{step}, refazer",
+  "stepflow_read_only": "Somente leitura",
+  "stepflow_finish_first": "conclua {step} antes",
+  "catalogue_stepflow_desc": "Uma faixa e um rodapé para todo fluxo em etapas. A faixa marca a etapa atual; o rodapé tem a única ação primária: Prosseguir, ou o verbo do próprio fluxo na última etapa.",
+  "catalogue_stepflow_strip_label": "Etapas: {caption}",
+  "catalogue_stepflow_states_heading": "Estados das etapas",
+  "catalogue_stepflow_states_caption": "Fluxos fixos com etapas em texto simples. O rodapé pertence à etapa na tela, sublinhada na faixa.",
+  "catalogue_stepflow_case_progress": "a fazer · atual · concluída · ignorada",
+  "catalogue_stepflow_case_blocked": "bloqueada, com o motivo",
+  "catalogue_stepflow_case_locked": "etapa posterior: somente leitura",
+  "catalogue_stepflow_case_earlier": "etapa anterior: reabrir",
+  "catalogue_stepflow_case_reopened": "reaberta: etapas posteriores a refazer",
+  "catalogue_stepflow_case_optional": "etapa opcional: Pular",
+  "catalogue_stepflow_case_last": "última etapa: o verbo do fluxo",
+  "catalogue_stepflow_case_finished": "fluxo concluído",
+  "catalogue_stepflow_run_heading": "Fluxo de execução",
+  "catalogue_stepflow_run_caption": "As etapas são links, e Prosseguir abre a próxima. A condição de Calibrar segura Prosseguir até Atribuir automaticamente. Preparar e Concluir execução pedem confirmação; depois de Concluir execução toda etapa fica somente leitura.",
+  "catalogue_stepflow_wrapup_heading": "Encerramento (ordem estrita)",
+  "catalogue_stepflow_wrapup_caption": "As etapas são botões locais. Prosseguir sem nada selecionado ignora a etapa. Uma etapa posterior fica somente leitura até as anteriores estarem concluídas ou ignoradas; uma etapa anterior pode ser reaberta até Fechar projeto.",
+  "catalogue_stepflow_review_heading": "Revisão de sessão",
+  "catalogue_stepflow_review_caption": "As etapas são links. Concluir revisão abre a próxima sessão que precisa de revisão; depois da última a página fica somente leitura.",
+  "catalogue_stepflow_review_strip": "Etapas de {session}",
+  "catalogue_stepflow_restart": "Recomeçar",
+  "catalogue_stepflow_not_confirmed": "não confirmado",
+  "catalogue_stepflow_unresolved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} não resolvido",
+        "countPlural=*": "{count} não resolvidos"
+      }
+    }
+  ],
+  "catalogue_stepflow_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame não revisado",
+        "countPlural=*": "{count} frames não revisados"
+      }
+    }
+  ],
+  "catalogue_stepflow_trash_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {count} item para a Lixeira?",
+        "countPlural=*": "Mover {count} itens para a Lixeira?"
+      }
+    }
+  ],
+  "catalogue_stepflow_queue": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mais {count} sessão precisa de revisão",
+        "countPlural=*": "Mais {count} sessões precisam de revisão"
+      }
+    }
+  ],
+  "catalogue_stepflow_queue_empty": "Nenhuma outra sessão precisa de revisão"
 }

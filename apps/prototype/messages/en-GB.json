@@ -8080,5 +8080,107 @@
   "seed_project_cygnus_notes": "Wide HOO of the North America and Pelican region; the OSC rig adds dual-band data.",
   "seed_project_m31_notes": "Broadband first; narrowband blend later.",
   "seed_project_heart_notes": "Ha first; OIII when the Moon allows.",
-  "seed_dark_exception_reason": "Darks stacked in PixInsight"
+  "seed_dark_exception_reason": "Darks stacked in PixInsight",
+  "stepflow_steps": "Steps",
+  "stepflow_proceed": "Proceed",
+  "stepflow_skip": "Skip",
+  "stepflow_reopen_step": "Reopen step",
+  "stepflow_finish_run": "Finish run",
+  "stepflow_finish_run_title": "Finish {name}?",
+  "stepflow_close_project": "Close project",
+  "stepflow_close_project_title": "Close {name}?",
+  "stepflow_finish_review": "Finish review",
+  "stepflow_finished_on": "Finished {date}",
+  "stepflow_closed_on": "Closed {date}",
+  "stepflow_step_todo": "{step}, to do",
+  "stepflow_step_current": "{step}, current step",
+  "stepflow_step_finished": "{step}, finished",
+  "stepflow_step_skipped": "{step}, skipped",
+  "stepflow_step_blocked": "{step}, blocked",
+  "stepflow_step_blocked_by": "{step}, blocked · {reason}",
+  "stepflow_step_redo": "{step}, redo",
+  "stepflow_read_only": "Read-only",
+  "stepflow_finish_first": "finish {step} first",
+  "catalogue_stepflow_desc": "One strip and one footer for every staged flow. The strip marks the current step; the footer holds the one primary action: Proceed, or the flow's own verb on the last step.",
+  "catalogue_stepflow_strip_label": "Steps: {caption}",
+  "catalogue_stepflow_states_heading": "Step states",
+  "catalogue_stepflow_states_caption": "Fixed flows with plain-text steps. The footer belongs to the step on screen, underlined in the strip.",
+  "catalogue_stepflow_case_progress": "to do · current · finished · skipped",
+  "catalogue_stepflow_case_blocked": "blocked, with its reason",
+  "catalogue_stepflow_case_locked": "later step: read-only",
+  "catalogue_stepflow_case_earlier": "earlier step: reopen",
+  "catalogue_stepflow_case_reopened": "reopened: later steps redo",
+  "catalogue_stepflow_case_optional": "optional step: Skip",
+  "catalogue_stepflow_case_last": "last step: the flow's verb",
+  "catalogue_stepflow_case_finished": "finished flow",
+  "catalogue_stepflow_run_heading": "Run flow",
+  "catalogue_stepflow_run_caption": "Steps are links, and Proceed opens the next one. Calibrate's gate holds Proceed until Auto-assign. Prepare and Finish run ask first; after Finish run every step is read-only.",
+  "catalogue_stepflow_wrapup_heading": "Wrap up (strict order)",
+  "catalogue_stepflow_wrapup_caption": "Steps are local buttons. Proceed with nothing selected skips the step. A later step stays read-only until the ones before it are finished or skipped; an earlier step reopens until Close project.",
+  "catalogue_stepflow_review_heading": "Session review",
+  "catalogue_stepflow_review_caption": "Steps are links. Finish review opens the next session that needs review; after the last one the page turns read-only.",
+  "catalogue_stepflow_review_strip": "Steps of {session}",
+  "catalogue_stepflow_restart": "Start over",
+  "catalogue_stepflow_not_confirmed": "not confirmed",
+  "catalogue_stepflow_unresolved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} unresolved",
+        "countPlural=*": "{count} unresolved"
+      }
+    }
+  ],
+  "catalogue_stepflow_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame unreviewed",
+        "countPlural=*": "{count} frames unreviewed"
+      }
+    }
+  ],
+  "catalogue_stepflow_trash_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {count} item to Trash?",
+        "countPlural=*": "Move {count} items to Trash?"
+      }
+    }
+  ],
+  "catalogue_stepflow_queue": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} more session needs review",
+        "countPlural=*": "{count} more sessions need review"
+      }
+    }
+  ],
+  "catalogue_stepflow_queue_empty": "No other session needs review"
 }
