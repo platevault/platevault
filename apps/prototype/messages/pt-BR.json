@@ -8703,5 +8703,21 @@
   "catalogue_templates_step_shift": "Deslocamento do layout na última mudança de etapa: {px} px",
   "catalogue_templates_settings_desc": "Uma área de Configurações: o título, linhas de configuração e uma seção de lista com um Adicionar no cabeçalho.",
   "catalogue_templates_indexing": "Indexação",
-  "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app"
+  "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} está antigo · em {count} execução não concluída",
+        "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
+      }
+    }
+  ]
 }

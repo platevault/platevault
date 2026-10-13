@@ -55,6 +55,8 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
       return { text: m.issue_blocked({ name }), action: m.verb_open() }
     case "master-offer":
       return { text: m.issue_master_offered({ count }), action: m.verb_review() }
+    case "master-old":
+      return { text: m.issue_master_old({ name, count }), action: m.nav_calibration() }
     case "calibration-waiting":
       return { text: m.issue_to_stack({ count }), action: m.verb_stack() }
     case "calibration-failed":
