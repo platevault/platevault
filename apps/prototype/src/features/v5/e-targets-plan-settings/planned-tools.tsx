@@ -1,35 +1,34 @@
 /**
- * The Planned view's header tools (slice E, Round 6): Reminders and Export
+ * The Planned view's tools (slice E, Round 6): Reminders… and Export
  * calendar…, both covering every upcoming planned night, not just the one
- * shown.
+ * shown. Each opens a FormDialog from the page header.
  *
- * - Reminders: a toggle and a lead time. They always use the default site
- *   (PLAN-FR-06); turning them on asks the simulated OS for permission
+ * - Reminders: on or off, and a lead time (a preset, or any number of
+ *   minutes, hours or days; astro-plan-mv2g1). They always use the default
+ *   site (PLAN-FR-06); turning them on asks the simulated OS for permission
  *   (Prototype controls › next notification answer). `ReminderScheduler`
  *   delivers each due reminder once, as a "reminder" Activity entry, so it
- *   arrives in the status bar's bell. Prototype: the flask button moves
- *   PlateVault's clock into the next reminder's lead time.
- * - Export calendar…: a preview of the events, night by night, then the .ics
- *   download; the export is saved as a snapshot (PLAN-FR-04).
+ *   arrives in the status bar's bell.
+ * - Export calendar: the events night by night, then the .ics download; the
+ *   export is saved as a snapshot (PLAN-FR-04).
  */
-import { CalendarArrowDown, FlaskConical } from "lucide-react"
-import { useEffect, useId, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ActionError, EmptyState } from "@/components/app/feedback"
-import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
+import { BoxTable } from "@/components/app/box"
+import type { Column } from "@/components/app/contracts"
+import { KeyValueList } from "@/components/app/data"
+import { EmptyState } from "@/components/app/feedback"
+import { NumberField, SelectField, SwitchField } from "@/components/app/fields"
+import { FormDialog } from "@/components/app/form-dialog"
+import { siteTime, siteTimeRange } from "@/components/domain/sky-lines"
+import { CalendarArrowDown } from "lucide-react"
 import { planningSite } from "@/domain/derive"
 import { calendarFile, downloadText, nightAt, plannedWindows, reminderKey, upcomingNight } from "@/domain/planning"
 import type { ObservingWindow } from "@/domain/types"
 import { formatNight } from "@/lib/format"
-import { type CommitResult, nowIso, store, useStore } from "@/store/core"
+import type { Messages } from "@/lib/i18n"
 import { DEFAULT_LEAD_MIN, deliverDueReminders, disableReminders, enableReminders, LEAD_TIMES_MIN, saveCalendarExport, setReminderLead } from "@/store/actions/planning"
-import { setClockTo } from "@/store/simulation"
-import { siteTime, siteTimeRange } from "./parts"
+import { type CommitResult, nowIso, store, useStore } from "@/store/core"
 
 /** The (simulated) clock in 10-minute buckets, re-read every minute, so schedules re-derive as time moves on. */
 function useClockBucket(): number {
@@ -59,56 +58,111 @@ function useNextReminder(): { window: ObservingWindow; at: string } | null {
   }, [catalog, bucket])
 }
 
-export function RemindersControl() {
+// ---------------------------------------------------------------------------
+// Reminders
+// ---------------------------------------------------------------------------
+
+type LeadUnit = "minutes" | "hours" | "days"
+const UNIT_MIN: Record<LeadUnit, number> = { minutes: 1, hours: 60, days: 1440 }
+const CUSTOM = "custom"
+/** The longest lead time: a week. */
+const MAX_LEAD_MIN = 7 * 1440
+
+/** "30 min before", "2 h before", "1 day before": a lead time in its largest whole unit. */
+export function leadText(m: Messages, minutes: number): string {
+  if (minutes % 1440 === 0) return m.plan_lead_days({ count: minutes / 1440 })
+  if (minutes % 60 === 0) return m.plan_lead_hours({ count: minutes / 60 })
+  return m.plan_lead_minutes({ count: minutes })
+}
+
+/** A lead time as an amount in its largest whole unit, for the custom fields. */
+function asAmount(minutes: number): { amount: number; unit: LeadUnit } {
+  if (minutes % 1440 === 0) return { amount: minutes / 1440, unit: "days" }
+  if (minutes % 60 === 0) return { amount: minutes / 60, unit: "hours" }
+  return { amount: minutes, unit: "minutes" }
+}
+
+interface ReminderDraft {
+  on: boolean
+  choice: string
+  amount: number | null
+  unit: LeadUnit
+}
+
+function draftOf(on: boolean, lead: number): ReminderDraft {
+  const preset = (LEAD_TIMES_MIN as readonly number[]).includes(lead)
+  return { on, choice: preset ? String(lead) : CUSTOM, ...asAmount(lead) }
+}
+
+/** The lead time a draft asks for, in minutes; null while the custom amount is missing or out of range. */
+function draftMinutes(draft: ReminderDraft): number | null {
+  if (draft.choice !== CUSTOM) return Number(draft.choice)
+  if (draft.amount === null || !Number.isInteger(draft.amount) || draft.amount < 1) return null
+  const minutes = draft.amount * UNIT_MIN[draft.unit]
+  return minutes <= MAX_LEAD_MIN ? minutes : null
+}
+
+export function RemindersDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const reminders = useStore((s) => s.catalog.reminders)
-  const reminderSite = useStore((s) => (s.catalog.reminders.siteId ? s.catalog.sites[s.catalog.reminders.siteId] : undefined))
+  const sites = useStore((s) => s.catalog.sites)
+  const defaultSiteId = useStore((s) => s.settings.defaultSiteId)
   const targets = useStore((s) => s.catalog.targets)
   const next = useNextReminder()
-  const [refused, setRefused] = useState<RefusalProps | null>(null)
-  const [failure, setFailure] = useState<{ message: string; retry: () => void } | null>(null)
-  const switchId = useId()
   const on = reminders.enabled && reminders.permission === "granted"
   const lead = reminders.leadTimeMin ?? DEFAULT_LEAD_MIN
-  const leadItems = LEAD_TIMES_MIN.map((minutes) => ({ value: String(minutes), label: m.plan_lead_option({ minutes }) }))
+  const [draft, setDraft] = useState<ReminderDraft>(() => draftOf(on, lead))
+  const [tried, setTried] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    setDraft(draftOf(on, lead))
+    setTried(false)
+  }, [open])
 
-  function run(action: () => CommitResult, refusedAction: string) {
-    const result = action()
-    setRefused(refusalFrom(result, refusedAction, { [m.site_no_default()]: { to: "/settings/sites" } }))
-    setFailure(result.ok || result.reason === "refused" ? null : { message: result.message, retry: () => run(action, refusedAction) })
+  const minutes = draftMinutes(draft)
+  const reminderSite = reminders.siteId ? sites[reminders.siteId] : defaultSiteId ? sites[defaultSiteId] : undefined
+  const options = [...LEAD_TIMES_MIN.map((value) => ({ value: String(value), label: leadText(m, value) })), { value: CUSTOM, label: m.plan_lead_custom() }]
+  const units: { value: LeadUnit; label: string }[] = [
+    { value: "minutes", label: m.plan_lead_unit_minutes() },
+    { value: "hours", label: m.plan_lead_unit_hours() },
+    { value: "days", label: m.plan_lead_unit_days() },
+  ]
+
+  function save(): CommitResult | void {
+    setTried(true)
+    if (minutes === null) return { ok: false, reason: "refused", message: m.plan_lead_invalid(), reasons: [] }
+    if (!draft.on) return on ? disableReminders() : undefined
+    if (!on) return enableReminders(minutes)
+    if (minutes !== lead) return setReminderLead(minutes)
   }
 
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1" data-reminders={on ? "on" : "off"}>
-      <span className="inline-flex items-center gap-1.5">
-        <Switch id={switchId} size="sm" checked={on} onCheckedChange={(checked) => run(() => (checked ? enableReminders(lead) : disableReminders()), m.plan_cant_turn_on_reminders())} />
-        <Label htmlFor={switchId} className="text-sm font-normal">
-          {m.plan_reminders()}
-        </Label>
-      </span>
-      <Select items={leadItems} value={String(lead)} onValueChange={(value) => run(() => setReminderLead(Number(value)), m.plan_reminder_lead())}>
-        <SelectTrigger size="sm" aria-label={m.plan_reminder_lead()} className="w-36">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {leadItems.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {on && next && reminderSite ? (
-        <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums" data-next-reminder>
-          <span title={`${targets[next.window.targetId]?.name ?? ""} · ${formatNight(nightAt(Date.parse(next.window.start), reminderSite))}`}>{m.plan_next_reminder({ time: siteTime(next.at, reminderSite) })}</span>
-          <Button size="icon-xs" variant="ghost" aria-label={m.plan_proto_next_reminder()} title={m.plan_proto_next_reminder()} onClick={() => setClockTo(new Date(Date.parse(next.at) + 60_000).toISOString())} data-proto-reminder>
-            <FlaskConical aria-hidden="true" />
-          </Button>
-        </span>
+    <FormDialog open={open} onOpenChange={onOpenChange} title={m.plan_reminders()} size="sm" confirm={{ id: "reminders-save", label: m.settings_save(), kind: "primary", run: save }}>
+      <SwitchField label={m.plan_reminders()} checked={draft.on} onChange={(checked) => setDraft((d) => ({ ...d, on: checked }))} />
+      <SelectField label={m.plan_reminder_lead()} value={draft.choice} options={options} onChange={(choice) => setDraft((d) => ({ ...d, choice }))} />
+      {draft.choice === CUSTOM ? (
+        <>
+          <NumberField
+            label={m.plan_lead_amount()}
+            min={1}
+            step={1}
+            value={draft.amount}
+            onChange={(amount) => setDraft((d) => ({ ...d, amount }))}
+            error={tried && minutes === null ? m.plan_lead_invalid() : undefined}
+          />
+          <SelectField label={m.plan_lead_unit()} value={draft.unit} options={units} onChange={(unit) => setDraft((d) => ({ ...d, unit }))} />
+        </>
       ) : null}
-      {refused ? <Refusal {...refused} className="basis-full" /> : null}
-      {failure ? <ActionError message={failure.message} onRetry={failure.retry} className="basis-full" /> : null}
-    </span>
+      <KeyValueList
+        items={[
+          { label: m.plan_reminders_site(), value: reminderSite?.name ?? m.site_no_default() },
+          {
+            label: m.plan_reminders_next(),
+            value: on && next && reminderSite ? `${siteTime(next.at, reminderSite.timeZone)} · ${targets[next.window.targetId]?.name ?? "–"} · ${formatNight(nightAt(Date.parse(next.window.start), reminderSite))}` : "–",
+          },
+        ]}
+      />
+    </FormDialog>
   )
 }
 
@@ -129,93 +183,74 @@ export function ReminderScheduler() {
   return null
 }
 
-/** Export calendar…: every upcoming planned night at the planning site, previewed, then downloaded as .ics. */
-export function ExportCalendarButton() {
-  const m = useMessages()
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)} data-export-calendar>
-        <CalendarArrowDown aria-hidden="true" data-icon="inline-start" />
-        {m.plan_export_calendar_open()}
-      </Button>
-      <ExportCalendarDialog open={open} onOpenChange={setOpen} />
-    </>
-  )
+// ---------------------------------------------------------------------------
+// Export calendar
+// ---------------------------------------------------------------------------
+
+interface CalendarEvent {
+  window: ObservingWindow
+  night: string
+  target: string
 }
 
-function ExportCalendarDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+/** Export calendar: every upcoming planned night at the planning site, listed, then downloaded as .ics. */
+export function ExportCalendarDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const site = useStore((s) => planningSite(s))
   const catalog = useStore((s) => s.catalog)
-  const [failure, setFailure] = useState<string | null>(null)
   const bucket = useClockBucket()
-  // Recomputed each time the dialog opens, so the preview is what the file holds.
+  // Recomputed each time the dialog opens, so the list is what the file holds.
   const windows = useMemo(() => (open && site ? plannedWindows(catalog, site, Date.parse(nowIso())) : []), [open, site, catalog, bucket])
-  const nights = useMemo(() => {
-    const out = new Map<string, ObservingWindow[]>()
-    if (!site) return out
-    for (const w of windows) {
-      const night = nightAt(Date.parse(w.start), site)
-      out.set(night, [...(out.get(night) ?? []), w])
-    }
-    return out
-  }, [windows, site])
+  const events = useMemo<CalendarEvent[]>(
+    () => (site ? windows.map((w) => ({ window: w, night: nightAt(Date.parse(w.start), site), target: catalog.targets[w.targetId]?.name ?? w.targetId })) : []),
+    [windows, site, catalog],
+  )
+  const nights = [...new Set(events.map((e) => e.night))]
 
-  useEffect(() => {
-    if (open) setFailure(null)
-  }, [open])
-
-  function download() {
-    if (!site || windows.length === 0) return
-    const first = [...nights.keys()][0] ?? upcomingNight(site, Date.parse(nowIso()))
-    const last = [...nights.keys()].at(-1) ?? first
+  function download(): CommitResult | void {
+    if (!site || windows.length === 0) return { ok: false, reason: "refused", message: m.plan_nothing_upcoming(), reasons: [] }
+    const first = nights[0] ?? upcomingNight(site, Date.parse(nowIso()))
+    const last = nights.at(-1) ?? first
     const fileName = `platevault-plan-${first}${last !== first ? `-to-${last}` : ""}.ics`
     const { result, record } = saveCalendarExport({ siteId: site.id, timeZone: site.timeZone, from: first, to: last, fileName, windows })
-    if (!result.ok) return setFailure(result.message)
+    if (!result.ok) return result
     const names = Object.fromEntries(Object.values(store.getState().catalog.targets).map((t) => [t.id, t.name]))
     downloadText(fileName, calendarFile(record, site.name, names))
-    onOpenChange(false)
   }
 
+  const columns: Column<CalendarEvent>[] = site
+    ? [
+        { id: "target", header: m.targets_designation(), rowHeader: true, sortValue: (e) => e.target, cell: (e) => e.target },
+        { id: "window", header: m.tonight_window(), sortValue: (e) => e.window.start, cell: (e) => siteTimeRange(e.window.start, e.window.end, site.timeZone) },
+        { id: "altitude", header: m.tonight_altitude(), align: "right", sortValue: (e) => e.window.maxAltitudeDeg, cell: (e) => m.plan_event_max_alt({ altitude: Math.round(e.window.maxAltitudeDeg) }) },
+      ]
+    : []
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-export-dialog>
-        <DialogHeader>
-          <DialogTitle>{m.plan_export_calendar()}</DialogTitle>
-          <DialogDescription>{site ? m.plan_export_summary({ events: m.plan_events_count({ count: windows.length }), nights: m.plan_nights_count({ count: nights.size }), site: site.name }) : m.project_no_site()}</DialogDescription>
-        </DialogHeader>
-        {windows.length === 0 ? (
-          <EmptyState icon={CalendarArrowDown} title={m.plan_nothing_upcoming()} description={null} action={null} />
-        ) : (
-          <div className="max-h-80 space-y-2 overflow-y-auto rounded-md border px-3 py-2 text-sm" data-ics-preview>
-            {[...nights.entries()].map(([night, list]) => (
-              <section key={night} aria-label={formatNight(night, true)}>
-                <h3 className="text-xs font-semibold text-muted-foreground">{formatNight(night, true)}</h3>
-                <ul className="divide-y divide-border/50">
-                  {list.map((w) => (
-                    <li key={w.key} className="flex min-h-(--row-h) items-center justify-between gap-3 py-(--row-py)" data-ics-event>
-                      <span className="truncate font-medium">{catalog.targets[w.targetId]?.name ?? w.targetId}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                        {site ? siteTimeRange(w.start, w.end, site) : null} · {m.plan_event_max_alt({ altitude: Math.round(w.maxAltitudeDeg) })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
-        {failure ? <ActionError message={failure} onRetry={download} /> : null}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {m.verb_cancel()}
-          </Button>
-          <Button disabled={windows.length === 0} onClick={download} data-ics-download>
-            {m.plan_download_ics()}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={m.plan_export_calendar()}
+      size="lg"
+      confirm={{ id: "export-ics", label: m.plan_download_ics(), kind: "primary", run: download }}
+    >
+      <KeyValueList
+        items={[
+          { label: m.plan_site(), value: site?.name ?? m.project_no_site() },
+          { label: m.plan_export_events(), value: m.plan_export_summary({ events: m.plan_events_count({ count: events.length }), nights: m.plan_nights_count({ count: nights.length }), site: site?.name ?? "–" }) },
+        ]}
+      />
+      {events.length === 0 ? (
+        <EmptyState icon={CalendarArrowDown} title={m.plan_nothing_upcoming()} action={null} />
+      ) : (
+        <BoxTable
+          label={m.plan_export_calendar()}
+          rows={events}
+          columns={columns}
+          getRowId={(e) => e.window.key}
+          groups={{ key: (e) => e.night, label: (night) => formatNight(night, true) }}
+        />
+      )}
+    </FormDialog>
   )
 }

@@ -1,49 +1,40 @@
 /**
- * S10 Target detail (`/targets/$targetId`, slice E): v4's finder list beside
- * the Target. The detail holds, in boxes: the chosen night at the planning
- * site (the Targets page's `?night=`, else tonight: the altitude sparkline,
- * best window, Img time, Moon, filters graded good tonight), identity, Fit
- * on every rig, the Projects that use it with their goal lines, and the
- * library's facts: Usable, Unreviewed and Offline integration per channel,
- * library-wide, over its sessions with their capture site. The header adds
- * it to the chosen night's plan, adds it to an open Project (previewed
- * first) or opens New Project with this Target as the subject.
+ * S10 Target (`/targets/$targetId`, slice E): one Target on a DetailPage.
+ *
+ * - Header: the path back to Targets (keeping its view and night), Add to
+ *   Plan for the chosen night (the Targets page's `?night=`, else tonight),
+ *   New Project… with this Target as the subject, and the Target menu: My
+ *   targets, and Add to Project ▸ (each Project confirms what it adds).
+ * - Sections: the chosen night at the planning site (altitude, best window,
+ *   Img time, filter grades under the Moon curves, Moon and darkness), the
+ *   identity, Fit on every rig, the Projects that use it with their goals
+ *   and window, the library's integration per channel, and its sessions.
  */
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { ChevronDown, Star } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
+import { MapPin } from "lucide-react"
+import { useMemo } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
-import { openSheet } from "@/app/ui-state"
-import { Box } from "@/components/app/box"
-import { ClearableInput } from "@/components/app/clearable-input"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
+import { ActionButton } from "@/components/app/actions"
+import { BoxTable } from "@/components/app/box"
+import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { ActionError, UnknownValue } from "@/components/app/feedback"
-import { ListDetail, PageBody, PageHeader } from "@/components/app/page"
-import { CountBadge, Pill } from "@/components/app/pill"
-import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
-import type { Tone } from "@/components/app/status"
-import { HelpTip, NoteMarker } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { formatHours, goalProgress, liveLightSessions, projectGoalSet, projectStatus, rigFieldOfView, sessionRigId, sessionTargetId, subjectName, rigName } from "@/domain/derive"
+import { EmptyState } from "@/components/app/feedback"
+import { StatusBadge } from "@/components/app/status"
+import { GradeBadges } from "@/components/domain/grade-badges"
+import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
+import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
+import { formatHours, liveLightSessions, projectStatus, rigFieldOfView, rigName, sessionRigId, sessionTargetId, subjectProgress } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { captureSite, targetCoverage } from "@/domain/library"
 import { nightPlan } from "@/domain/planning"
-import { matchesQuery } from "@/domain/sky"
-import type { Project } from "@/domain/types"
+import type { Catalog, Project, Session } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
-import { setFavourite } from "@/store/actions/library"
-import { addToPlan } from "@/store/actions/planning"
-import { addSubject } from "@/store/actions/projects"
-import { type CommitResult, useStore } from "@/store/core"
-import { AddSiteButton, AltitudeSpark, clockRange, criteriaText, DarkLine, FilterChips, FitCell, MoonLine, planNight, SiteLine, useSkyContext } from "./parts"
-import { allRows, rowView, sessionCountsByTarget, type TargetRow, unplan, zeroReasonText } from "./targets-model"
-import { keepSearch } from "./targets"
+import { useStore } from "@/store/core"
+import { addToProjectMenu, clockRange, criteriaText, fitText, keepSearch, myTargetsAction, newProjectAction, planAction, planNight, useSkyContext } from "./parts"
+import { allRows, prioritiesByTarget, type RigFit, rowView, sessionCountsByTarget, type TargetRow, zeroReasonWord } from "./targets-model"
 
 /** Integration as "2h 10m"; "–" for none. */
 function hoursOrDash(seconds: number): string {
@@ -54,119 +45,19 @@ function coordinateSource(m: Messages, source: string): string {
   return source === "catalog" ? m.target_source_catalogue() : source === "user" ? m.target_source_user() : source === "resolver" ? m.target_source_resolver() : m.status_unknown()
 }
 
-function statusPill(m: Messages, status: ReturnType<typeof projectStatus>): { tone: Tone; label: string } {
-  if (status === "done") return { tone: "success", label: m.status_done() }
-  if (status === "archived") return { tone: "muted", label: m.status_archived() }
-  return { tone: "info", label: m.status_open() }
+/** One Project that uses the Target: its subject's goals and window on the chosen night (C7). */
+interface ProjectUse {
+  project: Project
+  met: number
+  total: number
+  window: string | null
 }
 
-/** Runs a write and keeps its failure for Retry. */
-function useWrite() {
-  const [error, setError] = useState<{ message: string; retry: () => void } | null>(null)
-  function run(action: () => CommitResult) {
-    const result = action()
-    setError(result.ok ? null : { message: result.message, retry: () => run(action) })
-  }
-  return { error, run }
-}
-
-/** v4's finder: My targets (or the search), one dense row each, beside the detail. */
-function TargetFinder({ activeId }: { activeId: string }) {
-  const m = useMessages()
-  const search = useSearch({ strict: false }) as SearchParams
-  const navigate = useNavigate()
-  const catalog = useStore((s) => s.catalog)
-  const { error, run } = useWrite()
-  const rows = useMemo(() => allRows(catalog).filter((r) => r.target), [catalog])
-  const night = planNight(useSkyContext(search.night))
-  const planned = useMemo(() => new Set(nightPlan(catalog, night).map((t) => t.id)), [catalog, night])
-  // Local while typing; the URL keeps it for the way back to the table.
-  const [query, setQuery] = useState(search.q ?? "")
-  const shown = (query ? rows.filter((r) => matchesQuery([r.designation, ...r.aliases], query)) : rows.filter((r) => r.mine)).sort((a, b) => a.designation.localeCompare(b.designation, "en-GB", { numeric: true }))
-  const keep = keepSearch(search)
-
-  function menu(key: string): MenuEntry[] {
-    const target = catalog.targets[key]
-    if (!target) return []
-    return [
-      { label: m.verb_open(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: key }, search: keep }) },
-      { label: target.favourite ? m.targets_unstar() : m.targets_star(), onSelect: () => run(() => setFavourite(key, !target.favourite)) },
-      planned.has(key) ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => unplan(key, night)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => addToPlan(key, night)) },
-      { separator: true },
-      { label: m.newproject_open(), onSelect: () => openSheet({ kind: "new-project", targetId: key }) },
-    ]
-  }
-
-  return (
-    <div className="flex min-h-full flex-col" data-chrome>
-      <div className="sticky top-0 z-10 space-y-1.5 border-b border-separator bg-background px-2 py-2">
-        <ClearableInput
-          search
-          aria-label={m.target_find()}
-          placeholder={m.target_find_placeholder()}
-          value={query}
-          onValueChange={(value) => {
-            setQuery(value)
-            navigate({ to: "/targets/$targetId", params: { targetId: activeId }, search: { ...keep, q: value || undefined }, replace: true } as never)
-          }}
-        />
-        <p className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground tabular-nums">
-          {query ? m.plan_matches() : m.project_search_my_targets()}
-          <CountBadge count={shown.length} tone="muted" label={query ? m.target_matching_count({ count: shown.length }) : m.target_targets_count({ count: shown.length })} />
-        </p>
-        {error ? <ActionError message={error.message} onRetry={error.retry} /> : null}
-      </div>
-      <ContextMenuArea menu={menu}>
-        <ul
-          aria-label={m.nav_targets()}
-          className="py-1"
-          onKeyDown={(event) => {
-            const links = Array.from(event.currentTarget.querySelectorAll<HTMLAnchorElement>("a[data-finder-row]"))
-            const at = links.indexOf(document.activeElement as HTMLAnchorElement)
-            const to = event.key === "ArrowDown" ? at + 1 : event.key === "ArrowUp" ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? links.length - 1 : null
-            if (to === null || at === -1) return
-            event.preventDefault()
-            links[Math.max(0, Math.min(links.length - 1, to))]?.focus()
-          }}
-        >
-          {shown.map((r) => {
-            const active = r.target!.id === activeId
-            return (
-              <li key={r.key} {...menuKey(r.target!.id)}>
-                <Link
-                  data-finder-row
-                  to="/targets/$targetId"
-                  params={{ targetId: r.target!.id }}
-                  search={keep}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "mx-1 flex h-(--row-h) items-center gap-1.5 rounded-[0.3125rem] px-2 text-sm hover:bg-foreground/[0.06]",
-                    active && "bg-selected text-selected-foreground hover:bg-selected [&_.text-muted-foreground]:text-selected-foreground [&_svg]:text-selected-foreground",
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="font-medium">{r.designation}</span>
-                    {r.aliases[0] ? <span className="ml-1 text-xs text-muted-foreground">{r.aliases[0]}</span> : null}
-                  </span>
-                  {r.target!.favourite ? (
-                    <>
-                      <Star aria-hidden="true" className="size-3 shrink-0 fill-current text-muted-foreground" />
-                      <span className="sr-only">{m.target_favourite_sr()}</span>
-                    </>
-                  ) : null}
-                  {r.projects.length > 0 ? <CountBadge count={r.projects.length} tone="muted" label={m.target_projects_count({ count: r.projects.length })} /> : null}
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </ContextMenuArea>
-      <div className="mt-auto border-t border-separator px-3 py-2">
-        <Link to="/targets" search={keep} className="text-xs text-link hover:underline">
-          {m.target_table_link()}
-        </Link>
-      </div>
-    </div>
+function projectUses(m: Messages, catalog: Catalog, targetId: string, night: string): ProjectUse[] {
+  return Object.values(catalog.projects).flatMap((project) =>
+    subjectProgress(catalog, project, night)
+      .filter((p) => p.subject.targetId === targetId)
+      .map((p) => ({ project, met: p.goals.filter((g) => g.met).length, total: p.goals.length, window: p.window ? say(m, p.window.line) : null })),
   )
 }
 
@@ -175,9 +66,7 @@ export function TargetPage() {
   const { targetId = "" } = useParams({ strict: false }) as { targetId?: string }
   const exists = useStore((s) => Boolean(s.catalog.targets[targetId]))
   if (!exists) return <MissingRecord title={m.target_missing_title()} backTo="/targets" backLabel={m.target_open_targets()} />
-  return (
-    <ListDetail listLabel={m.target_finder()} list={<TargetFinder activeId={targetId} />} detail={<TargetDetail key={targetId} targetId={targetId} />} className="grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]" />
-  )
+  return <TargetDetail key={targetId} targetId={targetId} />
 }
 
 function TargetDetail({ targetId }: { targetId: string }) {
@@ -186,401 +75,213 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
-  const constraints = useStore((s) => s.settings.moonConstraints)
+  const curves = useStore((s) => s.settings.moonAvoidance)
   const ctx = useSkyContext(search.night)
-  const { error, run } = useWrite()
-  const [adding, setAdding] = useState<Project | null>(null)
+  const night = planNight(ctx)
   const target = catalog.targets[targetId]!
   const row = useMemo(() => allRows(catalog).find((r) => r.key === targetId) as TargetRow, [catalog, targetId])
   const rigIds = Object.keys(catalog.opticalTrains)
-  const view = useMemo(() => rowView(catalog, disk, ctx, row, rigIds, sessionCountsByTarget(catalog), constraints), [catalog, disk, ctx, row, constraints])
-  const night = planNight(ctx)
-  const inPlan = catalog.plans[targetId]?.nights.includes(night) ?? false
-  const projects = Object.values(catalog.projects).filter((p) => p.subjects.some((s) => s.targetId === targetId))
-  const openWithout = Object.values(catalog.projects).filter((p) => p.state === "open" && !p.subjects.some((s) => s.targetId === targetId))
-  const sessions = liveLightSessions(catalog)
-    .filter((s) => sessionTargetId(s) === targetId)
-    .sort((a, b) => b.night.localeCompare(a.night))
+  const view = useMemo(
+    () => rowView(catalog, disk, ctx, row, { rigIds, sessionCounts: sessionCountsByTarget(catalog), curves, priorities: prioritiesByTarget(catalog, night) }),
+    [catalog, disk, ctx, row, curves, night],
+  )
+  const inPlan = nightPlan(catalog, night).some((t) => t.id === targetId)
+  const uses = useMemo(() => projectUses(m, catalog, targetId, night), [m, catalog, targetId, night])
+  const sessions = useMemo(
+    () =>
+      liveLightSessions(catalog)
+        .filter((s) => sessionTargetId(s) === targetId)
+        .sort((a, b) => b.night.localeCompare(a.night)),
+    [catalog, targetId],
+  )
   const coverage = useMemo(() => targetCoverage(disk, catalog, targetId).channels, [disk, catalog, targetId])
 
+  const addSite: Action = { id: "add-site", label: m.tonight_add_site(), run: () => void navigate({ to: "/settings/sites", search: { return: `/targets/${targetId}` } } as never) }
   const sky = view.sky
-  const addingGoals = adding ? projectGoalSet(adding) : []
-
-  const tonightBox = (() => {
-    if (!ctx)
-      return (
-        <div className="flex items-center gap-2 p-3 text-sm">
-          <span className="text-muted-foreground">{m.project_no_site()}</span>
-          <AddSiteButton returnTo={`/targets/${targetId}`} />
-        </div>
-      )
-    if (sky.status !== "ok") return <p className="p-3 text-sm text-muted-foreground">{m.target_no_coordinates()}</p>
-    const zeroTitle = sky.zeroReason ? zeroReasonText(sky.zeroReason) : undefined
-    const facts = [
-      { label: m.tonight_altitude(), value: <AltitudeSpark ctx={ctx} sky={sky} /> },
-      { label: m.tonight_best(), value: sky.best ? `${clockRange(sky.best.start, sky.best.end, ctx.site)} · ${Math.round(sky.best.maxAltitudeDeg)}°` : <span title={zeroTitle}>{m.target_best_none()}</span> },
-      { label: m.tonight_img_time(), value: sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : <span title={zeroTitle}>{m.tonight_zero_hours()}</span> },
-      { label: m.tonight_lunar(), value: `${Math.round(sky.best ? sky.best.moonSeparationDeg : sky.lunarDeg)}°` },
-      { label: m.targets_filters(), value: <FilterChips chips={view.tonight} empty={zeroTitle ?? m.tonight_no_window()} /> },
-      { label: m.tonight_opposition(), value: view.opposition ? formatNight(view.opposition, true) : "–" },
-    ]
-    return (
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-3 py-2" data-target-night>
-        <dl className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm tabular-nums">
-          {facts.map((f) => (
-            <div key={f.label} className="flex items-center gap-1.5">
-              <dt className="text-xs text-muted-foreground">{f.label}</dt>
-              <dd>{f.value}</dd>
-            </div>
-          ))}
-        </dl>
-        <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <MoonLine ctx={ctx} />
-          <DarkLine ctx={ctx} />
-          <SiteLine site={ctx.site} />
-          <NoteMarker
-            label={m.tonight_method()}
-            rows={[
-              { label: m.tonight_night(), value: formatNight(ctx.grid.night, true) },
-              { label: m.tonight_times(), value: ctx.site.timeZone },
-              { label: m.tonight_criteria(), value: criteriaText(m, ctx.criteria) },
-              { label: m.tonight_method(), value: m.tonight_method_value() },
-            ]}
-          />
-        </span>
-      </div>
-    )
-  })()
-
-  const projectMenu = (key: string): MenuEntry[] => {
-    const p = catalog.projects[key]
-    if (!p) return []
-    return [
-      { label: m.target_open_project(), onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
-      ...(p.state === "open" ? [{ label: m.target_open_planner(), onSelect: () => void navigate({ to: "/targets", search: { project: p.id, night: search.night } }) }] : []),
-    ]
-  }
-  const sessionMenu = (key: string): MenuEntry[] => [{ label: m.project_open_session(), onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: key } }) }]
-  const rigMenu = (key: string): MenuEntry[] => [{ label: m.target_open_equipment(), onSelect: () => void navigate({ to: "/settings/equipment", search: { rig: key } }) }]
-
-  return (
-    <div className="flex min-h-full flex-col">
-      <PageHeader
-        title={target.name}
-        eyebrow={
-          <Link to="/targets" search={keepSearch(search)}>
-            {m.nav_targets()}
-          </Link>
-        }
-        description={row.aliases.length > 0 ? row.aliases.slice(0, 3).join(" · ") : undefined}
-        meta={
-          <>
-            {row.objectType ? <Pill tone="muted">{say(m, objectTypeRef(row.objectType))}</Pill> : null}
-            <Button size="xs" variant="ghost" aria-pressed={target.favourite} onClick={() => run(() => setFavourite(targetId, !target.favourite))}>
-              <Star aria-hidden="true" data-icon="inline-start" className={cn(target.favourite && "fill-warning text-warning")} />
-              {target.favourite ? m.targets_favourite() : m.targets_star()}
-            </Button>
-          </>
-        }
-        actions={
-          <>
-            <Button variant="outline" aria-pressed={inPlan} title={formatNight(night, true)} onClick={() => run(() => (inPlan ? unplan(targetId, night) : addToPlan(targetId, night)))}>
-              {inPlan ? m.targets_remove_from_plan() : m.targets_add_to_plan()}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" disabled={openWithout.length === 0} title={openWithout.length === 0 ? m.target_in_every_project() : undefined} />}>
-                {m.session_add_to_project()}
-                <ChevronDown aria-hidden="true" data-icon="inline-end" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{m.project_back_to_projects()}</DropdownMenuLabel>
-                  {openWithout.map((p) => (
-                    <DropdownMenuItem key={p.id} onClick={() => setAdding(p)}>
-                      {p.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button onClick={() => openSheet({ kind: "new-project", targetId })}>{m.newproject_open()}</Button>
-          </>
-        }
-      />
-      <PageBody className="space-y-4">
-        {error ? <ActionError message={error.message} onRetry={error.retry} /> : null}
-
-        <Box
-          id="tgt-tonight"
-          title={ctx && ctx.grid.night !== ctx.tonight ? formatNight(ctx.grid.night, true) : m.target_tonight()}
-          flush
-          actions={
-            ctx ? (
-              <Button size="xs" variant="ghost" render={<Link to="/targets" search={{ view: "planned", night: search.night }} />}>
-                {m.targets_open_plan()}
-              </Button>
-            ) : null
-          }
-        >
-          {tonightBox}
-        </Box>
-
-        <div className="grid gap-4 min-[90rem]:grid-cols-2">
-          <Box id="tgt-identity" title={m.target_identity()}>
-            <KeyValueList
-              columns={2}
-              items={[
-                { label: m.targets_designation(), value: target.name },
-                { label: m.target_aliases(), value: row.aliases.length > 0 ? row.aliases.join(", ") : "–" },
-                {
-                  label: m.targets_type(),
-                  value: row.objectType ? (
-                    <span className="inline-flex items-center gap-1">
-                      {say(m, objectTypeRef(row.objectType))}
-                      <NoteMarker rows={[{ label: m.targets_source(), value: row.entry ? m.target_source_catalogue() : (target.resolver?.provider ?? m.status_unknown()) }]} />
-                    </span>
-                  ) : (
-                    <UnknownValue label="–" reason={m.target_type_unresolved()} />
-                  ),
-                },
-                {
-                  label: m.targets_catalogues(),
-                  value: row.entry ? (
-                    <span className="flex flex-wrap gap-1">
-                      {row.entry.catalogues.map((c) => (
-                        <Pill key={c} tone="muted">
-                          {c}
-                        </Pill>
-                      ))}
-                    </span>
-                  ) : (
-                    "–"
-                  ),
-                },
-                {
-                  label: m.target_coordinates(),
-                  value:
-                    target.ra !== null && target.dec !== null ? (
-                      <span className="inline-flex items-center gap-1 tabular-nums">
-                        {formatRa(target.ra)} {formatDec(target.dec)}
-                        <NoteMarker rows={[{ label: m.targets_source(), value: coordinateSource(m, target.coordinateSource) }]} />
-                      </span>
-                    ) : (
-                      <UnknownValue label="–" reason={m.tonight_no_coordinates()} />
-                    ),
-                },
-                { label: m.target_angular_size(), value: row.sizeDeg ? `${formatDegrees(row.sizeDeg.width, 2)} × ${formatDegrees(row.sizeDeg.height, 2)}` : <UnknownValue label="–" reason={m.target_size_unknown()} /> },
-              ]}
-            />
-          </Box>
-
-          <Box
-            id="tgt-fit"
-            title={
-              <span className="inline-flex items-center gap-1">
-                {m.targets_fit()} <HelpTip label={m.target_about_fit()}>{m.target_fit_help()}</HelpTip>
-              </span>
-            }
-            flush
-          >
-            <ContextMenuArea menu={rigMenu}>
-              <table className="w-full text-sm">
-                <caption className="sr-only">{m.targets_fit_per_rig()}</caption>
-                <thead className="text-[0.6875rem] text-muted-foreground">
-                  <tr className="border-b">
-                    <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
-                      {m.targets_rig()}
-                    </th>
-                    <th scope="col" className="px-3 text-left font-medium">
-                      {m.target_field()}
-                    </th>
-                    <th scope="col" className="px-3 text-left font-medium">
-                      {m.targets_fit()}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.fits.map((f) => {
-                    const rig = catalog.opticalTrains[f.rigId]!
-                    const fov = rigFieldOfView(catalog, rig)
-                    return (
-                      <tr key={f.rigId} {...menuKey(f.rigId)} className="h-(--row-h) border-b border-border/50 last:border-0">
-                        <th scope="row" className="px-3 text-left font-normal">
-                          <Link to="/settings/equipment" search={{ rig: f.rigId }} className="hover:underline">
-                            {say(m, f.rig)}
-                          </Link>
-                        </th>
-                        <td className="px-3 tabular-nums">{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : <UnknownValue label="–" reason={m.target_fov_unknown()} />}</td>
-                        <td className="px-3">
-                          <FitCell fits={[f]} />
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </ContextMenuArea>
-          </Box>
-
-          <Box id="tgt-projects" title={m.nav_projects()} flush>
-            {projects.length === 0 ? (
-              <div className="flex items-center gap-2 p-3 text-sm">
-                <span className="text-muted-foreground">{m.sessions_no_project()}</span>
-                <Button size="xs" variant="outline" onClick={() => openSheet({ kind: "new-project", targetId })}>
-                  {m.newproject_open()}
-                </Button>
-              </div>
-            ) : (
-              <ContextMenuArea menu={projectMenu}>
-                <ul className="divide-y divide-border">
-                  {projects.map((p) => {
-                    const subjects = p.subjects.filter((s) => s.targetId === targetId)
-                    const lines = goalProgress(catalog, p).filter((g) => subjects.some((s) => s.id === g.goal.subjectId))
-                    const status = statusPill(m, projectStatus(p))
-                    return (
-                      <li key={p.id} {...menuKey(p.id)} className="space-y-1 px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link to="/projects/$projectId" params={{ projectId: p.id }} className="font-medium text-link hover:underline">
-                            {p.name}
-                          </Link>
-                          <Pill tone={status.tone}>{status.label}</Pill>
-                          {subjects
-                            .filter((s) => s.mosaic)
-                            .map((s) => (
-                              <Pill key={s.id} tone="muted">
-                                {m.target_mosaic_panels({ name: subjectName(m, catalog, s), count: s.mosaic!.panels.length })}
-                              </Pill>
-                            ))}
-                          {p.state === "open" ? (
-                            <Link to="/targets" search={{ project: p.id }} className="ml-auto text-xs text-link hover:underline">
-                              {m.target_planner()}
-                            </Link>
-                          ) : null}
-                        </div>
-                        {lines.length > 0 ? (
-                          <ul className="space-y-0.5 text-xs tabular-nums">
-                            {lines.map((g) => (
-                              <li key={g.goal.id} className={cn("flex flex-wrap items-center gap-1.5", g.met ? "text-muted-foreground" : "text-foreground")}>
-                                {g.goal.panelId ? (
-                                  <Pill tone="muted" className="h-4 px-1.5 text-[0.625rem]">
-                                    {m.target_panel({ number: subjects.flatMap((s) => s.mosaic?.panels ?? []).find((x) => x.id === g.goal.panelId)?.n ?? "?" })}
-                                  </Pill>
-                                ) : null}
-                                {say(m, g.line)}
-                                {g.met ? (
-                                  <Pill tone="success" className="h-4 px-1.5 text-[0.625rem]">
-                                    {m.status_met()}
-                                  </Pill>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">{m.projects_no_goals()}</p>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              </ContextMenuArea>
-            )}
-          </Box>
-
-          <Box id="tgt-captured" title={m.nav_library()} flush>
-            {coverage.length === 0 ? (
-              <p className="border-b border-border px-3 py-2 text-sm text-muted-foreground">–</p>
-            ) : (
-              <table className="w-full border-b border-border text-sm" data-library-facts>
-                <caption className="sr-only">{m.target_library_caption({ name: target.name })}</caption>
-                <thead className="text-[0.6875rem] text-muted-foreground">
-                  <tr className="border-b">
-                    <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
-                      {m.target_channel()}
-                    </th>
-                    <th scope="col" className="px-3 text-right font-medium">
-                      {m.status_usable()}
-                    </th>
-                    <th scope="col" className="px-3 text-right font-medium">
-                      {m.status_unreviewed()}
-                    </th>
-                    <th scope="col" className="px-3 text-right font-medium">
-                      {m.status_offline()}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coverage.map((c) => (
-                    <tr key={c.channel} className="h-(--row-h) border-b border-border/50 last:border-0">
-                      <th scope="row" className="px-3 text-left font-medium">
-                        {c.channel}
-                      </th>
-                      <td className="px-3 text-right tabular-nums">{hoursOrDash(c.breakdown.usable.seconds)}</td>
-                      <td className="px-3 text-right tabular-nums">{hoursOrDash(c.breakdown.unreviewed.seconds)}</td>
-                      <td className={cn("px-3 text-right tabular-nums", c.breakdown.unavailable.seconds > 0 && "text-warning")}>{hoursOrDash(c.breakdown.unavailable.seconds)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {sessions.length === 0 ? (
-              <p className="p-3 text-sm text-muted-foreground">{m.run_cal_no_sessions()}</p>
-            ) : (
-              <ContextMenuArea menu={sessionMenu}>
-                <table className="w-full text-sm">
-                  <caption className="sr-only">{m.target_sessions_caption({ name: target.name })}</caption>
-                  <thead className="text-[0.6875rem] text-muted-foreground">
-                    <tr className="border-b">
-                      <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
-                        {m.tonight_night()}
-                      </th>
-                      <th scope="col" className="px-3 text-left font-medium">
-                        {m.target_channel()}
-                      </th>
-                      <th scope="col" className="px-3 text-right font-medium">
-                        {m.calibration_frames()}
-                      </th>
-                      <th scope="col" className="px-3 text-left font-medium">
-                        {m.targets_rig()}
-                      </th>
-                      <th scope="col" className="px-3 text-left font-medium">
-                        {m.session_capture_site()}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessions.map((s) => (
-                      <tr key={s.id} {...menuKey(s.id)} className="h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
-                        <th scope="row" className="px-3 text-left font-normal">
-                          <Link to="/sessions/$sessionId" params={{ sessionId: s.id }} className="text-link hover:underline">
-                            {formatNight(s.night, true)}
-                          </Link>
-                        </th>
-                        <td className="px-3">{s.channel ?? "–"}</td>
-                        <td className="px-3 text-right tabular-nums">{s.assetIds.filter((id) => !catalog.assets[id]?.trashed).length}</td>
-                        <td className="px-3">{rigName(m, catalog, sessionRigId(s))}</td>
-                        <td className="px-3">{captureSite(catalog, s)?.name ?? "–"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ContextMenuArea>
-            )}
-          </Box>
-        </div>
-      </PageBody>
-
-      <ConfirmDialog
-        open={adding !== null}
-        onOpenChange={(open) => !open && setAdding(null)}
-        title={m.target_add_to_title({ target: target.name, project: adding?.name ?? "" })}
-        description={`${target.name} → ${adding?.name ?? ""}`}
-        changes={[
-          m.target_adds_subject({ name: target.name }),
-          addingGoals.length > 0 ? m.target_copies_goals({ goals: addingGoals.map((v) => `${v.channel} ${v.integrationS ? formatHours(v.integrationS) : m.target_goal_frames({ count: v.frameCount ?? 0 })}`).join(", ") }) : m.target_no_goals_to_copy(),
+  const tonight =
+    !ctx ? (
+      <EmptyState icon={MapPin} title={m.project_no_site()} action={<ActionButton action={addSite} />} />
+    ) : sky.status !== "ok" ? (
+      <EmptyState icon={MapPin} title={m.tonight_no_coordinates()} action={null} />
+    ) : (
+      <KeyValueList
+        columns={2}
+        items={[
+          { label: m.tonight_altitude(), value: <AltitudeSpark night={ctx.grid} sky={sky} darkness={ctx.summary.darkness} minAltitudeDeg={ctx.criteria.minAltitudeDeg} timeZone={ctx.site.timeZone} /> },
+          { label: m.tonight_best(), value: sky.best ? clockRange(sky.best.start, sky.best.end, ctx.site.timeZone) : m.target_best_none() },
+          { label: m.tonight_img_time(), value: sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : `${m.tonight_zero_hours()}${sky.zeroReason ? ` · ${zeroReasonWord(sky.zeroReason)}` : ""}` },
+          { label: m.tonight_lunar(), value: `${Math.round(sky.lunarDeg)}°` },
+          { label: m.domain_suitable_filters(), value: <GradeBadges grades={view.tonight} empty={m.tonight_no_window()} wrap /> },
+          { label: m.tonight_opposition(), value: view.opposition ? formatNight(view.opposition, true) : "–" },
+          { label: m.plan_dark(), value: <DarkLine darkness={ctx.summary.darkness} timeZone={ctx.site.timeZone} /> },
+          { label: m.tonight_moon(), value: <MoonLine moon={ctx.summary.moon} timeZone={ctx.site.timeZone} /> },
+          { label: m.plan_site(), value: `${ctx.site.name} · ${ctx.site.timeZone}` },
+          { label: m.tonight_criteria(), value: criteriaText(m, ctx.criteria) },
         ]}
-        confirmLabel={adding ? m.target_add_to_named({ name: adding.name }) : m.session_add_to_project()}
-        onConfirm={() => (adding ? addSubject(adding.id, { targetId, mosaic: null }, adding.revision) : undefined)}
       />
-    </div>
+    )
+
+  const fitColumns: Column<RigFit>[] = [
+    { id: "rig", header: m.targets_rig(), rowHeader: true, sortValue: (f) => say(m, f.rig), cell: (f) => say(m, f.rig) },
+    {
+      id: "field",
+      header: m.target_field(),
+      sortValue: (f) => {
+        const fov = rigFieldOfView(catalog, catalog.opticalTrains[f.rigId]!)
+        return fov ? fov.widthDeg * fov.heightDeg : null
+      },
+      cell: (f) => {
+        const fov = rigFieldOfView(catalog, catalog.opticalTrains[f.rigId]!)
+        return fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : "–"
+      },
+    },
+    { id: "fit", header: m.targets_fit(), sortValue: (f) => (f.fit.kind === "unknown" ? null : say(m, f.fit.label)), cell: (f) => fitText(m, f.fit) },
+  ]
+
+  const projectColumns: Column<ProjectUse>[] = [
+    { id: "project", header: m.nav_projects(), rowHeader: true, sortValue: (u) => u.project.name, cell: (u) => u.project.name },
+    { id: "status", header: m.target_project_state(), sortValue: (u) => projectStatus(u.project), cell: (u) => <StatusBadge kind="project" value={projectStatus(u.project)} /> },
+    { id: "goals", header: m.plan_goals(), align: "right", sortValue: (u) => (u.total > 0 ? u.met / u.total : null), cell: (u) => (u.total > 0 ? m.projects_goals_met({ met: u.met, total: u.total }) : m.projects_no_goals()) },
+    { id: "window", header: m.tonight_window(), sortValue: (u) => u.window, cell: (u) => u.window ?? "–" },
+  ]
+
+  type Coverage = (typeof coverage)[number]
+  const coverageColumns: Column<Coverage>[] = [
+    { id: "channel", header: m.target_channel(), rowHeader: true, sortValue: (c) => c.channel, cell: (c) => c.channel },
+    { id: "usable", header: m.status_usable(), align: "right", sortValue: (c) => c.breakdown.usable.seconds, cell: (c) => hoursOrDash(c.breakdown.usable.seconds) },
+    { id: "unreviewed", header: m.status_unreviewed(), align: "right", sortValue: (c) => c.breakdown.unreviewed.seconds, cell: (c) => hoursOrDash(c.breakdown.unreviewed.seconds) },
+  ]
+
+  const sessionColumns: Column<Session>[] = [
+    { id: "night", header: m.tonight_night(), rowHeader: true, sortValue: (s) => s.night, cell: (s) => formatNight(s.night, true) },
+    { id: "channel", header: m.target_channel(), sortValue: (s) => s.channel, cell: (s) => s.channel ?? "–" },
+    { id: "frames", header: m.calibration_frames(), align: "right", sortValue: (s) => frames(s), cell: (s) => frames(s) },
+    { id: "rig", header: m.targets_rig(), sortValue: (s) => rigName(m, catalog, sessionRigId(s)), cell: (s) => rigName(m, catalog, sessionRigId(s)) },
+    { id: "site", header: m.session_capture_site(), sortValue: (s) => captureSite(catalog, s)?.name ?? null, cell: (s) => captureSite(catalog, s)?.name ?? "–" },
+  ]
+  function frames(s: Session): number {
+    return s.assetIds.filter((id) => !catalog.assets[id]?.trashed).length
+  }
+
+  const openProject = (p: Project) => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } })
+  const openSession = (s: Session) => void navigate({ to: "/sessions/$sessionId", params: { sessionId: s.id } })
+
+  const sections: DetailSection[] = [
+    {
+      id: "tgt-tonight",
+      title: ctx && ctx.grid.night !== ctx.tonight ? formatNight(ctx.grid.night, true) : m.target_tonight(),
+      actions: ctx ? [{ id: "show-planned", label: m.targets_open_plan(), run: () => void navigate({ to: "/targets", search: { view: "planned", night: search.night } } as never) }] : [],
+      content: tonight,
+    },
+    {
+      id: "tgt-identity",
+      title: m.target_identity(),
+      content: (
+        <KeyValueList
+          columns={2}
+          items={[
+            { label: m.targets_designation(), value: target.name },
+            { label: m.target_aliases(), value: row.aliases.length > 0 ? row.aliases.join(", ") : "–" },
+            {
+              label: m.targets_type(),
+              value: row.objectType ? say(m, objectTypeRef(row.objectType)) : m.target_type_unresolved(),
+              source: row.objectType ? (row.entry ? m.target_source_catalogue() : (target.resolver?.provider ?? undefined)) : undefined,
+            },
+            { label: m.targets_catalogues(), value: row.entry ? row.entry.catalogues.join(", ") : "–" },
+            {
+              label: m.target_coordinates(),
+              value: target.ra !== null && target.dec !== null ? `${formatRa(target.ra)} ${formatDec(target.dec)}` : m.tonight_no_coordinates(),
+              source: target.ra !== null ? coordinateSource(m, target.coordinateSource) : undefined,
+            },
+            { label: m.target_angular_size(), value: row.sizeDeg ? `${formatDegrees(row.sizeDeg.width, 2)} × ${formatDegrees(row.sizeDeg.height, 2)}` : m.target_size_unknown() },
+          ]}
+        />
+      ),
+    },
+    {
+      id: "tgt-fit",
+      title: m.targets_fit_per_rig(),
+      count: view.fits.length,
+      flush: true,
+      content: (
+        <BoxTable
+          label={m.targets_fit_per_rig()}
+          rows={view.fits}
+          columns={fitColumns}
+          getRowId={(f) => f.rigId}
+          rowLabel={(f) => say(m, f.rig)}
+          rowActions={(f) => [{ id: "open-rig", label: m.target_open_equipment(), run: () => void navigate({ to: "/settings/equipment", search: { rig: f.rigId } } as never) }]}
+          empty={<EmptyState icon={MapPin} title={m.equipment_no_rigs()} action={null} />}
+        />
+      ),
+    },
+    {
+      id: "tgt-projects",
+      title: m.nav_projects(),
+      count: uses.length,
+      flush: true,
+      content: (
+        <BoxTable
+          label={m.nav_projects()}
+          rows={uses}
+          columns={projectColumns}
+          getRowId={(u) => u.project.id}
+          rowLabel={(u) => u.project.name}
+          onRowClick={(u) => openProject(u.project)}
+          rowActions={(u) => [
+            { id: "open-project", label: m.target_open_project(), run: () => openProject(u.project) },
+            ...(u.project.state === "open"
+              ? [{ id: "open-planner", label: m.target_open_planner(), run: () => void navigate({ to: "/targets", search: { project: u.project.id, night: search.night } } as never) }]
+              : []),
+          ]}
+          empty={<EmptyState icon={MapPin} title={m.sessions_no_project()} action={<ActionButton action={newProjectAction(m, targetId)} />} />}
+        />
+      ),
+    },
+    {
+      id: "tgt-library",
+      title: m.nav_library(),
+      count: coverage.length,
+      flush: true,
+      content: (
+        <BoxTable
+          label={m.target_library_caption({ name: target.name })}
+          rows={coverage}
+          columns={coverageColumns}
+          getRowId={(c) => c.channel}
+          empty={<EmptyState icon={MapPin} title={m.target_library_empty()} action={null} />}
+        />
+      ),
+    },
+    {
+      id: "tgt-sessions",
+      title: m.nav_sessions(),
+      count: sessions.length,
+      flush: true,
+      content: (
+        <BoxTable
+          label={m.target_sessions_caption({ name: target.name })}
+          rows={sessions}
+          columns={sessionColumns}
+          getRowId={(s) => s.id}
+          rowLabel={(s) => formatNight(s.night, true)}
+          onRowClick={openSession}
+          rowActions={(s) => [{ id: "open-session", label: m.project_open_session(), run: () => openSession(s) }]}
+          empty={<EmptyState icon={MapPin} title={m.run_cal_no_sessions()} action={null} />}
+        />
+      ),
+    },
+  ]
+
+  const addTo = addToProjectMenu(m, catalog, target)
+  const menu: MenuItem[] = [myTargetsAction(m, row), ...(addTo ? [addTo] : [])]
+  return (
+    <DetailPage
+      path={[{ label: m.nav_targets(), link: { to: "/targets", search: keepSearch(search) as Record<string, string> } }]}
+      title={target.name}
+      actions={[newProjectAction(m, targetId), { ...planAction(m, row, night, inPlan), kind: "primary" }]}
+      menu={{ label: m.target_menu(), items: menu }}
+      sections={sections}
+    />
   )
 }

@@ -1,29 +1,25 @@
 /**
- * Shared pieces of slice E's Targets and Target screens: the chosen night's
- * sky context, the Moon, darkness and site lines, the altitude sparkline,
- * the per-filter good-tonight chips, Fit per rig, compact Captured per
- * channel and the Project badge.
+ * Shared pieces of the Targets and Target pages (slice E): the chosen
+ * night's sky context, the planning site, value wording for the planning
+ * columns, and the actions on a Target that both pages offer (Add to Plan,
+ * My targets, Add to Project ▸, New Project…). The night visuals are the
+ * L2-domain ones (components/domain/sky-lines.tsx, grade-badges.tsx).
  */
-import { Link } from "@tanstack/react-router"
-import { MapPin, Moon } from "lucide-react"
 import { useMemo } from "react"
-import { useMessages } from "@/app/preferences"
-import { UnknownValue } from "@/components/app/feedback"
-import { Pill } from "@/components/app/pill"
-import type { Tone } from "@/components/app/status"
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { formatHours, planningSite } from "@/domain/derive"
-import { defaultCriteria, nightSummary, upcomingNight, zoneAbbreviation } from "@/domain/planning"
-import type { Fit } from "@/domain/derive"
-import type { NightDate, ObservingSite, PlanCriteria, Project } from "@/domain/types"
+import { openSheet } from "@/app/ui-state"
+import type { Action, MenuItem } from "@/components/app/contracts"
+import { formatHours, type Fit, planningSite, projectGoalSet } from "@/domain/derive"
+import { defaultCriteria, nightSummary, upcomingNight } from "@/domain/planning"
+import type { Catalog, NightDate, PlanCriteria, Target } from "@/domain/types"
 import { formatTime } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
-import { nowIso, useStore } from "@/store/core"
-import { type FilterChip, type FilterGrade, filterReason } from "./good-tonight"
+import { type Messages, msg, say } from "@/lib/i18n"
+import { setFavourite } from "@/store/actions/library"
+import { addToPlan } from "@/store/actions/planning"
+import { addSubject } from "@/store/actions/projects"
+import { commit, nowIso, useStore } from "@/store/core"
+import type { SearchParams } from "@/routes"
 import { nightGrid } from "./sky-tonight"
-import type { RigFit, RowSky, SkyContext } from "./targets-model"
+import { addToMyTargets, planRow, type SkyContext, type TargetRow, unplan } from "./targets-model"
 
 const NIGHT = /^\d{4}-\d{2}-\d{2}$/
 
@@ -52,231 +48,102 @@ export function planNight(ctx: SkyContext | null): NightDate {
   return ctx?.grid.night ?? nowIso().slice(0, 10)
 }
 
-/** "21:40 CEST" in the site's zone. */
-export function siteTime(iso: string, site: ObservingSite): string {
-  return `${formatTime(iso, site.timeZone)} ${zoneAbbreviation(iso, site.timeZone)}`
+/** The Targets view keys a Target link carries, so the list (and its night) is the same on return. */
+export function keepSearch(search: SearchParams): SearchParams {
+  const kept: SearchParams = {}
+  for (const key of ["view", "night", "q", "mode", "cat", "preset", "good", "rig", "project", "saved"]) if (search[key]) kept[key] = search[key]
+  return kept
 }
 
-export function siteTimeRange(start: string, end: string, site: ObservingSite): string {
-  return `${formatTime(start, site.timeZone)}–${formatTime(end, site.timeZone)} ${zoneAbbreviation(end, site.timeZone)}`
+/** "21:00–04:40" in the site's zone, for values whose zone the page header names. */
+export function clockRange(start: string, end: string, timeZone: string): string {
+  return `${formatTime(start, timeZone)}–${formatTime(end, timeZone)}`
 }
 
-/** "21:00–04:40" in the site's zone, for columns whose zone the toolbar names. */
-export function clockRange(start: string, end: string, site: ObservingSite): string {
-  return `${formatTime(start, site.timeZone)}–${formatTime(end, site.timeZone)}`
-}
-
-/** The Moon, once, for a toolbar: illumination, phase, rise and set on the chosen night (PLAN-TGT-FR-07). */
-export function MoonLine({ ctx, className }: { ctx: SkyContext; className?: string }) {
-  const m = useMessages()
-  const { moon } = ctx.summary
-  const parts = [
-    `${moon.illuminationPct}%`,
-    say(m, moon.phase),
-    moon.rise ? m.tonight_moon_rises({ time: siteTime(moon.rise, ctx.site) }) : m.tonight_moon_no_rise(),
-    moon.set ? m.tonight_moon_sets({ time: siteTime(moon.set, ctx.site) }) : m.tonight_moon_no_set(),
-  ]
-  return (
-    <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground tabular-nums", className)} data-moon>
-      <Moon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">
-        <span className="text-foreground">{m.tonight_moon()}</span> {parts.join(" · ")}
-      </span>
-    </span>
-  )
-}
-
-/** "Dark 20:10–05:40 CEST": the chosen night's darkness window at the planning site. */
-export function DarkLine({ ctx, className }: { ctx: SkyContext; className?: string }) {
-  const m = useMessages()
-  const { darkness } = ctx.summary
-  return (
-    <span className={cn("text-[0.75rem] text-muted-foreground tabular-nums", className)}>
-      <span className="text-foreground">{m.plan_dark()}</span> {darkness ? siteTimeRange(darkness.start, darkness.end, ctx.site) : m.plan_dark_none()}
-    </span>
-  )
-}
-
-type SkyOk = Extract<RowSky, { status: "ok" }>
-
-/** "Max 81° at 22:40 · window 20:10–02:30 CEST": the sparkline's tooltip and accessible name, one string. */
-export function altitudeFacts(m: Messages, sky: SkyOk, site: ObservingSite): string {
-  if (sky.peakDeg === null || sky.peakAt === null) return m.tonight_no_darkness()
-  const altitude = String(Math.round(sky.peakDeg)).replace("-", "−")
-  if (!sky.best) return m.tonight_spark_no_window({ altitude, time: siteTime(sky.peakAt, site) })
-  return m.tonight_spark_window({ altitude, time: formatTime(sky.peakAt, site.timeZone), window: siteTimeRange(sky.best.start, sky.best.end, site) })
-}
-
-/**
- * The altitude cell (P-PLAN2): a sparkline of the position's altitude from
- * sunset to sunrise on the chosen night, its dark window shaded, its best
- * window marked and the altitude limit dashed, beside the peak in darkness.
- * At most 120 px with its cell's padding; the tooltip and the accessible
- * name state the same facts.
- */
-export function AltitudeSpark({ ctx, sky }: { ctx: SkyContext; sky: SkyOk }) {
-  const m = useMessages()
-  const { grid } = ctx
-  const facts = altitudeFacts(m, sky, ctx.site)
-  const span = grid.to - grid.from + 1
-  const startMs = grid.samples[grid.from]!.ms
-  const stepMs = grid.samples[1]!.ms - grid.samples[0]!.ms
-  const x = (iso: string) => Math.max(0, Math.min(span, (Date.parse(iso) - startMs) / stepMs))
-  const y = (alt: number) => 100 - (Math.max(0, Math.min(90, alt)) / 90) * 100
-  const dark = ctx.summary.darkness
-  const curve = sky.altitudes
-    .slice(grid.from, grid.to + 1)
-    .map((alt, i) => `${i + 0.5},${y(alt)}`)
-    .join(" ")
-  const limitY = y(ctx.criteria.minAltitudeDeg)
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span role="img" aria-label={facts} data-altitude-spark className="inline-flex items-center gap-1 align-middle" />}>
-        <svg aria-hidden="true" viewBox={`0 0 ${span} 100`} preserveAspectRatio="none" className="h-5 w-[4.5rem] shrink-0 rounded-[2px] bg-foreground/[0.04]">
-          {dark ? <rect x={x(dark.start)} y={0} width={x(dark.end) - x(dark.start)} height={100} fill="var(--foreground)" fillOpacity={0.1} /> : null}
-          <line x1={0} x2={span} y1={limitY} y2={limitY} stroke="var(--muted-foreground)" strokeOpacity={0.6} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
-          {sky.best ? (
-            <>
-              <rect x={x(sky.best.start)} y={0} width={Math.max(0.5, x(sky.best.end) - x(sky.best.start))} height={100} fill="var(--primary)" fillOpacity={0.22} />
-              <rect x={x(sky.best.start)} y={84} width={Math.max(0.5, x(sky.best.end) - x(sky.best.start))} height={16} fill="var(--primary)" />
-            </>
-          ) : null}
-          <polyline points={curve} fill="none" stroke="var(--link)" strokeWidth={1.25} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        </svg>
-        <span aria-hidden="true" className="w-7 text-right text-xs tabular-nums">
-          {sky.peakDeg === null ? "–" : `${String(Math.round(sky.peakDeg)).replace("-", "−")}°`}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{facts}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** The active planning site and its time zone: every planning value names its basis. */
-export function SiteLine({ site, className }: { site: ObservingSite; className?: string }) {
-  return (
-    <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground", className)}>
-      <MapPin aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">
-        <span className="text-foreground">{site.name}</span> · {site.timeZone}
-      </span>
-    </span>
-  )
-}
-
-/** Settings › Sites (PLAN-TGT-AC-15), returning here afterwards. */
-export function AddSiteButton({ returnTo }: { returnTo: string }) {
-  const m = useMessages()
-  return (
-    <Button size="sm" variant="outline" render={<Link to="/settings/sites" search={{ return: returnTo }} />}>
-      {m.tonight_add_site()}
-    </Button>
-  )
-}
-
-/** The planning criteria behind every window, for the night's method note. */
+/** The planning criteria behind every window. */
 export function criteriaText(m: Messages, c: PlanCriteria): string {
   const parts = [
     m.tonight_criteria_altitude({ altitude: c.minAltitudeDeg }),
     c.darkness === "astronomical" ? m.tonight_criteria_astronomical() : m.tonight_criteria_nautical(),
     m.tonight_criteria_duration({ minutes: c.minDurationMin }),
   ]
-  if (c.maxMoonIlluminationPct !== null) parts.push(m.tonight_criteria_moon_illumination({ illumination: c.maxMoonIlluminationPct }))
-  if (c.minMoonSeparationDeg !== null) parts.push(m.tonight_criteria_moon_separation({ separation: c.minMoonSeparationDeg }))
   return parts.join(", ")
 }
 
-const GRADE_TONE: Record<FilterGrade, Tone> = { good: "success", marginal: "warning", poor: "muted" }
-
-/** Shape as well as colour: marginal is dashed, poor is struck through and unfilled. */
-const GRADE_SHAPE: Record<FilterGrade, string> = {
-  good: "",
-  marginal: "border border-dashed border-warning/70 ring-0",
-  poor: "bg-transparent line-through decoration-foreground/50",
+/** A Fit as one value ("Fits", "2 × 1 panels"), or "–". */
+export function fitText(m: Messages, fit: Fit): string {
+  return fit.kind === "unknown" ? "–" : say(m, fit.label)
 }
 
-/** A grade-tinted chip: a filter's band. */
-function GradePill({ grade, title, className, children }: { grade: FilterGrade; title?: string; className?: string; children: string }) {
-  return (
-    <Pill tone={GRADE_TONE[grade]} title={title} className={cn("h-4 min-w-5 justify-center gap-0 px-1 text-[0.625rem] leading-none", GRADE_SHAPE[grade], className)}>
-      {children}
-    </Pill>
-  )
+/** Captured per channel: "Ha 9h15 · OIII 6h", or "–". */
+export function capturedText(captured: ReadonlyArray<{ channel: string; seconds: number }>): string {
+  return captured.length === 0 ? "–" : captured.map((c) => `${c.channel} ${formatHours(c.seconds)}`).join(" · ")
 }
 
-/** One filter's good-tonight chip; its reason is the tooltip. */
-export function FilterPill({ chip, className }: { chip: FilterChip; className?: string }) {
-  useMessages()
-  return (
-    <GradePill grade={chip.grade} title={filterReason(chip)} className={className}>
-      {chip.band}
-    </GradePill>
-  )
+// ---------------------------------------------------------------------------
+// Planning site
+// ---------------------------------------------------------------------------
+
+/** The sites for a SitePicker, by name. */
+export function siteOptions(catalog: Catalog): { id: string; name: string }[] {
+  return Object.values(catalog.sites)
+    .map((site) => ({ id: site.id, name: site.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Pick the planning site, the one setting Home and Targets share: every planning value follows it. */
+export function choosePlanningSite(siteId: string) {
+  return commit(msg("plan_site"), (s) => ({ ...s, settings: { ...s.settings, planningSiteId: siteId } }), { href: "/targets" })
+}
+
+// ---------------------------------------------------------------------------
+// Actions on a Target
+// ---------------------------------------------------------------------------
+
+/** Add to Plan, or Remove from Plan when the Target is on the night's plan. A catalogue result is written into the library first. */
+export function planAction(m: Messages, row: TargetRow, night: NightDate, inPlan: boolean): Action {
+  const target = row.target
+  if (target && inPlan) return { id: "unplan", label: m.targets_remove_from_plan(), run: () => unplan(target.id, night) }
+  return { id: "plan", label: m.targets_add_to_plan(), run: () => (target ? addToPlan(target.id, night) : planRow(row, night)) }
+}
+
+/** My targets membership (★, D-W60): add a result or a library Target, or take it out again. */
+export function myTargetsAction(m: Messages, row: TargetRow): Action {
+  const target = row.target
+  if (target?.favourite) return { id: "my-remove", label: m.targets_my_remove(), run: () => setFavourite(target.id, false) }
+  return { id: "my-add", label: m.targets_my_add(), run: () => addToMyTargets(row).result }
+}
+
+export function newProjectAction(m: Messages, targetId: string): Action {
+  return { id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project", targetId }) }
 }
 
 /**
- * The per-filter good-tonight strip: one chip per filter, tinted good,
- * marginal or poor. Without a window tonight it reads "–" with `empty` as
- * the reason.
+ * Add to Project ▸: one item per open Project the Target is not a subject
+ * of, each confirming what it adds (the subject, and the goals it copies).
+ * Null when every open Project already holds it.
  */
-export function FilterChips({ chips, empty }: { chips: FilterChip[] | null; empty: string }) {
-  const m = useMessages()
-  if (!chips) return <UnknownValue label="–" reason={empty} />
-  if (chips.length === 0) return <span className="text-xs text-muted-foreground">{m.tonight_no_filters()}</span>
-  return (
-    <span role="img" aria-label={chips.map(filterReason).join("; ")} className="inline-flex items-center gap-0.5" data-filter-chips>
-      {chips.map((c) => (
-        <FilterPill key={c.band} chip={c} />
-      ))}
-    </span>
-  )
-}
-
-/** Why a Fit is "–"; derive always names it, so the fallback is only the type's null. */
-function fitReason(m: Messages, fit: Fit): string {
-  return fit.reason ? say(m, fit.reason) : m.status_unknown()
-}
-
-/** Fit per rig (D-W62): one value, or one per rig labelled with the rig name; "–" names its reason. */
-export function FitCell({ fits }: { fits: RigFit[] }) {
-  const m = useMessages()
-  if (fits.length === 1) {
-    const { fit } = fits[0]!
-    return fit.kind === "unknown" ? <UnknownValue label="–" reason={fitReason(m, fit)} /> : <span>{say(m, fit.label)}</span>
+export function addToProjectMenu(m: Messages, catalog: Catalog, target: Target): MenuItem | null {
+  const projects = Object.values(catalog.projects).filter((p) => p.state === "open" && !p.subjects.some((s) => s.targetId === target.id))
+  if (projects.length === 0) return null
+  return {
+    submenu: m.session_add_to_project(),
+    items: projects.map((p): Action => {
+      const goals = projectGoalSet(p)
+      const copies =
+        goals.length > 0
+          ? m.target_copies_goals({ goals: goals.map((v) => `${v.channel} ${v.integrationS ? formatHours(v.integrationS) : m.target_goal_frames({ count: v.frameCount ?? 0 })}`).join(", ") })
+          : m.target_no_goals_to_copy()
+      return {
+        id: `add-to-${p.id}`,
+        label: p.name,
+        confirm: {
+          title: m.target_add_to_title({ target: target.name, project: p.name }),
+          summary: `${m.target_adds_subject({ name: target.name })} · ${copies}`,
+          confirm: { label: m.target_add_to_named({ name: p.name }), kind: "primary" },
+        },
+        run: () => addSubject(p.id, { targetId: target.id, mosaic: null }, p.revision),
+      }
+    }),
   }
-  return (
-    <span className="flex flex-col gap-0 text-xs leading-4">
-      {fits.map((f) => (
-        <span key={f.rigId} className="whitespace-nowrap">
-          <span className="text-muted-foreground">{say(m, f.rig).split(" / ")[0]}: </span>
-          {f.fit.kind === "unknown" ? <UnknownValue label="–" reason={fitReason(m, f.fit)} /> : say(m, f.fit.label)}
-        </span>
-      ))}
-    </span>
-  )
-}
-
-/** Compact Captured per channel: "Ha 9h15 · OIII 6h". */
-export function CapturedCell({ captured }: { captured: Array<{ channel: string; seconds: number }> }) {
-  if (captured.length === 0) return <span className="text-muted-foreground">–</span>
-  return (
-    <span className="text-xs whitespace-nowrap tabular-nums">
-      {captured.map((c, i) => (
-        <span key={c.channel}>
-          {i > 0 ? <span className="text-muted-foreground"> · </span> : null}
-          <span className="text-muted-foreground">{c.channel}</span> {formatHours(c.seconds)}
-        </span>
-      ))}
-    </span>
-  )
-}
-
-/** A Project badge (D-W60): the Project's name as a pill, linking to it. */
-export function ProjectBadge({ project }: { project: Project }) {
-  const m = useMessages()
-  return (
-    <Pill tone="muted" link={{ to: "/projects/$projectId", params: { projectId: project.id } }} title={m.target_project_badge({ name: project.name })} className="h-4 max-w-40 px-1.5 text-[0.625rem]">
-      {project.name}
-    </Pill>
-  )
 }

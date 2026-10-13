@@ -2366,22 +2366,13 @@
   "tonight_criteria_astronomical": "astronomical darkness",
   "tonight_criteria_nautical": "nautical darkness",
   "tonight_criteria_duration": "at least {minutes} min",
-  "tonight_criteria_moon_illumination": "Moon ≤ {illumination}% when up",
-  "tonight_criteria_moon_separation": "Moon ≥ {separation}° away when up",
   "tonight_no_filters": "No filters",
-  "target_project_badge": "Project {name}",
-  "tonight_limit_separation_field": "{band} minimum Moon separation",
-  "tonight_limit_illumination_field": "{band} maximum Moon illumination",
   "tonight_moon_limits": "Moon limits",
-  "tonight_reset": "Reset",
   "tonight_filter": "Filter",
-  "tonight_limit_separation_header": "Moon ≥",
-  "tonight_limit_illumination_header": "Lit ≤",
   "tonight_actions": "Actions",
   "tonight_no_window": "No window tonight",
   "tonight_altitude": "Altitude",
   "tonight_window": "Window",
-  "tonight_method": "Method",
   "targets_name_empty": "{label}: enter a name.",
   "targets_name_taken": "{label}: “{name}” is already used. Choose another name.",
   "target_plan_tonight": "Plan tonight",
@@ -2411,7 +2402,6 @@
   "targets_preset_needs_rig": "Choose a rig to use this preset",
   "targets_preset_needs_narrowband": "The selected rig has no Ha, SII or OIII filter",
   "targets_result_gone": "This result is no longer available. Search again.",
-  "plan_matches": "Matches",
   "plan_unknown_target": "Unknown Target",
   "tonight_no_coordinates": "No catalogued coordinates",
   "plan_site": "Planning site",
@@ -2420,7 +2410,6 @@
   "plan_moon_away": "Moon {separation}° away",
   "plan_moon_up_best": "Moon {separation}° away, up in the best window",
   "plan_moon_down_best": "Moon {separation}° away, down in the best window",
-  "plan_moon_up": "up",
   "plan_goals": "Goals",
   "plan_goals_short": [
     {
@@ -2458,159 +2447,141 @@
       }
     }
   ],
-  "plan_rows_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} row",
-        "countPlural=*": "{count} rows"
-      }
-    }
-  ],
   "plan_list_empty": "Plan list empty",
   "plan_show_all": "Show all",
   "plan_dark": "Dark",
   "plan_dark_none": "none",
   "targets_browse_catalogues": "Browse catalogues",
   "tonight_night": "Night",
-  "tonight_times": "Times",
   "tonight_criteria": "Criteria",
-  "tonight_method_value": "Low-precision Sun and Moon, 10-min grid",
-  "targets_rig_lacks_filter": "The rig has no {band} filter",
-  "targets_unstar_named": "Remove {name} from favourites",
-  "targets_star_named": "Add {name} to favourites",
   "targets_add_named": "Add {name} to targets",
   "targets_designation": "Designation",
   "targets_type": "Type",
-  "targets_type_unknown": "Object type unknown",
   "tonight_no_darkness": "No darkness tonight",
   "tonight_lunar": "Lunar",
   "tonight_img_time": "Img time",
-  "targets_filters": "Filters",
-  "targets_filters_help": "Each filter tonight under its Moon limits. Dashed: marginal. Struck: poor.",
   "targets_fit_per_rig": "Fit per rig",
   "targets_fit": "Fit",
   "tonight_opposition": "Opposition",
   "targets_source": "Source",
-  "targets_add_to_targets": "Add to targets",
-  "targets_star": "Add ★",
-  "targets_unstar": "Remove ★",
   "targets_open_plan": "Show planned",
-  "targets_apply": "Apply",
-  "targets_rename_menu": "Rename…",
-  "targets_delete_menu": "Delete…",
-  "targets_good_for": "Good tonight for {band}",
-  "targets_good_for_menu": "Good tonight for…",
-  "targets_good_for_heading": "Good tonight for",
+  "targets_none_suitable": "No target suits the picked filters",
+  "targets_deadline": "Deadline",
+  "targets_fit_rig": "Fit · {rig}",
+  "targets_in_my_targets": "In My targets",
+  "targets_my_add": "Add to My targets",
+  "targets_my_remove": "Remove from My targets",
+  "targets_details": "Details",
+  "targets_preset_none": "No preset",
+  "targets_planning_for": "Planning {name}",
+  "targets_panel": "Panel",
+  "target_menu": "Target",
+  "target_project_state": "State",
+  "target_library_empty": "No frames yet",
+  "plan_first_already": "Already first",
+  "plan_last_already": "Already last",
+  "plan_lead_minutes": "{count} min before",
+  "plan_lead_hours": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} h before",
+        "countPlural=*": "{count} h before"
+      }
+    }
+  ],
+  "plan_lead_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day before",
+        "countPlural=*": "{count} days before"
+      }
+    }
+  ],
+  "plan_lead_custom": "Custom",
+  "plan_lead_amount": "Lead time",
+  "plan_lead_unit": "Unit",
+  "plan_lead_unit_minutes": "Minutes",
+  "plan_lead_unit_hours": "Hours",
+  "plan_lead_unit_days": "Days",
+  "plan_lead_invalid": "Enter a whole number, up to 7 days",
+  "plan_reminders_site": "Site",
+  "plan_reminders_next": "Next reminder",
+  "plan_export_events": "Events",
+  "tonight_curve_separation": "Separation at full Moon",
+  "tonight_curve_width": "Width",
+  "catalogue_grade_badges_wrap": "Wrapping in a narrow place",
+  "tonight_curve_days_unit": "days",
+  "tonight_curve_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day",
+        "countPlural=*": "{count} days"
+      }
+    }
+  ],
+  "tonight_curve_default": "Default {value}",
+  "tonight_curve_number_needed": "Enter a number",
+  "tonight_curve_incomplete": "{band}: enter both values",
+  "domain_grade_badge": "{band} {grade}",
+  "domain_grade_good": "good",
+  "domain_grade_marginal": "marginal",
+  "domain_grade_poor": "poor",
+  "catalogue_grade_badges_desc": "Display-only grade per filter for one night; tone and icon carry the grade.",
+  "catalogue_grade_badges_grades": "Every grade",
+  "catalogue_grade_badges_full": "Seven filters",
+  "catalogue_grade_badges_one": "One filter",
+  "catalogue_grade_badges_none": "No verdict",
   "targets_project_rigs": "This Project's rigs ({count})",
   "targets_no_match": "No match for “{query}”",
   "targets_choose_catalogue": "Choose a catalogue or preset",
   "targets_browse_messier": "Browse Messier",
-  "targets_none_good": "No target with {band} ok tonight",
   "targets_clear_filter": "Clear filter",
   "targets_none_match_preset": "No target matches {name}",
   "targets_clear_preset": "Clear preset",
   "targets_empty": "No targets yet",
-  "targets_clear_search_first": "Clear search first",
-  "targets_save_preset": "Save preset",
   "targets_clear_project": "Clear Project",
   "targets_show": "Show",
   "targets_search_label": "Search targets, catalogues and SIMBAD",
   "targets_search_placeholder": "Targets, catalogues, SIMBAD",
   "targets_rig": "Rig",
   "targets_moon_limits_for": "Moon limits for {band}",
-  "targets_off_while_searching": "Off while searching",
-  "targets_good_chip": "{band} ok · {limit}",
-  "targets_clear_band_filter": "Clear {band} filter",
   "targets_catalogues": "Catalogues",
-  "targets_presets": "Presets",
-  "targets_preset_unavailable_sr": ": unavailable, {reason}",
-  "targets_more_for": "More for {name}",
   "targets_preset_unavailable": "{name} · unavailable",
-  "targets_clear_named": "Clear {name}",
   "targets_simbad_searching": "Searching SIMBAD…",
   "targets_simbad_off": "SIMBAD off",
   "targets_simbad_unreachable": "SIMBAD unreachable",
-  "targets_simbad_searched": "SIMBAD searched",
-  "targets_simbad_fixture": "Fixture data (prototype)",
   "targets_caption_search": "Search results for {query}",
   "targets_caption_project": "{name} subjects",
   "targets_filters_band": "Filters ({band})",
-  "targets_favourite": "Favourite",
-  "targets_about_column": "About {name}",
-  "targets_sort_ascending": "ascending",
-  "targets_sort_descending": "descending",
-  "targets_preset_name": "Preset name",
-  "targets_rename_preset": "Rename preset",
-  "targets_rename": "Rename",
-  "targets_delete_preset_title": "Delete preset {name}?",
-  "targets_delete_preset_change": "Removes “{name}”",
-  "targets_delete_preset": "Delete preset",
   "target_source_catalogue": "Bundled catalogue",
   "target_source_user": "Entered by you",
   "target_source_resolver": "Online resolver",
-  "target_find": "Find a Target",
   "target_find_placeholder": "Name or alias",
-  "target_matching_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} matching Target",
-        "countPlural=*": "{count} matching Targets"
-      }
-    }
-  ],
-  "target_targets_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Target",
-        "countPlural=*": "{count} Targets"
-      }
-    }
-  ],
-  "target_favourite_sr": ", favourite",
-  "target_projects_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Project",
-        "countPlural=*": "{count} Projects"
-      }
-    }
-  ],
-  "target_table_link": "Targets table",
   "target_open_targets": "Open Targets",
-  "target_finder": "Target finder",
-  "target_no_coordinates": "No coordinates",
   "target_best_none": "None",
   "target_open_planner": "Open in Planner",
   "target_open_equipment": "Open in Equipment",
-  "target_in_every_project": "In every open Project",
   "target_tonight": "Tonight",
   "target_identity": "Identity",
   "target_aliases": "Aliases",
@@ -2618,28 +2589,7 @@
   "target_coordinates": "Coordinates",
   "target_angular_size": "Angular size",
   "target_size_unknown": "Size unknown",
-  "target_about_fit": "About Fit",
-  "target_fit_help": "Major axis against the shorter side of each rig's field.",
   "target_field": "Field",
-  "target_fov_unknown": "Camera or focal length unknown",
-  "target_mosaic_panels": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} panel",
-        "countPlural=*": "{name} · {count} panels"
-      }
-    }
-  ],
-  "target_planner": "Planner",
-  "target_panel": "Panel {number}",
   "target_sessions_caption": "Sessions of {name}",
   "target_channel": "Channel",
   "calibration_frames": "Frames",
@@ -7026,10 +6976,7 @@
   "op_measure_not_measured": "{count} not measured: no readable copy",
   "op_measure_summary": "{parts}.",
   "store_saved_preset": "Targets preset saved: {name}",
-  "store_saved_preset_renamed": "Targets preset renamed: {name}",
-  "store_preset_was": "Was “{name}”.",
   "store_saved_preset_deleted": "Targets preset deleted: {name}",
-  "store_saved_planning_site": "Planning site: {name}",
   "op_offer_to_trash": "{offer} of {name} to Trash",
   "seed_cleanup_summary": [
     {
@@ -7472,11 +7419,6 @@
   "plan_ics_description": "Max altitude {altitude}° · Moon {moon}%, {separation}° away",
   "duplicates_scope_help": "Library locations only; capture cards are never scanned. Keeps the copy in the earliest-registered location.",
   "plan_night_empty": "Nothing planned for {night}",
-  "plan_lead_option": "{minutes} min before",
-  "plan_cant_turn_on_reminders": "Can't turn on reminders",
-  "plan_next_reminder": "Next {time}",
-  "plan_proto_next_reminder": "Prototype: jump to the next reminder",
-  "plan_export_calendar_open": "Export calendar…",
   "plan_export_summary": "{events} on {nights} · {site}",
   "plan_events_count": [
     {
