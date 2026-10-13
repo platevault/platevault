@@ -34,10 +34,12 @@ import {
 import {
   getUpdateSnapshot,
   subscribeUpdate,
-  checkForUpdate,
-  restartPendingUpdate,
   getRunningVersion,
 } from '@/data/updateSubscription';
+import {
+  UpdateActions,
+  updateStatusMessage,
+} from '@/features/update/UpdateControls';
 import { selectBase } from '@/styles/select.css';
 import { controlCol, controlRow } from './advanced.css';
 
@@ -56,7 +58,6 @@ const RESET_FEEDBACK_MS = 3000;
  *
  * @param save - Persists updated advanced settings
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: settings form render with per-control state and validation branches
 export function Advanced({ save }: AdvancedProps) {
   const navigate = useNavigate();
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
@@ -64,7 +65,6 @@ export function Advanced({ save }: AdvancedProps) {
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
   const updateState = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
-  const [updateBusy, setUpdateBusy] = useState(false);
   const [runningVersion, setRunningVersion] = useState<string | null>(null);
   const [resetConfirming, setResetConfirming] = useState(false);
   const [resetDone, setResetDone] = useState(false);
@@ -144,28 +144,6 @@ export function Advanced({ save }: AdvancedProps) {
     setResetConfirming(false);
     setResetDone(true);
     setTimeout(() => setResetDone(false), RESET_FEEDBACK_MS);
-  };
-
-  // Staged update flow (#888, absorbs #869/#873): checking/downloading are
-  // automatic; only the restart/install step is an explicit user action
-  // (US10 AS1, FR-030). Both actions manage their own phase transitions in
-  // updateSubscription.ts — this pane just reflects `updateState`.
-  const handleCheckForUpdate = async () => {
-    setUpdateBusy(true);
-    try {
-      await checkForUpdate();
-    } finally {
-      setUpdateBusy(false);
-    }
-  };
-
-  const handleRestartUpdate = async () => {
-    setUpdateBusy(true);
-    try {
-      await restartPendingUpdate();
-    } finally {
-      setUpdateBusy(false);
-    }
   };
 
   return (
@@ -282,7 +260,7 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Signed auto-update — staged flow (spec 051 US10, #888/#869/#873) */}
+      {/* Signed auto-update (spec 051 US10, #869/#873, astro-plan-mkkgi) */}
       <SettingsSection title={m.settings_advanced_updates_title()}>
         <SettingsRow label={m.settings_advanced_updates_title()}>
           <div className={controlCol}>
@@ -300,55 +278,11 @@ export function Advanced({ save }: AdvancedProps) {
               className="pv-adv-settings__control-desc"
               data-testid="update-status"
             >
-              {updateState.phase === 'checking' &&
-                m.settings_advanced_updates_checking()}
-              {(updateState.phase === 'idle' ||
-                updateState.phase === 'up-to-date') &&
-                m.settings_advanced_updates_uptodate()}
-              {updateState.phase === 'check-failed' &&
-                m.settings_advanced_updates_checkfailed({
-                  message: updateState.error ?? '',
-                })}
-              {updateState.phase === 'downloading' &&
-                m.settings_advanced_updates_downloading({
-                  version: updateState.version ?? '',
-                })}
-              {updateState.phase === 'download-failed' &&
-                m.settings_advanced_updates_downloadfailed({
-                  message: updateState.error ?? '',
-                })}
-              {updateState.phase === 'ready' &&
-                m.settings_advanced_updates_ready({
-                  version: updateState.version ?? '',
-                })}
-              {updateState.phase === 'restart-failed' &&
-                m.settings_advanced_updates_restartfailed()}
+              {updateStatusMessage(updateState)}
             </p>
-            {(updateState.phase === 'ready' ||
-              updateState.phase === 'restart-failed') && (
-              <Btn
-                size="sm"
-                onClick={() => void handleRestartUpdate()}
-                disabled={updateBusy}
-                data-testid="update-restart-btn"
-              >
-                {updateBusy
-                  ? m.common_restarting()
-                  : m.settings_advanced_updates_restart()}
-              </Btn>
-            )}
-            {(updateState.phase === 'check-failed' ||
-              updateState.phase === 'download-failed') && (
-              <Btn
-                size="sm"
-                variant="ghost"
-                onClick={() => void handleCheckForUpdate()}
-                disabled={updateBusy}
-                data-testid="update-retry-btn"
-              >
-                {m.settings_advanced_updates_check_retry()}
-              </Btn>
-            )}
+            <div className={controlRow}>
+              <UpdateActions state={updateState} testIdPrefix="update" />
+            </div>
           </div>
         </SettingsRow>
       </SettingsSection>

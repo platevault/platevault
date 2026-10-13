@@ -851,6 +851,17 @@ export const commands = {
 	 */
 	recoveryStatus: () => typedError<RecoveryStatus, ContractError_Serialize>(__TAURI_INVOKE("recovery_status")),
 	/**
+	 *  `update_install_on_quit_begin` — the main window, answering
+	 *  [`INSTALL_EVENT`], asks to start installing. `true` when the gate now holds
+	 *  the quit, so the install may run; `false` when the quit was already
+	 *  released (a second quit or the watchdog), so the frontend must not install.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Never fails; the `Result` keeps the command surface's envelope uniform.
+	 */
+	updateInstallOnQuitBegin: () => typedError<boolean, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit_begin")),
+	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
 	 *  Applies a server-side default limit clamp (1..=500, default 100) to prevent
