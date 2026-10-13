@@ -239,6 +239,16 @@ than a new mechanism:
   Source: [Tauri v2 macOS code signing](https://v2.tauri.app/distribute/sign/macos/),
   [Tauri v2 environment variables reference](https://v2.tauri.app/reference/environment-variables/).
 
+### Self-signed identity (without Developer ID)
+
+Until a Developer ID exists, release builds are signed with the stable
+self-signed identity **PlateVault Self-Signed** instead of ad-hoc, once the
+`MACOS_SELF_SIGNED_*` secrets are set. The ad-hoc notes under
+[Current state](#current-state) apply to releases up to v0.6.1 and to builds
+without those secrets. [macOS signing](../release/macos-signing.md) covers
+the workflow steps, the first launch, the one-time re-grant of folder and
+drive access, and rotation.
+
 ### Free distribution channel: Homebrew cask
 
 Independent of Developer ID signing, a **Homebrew cask** is shipped as a free

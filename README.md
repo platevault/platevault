@@ -104,6 +104,11 @@ Windows releases are not code-signed yet. The [code signing policy](docs/release
 describes the planned signing through SignPath Foundation, who holds which
 role, and what will be signed.
 
+macOS releases are signed with a self-signed PlateVault certificate, not an
+Apple Developer ID. [macOS signing](docs/release/macos-signing.md) explains the
+first launch, the one-time re-grant of folder and drive access for existing
+installs, and how to check the certificate.
+
 ### Privacy
 
 PlateVault sends nothing to the maintainer. It contacts GitHub to check for
