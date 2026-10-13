@@ -50,6 +50,12 @@ export const COMPOSITION_ENFORCED = [
     area: { dir: "v5/d-review", depth: 0 },
     files: ["src/features/v5/d-review/**/*.{ts,tsx}"],
   },
+  {
+    // a-home is shared with P2 (Home), so P3's files are listed.
+    unit: "P3 Sessions",
+    area: { dir: "v5/a-home", depth: 0 },
+    files: ["src/features/v5/a-home/{sessions,session,session-intake,import,import-preview,import-model,import-run,parts,session-model,shell}.{ts,tsx}"],
+  },
 ]
 
 export default defineConfig(
