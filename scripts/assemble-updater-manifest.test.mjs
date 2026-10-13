@@ -52,11 +52,14 @@ function makeKey() {
   return { privateKey, keyId, pubkey };
 }
 
-/** The `.sig` contents `tauri signer sign` writes for `data`. */
-function signFile(data, fileName, key) {
+/**
+ * The `.sig` contents `tauri signer sign` writes for `data`. With `version`,
+ * the trusted comment records it as Tauri CLI 2.12 and later do.
+ */
+function signFile(data, fileName, key, version) {
   const digest = createHash('blake2b512').update(data).digest();
   const sig = sign(null, digest, key.privateKey);
-  const trusted = `timestamp:1791820000\tfile:${fileName}`;
+  const trusted = `timestamp:1791820000\tfile:${fileName}${version === undefined ? '' : `\tversion:${version}`}`;
   const globalSig = sign(null, Buffer.concat([sig, Buffer.from(trusted)]), key.privateKey);
   const sigLine = Buffer.concat([Buffer.from('ED', 'latin1'), key.keyId, sig]).toString('base64');
   const box = `untrusted comment: signature from tauri secret key\n${sigLine}\ntrusted comment: ${trusted}\n${globalSig.toString('base64')}\n`;
@@ -196,6 +199,38 @@ function assemble(edit = () => {}) {
   assertProblem(problems, /^linux-x86_64-deb: .* was made with key [0-9A-F]{16}, but the app trusts key [0-9A-F]{16}$/, 'a foreign key is named');
 }
 
+// ── a signature made for another version ────────────────────────────────────
+// tauri-plugin-updater 2.13 rejects it with SignedVersionMismatch, even with
+// requireSignedVersion off: e.g. a 0.6.9 bundle under a 0.7.0 latest.json.
+{
+  const { manifest, problems } = assemble((files, key) => {
+    const name = 'PlateVault_0.7.0_aarch64.app.tar.gz';
+    files[`${name}.sig`] = signFile(files[name], name, key, '0.6.9');
+  });
+  assertEqual(manifest, null, 'no manifest when a signed version differs');
+  assertProblem(
+    problems,
+    /^darwin-aarch64-app: the signature in .* was signed for version 0\.6\.9, but latest\.json announces 0\.7\.0$/,
+    'the mismatched signed version is named',
+  );
+  assertEqual(problems.length, 1, 'only the mismatched bundle is reported');
+}
+
+// ── a signature made for this version ───────────────────────────────────────
+// A leading `v` on either side is the same version, as the plugin compares it.
+{
+  const { problems } = assemble((files, key) => {
+    files['PlateVault_0.7.0_aarch64.app.tar.gz.sig'] = signFile(
+      files['PlateVault_0.7.0_aarch64.app.tar.gz'],
+      'PlateVault_0.7.0_aarch64.app.tar.gz',
+      key,
+      '0.7.0',
+    );
+    files['PlateVault_0.7.0_amd64.deb.sig'] = signFile(files['PlateVault_0.7.0_amd64.deb'], 'PlateVault_0.7.0_amd64.deb', key, 'v0.7.0');
+  });
+  assertEqual(problems.length, 0, `a matching signed version is accepted: ${problems.join('; ')}`);
+}
+
 // ── a garbled signature ─────────────────────────────────────────────────────
 {
   const { problems } = assemble((files) => {
@@ -236,7 +271,7 @@ function assemble(edit = () => {}) {
 // ── the CLI ─────────────────────────────────────────────────────────────────
 // Also the entry-point guard: an exit-0 run that wrote nothing would read as
 // "manifest published" to the workflow (see check-mock-baseline.mjs).
-function runCli(edit) {
+function runCli(edit, { rotateKey = false } = {}) {
   const key = makeKey();
   const dir = mkdtempSync(join(tmpdir(), 'updater-manifest-cli-'));
   try {
@@ -254,14 +289,31 @@ function runCli(edit) {
       assets: Object.keys(files).map((name) => ({ name, url: `${BASE_URL}/${name}` })),
     };
     writeFileSync(join(dir, 'release.json'), JSON.stringify(release));
-    writeFileSync(
-      join(dir, 'tauri.conf.json'),
-      JSON.stringify({ version: '0.7.0', plugins: { updater: { pubkey: key.pubkey } } }),
-    );
+    // In a key rotation the released config embeds the next key, and the
+    // previous release's config holds the key the bundles are signed with.
+    const writeConf = (file, version, pubkey) =>
+      writeFileSync(join(dir, file), JSON.stringify({ version, plugins: { updater: { pubkey } } }));
+    writeConf('tauri.conf.json', '0.7.0', rotateKey ? makeKey().pubkey : key.pubkey);
+    const pubkeyFlags = [];
+    if (rotateKey) {
+      writeConf('previous.json', '0.6.0', key.pubkey);
+      pubkeyFlags.push('--pubkey-conf', join(dir, 'previous.json'));
+    }
     const out = join(dir, 'latest.json');
     const run = spawnSync(
       process.execPath,
-      [SCRIPT_PATH, '--release', join(dir, 'release.json'), '--assets', assetsDir, '--tauri-conf', join(dir, 'tauri.conf.json'), '--out', out],
+      [
+        SCRIPT_PATH,
+        '--release',
+        join(dir, 'release.json'),
+        '--assets',
+        assetsDir,
+        '--tauri-conf',
+        join(dir, 'tauri.conf.json'),
+        ...pubkeyFlags,
+        '--out',
+        out,
+      ],
       { encoding: 'utf8' },
     );
     return { run, written: existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')) : null };
@@ -289,6 +341,14 @@ function runCli(edit) {
   if (!/linux-x86_64-appimage: no release asset/.test(run.stderr ?? '')) {
     failures.push(`the CLI did not name the missing platform on stderr: ${run.stderr}`);
   }
+}
+
+// ── the CLI during a minisign key rotation ──────────────────────────────────
+// --pubkey-conf supplies the trusted key; the version stays the released one.
+{
+  const { run, written } = runCli(undefined, { rotateKey: true });
+  assertEqual(run.status, 0, `the CLI verifies against --pubkey-conf's key (stderr: ${run.stderr})`);
+  assertEqual(written?.version, '0.7.0', 'the CLI takes the version from --tauri-conf, not --pubkey-conf');
 }
 
 if (failures.length > 0) {

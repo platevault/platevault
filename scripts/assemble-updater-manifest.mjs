@@ -16,7 +16,7 @@
  *   - Authenticode signing (`sign-windows`) rewrites the `.exe` and `.msi`, and
  *     those files are the Windows updater payloads. A minisign signature made
  *     before that no longer matches the bytes clients download, so every
- *     Windows update would fail. Now each signature is verified, exactly as
+ *     Windows update would fail. Now each signature is verified, as
  *     `tauri-plugin-updater` does, against the asset that is really on the
  *     release, using the public key the app embeds.
  *
@@ -31,7 +31,7 @@
  *   gh release download "$TAG" --dir release-assets
  *   node scripts/assemble-updater-manifest.mjs --release release.json \
  *     --assets release-assets --tauri-conf apps/desktop/src-tauri/tauri.conf.json \
- *     --out latest.json
+ *     [--pubkey-conf previous-tauri.conf.json] --out latest.json
  */
 
 import { createHash, createPublicKey, verify } from 'node:crypto';
@@ -63,6 +63,7 @@ export const UPDATER_BUNDLES = [
 ];
 
 const TRUSTED_COMMENT_PREFIX = 'trusted comment: ';
+const SIGNED_VERSION_FIELD = 'version:';
 
 /** Decode one base64 line, rejecting the junk `Buffer.from` silently skips. */
 function strictBase64(text) {
@@ -103,12 +104,14 @@ function keyIdHex(keyId) {
 }
 
 /**
- * Verify a `.sig` file's contents over `data`, with the same checks as
- * minisign-verify's `PublicKey::verify(data, signature, allow_legacy = true)`,
- * which is what tauri-plugin-updater calls before it installs anything.
+ * Verify a `.sig` file's contents over `data` for the release `version`, with
+ * the checks tauri-plugin-updater 2.13 (`verify_signature`) runs before it
+ * installs anything: minisign-verify's `PublicKey::verify(data, signature,
+ * allow_legacy = true)`, then the signed-version check with
+ * `requireSignedVersion` off, which is PlateVault's setting.
  * Returns null when the signature holds, or the reason it does not.
  */
-export function verifySignature(data, base64Signature, publicKey) {
+export function verifySignature(data, base64Signature, publicKey, version) {
   let lines;
   let sig;
   let globalSig;
@@ -136,9 +139,21 @@ export function verifySignature(data, base64Signature, publicKey) {
   if (!verify(null, message, publicKey.key, sig.subarray(10, 74))) {
     return 'does not verify over the asset on the release (was the file changed after it was signed?)';
   }
-  const comment = Buffer.from(trustedComment.slice(TRUSTED_COMMENT_PREFIX.length), 'utf8');
-  if (!verify(null, Buffer.concat([sig.subarray(10, 74), comment]), publicKey.key, globalSig)) {
+  const comment = trustedComment.slice(TRUSTED_COMMENT_PREFIX.length);
+  if (!verify(null, Buffer.concat([sig.subarray(10, 74), Buffer.from(comment, 'utf8')]), publicKey.key, globalSig)) {
     return 'has a trusted comment that does not verify';
+  }
+  // Tauri CLI 2.12 and later record the version they signed for as a
+  // `version:` field of the trusted comment. The plugin rejects an update whose
+  // signed version differs from latest.json's `version`, whatever
+  // requireSignedVersion says; that setting only decides whether a signature
+  // without the field is rejected. Older signatures carry none and are accepted.
+  const signedVersion = comment
+    .split('\t')
+    .find((field) => field.startsWith(SIGNED_VERSION_FIELD))
+    ?.slice(SIGNED_VERSION_FIELD.length);
+  if (signedVersion !== undefined && signedVersion.replace(/^v/, '') !== version.replace(/^v/, '')) {
+    return `was signed for version ${signedVersion}, but latest.json announces ${version}`;
   }
   return null;
 }
@@ -183,7 +198,7 @@ export function assembleManifest({ version, notes, pubDate, pubkey, assets, asse
     }
     // The `.sig` contents go into the manifest unchanged, as tauri-action did.
     const signature = readFileSync(signaturePath, 'utf8');
-    const failure = verifySignature(readFileSync(bundlePath), signature, publicKey);
+    const failure = verifySignature(readFileSync(bundlePath), signature, publicKey, version);
     if (failure) {
       problems.push(`${key}: the signature in ${signatureName} ${failure}`);
       continue;
@@ -211,6 +226,7 @@ function main() {
       release: { type: 'string' },
       assets: { type: 'string' },
       'tauri-conf': { type: 'string' },
+      'pubkey-conf': { type: 'string' },
       out: { type: 'string' },
     },
   });
@@ -222,16 +238,23 @@ function main() {
   }
 
   const release = JSON.parse(readFileSync(values.release, 'utf8'));
-  // The version and key of the commit being released, which is where
-  // tauri-action read them from. During a minisign key rotation, the release
-  // that embeds a new key is still signed with the old one, so point
-  // --tauri-conf at the previous release's config for that one release.
+  // The version of the commit being released, which is where tauri-action
+  // read it from and what the bundler signed into each trusted comment.
   const tauriConf = JSON.parse(readFileSync(values['tauri-conf'], 'utf8'));
+  // The key installed clients trust, which is the released commit's key except
+  // during a minisign key rotation: the release that embeds a new key is still
+  // signed with the old one. For that one release pass --pubkey-conf with the
+  // previous release's config, e.g. from `git show
+  // v0.6.0:apps/desktop/src-tauri/tauri.conf.json`. The version still comes
+  // from --tauri-conf.
+  const pubkeyConf = values['pubkey-conf']
+    ? JSON.parse(readFileSync(values['pubkey-conf'], 'utf8'))
+    : tauriConf;
   const { manifest, problems } = assembleManifest({
     version: tauriConf.version,
     notes: release.body ?? '',
     pubDate: new Date().toISOString(),
-    pubkey: tauriConf.plugins.updater.pubkey,
+    pubkey: pubkeyConf.plugins.updater.pubkey,
     assets: release.assets,
     assetsDir: values.assets,
   });

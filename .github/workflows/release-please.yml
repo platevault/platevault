@@ -124,14 +124,16 @@ jobs:
       # sign, even when its value is empty. It checks `var_os("APPLE_CERTIFICATE")`,
       # which is Some("") for an empty value. The v0.6.0 macOS leg passed
       # `APPLE_CERTIFICATE: ''` and failed with "failed to import keychain
-      # certificate". So the credentials are exported only when signing is on,
-      # and only when every one of them is present. With signing off they are
-      # never set, and the bundler ad-hoc signs as it did for v0.5.0.
+      # certificate". A step-level `env:` cannot leave a variable unset, so the
+      # build runs in one of two mutually exclusive tauri-action steps below:
+      # with signing on, a step that carries the APPLE_* credentials in its own
+      # `env:`, and otherwise a step that never sets them, where the bundler
+      # ad-hoc signs as it did for v0.5.0. The credentials reach only that one
+      # step, never later or post-job steps.
       #
-      # $GITHUB_ENV makes the values visible to the remaining steps of this leg,
-      # including post-job steps. A step-level `env:` cannot leave a variable
-      # unset, so there is no narrower scope.
-      - name: Export macOS signing credentials
+      # With signing on, this check fails the leg before the build when any
+      # credential is empty. It reads them and writes nothing.
+      - name: Check macOS signing credentials
         if: runner.os == 'macOS' && vars.ENABLE_MACOS_SIGNING == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -142,19 +144,14 @@ jobs:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          names='APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID'
           missing=''
-          for name in $names; do
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
             if [ -z "${!name:-}" ]; then missing="${missing} ${name}"; fi
           done
           if [ -n "${missing}" ]; then
             echo "::error::ENABLE_MACOS_SIGNING is 'true' but these are empty:${missing}. Set them, or unset ENABLE_MACOS_SIGNING to ship ad-hoc signed macOS builds."
             exit 1
           fi
-          for name in $names; do
-            delimiter="APPLE_EOF_$(openssl rand -hex 16)"
-            printf '%s<<%s\n%s\n%s\n' "${name}" "${delimiter}" "${!name}" "${delimiter}" >> "$GITHUB_ENV"
-          done
 
       # tauri-action auto-detects the package manager by checking for a
       # lockfile inside `projectPath` — apps/desktop has no pnpm-lock.yaml of
@@ -186,14 +183,19 @@ jobs:
       #   - updaterJsonKeepUniversal removed (now always on): we never set it.
       #   - assetNamePattern renamed to artifactNamePattern: we don't use it.
       #   - Tauri v1/unstable support dropped: we are on Tauri 2 stable.
+      #
+      # The two steps differ only in `env:`. The second reuses the first's
+      # inputs through the `tauri-action-inputs` anchor, and the
+      # `artifactPaths` output is read from whichever ran.
       - name: Build, sign, and upload Tauri bundles
         id: tauri
+        if: runner.os != 'macOS' || vars.ENABLE_MACOS_SIGNING != 'true'
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
+        with: &tauri-action-inputs
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           tagName: ${{ needs.release-please.outputs.tag_name }}
@@ -202,6 +204,22 @@ jobs:
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: false
+
+      - name: Build, sign, and upload Tauri bundles (macOS code signing)
+        id: tauri-macos-signed
+        if: runner.os == 'macOS' && vars.ENABLE_MACOS_SIGNING == 'true'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        with: *tauri-action-inputs
 
       # Build provenance for the bundles this matrix leg produced: a signed statement of
       # which workflow run, at which commit, built these exact bytes. Complements the
@@ -227,7 +245,7 @@ jobs:
         id: subjects
         shell: bash
         env:
-          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths || steps.tauri-macos-signed.outputs.artifactPaths }}
           # Only exclude the clobbered extensions on the leg that actually clobbers them.
           SKIP_WINDOWS_BUNDLES: ${{ runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true' }}
         run: |
@@ -396,7 +414,10 @@ jobs:
       # Writes signed/<file>.sig, the same format the bundler writes, from the same
       # key. Once @tauri-apps/cli is 2.12 or later, pass `--app-version` as well,
       # so the trusted comment carries the version the way the bundler's 2.12
-      # signatures do. The updater's `requireSignedVersion` checks it.
+      # signatures do. tauri-plugin-updater 2.13 checks a signed version whenever
+      # one is present; `requireSignedVersion` only decides whether a signature
+      # without one is rejected. Without `--app-version`, these signatures would
+      # break Windows updates alone if requireSignedVersion were ever turned on.
       - name: Sign the signed bundles for the updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
