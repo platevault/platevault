@@ -705,7 +705,7 @@
   "home_nothing_to_sort": "Nothing to sort or review.",
   "home_column_name": "Name",
   "home_column_progress": "Progress",
-  "home_column_deadline": "Deadline",
+  "home_next_step": "Next: {step}",
   "home_goals_met": "{met} of {total} goals met",
   "home_no_projects_in_progress": "No Projects in progress.",
   "home_locations": "Locations",

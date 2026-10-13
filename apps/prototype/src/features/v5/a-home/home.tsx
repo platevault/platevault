@@ -403,25 +403,29 @@ function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
     const step = r.next
     return step ? { id: "next", label: say(m, step.label), run: () => follow(step.link) } : null
   }
+  // Two columns and the ⋯ fit the 1280 px column and a 768 px window: the deadline leads the progress cell, the next step closes it, and a row click takes the next step.
   const columns: Column<OpenWork>[] = [
     { id: "name", header: m.home_column_name(), rowHeader: true, truncate: true, sortValue: name, cell: name },
     {
       id: "stands",
       header: m.home_column_progress(),
-      sortValue: (r) => (r.issues.length > 0 ? 0 : 1),
-      cell: (r) => (
-        <>
-          {stands(r)}
-          {r.issues.length > 0 ? " · " : null}
-          <Problems issues={r.issues} />
-        </>
-      ),
-    },
-    {
-      id: "deadline",
-      header: m.home_column_deadline(),
+      truncate: true,
       sortValue: (r) => r.window?.nightsLeft ?? null,
-      cell: (r) => (r.window ? <Pill tone={r.priority > 0 ? "warning" : "muted"}>{say(m, r.window.line)}</Pill> : "–"),
+      cell: (r) => {
+        const step = next(r)
+        return (
+          <>
+            {r.window ? (
+              <>
+                <Pill tone={r.priority > 0 ? "warning" : "muted"}>{say(m, r.window.line)}</Pill>{" "}
+              </>
+            ) : null}
+            {stands(r)}
+            {r.issues.length > 0 ? " · " : step ? ` · ${m.home_next_step({ step: step.label })}` : null}
+            <Problems issues={r.issues} />
+          </>
+        )
+      },
     },
   ]
   return (
@@ -431,9 +435,12 @@ function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
       columns={columns}
       getRowId={(r) => (r.kind === "project" ? r.project.id : r.view.process.id)}
       rowLabel={name}
-      primaryRowAction={next}
-      rowActions={(r) => [{ id: "open", label: r.kind === "project" ? m.target_open_project() : m.verb_open(), run: () => follow(page(r)) }]}
-      onRowClick={(r) => follow(page(r))}
+      rowActions={(r) => [...[next(r)].filter((a) => a !== null), { id: "open", label: r.kind === "project" ? m.target_open_project() : m.verb_open(), run: () => follow(page(r)) }]}
+      onRowClick={(r) => {
+        const step = next(r)
+        if (step) void step.run()
+        else follow(page(r))
+      }}
       empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />} />}
     />
   )
