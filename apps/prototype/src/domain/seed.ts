@@ -334,7 +334,15 @@ function baseFiles(): DiskFile[] {
     storedMaster("Darks/ZWO ASI533MC Pro/300s_g101_o50_-5C", "2026-09-10", "master-dark", 300, null, "2026-09-10T18:10:00Z", ESPRIT, 20),
     storedMaster("Bias/ZWO ASI533MC Pro/g101_o50", "2026-09-10", "master-bias", 0.000032, null, "2026-09-10T18:20:00Z", ESPRIT, 40),
     storedMaster("Flats/Esprit 100 - ASI533MC/L-eXtreme/2026-09-21", "2026-09-21", "master-flat", 3.0, "L-eXtreme", "2026-09-22T06:30:00Z", ESPRIT, 25),
+    // C9: a 600 s master dark written 91 days before the demo loads, so the library shows its "Old · 91 d" badge.
+    oldMasterDark(),
   ]
+}
+
+/** 91 days and one hour before load time, so `masterAge` reads "Old · 91 d" for 23 hours after the demo loads. */
+function oldMasterDark(): DiskFile {
+  const date = new Date(Date.now() - (91 * 24 + 1) * 3_600_000).toISOString()
+  return storedMaster("Darks/ZWO ASI2600MM Pro/600s_g100_o50_-10C", date.slice(0, 10), "master-dark", 600, null, date, REDCAT, 20)
 }
 
 /** M 42 on the NAS: the scan that is running when the demo loads (D-W12). */
