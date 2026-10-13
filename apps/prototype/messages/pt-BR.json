@@ -640,60 +640,8 @@
   "page_step_done": "(concluído)",
   "ui_breadcrumb": "Trilha de navegação",
   "import_open": "Importar",
-  "home_goal_line": "{inProject} no projeto / {captured} capturado",
-  "home_goal_line_goal": "{inProject} no projeto / {captured} capturado · meta {goal}",
   "home_blocked_at": "Bloqueado em {step}",
-  "home_why_blocked": "Motivo do bloqueio: {name}",
-  "home_rig_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} setup",
-        "countPlural=*": "{count} setups"
-      }
-    }
-  ],
-  "home_column_project": "Projeto",
   "home_goals": "Metas",
-  "home_column_next": "Próximo",
-  "home_project_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Projeto",
-        "countPlural=*": "{count} Projetos"
-      }
-    }
-  ],
-  "home_hidden_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} oculto",
-        "countPlural=*": "{count} ocultos"
-      }
-    }
-  ],
-  "home_projects_none": "Nenhum Projeto",
-  "home_all_done": "Tudo concluído",
   "session_count": [
     {
       "declarations": [
@@ -709,36 +657,85 @@
       }
     }
   ],
-  "home_all_count": "Todas as {count}",
-  "home_none": "Nenhuma",
-  "session_review_frames": "Revisar frames",
-  "session_choose_target": "Escolher Alvo",
-  "home_sessions_need_work": [
+  "home_all": "Todos ({count}) ›",
+  "home_ingestions": "Ingestões pendentes",
+  "home_pending_work": "Trabalho pendente",
+  "home_open_work": "Trabalho em aberto",
+  "home_status": "Situação",
+  "home_all_locations": "Todos os {count} locais ›",
+  "home_all_jobs": "Todas as {count} tarefas ›",
+  "home_calendar": "Calendário",
+  "home_calendar_label": "5 semanas em {site}",
+  "home_no_site_yet": "Adicione um local para ver a escuridão e a Lua desta noite.",
+  "home_import_paused": "Importação pausada · {percent}%",
+  "home_importing": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} sessão pendente",
-        "countPlural=*": "{count} sessões pendentes"
-      }
+      "declarations": ["input count", "input files", "input percent", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "Importando {files} arquivo · {percent}%", "countPlural=*": "Importando {files} arquivos · {percent}%" }
     }
   ],
-  "home_all_sessions": "Todas as sessões",
-  "home_nothing_to_do": "Nada a fazer",
+  "home_import_failed": "Falha na importação",
+  "home_import_stopped": "Importação interrompida",
+  "home_never_scanned": "Nunca escaneado",
+  "home_scan_unfinished": "O último escaneamento não terminou",
+  "home_new_files": [
+    {
+      "declarations": ["input count", "input files", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{files} arquivo novo", "countPlural=*": "{files} arquivos novos" }
+    }
+  ],
+  "home_column_location": "Local",
+  "home_column_state": "Estado",
+  "home_scan": "Escanear",
+  "home_everything_imported": "Tudo foi importado.",
+  "home_add_captures_location": "Adicione um local de Capturas para encontrar novas capturas.",
+  "home_column_item": "Sessão ou execução",
+  "home_ready_for": "Pronta para adicionar a {name}",
+  "home_clean_up_frees": "Limpar libera {bytes}",
+  "home_clean_up_links": [
+    {
+      "declarations": ["input count", "input n", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{n} link a remover", "countPlural=*": "{n} links a remover" }
+    }
+  ],
+  "home_import_to_start": "Importe capturas para começar a organizá-las.",
+  "home_nothing_to_sort": "Nada para organizar ou revisar.",
+  "home_column_name": "Nome",
+  "home_column_progress": "Progresso",
+  "home_column_deadline": "Prazo",
+  "home_goals_met": "{met} de {total} metas cumpridas",
+  "home_no_projects_in_progress": "Nenhum Projeto em andamento.",
+  "home_locations": "Locais",
+  "home_column_status": "Situação",
+  "home_low_space": "Pouco espaço",
+  "home_jobs": "Tarefas em segundo plano",
+  "home_column_job": "Tarefa em segundo plano",
+  "home_percent": "{percent}%",
+  "home_pause": "Pausar",
+  "home_resume": "Retomar",
+  "home_paused": "{name} pausada",
+  "home_resumed": "{name} retomada",
+  "home_nothing_running": "Nada em execução.",
+  "home_tonight_at": "Esta noite em {site}",
+  "home_column_grade": "Avaliação",
+  "home_goal_item": "{subject} · {channel}",
+  "home_added_to_plan": "{name} adicionado ao plano desta noite",
+  "home_no_goals_suit": "Nenhuma meta combina com esta noite.",
+  "home_no_goals_suit_next": "Nenhuma meta combina com esta noite. Próxima noite boa: {date}.",
+  "home_no_unfinished_goals": "Nenhuma meta por cumprir.",
+  "home_add_a_goal": "Adicionar uma Meta",
+  "home_moon_rules_out": "A Lua impede",
+  "session_review_frames": "Revisar frames",
+  "session_choose_target": "Escolher Alvo",
   "sessions_filter_needs_target": "Sem Alvo",
   "sessions_filter_not_in_project": "Fora de Projetos",
-  "home_group_ready_to_add": "Prontas para adicionar",
   "session_object": "OBJECT {name}",
   "session_no_object": "Sem OBJECT",
-  "home_suggested": "Sugerido pelas evidências",
   "session_cant_confirm": "Não é possível confirmar",
   "session_target_confirmed": "Alvo confirmado: {name}",
-  "home_confirm_target": "Confirmar {name}",
   "session_frames_unreviewed": [
     {
       "declarations": [
@@ -759,18 +756,7 @@
   "session_cant_add": "Não é possível adicionar",
   "home_added_to_draft": "{session} adicionada ao rascunho de {run}",
   "home_tonight": "Esta noite",
-  "home_no_site": "Sem local",
-  "home_darkness": "Escuridão",
-  "home_moon": "Lua",
-  "home_windows": "Janelas",
-  "home_no_subjects_or_favourites": "Sem objetos nem favoritos",
-  "home_favourite": "Favorito",
-  "home_window_detail": "{altitude}° · Lua {separation}°",
-  "home_no_window": "Sem janela",
   "home_panel": "{name} · Painel {n}",
-  "home_column_subject": "Objeto",
-  "home_column_channel": "Canal",
-  "home_column_in_project": "No projeto",
   "home_column_goal": "Meta",
   "session_frame_count": [
     {
@@ -788,32 +774,7 @@
       }
     }
   ],
-  "home_quality_bar": "Critério de qualidade",
   "home_column_needs": "Falta",
-  "home_captured_covers": "As capturas cobrem: adicione candidatas a uma execução",
-  "home_still_to_capture": "Ainda a capturar",
-  "home_goals_unmet": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} meta não cumprida",
-        "countPlural=*": "{count} metas não cumpridas"
-      }
-    }
-  ],
-  "home_unmet_goals": "Metas não cumpridas",
-  "home_all_met": "Todas cumpridas",
-  "home_running_count": "{count} em execução",
-  "home_pause_named": "Pausar {name}",
-  "home_resume_named": "Retomar {name}",
-  "home_retry_named": "Tentar de novo: {name}",
-  "home_cancel_named": "Cancelar {name}",
   "session_add_to_project": "Adicionar ao Projeto",
   "session_label": "Sessão",
   "session_adds_subject": "Adiciona o objeto {name}, com as metas do Projeto",
@@ -7127,155 +7088,7 @@
   "catalogue_workspace_empty": "palco vazio",
   "catalogue_workspace_overlay": "inspetor sobreposto",
   "picker_site_manage_ellipsis": "Gerenciar locais…",
-  "home_concept_title": "Conceitos de Início",
-  "home_concept_switch": "Conceito",
-  "home_concept_night": "Noite",
-  "home_concept_month": "Mês",
-  "home_concept_progress": "Progresso",
-  "home_concept_night_only": "Metas não cumpridas avaliadas para a noite escolhida e as 29 seguintes, e o próximo passo de cada Projeto aberto, o mais urgente primeiro",
-  "home_concept_month_only": "As próximas 30 noites lado a lado: escuridão, a Lua e as metas não cumpridas que cada noite favorece",
-  "home_concept_progress_only": "O que as noites recentes somaram a cada meta aberta, o que foi capturado mas ainda não está no Projeto e o que aguarda revisão",
-  "home_concept_planning": "Planejamento",
-  "home_concept_planned": "Planejados",
-  "home_concept_on_plan": "No plano",
-  "home_concept_target_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} alvo",
-        "countPlural=*": "{count} alvos"
-      }
-    }
-  ],
-  "home_concept_nothing_planned": "Nada planejado",
-  "home_concept_best": "Melhor para as metas",
-  "home_concept_best_value": "{name} · {time}",
-  "home_concept_needs": "Pendências",
-  "home_concept_column_goal": "Meta",
-  "home_concept_column_channel": "Canal",
-  "home_concept_column_remaining": "Falta",
-  "home_concept_column_next_good": "Próxima boa",
-  "home_concept_column_good_nights": "Noites boas",
-  "home_concept_of_nights": "{count}/{total}",
-  "home_concept_grade_good": "Boa",
-  "home_concept_grade_marginal": "Marginal",
-  "home_concept_grade_poor": "Ruim",
-  "home_concept_goal_item": "{subject} · {channel}",
-  "home_concept_group": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} meta",
-        "countPlural=*": "{name} · {count} metas"
-      }
-    }
-  ],
-  "home_concept_goals_met": "Todas as metas cumpridas",
-  "home_concept_all_projects": "Todos os Projetos",
   "common_up_next": "A seguir",
-  "home_concept_column_project": "Projeto",
-  "home_concept_column_reason": "Motivo",
-  "home_concept_no_open_projects": "Nenhum Projeto aberto",
-  "home_concept_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame",
-        "countPlural=*": "{frames} frames"
-      }
-    }
-  ],
-  "home_concept_outlook": "Panorama",
-  "home_concept_column_night": "Noite",
-  "home_concept_column_dark": "Escuro",
-  "home_concept_moon": "Lua",
-  "home_concept_moon_value": "{illumination}% · {phase}",
-  "home_concept_column_good_for": "Boa para",
-  "home_concept_column_limited": "Limitada pela Lua",
-  "home_concept_goal_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} meta",
-        "countPlural=*": "{count} metas"
-      }
-    }
-  ],
-  "home_concept_open_in_targets": "Abrir em Alvos",
-  "home_concept_open_plan": "Abrir plano",
-  "home_concept_darkest": "Noite mais escura",
-  "home_concept_best_night": "Melhor noite",
-  "home_concept_night_fact": "{night} · {detail}",
-  "home_concept_goals_good": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Boa para {count} meta",
-        "countPlural=*": "Boa para {count} metas"
-      }
-    }
-  ],
-  "home_concept_night_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} noite",
-        "countPlural=*": "{count} noites"
-      }
-    }
-  ],
-  "home_concept_week": "{from}–{to}",
-  "home_concept_period": "Período",
-  "home_concept_capture_nights": "Noites de captura",
-  "home_concept_captured": "Capturado",
-  "home_concept_captured_value": "{frames} · {time}",
-  "home_concept_waiting_review": "Aguardando revisão",
-  "home_concept_session_item": "{session} · {frames}",
-  "home_concept_goals_moved": "Metas com avanço",
-  "home_concept_column_added": "Somado",
-  "home_concept_added": "+{amount}",
-  "home_concept_of_goal": "{amount} de {target}",
-  "home_concept_column_pending": "Pendente",
-  "home_concept_met": "Cumprida",
-  "home_concept_no_captures": "Nenhuma captura neste período",
   "stepflow_steps": "Etapas",
   "stepflow_proceed": "Prosseguir",
   "stepflow_skip": "Pular",

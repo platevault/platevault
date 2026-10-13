@@ -640,46 +640,8 @@
   "page_step_done": "(done)",
   "ui_breadcrumb": "Breadcrumb",
   "import_open": "Import",
-  "home_goal_line": "{inProject} in project / {captured} captured",
-  "home_goal_line_goal": "{inProject} in project / {captured} captured · goal {goal}",
   "home_blocked_at": "Blocked at {step}",
-  "home_why_blocked": "Why {name} is blocked",
-  "home_rig_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} rig",
-        "countPlural=*": "{count} rigs"
-      }
-    }
-  ],
-  "home_column_project": "Project",
   "home_goals": "Goals",
-  "home_column_next": "Next",
-  "home_project_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Project",
-        "countPlural=*": "{count} Projects"
-      }
-    }
-  ],
-  "home_hidden_count": "{count} hidden",
-  "home_projects_none": "No Projects",
-  "home_all_done": "All Done",
   "session_count": [
     {
       "declarations": [
@@ -695,36 +657,85 @@
       }
     }
   ],
-  "home_all_count": "All {count}",
-  "home_none": "None",
-  "session_review_frames": "Review frames",
-  "session_choose_target": "Choose Target",
-  "home_sessions_need_work": [
+  "home_all": "All {count} ›",
+  "home_ingestions": "Pending ingestions",
+  "home_pending_work": "Pending work",
+  "home_open_work": "Open work",
+  "home_status": "Status",
+  "home_all_locations": "All {count} locations ›",
+  "home_all_jobs": "All {count} jobs ›",
+  "home_calendar": "Calendar",
+  "home_calendar_label": "5 weeks at {site}",
+  "home_no_site_yet": "Add a site to see tonight's darkness and Moon.",
+  "home_import_paused": "Import paused · {percent}%",
+  "home_importing": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} session needs work",
-        "countPlural=*": "{count} sessions need work"
-      }
+      "declarations": ["input count", "input files", "input percent", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "Importing {files} file · {percent}%", "countPlural=*": "Importing {files} files · {percent}%" }
     }
   ],
-  "home_all_sessions": "All sessions",
-  "home_nothing_to_do": "Nothing to do",
+  "home_import_failed": "Import failed",
+  "home_import_stopped": "Import stopped",
+  "home_never_scanned": "Never scanned",
+  "home_scan_unfinished": "Last scan didn't finish",
+  "home_new_files": [
+    {
+      "declarations": ["input count", "input files", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{files} new file", "countPlural=*": "{files} new files" }
+    }
+  ],
+  "home_column_location": "Location",
+  "home_column_state": "State",
+  "home_scan": "Scan",
+  "home_everything_imported": "Everything is imported.",
+  "home_add_captures_location": "Add a Captures location to find new captures.",
+  "home_column_item": "Session or run",
+  "home_ready_for": "Ready to add to {name}",
+  "home_clean_up_frees": "Clean up frees {bytes}",
+  "home_clean_up_links": [
+    {
+      "declarations": ["input count", "input n", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{n} link to remove", "countPlural=*": "{n} links to remove" }
+    }
+  ],
+  "home_import_to_start": "Import captures to start sorting them.",
+  "home_nothing_to_sort": "Nothing to sort or review.",
+  "home_column_name": "Name",
+  "home_column_progress": "Progress",
+  "home_column_deadline": "Deadline",
+  "home_goals_met": "{met} of {total} goals met",
+  "home_no_projects_in_progress": "No Projects in progress.",
+  "home_locations": "Locations",
+  "home_column_status": "Status",
+  "home_low_space": "Low on space",
+  "home_jobs": "Background jobs",
+  "home_column_job": "Background job",
+  "home_percent": "{percent}%",
+  "home_pause": "Pause",
+  "home_resume": "Resume",
+  "home_paused": "{name} paused",
+  "home_resumed": "{name} resumed",
+  "home_nothing_running": "Nothing running.",
+  "home_tonight_at": "Tonight at {site}",
+  "home_column_grade": "Grade",
+  "home_goal_item": "{subject} · {channel}",
+  "home_added_to_plan": "{name} added to tonight's plan",
+  "home_no_goals_suit": "No goals suit tonight.",
+  "home_no_goals_suit_next": "No goals suit tonight. Next good night: {date}.",
+  "home_no_unfinished_goals": "No unfinished goals.",
+  "home_add_a_goal": "Add a Goal",
+  "home_moon_rules_out": "The Moon rules out",
+  "session_review_frames": "Review frames",
+  "session_choose_target": "Choose Target",
   "sessions_filter_needs_target": "Needs a Target",
   "sessions_filter_not_in_project": "Not in any Project",
-  "home_group_ready_to_add": "Ready to add",
   "session_object": "OBJECT {name}",
   "session_no_object": "No OBJECT",
-  "home_suggested": "Suggested by the evidence",
   "session_cant_confirm": "Can't confirm",
   "session_target_confirmed": "Target confirmed: {name}",
-  "home_confirm_target": "Confirm {name}",
   "session_frames_unreviewed": [
     {
       "declarations": [
@@ -745,18 +756,7 @@
   "session_cant_add": "Can't add",
   "home_added_to_draft": "{session} added to the {run} draft",
   "home_tonight": "Tonight",
-  "home_no_site": "No site",
-  "home_darkness": "Darkness",
-  "home_moon": "Moon",
-  "home_windows": "Windows",
-  "home_no_subjects_or_favourites": "No subjects or favourites",
-  "home_favourite": "Favourite",
-  "home_window_detail": "{altitude}° · Moon {separation}°",
-  "home_no_window": "No window",
   "home_panel": "{name} · Panel {n}",
-  "home_column_subject": "Subject",
-  "home_column_channel": "Channel",
-  "home_column_in_project": "In project",
   "home_column_goal": "Goal",
   "session_frame_count": [
     {
@@ -774,32 +774,7 @@
       }
     }
   ],
-  "home_quality_bar": "Quality bar",
   "home_column_needs": "Needs",
-  "home_captured_covers": "Captured covers it: add candidates to a run",
-  "home_still_to_capture": "Still to capture",
-  "home_goals_unmet": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} goal unmet",
-        "countPlural=*": "{count} goals unmet"
-      }
-    }
-  ],
-  "home_unmet_goals": "Unmet goals",
-  "home_all_met": "All met",
-  "home_running_count": "{count} running",
-  "home_pause_named": "Pause {name}",
-  "home_resume_named": "Resume {name}",
-  "home_retry_named": "Retry {name}",
-  "home_cancel_named": "Cancel {name}",
   "session_add_to_project": "Add to Project",
   "session_label": "Session",
   "session_adds_subject": "Adds subject {name}, with the Project's goals",
@@ -7099,155 +7074,7 @@
   "catalogue_workspace_empty": "empty stage",
   "catalogue_workspace_overlay": "overlay inspector",
   "picker_site_manage_ellipsis": "Manage sites…",
-  "home_concept_title": "Home concepts",
-  "home_concept_switch": "Concept",
-  "home_concept_night": "Night",
-  "home_concept_month": "Month",
-  "home_concept_progress": "Progress",
-  "home_concept_night_only": "Unmet goals graded for the chosen night and the 29 after it, plus each open Project's next step, most urgent first",
-  "home_concept_month_only": "The next 30 nights side by side: darkness, the Moon and the unmet goals each night suits",
-  "home_concept_progress_only": "What recent nights added to each open goal, what is captured but not yet in the Project, and what waits for review",
-  "home_concept_planning": "Planning",
-  "home_concept_planned": "Planned",
-  "home_concept_on_plan": "On plan",
-  "home_concept_target_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} target",
-        "countPlural=*": "{count} targets"
-      }
-    }
-  ],
-  "home_concept_nothing_planned": "Nothing planned",
-  "home_concept_best": "Best for goals",
-  "home_concept_best_value": "{name} · {time}",
-  "home_concept_needs": "Needs",
-  "home_concept_column_goal": "Goal",
-  "home_concept_column_channel": "Channel",
-  "home_concept_column_remaining": "Remaining",
-  "home_concept_column_next_good": "Next good",
-  "home_concept_column_good_nights": "Good nights",
-  "home_concept_of_nights": "{count}/{total}",
-  "home_concept_grade_good": "Good",
-  "home_concept_grade_marginal": "Marginal",
-  "home_concept_grade_poor": "Poor",
-  "home_concept_goal_item": "{subject} · {channel}",
-  "home_concept_group": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} goal",
-        "countPlural=*": "{name} · {count} goals"
-      }
-    }
-  ],
-  "home_concept_goals_met": "All goals met",
-  "home_concept_all_projects": "All Projects",
   "common_up_next": "Up next",
-  "home_concept_column_project": "Project",
-  "home_concept_column_reason": "Reason",
-  "home_concept_no_open_projects": "No open Projects",
-  "home_concept_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame",
-        "countPlural=*": "{frames} frames"
-      }
-    }
-  ],
-  "home_concept_outlook": "Outlook",
-  "home_concept_column_night": "Night",
-  "home_concept_column_dark": "Dark",
-  "home_concept_moon": "Moon",
-  "home_concept_moon_value": "{illumination}% · {phase}",
-  "home_concept_column_good_for": "Good for",
-  "home_concept_column_limited": "Moon-limited",
-  "home_concept_goal_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} goal",
-        "countPlural=*": "{count} goals"
-      }
-    }
-  ],
-  "home_concept_open_in_targets": "Open in Targets",
-  "home_concept_open_plan": "Open plan",
-  "home_concept_darkest": "Darkest night",
-  "home_concept_best_night": "Best night",
-  "home_concept_night_fact": "{night} · {detail}",
-  "home_concept_goals_good": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Good for {count} goal",
-        "countPlural=*": "Good for {count} goals"
-      }
-    }
-  ],
-  "home_concept_night_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} night",
-        "countPlural=*": "{count} nights"
-      }
-    }
-  ],
-  "home_concept_week": "{from}–{to}",
-  "home_concept_period": "Period",
-  "home_concept_capture_nights": "Capture nights",
-  "home_concept_captured": "Captured",
-  "home_concept_captured_value": "{frames} · {time}",
-  "home_concept_waiting_review": "Waiting for review",
-  "home_concept_session_item": "{session} · {frames}",
-  "home_concept_goals_moved": "Goals moved",
-  "home_concept_column_added": "Added",
-  "home_concept_added": "+{amount}",
-  "home_concept_of_goal": "{amount} of {target}",
-  "home_concept_column_pending": "Pending",
-  "home_concept_met": "Met",
-  "home_concept_no_captures": "No captures in this period",
   "stepflow_steps": "Steps",
   "stepflow_proceed": "Proceed",
   "stepflow_skip": "Skip",
