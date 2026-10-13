@@ -21,7 +21,11 @@ const settingsUpdateMock =
     (scope: string, values: unknown) => Promise<{ status: string; data: null }>
   >();
 const nativeMenuSetLabelsMock =
-  vi.fn<(labels: unknown) => Promise<{ status: string; data: null }>>();
+  vi.fn<
+    (
+      labels: unknown,
+    ) => Promise<{ status: string; data?: null; error?: unknown }>
+  >();
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => isTauriMock(),
@@ -202,4 +206,63 @@ describe('LocaleProvider / useLocale', () => {
       closeWindow: 'Fechar janela',
     });
   });
+
+  it.each([
+    [
+      'resolves an error envelope',
+      () =>
+        nativeMenuSetLabelsMock.mockResolvedValue({
+          status: 'error',
+          error: { code: 'INTERNAL_ERROR', message: 'menu refused' },
+        }),
+    ],
+    [
+      'rejects',
+      () =>
+        nativeMenuSetLabelsMock.mockRejectedValue(new Error('IPC unavailable')),
+    ],
+  ])(
+    'still switches to pt-BR when relabelling the native menu %s',
+    async (_case, failSetLabels) => {
+      failSetLabels();
+      isTauriMock.mockReturnValue(true);
+      localStorage.setItem('pv.locale', 'en-GB');
+      settingsGetMock.mockResolvedValue({
+        status: 'ok',
+        data: { scope: 'general', values: { locale: 'en-GB' } },
+      });
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        render(
+          <LocaleProviderUnderTest>
+            <Probe />
+          </LocaleProviderUnderTest>,
+        );
+        await waitFor(() => {
+          expect(nativeMenuSetLabelsMock).toHaveBeenCalledTimes(1);
+        });
+
+        act(() => {
+          screen.getByRole('button', { name: 'switch' }).click();
+        });
+
+        expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
+        await waitFor(() => {
+          expect(nativeMenuSetLabelsMock).toHaveBeenCalledTimes(2);
+        });
+        // Let the failed sends settle, so a rejection escaping them would
+        // reach the listener before it is removed.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
+        expect(document.documentElement.lang).toBe('pt-BR');
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    },
+  );
 });

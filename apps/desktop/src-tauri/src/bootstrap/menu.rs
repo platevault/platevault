@@ -49,27 +49,6 @@ enum MenuLabel {
     CloseWindow,
 }
 
-impl MenuLabel {
-    /// The catalogue key holding this entry's text.
-    const fn catalogue_key(self) -> &'static str {
-        match self {
-            Self::About => "menu_about",
-            Self::Settings => "menu_settings",
-            Self::Quit => "menu_quit",
-            Self::Edit => "menu_edit",
-            Self::Undo => "menu_undo",
-            Self::Redo => "menu_redo",
-            Self::Cut => "menu_cut",
-            Self::Copy => "menu_copy",
-            Self::Paste => "menu_paste",
-            Self::SelectAll => "common_select_all",
-            Self::Window => "menu_window",
-            Self::Minimise => "menu_minimise",
-            Self::CloseWindow => "menu_close_window",
-        }
-    }
-}
-
 /// The visible text of every native menu entry, in one locale.
 #[derive(Clone, Debug, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -114,31 +93,76 @@ impl NativeMenuLabels {
     ///
     /// The catalogue is not JSON, or lacks a plain-text value for a label.
     fn from_catalogue(json: &str) -> Result<Self, String> {
-        let catalogue: serde_json::Map<String, serde_json::Value> =
-            serde_json::from_str(json).map_err(|e| format!("catalogue is not valid JSON: {e}"))?;
-        let get = |label: MenuLabel| {
-            let key = label.catalogue_key();
-            catalogue
-                .get(key)
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-                .ok_or_else(|| format!("catalogue has no text for `{key}`"))
-        };
-        Ok(Self {
-            about: get(MenuLabel::About)?,
-            settings: get(MenuLabel::Settings)?,
-            quit: get(MenuLabel::Quit)?,
-            edit: get(MenuLabel::Edit)?,
-            undo: get(MenuLabel::Undo)?,
-            redo: get(MenuLabel::Redo)?,
-            cut: get(MenuLabel::Cut)?,
-            copy: get(MenuLabel::Copy)?,
-            paste: get(MenuLabel::Paste)?,
-            select_all: get(MenuLabel::SelectAll)?,
-            window: get(MenuLabel::Window)?,
-            minimise: get(MenuLabel::Minimise)?,
-            close_window: get(MenuLabel::CloseWindow)?,
-        })
+        let catalogue: MenuCatalogue =
+            serde_json::from_str(json).map_err(|e| format!("unreadable menu catalogue: {e}"))?;
+        Ok(catalogue.into())
+    }
+}
+
+/// The menu's keys in a message catalogue. Deserializing into this struct
+/// skips every other message without allocating it.
+#[derive(Deserialize)]
+struct MenuCatalogue {
+    #[serde(rename = "menu_about")]
+    about: String,
+    #[serde(rename = "menu_settings")]
+    settings: String,
+    #[serde(rename = "menu_quit")]
+    quit: String,
+    #[serde(rename = "menu_edit")]
+    edit: String,
+    #[serde(rename = "menu_undo")]
+    undo: String,
+    #[serde(rename = "menu_redo")]
+    redo: String,
+    #[serde(rename = "menu_cut")]
+    cut: String,
+    #[serde(rename = "menu_copy")]
+    copy: String,
+    #[serde(rename = "menu_paste")]
+    paste: String,
+    #[serde(rename = "common_select_all")]
+    select_all: String,
+    #[serde(rename = "menu_window")]
+    window: String,
+    #[serde(rename = "menu_minimise")]
+    minimise: String,
+    #[serde(rename = "menu_close_window")]
+    close_window: String,
+}
+
+impl From<MenuCatalogue> for NativeMenuLabels {
+    fn from(catalogue: MenuCatalogue) -> Self {
+        let MenuCatalogue {
+            about,
+            settings,
+            quit,
+            edit,
+            undo,
+            redo,
+            cut,
+            copy,
+            paste,
+            select_all,
+            window,
+            minimise,
+            close_window,
+        } = catalogue;
+        Self {
+            about,
+            settings,
+            quit,
+            edit,
+            undo,
+            redo,
+            cut,
+            copy,
+            paste,
+            select_all,
+            window,
+            minimise,
+            close_window,
+        }
     }
 }
 
@@ -344,8 +368,10 @@ mod tests {
 
     #[test]
     fn a_catalogue_missing_a_label_names_the_key() {
-        let err = NativeMenuLabels::from_catalogue(r#"{"menu_about": "About"}"#)
-            .expect_err("incomplete catalogue");
-        assert!(err.contains("menu_settings"), "{err}");
+        let err = NativeMenuLabels::from_catalogue(
+            r#"{"$schema": "inlang", "inbox_title": "Inbox", "menu_about": "About"}"#,
+        )
+        .expect_err("incomplete catalogue");
+        assert!(err.contains("missing field `menu_settings`"), "{err}");
     }
 }
