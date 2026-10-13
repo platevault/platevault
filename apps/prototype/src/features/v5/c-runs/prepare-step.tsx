@@ -1,497 +1,214 @@
 /**
- * S5 Prepare: application profile and run view (P-PREP3: Symlinks, the
- * Settings default, or Copies, each with its footprint; Symlinks are refused
- * while Windows Developer Mode is off, with Open Windows settings, Check
- * again and Use copies for this run), the layout preview
- * `<output>/<Project>/<Run>/` with `<Run> Results/` and `(rev N)` for later
- * revisions, catalog corrections (patch, accept or exclude), the review that
- * runs the preparation as an operation, its outcome (Partial lists what was
- * prepared and what was blocked) with the run's footprint, and Open, which
- * re-verifies first (PREP-FR-03 to PREP-FR-11).
+ * S5 Prepare (§5.4, P-PREP3): Field rows, then the Inputs DataTable.
+ * - Profile: the application tools PlateVault detected (user item 161).
+ * - Run view: Symlinks · Copies with the footprint each writes. Symlinks
+ *   are refused while Windows Developer Mode is off, with "Use copies for
+ *   this run" beside the refusal.
+ * - Output folder: the parent the run folder is created in.
+ * Prepare… is the commit step's Proceed (F2): it confirms the folder layout
+ * and every input, runs the preparation, and opens Results once it is
+ * prepared and verified. Open in {app} sits in the table's toolbar once
+ * prepared (and in Run ▾). Corrections are made at intake and applied here
+ * without a per-field choice (C15).
  */
-import { Copy, FolderOpen, HardDrive, Layers, Lock, Play } from "lucide-react"
+import { FolderOpen } from "lucide-react"
 import { useState } from "react"
-import { DeveloperModeActions } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
-import { Box } from "@/components/app/box"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { FolderPicker } from "@/components/app/folder-picker"
-import { OperationPanel } from "@/components/app/operation-panel"
-import { Pill } from "@/components/app/pill"
+import { ActionButton } from "@/components/app/actions"
+import type { Action, Column, ConfirmSpec, FileRow } from "@/components/app/contracts"
+import { PathText } from "@/components/app/data"
+import { DataTable } from "@/components/app/data-table"
+import { PathField, SegmentedField, SelectField } from "@/components/app/fields"
+import { OperationLine } from "@/components/app/operation-panel"
 import { Refusal } from "@/components/app/refusal"
+import { SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
-import { HelpTip, NoteMarker } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { RadioGroup } from "@/components/ui/radio-group"
-import { PREPARE_BUTTON_ID, runOperations, runPreparations, runStepLink, type StepLink } from "@/domain/derive"
-import { MODE_NAME } from "@/domain/labels"
-import { runFootprint } from "@/domain/storage"
-import type { InputMode, Preparation, Run } from "@/domain/types"
-import { ExecutableState } from "@/features/t4/profile-parts"
-import { NO_PROFILE, profileOptions } from "@/features/v5/b-projects/start-run"
-import { fileName, formatBytes, formatDateTime, formatNight } from "@/lib/format"
-import { m, say } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
-import { useStore } from "@/store/core"
+import { runPreparations } from "@/domain/derive"
+import { MODE_NAME, orderedProfiles, profileRef } from "@/domain/labels"
+import type { InputMode, Preparation } from "@/domain/types"
+import { fileName, formatBytes, formatDateTime } from "@/lib/format"
+import { joinRefs, type Messages, msg, say } from "@/lib/i18n"
+import { checkDeveloperMode, openWindowsDeveloperSettings } from "@/store/actions/settings"
+import { type CommitResult, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
-import { chooseMode, chooseProfile, openPreparation, prepareChoices, setOutputParent, simulateObjectCorrection, simulateSourceDrift, startPrepare, updatePrepareChoices } from "./actions"
-import { CHECK_NAME, currentPreparation, FIELD_KEYWORD, FIELD_NAME, METADATA_CHOICE_NAME, type MetadataChoice, type ModeOption, type PlanCheck, type PreparePlan, preparePlan, type RunContext, type RunLayout, viewFootprintRef } from "./model"
-import { LayoutLine, OptionCard, OutcomeNotice, PrototypeMenu, profileLabel, useOutcome } from "./parts"
+import { chooseMode, chooseProfile, openPreparation, setOutputParent } from "./actions"
+import { currentPreparation, type ModeOption, type PrepareEntry, type PreparePlan, type RunContext, runLock, viewFootprintRef } from "./model"
 
-type Act = ReturnType<typeof useOutcome>["act"]
+/** What the Prepare fields write to: a run's own setup, or a run group's shared one (D-W38). */
+export type PrepareTarget = { runId: string } | { groupId: string }
 
-export function PrepareStep({ ctx }: { ctx: RunContext }) {
+export interface PrepareSetup {
+  target: PrepareTarget
+  profileId: string | null
+  mode: InputMode
+  modes: ModeOption[]
+  outputParent: string | null
+  /** The folder the next Prepare creates, shown under the output folder. */
+  folderPath: string | null
+  /** A panel run's setup is its group's: "Shared by every panel" under the profile. */
+  shared: boolean
+}
+
+type FieldId = "profile" | "mode" | "folder"
+
+function failureText(result: CommitResult): string | null {
+  if (result.ok) return null
+  return result.reason === "refused" ? result.reasons.join(" · ") : result.message
+}
+
+/** Profile, Run view and Output folder as Field rows; a refused change shows on its own field. */
+export function PrepareFields({ setup, editable }: { setup: PrepareSetup; editable: boolean }) {
   const m = useMessages()
-  const state = useStore((s) => s)
-  const { run, group } = ctx
-  const outcome = useOutcome()
-  const choices = prepareChoices(state, run.id)
-  const plan = preparePlan(state, run, choices)
-  const running = runOperations(state.operations, run.id).find((op) => op.kind === "prepare")
-  const lock = plan.checks.find((c) => c.id === "lock")?.detail
-  const locked = lock ? say(m, lock) : running ? m.run_prepare_running({ title: say(m, running.title) }) : null
-  const [confirm, setConfirm] = useState(false)
-  const target = group ? { groupId: group.id } : { runId: run.id }
-  const count = (kind: "light" | "calibration") => plan.entries.filter((e) => e.kind === kind).length
-  // A prepared current preparation makes Open (in PreparationOutcome) the step's next action, so Prepare… steps down.
-  const openable = currentPreparation(run, runPreparations(state.catalog, run.id))?.state === "prepared"
+  const catalog = useStore((s) => s.catalog)
+  const developerModeOff = useStore((s) => s.settings.developerModeCheck === "off")
+  const [errors, setErrors] = useState<Partial<Record<FieldId, string>>>({})
+  const commit = (field: FieldId, result: CommitResult) => setErrors((e) => ({ ...e, [field]: failureText(result) ?? undefined }))
+  const { target } = setup
+  // Detected tools only (user item 161), and the chosen profile whatever its state.
+  const profiles = orderedProfiles(catalog).filter((p) => p.executableState === "found" || p.executableState === "launch-fails" || p.id === setup.profileId)
+  const profileOptions = [...(setup.profileId ? [] : [{ value: "", label: m.run_layout_not_chosen(), disabled: true }]), ...profiles.map((p) => ({ value: p.id, label: say(m, profileRef(p)) }))]
+  const chosen = setup.modes.find((o) => o.mode === setup.mode)
+  const modeError = chosen && !chosen.allowed && !chosen.developerModeOff ? chosen.reasons.map((r) => say(m, r)).join(" · ") : undefined
+  const useCopies: Action = { id: "use-copies", label: m.run_use_copies(), run: () => chooseMode(target, "copy") }
+  const openSettings: Action = { id: "developer-settings", label: m.settings_open_windows_settings(), run: () => openWindowsDeveloperSettings() }
+  const checkAgain: Action = { id: "check-again", label: m.apps_check_again(), run: () => checkDeveloperMode() }
   return (
-    <div className="space-y-4">
-      <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} linkFor={(label) => planBlockerLink(run, label)} />
-      {locked || group ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {locked ? (
-            <Pill tone="muted" icon={Lock}>
-              {m.run_read_only_because({ reason: locked })}
-            </Pill>
-          ) : null}
-          {group ? (
-            <Pill tone="info" icon={Layers} link={{ to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: group.projectId, groupId: group.id, step: "prepare" } }} title={m.run_prepare_shared_title()}>
-              {m.run_shared_with({ name: group.name })}
-            </Pill>
-          ) : null}
-        </div>
+    <>
+      <SettingsSection title={m.run_prepare_setup()}>
+        <SelectField
+          label={m.run_check_profile()}
+          value={setup.profileId ?? ""}
+          options={profileOptions}
+          disabled={!editable}
+          description={setup.shared ? m.run_prepare_shared_title() : undefined}
+          error={errors.profile}
+          onChange={(id) => commit("profile", chooseProfile(target, id))}
+        />
+        <SegmentedField
+          label={m.run_check_mode()}
+          value={setup.mode}
+          options={setup.modes.map((o) => ({ value: o.mode, label: say(m, MODE_NAME[o.mode]) }))}
+          disabled={!editable}
+          description={chosen ? say(m, viewFootprintRef(chosen.mode, chosen.entries, chosen.footprintBytes)) : undefined}
+          error={errors.mode ?? modeError}
+          onChange={(mode) => commit("mode", chooseMode(target, mode))}
+        />
+        <PathField
+          mode="folder"
+          label={m.run_layout_output_folder()}
+          value={setup.outputParent}
+          disabled={!editable}
+          description={setup.folderPath ? m.run_prepare_creates({ folder: fileName(setup.folderPath) }) : undefined}
+          error={errors.folder}
+          onChange={(path) => commit("folder", setOutputParent(target, path))}
+        />
+      </SettingsSection>
+      {editable && setup.mode === "symlink" && developerModeOff ? (
+        <Refusal
+          standing
+          action={m.run_cant_prepare()}
+          reason={m.run_mode_needs_developer_mode()}
+          blockers={[]}
+          actions={
+            <>
+              <ActionButton action={useCopies} />
+              <ActionButton action={openSettings} />
+              <ActionButton action={checkAgain} />
+            </>
+          }
+        />
       ) : null}
-      <PreparationOutcome run={run} onOutcome={outcome.act} />
-      <ProfileSection profileId={plan.profile?.id ?? null} locked={locked !== null} onPick={(id) => outcome.act(chooseProfile(target, id), { blocked: m.run_profile_blocked() })} />
-      <ModeSection modes={plan.modes} mode={plan.mode} locked={locked !== null} onMode={(mode) => outcome.act(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} />
-      <LayoutSection
-        layout={plan.layout}
-        locked={locked !== null}
-        onParent={(path) => outcome.act(setOutputParent(target, path), { blocked: m.run_folder_blocked() })}
-        lines={(l) => (
-          <>
-            <LayoutLine path={`${l.parent.path ?? m.run_layout_output()}/`} note={parentNote(l)} />
-            <LayoutLine path={`${ctx.project.name}/`} note={m.run_col_project()} depth={1} />
-            {l.groupFolder ? <LayoutLine path={`${fileName(l.groupFolder)}/`} note={l.prepRevision > 1 ? m.run_layout_group_rev({ revision: l.prepRevision }) : m.run_layout_group()} depth={2} /> : null}
-            <LayoutLine path={`${fileName(l.folderPath ?? `${run.name}`)}/`} note={l.prepRevision > 1 ? m.run_layout_new_rev({ revision: l.prepRevision }) : m.run_layout_new()} depth={l.groupFolder ? 3 : 2} emphasis />
-            <LayoutLine path={`${l.resultsPath ? l.resultsPath.slice((l.projectDir ?? "").length + 1) : m.run_layout_results_folder({ name: run.name })}/`} note={m.run_layout_results_every_revision()} depth={2} />
-          </>
-        )}
-      />
-      <MetadataSection plan={plan} locked={locked !== null} onChoice={(key, choice) => updatePrepareChoices(run.id, { metadata: { ...choices.metadata, [key]: choice } })} />
-      <Box
-        id="prep-review"
-        level={2}
-        flush
-        title={
-          <span className="flex flex-wrap items-center gap-1.5">
-            {m.step_review()}
-            <Pill tone="muted">{m.run_frames_count({ count: count("light") })}</Pill>
-            {count("calibration") > 0 ? <Pill tone="muted">{m.run_cal_masters_count({ count: count("calibration") })}</Pill> : null}
-          </span>
-        }
-        actions={
-          <>
-            <PrototypeMenu
-              actions={[
-                { label: m.run_proto_object_correction(), detail: m.run_proto_object_correction_detail(), run: () => outcome.act(simulateObjectCorrection(run.id), { blocked: m.run_proto_blocked() }) },
-                { label: m.run_proto_source_drift(), detail: m.run_proto_source_drift_detail(), run: () => outcome.act(simulateSourceDrift(run.id), { blocked: m.run_proto_blocked() }) },
-              ]}
-            />
-            <Button id={PREPARE_BUTTON_ID} size="sm" variant={openable ? "outline" : "default"} disabled={locked !== null} onClick={() => (plan.ready ? setConfirm(true) : outcome.act(startPrepare(run.id, choices), { blocked: m.run_prepare_blocked() }))}>
-              <Play aria-hidden="true" data-icon="inline-start" />
-              {m.run_prepare_ellipsis()}
-            </Button>
-          </>
-        }
-      >
-        {/* The read-only pill above already names the lock. */}
-        <ChecksList checks={lock ? plan.checks.filter((c) => c.id !== "lock") : plan.checks} />
-      </Box>
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={plan.layout.prepRevision > 1 ? m.run_prepare_title_rev({ name: run.name, revision: plan.layout.prepRevision }) : m.run_prepare_title({ name: run.name })}
-        description={`${profileLabel(state.catalog, plan.profile?.id ?? null)} · ${say(m, MODE_NAME[plan.mode])}`}
-        changes={prepareChanges(plan)}
-        confirmLabel={m.run_prepare_confirm({ count: plan.entries.length })}
-        onConfirm={() => {
-          const r = startPrepare(run.id, choices)
-          outcome.act(r, { blocked: m.run_prepare_blocked() })
-          return r.result
-        }}
-      />
-    </div>
+    </>
   )
 }
 
-/** The layout preview's note on the output parent: where the folder choice came from. */
-function parentNote(l: RunLayout): string {
-  if (l.parent.origin === "last-used") return m.run_layout_last_used()
-  if (l.parent.origin === "none") return m.run_layout_not_chosen()
-  return m.run_layout_output_note()
+/** An input's state in the run view: blocked with its reason, prepared, or still to prepare. */
+function EntryState({ entry, prep }: { entry: PrepareEntry; prep: Preparation | null }) {
+  const m = useMessages()
+  const blocked = entry.unavailable ?? prep?.blocked.find((b) => b.path === entry.sourcePath)?.reason ?? null
+  if (blocked) return <StatusBadge kind="item" value="blocked" label={say(m, blocked)} />
+  if (prep?.state === "running") return <StatusBadge kind="item" value="running" />
+  const prepared = prep && (prep.state === "prepared" || prep.state === "partial") && (entry.assetId ? prep.preparedAssetIds.includes(entry.assetId) : prep.state === "prepared")
+  return prepared ? <StatusBadge kind="item" value="done" label={m.status_prepared()} /> : <StatusBadge kind="item" value="pending" label={m.run_entry_to_prepare()} />
 }
 
-/** Where a Prepare blocker ("Calibration: 1 requirement to review") is resolved: the check it names, by its label. */
-export function planBlockerLink(run: Run, blocker: string): StepLink | undefined {
-  const label = blocker.slice(0, Math.max(0, blocker.indexOf(":")))
-  const named = (id: PlanCheck["id"]) => label.endsWith(say(m, CHECK_NAME[id]))
-  const step = named("calibration") ? "calibrate" : named("membership") ? "select" : null
-  return step ? (runStepLink(run, step) as StepLink) : undefined
+function entryKind(m: Messages, entry: PrepareEntry): string {
+  return entry.kind === "calibration" ? m.run_entry_master() : m.run_entry_frame()
 }
 
-export function prepareChanges(plan: PreparePlan): string[] {
-  const blocked = plan.entries.filter((e) => e.unavailable)
+/** Every input the run view holds: the frames and the masters handed off. */
+export function inputColumns(m: Messages, prep: Preparation | null, mode: InputMode): Column<PrepareEntry>[] {
   return [
-    plan.layout.folderPath ? m.run_prepare_creates({ folder: plan.layout.folderPath }) : m.run_prepare_creates_run_folder(),
-    m.run_prepare_writes_entries({ count: plan.entries.length - blocked.length, bytes: formatBytes(plan.footprintBytes) }),
-    ...(blocked.length > 0 ? [m.run_prepare_inputs_blocked_partial({ count: blocked.length })] : []),
-    ...(plan.diffs.length > 0 ? [m.run_prepare_records_decisions({ count: plan.diffs.length })] : []),
+    { id: "file", header: m.run_col_file(), rowHeader: true, truncate: true, cell: (e) => e.fileName, sortValue: (e) => e.fileName },
+    { id: "kind", header: m.run_col_kind(), cell: (e) => entryKind(m, e), sortValue: (e) => e.kind },
+    { id: "from", header: m.run_col_source(), truncate: true, cell: (e) => <PathText path={e.sourcePath.slice(0, e.sourcePath.lastIndexOf("/"))} truncate />, sortValue: (e) => e.sourcePath },
+    { id: "size", header: m.run_col_size(), align: "right", cell: (e) => formatBytes(mode === "copy" ? e.sizeBytes : 0), sortValue: (e) => e.sizeBytes },
+    { id: "state", header: m.run_col_state(), cell: (e) => <EntryState entry={e} prep={prep} />, sortValue: (e) => (e.unavailable ? 0 : 1) },
   ]
 }
 
-export function ChecksList({ checks }: { checks: PlanCheck[] }) {
-  const m = useMessages()
-  return (
-    <ul className="divide-y divide-separator text-sm">
-      {checks.map((c) => {
-        const label = say(m, c.label)
-        const detail = say(m, c.detail)
-        return (
-          <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-1.5" data-check={c.id} data-ok={c.ok}>
-            <span className="w-40 shrink-0">
-              {c.ok ? <StatusBadge kind="checklist" value="met" label={label} /> : c.blocking ? <StatusBadge kind="checklist" value="missing" label={label} /> : <StatusBadge kind="checklist" value="partial" label={label} />}
-            </span>
-            <span className={cn("min-w-0 flex-1 truncate text-[0.75rem]", c.ok ? "text-muted-foreground" : "text-foreground")} title={detail}>
-              {detail}
-            </span>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-/** The application profile picker: the same order and names as Start run's `profileOptions`. */
-export function ProfileSection({ profileId, locked, onPick }: { profileId: string | null; locked: boolean; onPick: (id: string) => void }) {
-  const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const options = profileOptions(catalog).filter((o) => o.value !== NO_PROFILE)
-  const profile = profileId ? catalog.profiles[profileId] : undefined
-  return (
-    <Box
-      id="prep-profile"
-      level={2}
-      title={m.run_profile_application()}
-      actions={profile ? <ExecutableState profile={profile} /> : null}
-    >
-      <fieldset disabled={locked} className="space-y-2">
-        <legend className="sr-only">{m.run_check_profile()}</legend>
-        <RadioGroup value={profileId ?? ""} onValueChange={(value) => onPick(String(value))} className="grid gap-1.5 lg:grid-cols-2">
-          {options.map((o) => {
-            const p = catalog.profiles[o.value]!
-            return (
-              <OptionCard key={p.id} value={p.id} current={profileId ?? ""} disabled={locked}>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium">{o.label}</span>
-                  <StatusBadge kind="source" value={p.capability.verified ? "built-in" : "manual"} label={p.capability.verified ? m.run_profile_verified() : m.run_profile_not_verified()} />
-                  <Pill tone={p.capability.inputWrite === "read-only" ? "success" : p.capability.inputWrite === "write-prone" ? "warning" : "muted"}>
-                    {p.capability.inputWrite === "read-only" ? m.run_profile_read_only() : p.capability.inputWrite === "write-prone" ? m.run_profile_write_prone() : m.run_profile_writes_unknown()}
-                  </Pill>
-                  <NoteMarker label={m.run_profile_evidence({ name: o.label })}>{say(m, p.capability.evidence)}</NoteMarker>
-                </span>
-              </OptionCard>
-            )
-          })}
-        </RadioGroup>
-      </fieldset>
-    </Box>
-  )
-}
-
-/**
- * Run views (P-PREP3): Symlinks or Copies, each with its footprint. Symlinks
- * while Windows Developer Mode is off are refused with the ways forward.
- */
-export function ModeSection({ modes, mode, locked, onMode }: { modes: ModeOption[]; mode: InputMode; locked: boolean; onMode: (m: InputMode) => void }) {
-  const m = useMessages()
-  const chosen = modes.find((o) => o.mode === mode)
-  return (
-    <Box id="prep-mode" level={2} title={m.run_check_mode()}>
-      <div className="space-y-2">
-        {chosen?.developerModeOff ? (
-          <Refusal
-            action={m.run_cant_prepare()}
-            reason={m.run_mode_needs_developer_mode()}
-            blockers={[]}
-            standing
-            actions={
-              <>
-                <DeveloperModeActions />
-                <Button size="xs" variant="outline" disabled={locked} onClick={() => onMode("copy")}>
-                  <Copy aria-hidden="true" data-icon="inline-start" />
-                  {m.run_use_copies()}
-                </Button>
-              </>
-            }
-          />
-        ) : chosen && !chosen.allowed ? (
-          <Refusal action={m.run_mode_named_blocked({ mode: say(m, MODE_NAME[chosen.mode]) })} reason={m.refusal_blockers({ count: chosen.reasons.length })} blockers={chosen.reasons.map((r) => ({ label: say(m, r) }))} standing />
-        ) : null}
-        <fieldset disabled={locked}>
-          <legend className="sr-only">{m.run_check_mode()}</legend>
-          <RadioGroup value={mode} onValueChange={(value) => onMode(String(value) as InputMode)} className="grid gap-1.5 lg:grid-cols-2">
-            {modes.map((option) => (
-              <OptionCard key={option.mode} value={option.mode} current={mode} disabled={locked}>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium">{say(m, MODE_NAME[option.mode])}</span>
-                  <HelpTip label={say(m, MODE_NAME[option.mode])}>{say(m, option.semantics)}</HelpTip>
-                  <Pill tone="muted" icon={HardDrive} className="ml-auto">
-                    {say(m, viewFootprintRef(option.mode, option.entries, option.footprintBytes))}
-                  </Pill>
-                </span>
-                {/* The chosen view's refusal is the line above; another view names its reasons here. */}
-                {option.mode !== mode && option.reasons.length > 0 ? (
-                  <span className="flex flex-wrap gap-1" data-refusal>
-                    {option.reasons.map((ref) => {
-                      const r = say(m, ref)
-                      return (
-                        <Pill key={r} tone="danger" title={r}>
-                          {r}
-                        </Pill>
-                      )
-                    })}
-                  </span>
-                ) : null}
-              </OptionCard>
-            ))}
-          </RadioGroup>
-        </fieldset>
-      </div>
-    </Box>
-  )
-}
-
-export function LayoutSection({ layout, locked, onParent, lines }: { layout: RunLayout; locked: boolean; onParent: (path: string) => void; lines: (layout: RunLayout) => React.ReactNode }) {
-  const m = useMessages()
-  const [picking, setPicking] = useState(false)
-  return (
-    <Box
-      id="prep-layout"
-      level={2}
-      title={m.run_check_destination()}
-      actions={
-        <Button size="xs" variant="outline" disabled={locked} onClick={() => setPicking(true)}>
-          <FolderOpen aria-hidden="true" data-icon="inline-start" />
-          {layout.parent.path ? m.run_layout_change_folder() : m.import_choose_folder()}
-        </Button>
-      }
-    >
-      <ul className="space-y-1" aria-label={m.run_layout_preview()}>
-        {lines(layout)}
-      </ul>
-      <FolderPicker open={picking} onOpenChange={setPicking} title={m.run_layout_output_folder()} initialPath={layout.parent.path} chooseVerb={m.run_layout_use()} onChoose={(path) => onParent(path)} />
-    </Box>
-  )
-}
-
-function choiceHint(choice: Exclude<MetadataChoice, "patched-copy">): string {
-  if (choice === "accept-source") return m.run_metadata_hint_accept_source()
-  if (choice === "excluded") return m.run_metadata_hint_excluded()
-  return m.run_metadata_hint_configuration()
-}
-
-export function MetadataSection({ plan, locked, onChoice }: { plan: PreparePlan; locked: boolean; onChoice: (key: string, choice: MetadataChoice) => void }) {
-  const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  if (plan.diffs.length === 0) return null
-  const appName = profileLabel(catalog, plan.profile?.id ?? null)
-  const isolated = plan.mode === "copy"
-  return (
-    <Box id={`prep-metadata-${plan.run.id}`} level={2} flush title={m.run_check_metadata()}>
-      <ul className="divide-y divide-separator">
-        {plan.diffs.map((diff) => {
-          const choice = plan.metadata[diff.key]
-          return (
-            <li key={diff.key} className="space-y-2 px-3 py-2">
-              <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                <span className="font-medium">
-                  {formatNight(diff.session.night)} {diff.session.channel ?? ""} · {say(m, FIELD_NAME[diff.field])}
-                </span>
-                <Pill tone="muted">{m.run_frames_count({ count: diff.assetIds.length })}</Pill>
-                <span className="font-mono text-[0.75rem] text-muted-foreground">
-                  {FIELD_KEYWORD[diff.field]} “{diff.sourceValue ?? m.run_metadata_absent()}” → “{diff.catalogValue}”
-                </span>
-              </div>
-              <fieldset disabled={locked}>
-                <legend className="sr-only">{m.run_metadata_legend({ field: say(m, FIELD_NAME[diff.field]) })}</legend>
-                <RadioGroup value={choice ?? ""} onValueChange={(value) => onChoice(diff.key, String(value) as MetadataChoice)} className="grid gap-1.5 lg:grid-cols-2">
-                  {(["patched-copy", "accept-source", "excluded", "configuration"] as MetadataChoice[]).map((option) => {
-                    const unsupported = option === "configuration" && plan.profile?.capability.correctedMetadata !== "configuration"
-                    const needsIsolated = option === "patched-copy" && !isolated
-                    return (
-                      <OptionCard key={option} value={option} current={choice ?? ""} disabled={locked || unsupported}>
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">{say(m, METADATA_CHOICE_NAME[option])}</span>
-                          {unsupported ? (
-                            <Pill tone="danger">{m.run_metadata_not_supported({ name: appName })}</Pill>
-                          ) : needsIsolated ? (
-                            <Pill tone="warning">{m.run_metadata_needs_isolated()}</Pill>
-                          ) : (
-                            <span className="text-[0.75rem] text-muted-foreground">{option === "patched-copy" ? `${FIELD_KEYWORD[diff.field]} = ${diff.catalogValue}` : choiceHint(option)}</span>
-                          )}
-                        </span>
-                      </OptionCard>
-                    )
-                  })}
-                </RadioGroup>
-              </fieldset>
-            </li>
-          )
-        })}
-      </ul>
-    </Box>
-  )
-}
-
-/** The run's footprint: bytes its prepared folders hold (symlinks count zero), what Clean up frees. */
-export function FootprintPill({ run }: { run: Run }) {
+export function PrepareStep({ ctx, plan, editable }: { ctx: RunContext; plan: PreparePlan; editable: boolean }) {
   const m = useMessages()
   const state = useStore((s) => s)
-  const footprint = runFootprint(state.disk, state.catalog, run.id)
+  const { run } = ctx
+  const prep = currentPreparation(run, runPreparations(state.catalog, run.id))
+  const op = prep?.operationId ? state.operations[prep.operationId] : undefined
+  const profile = prep ? state.catalog.profiles[prep.profileId] : undefined
+  const openIn: Action[] = prep?.state === "prepared" && profile ? [{ id: "open", label: m.run_open_in({ app: say(m, profileRef(profile)) }), icon: FolderOpen, run: () => openPreparation(run.id) }] : []
+  const setup: PrepareSetup = {
+    target: run.groupId ? { groupId: run.groupId } : { runId: run.id },
+    profileId: plan.profile?.id ?? null,
+    mode: plan.mode,
+    modes: plan.modes,
+    outputParent: plan.layout.parent.path,
+    folderPath: plan.layout.folderPath,
+    shared: run.groupId !== null,
+  }
   return (
-    <span className="inline-flex items-center gap-1" data-footprint={footprint.preparedBytes}>
-      <Pill tone="muted" icon={HardDrive} title={m.run_footprint_title()}>
-        {m.run_footprint_prepared({ bytes: footprint.online ? formatBytes(footprint.preparedBytes) : "–" })}
-      </Pill>
-      {!footprint.online ? <NoteMarker label={m.run_footprint_note_label()}>{m.run_footprint_offline()}</NoteMarker> : null}
-    </span>
+    <>
+      <PrepareFields setup={setup} editable={editable && runLock(run) === null} />
+      {op && !isSettled(op.status) ? <OperationLine operationId={op.id} /> : null}
+      {prep?.unverified ? (
+        <Refusal
+          standing
+          action={m.run_unverified_since({ date: formatDateTime(prep.unverified.at) })}
+          reason={m.run_entries_changed({ count: prep.unverified.changed.length })}
+          blockers={prep.unverified.changed.slice(0, 8).map((c) => ({ label: `${fileName(c.path)} · ${say(m, c.reason)}` }))}
+        />
+      ) : null}
+      <DataTable
+        label={m.run_prepare_inputs()}
+        rows={plan.entries}
+        columns={inputColumns(m, prep, plan.mode)}
+        getRowId={(e) => e.id}
+        initialSort={{ columnId: "file", direction: "asc" }}
+        scroll="none"
+        toolbar={openIn.length > 0 ? { actions: openIn } : undefined}
+      />
+    </>
   )
 }
 
-function launchWord(outcome: Preparation["launches"][number]["outcome"]): string {
-  if (outcome === "opened") return m.run_launch_opened()
-  if (outcome === "missing-executable") return m.run_launch_not_located()
-  return m.run_launch_failed()
+/** One input of the run view Prepare writes: its source folder and the run folder it goes to. */
+export function prepareRows(m: Messages, plan: PreparePlan): FileRow[] {
+  return plan.entries.map((entry) => ({
+    file: entry.fileName,
+    from: entry.sourcePath.slice(0, entry.sourcePath.lastIndexOf("/")),
+    to: entry.destPath.slice(0, entry.destPath.lastIndexOf("/")),
+    action: "copy",
+    size: plan.mode === "copy" && !entry.unavailable ? entry.sizeBytes : 0,
+    status: entry.unavailable ? { label: say(m, entry.unavailable) } : undefined,
+  }))
 }
 
-/** The latest preparation of this run: Running, Prepared, Partial (prepared and blocked) or Failed; Open re-verifies. */
-export function PreparationOutcome({ run, onOutcome, compact = false }: { run: Run; onOutcome: Act; compact?: boolean }) {
-  const m = useMessages()
-  const state = useStore((s) => s)
-  const preps = runPreparations(state.catalog, run.id)
-  const current = currentPreparation(run, preps)
-  const latest = preps.at(-1)
-  if (!latest) return null
-  const prep = current ?? latest
-  const op = prep.operationId ? state.operations[prep.operationId] : undefined
-  const stale = !current
-  const label = profileLabel(state.catalog, prep.profileId)
-  const generic = state.catalog.profiles[prep.profileId]?.application === "generic"
-  const lastLaunch = prep.launches.at(-1)
-  return (
-    <Box
-      id={`prep-outcome-${run.id}`}
-      level={compact ? 3 : 2}
-      title={compact ? (prep.prepRevision > 1 ? m.run_named_rev({ name: run.name, revision: prep.prepRevision }) : run.name) : prep.prepRevision > 1 ? m.run_preparation_rev({ revision: prep.prepRevision }) : m.run_preparation()}
-      actions={
-        <>
-          <PrepStateBadge prep={prep} />
-          <FootprintPill run={run} />
-          {prep.state === "prepared" && !stale ? (
-            <Button size="xs" onClick={() => onOutcome(openPreparation(run.id), { blocked: m.run_open_blocked(), success: { title: m.run_opened({ name: run.name }), tone: "info" } })}>
-              {generic ? m.verb_open() : m.run_open_in({ app: label.split(" /")[0] ?? label })}
-            </Button>
-          ) : null}
-        </>
-      }
-    >
-      <div className="space-y-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[0.75rem] text-muted-foreground">
-          <span className="min-w-0 truncate font-mono" title={prep.folderPath}>
-            {fileName(prep.folderPath)}/
-          </span>
-          <Pill tone="neutral">
-            {say(m, MODE_NAME[prep.mode])} · {say(m, viewFootprintRef(prep.mode, prep.preparedAssetIds.length + prep.preparedCalibrationCount, prep.footprintBytes))}
-          </Pill>
-          <Pill tone="muted">{m.run_revision_short({ revision: prep.membershipRevision })}</Pill>
-          <span>{formatDateTime(prep.createdAt)}</span>
-          {lastLaunch ? <Pill tone={lastLaunch.outcome === "opened" ? "success" : "warning"} title={formatDateTime(lastLaunch.at)}>{launchWord(lastLaunch.outcome)}</Pill> : null}
-        </div>
-        {stale ? <Pill tone="warning">{m.run_membership_changed({ revision: latestRevisionNumber(run) })}</Pill> : null}
-        {op && !isSettled(op.status) ? <OperationPanel operationId={op.id} headingLevel={compact ? 4 : 3} /> : null}
-        {prep.unverified ? (
-          <Refusal
-            action={m.run_unverified_since({ date: formatDateTime(prep.unverified.at) })}
-            reason={m.run_entries_changed({ count: prep.unverified.changed.length })}
-            blockers={prep.unverified.changed.slice(0, 8).map((c) => ({ label: `${fileName(c.path)} · ${say(m, c.reason)}` }))}
-          />
-        ) : null}
-        {prep.state === "partial" || prep.state === "failed" || (prep.state === "prepared" && !compact) ? <PreparedLists prep={prep} /> : null}
-      </div>
-    </Box>
-  )
-}
-
-function latestRevisionNumber(run: Run): number {
-  return run.revisions.at(-1)?.revision ?? 0
-}
-
-export function PrepStateBadge({ prep }: { prep: Preparation }) {
-  const m = useMessages()
-  if (prep.unverified) return <StatusBadge kind="view" value="unverified" />
-  if (prep.state === "partial") return <StatusBadge kind="preparation" value="partial" label={m.run_partial_count({ done: prep.preparedAssetIds.length, total: prep.entryCount })} />
-  return <StatusBadge kind="preparation" value={prep.state} />
-}
-
-function PreparedLists({ prep }: { prep: Preparation }) {
-  const m = useMessages()
-  const assets = useStore((s) => s.catalog.assets)
-  const prepared = prep.preparedAssetIds.map((id) => assets[id]?.fileName ?? id)
-  return (
-    <div className="grid gap-2 lg:grid-cols-2">
-      <details className="rounded-md border px-3 py-1.5 text-[0.75rem]">
-        <summary className="cursor-default">
-          {m.run_prepared_count({ done: prepared.length, total: prep.entryCount })}
-        </summary>
-        <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto font-mono text-muted-foreground">
-          {prepared.length === 0 ? <li>{m.run_none()}</li> : null}
-          {prepared.map((name) => (
-            <li key={name}>{name}</li>
-          ))}
-        </ul>
-      </details>
-      {prep.blocked.length > 0 ? (
-        <details open className="rounded-md border px-3 py-1.5 text-[0.75rem]">
-          <summary className="cursor-default">{m.run_blocked_count({ count: prep.blocked.length })}</summary>
-          <ul tabIndex={0} aria-label={m.run_blocked_inputs_label({ count: prep.blocked.length })} className="mt-1 max-h-48 space-y-0.5 overflow-y-auto" data-blocked-list>
-            {prep.blocked.map((b) => {
-              const reason = say(m, b.reason)
-              return (
-                <li key={`${b.path}-${reason}`} className="flex flex-wrap gap-x-2">
-                  <span className="font-mono">{fileName(b.path)}</span>
-                  <span className="text-muted-foreground">{reason}</span>
-                </li>
-              )
-            })}
-          </ul>
-        </details>
-      ) : (
-        <Pill tone="muted" className="self-start justify-self-start">
-          {m.run_blocked_count({ count: 0 })}
-        </Pill>
-      )}
-    </div>
-  )
+/** Prepare…'s confirm (F2): the run folder it creates, the run view with its footprint, and every input. */
+export function prepareConfirm(m: Messages, plan: PreparePlan): ConfirmSpec {
+  const { layout, run } = plan
+  const chosen = plan.modes.find((o) => o.mode === plan.mode)!
+  return {
+    title: layout.prepRevision > 1 ? m.run_prepare_title_rev({ name: run.name, revision: layout.prepRevision }) : m.run_prepare_title({ name: run.name }),
+    summary: say(m, joinRefs([...(layout.folderPath ? [msg("run_prepare_creates", { folder: fileName(layout.folderPath) })] : []), MODE_NAME[plan.mode], viewFootprintRef(plan.mode, chosen.entries, chosen.footprintBytes)], " · ")),
+    groups: [{ label: m.run_prepare_inputs(), rows: prepareRows(m, plan) }],
+    confirm: { label: m.run_prepare_confirm({ count: plan.entries.length }) },
+  }
 }

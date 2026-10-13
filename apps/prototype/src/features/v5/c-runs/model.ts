@@ -1,19 +1,18 @@
 /**
  * Slice C read model (pure): the layout a run or run group prepares to, the
- * preparation plan (profile, run view, corrected metadata, entries and checks),
- * Open's re-verification, Results discovery and attribution, the Clean up
- * list and the calibration readiness line. Nothing here writes; the slice's
- * actions and operation handlers in `actions.ts` and `operations.ts` do.
+ * preparation plan (profile, run view, the corrections Prepare applies,
+ * entries and checks), Open's re-verification, Results discovery and
+ * attribution, and the calibration readiness per kind. Nothing here writes;
+ * the slice's actions and operation handlers in `actions.ts` and
+ * `operations.ts` do.
  */
 import { calibrationPlan, type CalibrationPlan, compareCandidates, handoffCalibration, KIND_NAME, KINDS, lightGeometry, matchCriteria, type RequirementRow, summarize } from "@/domain/calibration"
 import { calibrationProcesses, type ProcessView } from "@/domain/calibration-process"
-import { latestCorrection } from "@/domain/corrections"
-import { findPanel, findSubject, latestRevision, runPreparations, runSetup, savedContent, workingContent } from "@/domain/derive"
+import { findPanel, findSubject, latestRevision, runCorrections, type RunCorrections, runPreparations, runSetup, savedContent, workingContent } from "@/domain/derive"
 import { fileAt, filesUnder, freeBytes, volumeForPath } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
 import { MODE_NAME } from "@/domain/labels"
 import { assetAvailability, copyAvailability, preferredCopy } from "@/domain/library"
-import { memberSessions, type MemberSession } from "@/domain/membership"
 import type {
   ApplicationProfile,
   Asset,
@@ -30,7 +29,6 @@ import type {
   ResultRecord,
   Run,
   RunGroup,
-  Session,
   Subject,
   Volume,
 } from "@/domain/types"
@@ -195,51 +193,8 @@ export function groupAssembledPath(state: PrototypeState, group: RunGroup): stri
   return first ? runLayout(state, first).assembledPath : null
 }
 
-// ---------------------------------------------------------------------------
-// Corrected metadata (PREP-FR-03)
-// ---------------------------------------------------------------------------
-
-/** A corrected field's name: "Target", "Focal length". */
-export const FIELD_NAME: Record<CorrectionField, MessageRef> = {
-  target: msg("run_field_target"),
-  equipment: msg("run_field_equipment"),
-  filter: msg("run_field_filter"),
-  exposure: msg("run_field_exposure"),
-  "focal-length": msg("run_field_focal_length"),
-}
+/** The header keyword a patched copy rewrites for each corrected field (PREP-FR-03). */
 export const FIELD_KEYWORD: Record<CorrectionField, string> = { target: "OBJECT", equipment: "TELESCOP", filter: "FILTER", exposure: "EXPTIME", "focal-length": "FOCALLEN" }
-
-export type MetadataChoice = MetadataDecision["decision"]
-
-export const METADATA_CHOICE_NAME: Record<MetadataChoice, MessageRef> = {
-  configuration: msg("run_metadata_choice_configuration"),
-  "patched-copy": msg("run_metadata_choice_patched_copy"),
-  "accept-source": msg("run_metadata_choice_accept_source"),
-  excluded: msg("run_metadata_choice_excluded"),
-}
-
-export interface MetadataDiff {
-  key: string
-  session: Session
-  field: CorrectionField
-  assetIds: string[]
-  catalogValue: string
-  sourceValue: string | null
-}
-
-/** Catalog values that differ from what the application reads in the source headers. */
-export function metadataDiffs(members: MemberSession[]): MetadataDiff[] {
-  const out: MetadataDiff[] = []
-  for (const member of members) {
-    const { session } = member
-    for (const field of new Set(session.corrections.map((c) => c.field))) {
-      const correction = latestCorrection(session, field)
-      if (!correction || correction.observedValue === correction.correctedValue) continue
-      out.push({ key: `${session.id}:${field}`, session, field, assetIds: member.included, catalogValue: correction.correctedValue, sourceValue: correction.observedValue })
-    }
-  }
-  return out
-}
 
 // ---------------------------------------------------------------------------
 // Run views (PREP-FR-04, PREP-FR-05, D04, P-PREP3)
@@ -315,11 +270,14 @@ export interface PlanCheck {
   detail: MessageRef
 }
 
+/**
+ * @deprecated Nothing writes these since C15 (Prepare applies every
+ * correction as `runCorrections` decides). Kept only because slice C's
+ * `CState.prepare` still names the type; the lead drops both.
+ */
 export interface PrepareChoices {
-  metadata: Record<string, MetadataChoice>
+  metadata: Record<string, MetadataDecision["decision"]>
 }
-
-export const DEFAULT_CHOICES: PrepareChoices = { metadata: {} }
 
 export interface PreparePlan {
   run: Run
@@ -331,9 +289,8 @@ export interface PreparePlan {
   layout: RunLayout
   destination: Volume | null
   free: number | null
-  diffs: MetadataDiff[]
-  metadata: Record<string, MetadataChoice>
-  metadataExcluded: Set<string>
+  /** The corrections the inputs carry and how each reaches the application (C15). */
+  corrections: RunCorrections
   entries: PrepareEntry[]
   calibration: CalibrationPlan
   footprintBytes: number
@@ -373,35 +330,26 @@ function entryFromAsset(state: PrototypeState, asset: Asset, folder: string, kin
   }
 }
 
-export function preparePlan(state: PrototypeState, run: Run, choices: PrepareChoices, options: { groupRevision?: number } = {}): PreparePlan {
+export function preparePlan(state: PrototypeState, run: Run, options: { groupRevision?: number } = {}): PreparePlan {
   const { catalog, disk } = state
   const revision = savedContent(run)
   const content = revision ?? workingContent(run)
   const setup = runSetup(catalog, run)
   const profile = setup.profileId ? (catalog.profiles[setup.profileId] ?? null) : null
-  const members = content ? memberSessions(catalog, content) : []
   const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, content)
   const layout = runLayout(state, run, options)
   const parentIssue = parentProblem(state, layout.parent)
   const destinationId = layout.parent.path ? volumeForPath(disk, layout.parent.path) : null
   const destination = destinationId ? (disk.volumes[destinationId] ?? null) : null
   const free = destination?.mounted ? freeBytes(disk, destination.id) : null
-  const diffs = metadataDiffs(members)
-  const metadata: Record<string, MetadataChoice> = {}
-  const metadataExcluded = new Set<string>()
+  const corrections = runCorrections(catalog, content, profile)
   const patched = new Map<string, PrepareEntry["patches"]>()
-  for (const diff of diffs) {
-    const choice = choices.metadata[diff.key]
-    if (!choice) continue
-    metadata[diff.key] = choice
-    if (choice === "excluded") for (const id of diff.assetIds) metadataExcluded.add(id)
-    if (choice === "patched-copy") for (const id of diff.assetIds) patched.set(id, [...(patched.get(id) ?? []), { field: diff.field, value: diff.catalogValue }])
-  }
+  for (const d of corrections.decisions) if (d.decision === "patched-copy") patched.set(d.assetId, [...(patched.get(d.assetId) ?? []), { field: d.field, value: d.corrected }])
   const folder = layout.folderPath ?? m.run_layout_output()
   const entries: PrepareEntry[] = []
   for (const id of content?.included ?? []) {
     const asset = catalog.assets[id]
-    if (!asset || metadataExcluded.has(id)) continue
+    if (!asset) continue
     entries.push(entryFromAsset(state, asset, folder, "light", patched.get(id) ?? []))
   }
   for (const id of content?.unresolved ?? []) {
@@ -465,24 +413,14 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   })
   checks.push({ id: "profile", label: CHECK_NAME.profile, ok: profile !== null, blocking: true, detail: profile ? verbatim(profile.name) : msg("run_layout_not_chosen") })
   const footprintBytes = chosen.footprintBytes
-  const undecided = diffs.filter((d) => !metadata[d.key])
-  const badPatch = diffs.filter((d) => metadata[d.key] === "patched-copy" && !isolated)
-  const badConfig = diffs.filter((d) => metadata[d.key] === "configuration" && profile?.capability.correctedMetadata !== "configuration")
+  // A patched copy needs Copies: the run view never rewrites a library frame's header in place.
+  const needsCopies = !isolated && corrections.decisions.some((d) => d.decision === "patched-copy")
   checks.push({
     id: "metadata",
     label: CHECK_NAME.metadata,
-    ok: undecided.length === 0 && badPatch.length === 0 && badConfig.length === 0,
+    ok: !needsCopies,
     blocking: true,
-    detail:
-      diffs.length === 0
-        ? msg("run_none")
-        : undecided.length > 0
-          ? msg("run_check_corrections_to_decide", { count: undecided.length })
-          : badPatch.length > 0
-            ? msg("run_check_patched_needs_isolated")
-            : badConfig.length > 0
-              ? msg("run_check_no_configuration", { name: profile?.name ?? msg("run_profile_application") })
-              : msg("run_check_decisions", { count: diffs.length }),
+    detail: corrections.values.length === 0 ? msg("run_none") : needsCopies ? msg("run_check_patched_needs_isolated") : msg("flow_corrected_values", { count: corrections.values.length }),
   })
   checks.push({
     id: "mode",
@@ -522,9 +460,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     layout,
     destination,
     free,
-    diffs,
-    metadata,
-    metadataExcluded,
+    corrections,
     entries,
     calibration,
     footprintBytes,
@@ -719,43 +655,6 @@ export function scanResultsFolders(state: PrototypeState, folders: string[], opt
     }
   }
   return { files }
-}
-
-// ---------------------------------------------------------------------------
-// Clean up (PREP-FR-14, D-W26)
-// ---------------------------------------------------------------------------
-
-export interface CleanupEntry {
-  path: string
-  /** What removing it frees: zero for a symlink. */
-  sizeBytes: number
-  /** A symlink or copy of the run view, or the handoff list. */
-  kind: "link" | "copy" | "list"
-  prep: Preparation
-}
-
-export interface CleanupReview {
-  entries: CleanupEntry[]
-  /** Preparation folders that cannot be listed now, with the reason. */
-  refused: Array<{ path: string; reason: MessageRef }>
-}
-
-/** Only the entries the run's preparation revisions created: the run view's symlinks or copies and the handoff list. */
-export function cleanupReview(state: PrototypeState, run: Run): CleanupReview {
-  const out: CleanupReview = { entries: [], refused: [] }
-  for (const prep of runPreparations(state.catalog, run.id)) {
-    const volumeId = volumeForPath(state.disk, prep.folderPath)
-    const volume = volumeId ? state.disk.volumes[volumeId] : undefined
-    if (!volume?.mounted) {
-      out.refused.push({ path: prep.folderPath, reason: msg("run_cleanup_volume_offline", { name: volume?.name ?? msg("run_entry_its_volume") }) })
-      continue
-    }
-    for (const file of filesUnder(state.disk, prep.folderPath)) {
-      const kind: CleanupEntry["kind"] = file.linkTarget ? "link" : file.kind === "text" ? "list" : "copy"
-      out.entries.push({ path: file.path, sizeBytes: file.linkTarget ? 0 : file.sizeBytes, kind, prep })
-    }
-  }
-  return out
 }
 
 // ---------------------------------------------------------------------------
