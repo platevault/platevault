@@ -6544,6 +6544,7 @@
   "catalogue_status_bar_desc": "The bottom bar: locations, selection, running work, issue counters and notifications, each list in a ListPopover.",
   "catalogue_palette_desc": "The command palette: places, records and registered Actions in one searchable list.",
   "catalogue_run_step_desc": "A run's gate glyphs and its six steps in one line.",
+  "catalogue_run_step_rail_of": "Steps of {name}",
   "catalogue_walk_desc": "The modal orientation walk: a cut-out around each anchor, Back, Next and Skip. A step without an anchor is passed over.",
   "catalogue_walk_start": "Start the walk",
   "theme_picker_mode": "Mode",
