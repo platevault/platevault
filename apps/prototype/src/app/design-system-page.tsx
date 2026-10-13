@@ -59,16 +59,40 @@ function typeScale(m: Messages): Array<[className: string, sample: string]> {
   ]
 }
 
-/** Each z-index layer with what sits on it. */
-function zScale(m: Messages): Array<[layer: string, use: string]> {
+/** Each z-index token with what sits on it; the utility is `z-<name>`. */
+function zScale(m: Messages): Array<[token: string, use: string]> {
   return [
-    ["z-0", m.ds_z_page()],
-    ["z-1", m.ds_z_pinned_column()],
-    ["z-10", m.ds_z_sticky_headers()],
-    ["z-20", m.ds_z_shell()],
-    ["z-30", m.ds_z_flyouts()],
-    ["z-50", m.ds_z_portalled()],
+    ["--z-page", m.ds_z_page()],
+    ["--z-pinned", m.ds_z_pinned_column()],
+    ["--z-sticky", m.ds_z_sticky_headers()],
+    ["--z-shell", m.ds_z_shell()],
+    ["--z-flyout", m.ds_z_flyouts()],
+    ["--z-overlay", m.ds_z_portalled()],
   ]
+}
+
+/** Each elevation step with its utility (written out so Tailwind finds it) and what sits at it. */
+function elevationScale(m: Messages): Array<[token: string, className: string, use: string]> {
+  return [
+    ["--elevation-0", "shadow-elevation-0", m.ds_elevation_0()],
+    ["--elevation-1", "shadow-elevation-1", m.ds_elevation_1()],
+    ["--elevation-2", "shadow-elevation-2", m.ds_elevation_2()],
+    ["--elevation-3", "shadow-elevation-3", m.ds_elevation_3()],
+  ]
+}
+
+/** Each dialog width with its utility and what it is for. */
+function dialogWidths(m: Messages): Array<[token: string, className: string, use: string]> {
+  return [
+    ["--dialog-w-sm", "max-w-dialog-sm", m.ds_dialog_sm()],
+    ["--dialog-w-md", "max-w-dialog-md", m.ds_dialog_md()],
+    ["--dialog-w-lg", "max-w-dialog-lg", m.ds_dialog_lg()],
+  ]
+}
+
+/** A token's generated value as the browser resolves it, so the page shows themes.css rather than a copy of it. */
+function rootToken(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
 function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: boolean; empty: boolean; grouped: boolean; pinned: boolean; locked: boolean }) {
@@ -269,21 +293,62 @@ export function DesignSystemPage() {
                 ))}
               </div>
               <p className="text-muted-foreground">{m.ds_row_height()}</p>
+            </div>
+          </div>
+        </Section>
+
+        <Section title={m.ds_layers_title()}>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Section title={m.ds_elevation_caption()} level={3}>
+              <ul className="grid grid-cols-2 gap-4 rounded-lg bg-muted p-4 lg:grid-cols-4">
+                {elevationScale(m).map(([token, cls, use]) => (
+                  <li key={token} className="space-y-2 text-xs">
+                    <div className={`h-12 rounded-lg bg-popover ${cls}`} aria-hidden="true" />
+                    <span className="block font-mono">{token}</span>
+                    <span className="block text-muted-foreground">{use}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+            <Section title={m.ds_z_caption()} level={3}>
               <table className="w-full text-xs">
-                <caption className="sr-only">{m.ds_z_caption()}</caption>
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th scope="col" className="py-1 pr-3 font-normal">
+                      {m.ds_token_column()}
+                    </th>
+                    <th scope="col" className="py-1 pr-3 text-right font-normal">
+                      {m.ds_value_column()}
+                    </th>
+                    <th scope="col" className="py-1 font-normal">
+                      {m.ds_use_column()}
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {zScale(m).map(([z, use]) => (
-                    <tr key={z} className="border-b last:border-0">
+                  {zScale(m).map(([token, use]) => (
+                    <tr key={token} className="border-b last:border-0">
                       <th scope="row" className="py-1 pr-3 text-left font-mono font-normal whitespace-nowrap">
-                        {z}
+                        {token}
                       </th>
+                      <td className="py-1 pr-3 text-right tabular-nums">{rootToken(token)}</td>
                       <td className="py-1 text-muted-foreground">{use}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Section>
           </div>
+          <Section title={m.ds_dialog_caption()} level={3}>
+            <ul className="space-y-3 text-xs">
+              {dialogWidths(m).map(([token, cls, use]) => (
+                <li key={token} className="space-y-1">
+                  <div className={`h-6 w-full rounded-md border bg-muted ${cls}`} aria-hidden="true" />
+                  <span className="font-mono">{token}</span> <span className="tabular-nums">{rootToken(token)}</span> <span className="text-muted-foreground">{use}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
         </Section>
 
         <Section title={m.ds_buttons_title()} description={m.ds_buttons_description()}>

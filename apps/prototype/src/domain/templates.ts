@@ -1,11 +1,13 @@
 /**
- * Goal templates (D-W30, D-W47, PRJ-FR-12) and naming templates (D-W20,
- * STO-IMP-FR-07): the built-in values, the token values every consumer
- * builds the same way, and the pure template resolution that New Project,
- * Import, Archive, review names and Settings share. Nothing here writes state.
+ * Goal templates (D-W30, D-W47, PRJ-FR-12), the goal unit rule (C7) and
+ * naming templates (D-W20, STO-IMP-FR-07): the built-in values, the token
+ * values every consumer builds the same way, and the pure template resolution
+ * that New Project, Import, Archive, review names and Settings share. Nothing
+ * here writes state.
  */
 import { m, type MessageRef, msg } from "@/lib/i18n"
 import { nightOf } from "./indexing"
+import type { FrameTotals } from "./library"
 import type { FrameHeader, GoalChannel, GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken, QualityBar } from "./types"
 
 const H = 3600
@@ -17,11 +19,11 @@ function hours(channels: GoalChannel[], h: number, qualityBar: QualityBar | null
 
 /**
  * Built-in goal templates and their values (D-W47). Never filtered by rig
- * (D-W30). Each value holds the goal kinds a Goal does: integration time,
- * frame count and a quality bar. OSC templates use the derived channels
- * "OSC" and "Dual-band", as `goalChannel` in derive.ts reads them. HOO, SHO
- * and LRGB are palette names; the OSC names are words, so they are getters
- * read in the current language.
+ * (D-W30). Each value holds what a Goal does: one amount, time or frames
+ * (C7, `goalAmount`), and a quality bar. OSC templates use the derived
+ * channels "OSC" and "Dual-band", as `goalChannel` in derive.ts reads them.
+ * HOO, SHO and LRGB are palette names; the OSC names are words, so they are
+ * getters read in the current language.
  */
 export const BUILT_IN_GOAL_TEMPLATES: GoalTemplate[] = [
   { id: "gtpl_hoo", name: "HOO", source: "built-in", values: hours(["Ha", "OIII"], 10) },
@@ -44,6 +46,73 @@ export const BUILT_IN_GOAL_TEMPLATES: GoalTemplate[] = [
     values: hours(["Dual-band"], 15),
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Goal unit (C7): each goal counts time or frames, never both
+// ---------------------------------------------------------------------------
+
+/** What a goal counts: integration time or frames, one per goal (C7). */
+export type GoalUnit = "time" | "frames"
+
+/** A goal's one amount: seconds of integration, or a frame count. */
+export type GoalAmount = { unit: "time"; seconds: number } | { unit: "frames"; frames: number }
+
+type GoalFields = Pick<GoalTemplateValue, "integrationS" | "frameCount">
+
+/**
+ * The one amount a goal or template value holds, or null without one. A
+ * goal stored before C7 may hold both fields: it reads as time, the unit its
+ * progress always showed, so no goal needs two amounts to be met.
+ */
+export function goalAmount(goal: GoalFields): GoalAmount | null {
+  if (goal.integrationS !== null) return { unit: "time", seconds: goal.integrationS }
+  if (goal.frameCount !== null) return { unit: "frames", frames: goal.frameCount }
+  return null
+}
+
+/** The stored fields of an amount, at most one set: what a goal editor writes when the unit or the value changes. */
+export function goalFields(amount: GoalAmount | null): GoalFields {
+  if (!amount) return { integrationS: null, frameCount: null }
+  return amount.unit === "time" ? { integrationS: amount.seconds, frameCount: null } : { integrationS: null, frameCount: amount.frames }
+}
+
+/** One goal's progress in a single unit (`goalMeasure`): seconds for time, a count for frames. */
+export interface GoalMeasure {
+  amount: GoalAmount | null
+  /** The unit every number below counts in: the amount's, else frames (as each surface counts a goal without an amount). */
+  unit: GoalUnit
+  inProject: number
+  captured: number
+  /** The amount; null without one. */
+  target: number | null
+  /** Still needed in project, never below zero; null without an amount. */
+  remaining: number | null
+  /** "In project" reaches the amount; a goal without an amount is never met. */
+  met: boolean
+}
+
+/**
+ * One goal's progress from its "in project" and "captured" totals, both
+ * counted in the goal's one unit (C7), so the met test, what remains and the
+ * progress line always agree. The totals themselves come from
+ * `goalProgress` (derive.ts), which applies the quality bar.
+ */
+export function goalMeasure(goal: GoalFields, inProject: FrameTotals, captured: FrameTotals): GoalMeasure {
+  const amount = goalAmount(goal)
+  const unit: GoalUnit = amount?.unit ?? "frames"
+  const count = (totals: FrameTotals) => (unit === "time" ? totals.seconds : totals.frames)
+  const target = amount === null ? null : amount.unit === "time" ? amount.seconds : amount.frames
+  const done = count(inProject)
+  return {
+    amount,
+    unit,
+    inProject: done,
+    captured: count(captured),
+    target,
+    remaining: target === null ? null : Math.max(0, target - done),
+    met: target !== null && done >= target,
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Naming templates

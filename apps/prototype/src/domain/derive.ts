@@ -26,7 +26,7 @@ import {
 import { memberSessions, runSummary, sessionExposureS, sessionRef } from "./membership"
 import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight } from "./planning"
 import { angularSeparationDeg, type FieldOfView, fieldOfView } from "./sky"
-import { type NamingValues, namingValues } from "./templates"
+import { goalMeasure, type GoalMeasure, type NamingValues, namingValues } from "./templates"
 import type {
   AppSettings,
   Asset,
@@ -545,7 +545,12 @@ export interface GoalProgress {
   /** Members the goal's quality bar cannot judge (no applicable measurement); they do not count (PRJ-FR-03). */
   unknownQuality: number
   met: boolean
-  /** Integration still needed in project; null without an integration goal. */
+  /** The goal's one unit, its amount and what remains, in that unit (C7, `goalMeasure` in templates.ts). */
+  measure: GoalMeasure
+  /**
+   * Integration still needed in project; null without an integration goal.
+   * @deprecated Use `measure.remaining`, counted in `measure.unit`, so frame goals have one too (C7); W3 pages migrate.
+   */
   remainingS: number | null
   /** "Ha 6h10 in project · 9h15 captured · goal 10h" ("in project" never above "captured", PRJ-FR-21). */
   line: MessageRef
@@ -619,22 +624,20 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
     }
     const inProject = total(inProjectIds)
     const captured = total(capturedIds)
-    const hasGoal = goal.integrationS !== null || goal.frameCount !== null
-    const met = hasGoal && (goal.integrationS === null || inProject.seconds >= goal.integrationS) && (goal.frameCount === null || inProject.frames >= goal.frameCount)
-    const hours = goal.integrationS !== null ? verbatim(formatHours(goal.integrationS)) : null
-    const frames = goal.frameCount !== null ? framesRef(goal.frameCount) : null
-    const target = hours && frames ? msg("domain_goal_target_both", { hours, frames }) : (hours ?? frames)
-    const amount = (t: FrameTotals) => (goal.integrationS !== null ? verbatim(formatHours(t.seconds)) : framesRef(t.frames))
-    const amounts = target
-      ? msg("domain_goal_amounts", { inProject: amount(inProject), captured: amount(captured), target })
-      : msg("domain_goal_amounts_no_target", { inProject: amount(inProject), captured: amount(captured) })
+    const measure = goalMeasure(goal, inProject, captured)
+    const amount = (n: number) => (measure.unit === "time" ? verbatim(formatHours(n)) : framesRef(n))
+    const amounts =
+      measure.target !== null
+        ? msg("domain_goal_amounts", { inProject: amount(measure.inProject), captured: amount(measure.captured), target: amount(measure.target) })
+        : msg("domain_goal_amounts_no_target", { inProject: amount(measure.inProject), captured: amount(measure.captured) })
     return {
       goal,
       inProject,
       captured,
       unknownQuality,
-      met,
-      remainingS: goal.integrationS === null ? null : Math.max(0, goal.integrationS - inProject.seconds),
+      met: measure.met,
+      measure,
+      remainingS: measure.unit === "time" ? measure.remaining : null,
       line: msg("domain_goal_line", { channel: goal.channel, amounts }),
       amounts,
     }

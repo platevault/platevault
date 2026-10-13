@@ -27,8 +27,8 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { activityTitle, isSettled } from "@/store/operations"
 
-/** Cells grow from the density row height so a two-line entry stays readable. */
-const DENSITY_CELL = "py-[max(0.25rem,calc((var(--row-h)-1.25rem)/2))]"
+/** Cells grow from the row height so a two-line entry stays readable. */
+const ROW_CELL = "py-[max(0.25rem,calc((var(--row-h)-1.25rem)/2))]"
 /** The action cell holds 1.75rem buttons, so its padding makes the row exactly `--row-h`. */
 const ACTION_CELL = "py-[max(0px,calc((var(--row-h)-1.75rem)/2))]"
 
@@ -117,7 +117,7 @@ function Detail({ event }: { event: ActivityEvent }) {
   // A refusal records its reasons as one list joined by "; ": list each one.
   if (event.kind === "refusal" && "list" in event.detail && event.detail.list.length > 1) {
     return (
-      <ul className="list-disc pl-4 text-xs text-pretty text-muted-foreground compact:min-w-0 compact:truncate">
+      <ul className="list-disc pl-4 text-xs text-pretty text-muted-foreground">
         {event.detail.list.map((ref, i) => (
           <li key={i}>{say(m, ref)}</li>
         ))}
@@ -126,11 +126,11 @@ function Detail({ event }: { event: ActivityEvent }) {
   }
   const detail = say(m, event.detail)
   return (
-    <p className="text-xs text-pretty text-muted-foreground compact:min-w-0 compact:truncate" title={detail}>
+    <p className="text-xs text-pretty text-muted-foreground" title={detail}>
       {/* Paths in the mono face; split() puts each captured path at an odd index. */}
       {detail.split(PATH).map((part, i) =>
         i % 2 === 1 ? (
-          <span key={i} className="font-mono break-all compact:break-normal">
+          <span key={i} className="font-mono break-all">
             {part}
           </span>
         ) : (
@@ -148,19 +148,17 @@ function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEven
   return (
     <Fragment>
       <tr {...menuKey(event.id)} className="h-(--row-h) border-b align-top last:border-0">
-        <td className={cn("px-3 whitespace-nowrap", DENSITY_CELL)}>
+        <td className={cn("px-3 whitespace-nowrap", ROW_CELL)}>
           <time dateTime={event.at} className="text-xs text-muted-foreground tabular-nums">
             {formatDateTime(event.at)}
           </time>
         </td>
-        <td className={cn("px-3 whitespace-nowrap", DENSITY_CELL)}>
+        <td className={cn("px-3 whitespace-nowrap", ROW_CELL)}>
           <Outcome event={event} operation={operation} />
         </td>
-        <th scope="row" className={cn("min-w-40 px-3 text-left font-normal compact:w-full compact:max-w-0", DENSITY_CELL)}>
-          <div className="compact:flex compact:min-w-0 compact:items-baseline compact:gap-2">
-            <div className="font-medium text-pretty compact:shrink-0 compact:whitespace-nowrap">{title}</div>
-            <Detail event={event} />
-          </div>
+        <th scope="row" className={cn("min-w-40 px-3 text-left font-normal", ROW_CELL)}>
+          <div className="font-medium text-pretty">{title}</div>
+          <Detail event={event} />
         </th>
         <td className={cn("px-3", ACTION_CELL)}>
           <div className="flex justify-end gap-1">

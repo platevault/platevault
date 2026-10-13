@@ -190,17 +190,12 @@ export function useAction({ focusAfterConfirm }: UseActionOptions = {}): ActionR
   const feedback = failure ? refusal ? <Refusal {...refusal} /> : <ActionError message={failure.result.message} onRetry={() => run(failure.action)} /> : null
 
   const spec = confirming?.action.confirm
-  // Interim mapping onto today's ConfirmDialog; U5's ConfirmDialog takes the ConfirmSpec as it is (P8).
   const dialog =
     confirming && spec ? (
       <ConfirmDialog
+        {...spec}
         open={confirming.open}
         onOpenChange={(open) => setConfirming({ action: confirming.action, open })}
-        title={spec.title}
-        description={spec.summary ?? null}
-        changes={(spec.groups ?? []).map((group) => m.actions_confirm_group({ label: group.label, count: group.rows.length }))}
-        confirmLabel={spec.confirm.label}
-        tone={spec.confirm.kind === "destructive" ? "destructive" : "default"}
         onConfirm={() => confirmRun(confirming.action)}
         focusAfterConfirm={focusAfterConfirm}
       />

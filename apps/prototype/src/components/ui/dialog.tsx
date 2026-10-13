@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button"
 import { useCloseUnmountFallback } from "@/components/ui/use-close-unmount-fallback"
 import { XIcon } from "lucide-react"
 
+/**
+ * Dialog widths (plan §3.1 `dialog.w-sm|md|lg`): 24rem for short forms, 32rem
+ * for confirms and most forms, 42rem for file lists and tables. Below `sm` a
+ * dialog takes the viewport less its margin. U1's tokens give the same widths
+ * as `max-w-dialog-*`; once they land, this map is the one place to switch.
+ */
+const DIALOG_WIDTH = { sm: "sm:max-w-sm", md: "sm:max-w-lg", lg: "sm:max-w-2xl" } as const
+
+type DialogSize = keyof typeof DIALOG_WIDTH
+
 /** Unmounts on close even when a background tab pauses the exit animation (see useCloseUnmountFallback). */
 function Dialog({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef, ...props }: DialogPrimitive.Root.Props) {
   const closeProps = useCloseUnmountFallback({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef })
@@ -45,9 +55,12 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "sm",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /** The width from DIALOG_WIDTH; default `sm`. */
+  size?: DialogSize
 }) {
   const m = useMessages()
   return (
@@ -60,7 +73,8 @@ function DialogContent({
         className={cn(
           // Never taller than the viewport inside its safe area: a tall dialog scrolls inside itself and its footer stays reachable.
           // scroll-padding keeps a focused control from being scrolled under the sticky footer (WCAG 2.4.11).
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-data-[slot=dialog-footer]:scroll-pb-20 sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-data-[slot=dialog-footer]:scroll-pb-20 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          DIALOG_WIDTH[size],
           className
         )}
         {...props}
@@ -97,12 +111,19 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/**
+ * The footer's layout: sticky, flush and filled. It decides no button order.
+ * Dialogs render the L2 `DialogFooter` (components/app/form-dialog.tsx),
+ * which puts Cancel first and the action last on every OS (C1); W3 moves the
+ * feature footers to it, after which only the L2 footer renders this one.
+ */
 function DialogFooter({
   className,
   showCloseButton = false,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
+  /** @deprecated Close would come after the action (C1). Render the L2 `DialogFooter`, whose Cancel comes first. W4 removes this prop. */
   showCloseButton?: boolean
 }) {
   const m = useMessages()
@@ -158,6 +179,8 @@ function DialogDescription({
 }
 
 export {
+  DIALOG_WIDTH,
+  type DialogSize,
   Dialog,
   DialogClose,
   DialogContent,
