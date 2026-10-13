@@ -8647,5 +8647,13 @@
   "catalogue_templates_step_shift": "Layout shift on the last step change: {px} px",
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
-  "catalogue_templates_rescan_on_open": "Rescan when the app opens"
+  "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "catalogue_fields_notes_sample": "Imaged from the back garden; flats at dusk.",
+  "catalogue_fields_notes_error": "Notes over 500 characters",
+  "catalogue_fields_group_caption": "Two goals with a Remove action named after each group · a hours-or-frames error · disabled.",
+  "goal_channel_goal": "{channel} goal",
+  "goal_hours_or_frames": "Enter hours or frames",
+  "catalogue_fields_cell_kind": "Kind",
+  "catalogue_fields_cell_kind_of": "Kind of {name}",
+  "catalogue_fields_cell_caption": "Cell mode (hideLabel): the label names the control for screen readers only; the row keeps its height."
 }

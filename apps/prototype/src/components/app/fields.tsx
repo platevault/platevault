@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { KeyValueList, PathText } from "./data"
@@ -54,11 +55,19 @@ export interface FieldProps {
   className?: string
   /** Shown after the description and error, inside the field: a preview or a reference table. */
   after?: ReactNode
+  /**
+   * Cell mode, for a control inside a DataTable row: the label stays the
+   * control's accessible name but is visually hidden, no description or error
+   * line shows (an error stays `aria-invalid`), and the control takes the
+   * in-row height, so the row keeps its height. Ignored in a SettingsSection,
+   * whose row labels the control.
+   */
+  hideLabel?: boolean
   children: (control: FieldControlProps) => ReactNode
 }
 
 /** The props every concrete field shares with Field. */
-type FieldChrome = Pick<FieldProps, "label" | "description" | "error" | "required" | "id" | "className">
+type FieldChrome = Pick<FieldProps, "label" | "description" | "error" | "required" | "id" | "className" | "hideLabel">
 
 const joinIds = (...ids: Array<string | undefined>) => ids.filter(Boolean).join(" ") || undefined
 
@@ -82,11 +91,11 @@ function FieldErrors({ id, errors }: { id: string; errors: readonly string[] }) 
   )
 }
 
-export function Field({ label, description, error, required, id, className, after, children }: FieldProps) {
+export function Field({ label, description, error, required, id, className, after, hideLabel = false, children }: FieldProps) {
   const inRow = useInSettingsSection()
   const autoId = useId()
   const errors = toErrors(error)
-  const control = (controlId: string, labelId: string, descriptionId: string | undefined, errorId: string): FieldControlProps => ({
+  const control = (controlId: string, labelId: string, descriptionId: string | undefined, errorId: string | undefined): FieldControlProps => ({
     id: controlId,
     "aria-labelledby": labelId,
     "aria-describedby": joinIds(descriptionId, errors.length > 0 ? errorId : undefined),
@@ -113,6 +122,17 @@ export function Field({ label, description, error, required, id, className, afte
   const labelId = `${base}-label`
   const descriptionId = description ? `${base}-description` : undefined
   const errorId = `${base}-error`
+  if (hideLabel) {
+    // The in-row control height stands in for the input height inside the cell.
+    return (
+      <div className={cn("grid min-w-0 [--control-h-md:var(--control-h-sm)]", className)} data-invalid={errors.length > 0 ? true : undefined}>
+        <Label id={labelId} htmlFor={base} className="sr-only">
+          {label}
+        </Label>
+        {children(control(base, labelId, undefined, undefined))}
+      </div>
+    )
+  }
   return (
     <div className={cn("grid min-w-0 content-start gap-1.5", className)} data-invalid={errors.length > 0 ? true : undefined}>
       <Label id={labelId} htmlFor={base} className="leading-snug">
@@ -183,6 +203,50 @@ export function TextField({ value, onChange, placeholder, inputMode, mono, autoF
         )
       }}
     </Field>
+  )
+}
+
+export interface TextAreaFieldProps extends FieldChrome {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  /** Visible lines; default 3. */
+  rows?: number
+  autoFocus?: boolean
+  readOnly?: boolean
+  disabled?: boolean
+}
+
+/** Free text over several lines (a Project's notes): the TextField chrome around a text area. */
+export function TextAreaField({ value, onChange, placeholder, rows = 3, autoFocus, readOnly, disabled, ...chrome }: TextAreaFieldProps) {
+  return (
+    <Field {...chrome}>
+      {(control) => (
+        <Textarea {...control} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} rows={rows} autoFocus={autoFocus} readOnly={readOnly} disabled={disabled} />
+      )}
+    </Field>
+  )
+}
+
+export interface FieldGroupProps {
+  /** Names the group, as its legend: "Ha goal". */
+  label: string
+  /** One control that ends the line, such as a Remove IconButton; its name includes the group's ("Remove Ha goal"), so each group's is unique. */
+  action?: ReactNode
+  /** A few short fields (NumberField, SelectField) that sit side by side and wrap. */
+  children: ReactNode
+}
+
+/** A few short fields that belong together, named as one group: a fieldset whose legend is the label. Groups that follow each other keep a gap. Not inside a SettingsSection, where every field is its own row. */
+export function FieldGroup({ label, action, children }: FieldGroupProps) {
+  return (
+    <fieldset className="min-w-0 space-y-1.5 [fieldset+&]:mt-3">
+      <legend className="text-sm font-medium">{label}</legend>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="contents *:w-32">{children}</div>
+        {action ? <div className="ml-auto">{action}</div> : null}
+      </div>
+    </fieldset>
   )
 }
 
