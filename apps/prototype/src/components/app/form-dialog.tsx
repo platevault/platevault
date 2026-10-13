@@ -318,9 +318,10 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
     ;[...popup.querySelectorAll<HTMLElement>("[data-slot=dialog-footer] button")].at(-1)?.focus()
   }, [actionsKey])
 
+  /** Enter in a field. A destructive action has no submit button, so only implicit submission reaches here: it never runs (HIG). */
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !confirm || confirm.unavailable) return
+    if (busy || !confirm || confirm.unavailable || confirm.kind === "destructive") return
     commit(confirm.run, closeOnConfirm)
   }
 
