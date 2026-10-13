@@ -1,28 +1,30 @@
 /**
  * Review preferences (slice D), kept across sessions in localStorage: auto-
  * advance (on by default, D-W53), the display-name preset (D-W15), the
- * visible columns (PIX-FR-16) and the table's last dragged height (D-W22,
- * PIX-FR-10). Per-review state (filter, sort, selection, view) is component
- * state, so a selection never survives a restart.
+ * visible columns (PIX-FR-16), the list's last set height in rows (D-W22,
+ * PIX-FR-10) and whether the docked inspector shows. Per-review state
+ * (filter, sort, selection, view) is component state, so a selection never
+ * survives a restart.
  */
 import { useSyncExternalStore } from "react"
+import type { WorkspaceListHeight } from "@/components/templates/workspace"
 
-export type TableHeight = "full" | "rows" | "strip"
+export type TableHeight = WorkspaceListHeight
 
 export interface ReviewPrefs {
   autoAdvance: boolean
   namePreset: string
   columns: string[]
-  /** Height of the "about 8 rows" state, in px, after the last drag. */
+  /** Height of the list in `rows`, in px, after the last resize. */
   rowsHeightPx: number
   inspectorOpen: boolean
 }
 
-export const DEFAULT_COLUMNS = ["frame", "panel", "subject", "session", "quality", "member", "fwhm", "hfr", "eccentricity", "star-count", "background"]
+export const DEFAULT_COLUMNS = ["frame", "time", "quality", "fwhm", "hfr", "eccentricity", "star-count", "background"]
 /** About 8 rows of 26 px plus the header row. */
-export const ROWS_DEFAULT_PX = 9 * 26 + 2
+export const ROWS_DEFAULT_PX = 9 * 26
 
-const KEY = "platevault.review.v1"
+const KEY = "platevault.review.v2"
 const DEFAULTS: ReviewPrefs = { autoAdvance: true, namePreset: "file", columns: DEFAULT_COLUMNS, rowsHeightPx: ROWS_DEFAULT_PX, inspectorOpen: true }
 
 function read(): ReviewPrefs {

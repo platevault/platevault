@@ -1,19 +1,23 @@
 /**
  * Plate (L2-domain, plan §3.3): one frame on its mount (HARNESS-V4
  * Direction B), at Fit, 1:1 or 2:1, with pan by drag or arrow keys and an
- * optional star overlay. A copy of `d-review/preview.tsx` Plate, which stays
- * until W4. It takes the raster as data (`PlateImage`), so the plate knows
- * nothing about how pixels are made, and the host owns the view, so two
- * plates (Compare) can follow one zoom and centre.
+ * optional star overlay. It takes the raster as data (`PlateImage`), so the
+ * plate knows nothing about how pixels are made, and the host owns the view,
+ * so two plates (Compare) can follow one zoom and centre.
  *
  * Zoom on the plate itself (user item 49): the mouse wheel steps the zoom
  * at the pointer, a click at Fit zooms to 1:1 at the clicked point, and
  * + and − step it from the keyboard. The controls for zoom and stretch come
  * from the host (a DisplayMenu or a toggle group), never from the plate.
+ *
+ * Cursor readout (R9-PIXINSIGHT-STATS §3c): `onReadout` reports the source
+ * pixel under the pointer while it hovers, and null when it leaves; the host
+ * reads the linear value there and shows it in its caption.
  */
-import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef } from "react"
 import { useMessages } from "@/app/preferences"
 import { m } from "@/lib/i18n"
+import { useSize } from "@/lib/use-size"
 import { cn } from "@/lib/utils"
 
 export type Zoom = "fit" | "1" | "2"
@@ -113,20 +117,6 @@ export function zoomStep(zoom: Zoom, direction: 1 | -1): Zoom {
   return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, index))]!
 }
 
-/** Content-box size of an element, following resizes. */
-function useSize<T extends HTMLElement>() {
-  const ref = useRef<T>(null)
-  const [size, setSize] = useState({ width: 0, height: 0 })
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const observer = new ResizeObserver(([entry]) => setSize({ width: Math.floor(entry!.contentRect.width), height: Math.floor(entry!.contentRect.height) }))
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-  return [ref, size] as const
-}
-
 function Raster({ image, window, stretch }: { image: PlateImage; window: ViewWindow; stretch: Stretch }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const { x0, y0, scale, width, height } = window
@@ -154,10 +144,12 @@ export interface PlateProps<S extends PlateStar> {
   describedBy?: string
   /** Reports the region shown, for the histogram. */
   onWindow?: (window: ViewWindow) => void
+  /** The whole source pixel under the pointer while it hovers the plate; null when it leaves. */
+  onReadout?: (point: { x: number; y: number } | null) => void
 }
 
 /** One plate. The ring of the chosen star is drawn in the primary colour. */
-export function Plate<S extends PlateStar>({ image, view, onView, label, stars, starId = null, onStar, className, describedBy, onWindow }: PlateProps<S>) {
+export function Plate<S extends PlateStar>({ image, view, onView, label, stars, starId = null, onStar, className, describedBy, onWindow, onReadout }: PlateProps<S>) {
   const msgs = useMessages()
   const [mountRef, size] = useSize<HTMLDivElement>()
   const plateRef = useRef<HTMLDivElement>(null)
@@ -223,6 +215,10 @@ export function Plate<S extends PlateStar>({ image, view, onView, label, stars, 
     if (view.zoom !== "fit") event.currentTarget.setPointerCapture(event.pointerId)
   }
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (onReadout) {
+      const at = sourceAt(event.clientX, event.clientY)
+      onReadout({ x: Math.min(image.width - 1, Math.floor(at.x)), y: Math.min(image.height - 1, Math.floor(at.y)) })
+    }
     const start = press.current
     if (!start) return
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP) start.moved = true
@@ -256,6 +252,7 @@ export function Plate<S extends PlateStar>({ image, view, onView, label, stars, 
           onPointerCancel={() => {
             press.current = null
           }}
+          onPointerLeave={() => onReadout?.(null)}
           className={cn(
             "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[2px] bg-plate shadow-[0_0_0_1px_oklch(0_0_0/0.35)] outline-none select-none focus-visible:ring-2 focus-visible:ring-ring",
             view.zoom === "fit" ? "cursor-zoom-in" : "cursor-grab active:cursor-grabbing",

@@ -396,13 +396,22 @@ export interface Histogram {
   saturated: number
   invalid: number
   samples: number
+  /** Faintest sampled value in ADU; null when no sample is valid. */
+  min: number | null
+  /** Brightest value in ADU: the brighter of the sampled grid and the star peaks inside the region, so a star core the grid misses still counts. Null when no sample is valid. */
+  max: number | null
+  /** Source pixels in the region the samples were drawn from. */
+  total: number
 }
 
 /**
  * Histogram of the displayed region's linear data (PIX-FR-03), sampled on a
  * grid of at most 160 × 120 source pixels. The range runs from 0 to the
  * median plus 24 MAD so the sky background has room; brighter samples count
- * in the last bin. Display stretch never reaches it.
+ * in the last bin. MAD is unscaled (PCL `MAD()`), not ×1.4826. Min comes from
+ * the grid; Max also takes each star's peak in the region from the model, so
+ * a hot core between grid points is not missed (R9-PIXINSIGHT-STATS §3a).
+ * Display stretch never reaches it.
  */
 export function linearHistogram(field: StarField, window: ViewWindow, binCount = 96): Histogram {
   const values: number[] = []
@@ -410,10 +419,14 @@ export function linearHistogram(field: StarField, window: ViewWindow, binCount =
   let invalid = 0
   const w = window.width * window.scale
   const h = window.height * window.scale
+  const left = Math.max(0, window.x0)
+  const top = Math.max(0, window.y0)
+  const right = Math.min(field.width, window.x0 + w)
+  const bottom = Math.min(field.height, window.y0 + h)
   const stepX = Math.max(1, w / 160)
   const stepY = Math.max(1, h / 120)
-  for (let y = Math.max(0, window.y0); y < Math.min(field.height, window.y0 + h); y += stepY) {
-    for (let x = Math.max(0, window.x0); x < Math.min(field.width, window.x0 + w); x += stepX) {
+  for (let y = top; y < bottom; y += stepY) {
+    for (let x = left; x < right; x += stepX) {
       const v = sampleAt(field, Math.floor(x), Math.floor(y))
       if (Number.isNaN(v)) invalid += 1
       else {
@@ -433,5 +446,12 @@ export function linearHistogram(field: StarField, window: ViewWindow, binCount =
     if (v > rangeMax) above += 1
     bins[Math.min(binCount - 1, Math.floor((Math.max(0, v) / rangeMax) * binCount))]! += 1
   }
-  return { bins, rangeMax, median, mad, above, saturated, invalid, samples: values.length }
+  let max = sorted.at(-1) ?? null
+  if (max !== null) {
+    for (const star of field.stars) {
+      if (star.x >= left && star.x < right && star.y >= top && star.y < bottom) max = Math.max(max, Math.min(ADU_MAX, star.peak + field.background))
+    }
+  }
+  const total = Math.max(0, Math.ceil(right - left)) * Math.max(0, Math.ceil(bottom - top))
+  return { bins, rangeMax, median, mad, above, saturated, invalid, samples: values.length, min: sorted[0] ?? null, max, total }
 }

@@ -1,23 +1,17 @@
 /**
- * Frame-review writes kept from v4 for slice D: imported measurements
- * (PIX-FR-06, PIX-FR-07) and the frame-review UI state in slice D. Quality
- * marks (P/X/U, Reject for this Project only) are the shared actions in
- * `src/store/actions/library.ts`.
+ * Review writes of slice D: imported measurements (PIX-FR-06, PIX-FR-07)
+ * and the frame-review UI state. Quality marks (P/X/U) are the shared
+ * library action in `src/store/actions/library.ts`. Each write records the
+ * review it came from (`href`), so its activity entry links back there.
  */
-import { runHref } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"
-import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow, RunId } from "@/domain/types"
+import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { m, msg } from "@/lib/i18n"
+import { historyEntry } from "@/store/actions/measure"
 import { type CommitResult, commit, nowIso, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { defaultFrameUi, type FrameUi } from "@/store/slices/d"
 import { attaches, type CsvRow, importedMetrics, type MappedRow, observeFrame } from "./csv"
-import { historyEntry } from "./measure"
-
-function reviewHref(runId: RunId): string {
-  const run = store.getState().catalog.runs[runId]
-  return run ? runHref(run, "review") : "/projects"
-}
 
 /**
  * Add imported metrics next to built-in ones; an earlier import of the same metric is replaced, a built-in value never.
@@ -35,7 +29,8 @@ function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "ind
   return { assetId, state: "unavailable", inputSha256: sha256, metrics, computedAt: nowIso(), history: [...(earlier ? [earlier] : []), ...(record?.history ?? [])] }
 }
 
-export function importMeasurements(runId: RunId, path: string, mapped: MappedRow[], runAssetIds: Set<AssetId>): CommitResult {
+/** Records an import for the review `key` (`session:<id>`): matched values attach, the rest wait for the user. */
+export function importMeasurements(key: string, href: string, path: string, mapped: MappedRow[], reviewAssetIds: ReadonlySet<AssetId>): CommitResult {
   const attach = mapped.filter(attaches)
   const rows: MeasurementImportRow[] = mapped
     .filter((m) => !attaches(m))
@@ -43,14 +38,13 @@ export function importMeasurements(runId: RunId, path: string, mapped: MappedRow
   const changed = rows.filter((r) => r.status === "content-changed" || r.status === "unreadable").length
   const record: MeasurementImport = {
     id: `imp_${stableHash(`${path}|${nowIso()}`)}`,
-    runId,
+    runId: key,
     path,
     importedAt: nowIso(),
     matched: attach.length,
-    outsideRun: attach.filter((m) => !runAssetIds.has(m.assetId!)).length,
+    outsideRun: attach.filter((m) => !reviewAssetIds.has(m.assetId!)).length,
     rows,
   }
-  const href = reviewHref(runId)
   // Matched values and the rows left to review are one durable write.
   const result = commit(
     msg("importdlg_title"),
@@ -76,7 +70,7 @@ export function importMeasurements(runId: RunId, path: string, mapped: MappedRow
 }
 
 /** Attach an ambiguous row to the frame the user chose, only while that frame's bytes still equal its recorded basis. */
-export function resolveImportRow(importId: string, rowIndex: number, assetId: AssetId): CommitResult {
+export function resolveImportRow(importId: string, rowIndex: number, assetId: AssetId, href: string): CommitResult {
   const { catalog, disk } = store.getState()
   const record = catalog.measurementImports[importId]
   const row = record?.rows.find((r) => r.index === rowIndex)
@@ -94,11 +88,11 @@ export function resolveImportRow(importId: string, rowIndex: number, assetId: As
         measurements: { ...c.measurements, [assetId]: withImported(c, assetId, row, record.path, seen.observedSha256!) },
         measurementImports: { ...c.measurementImports, [importId]: { ...record, rows } },
       })),
-    { href: reviewHref(record.runId) },
+    { href },
   )
 }
 
-/** Frame-review UI state for one run (slice D); not a durable catalog write. */
-export function setFrameUi(runId: RunId, patch: Partial<FrameUi>) {
-  updateSlice("d", (slice) => ({ ...slice, frames: { ...slice.frames, [runId]: { ...(slice.frames[runId] ?? defaultFrameUi()), ...patch } } }))
+/** Frame-review UI state for one review key (slice D); not a durable catalog write. */
+export function setFrameUi(key: string, patch: Partial<FrameUi>) {
+  updateSlice("d", (slice) => ({ ...slice, frames: { ...slice.frames, [key]: { ...(slice.frames[key] ?? defaultFrameUi()), ...patch } } }))
 }

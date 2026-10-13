@@ -1,6 +1,6 @@
 /**
  * Thumbnails for the filmstrip and the grid (D-W40, PIX-FR-12): decoded by
- * the same synthetic decoder as the preview (`starField` + `renderWindow`)
+ * the same synthetic decoder as the plate (`starField` + `renderWindow`)
  * with the Auto display stretch, and cached by the SHA-256 of the bytes they
  * were decoded from. A frame whose bytes change gets a new key, so it is
  * decoded again; a frame not yet decoded reads Pending. Decoding is
@@ -8,8 +8,8 @@
  */
 import { useEffect, useSyncExternalStore } from "react"
 import type { AssetId, DiskFile } from "@/domain/types"
-import { frameField, renderWindow } from "@/features/t3/raster"
 import { m } from "@/lib/i18n"
+import { frameField, renderWindow } from "./raster"
 
 export const THUMB_W = 160
 
