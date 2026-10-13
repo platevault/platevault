@@ -291,6 +291,10 @@ pub fn build_app() -> tauri::App {
     }
 
     tb
+        // The native menu is installed in `boot`, once the saved locale is
+        // readable (astro-plan-bw4s6). Until then macOS would show Tauri's
+        // default menu, which is English, behind the splash.
+        .enable_macos_default_menu(false)
         // Spec 051 US5 (T033): the native "Settings" menu item has no native
         // dialog of its own — emit a frontend event and let the existing
         // Settings route handle navigation, matching the reference pattern
@@ -314,15 +318,6 @@ pub fn build_app() -> tauri::App {
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
-
-            // Spec 051 US5 (T032): native application menu — App submenu
-            // (About/Settings/Quit), Window submenu, and a standard Edit
-            // submenu (copy/cut/paste/select-all/undo/redo), labelled from
-            // the message catalogue. Does not touch any existing native/React
-            // context-menu code path (T035 — none exists in this crate to
-            // touch).
-            install_native_menu(app);
-
             Ok(())
         })
         .build(instance_context())
@@ -661,6 +656,21 @@ async fn boot(
         return fatal(&app, &format!("failed to run migrations on {db_url}: {error}"));
     }
     let pool = db.pool().clone();
+
+    // Spec 051 US5 (T032): the native application menu — App submenu
+    // (About/Settings/Quit), Window submenu, and a standard Edit submenu
+    // (copy/cut/paste/select-all/undo/redo). Built here, behind the splash and
+    // before the main window, in the locale saved in the settings DB, so it
+    // never shows in English to a user who chose another language
+    // (astro-plan-bw4s6). Does not touch any existing native/React
+    // context-menu code path (T035 — none exists in this crate to touch).
+    let saved_locale = persistence_lifecycle::repositories::settings::get_raw(&pool, "locale")
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("could not read the saved locale for the native menu: {e}");
+            None
+        });
+    install_native_menu(&app, saved_locale.as_ref().and_then(serde_json::Value::as_str));
 
     // Unclean-shutdown detection (astro-plan-kyo7.48): consume the clean-shutdown
     // marker written on the previous graceful exit. Absent marker => the process

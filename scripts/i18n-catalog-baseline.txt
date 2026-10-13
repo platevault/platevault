@@ -36,3 +36,5 @@ dup-value	calibration_status_no_match,projects_calib_status_no_match
 dup-value	dev_settings_title,dev_settings_toggle_label
 dup-value	projects_cleanup_scan_btn,sessions_rawcleanup_scan_btn
 dup-value	projects_cleanup_generate_btn,sessions_rawcleanup_generate_btn
+# macOS menu bar uses title case (Apple HIG), owner-approved 2026-10-13.
+dup-value	common_select_all,menu_select_all

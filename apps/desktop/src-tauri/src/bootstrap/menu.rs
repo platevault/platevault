@@ -4,10 +4,11 @@
 //! The native application menu (spec 051 US5).
 //!
 //! Every label comes from the frontend message catalogue
-//! (`apps/desktop/messages`). The menu is built with the base locale's labels,
-//! embedded from that catalogue so the menu reads correctly before the webview
-//! loads; the frontend then calls [`native_menu_set_labels`] with the active
-//! locale's labels at startup and on every locale change.
+//! (`apps/desktop/messages`), embedded so the menu has labels before the
+//! webview loads. Start-up builds the menu behind the splash, in the locale
+//! saved in the settings DB ([`install_native_menu`]); the frontend then calls
+//! [`native_menu_set_labels`] with the active locale's labels at startup and on
+//! every locale change.
 
 use contracts_core::ContractError;
 use serde::Deserialize;
@@ -27,9 +28,49 @@ pub const MENU_ID_QUIT: &str = "menu-quit";
 /// The App submenu's title: the app name, a proper noun no locale translates.
 const APP_NAME: &str = "PlateVault";
 
-/// The base-locale catalogue, embedded so the menu has labels before the
-/// frontend can send the active locale's.
-const BASE_CATALOGUE: &str = include_str!("../../../messages/en-GB.json");
+/// A shipped locale and its embedded catalogue.
+struct ShippedLocale {
+    tag: &'static str,
+    catalogue: &'static str,
+}
+
+/// Every locale in `project.inlang/settings.json`, the base locale first.
+static SHIPPED_LOCALES: [ShippedLocale; 2] = [
+    ShippedLocale { tag: "en-GB", catalogue: include_str!("../../../messages/en-GB.json") },
+    ShippedLocale { tag: "pt-BR", catalogue: include_str!("../../../messages/pt-BR.json") },
+];
+
+/// The locale the menu starts in, resolved as the frontend's Paraglide
+/// strategy chain resolves its own (`custom-almSettings`, `preferredLanguage`,
+/// `baseLocale` — see `apps/desktop/src/data/locale.tsx`):
+/// 1. the saved locale, when it names a shipped locale exactly;
+/// 2. else the first preferred language whose full tag, then bare language,
+///    names a shipped locale case-insensitively;
+/// 3. else the base locale.
+///
+/// `preferred` is the OS language list. Start-up passes none (no OS-locale
+/// dependency yet), so a first run starts in the base locale until the
+/// frontend relabels the menu.
+fn negotiate_locale(saved: Option<&str>, preferred: &[&str]) -> &'static ShippedLocale {
+    let matching = |tag: &str| SHIPPED_LOCALES.iter().find(|l| l.tag.eq_ignore_ascii_case(tag));
+    saved
+        .and_then(|tag| SHIPPED_LOCALES.iter().find(|l| l.tag == tag))
+        .or_else(|| {
+            preferred
+                .iter()
+                .find_map(|tag| matching(tag).or_else(|| tag.split('-').next().and_then(matching)))
+        })
+        .unwrap_or(&SHIPPED_LOCALES[0])
+}
+
+/// The labels the menu starts with, given the locale saved in the settings DB.
+///
+/// # Errors
+///
+/// The matching embedded catalogue lacks a label.
+fn startup_labels(saved_locale: Option<&str>) -> Result<NativeMenuLabels, String> {
+    NativeMenuLabels::from_catalogue(negotiate_locale(saved_locale, &[]).catalogue)
+}
 
 /// Each native menu entry whose text comes from the catalogue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -121,7 +162,7 @@ struct MenuCatalogue {
     copy: String,
     #[serde(rename = "menu_paste")]
     paste: String,
-    #[serde(rename = "common_select_all")]
+    #[serde(rename = "menu_select_all")]
     select_all: String,
     #[serde(rename = "menu_window")]
     window: String,
@@ -207,8 +248,8 @@ struct NativeMenu(Vec<(MenuLabel, MenuItemKind<Wry>)>);
 /// `on_menu_event` in `build_app()`, which emits a frontend event for the
 /// existing Settings route to handle (T033: reuse existing UI, no new native
 /// dialog). Quit is handled there too (see [`MENU_ID_QUIT`]).
-fn build_native_menu(
-    app: &tauri::App<Wry>,
+fn build_native_menu<M: Manager<Wry>>(
+    app: &M,
     labels: &NativeMenuLabels,
 ) -> tauri::Result<(Menu<Wry>, NativeMenu)> {
     let about = PredefinedMenuItem::about(app, Some(&labels.about), None)?;
@@ -264,17 +305,20 @@ fn build_native_menu(
     Ok((menu, NativeMenu(entries)))
 }
 
-/// Build the native menu in the base locale, set it as the app menu, and keep
-/// its entries for [`native_menu_set_labels`]. A failure is logged and leaves
-/// the app without a native menu, as before the menu existed.
-pub fn install_native_menu(app: &tauri::App<Wry>) {
-    if let Err(e) = try_install_native_menu(app) {
+/// Build the native menu in the locale saved in the settings DB (see
+/// [`negotiate_locale`]), set it as the app menu, and keep its entries for
+/// [`native_menu_set_labels`]. Start-up calls this behind the splash, before
+/// the main window exists, so a user who chose another language never sees
+/// the menu in English. A failure is logged and leaves the app without a
+/// native menu, as before the menu existed.
+pub fn install_native_menu(app: &AppHandle<Wry>, saved_locale: Option<&str>) {
+    if let Err(e) = try_install_native_menu(app, saved_locale) {
         tracing::warn!("native application menu not installed: {e}");
     }
 }
 
-fn try_install_native_menu(app: &tauri::App<Wry>) -> Result<(), String> {
-    let labels = NativeMenuLabels::from_catalogue(BASE_CATALOGUE)?;
+fn try_install_native_menu(app: &AppHandle<Wry>, saved_locale: Option<&str>) -> Result<(), String> {
+    let labels = startup_labels(saved_locale)?;
     let (menu, entries) =
         build_native_menu(app, &labels).map_err(|e| format!("failed to build it: {e}"))?;
     app.set_menu(menu).map_err(|e| format!("failed to set it: {e}"))?;
@@ -309,7 +353,9 @@ mod tests {
 
     use super::*;
 
-    const PT_BR_CATALOGUE: &str = include_str!("../../../messages/pt-BR.json");
+    fn catalogue(tag: &str) -> &'static str {
+        SHIPPED_LOCALES.iter().find(|l| l.tag == tag).expect("shipped locale").catalogue
+    }
 
     /// Records the last text it was given.
     #[derive(Default)]
@@ -338,8 +384,8 @@ mod tests {
             MenuLabel::CloseWindow,
         ]
         .map(|label| (label, Recorder::default()));
-        let en_gb = NativeMenuLabels::from_catalogue(BASE_CATALOGUE).expect("en-GB labels");
-        let pt_br = NativeMenuLabels::from_catalogue(PT_BR_CATALOGUE).expect("pt-BR labels");
+        let en_gb = NativeMenuLabels::from_catalogue(catalogue("en-GB")).expect("en-GB labels");
+        let pt_br = NativeMenuLabels::from_catalogue(catalogue("pt-BR")).expect("pt-BR labels");
 
         apply_labels(&entries, &en_gb).expect("apply en-GB");
         apply_labels(&entries, &pt_br).expect("apply pt-BR");
@@ -360,10 +406,57 @@ mod tests {
 
     #[test]
     fn every_shipped_catalogue_carries_every_menu_label() {
-        let en_gb = NativeMenuLabels::from_catalogue(BASE_CATALOGUE).expect("en-GB labels");
-        let pt_br = NativeMenuLabels::from_catalogue(PT_BR_CATALOGUE).expect("pt-BR labels");
-        assert_eq!(en_gb.quit, "Quit PlateVault");
-        assert_eq!(pt_br.quit, "Encerrar PlateVault");
+        for locale in &SHIPPED_LOCALES {
+            NativeMenuLabels::from_catalogue(locale.catalogue)
+                .unwrap_or_else(|e| panic!("{}: {e}", locale.tag));
+        }
+    }
+
+    #[test]
+    fn shipped_locales_match_the_inlang_project() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Project {
+            base_locale: String,
+            locales: Vec<String>,
+        }
+        let project: Project =
+            serde_json::from_str(include_str!("../../../project.inlang/settings.json"))
+                .expect("inlang settings");
+        let tags: Vec<_> = SHIPPED_LOCALES.iter().map(|l| l.tag).collect();
+        assert_eq!(tags, project.locales);
+        assert_eq!(SHIPPED_LOCALES[0].tag, project.base_locale);
+    }
+
+    #[test]
+    fn startup_with_a_saved_pt_br_builds_pt_br_labels() {
+        let labels = startup_labels(Some("pt-BR")).expect("pt-BR labels");
+        assert_eq!(labels.quit, "Encerrar PlateVault");
+        assert_eq!(labels.select_all, "Selecionar tudo");
+    }
+
+    #[test]
+    fn startup_with_no_saved_locale_uses_the_base_locale() {
+        let labels = startup_labels(None).expect("en-GB labels");
+        assert_eq!(labels.quit, "Quit PlateVault");
+        assert_eq!(labels.select_all, "Select All");
+        assert_eq!(labels.close_window, "Close Window");
+    }
+
+    #[test]
+    fn negotiate_locale_follows_the_frontend_strategy_chain() {
+        let tag = |saved, preferred: &[&str]| negotiate_locale(saved, preferred).tag;
+        // A saved shipped locale wins over any preference.
+        assert_eq!(tag(Some("pt-BR"), &["en-GB"]), "pt-BR");
+        // A saved value must match exactly (Paraglide `isLocale`).
+        assert_eq!(tag(Some("pt-br"), &[]), "en-GB");
+        assert_eq!(tag(Some("fr-FR"), &[]), "en-GB");
+        // Preferred languages match case-insensitively, in order.
+        assert_eq!(tag(None, &["fr-FR", "PT-br", "en-GB"]), "pt-BR");
+        // A bare language matches only a shipped bare locale, of which there
+        // are none; nothing matching falls back to the base locale.
+        assert_eq!(tag(None, &["pt-PT", "pt"]), "en-GB");
+        assert_eq!(tag(None, &[]), "en-GB");
     }
 
     #[test]

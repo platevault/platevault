@@ -4,10 +4,10 @@
 // Native menu labels (astro-plan-bw4s6).
 //
 // The native application menu is built by the Rust shell, but its text lives
-// in this catalogue like every other visible string. `LocaleProvider` sends
-// these labels through `native_menu_set_labels` at startup and on every
-// locale change; the shell builds the menu from the base locale's catalogue
-// until then.
+// in this catalogue like every other visible string. The shell builds the menu
+// behind the splash in the locale saved in the settings DB; `LocaleProvider`
+// then sends these labels through `native_menu_set_labels` at startup and on
+// every locale change.
 
 import type { NativeMenuLabels } from '@/bindings/index';
 import { m } from '@/paraglide/messages';
@@ -26,7 +26,7 @@ export function nativeMenuLabels(locale: Locale): NativeMenuLabels {
     cut: m.menu_cut({}, options),
     copy: m.menu_copy({}, options),
     paste: m.menu_paste({}, options),
-    selectAll: m.common_select_all({}, options),
+    selectAll: m.menu_select_all({}, options),
     window: m.menu_window({}, options),
     minimise: m.menu_minimise({}, options),
     closeWindow: m.menu_close_window({}, options),
