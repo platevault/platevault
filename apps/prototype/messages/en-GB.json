@@ -8201,6 +8201,155 @@
   "catalogue_domain_mosaic_layout": "2 × 2, one excluded, slots shown",
   "catalogue_domain_map_desc": "OpenStreetMap tiles in a lazy chunk. The marker follows the fields; a click or a drag reports a position.",
   "picker_site_manage_ellipsis": "Manage sites…",
+  "home_concept_title": "Home concepts",
+  "home_concept_switch": "Concept",
+  "home_concept_night": "Night",
+  "home_concept_month": "Month",
+  "home_concept_progress": "Progress",
+  "home_concept_night_only": "Unmet goals graded for the chosen night and the 29 after it, plus each open Project's next step, most urgent first",
+  "home_concept_month_only": "The next 30 nights side by side: darkness, the Moon and the unmet goals each night suits",
+  "home_concept_progress_only": "What recent nights added to each open goal, what is captured but not yet in the Project, and what waits for review",
+  "home_concept_planning": "Planning",
+  "home_concept_planned": "Planned",
+  "home_concept_on_plan": "On plan",
+  "home_concept_target_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} target",
+        "countPlural=*": "{count} targets"
+      }
+    }
+  ],
+  "home_concept_nothing_planned": "Nothing planned",
+  "home_concept_best": "Best for goals",
+  "home_concept_best_value": "{name} · {time}",
+  "home_concept_needs": "Needs",
+  "home_concept_column_goal": "Goal",
+  "home_concept_column_channel": "Channel",
+  "home_concept_column_remaining": "Remaining",
+  "home_concept_column_next_good": "Next good",
+  "home_concept_column_good_nights": "Good nights",
+  "home_concept_of_nights": "{count}/{total}",
+  "home_concept_grade_good": "Good",
+  "home_concept_grade_marginal": "Marginal",
+  "home_concept_grade_poor": "Poor",
+  "home_concept_goal_item": "{subject} · {channel}",
+  "home_concept_group": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} goal",
+        "countPlural=*": "{name} · {count} goals"
+      }
+    }
+  ],
+  "home_concept_goals_met": "All goals met",
+  "home_concept_all_projects": "All Projects",
+  "home_concept_up_next": "Up next",
+  "home_concept_column_project": "Project",
+  "home_concept_column_reason": "Reason",
+  "home_concept_no_open_projects": "No open Projects",
+  "home_concept_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame",
+        "countPlural=*": "{frames} frames"
+      }
+    }
+  ],
+  "home_concept_outlook": "Outlook",
+  "home_concept_column_night": "Night",
+  "home_concept_column_dark": "Dark",
+  "home_concept_moon": "Moon",
+  "home_concept_moon_value": "{illumination}% · {phase}",
+  "home_concept_column_good_for": "Good for",
+  "home_concept_column_limited": "Moon-limited",
+  "home_concept_goal_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} goal",
+        "countPlural=*": "{count} goals"
+      }
+    }
+  ],
+  "home_concept_open_in_targets": "Open in Targets",
+  "home_concept_open_plan": "Open plan",
+  "home_concept_darkest": "Darkest night",
+  "home_concept_best_night": "Best night",
+  "home_concept_night_fact": "{night} · {detail}",
+  "home_concept_goals_good": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Good for {count} goal",
+        "countPlural=*": "Good for {count} goals"
+      }
+    }
+  ],
+  "home_concept_night_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} night",
+        "countPlural=*": "{count} nights"
+      }
+    }
+  ],
+  "home_concept_week": "{from}–{to}",
+  "home_concept_period": "Period",
+  "home_concept_capture_nights": "Capture nights",
+  "home_concept_captured": "Captured",
+  "home_concept_captured_value": "{frames} · {time}",
+  "home_concept_waiting_review": "Waiting for review",
+  "home_concept_session_item": "{session} · {frames}",
+  "home_concept_goals_moved": "Goals moved",
+  "home_concept_column_added": "Added",
+  "home_concept_added": "+{amount}",
+  "home_concept_of_goal": "{amount} of {target}",
+  "home_concept_column_pending": "Pending",
+  "home_concept_met": "Met",
+  "home_concept_no_captures": "No captures in this period",
   "stepflow_steps": "Steps",
   "stepflow_proceed": "Proceed",
   "stepflow_skip": "Skip",

@@ -13,9 +13,10 @@
  * planning values use; tonight when absent or past), `?project=`;
  * `/settings/locations?duplicates=review` (the Duplicates review sheet);
  * `/import?step=` and `/sessions/$sessionId?step=` (the staged Import and
- * intake flows; without `step` the plain view shows).
+ * intake flows; without `step` the plain view shows); `/home-concepts?concept=`
+ * with `night` and `period` (the Home concepts, HomeConceptsPage).
  */
-import { createHashHistory, createRootRoute, createRoute, createRouter, redirect, useSearch } from "@tanstack/react-router"
+import { createHashHistory, createRootRoute, createRoute, createRouter, lazyRouteComponent, redirect, useSearch } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { DesignSystemPage } from "@/app/design-system-page"
 import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
@@ -100,6 +101,14 @@ const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path
 // S1 Home is the start page (D-W39); S13 Import is a sheet over `/import`, and `/import?step=` its staged flow.
 const homeRoute = page("/", HomePage)
 const importRoute = page("/import", stepFlowOr(ImportRoute, ImportFlowPage))
+
+// Home concepts for the C8 choice (bead astro-plan-5kpyp): a lazy chunk, removed once C8 is decided.
+const homeConceptsRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/home-concepts",
+  component: lazyRouteComponent(() => import("@/features/v5/a-home/concepts/home-concepts"), "HomeConceptsPage"),
+  validateSearch: looseSearch,
+})
 
 // S2, S3, S8: Projects. S4 New Project is a sheet; Wrap up is S3's `?stage=wrap-up`.
 const projectsRoute = page("/projects", ProjectsPage)
@@ -186,6 +195,7 @@ const routeTree = rootRoute.addChildren([
   setupLayout.addChildren([welcomeRoute, setupLocationsRoute, setupIndexingRoute]),
   appLayout.addChildren([
     homeRoute,
+    homeConceptsRoute,
     importRoute,
     projectsRoute,
     projectRoute,
