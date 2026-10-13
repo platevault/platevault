@@ -5352,7 +5352,6 @@
   "importdlg_blocked_unsupported": "This file cannot be imported.",
   "importdlg_blocked_no_match": "No row matches an indexed frame.",
   "importdlg_title": "Import measurements",
-  "importdlg_description_choose": "Choose a supported export. Prototype: simulated file chooser listing CSV files on mounted volumes.",
   "importdlg_description_review": "Review how the export maps to frames and metrics before anything is attached.",
   "importdlg_no_csv_title": "No CSV export on a mounted volume",
   "importdlg_no_csv_body": "Supported: {format}. Mount the volume that holds the export, or copy it to a mounted location.",

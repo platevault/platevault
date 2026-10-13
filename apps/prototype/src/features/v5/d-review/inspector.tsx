@@ -49,7 +49,7 @@ function Values({ frame, record }: { frame: ReviewFrame; record: FrameMeasuremen
   const missing = frame.measure === "pending" ? m.status_pending() : frame.measure === "verifying" ? m.status_verifying() : m.status_not_measured()
   const columns: Column<MetricRow>[] = [
     { id: "metric", header: m.frame_col_metric(), rowHeader: true, sortValue: (row) => METRIC_LABEL[row.key], cell: (row) => METRIC_LABEL[row.key] },
-    { id: "built-in", header: m.status_built_in(), align: "right", sortValue: (row) => row.builtIn?.value ?? null, cell: (row) => (row.builtIn ? formatMetricFixed(m, row.builtIn) : <UnknownValue label={missing} />) },
+    { id: "built-in", header: m.status_built_in(), align: "right", sortValue: (row) => row.builtIn?.value ?? null, cell: (row) => (row.builtIn ? formatMetricFixed(m, row.builtIn) : "–") },
     {
       id: "imported",
       header: m.frame_col_imported(),
@@ -64,7 +64,7 @@ function Values({ frame, record }: { frame: ReviewFrame; record: FrameMeasuremen
   // The source of each column as facts, not a tooltip (§6.2): method, basis, input and time.
   const sources = [
     { label: m.frame_builtin_source(), value: own ? `${own.method} ${own.version}` : `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
-    { label: m.frame_note_basis(), value: own ? say(m, own.basis) : applies ? m.status_not_measured() : m.frame_does_not_apply() },
+    { label: m.frame_note_basis(), value: own ? say(m, own.basis) : frame.measure === "history-only" ? m.frame_does_not_apply() : missing },
     ...(own && input ? [{ label: m.frame_note_input(), value: input === frame.asset.sha256 ? m.frame_input_current({ hash: input.slice(0, 12) }) : m.frame_input_earlier({ hash: input.slice(0, 12) }), mono: true }] : []),
     ...(own && record?.computedAt ? [{ label: m.status_measured(), value: formatDateTime(record.computedAt) }] : []),
     ...(imported[0] ? [{ label: m.frame_imported_source(), value: `${imported[0].method} ${imported[0].version}` }, { label: m.frame_note_match(), value: m.frame_match_file_name() }] : []),

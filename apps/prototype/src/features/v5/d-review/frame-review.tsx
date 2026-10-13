@@ -89,10 +89,6 @@ function heightLabel(m: Messages, height: TableHeight): string {
   return height === "rows" ? m.review_height_rows() : height === "strip" ? m.review_height_strip() : m.review_height_full()
 }
 
-function libraryWord(m: Messages, value: QualityValue): string {
-  return value === "usable" ? m.status_usable() : value === "unusable" ? m.status_unusable() : m.status_unreviewed()
-}
-
 /** Text entry only: a Select trigger is not typing, and the capture-phase handler keeps its typeahead from firing. */
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
@@ -227,7 +223,8 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const markLabel: Record<QualityValue, string> = { usable: MARK_WORD.usable, unusable: MARK_WORD.unusable, unreviewed: MARK_WORD.unreviewed }
   const markKey: Record<QualityValue, string> = { usable: REVIEW_KEY.pick, unusable: REVIEW_KEY.reject, unreviewed: REVIEW_KEY.unreviewed }
   function markAction(value: QualityValue, list: ReviewFrame[], always = false): Action {
-    const said = { count: list.length, n: formatCount(list.length), quality: libraryWord(m, value) }
+    // The review's own words (Picked, Rejected, Unreviewed), as the buttons that ask read.
+    const said = { count: list.length, n: formatCount(list.length), quality: markLabel[value] }
     return {
       id: `mark-${value}`,
       label: markLabel[value],
@@ -584,7 +581,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
               {" · "}
               {m.review_frame_position({ index: index + 1, total: ordered.length })}
               {field?.cfa ? <Pill tone="muted">{m.review_cfa({ cfa: field.cfa })}</Pill> : null}
-              {readoutText}
+              {readoutText ? ` · ${readoutText}` : null}
             </>
           ),
           content: plateOf(current, image, field, true),

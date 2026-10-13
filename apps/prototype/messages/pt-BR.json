@@ -5408,7 +5408,6 @@
   "importdlg_blocked_unsupported": "Este arquivo não pode ser importado.",
   "importdlg_blocked_no_match": "Nenhuma linha corresponde a um frame indexado.",
   "importdlg_title": "Importar medições",
-  "importdlg_description_choose": "Escolha uma exportação compatível. Protótipo: seletor de arquivos simulado que lista os CSV dos volumes montados.",
   "importdlg_description_review": "Revise como a exportação corresponde aos frames e às métricas antes de anexar qualquer coisa.",
   "importdlg_no_csv_title": "Nenhuma exportação CSV em um volume montado",
   "importdlg_no_csv_body": "Compatível: {format}. Monte o volume que contém a exportação ou copie-a para um local montado.",

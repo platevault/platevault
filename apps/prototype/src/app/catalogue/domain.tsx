@@ -142,6 +142,7 @@ function ReviewVisuals() {
       <div className="space-y-3">
         <Specimen caption={m.catalogue_domain_corners()}>
           <div className="flex h-96 w-full">
+            {/* eslint-disable-next-line alm/no-user-string -- a sample file name */}
             <CornerGrid field={field} stretch="auto" overlay={{ fwhm: true, eccentricity: true }} label="Light_0001.fits" />
           </div>
         </Specimen>
