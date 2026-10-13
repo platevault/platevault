@@ -134,14 +134,30 @@ certificate, with PlateVault v0.6.1 installed from its GitHub release.
    **Privacy & Security** › **Open Anyway**, as in
    [First launch](#first-launch-on-macos-sequoia-and-later). The app must
    start and open the library.
-3. On the Mac with v0.6.1, point the update check at a `latest.json` that
-   offers the candidate (a test release, or a local server), and install the
-   update from inside the app. After the relaunch, the app must run the new
-   version, and `codesign -dv` on `/Applications/PlateVault.app` must show
-   the self-signed authority.
+3. On the Mac with v0.6.1, replace the app the way an update does. v0.6.1
+   checks a fixed update address, so you cannot point it at a test build.
+   Instead:
+   1. Quit PlateVault v0.6.1.
+   2. In Terminal, fetch the candidate's updater bundle,
+      `PlateVault_<version>_aarch64.app.tar.gz`, with `curl -LO` or
+      `gh run download`, not a browser, so it carries no quarantine
+      attribute, just like an in-app update. Extract it over the installed
+      app:
+
+      ```sh
+      tar -xzf PlateVault_<version>_aarch64.app.tar.gz -C /Applications
+      ```
+
+   3. Open PlateVault again. It must start and open the library.
+   4. Run `codesign -dv --verbose=2 /Applications/PlateVault.app`. It must
+      show `Authority=PlateVault Self-Signed`.
 4. Check that macOS asks once for folder and drive access, and not again
    after a second launch.
 
 If any step fails, do not publish the release. Deleting the
 `MACOS_SELF_SIGNED_*` secrets returns the release workflow to ad-hoc
 signing.
+
+The in-app updater path itself, from v0.6.1 to the first self-signed
+release, can only be checked after that release is published. Install the
+update from inside v0.6.1, then repeat steps 3.3 to 4.
