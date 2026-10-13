@@ -542,13 +542,21 @@ export interface Goal {
   qualityBar: QualityBar | null
 }
 
-/** The three optional Wrap up steps after every run is Complete (P-WRAP1). */
+/** The three Wrap up steps after every run is Finished, in their strict order (P-WRAP1, C3): Clean up runs → Trash → Archive. */
 export type WrapUpStepId = "cleanup" | "trash" | "archive"
 
-/** A Wrap up step the user finished or chose to skip; an absent step is still to do. */
+/** A Wrap up step the user finished or skipped; an absent step is still to do. */
 export interface WrapUpStepRecord {
   state: "done" | "skipped"
   at: IsoDateTime
+  /**
+   * The operations its Proceed started (F2). The step reads Finished once
+   * every one succeeded; while one runs it reads Running, and a failed,
+   * partial or canceled one returns it to To do. Empty when nothing moved.
+   */
+  operationIds: OperationId[]
+  /** An earlier step was reopened after this one settled (F5): it reads Redo until Proceed records it again. */
+  redo: boolean
 }
 
 export interface Project {
@@ -574,8 +582,6 @@ export interface Project {
    * Archived until the user restores them (D-W69).
    */
   archive: { at: IsoDateTime; sessionIds: SessionId[] } | null
-  /** Project-only rejects, the second quality level (D-W42). Never change library quality. */
-  rejections: Record<AssetId, { at: IsoDateTime }>
   createdAt: IsoDateTime
   revision: number
 }
@@ -600,8 +606,15 @@ export interface GoalTemplate {
 // Processing runs (the domain's View: PV-VSEL, D-W3) and measurements (PV-PIX)
 // ---------------------------------------------------------------------------
 
-/** The six steps every run owns (D-W3, VSEL-FR-02). */
+/**
+ * The six steps of the v5 run pipeline (`runPipeline`). Deprecated with it:
+ * "review" and "done" go under P-REV2 and C2; the run flow (`runFlow`) uses
+ * `RunFlowStepId`. W4 narrows this type.
+ */
 export type RunStep = "select" | "review" | "calibrate" | "prepare" | "results" | "done"
+
+/** The four steps of the run flow, in order (D1, C2): Results' Proceed is Finish run, and there is no Review or Done step. */
+export type RunFlowStepId = "select" | "calibrate" | "prepare" | "results"
 
 export type SelectionReasonKind =
   /** "Target <subject> on <rig>": the candidate rule (D-W49). */
@@ -626,9 +639,9 @@ export interface MembershipContent {
   /** Run-scoped exclusions ("Exclude from run"). Files stay on disk (VSEL-FR-10). */
   excluded: AssetId[]
   /**
-   * Frames rejected in this run's Review step (X or Reject for this Project
-   * only) leave the draft with the reason "Rejected"; un-rejecting restores
-   * them (D-W54).
+   * Frames marked Unusable in the library (X) after they joined leave the
+   * draft with the reason "Rejected"; marking them Usable again restores
+   * them (D-W54, P-REJ2).
    */
   rejected: AssetId[]
   /** Selected members that are unavailable; never omitted silently. */
@@ -820,8 +833,10 @@ export interface CalibrationMaster {
    */
   origin: { kind: "library" | "generated" | "stacked" | "imported"; runId: RunId | null; sourcePath: string; sessionId: SessionId | null }
   adoption: { destinationPath: string; verifiedSha256: string; adoptedAt: IsoDateTime } | null
-  /** Set while the master is dismissed (P-CAL2): it leaves the library's list for its Dismissed filter and is never matched; Restore clears it. */
+  /** Set while the master is hidden (P-CAL2, C2 "Hide"): it leaves the library's list for its Hidden filter and is never matched; Restore clears it. */
   dismissedAt?: IsoDateTime
+  /** The master that replaced this one (C9 Replace…): unfinished runs were re-pointed to it; finished runs keep this one. */
+  replacedBy?: MasterId
 }
 
 export type MatchCriterionName =
@@ -1286,6 +1301,8 @@ export interface AppSettings {
   naming: Partial<Record<NamingFrameType, string>>
   /** Keep raw calibration frames after their master registers; off moves them to the OS Trash (P-CAL3). */
   keepRawCalibration: boolean
+  /** Darks, bias and dark flats older than this many days read "Old · {n} d" (C9; flats are exempt). */
+  masterMaxAgeDays: number
   /** Online Target resolution (LIB-AC-12, D18). Local search always works. */
   targetLookup: {
     enabled: boolean

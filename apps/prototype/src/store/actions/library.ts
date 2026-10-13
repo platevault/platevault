@@ -1,11 +1,12 @@
 /**
- * Library writes shared by every screen (foundation-owned): the two quality
- * levels (D-W42, D-W54), Confirm Target and Confirm rig (LIB-FR-05), File
- * into Target for a session imported as Unclassified (P-IMP2) and
- * ★ favourites (D-W60). Catalog only, except File into Target, which moves
- * the session's frames: source headers never change.
+ * Library writes shared by every screen (foundation-owned): library quality
+ * (P/X/U, library-wide, P-REJ2; D-W54), Confirm Target and Confirm rig
+ * (LIB-FR-05), File into Target for a session imported as Unclassified
+ * (P-IMP2) and ★ favourites (D-W60). Catalog only, except File into Target,
+ * which moves the session's frames: source headers never change. A session
+ * whose frames an unfinished run's prepared view holds keeps its marks (C10).
  */
-import { latestRevision, liveAssetIds, sessionNamingValues } from "@/domain/derive"
+import { latestRevision, reviewLockGate, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { confirmedEvidence, isUnder } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
@@ -17,22 +18,31 @@ import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { setProjectRejection } from "./projects"
 import { updateRunDraft } from "./runs"
-import { freshId, MISSING, recordSaved, refuse } from "./shared"
+import { freshId, MISSING, recordSaved, refuse, refuseWithGate } from "./shared"
 
 const QUALITY_NAME: Record<QualityValue, MessageRef> = { usable: msg("status_usable"), unusable: msg("status_unusable"), unreviewed: msg("status_unreviewed") }
 
 /**
- * Library quality, the first level (P, X, U; PIX-FR-13). It binds the
- * current bytes and clears Changed content or pending verification. The mark
- * is library-wide (round 6): X takes the frames out of every open run's draft
- * with the reason "Rejected", and P or U restores them (D-W54); saved
- * revisions never change.
+ * Library quality (P, X, U; PIX-FR-13), the one quality level (P-REJ2). It
+ * binds the current bytes and clears Changed content or pending
+ * verification. The mark is library-wide (round 6): X takes the frames out of
+ * every open run's draft with the reason "Rejected", and P or U restores
+ * them (D-W54); saved revisions never change, so a run not yet prepared
+ * reads "Inputs changed". Refused for frames of a session an unfinished
+ * run's prepared view holds (C10).
  */
 export function markFrames(assetIds: AssetId[], value: QualityValue, href: string): CommitResult {
   if (assetIds.length === 0) return { ok: true }
   const at = nowIso()
   const count = assetIds.length
-  const result = commit(msg("store_label_mark_frames", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), (s) =>
+  const label = msg("store_label_mark_frames", { count, n: formatCount(count), quality: QUALITY_NAME[value] })
+  const state = store.getState()
+  const sessionIds = new Set(assetIds.flatMap((id) => state.catalog.assets[id]?.sessionId ?? []))
+  for (const sessionId of sessionIds) {
+    const locked = reviewLockGate(state, sessionId)
+    if (locked) return refuseWithGate(label, locked, href)
+  }
+  const result = commit(label, (s) =>
     withCatalog(s, (c) => {
       const assets = { ...c.assets }
       for (const id of assetIds) {
@@ -49,31 +59,36 @@ export function markFrames(assetIds: AssetId[], value: QualityValue, href: strin
   return drafts.find((r) => !r.ok) ?? result
 }
 
+/** Mark rest usable (C10): every frame of the session still without a decision becomes Usable, so its review can finish. */
+export function markRestUsable(sessionId: SessionId): CommitResult {
+  const { catalog } = store.getState()
+  const session = catalog.sessions[sessionId]
+  if (!session) return MISSING
+  return markFrames(unreviewedAssetIds(catalog, session), "usable", `/sessions/${sessionId}?step=review`)
+}
+
 function applyToDraft(runId: RunId, assetIds: AssetId[], reject: boolean): CommitResult {
   const { catalog } = store.getState()
   const run = catalog.runs[runId]
   if (!run || run.completion === "complete" || run.trashedAt) return { ok: true }
   const content = run.draft ?? latestRevision(run)
   if (!content) return { ok: true }
-  // A frame still rejected in the other scope stays out of the draft (D-W42, D-W54): P on a Project-rejected frame, or
-  // clearing the Project reject of a library-Unusable frame, never restores it.
-  const rejections = catalog.projects[run.projectId]?.rejections ?? {}
-  const ids = reject ? assetIds : assetIds.filter((id) => catalog.assets[id]?.quality.value !== "unusable" && !(id in rejections))
+  // A frame P or U restores only when the library no longer rejects it (D-W54).
+  const ids = reject ? assetIds : assetIds.filter((id) => catalog.assets[id]?.quality.value !== "unusable")
   const touches = reject ? ids.some((id) => memberState(content, id) !== null && memberState(content, id) !== "rejected") : ids.some((id) => content.rejected.includes(id))
   if (!touches) return { ok: true }
   return updateRunDraft(runId, reject ? msg("store_label_rejected_in_review") : msg("store_label_unrejected_in_review"), (c, s) => (reject ? rejectInContent(c, ids) : unrejectInContent(s.disk, s.catalog, c, ids)))
 }
 
 /**
- * "Reject for this Project only", the second level (D-W42, PRJ-FR-13). It
- * leaves library quality, captured and other Projects alone. In an open
- * run's Review step it also removes the frames from that run's draft (D-W54).
+ * @deprecated P-REJ2 dropped "Reject for this Project only": Reject is
+ * library-wide (`markFrames` with "unusable"). Refused, writing nothing; W3
+ * removes the caller (d-review/marks.ts) and W4 this function.
  */
-export function rejectForProjectOnly(runId: RunId, assetIds: AssetId[], rejected: boolean): CommitResult {
+export function rejectForProjectOnly(runId: RunId, _assetIds: AssetId[], _rejected: boolean): CommitResult {
   const run = store.getState().catalog.runs[runId]
   if (!run) return MISSING
-  const result = setProjectRejection(run.projectId, assetIds, rejected)
-  return result.ok ? applyToDraft(runId, assetIds, rejected) : result
+  return setProjectRejection(run.projectId, _assetIds, _rejected)
 }
 
 function correction(session: Session, field: CatalogCorrection["field"], observed: string | null, corrected: string): CatalogCorrection[] {

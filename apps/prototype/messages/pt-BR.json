@@ -8136,5 +8136,131 @@
   "seed_project_cygnus_notes": "HOO amplo da região da América do Norte e do Pelicano; o equipamento OSC acrescenta dados dual-band.",
   "seed_project_m31_notes": "Banda larga primeiro; mistura com banda estreita depois.",
   "seed_project_heart_notes": "Ha primeiro; OIII quando a Lua permitir.",
-  "seed_dark_exception_reason": "Darks empilhados no PixInsight"
+  "seed_dark_exception_reason": "Darks empilhados no PixInsight",
+  "stepflow_proceed": "Prosseguir",
+  "stepflow_skip": "Pular",
+  "stepflow_reopen_step": "Reabrir etapa",
+  "stepflow_finish_run": "Concluir execução",
+  "stepflow_close_project": "Fechar projeto",
+  "stepflow_finish_review": "Concluir revisão",
+  "stepflow_finish_run_title": "Concluir {name}?",
+  "stepflow_close_project_title": "Fechar {name}?",
+  "stepflow_finished_on": "Concluído em {date}",
+  "stepflow_finish_calibration": "Concluir calibração",
+  "flow_review_locked": "Bloqueado por uma visão de execução preparada",
+  "flow_select_one_session": "Selecione pelo menos uma sessão",
+  "flow_sessions_need_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão precisa de revisão",
+        "countPlural=*": "{count} sessões precisam de revisão"
+      }
+    }
+  ],
+  "flow_inputs_changed": "Entradas alteradas · Atualizar",
+  "flow_resolve_calibration_first": "Resolva a calibração primeiro",
+  "flow_choose_profile": "Escolha um perfil",
+  "flow_corrected_values": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} valor corrigido",
+        "countPlural=*": "{count} valores corrigidos"
+      }
+    }
+  ],
+  "flow_files_being_written": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} arquivo ainda sendo gravado",
+        "countPlural=*": "{count} arquivos ainda sendo gravados"
+      }
+    }
+  ],
+  "flow_confirm_target": "Confirme um Alvo",
+  "flow_confirm_rig": "Confirme um setup",
+  "flow_frames_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame Não revisado",
+        "countPlural=*": "{count} frames Não revisados"
+      }
+    }
+  ],
+  "flow_finish_every_run": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Conclua todas as execuções primeiro · {count} aberta",
+        "countPlural=*": "Conclua todas as execuções primeiro · {count} abertas"
+      }
+    }
+  ],
+  "flow_reason_sessions_need_review": "Sessões correspondentes precisam de revisão",
+  "flow_master_old": "Antigo · {n} d",
+  "flow_match_new": "Novo",
+  "flow_match_replaces": "Substitui {master}",
+  "flow_match_duplicate": "Duplicado",
+  "flow_replace_other_kind": "Não é um master de {kind}",
+  "flow_reason_not_finished": "{name} não está Concluída",
+  "flow_reason_step_first": "Conclua ou pule {step} primeiro",
+  "flow_reason_step_settled": "{step} já foi concluída ou pulada",
+  "flow_reason_step_open": "{step} não foi concluída nem pulada",
+  "flow_reason_reject_is_library_wide": "Rejeitar marca o frame como Inutilizável na biblioteca",
+  "flow_reason_session_needs_review": "{name} precisa de revisão",
+  "flow_label_record_calibration": "Registrar calibração",
+  "flow_nothing_to_clean_up": "Nada para limpar",
+  "flow_reason_run_finished": "{name} já está Concluída",
+  "flow_label_replace_master": "Substituir {name}",
+  "flow_saved_master_replaced": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} substituído · {count} execução reapontada",
+        "countPlural=*": "{name} substituído · {count} execuções reapontadas"
+      }
+    }
+  ],
+  "flow_settings_master_age": "Masters antigos após",
+  "flow_reason_whole_days": "Informe um número inteiro de dias"
 }

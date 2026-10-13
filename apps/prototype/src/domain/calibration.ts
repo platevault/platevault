@@ -13,14 +13,18 @@ import { fileAt } from "./disk"
 import { isUnder } from "./indexing"
 import { memberSessions, type MemberSession } from "./membership"
 import type {
+  AppSettings,
   AssetId,
   CalibrationAssignment,
   CalibrationInput,
   CalibrationKind,
+  CalibrationMaster,
   CalibrationPolicy,
   Catalog,
   Disk,
+  DiskFile,
   IsoDateTime,
+  MasterId,
   MatchCriterion,
   MembershipContent,
   Run,
@@ -413,6 +417,11 @@ export interface CalibrationPlan {
 
 const HANDED_OFF = new Set<RowState>(["automatic", "accepted", "exception"])
 
+/** The row's input goes to the application: assigned automatically, accepted, or an exception. */
+export function handsOff(row: Pick<RequirementRow, "state">): boolean {
+  return HANDED_OFF.has(row.state)
+}
+
 /**
  * The run's calibration requirements. With the automatic policy every row
  * with a compatible candidate is assigned without a click, and a stored
@@ -525,4 +534,102 @@ export function handoffCalibration(catalog: Catalog, plan: CalibrationPlan): Cal
     if (source) out.push(source)
   }
   return out
+}
+
+// ---------------------------------------------------------------------------
+// Master age, import matching and Replace (C9, D9)
+// ---------------------------------------------------------------------------
+
+/** Kinds whose masters age (C9): darks, bias and dark flats. Flats are exempt. */
+const AGEING_KINDS: ReadonlySet<CalibrationKind> = new Set(["dark", "bias", "dark-flat"])
+
+const DAY_MS = 86_400_000
+
+/**
+ * "Old · 120 d": a dark, bias or dark flat older than
+ * `settings.masterMaxAgeDays` (90 by default). Null for a younger master and
+ * for every flat. Age alone raises no issue: only an old master assigned to
+ * an unfinished run does (`oldMastersInUse` in derive.ts).
+ */
+export function masterAge(master: Pick<CalibrationMaster, "kind" | "createdAt">, settings: Pick<AppSettings, "masterMaxAgeDays">, nowMs: number): { days: number; label: MessageRef } | null {
+  if (!AGEING_KINDS.has(master.kind)) return null
+  const days = Math.floor((nowMs - Date.parse(master.createdAt)) / DAY_MS)
+  return days > settings.masterMaxAgeDays ? { days, label: msg("flow_master_old", { n: days }) } : null
+}
+
+/** What an imported master file is to the library (C9): new, the replacement of a master with the same facts, or one the library already holds. */
+export type MasterMatch = { kind: "new" } | { kind: "replaces"; master: CalibrationMaster } | { kind: "duplicate"; master: CalibrationMaster }
+
+type MasterFacts = Pick<CalibrationMaster, "kind" | "cameraName" | "widthPx" | "heightPx" | "binning" | "gain" | "offset" | "exposureS" | "channel">
+
+/** The facts a replacement shares with the master it replaces: what matching compares for its kind (camera, size, binning, gain and offset; exposure for darks and dark flats; the filter for flats and dark flats). */
+function replacementKey(facts: MasterFacts): string {
+  const exposure = facts.kind === "dark" || facts.kind === "dark-flat" ? facts.exposureS : null
+  const channel = facts.kind === "flat" || facts.kind === "dark-flat" ? (facts.channel ?? "").toLowerCase() : null
+  return [facts.kind, facts.cameraName, facts.widthPx, facts.heightPx, facts.binning, facts.gain, facts.offset, exposure, channel].join("|")
+}
+
+/** The calibration kind of a master file's IMAGETYP; null when the file is not a master. */
+export function masterKindOf(file: Pick<DiskFile, "header">): CalibrationKind | null {
+  const type = file.header?.imageType ?? ""
+  return type.startsWith("master-") ? (type.slice("master-".length) as CalibrationKind) : null
+}
+
+function factsOf(file: DiskFile, kind: CalibrationKind): MasterFacts {
+  const h = file.header!
+  return { kind, cameraName: h.instrument, widthPx: h.widthPx, heightPx: h.heightPx, binning: h.binning, gain: h.gain, offset: h.offset, exposureS: h.exposureS, channel: h.filter }
+}
+
+/** A master still in the library's list: not hidden and not replaced. */
+function listed(master: CalibrationMaster): boolean {
+  return !master.dismissedAt && !master.replacedBy
+}
+
+/**
+ * Import masters' preview (C9), per file: Duplicate when the library holds
+ * the same bytes or path; Replaces when a listed master of the same kind has
+ * the same facts (the newest one); else New. Null when the file is not a
+ * master.
+ */
+export function masterImportMatch(catalog: Catalog, disk: Disk, file: DiskFile): MasterMatch | null {
+  const kind = masterKindOf(file)
+  if (!kind || !file.header) return null
+  const masters = Object.values(catalog.masters)
+  const duplicate = masters.find((m) => m.path === file.path || m.origin.sourcePath === file.path || m.adoption?.verifiedSha256 === file.sha256 || fileAt(disk, m.path)?.sha256 === file.sha256)
+  if (duplicate) return { kind: "duplicate", master: duplicate }
+  const key = replacementKey(factsOf(file, kind))
+  const replaced = masters.filter((m) => listed(m) && m.state === "adopted" && replacementKey(m) === key).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+  return replaced ? { kind: "replaces", master: replaced } : { kind: "new" }
+}
+
+/** "New", "Replaces MasterDark_2026-09-08.xisf", "Duplicate": the preview's Match cell. */
+export function masterMatchRef(match: MasterMatch): MessageRef {
+  if (match.kind === "new") return msg("flow_match_new")
+  return match.kind === "replaces" ? msg("flow_match_replaces", { master: fileName(match.master.path) }) : msg("flow_match_duplicate")
+}
+
+/** Why `file` cannot replace `master` (Replace… on a master row, C9): it is not a master, another kind, or one the library holds already. Null when it can. */
+export function replacementRefusal(catalog: Catalog, disk: Disk, master: CalibrationMaster, file: DiskFile): MessageRef | null {
+  const match = masterImportMatch(catalog, disk, file)
+  if (!match) return msg("store_cal_not_a_master")
+  if (masterKindOf(file) !== master.kind) return msg("flow_replace_other_kind", { kind: KIND_NOUN[master.kind] })
+  return match.kind === "duplicate" ? msg("flow_match_duplicate") : null
+}
+
+/**
+ * A run's stored calibration with every input of `from` pointing at `to`
+ * (C9 Replace…). Each assignment keeps its state; its criteria and basis are
+ * the new master's as of `at`. A Finished run is never re-pointed: it keeps
+ * what it recorded (D5).
+ */
+export function repointAssignments(catalog: Catalog, disk: Disk, run: Run, from: MasterId, to: MasterId, at: IsoDateTime): CalibrationAssignment[] {
+  const source = masterSource(catalog, to)
+  if (!source || run.completion === "complete") return run.calibration
+  const input: CalibrationInput = { type: "master", masterId: to }
+  return run.calibration.map((a) => {
+    if (a.input?.masterId !== from) return a
+    const session = catalog.sessions[a.lightSessionId]
+    const criteria = session ? matchCriteria(catalog, lightGeometry(catalog, session), source) : a.criteria
+    return { ...a, input, criteria, basis: { at, files: basisFiles(catalog, disk, input) } }
+  })
 }
