@@ -6,7 +6,7 @@
  * quality, measurements) lives in the catalog.
  */
 import type { AssetId, MetricKey, RunId, SessionId } from "@/domain/types"
-import { measureHandler } from "@/features/t3/measure"
+import { measureHandler } from "@/store/actions/measure"
 import type { SliceDefinition } from "./index"
 
 export interface FrameUi {
