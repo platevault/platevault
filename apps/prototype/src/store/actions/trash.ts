@@ -61,7 +61,7 @@ interface TrashPayload extends Omit<MoveToOsTrash, "title" | "items"> {
 }
 
 /** Prepared entries of a run: every file in its preparation folders (PREP-FR-14). */
-export function preparedEntryItems(state: PrototypeState, runId: RunId): TrashItem[] {
+export function preparedEntryItems(state: Pick<PrototypeState, "catalog" | "disk">, runId: RunId): TrashItem[] {
   const out: TrashItem[] = []
   for (const prep of Object.values(state.catalog.preparations)) {
     if (prep.runId !== runId) continue
