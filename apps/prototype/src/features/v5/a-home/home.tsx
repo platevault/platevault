@@ -16,7 +16,7 @@
  *   with the space each frees.
  * - Open work: open Projects and calibration processes, where each stands
  *   and its next step, deadline or season first with "N nights left".
- * - Status: locations (online, free space, low on space) and background
+ * - Status: locations (online, free space) and background
  *   jobs other than imports.
  * - Tonight: unfinished goals graded for tonight at the planning site, which
  *   Home names and Targets changes.
@@ -502,19 +502,8 @@ function LocationsTable({ rows, follow }: { rows: LocationStatus[]; follow: Foll
       header: m.run_check_space(),
       align: "right",
       sortValue: (r) => r.space?.freeBytes ?? null,
-      cell: (r) =>
-        r.space ? (
-          <>
-            {r.space.low ? (
-              <>
-                <Pill tone="warning">{m.home_low_space()}</Pill>{" "}
-              </>
-            ) : null}
-            {formatBytes(r.space.freeBytes)}
-          </>
-        ) : (
-          "–"
-        ),
+      // A low-space flag goes here once the owner sets the threshold (D1, pending).
+      cell: (r) => (r.space ? formatBytes(r.space.freeBytes) : "–"),
     },
   ]
   return (

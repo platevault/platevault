@@ -129,16 +129,16 @@ describe("homeStatus: locations and background jobs", () => {
     expect(Object.values(world.operations).some((op) => op.kind === "index" && op.status === "running")).toBe(true)
   })
 
-  it("flags a location low on space below the share, and reads an offline one with its issue and no space", () => {
+  it("shows a nearly full location's free space with no low-space flag (D1 pending), and reads an offline one with its issue and no space", () => {
     const world = demo()
     const location = arrivalLocation(world)
     const volume = world.disk.volumes[location.volumeId]!
     const row = () => homeStatus(world, NOW).locations.find((r) => r.location.id === location.id)!
-    expect(row().space?.low).toBe(false)
     const used = volume.capacityBytes - row().space!.freeBytes
-    // 1 % free: low under any threshold the owner may choose.
+    // 1 % free: low under any threshold the owner may choose, yet Home flags nothing until D1 is decided.
     world.disk.volumes[volume.id] = { ...volume, capacityBytes: Math.ceil(used / 0.99) }
-    expect(row().space?.low).toBe(true)
+    const free = world.disk.volumes[volume.id]!.capacityBytes - used
+    expect(row().space).toEqual({ freeBytes: free })
     world.disk.volumes[volume.id] = { ...world.disk.volumes[volume.id]!, mounted: false }
     expect(row()).toMatchObject({ availability: "offline", space: null, issue: { kind: "location-offline" } })
     // Problems first: the offline location reads before every online one.

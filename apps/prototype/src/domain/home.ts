@@ -1,8 +1,7 @@
 /**
  * Home's cross-area state (decision C8): what came in, what needs sorting,
  * what is open and what runs, each row with where its owning page shows it.
- * Every function joins existing derives; the one rule here is the low-space
- * threshold (`LOW_SPACE_SHARE`), pending the owner's decision.
+ * Every function joins existing derives.
  *
  * - `pendingIngestions`: per Captures location, a running import, a stopped
  *   or failed one, a location never scanned or whose last scan did not
@@ -258,18 +257,11 @@ export function openWork(world: World, nowMs: number, tonight: NightDate): OpenW
 // Status
 // ---------------------------------------------------------------------------
 
-/**
- * A volume reads low on space below this share of its capacity free.
- * Pending owner decision (2026-10-13): the threshold, or a fixed free amount
- * instead of a share, is the owner's call; 10 % stands in until then.
- */
-const LOW_SPACE_SHARE = 0.1
-
 export interface LocationStatus {
   location: Location
   availability: Availability
-  /** Null while the volume is not mounted. */
-  space: { freeBytes: number; capacityBytes: number; low: boolean } | null
+  /** Null while the volume is not mounted. A low-space flag waits on the owner's threshold (D1, pending). */
+  space: { freeBytes: number } | null
   /** Offline or denied: the location's issue from Issues. */
   issue: Issue | null
 }
@@ -290,11 +282,11 @@ export function homeStatus(world: World, nowMs: number): HomeStatus {
       return {
         location,
         availability: locationAvailability(world.disk, location),
-        space: volume && free !== null ? { freeBytes: free, capacityBytes: volume.capacityBytes, low: free < volume.capacityBytes * LOW_SPACE_SHARE } : null,
+        space: free !== null ? { freeBytes: free } : null,
         issue: issues.find((i) => (i.kind === "location-offline" || i.kind === "location-denied") && i.about === location.id) ?? null,
       }
     })
-    // Problems first: denied, then offline, then low on space; then by name.
+    // Problems first: denied, then offline; then by name.
     .sort((a, b) => rankLocation(a) - rankLocation(b) || a.location.displayName.localeCompare(b.location.displayName))
   return { locations, jobs: runningWork(world.operations).filter((op) => !INGEST_KINDS.has(op.kind)) }
 }
@@ -302,8 +294,7 @@ export function homeStatus(world: World, nowMs: number): HomeStatus {
 function rankLocation(row: LocationStatus): number {
   if (row.issue?.kind === "location-denied") return 0
   if (row.availability === "offline") return 1
-  if (row.space?.low) return 2
-  return 3
+  return 2
 }
 
 /** Where a background job's work lives: its run's current step, its Project, Calibration, or Activity. */
