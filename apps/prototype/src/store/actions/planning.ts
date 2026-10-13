@@ -54,9 +54,10 @@ export function removeFromPlan(targetId: TargetId, night: NightDate): CommitResu
 // Reminders (PLAN-FR-06): always at the default site, before each planned window
 // ---------------------------------------------------------------------------
 
-/** Lead times the Planned view offers, in minutes. */
-export const LEAD_TIMES_MIN = [15, 30, 60, 120] as const
-export const DEFAULT_LEAD_MIN = 30
+/** Lead times the Planned view offers, in minutes: half an hour up to a day ahead (astro-plan-mv2g1). */
+export const LEAD_TIMES_MIN = [30, 60, 120, 240, 1440] as const
+/** Two hours: longer than 30 min, so a reminder leaves time to set up (astro-plan-mv2g1). */
+export const DEFAULT_LEAD_MIN = 120
 
 /**
  * Turn reminders on at the default site. Asks the (simulated) OS for

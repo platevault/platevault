@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest"
 import { m, say } from "@/lib/i18n"
-import { freezeGoals, goalProgress, panelBalance, planningPriorities, subjectProgress, type GoalProgress } from "./derive"
+import { freezeGoals, goalProgress, nearestPanel, panelBalance, planningPriorities, subjectProgress, type GoalProgress } from "./derive"
 import { defaultCriteria, seasonWindow } from "./planning"
 import { createSeed } from "./seed"
 import { qualityBarFor, subjectConditionsFrom } from "./templates"
@@ -296,5 +296,28 @@ describe("goals freeze when the Project closes (C7)", () => {
     const after = subject(catalog, M31, "sub_m31")
     expect(after.fraction).toBe(before.fraction)
     expect(say(m, after.ratio!.line)).toBe(say(m, before.ratio!.line))
+  })
+})
+
+describe("nearestPanel", () => {
+  const panels = [
+    { id: "p1", ra: 314.0, dec: 44.0 },
+    { id: "p2", ra: 316.0, dec: 44.0 },
+    { id: "p3", ra: 315.0, dec: 46.0 },
+  ]
+  const at = (ra: number, dec: number) => ({ ra, dec, rotationDeg: null })
+
+  it("picks the panel whose centre is closest to the pointing", () => {
+    expect(nearestPanel(at(315.8, 44.2), panels)?.id).toBe("p2")
+    expect(nearestPanel(at(314.9, 45.7), panels)?.id).toBe("p3")
+  })
+
+  it("measures right ascension across 0°/360°", () => {
+    expect(nearestPanel(at(359.5, 10), [{ id: "east", ra: 1, dec: 10 }, { id: "west", ra: 357, dec: 10 }])?.id).toBe("east")
+  })
+
+  it("is null without pointing or panels", () => {
+    expect(nearestPanel(null, panels)).toBeNull()
+    expect(nearestPanel(at(315, 44), [])).toBeNull()
   })
 })
