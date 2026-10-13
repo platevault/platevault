@@ -5,6 +5,7 @@
  * profiles (PREP-FR-01, PREP-FR-02). Failed writes stay unsaved with Retry;
  * the last saved value stays in effect.
  */
+import { clampMoonAvoidance, type MoonAvoidance } from "@/domain/planning"
 import { validateNamingTemplate } from "@/domain/templates"
 import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, InputMode, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
@@ -12,7 +13,7 @@ import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
 // ---------------------------------------------------------------------------
-// Archive locations (P-ARC1) and Moon constraints (planning)
+// Archive locations (P-ARC1) and the Moon rule (planning)
 // ---------------------------------------------------------------------------
 
 /** Make an archive location the Default; a Project may still pick another (`setProjectArchiveLocation`). */
@@ -26,7 +27,10 @@ export function setDefaultArchiveLocation(locationId: LocationId): CommitResult 
   return result
 }
 
-/** One band's Moon constraint behind "good tonight"; values are clamped to their ranges. */
+/**
+ * One band's Moon constraint behind "good tonight"; values are clamped to their ranges.
+ * @deprecated C6: `setMoonAvoidance` edits the curves grades and Img time use; P7 switches the Moon limits dialog and W4 removes this.
+ */
 export function setMoonConstraint(band: Band, patch: Partial<MoonConstraint>): CommitResult {
   const href = "/plan"
   return commit(msg("store_label_moon_constraint", { band }), (s) => {
@@ -37,6 +41,14 @@ export function setMoonConstraint(band: Band, patch: Partial<MoonConstraint>): C
     }
     return { ...s, settings: { ...s.settings, moonConstraints: { ...s.settings.moonConstraints, [band]: next } } }
   }, { href })
+}
+
+/** One filter's Moon-avoidance curve (C6): the patch is merged and clamped to `MOON_AVOIDANCE_LIMITS`, so the width never reaches zero. */
+export function setMoonAvoidance(band: Band, patch: Partial<MoonAvoidance>): CommitResult {
+  return commit(msg("targets_moon_limits_for", { band }), (s) => {
+    const next = clampMoonAvoidance({ ...s.settings.moonAvoidance[band], ...patch })
+    return { ...s, settings: { ...s.settings, moonAvoidance: { ...s.settings.moonAvoidance, [band]: next } } }
+  }, { href: "/plan" })
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@
  * sibling modules, not these. Activity copy is a `MessageRef`, worded when it
  * is read; a refusal's returned message is worded now.
  */
+import type { FlowGate } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"
 import type { Project } from "@/domain/types"
 import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
@@ -26,6 +27,12 @@ export function refuse(title: MessageRef, reasons: MessageRef[], href: string | 
   const detail = joinRefs(reasons, "; ")
   recordActivity({ kind: "refusal", title, detail, operationId: null, href })
   return { ok: false, reason: "refused", message: say(m, msg("store_refusal_message", { title, reasons: detail })), reasons: reasons.map((reason) => say(m, reason)) }
+}
+
+/** A flow gate as a refusal (F3): one reason per blocker ("Locked by a prepared run view · M 31 LRGB"), or the gate's reason alone. */
+export function refuseWithGate(label: MessageRef, gate: FlowGate, href: string | null): CommitResult {
+  const reasons = gate.blockers.length > 0 ? gate.blockers.map((b) => joinRefs([gate.reason, b.label], " · ")) : [gate.reason]
+  return refuse(msg("store_refused", { label }), reasons, href)
 }
 
 /**

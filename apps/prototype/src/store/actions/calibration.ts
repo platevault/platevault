@@ -40,11 +40,11 @@ import {
   stackRefusals,
   stepRecord,
 } from "@/domain/calibration-process"
-import { automaticAssignments, calibrationPlan, KIND_NOUN } from "@/domain/calibration"
+import { automaticAssignments, calibrationPlan, KIND_NOUN, type MasterMatch, masterImportMatch, repointAssignments, replacementRefusal } from "@/domain/calibration"
 import { dismissBlockers, masterUsage } from "@/domain/calibration-library"
 import { createFolder, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder, nightOf, readFiles, stableHash } from "@/domain/indexing"
-import { runSetup, workingContent } from "@/domain/derive"
+import { masterReplacementRuns, runSetup, workingContent } from "@/domain/derive"
 import { unitCount } from "@/domain/labels"
 import { headerNamingValues } from "@/domain/templates"
 import type { CalibrationKind, CalibrationMaster, CalibrationProcess, CalibrationProcessId, CalibrationStepId, CalibrationStepRecord, MasterId, OperationId, ProfileId, RunId, SessionId } from "@/domain/types"
@@ -392,6 +392,98 @@ export function importMasterFile(path: string): { result: CommitResult; processI
   return { result, processId: result.ok ? id : null }
 }
 
+/** One file Import masters or Replace… handled (C9): its preview match, the outcome, the master it registered and the runs it re-pointed. */
+export interface MasterImportOutcome {
+  path: string
+  match: MasterMatch | null
+  result: CommitResult
+  masterId: MasterId | null
+  repointed: RunId[]
+}
+
+/** Import one file and run Import and Register; the registered master, or the refusal or failed step that stopped it. */
+function importAndRegister(path: string): { result: CommitResult; masterId: MasterId | null } {
+  const imported = importMasterFile(path)
+  if (!imported.result.ok || !imported.processId) return { result: imported.result, masterId: null }
+  const process = store.getState().catalog.calibrationProcesses[imported.processId]
+  if (process?.masterId) return { result: imported.result, masterId: process.masterId }
+  const failed = process ? CALIBRATION_STEPS.map((step) => process.steps[step]).find((r) => r.state === "failed") : undefined
+  return { result: refuse(IMPORT_BLOCKED, [failed?.reason ?? msg("store_cal_master_missing")], HREF), masterId: null }
+}
+
+/**
+ * Replace (C9): unfinished runs that hand off `oldId` now hand off `newId`,
+ * each assignment keeping its state with the new master's basis; finished
+ * runs keep what they recorded (D5). The old master leaves the list as
+ * replaced and is never matched again. Automatic choices are recorded
+ * first, so no run re-ranks by itself.
+ */
+function replaceWith(oldId: MasterId, newId: MasterId): { result: CommitResult; repointed: RunId[] } {
+  const state = store.getState()
+  const old = state.catalog.masters[oldId]
+  if (!old) return { result: MISSING, repointed: [] }
+  const repointed = masterReplacementRuns(state, oldId).map((r) => r.id)
+  const at = nowIso()
+  const result = commit(
+    msg("flow_label_replace_master", { name: fileName(old.path) }),
+    (s) => {
+      const pinned = pinAutomaticChoices(s)
+      return withCatalog(pinned, (c) => {
+        const runs = { ...c.runs }
+        for (const id of repointed) runs[id] = { ...runs[id]!, calibration: repointAssignments(c, pinned.disk, runs[id]!, oldId, newId, at) }
+        return { ...c, runs, masters: { ...c.masters, [oldId]: { ...c.masters[oldId]!, dismissedAt: at, replacedBy: newId } } }
+      })
+    },
+    { href: HREF },
+  )
+  if (result.ok) recordSaved(msg("flow_saved_master_replaced", { name: fileName(old.path), count: repointed.length }), null, HREF)
+  return { result, repointed: result.ok ? repointed : [] }
+}
+
+/**
+ * Import masters (C9): each selected file by its preview match
+ * (`masterImportMatch`). New imports it; Replaces imports it and replaces the
+ * master it matched; Duplicate and a file that is not a master are refused.
+ */
+export function importMasterFiles(paths: string[]): MasterImportOutcome[] {
+  return paths.map((path): MasterImportOutcome => {
+    const { catalog, disk } = store.getState()
+    const file = fileAt(disk, path)
+    const match = file ? masterImportMatch(catalog, disk, file) : null
+    if (match?.kind === "duplicate") return { path, match, result: refuse(IMPORT_BLOCKED, [msg("store_cal_already_in_library")], HREF), masterId: null, repointed: [] }
+    const imported = importAndRegister(path)
+    if (!imported.masterId || match?.kind !== "replaces") return { path, match, ...imported, repointed: [] }
+    const replaced = replaceWith(match.master.id, imported.masterId)
+    return { path, match, result: replaced.result, masterId: imported.masterId, repointed: replaced.repointed }
+  })
+}
+
+/**
+ * Replace… on a master (C9): the file goes through the same matching; a
+ * duplicate, a file of another kind or one that is not a master is refused.
+ * Otherwise it is imported and the master replaced (`replaceWith`); the
+ * confirm lists `masterReplacementRuns` first.
+ */
+export function replaceMaster(masterId: MasterId, path: string): MasterImportOutcome {
+  const { catalog, disk } = store.getState()
+  const master = catalog.masters[masterId]
+  if (!master) return { path, match: null, result: MISSING, masterId: null, repointed: [] }
+  const file = fileAt(disk, path)
+  const match = file ? masterImportMatch(catalog, disk, file) : null
+  const refusal = file ? replacementRefusal(catalog, disk, master, file) : msg("store_cal_path_unreadable", { path })
+  if (refusal) return { path, match, result: refuse(msg("store_refused", { label: msg("flow_label_replace_master", { name: fileName(master.path) }) }), [refusal], HREF), masterId: null, repointed: [] }
+  const imported = importAndRegister(path)
+  if (!imported.masterId) return { path, match, ...imported, repointed: [] }
+  const replaced = replaceWith(masterId, imported.masterId)
+  return { path, match, result: replaced.result, masterId: imported.masterId, repointed: replaced.repointed }
+}
+
+/** Settings › Old masters after (C9): darks, bias and dark flats older than this many days read "Old · {n} d". */
+export function setMasterMaxAgeDays(days: number): CommitResult {
+  if (!Number.isInteger(days) || days < 1) return refuse(msg("store_refused", { label: msg("flow_settings_master_age") }), [msg("flow_reason_whole_days")], "/settings/calibration")
+  return commit(msg("flow_settings_master_age"), (s) => ({ ...s, settings: { ...s.settings, masterMaxAgeDays: days } }), { href: "/settings/calibration" })
+}
+
 /** Settings › Keep raw calibration frames (off by default: raws go to the OS Trash once their master registers). */
 export function setKeepRawCalibration(keep: boolean): CommitResult {
   return commit(msg("settings_keep_raws"), (s) => ({ ...s, settings: { ...s.settings, keepRawCalibration: keep } }), { href: "/settings/calibration" })
@@ -413,16 +505,28 @@ function editMaster(masterId: MasterId, label: MessageRef, saved: MessageRef, up
   return result
 }
 
-/** Dismiss (P-CAL2): the master leaves the library's list for its Dismissed filter and is never matched; refused while a run uses or offers it. */
-export function dismissMaster(masterId: MasterId): CommitResult {
+/** Take a master out of the library's list and out of matching (P-CAL2); refused while a run uses or offers it. */
+function hide(masterId: MasterId, label: MessageRef, saved: (name: string) => MessageRef): CommitResult {
   const { catalog, disk } = store.getState()
   const master = catalog.masters[masterId]
   if (!master) return MISSING
-  const label = msg("calibration_dismiss_master")
   const blockers = dismissBlockers(catalog, masterUsage(catalog, disk), masterId)
   if (blockers.length > 0) return refuse(msg("store_refused", { label }), blockers.map((run) => verbatim(run.name)), HREF)
   if (master.dismissedAt) return { ok: true }
-  return editMaster(masterId, label, msg("store_saved_dismissed", { name: fileName(master.path) }), (current) => ({ ...current, dismissedAt: nowIso() }))
+  return editMaster(masterId, label, saved(fileName(master.path)), (current) => ({ ...current, dismissedAt: nowIso() }))
+}
+
+/** Hide (C2, P-CAL2): the master leaves the library's list for Show hidden and is never matched; Restore brings it back. */
+export function hideMaster(masterId: MasterId): CommitResult {
+  return hide(masterId, msg("calibration_hide_master"), (name) => msg("calibration_hid_master", { name }))
+}
+
+/**
+ * Dismiss (P-CAL2), worded as before.
+ * @deprecated C2 renames the verb to Hide: use `hideMaster`. P8 migrates the Calibration page and W4 removes this.
+ */
+export function dismissMaster(masterId: MasterId): CommitResult {
+  return hide(masterId, msg("calibration_dismiss_master"), (name) => msg("store_saved_dismissed", { name }))
 }
 
 /** Restore (P-CAL2): a dismissed master is back in the library's list and matched again. */

@@ -1,9 +1,10 @@
 /**
  * Run lifecycle writes shared by every screen (foundation-owned): start a run
- * or run group, edit and save membership, setup, Complete and Reopen, Move to
- * Trash, Restore and Empty Trash (D-W3, D-W8, D-W34, D-W38, D-W49, D-W50,
- * D-W72). Step-specific writes (calibration decisions, Prepare, Results,
- * Clean up) belong to the run screens (slice C).
+ * or run group, edit and save membership, setup, record calibration, Finish
+ * run and Reopen, Move to Trash, Restore and Empty Trash (D-W3, D-W8, D-W34,
+ * D-W38, D-W49, D-W50, D-W72, D1, D2, C2). Only Ready sessions join a run
+ * (P-REV2). Step-specific writes (calibration decisions, Prepare, Results)
+ * belong to the run screens (slice C).
  */
 import {
   completeRefusals,
@@ -14,18 +15,23 @@ import {
   panelRef,
   projectCandidates,
   rigRef,
+  runFlowState,
   runHref,
   runPipeline,
+  runPreparations,
   runSetup,
   savedContent,
+  sessionReadiness,
   subjectRef,
   trashRefusals,
   workingContent,
 } from "@/domain/derive"
 import { automaticAssignments, calibrationPlan } from "@/domain/calibration"
-import { addSessions, contentEquals, contentOf, describeDiff, diffContent, emptyContent, removeSessions } from "@/domain/membership"
+import { addSessions, contentEquals, contentOf, describeDiff, diffContent, emptyContent, removeSessions, sessionRef } from "@/domain/membership"
 import type {
+  IsoDateTime,
   MembershipContent,
+  OperationId,
   OpticalTrainId,
   ProjectId,
   Run,
@@ -35,12 +41,13 @@ import type {
   RunSetup,
   RunStep,
   SelectionReason,
+  Session,
   SessionId,
 } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
-import { closedRefusal, freshId, MISSING, recordSaved, refuse } from "./shared"
+import { closedRefusal, freshId, MISSING, recordSaved, refuse, refuseWithGate } from "./shared"
 import { moveToOsTrash, preparedEntryItems, resultItems } from "./trash"
 
 /** Names the Project's runs and run groups already use: a new run or group never repeats one. */
@@ -229,8 +236,14 @@ export function updateRunDraft(runId: RunId, label: MessageRef, change: (content
   )
 }
 
+/** Add sessions to the draft; refused for a session that is not Ready: it is reviewed at intake first (P-REV2, D2). */
 export function addRunSessions(runId: RunId, sessionIds: SessionId[], reason: SelectionReason): CommitResult {
-  return updateRunDraft(runId, msg("store_label_add_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) }), (content, s) =>
+  const { catalog } = store.getState()
+  const label = msg("store_label_add_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) })
+  const notReady = sessionIds.map((id) => catalog.sessions[id]).filter((s): s is Session => s !== undefined && sessionReadiness(catalog, s) !== "ready")
+  const run = catalog.runs[runId]
+  if (run && notReady.length > 0) return refuse(msg("store_refused", { label }), notReady.map((s) => msg("flow_reason_session_needs_review", { name: sessionRef(s) })), runHref(run))
+  return updateRunDraft(runId, label, (content, s) =>
     addSessions(content, s.disk, s.catalog, sessionIds.flatMap((id) => (s.catalog.sessions[id] ? [{ session: s.catalog.sessions[id]!, reason }] : []))),
   )
 }
@@ -308,12 +321,20 @@ export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): Co
   return result
 }
 
+/** The run Finished: its automatic calibration choices recorded, so it keeps what it handed off whatever the library holds later (D5). */
+function finished(run: Run, state: PrototypeState, at: IsoDateTime, stage: RunStep): Run {
+  const plan = calibrationPlan(state.catalog, state.disk, run, runSetup(state.catalog, run).calibrationPolicy, savedContent(run) ?? workingContent(run))
+  return { ...run, calibration: [...run.calibration, ...automaticAssignments(state.catalog, state.disk, run.id, plan, at)], completion: "complete", completedAt: at, stageBeforeComplete: stage }
+}
+
 /**
  * Complete (RES-FR-06, RES-FR-07): records completion even with no accepted
  * Result and removes nothing. Refused only while an operation affecting the
  * run is Running. The current step is kept so Reopen returns there, and the
  * run's automatic calibration choices are recorded: a Complete run keeps what
  * it handed off whatever the library holds later.
+ * @deprecated C2: Finish run (`finishRun`) is Results' Proceed and checks its
+ * gate first. W3 migrates the run pages and W4 removes this.
  */
 export function completeRun(runId: RunId): CommitResult {
   const state = store.getState()
@@ -324,15 +345,97 @@ export function completeRun(runId: RunId): CommitResult {
   if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_complete_named", { name: run.name }) }), blockers, runHref(run, "done"))
   const stage = runPipeline(state, run).current.id
   const at = nowIso()
+  return editRun(runId, msg("run_complete"), (current, s) => finished(current, s, at, stage), { step: "done" })
+}
+
+/**
+ * Calibrate's Proceed (§5.4): the automatic choices become the run's
+ * recorded assignments, so its masters stay put when a better one appears.
+ * Refused until the selection is saved and every row has a master or No
+ * calibration.
+ */
+export function recordRunCalibration(runId: RunId): CommitResult {
+  const state = store.getState()
+  const run = state.catalog.runs[runId]
+  if (!run) return MISSING
+  const flow = runFlowState(state, run)
+  const step = flow.steps.find((s) => s.id === "calibrate")!
+  if (step.state === "finished") return { ok: true }
+  const label = msg("flow_label_record_calibration")
+  if (flow.current !== "calibrate" || step.gate) {
+    const gate = flow.steps.find((s) => s.id === flow.current)?.gate ?? step.gate
+    return gate ? refuseWithGate(label, gate, runHref(run, "calibrate")) : refuse(msg("store_refused", { label }), [msg("domain_gate_save_first")], runHref(run, "calibrate"))
+  }
+  const at = nowIso()
   return editRun(
     runId,
-    msg("run_complete"),
+    label,
     (current, s) => {
-      const plan = calibrationPlan(s.catalog, s.disk, current, runSetup(s.catalog, current).calibrationPolicy, savedContent(current) ?? workingContent(current))
-      return { ...current, calibration: [...current.calibration, ...automaticAssignments(s.catalog, s.disk, current.id, plan, at)], completion: "complete", completedAt: at, stageBeforeComplete: stage }
+      const plan = calibrationPlan(s.catalog, s.disk, current, runSetup(s.catalog, current).calibrationPolicy, latestRevision(current))
+      return { ...current, calibration: [...current.calibration, ...automaticAssignments(s.catalog, s.disk, current.id, plan, at)] }
     },
-    { step: "done" },
+    { step: "calibrate" },
   )
+}
+
+/**
+ * Remove a Finished run's view (F6): its links and copies go to the OS
+ * Trash through the shared engine, as one Clean up operation. Refused for a
+ * run that is not Finished, while an operation affecting it runs, or when no
+ * view is left.
+ */
+export function startRunViewRemoval(runId: RunId): { result: CommitResult; operationId: OperationId | null } {
+  const state = store.getState()
+  const run = state.catalog.runs[runId]
+  if (!run) return { result: MISSING, operationId: null }
+  const label = msg("store_label_clean_up_named", { name: run.name })
+  const href = runHref(run, "results")
+  const title = msg("store_refused", { label })
+  const closed = closedRefusal(state.catalog.projects[run.projectId], label)
+  if (closed) return { result: closed, operationId: null }
+  if (run.completion !== "complete") return { result: refuse(title, [msg("flow_reason_not_finished", { name: run.name })], href), operationId: null }
+  const running = completeRefusals(state, run)
+  if (running.length > 0) return { result: refuse(title, running, href), operationId: null }
+  const items = preparedEntryItems(state, run.id)
+  if (items.length === 0) return { result: refuse(title, [msg("flow_nothing_to_clean_up")], href), operationId: null }
+  const operationId = moveToOsTrash({
+    kind: "run-cleanup",
+    title: label,
+    projectId: run.projectId,
+    runIds: [run.id],
+    items,
+    pruneFolders: [...new Set(runPreparations(state.catalog, run.id).map((p) => p.folderPath))],
+    unit: "prepared-entries",
+    href,
+  })
+  return { result: { ok: true }, operationId }
+}
+
+/**
+ * Finish run (C2), Results' Proceed (§5.4): refused until Results' gate
+ * holds (prepared, nothing still being written, no operation running).
+ * Records the run Finished with its calibration frozen (D5), then removes
+ * its view unless the user keeps it (F6); Wrap up's Clean up catches a kept
+ * view. Returns the view removal's operation, if one started.
+ */
+export function finishRun(runId: RunId, options: { keepView: boolean }): { result: CommitResult; operationId: OperationId | null } {
+  const state = store.getState()
+  const run = state.catalog.runs[runId]
+  if (!run) return { result: MISSING, operationId: null }
+  const label = msg("stepflow_finish_run")
+  const title = msg("store_refused", { label })
+  const href = runHref(run, "results")
+  if (run.trashedAt) return { result: refuse(title, [msg("store_reason_in_trash", { name: run.name })], href), operationId: null }
+  if (run.completion === "complete") return { result: refuse(title, [msg("flow_reason_run_finished", { name: run.name })], href), operationId: null }
+  const flow = runFlowState(state, run)
+  const gate = flow.steps.find((s) => s.id === flow.current)?.gate ?? null
+  if (gate) return { result: refuseWithGate(label, gate, href), operationId: null }
+  if (flow.current !== "results") return { result: refuse(title, [msg("domain_gate_prepare_first")], href), operationId: null }
+  const stage = runPipeline(state, run).current.id
+  const at = nowIso()
+  const result = editRun(runId, label, (current, s) => finished(current, s, at, stage), { step: "results" })
+  if (!result.ok || options.keepView || preparedEntryItems(store.getState(), runId).length === 0) return { result, operationId: null }
+  return { result, operationId: startRunViewRemoval(runId).operationId }
 }
 
 /** Reopen returns the run to the step it was in (D-W71 as kept by D-W72); returns that step. */

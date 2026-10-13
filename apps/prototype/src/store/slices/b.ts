@@ -2,11 +2,13 @@
  * Slice B: S2 Projects list, S3 Project (with its Wrap up stage and the
  * mosaic editor), S4 New Project, S8 Trash. Screen-local state, plus the
  * "archive" operation handler (Archive at Wrap up and Restore after Reopen,
- * STO-FR-13, D-W69).
+ * STO-FR-13, D-W69). The handler closes a Project whose Close project
+ * transfer succeeds (`closingOnSuccess`, §5.5, F2).
  */
 import { archiveHandler } from "@/features/v5/b-projects/actions"
 import type { ArchiveOrigins, OfferKind } from "@/features/v5/b-projects/model"
 import type { OperationId, ProjectId } from "@/domain/types"
+import { closingOnSuccess } from "@/store/actions/projects"
 import type { SliceDefinition } from "./index"
 
 /** A Wrap up or Trash approval whose operation the Project keeps showing. */
@@ -27,5 +29,5 @@ export const bSlice: SliceDefinition<BState> = {
   id: "b",
   version: 3,
   initial: () => ({ showDone: false, archiveOrigins: {}, approvals: {}, skippedOffers: {} }),
-  operations: [archiveHandler],
+  operations: [closingOnSuccess(archiveHandler)],
 }

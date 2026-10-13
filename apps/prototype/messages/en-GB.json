@@ -8212,6 +8212,126 @@
   "stepflow_finish_review": "Finish review",
   "stepflow_import": "Import",
   "stepflow_finished_on": "Finished {date}",
+  "stepflow_finish_calibration": "Finish calibration",
+  "flow_review_locked": "Locked by a prepared run view",
+  "flow_select_one_session": "Select at least one session",
+  "flow_sessions_need_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session needs review",
+        "countPlural=*": "{count} sessions need review"
+      }
+    }
+  ],
+  "flow_inputs_changed": "Inputs changed · Refresh",
+  "flow_resolve_calibration_first": "Resolve calibration first",
+  "flow_choose_profile": "Choose a profile",
+  "flow_corrected_values": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} corrected value",
+        "countPlural=*": "{count} corrected values"
+      }
+    }
+  ],
+  "flow_files_being_written": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file still being written",
+        "countPlural=*": "{count} files still being written"
+      }
+    }
+  ],
+  "flow_confirm_target": "Confirm a Target",
+  "flow_confirm_rig": "Confirm a rig",
+  "flow_frames_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame Unreviewed",
+        "countPlural=*": "{count} frames Unreviewed"
+      }
+    }
+  ],
+  "flow_finish_every_run": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Finish every run first · {count} open",
+        "countPlural=*": "Finish every run first · {count} open"
+      }
+    }
+  ],
+  "flow_reason_sessions_need_review": "Matching sessions need review",
+  "flow_master_old": "Old · {n} d",
+  "flow_match_new": "New",
+  "flow_match_replaces": "Replaces {master}",
+  "flow_match_duplicate": "Duplicate",
+  "flow_replace_other_kind": "Not a {kind} master",
+  "flow_reason_not_finished": "{name} is not Finished",
+  "flow_reason_step_first": "Finish or skip {step} first",
+  "flow_reason_step_settled": "{step} is finished or skipped",
+  "flow_reason_step_open": "{step} is not finished or skipped",
+  "flow_reason_reject_is_library_wide": "Reject marks the frame Unusable in the library",
+  "flow_reason_session_needs_review": "{name} needs review",
+  "flow_label_record_calibration": "Record calibration",
+  "flow_nothing_to_clean_up": "Nothing to clean up",
+  "flow_reason_run_finished": "{name} is already Finished",
+  "flow_label_replace_master": "Replace {name}",
+  "flow_saved_master_replaced": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Replaced {name} · {count} run re-pointed",
+        "countPlural=*": "Replaced {name} · {count} runs re-pointed"
+      }
+    }
+  ],
+  "flow_settings_master_age": "Old masters after",
+  "flow_reason_whole_days": "Enter a whole number of days",
+  "status_closed": "Closed",
+  "calibration_hide_master": "Hide master",
+  "calibration_hid_master": "Hid {name}",
   "stepflow_closed_on": "Closed {date}",
   "stepflow_step_todo": "{step}, to do",
   "stepflow_step_current": "{step}, current step",

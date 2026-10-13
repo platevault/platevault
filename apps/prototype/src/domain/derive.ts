@@ -8,7 +8,10 @@
  * params), worded by the screen with `say(m, …)`, so it follows a language
  * switch; the name helpers that return a string take the caller's `m`.
  */
-import { calibrationPlan, type CalibrationPlan } from "./calibration"
+import { calibrationPlan, type CalibrationPlan, handoffCalibration, handsOff, KIND_NAME, masterAge } from "./calibration"
+import { CALIBRATION_STEPS, stackRefusals } from "./calibration-process"
+import { latestCorrection } from "./corrections"
+import { filesUnder, volumeForPath } from "./disk"
 import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import {
   assetAvailability,
@@ -20,7 +23,7 @@ import {
   qualityApplicability,
   sessionFootprint,
 } from "./library"
-import { runSummary, sessionExposureS } from "./membership"
+import { memberSessions, runSummary, sessionExposureS, sessionRef } from "./membership"
 import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight } from "./planning"
 import { angularSeparationDeg, type FieldOfView, fieldOfView } from "./sky"
 import { goalMeasure, type GoalMeasure, type NamingValues, namingValues } from "./templates"
@@ -30,7 +33,18 @@ import type {
   AssetId,
   Band,
   CameraKind,
+  ApplicationProfile,
+  CalibrationMaster,
+  CalibrationProcess,
+  CalibrationProcessId,
+  CalibrationStepId,
   Catalog,
+  CorrectionField,
+  MasterId,
+  MetadataDecision,
+  ProfileId,
+  RunFlowStepId,
+  WrapUpStepRecord,
   Disk,
   Goal,
   GoalChannel,
@@ -61,8 +75,8 @@ import type {
   Subject,
   Target,
 } from "./types"
-import { formatCount } from "@/lib/format"
-import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
+import { fileName, formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 /** The read-only slice of the prototype state derivations need; `PrototypeState` satisfies it. */
 export interface World {
@@ -310,6 +324,35 @@ export function projectStatus(project: Project): ProjectStatus {
   return project.archive ? "archived" : "done"
 }
 
+/** The header's StatusBadge word (C2, D10): Open, Closed, or Archived (Closed with an Archive). */
+export const PROJECT_STATUS_NAME: Record<ProjectStatus, MessageRef> = { open: msg("status_open"), done: msg("status_closed"), archived: msg("status_archived") }
+
+export type ProjectTabId = "runs" | "wrap-up"
+
+export interface ProjectTabs {
+  status: ProjectStatus
+  tabs: Array<{ id: ProjectTabId; label: MessageRef; count: number | null }>
+  /** Wrap up's EmptyState until every run is Finished or Trashed (§5.5); null once Wrap up is available or the Project is closed. */
+  wrapUpUnavailable: FlowGate | null
+}
+
+/**
+ * The Project page's StatusBadge and its two tabs, Runs and Wrap up (D10, §5.7),
+ * in place of the stage strip (`projectStageStrip`). Runs counts the runs
+ * outside the Trash; Wrap up reads its one line until it is available.
+ */
+export function projectTabs(world: World, project: Project): ProjectTabs {
+  const wrapUp = wrapUpFlowState(world, project)
+  return {
+    status: projectStatus(project),
+    tabs: [
+      { id: "runs", label: msg("common_runs"), count: projectRuns(world.catalog, project.id).length },
+      { id: "wrap-up", label: msg("wrapup_action"), count: null },
+    ],
+    wrapUpUnavailable: wrapUp.unavailable,
+  }
+}
+
 /** Runs of a Project outside its Trash, oldest first. */
 export function projectRuns(catalog: Catalog, projectId: ProjectId): Run[] {
   return Object.values(catalog.runs)
@@ -351,7 +394,12 @@ export interface Candidate {
   reason: MessageRef
 }
 
-export function projectCandidates(catalog: Catalog, project: Project): Candidate[] {
+/**
+ * Sessions the candidate rule matches, reviewed or not: what a goal's
+ * "captured" counts and what a Project's review queue draws on. Only the
+ * Ready ones are candidates (`projectCandidates`, P-REV2).
+ */
+export function projectMatches(catalog: Catalog, project: Project): Candidate[] {
   const out: Candidate[] = []
   for (const session of liveLightSessions(catalog)) {
     const subject = candidateSubject(catalog, project, session)
@@ -360,6 +408,16 @@ export function projectCandidates(catalog: Catalog, project: Project): Candidate
     out.push({ session, subject, rigId, reason: msg("domain_candidate_reason", { target: subjectRef(catalog, subject), rig: rigRef(catalog, rigId) }) })
   }
   return out.sort((a, b) => a.session.night.localeCompare(b.session.night) || (a.session.channel ?? "").localeCompare(b.session.channel ?? ""))
+}
+
+/** Candidates (D2, P-REV2): matching sessions that are fully reviewed. Only they join a run; the rest wait in the review queue. */
+export function projectCandidates(catalog: Catalog, project: Project): Candidate[] {
+  return projectMatches(catalog, project).filter((c) => sessionReadiness(catalog, c.session) === "ready")
+}
+
+/** Matching sessions that still need review before they can join a run: "3 sessions need review ▸" (C14). */
+export function projectSessionsNeedingReview(catalog: Catalog, project: Project): Candidate[] {
+  return projectMatches(catalog, project).filter((c) => sessionReadiness(catalog, c.session) !== "ready")
 }
 
 /** The latest saved membership revision of a run, if any. */
@@ -384,15 +442,25 @@ export function projectMemberSessionIds(catalog: Catalog, projectId: ProjectId):
   return ids
 }
 
-/** The run's candidates: the subject's candidates on the run's rig; a panel run's, by pointing (D-W49, D-W38). */
-export function runCandidates(catalog: Catalog, run: Run): Candidate[] {
-  const project = catalog.projects[run.projectId]
-  if (!project) return []
-  return projectCandidates(catalog, project).filter((c) => {
+/** Matches of the run's subject on the run's rig; a panel run's, by pointing (D-W49, D-W38). */
+function forRun(catalog: Catalog, run: Run, matches: Candidate[]): Candidate[] {
+  return matches.filter((c) => {
     if (c.subject.id !== run.subjectId || c.rigId !== run.rigId) return false
     if (!run.panelId) return true
     return panelForSession(catalog, c.subject, c.session, run.rigId).panelId === run.panelId
   })
+}
+
+/** The run's candidates: the subject's Ready candidates on the run's rig; a panel run's, by pointing (D-W49, D-W38, D2). */
+export function runCandidates(catalog: Catalog, run: Run): Candidate[] {
+  const project = catalog.projects[run.projectId]
+  return project ? forRun(catalog, run, projectCandidates(catalog, project)) : []
+}
+
+/** Sessions that would be the run's candidates once reviewed: Select's "N sessions need review ▸" (C14). */
+export function runSessionsNeedingReview(catalog: Catalog, run: Run): Candidate[] {
+  const project = catalog.projects[run.projectId]
+  return project ? forRun(catalog, run, projectSessionsNeedingReview(catalog, project)) : []
 }
 
 export interface SessionGeometry {
@@ -467,16 +535,17 @@ export function groupCandidates(catalog: Catalog, group: RunGroup): { byPanel: R
 export interface FrameQuality {
   /** First level: library P/X/U, as it applies to the current bytes. */
   library: "unreviewed" | "usable" | "unusable" | "changed-content" | "verification-pending"
-  /** Second level: "Reject for this Project only". */
-  projectRejected: boolean
+  /** @deprecated P-REJ2 dropped Project-only rejects: always false. W3 removes the readers (d-review), W4 the field. */
+  projectRejected: false
   trashed: boolean
 }
 
-export function frameQuality(asset: Asset, project: Project | null): FrameQuality {
+/** Library quality as it applies to the frame's current bytes. Reject is library-wide (P-REJ2); `project` is unused and goes in W4. */
+export function frameQuality(asset: Asset, _project?: Project | null): FrameQuality {
   const applicability = qualityApplicability(asset)
   return {
     library: applicability === "applicable" ? asset.quality.value : applicability,
-    projectRejected: project ? asset.id in project.rejections : false,
+    projectRejected: false,
     trashed: asset.trashed !== null,
   }
 }
@@ -538,14 +607,14 @@ function goalMatches(catalog: Catalog, goal: Goal, session: Session, subject: Su
 /**
  * Progress of every goal. "in project" counts frames in the latest saved
  * memberships of the Project's runs outside its Trash (each frame once),
- * leaving out run exclusions and rejections, Project-only rejects, Trashed
+ * leaving out run exclusions and rejections, Trashed
  * frames and frames the quality bar does not admit. "captured" counts every
  * candidate frame plus those members, Trashed frames aside, so "in project"
  * never exceeds "captured" (D-W66).
  */
 export function goalProgress(catalog: Catalog, project: Project): GoalProgress[] {
   const runs = projectRuns(catalog, project.id)
-  const candidates = projectCandidates(catalog, project)
+  const candidates = projectMatches(catalog, project)
   return project.goals.map((goal): GoalProgress => {
     const subject = findSubject(project, goal.subjectId)
     const inProjectIds = new Set<AssetId>()
@@ -561,7 +630,7 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
           const session = asset?.sessionId ? catalog.sessions[asset.sessionId] : undefined
           if (!asset || asset.trashed || !session || goalChannel(catalog, session) !== goal.channel) continue
           capturedIds.add(id)
-          if (!revision.included.includes(id) || id in project.rejections) continue
+          if (!revision.included.includes(id)) continue
           const admitted = admitsQuality(catalog, asset, goal.qualityBar)
           if (admitted === null) unknownQuality += 1
           else if (admitted) inProjectIds.add(id)
@@ -1068,7 +1137,6 @@ function reviewDraftNote(run: Run): MessageRef | null {
 /** Frames a run's Review lists and how many still have no quality decision (Review's Unreviewed filter). */
 export function runReviewCounts(catalog: Catalog, run: Run): { total: number; unreviewed: number } {
   const content = workingContent(run)
-  const project = catalog.projects[run.projectId] ?? null
   if (!content) return { total: 0, unreviewed: 0 }
   const seen = new Set<AssetId>()
   let unreviewed = 0
@@ -1076,8 +1144,8 @@ export function runReviewCounts(catalog: Catalog, run: Run): { total: number; un
     const asset = catalog.assets[id]
     if (!asset || asset.trashed || seen.has(id)) continue
     seen.add(id)
-    const q = frameQuality(asset, project)
-    if (q.library !== "usable" && q.library !== "unusable" && !q.projectRejected) unreviewed += 1
+    const q = frameQuality(asset)
+    if (q.library !== "usable" && q.library !== "unusable") unreviewed += 1
   }
   return { total: seen.size, unreviewed }
 }
@@ -1205,11 +1273,11 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
 // Home (D-W35, D-W39, D-W48, PRJ-FR-17 to PRJ-FR-19)
 // ---------------------------------------------------------------------------
 
-/** Sessions that are candidates or members of at least one Project (any state). */
+/** Sessions that match or are members of at least one Project (any state), reviewed or not. */
 function sessionsInProjects(catalog: Catalog): Set<SessionId> {
   const ids = new Set<SessionId>()
   for (const project of Object.values(catalog.projects)) {
-    for (const c of projectCandidates(catalog, project)) ids.add(c.session.id)
+    for (const c of projectMatches(catalog, project)) ids.add(c.session.id)
     for (const id of projectMemberSessionIds(catalog, project.id)) ids.add(id)
   }
   return ids
@@ -1220,17 +1288,44 @@ export interface SessionsNeedingWork {
   needsTarget: Session[]
   /** A confirmed Target but no Project's candidate or member. */
   notInProject: Session[]
-  /** Candidates of open Projects with Unreviewed frames. */
+  /** Sessions open Projects match that still have Unreviewed frames: they wait in the review queue (P-REV2). */
   unreviewed: Array<{ session: Session; projectId: ProjectId; frames: number }>
   /** Candidates of a Project that are members of none of its runs (PRJ-FR-19). */
   readyToAdd: Array<{ session: Session; projectId: ProjectId }>
 }
 
-function unreviewedFrames(catalog: Catalog, session: Session): number {
+/** Live frames with no quality decision, or one that does not apply to their current bytes: what Review still needs (C10). */
+export function unreviewedAssetIds(catalog: Catalog, session: Session): AssetId[] {
   return liveAssetIds(catalog, session).filter((id) => {
     const asset = catalog.assets[id]!
     return asset.quality.value === "unreviewed" || qualityApplicability(asset) !== "applicable"
-  }).length
+  })
+}
+
+export function sessionUnreviewedFrames(catalog: Catalog, session: Session): number {
+  return unreviewedAssetIds(catalog, session).length
+}
+
+/** A light session's intake state (§5.7, P-REV2): it joins a Project's runs only once Ready. */
+export type SessionReadiness = "needs-target" | "needs-rig" | "needs-review" | "ready"
+
+/** Ready means a settled Target, a settled rig and every live frame Usable or Unusable (C10). */
+export function sessionReadiness(catalog: Catalog, session: Session): SessionReadiness {
+  if (!sessionTargetId(session)) return "needs-target"
+  if (!sessionRigId(session)) return "needs-rig"
+  return sessionUnreviewedFrames(catalog, session) > 0 ? "needs-review" : "ready"
+}
+
+/** The Sessions list's "Needs review" facet, which is the review queue (C14): live light sessions that are not Ready, oldest night first. */
+export function reviewQueue(catalog: Catalog): Session[] {
+  return liveLightSessions(catalog)
+    .filter((s) => sessionReadiness(catalog, s) !== "ready")
+    .sort((a, b) => a.night.localeCompare(b.night) || a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
+}
+
+/** The session intake step page: `/sessions/$sessionId?step=` (C14). */
+export function sessionIntakeLink(sessionId: SessionId, step: SessionIntakeStepId): StepLink {
+  return { to: "/sessions/$sessionId", params: { sessionId }, search: { step } }
 }
 
 export function sessionsNeedingWork(catalog: Catalog): SessionsNeedingWork {
@@ -1244,9 +1339,11 @@ export function sessionsNeedingWork(catalog: Catalog): SessionsNeedingWork {
   for (const project of Object.values(catalog.projects)) {
     if (project.state !== "open") continue
     const members = projectMemberSessionIds(catalog, project.id)
-    for (const { session } of projectCandidates(catalog, project)) {
-      const frames = unreviewedFrames(catalog, session)
+    for (const { session } of projectSessionsNeedingReview(catalog, project)) {
+      const frames = sessionUnreviewedFrames(catalog, session)
       if (frames > 0) out.unreviewed.push({ session, projectId: project.id, frames })
+    }
+    for (const { session } of projectCandidates(catalog, project)) {
       if (!members.has(session.id)) out.readyToAdd.push({ session, projectId: project.id })
     }
   }
@@ -1268,7 +1365,7 @@ export function planningSite(world: Pick<World, "catalog" | "settings" | "faults
 
 /**
  * A Project's one Next action, the first rule that applies (D-W35, PRJ-FR-18):
- * 1. its candidates have Unreviewed frames: "Review N new frames";
+ * 1. sessions it matches have Unreviewed frames: "Review N new frames", at the first one's review step (P-REV2, C14);
  * 2. one of its runs is blocked: that run at its blocked step;
  * 3. every run is Complete: "Wrap up" (P-WRAP1), until its steps are done or skipped;
  * 4. a goal is unmet in project and tonight has a window for that subject: "Plan tonight";
@@ -1279,15 +1376,16 @@ export function planningSite(world: Pick<World, "catalog" | "settings" | "faults
 export function projectNext(world: World, project: Project, nowMs: number, wrapUpOf: (project: Project) => ProjectWrapUp): NextAction | null {
   const { catalog } = world
   if (project.state === "done") return null
-  const candidates = projectCandidates(catalog, project)
-  const unreviewed = candidates.reduce((n, c) => n + unreviewedFrames(catalog, c.session), 0)
+  const waiting = projectSessionsNeedingReview(catalog, project)
+  const unreviewed = waiting.reduce((n, c) => n + sessionUnreviewedFrames(catalog, c.session), 0)
   const runs = projectRuns(catalog, project.id)
   if (unreviewed > 0) {
-    // A run's Review lists only its members, so new candidates are reviewed in the Project's candidate review (PIX-FR-18).
+    // Review happens at ingestion (P-REV2): the first waiting session's review step, then Finish review opens the next (C14).
+    const first = waiting.find((c) => sessionUnreviewedFrames(catalog, c.session) > 0)!
     return {
       label: msg("domain_next_review_new_frames", { count: unreviewed, n: formatCount(unreviewed) }),
-      reason: msg("domain_reason_candidates_unreviewed"),
-      link: projectLink(project.id, { candidates: "unreviewed" }),
+      reason: msg("flow_reason_sessions_need_review"),
+      link: sessionIntakeLink(first.session.id, "review"),
       step: null,
     }
   }
@@ -1333,7 +1431,10 @@ export function projectNext(world: World, project: Project, nowMs: number, wrapU
   return { label: msg("domain_next_start_run"), reason: msg("domain_reason_choose_subject_rig"), link: projectLink(project.id, { start: "run" }), step: null }
 }
 
-/** Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run. */
+/**
+ * Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run.
+ * @deprecated D10: the StatusBadge (`projectTabs`, `PROJECT_STATUS_NAME`) and Up next (`projectNext`) replace stages; W3 migrates Home and the Projects list, W4 removes this.
+ */
 export function projectStage(world: World, project: Project): { label: MessageRef; step: RunStep | null; state: GateState } {
   if (project.state === "done") return { label: project.archive ? msg("status_archived") : msg("status_done"), step: null, state: "done" }
   const runs = projectRuns(world.catalog, project.id)
@@ -1417,6 +1518,7 @@ export type ProjectStageId = "open" | "runs" | "wrap-up" | "done" | "archived"
 /**
  * The Project header's stage strip: Open → Runs → Wrap up → Done (or
  * Archived). Earlier stages read done, the current one current.
+ * @deprecated D10: tabs Runs · Wrap up and a StatusBadge (`projectTabs`) replace the strip; P5 migrates the Project page, W4 removes this.
  */
 export function projectStageStrip(catalog: Catalog, project: Project): { current: ProjectStageId; stages: Array<{ id: ProjectStageId; label: MessageRef; state: "done" | "current" | "todo" }> } {
   const runs = projectRuns(catalog, project.id)
@@ -1544,4 +1646,463 @@ export function unavailableMembers(disk: Disk, catalog: Catalog, content: Member
     const asset = catalog.assets[id]
     return asset ? assetAvailability(disk, catalog, asset) !== "available" : true
   })
+}
+
+// ---------------------------------------------------------------------------
+// Staged flows (round 10, plan §5): the step states every StepFlow builder
+// words (store/actions/flows.ts). One rule per flow, derived from the
+// records, so the strip, the footer and every list agree.
+// ---------------------------------------------------------------------------
+
+/** A step's state on the StepStrip (contracts.ts `FlowStep`). */
+export type FlowStepState = "todo" | "current" | "finished" | "skipped" | "blocked" | "redo"
+
+/** What keeps Proceed from running (F3): the reason and each blocker, with where it is resolved. */
+export interface FlowGate {
+  reason: MessageRef
+  blockers: Array<{ label: MessageRef; link?: StepLink }>
+}
+
+/** One derived step. Only the current step carries a gate; it reads Blocked while that gate is unmet. */
+export interface DerivedStep<Id extends string> {
+  id: Id
+  state: FlowStepState
+  gate: FlowGate | null
+  summary: MessageRef | null
+}
+
+/** The state of a step that is not finished or skipped: Blocked or Current when it is the flow's position, else Redo when it was settled before, else To do. */
+function openState(isCurrent: boolean, gate: FlowGate | null, settledBefore: boolean): FlowStepState {
+  if (isCurrent) return gate ? "blocked" : "current"
+  return settledBefore ? "redo" : "todo"
+}
+
+/** Proceed waits while an operation affecting the step runs: "Prepare M 31 is running". */
+function runningGate(operations: Operation[]): FlowGate | null {
+  return operations.length > 0 ? { reason: joinRefs(operations.map(operationHolds), "; "), blockers: [] } : null
+}
+
+/** "Finished 12 Oct": when a run, step or flow settled. */
+function finishedOn(at: IsoDateTime): MessageRef {
+  return msg("stepflow_finished_on", { date: nightRef(at.slice(0, 10)) })
+}
+
+// --- Corrected metadata at Prepare (C15, D11) ------------------------------
+
+/** One corrected value of a run input's session: the recorded header value and the catalog's correction, set at intake. */
+export interface CorrectedValue {
+  session: Session
+  field: CorrectionField
+  recorded: string | null
+  corrected: string
+}
+
+export interface RunCorrections {
+  /** Each session × field whose correction differs from the recorded value: Prepare shows "N corrected values". */
+  values: CorrectedValue[]
+  /** How each included frame gets each value: through the profile's configuration when it reads corrected values, else as a patched copy. */
+  decisions: MetadataDecision[]
+}
+
+/**
+ * The corrections a run's inputs carry. Corrections are made at intake, not
+ * at Prepare (C15): Prepare applies every one, with no per-field choice, and
+ * reports the count. Source headers never change.
+ */
+export function runCorrections(catalog: Catalog, content: MembershipContent | null, profile: ApplicationProfile | null): RunCorrections {
+  const out: RunCorrections = { values: [], decisions: [] }
+  const decision: MetadataDecision["decision"] = profile?.capability.correctedMetadata === "configuration" ? "configuration" : "patched-copy"
+  for (const member of content ? memberSessions(catalog, content) : []) {
+    for (const field of new Set(member.session.corrections.map((c) => c.field))) {
+      const correction = latestCorrection(member.session, field)
+      if (!correction || correction.observedValue === correction.correctedValue) continue
+      out.values.push({ session: member.session, field, recorded: correction.observedValue, corrected: correction.correctedValue })
+      for (const assetId of member.included) out.decisions.push({ assetId, field, observed: correction.observedValue, corrected: correction.correctedValue, decision })
+    }
+  }
+  return out
+}
+
+// --- Review lock (C10) ------------------------------------------------------
+
+/**
+ * The prepared view that holds a run's inputs: the latest preparation of a
+ * run that is neither Finished nor Trashed, unless it failed, was canceled or
+ * its view was removed. An offline view still counts: a tool may be using it.
+ */
+function heldView(world: World, run: Run): Preparation | null {
+  if (run.completion === "complete" || run.trashedAt) return null
+  const prep = runPreparations(world.catalog, run.id).at(-1)
+  if (!prep || prep.state === "failed" || prep.state === "canceled") return null
+  const volumeId = volumeForPath(world.disk, prep.folderPath)
+  const online = Boolean(volumeId && world.disk.volumes[volumeId]?.mounted)
+  return !online || filesUnder(world.disk, prep.folderPath).length > 0 ? prep : null
+}
+
+/** Runs whose prepared view uses the session: its review stays locked until each finishes or its view is removed (C10). */
+export function sessionReviewLock(world: World, sessionId: SessionId): Run[] {
+  return Object.values(world.catalog.runs).filter((run) => {
+    const prep = heldView(world, run)
+    const revision = prep ? run.revisions.find((r) => r.revision === prep.membershipRevision) : undefined
+    return revision?.sessions.some((s) => s.sessionId === sessionId) ?? false
+  })
+}
+
+/** Why the session's review marks cannot change now: "Locked by a prepared run view", naming each run. Null when they can. */
+export function reviewLockGate(world: World, sessionId: SessionId): FlowGate | null {
+  const runs = sessionReviewLock(world, sessionId)
+  if (runs.length === 0) return null
+  return { reason: msg("flow_review_locked"), blockers: runs.map((run) => ({ label: verbatim(run.name), link: runStepLink(run, "results") })) }
+}
+
+// --- Run flow (D1, D5, C2, C10) ---------------------------------------------
+
+export const RUN_FLOW_STEPS: RunFlowStepId[] = ["select", "calibrate", "prepare", "results"]
+
+export interface RunFlowState {
+  steps: Array<DerivedStep<RunFlowStepId>>
+  /** The first step that is not finished; Results once the run is Finished. */
+  current: RunFlowStepId
+  /** Set once the run is Finished (C2): every step is read-only and Run ▾ offers Reopen run. */
+  finishedAt: IsoDateTime | null
+  trashed: boolean
+  /** Matched against the saved revision; a Finished run's is what it recorded (D5). */
+  calibration: CalibrationPlan
+  /** What Prepare applies (C15). */
+  corrections: RunCorrections
+}
+
+/**
+ * The run flow: Select → Calibrate → Prepare → Results, with Finish run as
+ * Results' Proceed (D1, C2). There is no Review step (review happens at
+ * intake, P-REV2) and no Done step. A step is finished only when every step
+ * before it is; one that was settled before but no longer holds reads Redo.
+ * - Select: a saved revision with no draft, whose sessions are all Ready.
+ *   Library marks that change the membership of a run not yet prepared
+ *   leave a draft: Select is current again and Select and Prepare read
+ *   "Inputs changed · Refresh" until Proceed saves it (C10).
+ * - Calibrate: every row has a master or No calibration, recorded.
+ * - Prepare: the latest revision is prepared and verified.
+ * - Results: finished by Finish run, once nothing is still being written.
+ */
+export function runFlowState(world: World, run: Run): RunFlowState {
+  const { catalog, disk } = world
+  const latest = latestRevision(run)
+  const working = workingContent(run)
+  const inputsChanged = draftOwner(run) === "review"
+  const finishedRun = run.completion === "complete"
+  const link = (step: RunFlowStepId) => runStepLink(run, step)
+  const stepLabel = (step: RunFlowStepId) => STEP_NAME[step]
+  const running = runOperations(world.operations, run.id)
+
+  // 1 Select
+  const members = (working?.sessions ?? []).map((s) => catalog.sessions[s.sessionId]).filter((s): s is Session => s !== undefined)
+  const notReady = members.filter((s) => sessionReadiness(catalog, s) !== "ready")
+  const selectGate: FlowGate | null =
+    members.length === 0
+      ? { reason: msg("flow_select_one_session"), blockers: [] }
+      : notReady.length > 0
+        ? { reason: msg("flow_sessions_need_review", { count: notReady.length }), blockers: notReady.map((s) => ({ label: sessionRef(s), link: sessionIntakeLink(s.id, "review") })) }
+        : null
+  const selectDone = latest !== null && run.draft === null && selectGate === null
+  const selectSummary = inputsChanged ? msg("flow_inputs_changed") : run.draft ? msg("status_unsaved_changes") : latest ? msg("domain_status_saved_revision", { revision: latest.revision }) : msg("status_not_saved")
+
+  // 2 Calibrate
+  const setup = runSetup(catalog, run)
+  const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, selectDone || finishedRun ? latest : null)
+  const open = calibration.needsReview
+  const recorded = calibration.policy === "off" || calibration.rows.every((r) => r.assignment !== null)
+  const calibrateDone = selectDone && open.length === 0 && recorded
+  const calibrateGate: FlowGate | null = !selectDone
+    ? { reason: msg("domain_gate_save_first"), blockers: [{ label: stepLabel("select"), link: link("select") }] }
+    : open.length > 0
+      ? { reason: msg("blocker_calibration_review", { count: open.length }), blockers: open.map((row) => ({ label: joinRefs([KIND_NAME[row.kind], sessionRef(row.member.session)], " · "), link: link("calibrate") })) }
+      : null
+  // Without a saved selection there is nothing to match yet: the gate says so, and no count is shown.
+  const calibrateSummary: MessageRef | null = !selectDone && !finishedRun
+    ? null
+    : calibration.policy === "off"
+      ? msg("run_cal_off")
+      : open.length > 0
+        ? msg("domain_status_need_review", { count: open.length })
+        : msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length })
+
+  // 3 Prepare
+  const preparations = runPreparations(catalog, run.id)
+  const prep = preparations.at(-1) ?? null
+  const prepCurrent = prep && latest && prep.membershipRevision === latest.revision ? prep : null
+  const profile = setup.profileId ? (catalog.profiles[setup.profileId] ?? null) : null
+  const corrections = runCorrections(catalog, latest, profile)
+  const prepared = prepCurrent?.state === "prepared" && !prepCurrent.unverified
+  const prepareDone = calibrateDone && prepared
+  const prepareGate: FlowGate | null = !selectDone
+    ? { reason: msg("domain_gate_save_first"), blockers: [{ label: stepLabel("select"), link: link("select") }] }
+    : !calibrateDone
+      ? { reason: msg("flow_resolve_calibration_first"), blockers: [{ label: stepLabel("calibrate"), link: link("calibrate") }] }
+      : !profile
+        ? { reason: msg("flow_choose_profile"), blockers: [] }
+        : runningGate(running)
+  const prepState: MessageRef = !prepCurrent
+    ? msg("status_not_started")
+    : prepCurrent.state === "running" || prepCurrent.state === "paused"
+      ? msg("setup_stat_complete_value", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
+      : prepCurrent.state === "partial"
+        ? msg("run_partial_count", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
+        : prepCurrent.state === "prepared"
+          ? prepCurrent.unverified
+            ? msg("status_unverified")
+            : msg("status_prepared")
+          : msg("status_failed")
+  const prepareSummary = inputsChanged
+    ? msg("flow_inputs_changed")
+    : corrections.values.length > 0
+      ? joinRefs([prepState, msg("flow_corrected_values", { count: corrections.values.length })], " · ")
+      : prepState
+
+  // 4 Results
+  const { products } = runResults(catalog, run.id)
+  const writing = products.filter((r) => r.processingState === "pending")
+  const accepted = products.filter((r) => r.acceptance === "accepted").length
+  const resultsGate: FlowGate | null = !prepareDone
+    ? { reason: msg("domain_gate_prepare_first"), blockers: [{ label: stepLabel("prepare"), link: link("prepare") }] }
+    : writing.length > 0
+      ? { reason: msg("flow_files_being_written", { count: writing.length }), blockers: writing.map((r) => ({ label: verbatim(fileName(r.path)), link: link("results") })) }
+      : runningGate(running)
+  const resultsSummary = finishedRun && run.completedAt ? finishedOn(run.completedAt) : products.length === 0 ? msg("domain_status_awaiting_outputs") : msg("domain_status_accepted_of", { accepted, total: products.length })
+
+  const done: Record<RunFlowStepId, boolean> = finishedRun
+    ? { select: true, calibrate: true, prepare: true, results: true }
+    : { select: selectDone, calibrate: calibrateDone, prepare: prepareDone, results: false }
+  const settledBefore: Record<RunFlowStepId, boolean> = { select: latest !== null, calibrate: run.calibration.length > 0, prepare: prep !== null, results: false }
+  const gates: Record<RunFlowStepId, FlowGate | null> = { select: selectGate, calibrate: calibrateGate, prepare: prepareGate, results: resultsGate }
+  const summaries: Record<RunFlowStepId, MessageRef | null> = { select: selectSummary, calibrate: calibrateSummary, prepare: prepareSummary, results: resultsSummary }
+  const current = finishedRun ? "results" : RUN_FLOW_STEPS.find((id) => !done[id])!
+  const steps = RUN_FLOW_STEPS.map((id): DerivedStep<RunFlowStepId> => {
+    if (done[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
+    const gate = id === current && !run.trashedAt ? gates[id] : null
+    return { id, state: openState(id === current, gate, settledBefore[id]), gate, summary: run.trashedAt && id === current ? msg("status_trashed") : summaries[id] }
+  })
+  return { steps, current, finishedAt: finishedRun ? run.completedAt : null, trashed: run.trashedAt !== null, calibration, corrections }
+}
+
+// --- Session intake (P-REV2, C10, C14, C15) ---------------------------------
+
+export type SessionIntakeStepId = "target" | "rig" | "review"
+
+export const SESSION_INTAKE_STEPS: SessionIntakeStepId[] = ["target", "rig", "review"]
+
+/** "Target", "Rig", "Review". */
+export const SESSION_INTAKE_NAME: Record<SessionIntakeStepId, MessageRef> = { target: msg("sessions_column_target"), rig: msg("sessions_column_rig"), review: msg("step_review") }
+
+export interface SessionIntakeState {
+  steps: Array<DerivedStep<SessionIntakeStepId>>
+  /** The first step not settled; Review once the session is Ready. */
+  current: SessionIntakeStepId
+  readiness: SessionReadiness
+  /** Unfinished runs whose prepared view holds the session's review (C10). */
+  lockedBy: Run[]
+  /** The next session in the review queue (C14): where Finish review goes. */
+  next: Session | null
+  /** The corrections intake recorded, recorded beside corrected (C15). */
+  corrections: CorrectedValue[]
+}
+
+/** The next session the review queue holds after `session`, wrapping to the first; null when no other waits (C14). */
+export function nextInReviewQueue(catalog: Catalog, session: Session): Session | null {
+  const queue = reviewQueue(catalog).filter((s) => s.id !== session.id)
+  const after = queue.find((s) => s.night > session.night || (s.night === session.night && s.startedAt > session.startedAt))
+  return after ?? queue[0] ?? null
+}
+
+/** Where intake opens a session: its first step that is not settled, else Review (C14). */
+export function sessionIntakeEntry(catalog: Catalog, session: Session): StepLink {
+  const readiness = sessionReadiness(catalog, session)
+  return sessionIntakeLink(session.id, readiness === "needs-target" ? "target" : readiness === "needs-rig" ? "rig" : "review")
+}
+
+/** Where Import ends (C14): the first imported session the review queue holds, at its first open step; null when every one is Ready. */
+export function importReviewLink(catalog: Catalog, sessionIds: SessionId[]): StepLink | null {
+  const imported = new Set(sessionIds)
+  const first = reviewQueue(catalog).find((s) => imported.has(s.id))
+  return first ? sessionIntakeEntry(catalog, first) : null
+}
+
+/**
+ * Session intake: Target → Rig → Review, Finish review on the last step
+ * (§5.3). Each step's data is the session's own, so a step reads finished
+ * whenever it holds: a settled Target, a settled rig, 0 Unreviewed. Only
+ * Review has a domain gate (every frame Usable or Unusable, C10); Target's
+ * and Rig's Proceed confirm what the page's picker holds, so the builder
+ * gates them on that choice. A Ready session stays on Review, whose Finish
+ * review opens the next session the queue holds (C14).
+ */
+export function sessionIntakeState(world: World, session: Session): SessionIntakeState {
+  const { catalog } = world
+  const targetId = sessionTargetId(session)
+  const rigId = sessionRigId(session)
+  const unreviewed = sessionUnreviewedFrames(catalog, session)
+  const target = targetId ? catalog.targets[targetId] : undefined
+  const settled: Record<SessionIntakeStepId, boolean> = { target: targetId !== null, rig: rigId !== null, review: unreviewed === 0 }
+  const reviewGate: FlowGate | null = unreviewed > 0 ? { reason: msg("flow_frames_unreviewed", { count: unreviewed }), blockers: [] } : null
+  const lockedBy = sessionReviewLock(world, session.id)
+  const summaries: Record<SessionIntakeStepId, MessageRef> = {
+    target: target ? verbatim(target.name) : msg("sessions_filter_needs_target"),
+    rig: rigId ? rigRef(catalog, rigId) : msg("sessions_rig_needs_review"),
+    review: lockedBy.length > 0 ? msg("flow_review_locked") : unreviewed > 0 ? msg("flow_frames_unreviewed", { count: unreviewed }) : msg("status_ready"),
+  }
+  const current = SESSION_INTAKE_STEPS.find((id) => !settled[id]) ?? "review"
+  const steps = SESSION_INTAKE_STEPS.map((id): DerivedStep<SessionIntakeStepId> => {
+    if (settled[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
+    const gate = id === current && id === "review" ? reviewGate : null
+    return { id, state: openState(id === current, gate, false), gate, summary: summaries[id] }
+  })
+  const corrections = SESSION_CORRECTION_FIELDS.flatMap((field): CorrectedValue[] => {
+    const correction = latestCorrection(session, field)
+    return correction && correction.observedValue !== correction.correctedValue ? [{ session, field, recorded: correction.observedValue, corrected: correction.correctedValue }] : []
+  })
+  return { steps, current, readiness: sessionReadiness(catalog, session), lockedBy, next: nextInReviewQueue(catalog, session), corrections }
+}
+
+const SESSION_CORRECTION_FIELDS: CorrectionField[] = ["target", "equipment", "filter", "exposure", "focal-length"]
+
+// --- Wrap up (C3, D4, F2) ---------------------------------------------------
+
+/** Where Wrap up's StepPage lives: the Project's Wrap up tab, one step at a time. */
+export function wrapUpStepLink(projectId: ProjectId, step: WrapUpStepId): StepLink {
+  return projectLink(projectId, { stage: "wrap-up", step })
+}
+
+/** A step record's state from its operations (F2): Finished only once every one succeeded. */
+export type WrapUpRecordState = "todo" | "running" | "finished" | "skipped" | "redo"
+
+export function wrapUpRecordState(operations: Record<string, Operation>, record: WrapUpStepRecord | undefined): { state: WrapUpRecordState; failed: Operation | null; running: Operation[] } {
+  if (!record) return { state: "todo", failed: null, running: [] }
+  if (record.redo) return { state: "redo", failed: null, running: [] }
+  if (record.state === "skipped") return { state: "skipped", failed: null, running: [] }
+  const ops = record.operationIds.map((id) => operations[id]).filter((op): op is Operation => op !== undefined)
+  const unsettledOps = ops.filter(unsettled)
+  if (unsettledOps.length > 0) return { state: "running", failed: null, running: unsettledOps }
+  const failed = ops.find((op) => op.status !== "succeeded") ?? null
+  return { state: failed ? "todo" : "finished", failed, running: [] }
+}
+
+export interface WrapUpFlowState {
+  /** Every run outside the Trash is Finished: before then the tab shows "Finish every run first" (§5.5). */
+  available: boolean
+  /** Until it is available (and the Project is open), the tab's one line: "Finish every run first · 2 open ▸" or "No runs yet". */
+  unavailable: FlowGate | null
+  waitingOn: Run[]
+  steps: Array<DerivedStep<WrapUpStepId>>
+  /** The first step not finished or skipped, in the strict order (C3); Archive once the Project is closed. */
+  current: WrapUpStepId
+  /** Close project succeeded: the record is read-only until Reopen. */
+  closed: boolean
+  /** Close project's Archive transfer while it runs ("Closing"). */
+  closing: Operation[]
+}
+
+/**
+ * Wrap up: Clean up runs → Trash → Archive, strictly in that order (C3). A
+ * later step is read-only until the earlier ones are finished or skipped;
+ * an earlier one reopens until Close, and the steps after it read Redo. A
+ * step finishes when its operations succeed, not when they start (F2).
+ * Archive's Proceed is Close project: the Project closes when its transfer
+ * succeeds (§5.5).
+ */
+export function wrapUpFlowState(world: World, project: Project): WrapUpFlowState {
+  const runs = projectRuns(world.catalog, project.id)
+  const waitingOn = runs.filter((r) => r.completion !== "complete")
+  const closed = project.state === "done"
+  const available = runs.length > 0 && waitingOn.length === 0
+  const unavailable = available || closed ? null : wrapUpUnavailable(runs, waitingOn)
+  const records = WRAP_UP_STEPS.map((id) => ({ id, record: project.wrapUp[id], ...wrapUpRecordState(world.operations, project.wrapUp[id]) }))
+  const settled = (s: WrapUpRecordState) => s === "finished" || s === "skipped"
+  const firstOpen = records.find((r) => !settled(r.state))
+  const current: WrapUpStepId = closed || !firstOpen ? "archive" : firstOpen.id
+  const position = WRAP_UP_STEPS.indexOf(current)
+  const steps = records.map(({ id, record, state, failed, running }, index): DerivedStep<WrapUpStepId> => {
+    const summary =
+      state === "finished" && record ? finishedOn(record.at) : state === "skipped" ? msg("status_skipped") : state === "running" ? msg("status_running") : failed?.summary ?? null
+    if ((closed || index < position) && settled(state)) return { id, state, gate: null, summary }
+    if (index > position) return { id, state: record ? "redo" : "todo", gate: null, summary: null }
+    const gate: FlowGate | null = closed ? null : (unavailable ?? runningGate(running))
+    return { id, state: openState(true, gate, false), gate, summary }
+  })
+  const archive = records.find((r) => r.id === "archive")!
+  return { available, unavailable, waitingOn, steps, current, closed, closing: closed ? [] : archive.running }
+}
+
+/** Why Wrap up is not available yet: "Finish every run first · 2 open", naming each open run, or "No runs yet" (§5.5). */
+function wrapUpUnavailable(runs: Run[], waitingOn: Run[]): FlowGate {
+  if (runs.length === 0) return { reason: msg("project_no_runs"), blockers: [] }
+  return { reason: msg("flow_finish_every_run", { count: waitingOn.length }), blockers: waitingOn.map((run) => ({ label: verbatim(run.name), link: runStepLink(run, "results") })) }
+}
+
+// --- Calibration process (P-CAL3) -------------------------------------------
+
+export interface CalibrationFlowState {
+  steps: Array<DerivedStep<CalibrationStepId>>
+  /** The first step not done or skipped; Raws once every step is. */
+  current: CalibrationStepId
+  finished: boolean
+}
+
+/** The calibration process as a flow: Stack → Detect → Import → Register → Raws, each step's own record and gate (P-CAL3). */
+export function calibrationFlowState(world: World, process: CalibrationProcess, profileId: ProfileId | null): CalibrationFlowState {
+  const settled = (id: CalibrationStepId) => process.steps[id].state === "done" || process.steps[id].state === "skipped"
+  const current = CALIBRATION_STEPS.find((id) => !settled(id)) ?? "raws"
+  const finished = CALIBRATION_STEPS.every(settled)
+  const op = process.operationId ? world.operations[process.operationId] : undefined
+  const gateFor = (id: CalibrationStepId): FlowGate | null => {
+    if (id === "stack" && process.sessionId) {
+      const reasons = stackRefusals(world.catalog, world.settings, process.sessionId, profileId)
+      if (reasons.length > 0) return { reason: reasons[0]!, blockers: reasons.map((label) => ({ label })) }
+      if (!profileId) return { reason: msg("flow_choose_profile"), blockers: [] }
+    }
+    if (id === "raws" && process.steps.raws.state === "running" && op && unsettled(op)) return runningGate([op])
+    return null
+  }
+  const steps = CALIBRATION_STEPS.map((id): DerivedStep<CalibrationStepId> => {
+    const record = process.steps[id]
+    const summary = record.state === "done" && record.at ? finishedOn(record.at) : record.state === "skipped" ? msg("status_skipped") : record.state === "running" ? msg("status_running") : record.reason
+    if (settled(id)) return { id, state: record.state === "skipped" ? "skipped" : "finished", gate: null, summary }
+    const gate = id === current ? gateFor(id) : null
+    return { id, state: openState(id === current, gate, false), gate, summary }
+  })
+  return { steps, current, finished }
+}
+
+export function calibrationStepLink(processId: CalibrationProcessId, step: CalibrationStepId): StepLink {
+  return { to: "/calibration/processes/$processId/$step", params: { processId, step } }
+}
+
+// --- Master age and Replace (C9, D9) ----------------------------------------
+
+/** The calibration a run hands off now: against its saved revision, else its working content (the library's Used by). */
+function handedOffPlan(world: World, run: Run): CalibrationPlan {
+  return calibrationPlan(world.catalog, world.disk, run, runSetup(world.catalog, run).calibrationPolicy, savedContent(run) ?? workingContent(run))
+}
+
+/** Unfinished runs Replace… re-points from `masterId`, listed in its confirm (C9). Finished runs keep what they recorded. */
+export function masterReplacementRuns(world: World, masterId: MasterId): Run[] {
+  return Object.values(world.catalog.runs).filter((run) => {
+    if (run.completion === "complete" || run.trashedAt) return false
+    return handedOffPlan(world, run).rows.some((row) => handsOff(row) && row.input?.masterId === masterId)
+  })
+}
+
+/** Unfinished runs that hand off an old master, per master: the only case that raises an issue (C9). */
+export function oldMastersInUse(world: World, nowMs: number): Array<{ master: CalibrationMaster; runs: Run[] }> {
+  const out = new Map<MasterId, { master: CalibrationMaster; runs: Run[] }>()
+  for (const run of Object.values(world.catalog.runs)) {
+    if (run.completion === "complete" || run.trashedAt) continue
+    const plan = handedOffPlan(world, run)
+    for (const master of handoffCalibration(world.catalog, plan).map((s) => world.catalog.masters[s.input.masterId])) {
+      if (!master || masterAge(master, world.settings, nowMs) === null) continue
+      const entry = out.get(master.id) ?? { master, runs: [] }
+      if (!entry.runs.includes(run)) entry.runs.push(run)
+      out.set(master.id, entry)
+    }
+  }
+  return [...out.values()]
 }
