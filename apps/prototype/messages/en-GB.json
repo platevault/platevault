@@ -7510,7 +7510,7 @@
       }
     }
   ],
-  "review_plot_coverage": "{count}/{total}",
+  "review_plot_coverage": "{count} of {total} measured",
   "review_plot_point": "{name}: {value}",
   "review_readout": "x {x} y {y} · {value} ADU",
   "review_readout_invalid": "x {x} y {y} · NaN",
