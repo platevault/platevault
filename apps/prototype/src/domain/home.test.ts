@@ -79,6 +79,21 @@ describe("pendingWork: what needs sorting", () => {
       expect(row.bytes).toBeGreaterThanOrEqual(0)
     }
   })
+
+  it("drops a ready-to-add session once an open run of its Project holds it in its draft, and lists it again without", () => {
+    const world = demo()
+    const row = pendingWork(world).find((r) => r.kind === "ready-to-add")
+    expect(row, "the demo library has a session ready to add").toBeDefined()
+    const { session, projectId } = row as Extract<PendingWork, { kind: "ready-to-add" }>
+    const run = Object.values(world.catalog.runs).find((r) => r.projectId === projectId && r.completion === "open" && !r.trashedAt)!
+    const saved = run.revisions.at(-1)!
+    const draft = { ...saved, baseRevision: saved.revision, updatedAt: "2026-10-13T12:00:00.000Z", sessions: [...saved.sessions, { sessionId: session.id, reason: saved.sessions[0]!.reason }] }
+    const listed = (w: World) => pendingWork(w).some((r) => r.kind === "ready-to-add" && r.session.id === session.id)
+    world.catalog.runs[run.id] = { ...run, draft }
+    expect(listed(world)).toBe(false)
+    world.catalog.runs[run.id] = { ...run, draft: null }
+    expect(listed(world)).toBe(true)
+  })
 })
 
 describe("openWork: open Projects and calibration, with their problems in context", () => {

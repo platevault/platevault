@@ -42,7 +42,7 @@ import { listLocation } from "./indexing"
 import { deriveIssues, type Issue } from "./issues"
 import { locationAvailability } from "./library"
 import { runFootprint } from "./storage"
-import type { Availability, Location, NightDate, Operation, Project, ProjectId, Run, Session } from "./types"
+import type { Availability, Location, NightDate, Operation, Project, ProjectId, Run, Session, SessionId } from "./types"
 
 // ---------------------------------------------------------------------------
 // Pending ingestions
@@ -141,7 +141,9 @@ function preparedOnDisk(world: Pick<World, "disk" | "catalog">, run: Run): { ent
 /**
  * Pending work in the order it unblocks the rest: a Target, then review,
  * then a Project, then a run, then Clean up; oldest night first within a
- * kind. A session reviewed for several Projects shows once.
+ * kind. A session reviewed for several Projects shows once. A session an
+ * open run's draft already holds is not ready to add: it waits only for
+ * that run's Save.
  */
 export function pendingWork(world: Pick<World, "disk" | "catalog">): PendingWork[] {
   const work = sessionsNeedingWork(world.catalog)
@@ -160,9 +162,17 @@ export function pendingWork(world: Pick<World, "disk" | "catalog">): PendingWork
     ...work.needsTarget.map((session) => ({ session })).sort(byNight).map(({ session }): PendingWork => ({ kind: "needs-target", session })),
     ...unreviewed.sort(byNight).map((u): PendingWork => ({ kind: "unreviewed", ...u })),
     ...work.notInProject.map((session) => ({ session })).sort(byNight).map(({ session }): PendingWork => ({ kind: "not-in-project", session })),
-    ...[...work.readyToAdd].sort(byNight).map((r): PendingWork => ({ kind: "ready-to-add", ...r })),
+    ...work.readyToAdd
+      .filter((r) => !inOpenDraft(world, r.projectId, r.session.id))
+      .sort(byNight)
+      .map((r): PendingWork => ({ kind: "ready-to-add", ...r })),
     ...cleanUp,
   ]
+}
+
+/** Whether an open run of the Project outside its Trash holds the session in its unsaved draft. */
+function inOpenDraft(world: Pick<World, "catalog">, projectId: ProjectId, sessionId: SessionId): boolean {
+  return projectRuns(world.catalog, projectId).some((run) => run.completion === "open" && (run.draft?.sessions.some((s) => s.sessionId === sessionId) ?? false))
 }
 
 /** Where a Finished run's Clean up happens: Wrap up's first step once every run is Finished, else the run's Results step. */

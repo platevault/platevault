@@ -26,10 +26,12 @@
  *
  * Problems show on the row they affect (`issueCopy` words them as Issues
  * does). Row actions are Action descriptors: one click only where nothing
- * more is asked and the action can be undone (Add to run, Add to Plan,
- * Pause, Resume), each with an Undo toast; everything else opens its page.
+ * more is asked and the action can be undone (Add to run, Add to Plan),
+ * each with an Undo toast; everything else opens its page. Status lists no
+ * job that can pause (only scans and imports can, and they show in Pending
+ * ingestions), so its jobs only open where their work lives.
  */
-import { FolderPlus, Import, MapPin, Pause, Play } from "lucide-react"
+import { FolderPlus, Import, MapPin } from "lucide-react"
 import { useMemo } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/app/run-ui"
@@ -74,7 +76,6 @@ import { dayInWeek, WEEK_START } from "@/lib/week"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
 import { addRunSessions, removeRunSessions } from "@/store/actions/runs"
 import { nowIso, useStore } from "@/store/core"
-import { pauseOperation, resumeOperation } from "@/store/operations"
 import { runToJoin } from "./session-model"
 
 /** Rows a section shows before "All N ›" (C8). */
@@ -530,34 +531,6 @@ function LocationsTable({ rows, follow }: { rows: LocationStatus[]; follow: Foll
   )
 }
 
-/** Pause and Resume undo each other, so each is one click with an Undo toast. */
-function jobAction(m: Messages, op: Operation): Action | null {
-  const title = say(m, op.title)
-  if (op.status === "running" && op.canPause) {
-    return {
-      id: "pause",
-      label: m.home_pause(),
-      icon: Pause,
-      run: () => {
-        pauseOperation(op.id)
-        withUndo(m, m.home_paused({ name: title }), () => resumeOperation(op.id))
-      },
-    }
-  }
-  if (op.status === "paused" || op.status === "interrupted") {
-    return {
-      id: "resume",
-      label: m.home_resume(),
-      icon: Play,
-      run: () => {
-        resumeOperation(op.id)
-        withUndo(m, m.home_resumed({ name: title }), () => pauseOperation(op.id))
-      },
-    }
-  }
-  return null
-}
-
 function JobsTable({ jobs, follow }: { jobs: Operation[]; follow: Follow }) {
   const m = useMessages()
   const world = useStore((s) => s)
@@ -575,7 +548,6 @@ function JobsTable({ jobs, follow }: { jobs: Operation[]; follow: Follow }) {
       columns={columns}
       getRowId={(op) => op.id}
       rowLabel={title}
-      primaryRowAction={(op) => jobAction(m, op)}
       rowActions={(op) => [{ id: "open", label: m.verb_open(), run: () => follow(operationLink(world, op)) }]}
       onRowClick={(op) => follow(operationLink(world, op))}
       empty={m.home_nothing_running()}
