@@ -1,27 +1,39 @@
 /**
- * S6 Review (slice D): frame review inside a run's Review step, Review all
- * across a run group's panels (D-W41), review of a Project's candidate
- * sessions, opened filtered to Unreviewed (PIX-FR-18), and review of one
- * library session from Sessions (marks are library-level only; no Project
- * reject). Each renders the one review workspace (`frame-review.tsx`) as a
- * full-height flex child with its own toolbar; mount it without page padding.
- * Route search params read: `?filter=all|picked|rejected|unreviewed`,
- * `?panel=<panelId>`, `?assetId=`.
+ * Review (slice D; P-REV2): the session intake Review step body. Marks are
+ * library-level only (P-REJ2). The intake StepPage hosts it with `fill`;
+ * it renders no header, step strip or footer of its own. Route search
+ * params read: `?assetId=` opens that frame.
+ *
+ * ReviewStep, GroupReviewStep and CandidateReview are the pre-P-REV2 hosts
+ * (a run's Review step, a group's Review all, a Project's candidates). They
+ * stay until their importers move to session intake, and mark the library
+ * only; W4 (astro-plan-o1wsa) deletes them.
  */
-import { FrameReview } from "./frame-review"
+import type { ProjectId, RunGroupId, RunId, SessionId } from "@/domain/types"
+import { ReviewWorkspace } from "./frame-review"
 
-export function ReviewStep({ runId }: { runId: string }) {
-  return <FrameReview key={runId} context={{ kind: "run", runId }} />
+export interface SessionReviewProps {
+  sessionId: SessionId
+  /** The host's Finish review; the workspace's Finish command (⌘↵) calls it once no frame is Unreviewed. */
+  onFinished?: () => void
 }
 
-export function GroupReviewStep({ groupId }: { groupId: string }) {
-  return <FrameReview key={groupId} context={{ kind: "group", groupId }} />
+/** The Review step body of session intake. */
+export function SessionReview({ sessionId, onFinished }: SessionReviewProps) {
+  return <ReviewWorkspace key={sessionId} context={{ kind: "session", sessionId }} onFinished={onFinished} />
 }
 
-export function CandidateReview({ projectId }: { projectId: string }) {
-  return <FrameReview key={projectId} context={{ kind: "candidates", projectId }} />
+/** @deprecated P-REV2: review moved to session intake. Importer: c-runs/run.tsx (W3P6Runs); W4 deletes it. */
+export function ReviewStep({ runId }: { runId: RunId }) {
+  return <ReviewWorkspace key={runId} context={{ kind: "run", runId }} />
 }
 
-export function SessionReview({ sessionId }: { sessionId: string }) {
-  return <FrameReview key={sessionId} context={{ kind: "session", sessionId }} />
+/** @deprecated P-REV2: review moved to session intake. Importer: c-runs/group.tsx (W3P6Runs); W4 deletes it. */
+export function GroupReviewStep({ groupId }: { groupId: RunGroupId }) {
+  return <ReviewWorkspace key={groupId} context={{ kind: "group", groupId }} />
+}
+
+/** @deprecated P-REV2: review moved to session intake. Importer: b-projects/project.tsx (W3P5Projects); W4 deletes it. */
+export function CandidateReview({ projectId }: { projectId: ProjectId }) {
+  return <ReviewWorkspace key={projectId} context={{ kind: "candidates", projectId }} />
 }

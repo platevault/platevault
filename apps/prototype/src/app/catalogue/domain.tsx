@@ -1,23 +1,29 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §3.3 L2-domain): Plate, Histogram,
- * MoonLine, DarkLine, AltitudeSpark, MosaicField and SiteMap. The plates
- * render the prototype's synthetic star field; the night visuals compute a
- * real night at sample sites; the mosaic is a 2 × 2 layout around M 31.
- * Captions are reviewer labels; site names are sample data.
+ * CornerGrid, FrameThumbnails, SessionPlots, StarCutouts, MoonLine, DarkLine,
+ * AltitudeSpark, MosaicField and SiteMap. The plates render the prototype's
+ * synthetic star field; the night visuals compute a real night at sample
+ * sites; the mosaic is a 2 × 2 layout around M 31. Captions are reviewer
+ * labels; site and frame names are sample data.
  */
 import { lazy, Suspense, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { DisplayMenu } from "@/components/app/display-menu"
 import { Section } from "@/components/app/page"
+import { CornerGrid } from "@/components/domain/corner-grid"
+import { FrameThumbnails } from "@/components/domain/frame-thumbnails"
 import { Histogram } from "@/components/domain/histogram"
 import { type MosaicFieldPanel, MosaicField, mosaicFreeSlots } from "@/components/domain/mosaic-field"
 import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type Stretch, type ViewWindow, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
+import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
+import { StarCutouts } from "@/components/domain/star-cutouts"
+import { StatusBadge } from "@/components/app/status"
 import { Spinner } from "@/components/ui/spinner"
 import { defaultCriteria, nightSummary, upcomingNight } from "@/domain/planning"
-import type { ObservingSite } from "@/domain/types"
-import { formatDecimal } from "@/lib/format"
-import { detectedStars, linearHistogram, renderWindow, type StarField, starField } from "@/features/t3/raster"
+import type { DiskFile, ObservingSite } from "@/domain/types"
+import { formatCount, formatDecimal } from "@/lib/format"
+import { detectedStars, linearHistogram, renderWindow, type StarField, starField } from "@/components/domain/raster"
 import { nightGrid } from "@/features/v5/e-targets-plan-settings/sky-tonight"
 import { positionSky, type SkyContext } from "@/features/v5/e-targets-plan-settings/targets-model"
 import { ComponentSection, Specimen } from "./specimen"
@@ -91,6 +97,73 @@ function Histograms() {
           <div className="w-64">
             <Histogram data={data.flagged} />
           </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_histogram_readout()}>
+          <div className="w-64">
+            <Histogram data={data.clean} readout={data.clean.median * 1.6} />
+          </div>
+        </Specimen>
+      </div>
+    </ComponentSection>
+  )
+}
+
+function ReviewVisuals() {
+  const m = useMessages()
+  const field = useMemo(() => starField("catalogue-corners", FIELD_TRUTH, 1600, 1100, null), [])
+  const stars = useMemo(() => detectedStars(field), [field])
+  const failed = stars.find((s) => s.state === "failed") ?? stars[0]!
+  const [active, setActive] = useState("t2")
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(["t4"]))
+  const thumbs = useMemo(
+    () =>
+      Array.from({ length: 8 }, (_, i) => {
+        const id = `t${i + 1}`
+        // A disk file as indexing records it: enough header and pixel facts to decode a thumbnail.
+        const file = { path: `/catalogue/Light_${i + 1}.fits`, sha256: `catalogue-thumb-${i}`, header: { widthPx: 1600, heightPx: 1100, bayerPattern: null }, pixelTruth: { ...FIELD_TRUTH, fwhmPx: 2.6 + i * 0.3 } } as unknown as DiskFile
+        return { id, name: `Light_${String(i + 1).padStart(4, "0")}.fits`, file: i === 6 ? undefined : file, unreadable: i === 6 ? m.status_offline() : null, status: <StatusBadge kind="quality" value={i === 3 ? "unusable" : i < 3 ? "usable" : "unreviewed"} />, statusText: "", dimmed: i === 3 }
+      }),
+    [m],
+  )
+  const series: PlotSeries[] = (["fwhm", "eccentricity"] as const).map((id) => ({
+    id,
+    label: id === "fwhm" ? "FWHM" : m.review_ecc_short(),
+    points: thumbs.map((t, index) => ({ id: t.id, index, value: id === "fwhm" ? 2.6 + index * 0.3 : 0.3 + (index % 3) * 0.05, name: t.name, rejected: t.dimmed })),
+    format: (value) => formatDecimal(value, 2),
+    tick: (value) => formatDecimal(value, 2),
+  }))
+  const activate = (id: string, mode: "set" | "toggle" | "range") => {
+    setActive(id)
+    if (mode === "toggle") setSelected((prev) => (prev.has(id) ? new Set([...prev].filter((x) => x !== id)) : new Set([...prev, id])))
+    else if (mode === "set") setSelected(new Set())
+  }
+  return (
+    <ComponentSection components={["CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"]} description={m.catalogue_domain_review_desc()} level={3}>
+      <div className="space-y-3">
+        <Specimen caption={m.catalogue_domain_corners()}>
+          <div className="flex h-96 w-full">
+            {/* eslint-disable-next-line alm/no-user-string -- a sample file name */}
+            <CornerGrid field={field} stretch="auto" overlay={{ fwhm: true, eccentricity: true }} label="Light_0001.fits" />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_filmstrip()}>
+          <div className="w-full min-w-0">
+            <FrameThumbnails layout="strip" label={m.review_view_filmstrip()} items={thumbs} activeId={active} selected={selected} onActivate={activate} empty={null} />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_grid()}>
+          <div className="flex h-80 w-full min-w-0">
+            <FrameThumbnails layout="grid" label={m.review_frame_grid()} items={thumbs} activeId={active} selected={selected} onActivate={activate} empty={null} />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_plots()}>
+          <div className="h-28 w-full">
+            <SessionPlots series={series} count={thumbs.length} activeId={active} selected={selected} threshold={{ seriesId: "fwhm", direction: "above", value: 4 }} onSelect={(id) => setActive(id)} />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_cutouts({ count: formatCount(2) })}>
+          <StarCutouts field={field} star={stars[0]!} />
+          <StarCutouts field={field} star={failed} />
         </Specimen>
       </div>
     </ComponentSection>
@@ -193,6 +266,7 @@ export function DomainCatalogue() {
     <Section title={m.catalogue_domain_title()} description="components/domain/*">
       <Plates />
       <Histograms />
+      <ReviewVisuals />
       <NightVisuals />
       <MosaicFields />
       <SiteMaps />

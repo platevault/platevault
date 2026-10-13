@@ -5308,7 +5308,6 @@
   "importdlg_blocked_unsupported": "Este arquivo não pode ser importado.",
   "importdlg_blocked_no_match": "Nenhuma linha corresponde a um frame indexado.",
   "importdlg_title": "Importar medições",
-  "importdlg_description_choose": "Escolha uma exportação compatível. Protótipo: seletor de arquivos simulado que lista os CSV dos volumes montados.",
   "importdlg_description_review": "Revise como a exportação corresponde aos frames e às métricas antes de anexar qualquer coisa.",
   "importdlg_no_csv_title": "Nenhuma exportação CSV em um volume montado",
   "importdlg_no_csv_body": "Compatível: {format}. Monte o volume que contém a exportação ou copie-a para um local montado.",
@@ -7360,6 +7359,133 @@
       }
     }
   ],
+  "frame_angle_value": "{deg}°",
+  "frame_col_star": "Estrela",
+  "frame_note_warning": "Aviso",
+  "frame_value_history": "{value} (bytes anteriores)",
+  "frame_width_scaled": "{arcsec} ({px})",
+  "importdlg_choose_again": "Escolher outra exportação",
+  "importdlg_choose_export": "Escolha uma exportação",
+  "importdlg_col_file": "Arquivo",
+  "importdlg_col_frame": "Frame",
+  "importdlg_col_match": "Correspondência",
+  "importdlg_col_note": "Nota",
+  "importdlg_col_row": "Linha",
+  "importdlg_file_modified": "Modificado",
+  "importdlg_file_size": "Tamanho",
+  "importdlg_frame_in_session": "{file} ({session})",
+  "importdlg_identity": "Identidade do frame",
+  "importdlg_imported_at": "Importado",
+  "importdlg_matched": "Correspondidas",
+  "importdlg_method": "Método",
+  "importdlg_outside": "Fora desta revisão",
+  "importdlg_recorded_title": "Medições importadas",
+  "importdlg_row_matched": "Correspondida",
+  "importdlg_scale": "{value}″/px",
+  "importdlg_step_choose": "Escolher",
+  "importdlg_step_preview": "Pré-visualizar",
+  "importdlg_supported": "Formato aceito",
+  "importdlg_unattached": "Não anexadas",
+  "review_announce_rest_picked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame aprovado.",
+        "countPlural=*": "{count} frames aprovados."
+      }
+    }
+  ],
+  "review_cmd_finish": "Concluir esta revisão",
+  "review_compare_end": "Encerrar comparação",
+  "review_compare_needs_other": "Precisa de outro frame",
+  "review_compare_with_current": "Comparar com o atual",
+  "review_histogram_bin": "{from}–{to} ADU · {count} px · {percent} %",
+  "review_histogram_bin_last": "≥ {from} ADU · {count} px · {percent} %",
+  "review_histogram_extremes": "Mín {min} · Máx {max}",
+  "review_import_measurements_ellipsis": "Importar medições…",
+  "review_imported_measurements_ellipsis": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} importação…",
+        "countPlural=*": "{count} importações…"
+      }
+    }
+  ],
+  "review_note_mad": "MAD",
+  "review_note_mad_unscaled": "Sem escala",
+  "review_note_samples_of": "{count} de {total}, região exibida",
+  "review_pick_rest": "Aprovar o resto",
+  "review_pick_rest_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Aprovar {n} frame",
+        "countPlural=*": "Aprovar {n} frames"
+      }
+    }
+  ],
+  "review_pick_rest_none": "Nenhum frame não revisado",
+  "review_pick_rest_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Aprovar o {n} frame não revisado?",
+        "countPlural=*": "Aprovar os {n} frames não revisados?"
+      }
+    }
+  ],
+  "review_plot_coverage": "{count} de {total} medidos",
+  "review_plot_point": "{name}: {value}",
+  "review_readout": "x {x} y {y} · {value} ADU",
+  "review_readout_invalid": "x {x} y {y} · NaN",
+  "review_threshold_matches": "Correspondências",
+  "review_threshold_value_missing": "Informe um valor",
+  "review_tile_label_ratio": "{name} em 1:1, FWHM {fwhm}, {ratio}× o centro, excentricidade {ecc}",
+  "review_tile_soft": "{fwhm} ×{ratio}",
+  "review_workspace_label": "Frames para revisar",
+  "workspace_list_height": "Altura da lista",
+  "workspace_list_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} linha",
+        "countPlural=*": "{count} linhas"
+      }
+    }
+  ],
   "sessions_empty_unusable": "Nenhum frame inutilizável",
   "sessions_cant_archive": "Não é possível arquivar",
   "sessions_in_a_project": [
@@ -8226,6 +8352,21 @@
   "catalogue_domain_mosaic_desc": "Painéis com o norte para cima e o leste à esquerda. Um painel é uma caixa de seleção e aceita uma sessão arrastada; um espaço tracejado adiciona um painel.",
   "catalogue_domain_mosaic_layout": "2 × 2, um excluído, espaços visíveis",
   "catalogue_domain_map_desc": "Blocos do OpenStreetMap em um pacote carregado sob demanda. O marcador segue os campos; um clique ou arrasto informa uma posição.",
+  "catalogue_domain_histogram_readout": "linha de leitura",
+  "catalogue_domain_review_desc": "Visuais da revisão: os cantos, as miniaturas em faixa e em grade, os gráficos da sessão e os recortes de uma estrela.",
+  "catalogue_domain_corners": "cantos, as duas sobreposições",
+  "catalogue_domain_filmstrip": "faixa, um selecionado, um offline",
+  "catalogue_domain_grid": "grade",
+  "catalogue_domain_plots": "gráficos, limite no FWHM",
+  "catalogue_domain_cutouts": "{count} estrelas: ajustada, ajuste falhou",
+  "catalogue_workspace_desc": "O corpo de altura total de uma etapa de revisão: barra, lista, palco, inspetor e linha de status.",
+  "catalogue_workspace_col_number": "Número",
+  "catalogue_workspace_toolbar": "Barra de ferramentas",
+  "catalogue_workspace_rows": "linhas, inspetor encaixado",
+  "catalogue_workspace_compare": "faixa, dois painéis",
+  "catalogue_workspace_full": "lista inteira",
+  "catalogue_workspace_empty": "palco vazio",
+  "catalogue_workspace_overlay": "inspetor sobreposto",
   "picker_site_manage_ellipsis": "Gerenciar locais…",
   "home_concept_title": "Conceitos de Início",
   "home_concept_switch": "Conceito",

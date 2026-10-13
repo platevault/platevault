@@ -1,182 +1,184 @@
 /**
- * Review inspector (D-W13, D-W15, D-W42, PIX-FR-02, PIX-FR-05, PIX-FR-06):
- * the current frame's display name and full path, its quality with the
- * library marks (P, X, U are library-wide; "Reject for this Project only"
- * lives in the frame menu, round 6), the histogram of its displayed region,
- * and tabs for its measured values with their sources, detected stars with
- * cutouts, and the header. The corners at 1:1 live on the stage
- * (`corners.tsx`).
+ * The Review inspector's body (D-W13, D-W15, PIX-FR-02, PIX-FR-05,
+ * PIX-FR-06): the current frame's library quality with the three marks
+ * (library-wide, P-REJ2), where its copies are, the histogram of the region
+ * the plate shows, and tabs for its measured values with their sources, the
+ * detected stars with cutouts, and the header. The workspace's aside holds
+ * it: docked beside the stage, or over it on a narrow window.
  */
-import { Link } from "@tanstack/react-router"
-import { Sparkles, X } from "lucide-react"
+import { useMemo } from "react"
 import { useMessages } from "@/app/preferences"
-import { HelpTip } from "@/components/app/tips"
-import { PathText } from "@/components/app/data"
-import { Button } from "@/components/ui/button"
-import { Kbd } from "@/components/ui/kbd"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Toggle } from "@/components/ui/toggle"
+import { ActionBar, type ActionRunner } from "@/components/app/actions"
+import type { Action, Column } from "@/components/app/contracts"
+import { KeyValueList, PathText } from "@/components/app/data"
+import { DataTable } from "@/components/app/data-table"
+import { UnknownValue } from "@/components/app/feedback"
+import { Histogram } from "@/components/domain/histogram"
+import { detectedStars, linearHistogram, type StarField, type StarRecord, type ViewWindow } from "@/components/domain/raster"
+import { StarCutouts } from "@/components/domain/star-cutouts"
+import { ViewTabs } from "@/components/templates/parts"
+import { BUILT_IN_METHOD } from "@/domain/measurement"
 import { formatMetricFixed, pixelScaleFor } from "@/domain/membership"
-import type { Catalog, FrameMeasurement } from "@/domain/types"
-import { HeaderDetails, MetricTable, StarDetail } from "@/features/t3/frame-preview"
-import { detectedStars, type StarField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
-import { cn } from "@/lib/utils"
-import { MARK_WORD } from "./marks"
-import type { ReviewFrame, ReviewScope } from "./model"
-import { HistogramView } from "./preview"
-import { memberWord, QualityLabel } from "./quality"
-import { REVIEW_KEY } from "./shortcuts"
+import { type Catalog, type FrameMeasurement, HEADER_KEYWORDS, type FrameHeader, type Metric, type MetricKey } from "@/domain/types"
+import { formatDateTime } from "@/lib/format"
+import { type Messages, say } from "@/lib/i18n"
+import { builtInMetrics, currentImportedMetrics, historyImportedMetrics, METRIC_LABEL } from "@/store/actions/measure"
+import type { ReviewFrame } from "./model"
+import { QualityLabel } from "./quality"
 
-const MARKS = [
-  ["usable", REVIEW_KEY.pick],
-  ["unusable", REVIEW_KEY.reject],
-  ["unreviewed", REVIEW_KEY.unreviewed],
-] as const
+export type InspectorTab = "values" | "stars" | "header"
 
-export interface InspectorActions {
-  mark: (value: "usable" | "unusable" | "unreviewed") => void
+const METRIC_ORDER: MetricKey[] = ["fwhm", "hfr", "eccentricity", "star-count", "background", "snr"]
+
+interface MetricRow {
+  key: MetricKey
+  builtIn: Metric | undefined
+  imported: Metric | undefined
+  /** An import recorded for other bytes: history only (D19). */
+  earlier: Metric | undefined
 }
 
-export function Inspector({
-  scope,
-  frame,
-  name,
-  catalog,
-  field,
-  window,
-  starsOn,
-  onStarsOn,
-  star,
-  onStar,
-  tab,
-  onTab,
-  targets,
-  actions,
-  overlay = false,
-  onClose,
-}: {
-  scope: ReviewScope
+function Values({ frame, record }: { frame: ReviewFrame; record: FrameMeasurement | undefined }) {
+  const m = useMessages()
+  const applies = frame.measure === "measured"
+  const builtIn = applies ? builtInMetrics(record) : []
+  const imported = currentImportedMetrics(record, frame.asset.sha256)
+  const earlier = historyImportedMetrics(record, frame.asset.sha256)
+  const find = (list: Metric[], key: MetricKey) => list.find((metric) => metric.key === key)
+  const rows: MetricRow[] = METRIC_ORDER.map((key) => ({ key, builtIn: find(builtIn, key), imported: find(imported, key), earlier: find(earlier, key) }))
+  const missing = frame.measure === "pending" ? m.status_pending() : frame.measure === "verifying" ? m.status_verifying() : m.status_not_measured()
+  const columns: Column<MetricRow>[] = [
+    { id: "metric", header: m.frame_col_metric(), rowHeader: true, sortValue: (row) => METRIC_LABEL[row.key], cell: (row) => METRIC_LABEL[row.key] },
+    { id: "built-in", header: m.status_built_in(), align: "right", sortValue: (row) => row.builtIn?.value ?? null, cell: (row) => (row.builtIn ? formatMetricFixed(m, row.builtIn) : "–") },
+    {
+      id: "imported",
+      header: m.frame_col_imported(),
+      align: "right",
+      sortValue: (row) => row.imported?.value ?? null,
+      cell: (row) => (row.imported ? formatMetricFixed(m, row.imported) : row.earlier ? m.frame_value_history({ value: formatMetricFixed(m, row.earlier) }) : "–"),
+    },
+  ]
+  const own = builtIn[0]
+  const input = record?.inputSha256
+  const warning = builtIn.find((metric) => metric.warning)?.warning
+  // The source of each column as facts, not a tooltip (§6.2): method, basis, input and time.
+  const sources = [
+    { label: m.frame_builtin_source(), value: own ? `${own.method} ${own.version}` : `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
+    { label: m.frame_note_basis(), value: own ? say(m, own.basis) : frame.measure === "history-only" ? m.frame_does_not_apply() : missing },
+    ...(own && input ? [{ label: m.frame_note_input(), value: input === frame.asset.sha256 ? m.frame_input_current({ hash: input.slice(0, 12) }) : m.frame_input_earlier({ hash: input.slice(0, 12) }), mono: true }] : []),
+    ...(own && record?.computedAt ? [{ label: m.status_measured(), value: formatDateTime(record.computedAt) }] : []),
+    ...(imported[0] ? [{ label: m.frame_imported_source(), value: `${imported[0].method} ${imported[0].version}` }, { label: m.frame_note_match(), value: m.frame_match_file_name() }] : []),
+    ...(warning ? [{ label: m.frame_note_warning(), value: say(m, warning) }] : []),
+  ]
+  return (
+    <>
+      <DataTable label={m.frame_metrics_caption()} rows={rows} columns={columns} getRowId={(row) => row.key} scroll="none" />
+      <KeyValueList items={sources} />
+    </>
+  )
+}
+
+function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: StarRecord; scaleArcsec: number | null }) {
+  const m = useMessages()
+  const width = (px: number | null) =>
+    px === null ? <UnknownValue label={m.measure_not_reported()} /> : scaleArcsec ? m.frame_width_scaled({ arcsec: formatMetricFixed(m, { value: px * scaleArcsec, unit: "arcsec" }), px: formatMetricFixed(m, { value: px, unit: "px" }) }) : formatMetricFixed(m, { value: px, unit: "px" })
+  return (
+    <>
+      <KeyValueList
+        items={[
+          { label: m.frame_star({ id: star.id }), value: star.state === "failed" ? m.status_failed_fit() : m.frame_fitted() },
+          { label: m.frame_location(), value: m.frame_star_location({ x: star.x, y: star.y }) },
+          { label: m.frame_psf_model(), value: star.state === "failed" ? m.frame_clipped_profile() : BUILT_IN_METHOD.method },
+          { label: METRIC_LABEL.fwhm, value: width(star.fwhmPx) },
+          { label: METRIC_LABEL.hfr, value: width(star.hfrPx) },
+          { label: METRIC_LABEL.eccentricity, value: star.eccentricity === null ? <UnknownValue label={m.measure_not_reported()} /> : formatMetricFixed(m, { value: star.eccentricity, unit: "" }) },
+          { label: m.frame_angle(), value: star.angleDeg === null ? <UnknownValue label={m.measure_not_reported()} /> : m.frame_angle_value({ deg: star.angleDeg }) },
+          { label: m.frame_peak(), value: formatMetricFixed(m, { value: star.peakAdu, unit: "ADU" }) },
+          { label: METRIC_LABEL.background, value: formatMetricFixed(m, { value: star.backgroundAdu, unit: "ADU" }) },
+          { label: METRIC_LABEL.snr, value: formatMetricFixed(m, { value: star.snr, unit: "" }) },
+          ...(star.warnings.length > 0 ? [{ label: m.frame_note_warning(), value: star.warnings.map((w) => (w === "saturated" ? m.frame_warning_saturated() : m.frame_warning_near_edge())).join(" · ") }] : []),
+        ]}
+      />
+      <StarCutouts field={field} star={star} />
+    </>
+  )
+}
+
+function Stars({ field, star, onStar, scaleArcsec }: { field: StarField; star: StarRecord | null; onStar: (star: StarRecord) => void; scaleArcsec: number | null }) {
+  const m = useMessages()
+  const stars = useMemo(() => detectedStars(field), [field])
+  const columns: Column<StarRecord>[] = [
+    { id: "star", header: m.frame_col_star(), rowHeader: true, sortValue: (s) => s.id, cell: (s) => m.frame_star({ id: s.id }) },
+    { id: "position", header: m.frame_location(), sortValue: (s) => s.y * 100_000 + s.x, cell: (s) => m.frame_star_location({ x: s.x, y: s.y }) },
+    { id: "fwhm", header: METRIC_LABEL.fwhm, align: "right", sortValue: (s) => s.fwhmPx, cell: (s) => (s.state === "failed" ? m.status_failed_fit() : formatMetricFixed(m, { value: s.fwhmPx, unit: "px" })) },
+  ]
+  return (
+    <>
+      <DataTable label={m.review_detected_stars({ count: stars.length })} rows={stars} columns={columns} getRowId={(s) => String(s.id)} activeRowId={star ? String(star.id) : null} onRowClick={onStar} scroll="none" />
+      {star ? <StarDetail field={field} star={star} scaleArcsec={scaleArcsec} /> : null}
+    </>
+  )
+}
+
+function Header({ header }: { header: FrameHeader }) {
+  const m = useMessages()
+  const keys = Object.keys(HEADER_KEYWORDS) as Array<keyof FrameHeader>
+  return <KeyValueList items={keys.map((key) => ({ label: HEADER_KEYWORDS[key], value: header[key] === null ? m.status_missing() : String(header[key]), mono: true }))} />
+}
+
+export interface InspectorProps {
   frame: ReviewFrame
-  name: string
   catalog: Catalog
+  /** The frame's pixels; null when no copy can be read. */
   field: StarField | null
+  /** The region the plate shows, for the histogram. */
   window: ViewWindow | null
-  starsOn: boolean
-  onStarsOn: (on: boolean) => void
+  /** The linear value under the plate's cursor, drawn on the histogram. */
+  readout: number | null
   star: StarRecord | null
   onStar: (star: StarRecord) => void
-  tab: string
-  onTab: (tab: string) => void
-  /** How many frames a mark applies to: the selection when it holds more than one. */
-  targets: number
-  actions: InspectorActions
-  /** Under 1000 px of pane the inspector opens over the preview instead of beside it. */
-  overlay?: boolean
-  onClose?: () => void
-}) {
+  tab: InspectorTab
+  onTab: (tab: InspectorTab) => void
+  /** Usable, Unusable, Unreviewed: for the selection when it holds more than one frame. */
+  marks: Action[]
+  runner: ActionRunner
+}
+
+export function Inspector({ frame, catalog, field, window, readout, star, onStar, tab, onTab, marks, runner }: InspectorProps) {
   const m = useMessages()
-  const record: FrameMeasurement | undefined = catalog.measurements[frame.asset.id]
-  const applies = frame.measure === "measured"
-  const disabled = scope.readOnlyReason
-  const stars = field ? detectedStars(field) : []
+  const record = catalog.measurements[frame.asset.id]
+  const histogram = useMemo(() => (field && window ? linearHistogram(field, window) : null), [field, window])
   return (
-    <aside
-      aria-label={m.review_frame_inspector()}
-      className={cn(
-        "flex min-h-0 shrink-0 flex-col overflow-y-auto border-l border-separator bg-background",
-        overlay ? "absolute inset-y-0 right-0 z-20 w-[min(19rem,100%)] shadow-lg" : "w-[19rem]",
-      )}
-    >
-      <div className="space-y-2 border-b border-separator px-3 py-2">
-        <div className="flex min-w-0 items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold" title={frame.asset.copies[0]?.path}>
-              {name}
-            </h2>
-            <ul className="mt-0.5 space-y-0.5 text-xs text-muted-foreground">
-              {frame.asset.copies.map((c) => (
-                <li key={`${c.volumeId}${c.path}`} className="min-w-0">
-                  <span>{m.review_copy_location({ location: catalog.locations[c.locationId]?.displayName ?? m.review_unknown_location() })}</span>
-                  <PathText path={c.path} className="inline" />
-                </li>
-              ))}
-            </ul>
-          </div>
-          {onClose ? (
-            <Button size="icon-sm" variant="ghost" aria-label={m.shell_with_shortcut({ label: m.review_close_inspector(), shortcut: REVIEW_KEY.inspector })} onClick={onClose}>
-              <X aria-hidden="true" />
-            </Button>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <QualityLabel frame={frame} />
-          {scope.project ? <HelpTip label={m.review_mark_scope_help()}>{m.review_mark_scope_tip()}</HelpTip> : null}
-          {frame.member ? <span className="text-muted-foreground">{m.review_in_run({ state: memberWord(m, frame.member) })}</span> : null}
-          {frame.panel && frame.run ? (
-            <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: frame.run.projectId, runId: frame.run.id, step: "review" }} className="text-link hover:underline">
-              {m.review_panel_run({ n: frame.panel.n })}
-            </Link>
-          ) : null}
-          {frame.subject ? <span className="text-muted-foreground">{m.review_subject({ name: frame.subject })}</span> : null}
-        </div>
-        <div className="grid grid-cols-3 gap-1" role="group" aria-label={targets > 1 ? m.review_library_quality_frames({ count: targets }) : m.review_library_quality()}>
-          {MARKS.map(([value, key]) => (
-            <Button
-              key={value}
-              size="xs"
-              className="justify-between px-1.5"
-              variant={frame.quality.library === value && targets <= 1 ? "secondary" : "outline"}
-              aria-pressed={targets <= 1 ? frame.quality.library === value : undefined}
-              disabled={disabled !== null}
-              title={disabled ?? undefined}
-              onClick={() => actions.mark(value)}
-            >
-              {MARK_WORD[value]}
-              <Kbd>{key}</Kbd>
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div className="border-b border-separator px-3 py-2">{field && window ? <HistogramView field={field} window={window} /> : <p className="text-xs text-muted-foreground">{m.review_no_pixels()}</p>}</div>
-      <Tabs value={tab === "regions" ? "values" : tab} onValueChange={(v) => onTab(String(v))} className="gap-0">
-        <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-separator px-2">
-          <TabsTrigger value="values">{m.review_tab_values()}</TabsTrigger>
-          <TabsTrigger value="stars">{m.review_tab_stars()}</TabsTrigger>
-          <TabsTrigger value="header">{m.evidence_source_header()}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="values" className="px-3 py-2">
-          <MetricTable record={record} state={frame.measure} applies={applies} sha256={frame.asset.sha256} />
-        </TabsContent>
-        <TabsContent value="stars" className="space-y-2 px-3 py-2">
-          {field ? (
-            <>
-              <Toggle variant="outline" size="sm" pressed={starsOn} onPressedChange={onStarsOn}>
-                <Sparkles aria-hidden="true" data-icon="inline-start" />
-                {m.review_show_stars()}
-              </Toggle>
-              <ul className="max-h-36 overflow-y-auto rounded-md border text-xs" aria-label={m.review_detected_stars({ count: stars.length })}>
-                {stars.map((s) => (
-                  <li key={s.id} className={cn("border-b last:border-0", s.id === star?.id && "bg-accent")}>
-                    <button type="button" className="flex w-full justify-between gap-2 px-2 py-0.5 text-left tabular-nums hover:bg-foreground/[0.05]" aria-current={s.id === star?.id ? "true" : undefined} onClick={() => onStar(s)}>
-                      <span>{m.frame_star({ id: s.id })}</span>
-                      <span className="text-muted-foreground">
-                        {s.x}, {s.y}
-                      </span>
-                      <span className={s.state === "failed" ? "text-warning" : undefined}>{s.state === "failed" ? m.status_failed_fit() : formatMetricFixed(m, { value: s.fwhmPx, unit: "px" })}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {star ? <StarDetail field={field} star={star} scaleArcsec={pixelScaleFor(catalog, frame.session)} /> : null}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">{m.review_no_pixels()}</p>
-          )}
-        </TabsContent>
-        <TabsContent value="header" className="px-3 py-2">
-          <HeaderDetails header={frame.asset.observed} />
-        </TabsContent>
-      </Tabs>
-    </aside>
+    <>
+      <ActionBar actions={marks} runner={runner} />
+      <KeyValueList
+        items={[
+          { label: m.review_col_quality(), value: <QualityLabel frame={frame} /> },
+          ...frame.asset.copies.map((copy) => ({ label: catalog.locations[copy.locationId]?.displayName ?? m.review_unknown_location(), value: <PathText path={copy.path} /> })),
+        ]}
+      />
+      {histogram ? <Histogram data={histogram} readout={readout} /> : <UnknownValue label={m.review_no_pixels()} />}
+      <ViewTabs
+        views={{
+          label: m.review_frame_inspector(),
+          items: [
+            { id: "values", label: m.review_tab_values() },
+            { id: "stars", label: m.review_tab_stars() },
+            { id: "header", label: m.evidence_source_header() },
+          ],
+          value: tab,
+          onChange: (id) => onTab(id as InspectorTab),
+        }}
+      >
+        {tab === "values" ? <Values frame={frame} record={record} /> : null}
+        {tab === "stars" ? field ? <Stars field={field} star={star} onStar={onStar} scaleArcsec={pixelScaleFor(catalog, frame.session)} /> : <UnknownValue label={m.review_no_pixels()} /> : null}
+        {tab === "header" ? <Header header={frame.asset.observed} /> : null}
+      </ViewTabs>
+    </>
   )
+}
+
+/** For the palette and announcements. */
+export function inspectorTabLabel(m: Messages, tab: InspectorTab): string {
+  return tab === "values" ? m.review_tab_values() : tab === "stars" ? m.review_tab_stars() : m.evidence_source_header()
 }

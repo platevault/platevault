@@ -5252,7 +5252,6 @@
   "importdlg_blocked_unsupported": "This file cannot be imported.",
   "importdlg_blocked_no_match": "No row matches an indexed frame.",
   "importdlg_title": "Import measurements",
-  "importdlg_description_choose": "Choose a supported export. Prototype: simulated file chooser listing CSV files on mounted volumes.",
   "importdlg_description_review": "Review how the export maps to frames and metrics before anything is attached.",
   "importdlg_no_csv_title": "No CSV export on a mounted volume",
   "importdlg_no_csv_body": "Supported: {format}. Mount the volume that holds the export, or copy it to a mounted location.",
@@ -7304,6 +7303,133 @@
       }
     }
   ],
+  "frame_angle_value": "{deg}°",
+  "frame_col_star": "Star",
+  "frame_note_warning": "Warning",
+  "frame_value_history": "{value} (earlier bytes)",
+  "frame_width_scaled": "{arcsec} ({px})",
+  "importdlg_choose_again": "Choose another export",
+  "importdlg_choose_export": "Choose an export",
+  "importdlg_col_file": "File",
+  "importdlg_col_frame": "Frame",
+  "importdlg_col_match": "Match",
+  "importdlg_col_note": "Note",
+  "importdlg_col_row": "Row",
+  "importdlg_file_modified": "Modified",
+  "importdlg_file_size": "Size",
+  "importdlg_frame_in_session": "{file} ({session})",
+  "importdlg_identity": "Frame identity",
+  "importdlg_imported_at": "Imported",
+  "importdlg_matched": "Matched",
+  "importdlg_method": "Method",
+  "importdlg_outside": "Outside this review",
+  "importdlg_recorded_title": "Imported measurements",
+  "importdlg_row_matched": "Matched",
+  "importdlg_scale": "{value}″/px",
+  "importdlg_step_choose": "Choose",
+  "importdlg_step_preview": "Preview",
+  "importdlg_supported": "Supported format",
+  "importdlg_unattached": "Not attached",
+  "review_announce_rest_picked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame Picked.",
+        "countPlural=*": "{count} frames Picked."
+      }
+    }
+  ],
+  "review_cmd_finish": "Finish this review",
+  "review_compare_end": "End compare",
+  "review_compare_needs_other": "Needs another frame",
+  "review_compare_with_current": "Compare with current",
+  "review_histogram_bin": "{from}–{to} ADU · {count} px · {percent} %",
+  "review_histogram_bin_last": "≥ {from} ADU · {count} px · {percent} %",
+  "review_histogram_extremes": "Min {min} · Max {max}",
+  "review_import_measurements_ellipsis": "Import measurements…",
+  "review_imported_measurements_ellipsis": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} import…",
+        "countPlural=*": "{count} imports…"
+      }
+    }
+  ],
+  "review_note_mad": "MAD",
+  "review_note_mad_unscaled": "Unscaled",
+  "review_note_samples_of": "{count} of {total}, region shown",
+  "review_pick_rest": "Pick the rest",
+  "review_pick_rest_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Pick {n} frame",
+        "countPlural=*": "Pick {n} frames"
+      }
+    }
+  ],
+  "review_pick_rest_none": "No frame is Unreviewed",
+  "review_pick_rest_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Pick the {n} Unreviewed frame?",
+        "countPlural=*": "Pick the {n} Unreviewed frames?"
+      }
+    }
+  ],
+  "review_plot_coverage": "{count} of {total} measured",
+  "review_plot_point": "{name}: {value}",
+  "review_readout": "x {x} y {y} · {value} ADU",
+  "review_readout_invalid": "x {x} y {y} · NaN",
+  "review_threshold_matches": "Matches",
+  "review_threshold_value_missing": "Enter a value",
+  "review_tile_label_ratio": "{name} at 1:1, FWHM {fwhm}, {ratio}× the centre, eccentricity {ecc}",
+  "review_tile_soft": "{fwhm} ×{ratio}",
+  "review_workspace_label": "Frames to review",
+  "workspace_list_height": "List height",
+  "workspace_list_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} row",
+        "countPlural=*": "{count} rows"
+      }
+    }
+  ],
   "sessions_empty_unusable": "No Unusable frames",
   "sessions_cant_archive": "Can't archive",
   "sessions_in_a_project": [
@@ -8170,6 +8296,21 @@
   "catalogue_domain_mosaic_desc": "Panels north up, east left. A panel is a checkbox and takes a dragged session; a dashed slot adds a panel.",
   "catalogue_domain_mosaic_layout": "2 × 2, one excluded, slots shown",
   "catalogue_domain_map_desc": "OpenStreetMap tiles in a lazy chunk. The marker follows the fields; a click or a drag reports a position.",
+  "catalogue_domain_histogram_readout": "readout line",
+  "catalogue_domain_review_desc": "Review visuals: the corner tiles, the frame thumbnails as a strip and a grid, the session plots and a star's cutouts.",
+  "catalogue_domain_corners": "corners, both overlays",
+  "catalogue_domain_filmstrip": "strip, one selected, one offline",
+  "catalogue_domain_grid": "grid",
+  "catalogue_domain_plots": "plots, threshold on FWHM",
+  "catalogue_domain_cutouts": "{count} stars: fitted, failed fit",
+  "catalogue_workspace_desc": "The full-height body of a review step: toolbar, list, stage, inspector and status line.",
+  "catalogue_workspace_col_number": "Number",
+  "catalogue_workspace_toolbar": "Toolbar",
+  "catalogue_workspace_rows": "rows, docked inspector",
+  "catalogue_workspace_compare": "strip, two panes",
+  "catalogue_workspace_full": "full list",
+  "catalogue_workspace_empty": "empty stage",
+  "catalogue_workspace_overlay": "overlay inspector",
   "picker_site_manage_ellipsis": "Manage sites…",
   "home_concept_title": "Home concepts",
   "home_concept_switch": "Concept",

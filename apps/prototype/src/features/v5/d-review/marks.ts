@@ -1,15 +1,13 @@
 /**
- * Mark routing for S6 Review (D-W42, D-W54, PIX-FR-14, PIX-FR-17). Library
- * P/X/U goes through `markFrames`, which is library-wide (round 6): X marks
- * a frame Unusable everywhere and takes it out of every open run's draft.
- * "Reject for this Project only" uses the Project-scoped reject with the run
- * that holds each frame; a session review has no Project, so it refuses.
- * Each call returns one result for the whole mark.
+ * Mark routing for Review (D-W54, PIX-FR-14, PIX-FR-17, P-REJ2). P, X and U
+ * set library quality through `markFrames`, which is library-wide: X marks a
+ * frame Unusable everywhere and takes it out of every open run's draft. The
+ * store refuses a mark while an unfinished run's prepared view holds the
+ * session (C10). Each call returns one result for the whole mark.
  */
-import type { QualityValue, RunId } from "@/domain/types"
+import type { QualityValue } from "@/domain/types"
 import { m } from "@/lib/i18n"
-import { markFrames, rejectForProjectOnly } from "@/store/actions/library"
-import { setProjectRejection } from "@/store/actions/projects"
+import { markFrames } from "@/store/actions/library"
 import type { CommitResult } from "@/store/core"
 import type { ReviewFrame, ReviewScope } from "./model"
 
@@ -31,18 +29,7 @@ export function framesWhat(frames: ReviewFrame[]): string {
   return frames.length === 1 ? frames[0]!.asset.fileName : m.review_frames_count({ count: frames.length })
 }
 
-function byRun(frames: ReviewFrame[]): Map<RunId | null, string[]> {
-  const out = new Map<RunId | null, string[]>()
-  for (const f of frames) out.set(f.run?.id ?? null, [...(out.get(f.run?.id ?? null) ?? []), f.asset.id])
-  return out
-}
-
-function firstFailure(results: CommitResult[]): CommitResult {
-  return results.find((r) => !r.ok) ?? { ok: true }
-}
-
 export function markLibrary(scope: ReviewScope, frames: ReviewFrame[], value: QualityValue): CommitResult {
-  if (scope.readOnlyReason) return { ok: false, reason: "refused", message: scope.readOnlyReason, reasons: [scope.readOnlyReason] }
   return markFrames(
     frames.map((f) => f.asset.id),
     value,
@@ -50,26 +37,7 @@ export function markLibrary(scope: ReviewScope, frames: ReviewFrame[], value: Qu
   )
 }
 
-export function setProjectOnlyReject(scope: ReviewScope, frames: ReviewFrame[], rejected: boolean): CommitResult {
-  if (scope.readOnlyReason) return { ok: false, reason: "refused", message: scope.readOnlyReason, reasons: [scope.readOnlyReason] }
-  const project = scope.project
-  if (!project) return { ok: false, reason: "refused", message: m.sessions_no_project(), reasons: [m.sessions_no_project()] }
-  return firstFailure([...byRun(frames)].map(([runId, ids]) => (runId ? rejectForProjectOnly(runId, ids, rejected) : setProjectRejection(project.id, ids, rejected))))
-}
-
-/** "Rejected: 12 frames. Library scope. Removed from the run's draft as Rejected." The draft clause only when it changes. */
+/** "Rejected: 12 frames. Library scope." */
 export function markAnnouncement(frames: ReviewFrame[], value: QualityValue): string {
-  const open = frames.filter((f) => f.run !== null && f.run.completion === "open" && !f.run.trashedAt)
-  const draft =
-    value === "unusable"
-      ? open.some((f) => f.member !== "rejected")
-        ? m.review_mark_draft_removed()
-        : null
-      : open.some((f) => f.member === "rejected" && !f.quality.projectRejected)
-        ? m.review_mark_draft_back()
-        : open.some((f) => f.member === "rejected")
-          ? m.review_mark_draft_still_out()
-          : null
-  const said = m.review_mark_announcement({ mark: MARK_WORD[value], what: framesWhat(frames) })
-  return draft ? `${said} ${draft}` : said
+  return m.review_mark_announcement({ mark: MARK_WORD[value], what: framesWhat(frames) })
 }

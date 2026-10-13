@@ -1,216 +1,202 @@
 /**
- * S6 Review workspace (slice D): one frame list in three views, the preview
- * with its plots and inspector, the two quality levels and the review
- * hotkeys (D-W13, D-W14, D-W15, D-W22, D-W40, D-W41, D-W42, D-W53, D-W54;
- * spec 067 PIX-FR-01 to PIX-FR-18). Contexts: a run, a group, a Project's
- * candidates, or one library session (library marks only). Round 6: X marks
- * a frame Unusable library-wide; "Reject for this Project only" is in the
- * frame menu; a mark on more than 20 frames asks first.
+ * Review (slice D; P-REV2, §5.3): the session intake Review step body. One
+ * library session's frames in a Workspace: the frame list (a DataTable, the
+ * filmstrip or the grid, D-W40), the plate with Compare and the corner
+ * inspector, the session plots, the inspector, and a status line. P, X and U
+ * set library quality (P-REJ2): X marks a frame Unusable everywhere.
  *
- * Layout (D-W22): the frame table spans the full width at the top; T cycles
- * it through about 8 rows (resizable, the height is remembered), a one-line
- * strip showing the current frame, and full height. The preview, inspector
- * and the plots across the session fill the rest. F is fullscreen; G is the
- * grid; the filmstrip is the strip with thumbnails; ⌘/Ctrl+I swaps each
- * plate for the corner inspector (nine 1:1 tiles), in fullscreen and
- * Compare too.
+ * - Everything about how frames show (view, list height, zoom, stretch,
+ *   overlays, names, columns, inspector, auto-advance) is in one Display
+ *   menu (P13); the list's quality filter leads the toolbar.
+ * - Selection swaps the table's toolbar for its batch bar (Picked ·
+ *   Rejected · Unreviewed); "Select by threshold…" and "Pick the rest" sit
+ *   in that toolbar. A mark on more than 20 frames asks first.
+ * - Hotkeys (PIX-FR-13) act the same in the table, the filmstrip and the
+ *   grid, never while a field or a menu has focus, and follow the app's
+ *   single-key setting (WCAG 2.1.4). They are listed on the Help page.
+ * - The host (the intake StepPage) owns Finish review; the workspace's own
+ *   Finish command and ⌘↵ call `onFinished`, once no frame is Unreviewed.
+ * - Marks are refused while an unfinished run's prepared view holds the
+ *   session (C10); every mark control then names why and where it resolves.
  */
-import { Link, useSearch } from "@tanstack/react-router"
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Expand, Filter, FolderOpen, Grid3x3, ImageOff, Keyboard, LayoutList, ListChecks, Minimize, PanelRight, Rows3, Save, Scan, Upload, X } from "lucide-react"
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { useSearch } from "@tanstack/react-router"
+import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, FolderOpen, ImageOff, Minimize, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { getPreferences, useMessages } from "@/app/preferences"
 import { MOD_LABEL } from "@/app/shortcuts"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { EmptyState } from "@/components/app/feedback"
+import { ActionBar, ActionButton, IconButton, useAction } from "@/components/app/actions"
+import type { Action, MenuItem } from "@/components/app/contracts"
+import { PathText } from "@/components/app/data"
+import { DataTable, sortRows, type TableSort } from "@/components/app/data-table"
+import { DisplayMenu, type DisplayGroup } from "@/components/app/display-menu"
+import { announce, EmptyState, UnknownValue } from "@/components/app/feedback"
+import { FilterControls } from "@/components/app/filter-bar"
 import { Pill } from "@/components/app/pill"
-import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
-import type { MenuEntry } from "@/components/app/row-menu"
-import { HelpTip } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { runHref, runPipeline, type StepLink } from "@/domain/derive"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { Kbd } from "@/components/ui/kbd"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Toggle } from "@/components/ui/toggle"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { currentFile, previewUnavailableReason } from "@/domain/membership"
-import type { AssetId, MetricKey, QualityValue } from "@/domain/types"
-import { setFrameUi } from "@/features/t3/actions"
-import { useSize } from "@/features/t3/frame-preview"
-import { ImportDialog, ImportReview } from "@/features/t3/import-dialog"
-import { METRIC_LABEL } from "@/features/t3/measure"
-import { frameField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
+import { CornerGrid, type CornerOverlay } from "@/components/domain/corner-grid"
+import { FrameThumbnails } from "@/components/domain/frame-thumbnails"
+import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type Stretch, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
+import { detectedStars, frameField, renderWindow, sampleAt, type StarRecord, type ViewWindow } from "@/components/domain/raster"
+import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
+import { type WorkspaceAside, type WorkspacePane, Workspace } from "@/components/templates/workspace"
+import { sessionUnreviewedFrames } from "@/domain/derive"
+import { currentFile, formatMetricFixed, previewUnavailableReason } from "@/domain/membership"
+import type { AssetId, QualityValue } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
-import { discardRunDraft, saveRun } from "@/store/actions/runs"
+import { METRIC_LABEL } from "@/store/actions/measure"
+import { markRestUsable } from "@/store/actions/library"
 import { type CommitResult, useStore } from "@/store/core"
+import { setFrameUi } from "./actions"
+import { frameColumns } from "./columns"
 import { registerReviewCommands } from "./commands"
-import { CornerGrid, type CornerOverlay } from "./corners"
-import { Inspector } from "./inspector"
-import { type Activate, FrameGrid, FrameTable, Filmstrip, frameColumns, type SortState, sortFrames } from "./list"
-import { framesWhat, markAnnouncement, markLibrary, MARK_WORD, setProjectOnlyReject } from "./marks"
-import { MeasureBar } from "./measure-bar"
+import { ImportDialog, ImportedMeasurementsDialog } from "./import-dialog"
+import { Inspector, type InspectorTab } from "./inspector"
+import { MARK_WORD, markAnnouncement, markLibrary } from "./marks"
+import { MeasureStatus } from "./measure-bar"
 import { bucketAfterMark, contextKey, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
 import { displayName, NAME_PRESETS, namePreset } from "./names"
-import { SessionPlots, type Threshold } from "./plots"
 import { setReviewPrefs, type TableHeight, useReviewPrefs } from "./prefs"
-import { Plate, type PlateView, plateWindow, STRETCH_LABEL, ZOOM_LABEL, type Zoom } from "./preview"
-import { REVIEW_KEY, ReviewShortcutsDialog } from "./shortcuts"
+import { QualityLabel, qualityWord } from "./quality"
+import { type Threshold, ThresholdDialog } from "./threshold"
 
 type ListView = "table" | "filmstrip" | "grid"
+
+/** The key glyphs of Review's hotkeys. Key names, not words: never translated. */
+export const REVIEW_KEY = {
+  next: "J",
+  previous: "K",
+  pick: "P",
+  reject: "X",
+  unreviewed: "U",
+  zoom: "Z",
+  fullscreen: "F",
+  compare: "C",
+  grid: "G",
+  height: "T",
+  inspector: "I",
+  selectAll: "A",
+  finish: "↵",
+} as const
+
 const HEIGHT_NEXT: Record<TableHeight, TableHeight> = { rows: "strip", strip: "full", full: "rows" }
+/** A mark on more frames than this asks first. */
+const BULK_MARK_CONFIRM_OVER = 20
+/** Controls that own the arrow keys while they have focus. */
+const ARROW_OWNERS = "[role=tablist],[role=separator],[role=slider],[role=radiogroup],[role=menu],[role=listbox],[data-histogram],[data-workspace-handle]"
+
 function heightLabel(m: Messages, height: TableHeight): string {
   return height === "rows" ? m.review_height_rows() : height === "strip" ? m.review_height_strip() : m.review_height_full()
 }
-const ROW_PX = 26
-/** The preview stage's minimum: caption, a plate of about 240 px and the plots strip. */
-const STAGE_MIN_PX = 416
-/** Review's own chrome around the table and the stage: toolbar, table handle and status line. */
-const REVIEW_CHROME_PX = 66
-const ARROW_OWNERS = "[role=tablist],[data-slot=toggle-group],[role=separator],[role=slider],[role=radiogroup],[role=menu]"
-/** A mark on more frames than this asks first (round 6: ⌘A then X on 120 frames). */
-const BULK_MARK_CONFIRM_OVER = 20
-/** The library word of each mark, for the bulk confirmation: "Mark 120 frames Unusable?". */
-function libraryWord(m: Messages, value: QualityValue): string {
-  return value === "usable" ? m.status_usable() : value === "unusable" ? m.status_unusable() : m.status_unreviewed()
-}
 
-/** Text entry only: a Select trigger (role combobox) is not typing, and the capture-phase handler keeps its typeahead from firing. */
-function isTyping(target: EventTarget | null) {
+/** Text entry only: a Select trigger is not typing, and the capture-phase handler keeps its typeahead from firing. */
+function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
 }
 
-/** An open dialog, menu or list owns the keyboard; closed popups can stay in the DOM, so only visible ones count. */
-function popupOpen() {
-  return [...document.querySelectorAll("[role=dialog], [role=alertdialog], [role=menu], [role=listbox]")].some((el) => el.checkVisibility())
+/** An open dialog, menu or list owns the keyboard. The workspace's own fullscreen and overlay inspector do not count. */
+function popupOpen(): boolean {
+  return [...document.querySelectorAll("[role=dialog]:not([data-workspace-aside]):not([data-workspace-fullscreen]), [role=alertdialog], [role=menu], [role=listbox]")].some((el) => el.checkVisibility())
 }
 
-function MiniSelect({ label, value, options, onChange, className }: { label: string; value: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; className?: string }) {
-  return (
-    <Select items={options} value={value} onValueChange={(next) => onChange(String(next))}>
-      <SelectTrigger size="sm" aria-label={label} className={cn("min-h-6 text-xs", className)}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
+const withKey = (m: Messages, label: string, key: string) => m.shell_with_shortcut({ label, shortcut: key })
+
+export interface ReviewWorkspaceProps {
+  context: ReviewContext
+  /** Finish review, as the host's Proceed runs it; the workspace calls it from its own Finish command once no frame is Unreviewed. */
+  onFinished?: () => void
 }
 
-export function FrameReview({ context }: { context: ReviewContext }) {
+export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const m = useMessages()
   const state = useStore((s) => s)
   const { catalog, disk } = state
-  const contextKeyStr = contextKey(context)
   // biome-ignore lint/correctness/useExhaustiveDependencies: the context is rebuilt by its parent every render; its key identifies it.
-  const scope = useMemo(() => reviewScope(state, context), [state, context.kind, contextKeyStr])
+  const scope = useMemo(() => reviewScope(state, context), [state, contextKey(context)])
   const prefs = useReviewPrefs()
   const search: Record<string, unknown> = useSearch({ strict: false })
-  const searchFilter = FILTERS.find((f) => f.id === search.filter)?.id
-  const [filter, setFilter] = useState<QualityFilter>(searchFilter ?? (context.kind === "candidates" ? "unreviewed" : "all"))
-  const [panelId, setPanelId] = useState<string>(typeof search.panel === "string" ? search.panel : "all")
-  const [sort, setSort] = useState<SortState>({ columnId: "order", direction: "asc" })
+  const runner = useAction()
+
+  const [filter, setFilter] = useState<QualityFilter>("all")
+  const [sort, setSort] = useState<TableSort | null>(null)
   const [selected, setSelected] = useState<Set<AssetId>>(() => new Set())
   const [view, setView] = useState<ListView>("table")
   const [beforeGrid, setBeforeGrid] = useState<Exclude<ListView, "grid">>("table")
   const [height, setHeight] = useState<TableHeight>("rows")
-  const [dragPx, setDragPx] = useState<number | null>(null)
   const [compare, setCompare] = useState(false)
   const [refId, setRefId] = useState<AssetId | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [plateView, setPlateView] = useState<PlateView>({ zoom: "fit", centre: null, stretch: "auto" })
   const [shownWindow, setShownWindow] = useState<ViewWindow | null>(null)
+  const [readout, setReadout] = useState<{ x: number; y: number } | null>(null)
   const [starsOn, setStarsOn] = useState(false)
   const [star, setStar] = useState<StarRecord | null>(null)
-  const [tab, setTab] = useState("values")
+  const [tab, setTab] = useState<InspectorTab>("values")
   const [threshold, setThreshold] = useState<Threshold | null>(null)
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [projectConfirm, setProjectConfirm] = useState<ReviewFrame[] | null>(null)
-  const [bulkMark, setBulkMark] = useState<{ list: ReviewFrame[]; value: QualityValue } | null>(null)
-  const [importOpen, setImportOpen] = useState(false)
-  const [announcement, setAnnouncement] = useState("")
-  const [error, setError] = useState<RefusalProps | null>(null)
   const [corners, setCorners] = useState(false)
   const [cornerOverlay, setCornerOverlay] = useState<CornerOverlay>({ fwhm: true, eccentricity: true })
   const [revealed, setRevealed] = useState<string | null>(null)
-  const [inspectorShown, setInspectorShown] = useState(false)
+  const [overlayInspector, setOverlayInspector] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importsOpen, setImportsOpen] = useState(false)
   const gridCols = useRef(4)
-  const [rootRef, rootSize] = useSize<HTMLDivElement>()
-  const statusLineRef = useRef<HTMLElement>(null)
-  // Under 1000 px of pane (a 1280 px window with the sidebar, or less) the inspector leaves the row and opens over the preview.
-  const inspectorOverlay = rootSize.width > 0 && rootSize.width < 1000
+  const overlayMode = useRef(false)
 
   const key = scope?.key ?? ""
-  const storedActive = state.slices.d.frames[key]?.activeAssetId ?? null
-  const template = namePreset(prefs.namePreset).template
   const frames = scope?.frames ?? []
+  const template = namePreset(prefs.namePreset).template
   const names = useMemo(() => new Map(frames.map((f) => [f.asset.id, displayName(catalog, f, template)])), [frames, catalog, template])
-  const allColumns = frameColumns(m, names).filter((c) => !c.contexts || c.contexts.includes(context.kind))
+  const allColumns = useMemo(() => frameColumns(m, names), [m, names])
   const columns = allColumns.filter((c) => c.id === "frame" || prefs.columns.includes(c.id))
-  const inPanel = frames.filter((f) => panelId === "all" || f.panel?.id === panelId)
   const counts: Record<QualityFilter, number> = {
-    all: inPanel.length,
-    picked: inPanel.filter((f) => f.bucket === "picked").length,
-    rejected: inPanel.filter((f) => f.bucket === "rejected").length,
-    unreviewed: inPanel.filter((f) => f.bucket === "unreviewed").length,
+    all: frames.length,
+    picked: frames.filter((f) => f.bucket === "picked").length,
+    rejected: frames.filter((f) => f.bucket === "rejected").length,
+    unreviewed: frames.filter((f) => f.bucket === "unreviewed").length,
   }
-  const shown = inPanel.filter((f) => filter === "all" || f.bucket === filter)
-  const ordered = sortFrames(shown, sort, allColumns)
+  const shown = frames.filter((f) => filter === "all" || f.bucket === filter)
+  const ordered = sort ? sortRows(shown, allColumns, sort) : shown
+  const storedActive = state.slices.d.frames[key]?.activeAssetId ?? null
   const current = ordered.find((f) => f.asset.id === storedActive) ?? ordered[0] ?? null
   const index = current ? ordered.indexOf(current) : -1
   const selectedFrames = frames.filter((f) => selected.has(f.asset.id))
   const hiddenSelected = selectedFrames.filter((f) => !shown.includes(f)).length
   const targets = selectedFrames.length > 1 ? selectedFrames : current ? [current] : []
   const reference = compare ? (frames.find((f) => f.asset.id === refId) ?? null) : null
+  const unreviewed = scope ? (scope.session ? sessionUnreviewedFrames(catalog, scope.session) : frames.filter((f) => f.bucket === "unreviewed").length) : 0
+  const lock = scope?.lock ?? null
+  const blocked = (action: string): Action["unavailable"] => (lock ? { action, reason: say(m, lock.reason), blockers: lock.blockers.map((b) => ({ label: say(m, b.label), link: b.link })) } : undefined)
 
-  const file = current && current.availability === "available" ? currentFile(disk, catalog, current.asset) : undefined
-  const field = current ? frameField(current.asset.id, file) : null
-  const refFile = reference && reference.availability === "available" ? currentFile(disk, catalog, reference.asset) : undefined
-  const refField = reference ? frameField(reference.asset.id, refFile) : null
-  const unavailableReason = current && current.availability !== "available" ? say(m, previewUnavailableReason(current.availability)) : current && !field ? m.review_no_pixel_data() : null
-
-  function announce(message: string) {
-    setAnnouncement(message)
-  }
+  const fileOf = (f: ReviewFrame | null) => (f && f.availability === "available" ? currentFile(disk, catalog, f.asset) : undefined)
+  const field = useMemo(() => (current ? frameField(current.asset.id, fileOf(current)) : null), [current?.asset.id, current?.asset.sha256, current?.availability])
+  const refField = useMemo(() => (reference ? frameField(reference.asset.id, fileOf(reference)) : null), [reference?.asset.id, reference?.asset.sha256, reference?.availability])
+  const image = useMemo<PlateImage | null>(() => (field ? { width: field.width, height: field.height, render: (window, stretch) => renderWindow(field, window, stretch) } : null), [field])
+  const refImage = useMemo<PlateImage | null>(() => (refField ? { width: refField.width, height: refField.height, render: (window, stretch) => renderWindow(refField, window, stretch) } : null), [refField])
+  const stars = useMemo(() => (field && starsOn ? detectedStars(field) : undefined), [field, starsOn])
+  const readoutValue = field && readout ? sampleAt(field, readout.x, readout.y) : null
 
   function select(id: AssetId) {
     if (!scope) return
     setFrameUi(scope.key, { activeAssetId: id })
-    // The measure operation of the frame's own run takes it first (PIX-FR-01).
-    const run = scope.frames.find((f) => f.asset.id === id)?.run
-    if (run && run.id !== scope.key) setFrameUi(run.id, { activeAssetId: id })
   }
 
-  const activate: Activate = (id, mode) => {
+  function step(delta: number) {
+    const next = ordered[Math.min(ordered.length - 1, Math.max(0, index + delta))]
+    if (!next || next === current) return
+    select(next.asset.id)
+    announce(m.review_announce_frame({ name: names.get(next.asset.id) ?? next.asset.fileName, index: ordered.indexOf(next) + 1, total: ordered.length }))
+  }
+
+  function activate(id: AssetId, mode: "set" | "toggle" | "range") {
     if (mode === "set") setSelected(new Set())
-    else if (mode === "toggle")
+    else if (mode === "toggle") {
       setSelected((prev) => {
         const next = new Set(prev.size === 0 && current ? [current.asset.id] : prev)
         if (next.has(id)) next.delete(id)
         else next.add(id)
         return next
       })
-    else {
+    } else {
       const from = Math.max(0, index)
       const to = ordered.findIndex((f) => f.asset.id === id)
       setSelected(new Set(ordered.slice(Math.min(from, to), Math.max(from, to) + 1).map((f) => f.asset.id)))
@@ -218,69 +204,54 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     select(id)
   }
 
-  function step(delta: number) {
-    const next = ordered[Math.min(ordered.length - 1, Math.max(0, index + delta))]
-    if (!next) return
-    setSelected(new Set())
-    select(next.asset.id)
-    announce(m.review_announce_frame({ name: names.get(next.asset.id) ?? next.asset.fileName, index: ordered.indexOf(next) + 1, total: ordered.length }))
-  }
-
-  /** A refused or failed write as a Refusal; a blocker that names the read-only reason links to where it resolves. */
-  function refuse(result: CommitResult, action: string) {
-    if (result.ok) return
-    const links: Record<string, StepLink> = scope?.readOnlyReason && scope.readOnlyBlocker ? { [scope.readOnlyReason]: scope.readOnlyBlocker.link } : {}
-    setError(refusalFrom(result, action, links) ?? { action, reason: result.message, blockers: [] })
-    announce(`${action}: ${result.message}`)
-  }
-
-  function mark(value: QualityValue, always = false, list: ReviewFrame[] = targets, confirmed = false) {
-    if (!scope || !current) return
-    if (list.length > BULK_MARK_CONFIRM_OVER && !confirmed) return setBulkMark({ list, value })
+  /** Marks `list`; a single current frame then advances when auto-advance is on, or `always` (⇧). */
+  function mark(value: QualityValue, list: ReviewFrame[], always = false): CommitResult {
+    if (!scope || list.length === 0) return { ok: true }
     const result = markLibrary(scope, list, value)
-    if (!result.ok) return refuse(result, m.review_refusal_mark())
-    setError(null)
+    if (!result.ok) return result
     announce(markAnnouncement(list, value))
-    if (list.length > 1) return
-    const successor = ordered[index + 1] ?? null
-    const fallback = ordered[index - 1] ?? null
-    const leaves = filter !== "all" && bucketAfterMark(current, value) !== filter
-    // Auto-advance on the last frame keeps it current; a mark that moves the frame out of the filter moves on either way.
-    const next = prefs.autoAdvance || always ? (successor ?? (leaves ? fallback : null)) : leaves ? (successor ?? fallback) : null
-    if (next) select(next.asset.id)
+    if (list.length === 1 && current && list[0] === current) {
+      const leaves = filter !== "all" && bucketAfterMark(value) !== filter
+      const successor = ordered[index + 1] ?? null
+      const fallback = ordered[index - 1] ?? null
+      const next = prefs.autoAdvance || always ? (successor ?? fallback) : leaves ? (successor ?? fallback) : null
+      if (next) select(next.asset.id)
+    }
+    return result
   }
 
-  function confirmProjectReject(list: ReviewFrame[]) {
-    if (!scope?.project) return
-    if (scope.readOnlyReason) return refuse({ ok: false, reason: "refused", message: scope.readOnlyReason, reasons: [scope.readOnlyReason] }, m.review_refusal_reject())
-    setProjectConfirm(list)
+  const markLabel: Record<QualityValue, string> = { usable: MARK_WORD.usable, unusable: MARK_WORD.unusable, unreviewed: MARK_WORD.unreviewed }
+  const markKey: Record<QualityValue, string> = { usable: REVIEW_KEY.pick, unusable: REVIEW_KEY.reject, unreviewed: REVIEW_KEY.unreviewed }
+  function markAction(value: QualityValue, list: ReviewFrame[], always = false): Action {
+    // The review's own words (Picked, Rejected, Unreviewed), as the buttons that ask read.
+    const said = { count: list.length, n: formatCount(list.length), quality: markLabel[value] }
+    return {
+      id: `mark-${value}`,
+      label: markLabel[value],
+      shortcut: markKey[value],
+      unavailable: list.length === 0 ? { action: markLabel[value], reason: m.review_no_current_frame(), blockers: [] } : blocked(markLabel[value]),
+      confirm: list.length > BULK_MARK_CONFIRM_OVER ? { title: m.review_bulk_mark_title(said), confirm: { label: m.store_label_mark_frames(said) } } : undefined,
+      run: () => mark(value, list, always),
+    }
   }
+  const marksFor = (list: ReviewFrame[]) => (["usable", "unusable", "unreviewed"] as const).map((value) => markAction(value, list))
 
-  function clearProjectReject(list: ReviewFrame[]) {
-    if (!scope) return
-    const result = setProjectOnlyReject(scope, list, false)
-    if (!result.ok) return refuse(result, m.review_refusal_clear())
-    setError(null)
-    announce(m.review_announce_project_reject_cleared({ what: framesWhat(list) }))
-  }
-
-  /** Compare the current frame with `with` (a right-clicked frame), else toggle Compare with the nearest other frame. */
   function startCompare(withId?: AssetId) {
-    const reference = withId && withId !== current?.asset.id ? frames.find((f) => f.asset.id === withId) : undefined
-    if (reference) {
-      setRefId(reference.asset.id)
+    const withFrame = withId && withId !== current?.asset.id ? frames.find((f) => f.asset.id === withId) : undefined
+    const currentName = current ? (names.get(current.asset.id) ?? "") : m.review_no_frame()
+    if (withFrame) {
+      setRefId(withFrame.asset.id)
       setCompare(true)
-      announce(m.review_announce_compare({ current: current ? (names.get(current.asset.id) ?? "") : m.review_no_frame(), reference: names.get(reference.asset.id) ?? "" }))
+      announce(m.review_announce_compare({ current: currentName, reference: names.get(withFrame.asset.id) ?? "" }))
       return
     }
     if (compare) {
-      if (!withId) setCompare(false)
+      setCompare(false)
       return
     }
     const other = selectedFrames.find((f) => f.asset.id !== current?.asset.id) ?? ordered[index - 1] ?? ordered[index + 1] ?? null
     if (!refId || !frames.some((f) => f.asset.id === refId)) setRefId(other?.asset.id ?? null)
     setCompare(true)
-    const currentName = current ? (names.get(current.asset.id) ?? "") : m.review_no_frame()
     announce(other ? m.review_announce_compare({ current: currentName, reference: names.get(other.asset.id) ?? "" }) : m.review_announce_compare_none({ current: currentName }))
   }
 
@@ -291,19 +262,20 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     })
   }
 
-  /** Prototype: there is no OS file manager, so Reveal shows the path it would open. */
   function reveal(frame: ReviewFrame) {
     const path = frame.asset.copies[0]?.path ?? null
     setRevealed(path)
     announce(path ? m.review_announce_revealed({ path }) : m.review_announce_no_copy())
   }
 
+  function chooseView(next: ListView) {
+    if (next === "grid" && view !== "grid") setBeforeGrid(view as Exclude<ListView, "grid">)
+    setView(next)
+  }
+
   function toggleGrid() {
     if (view === "grid") setView(beforeGrid)
-    else {
-      setBeforeGrid(view)
-      setView("grid")
-    }
+    else chooseView("grid")
   }
 
   function cycleHeight() {
@@ -319,23 +291,21 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     announce(m.review_announce_selected({ count: ordered.length }))
   }
 
-  function thresholdMatches(t: Threshold) {
-    if (t.value === null) return { matches: [] as ReviewFrame[], missing: shown.filter((f) => f.builtIn[t.metric]?.value == null).length }
-    const matches = shown.filter((f) => {
-      const v = f.builtIn[t.metric]?.value
-      return v !== null && v !== undefined && (t.direction === "above" ? v > t.value! : v < t.value!)
-    })
-    return { matches, missing: shown.filter((f) => f.builtIn[t.metric]?.value == null).length }
+  function applyThreshold(matches: ReviewFrame[], t: Threshold) {
+    setSelected((prev) => new Set([...(t.add ? prev : []), ...matches.map((f) => f.asset.id)]))
+    if (matches[0]) select(matches[0].asset.id)
+    const said = { count: matches.length, metric: METRIC_LABEL[t.metric], value: String(t.value) }
+    announce(t.direction === "above" ? m.review_announce_threshold_above(said) : m.review_announce_threshold_below(said))
+    setThreshold(null)
   }
 
-  function applyThreshold(add: boolean) {
-    if (!threshold) return
-    const { matches } = thresholdMatches(threshold)
-    setSelected((prev) => new Set([...(add ? prev : []), ...matches.map((f) => f.asset.id)]))
-    if (matches[0]) select(matches[0].asset.id)
-    const said = { count: matches.length, metric: METRIC_LABEL[threshold.metric], value: String(threshold.value) }
-    announce(threshold.direction === "above" ? m.review_announce_threshold_above(said) : m.review_announce_threshold_below(said))
+  /** Finish review: only a session review finishes, and only once no frame is Unreviewed (C10). */
+  function finish() {
+    if (!scope?.session || unreviewed > 0 || !onFinished) return
+    onFinished()
   }
+
+  const toggleInspector = () => (overlayMode.current ? setOverlayInspector((on) => !on) : setReviewPrefs({ inspectorOpen: !prefs.inspectorOpen }))
 
   // `?assetId=` opens that frame, with the filter widened when it hides it.
   const linked = typeof search.assetId === "string" ? search.assetId : null
@@ -343,8 +313,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     if (!linked || !scope) return
     const f = scope.frames.find((x) => x.asset.id === linked)
     if (!f) return
-    setPanelId("all")
-    setFilter((current) => (current === "all" || current === f.bucket ? current : "all"))
+    setFilter((was) => (was === "all" || was === f.bucket ? was : "all"))
     select(linked)
     // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per linked frame.
   }, [linked, scope?.key])
@@ -352,12 +321,21 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   useEffect(() => {
     setStar(null)
     setRevealed(null)
+    setReadout(null)
   }, [current?.asset.id])
 
-  const zoomed = plateView.zoom !== "fit"
+  // The current row stays in view; while focus is on a row it follows the current frame.
+  useEffect(() => {
+    if (view !== "table" || !current) return
+    const row = document.querySelector<HTMLElement>(`[data-workspace-list] tr[aria-current="true"]`)
+    row?.scrollIntoView({ block: "nearest" })
+    const focus = document.activeElement
+    if (row && focus instanceof HTMLElement && focus !== row && focus.closest("[data-workspace-list] tbody tr")) row.focus({ preventScroll: true })
+  }, [current?.asset.id, view])
+
   const latest = {
     step,
-    mark,
+    mark: (value: QualityValue, always = false) => runner.run(markAction(value, targets, always)),
     selectAll,
     toggleGrid,
     cycleHeight,
@@ -375,8 +353,8 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         setFullscreen(false)
         return true
       }
-      if (inspectorOverlay && inspectorShown) {
-        setInspectorShown(false)
+      if (overlayMode.current && overlayInspector) {
+        setOverlayInspector(false)
         return true
       }
       if (selected.size > 0) {
@@ -386,35 +364,38 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       }
       return false
     },
-    shortcuts: () => setShortcutsOpen(true),
-    toggleInspector: () => (inspectorOverlay ? setInspectorShown((v) => !v) : setReviewPrefs({ inspectorOpen: !prefs.inspectorOpen })),
-    zoomed,
+    toggleInspector,
+    finish,
+    zoomed: plateView.zoom !== "fit",
     gridCols: () => (view === "grid" ? gridCols.current : 1),
   }
   const handlers = useRef(latest)
   handlers.current = latest
 
-  // Review hotkeys (PIX-FR-13), on the capture phase so they win over the app's G sequences and ? while Review is open.
+  // Review hotkeys (PIX-FR-13), on the capture phase so they win over the app's G sequences while Review is open.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const h = handlers.current
-      if (isTyping(event.target)) return
-      if (popupOpen()) return
+      if (isTyping(event.target) || popupOpen()) return
       const target = event.target instanceof Element ? event.target : null
       const consume = () => {
         event.preventDefault()
         event.stopPropagation()
       }
       const key = event.key
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && key.toLowerCase() === "a") {
-        h.selectAll()
-        return consume()
+      if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+        if (key.toLowerCase() === "a") {
+          h.selectAll()
+          consume()
+        } else if (key.toLowerCase() === "i" && !event.shiftKey) {
+          h.toggleCorners()
+          consume()
+        } else if (key === "Enter") {
+          h.finish()
+          consume()
+        }
+        return
       }
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key.toLowerCase() === "i") {
-        h.toggleCorners()
-        return consume()
-      }
-      if (event.metaKey || event.ctrlKey) return
       if (event.altKey) {
         const n = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(event.code)
         if (n >= 0) {
@@ -435,7 +416,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       }
       if (!getPreferences().singleKeyShortcuts) return
       if (key === " ") {
-        if (target === document.body || target?.closest("[data-frame-item], tr[data-frame-id], [data-plate]")) {
+        if (target === document.body || target?.closest("[data-frame-item], [data-workspace-list] tbody tr, [data-plate]")) {
           h.toggleSelected()
           consume()
         }
@@ -450,14 +431,13 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         u: () => h.mark("unreviewed"),
         z: h.toggleZoom,
         f: h.toggleFullscreen,
-        c: h.startCompare,
+        c: () => h.startCompare(),
         g: h.toggleGrid,
         t: h.cycleHeight,
         i: h.toggleInspector,
-        "?": h.shortcuts,
       }
-      const action = actions[key === "?" ? "?" : lower]
-      if (!action || (event.shiftKey && !["p", "x", "?"].includes(key === "?" ? "?" : lower))) return
+      const action = actions[lower]
+      if (!action || (event.shiftKey && !["p", "x"].includes(lower))) return
       action()
       consume()
     }
@@ -478,7 +458,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       { id: "inspector", get label() { return m.review_frame_inspector() }, keys: REVIEW_KEY.inspector, run: () => h().toggleInspector() },
       { id: "corners", get label() { return m.review_corner_inspector() }, keys: `${MOD_LABEL}${REVIEW_KEY.inspector}`, run: () => h().toggleCorners() },
       { id: "select-all", get label() { return m.review_cmd_select_all() }, keys: `${MOD_LABEL}${REVIEW_KEY.selectAll}`, run: () => h().selectAll() },
-      { id: "shortcuts", get label() { return m.review_shortcuts_title() }, keys: REVIEW_KEY.shortcuts, run: () => h().shortcuts() },
+      { id: "finish", get label() { return m.review_cmd_finish() }, keys: `${MOD_LABEL}${REVIEW_KEY.finish}`, run: () => h().finish() },
     ])
     return () => {
       window.removeEventListener("keydown", onKeyDown, true)
@@ -487,704 +467,333 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   }, [])
 
   if (!scope) {
-    const title = { candidates: m.project_missing_title, group: m.rungroup_missing_title, run: m.run_missing_title, session: m.session_missing_title }[context.kind]()
-    return context.kind === "session" ? <MissingRecord title={title} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord title={title} backTo="/projects" backLabel={m.project_back_to_projects()} />
+    return context.kind === "session" ? <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
   }
+  const session = scope.session
 
-  // Right click on a row or thumbnail: the selection when the frame is in it, else that frame.
-  const menu = (id: AssetId): MenuEntry[] => {
+  // Row ⋯, right click and thumbnails: the selection when the frame is in it, else that frame.
+  const rowItems = (id: AssetId): MenuItem[] => {
     const frame = frames.find((f) => f.asset.id === id)
     if (!frame) return []
     const list = selected.has(id) && selectedFrames.length > 1 ? selectedFrames : [frame]
-    const blocked = scope.readOnlyReason !== null
-    const markEntry = (label: string, value: QualityValue, shortcut: string): MenuEntry => ({ label, shortcut, disabled: blocked, onSelect: () => mark(value, false, list) })
-    const projectEntries: MenuEntry[] = scope.project
-      ? [
-          { separator: true },
-          list.length === 1 && frame.rejectedBy.project
-            ? { label: m.review_clear_project_reject(), disabled: blocked, onSelect: () => clearProjectReject(list) }
-            : { label: m.review_reject_for_project(), disabled: blocked, onSelect: () => confirmProjectReject(list) },
-        ]
-      : []
     return [
       ...(list.length > 1 ? [{ heading: m.review_frames_count({ count: list.length }) }] : []),
-      markEntry(m.review_key_pick(), "usable", REVIEW_KEY.pick),
-      markEntry(m.review_key_reject(), "unusable", REVIEW_KEY.reject),
-      markEntry(m.status_unreviewed(), "unreviewed", REVIEW_KEY.unreviewed),
-      ...projectEntries,
+      ...marksFor(list),
       { separator: true },
-      { label: m.review_compare(), icon: ArrowLeftRight, shortcut: REVIEW_KEY.compare, disabled: frames.length < 2, onSelect: () => startCompare(id) },
-      { label: m.review_reveal_path(), icon: FolderOpen, disabled: frame.asset.copies.length === 0, onSelect: () => reveal(frame) },
+      { id: "compare-with", label: m.review_compare_with_current(), icon: ArrowLeftRight, shortcut: REVIEW_KEY.compare, unavailable: frames.length < 2 || id === current?.asset.id ? { action: m.review_compare_with_current(), reason: m.review_compare_needs_other(), blockers: [] } : undefined, run: () => startCompare(id) },
+      { id: "reveal", label: m.review_reveal_path(), icon: FolderOpen, unavailable: frame.asset.copies.length === 0 ? { action: m.review_reveal_path(), reason: m.review_announce_no_copy(), blockers: [] } : undefined, run: () => reveal(frame) },
     ]
   }
 
   const emptyTitle = frames.length === 0 || filter === "all" ? m.review_empty_none() : filter === "picked" ? m.review_empty_picked() : filter === "rejected" ? m.review_empty_rejected() : m.review_empty_unreviewed()
-  const back = context.kind === "session" ? { to: "/sessions", label: m.session_open_sessions() } : scope.runs[0] ? { to: runHref(scope.runs[0], "select"), label: m.review_open_select() } : { to: `/projects/${scope.project?.id ?? ""}`, label: m.target_open_project() }
-  const emptyList = (
-    <EmptyState
-      icon={ImageOff}
-      title={emptyTitle}
-      description={null}
-      action={
-        frames.length > 0 ? (
-          <Button size="sm" variant="outline" onClick={() => setFilter("all")}>
-            {m.review_show_all()}
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" render={<Link to={back.to as never} />}>
-            {back.label}
-          </Button>
-        )
-      }
-    />
-  )
+  const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => setFilter("all") }} /> : null} />
 
-  const listProps = {
-    frames: ordered,
-    activeId: current?.asset.id ?? null,
-    selected,
-    names,
-    onActivate: activate,
-    onToggleSelected: (id: AssetId, on: boolean) =>
-      setSelected((prev) => {
-        const next = new Set(prev)
-        if (on) next.add(id)
-        else next.delete(id)
-        return next
-      }),
-    menu,
-    empty: emptyList,
+  const selectByThreshold: Action = { id: "threshold", label: m.review_select_by_threshold_menu(), opensDialog: true, run: () => setThreshold({ metric: "fwhm", direction: "above", value: null, add: false }) }
+  const pickRest: Action = {
+    id: "pick-rest",
+    label: m.review_pick_rest(),
+    unavailable: unreviewed === 0 ? { action: m.review_pick_rest(), reason: m.review_pick_rest_none(), blockers: [] } : blocked(m.review_pick_rest()),
+    confirm: { title: m.review_pick_rest_title({ count: unreviewed, n: formatCount(unreviewed) }), confirm: { label: m.review_pick_rest_confirm({ count: unreviewed, n: formatCount(unreviewed) }) } },
+    run: () => {
+      const result = session ? markRestUsable(session.id) : ({ ok: true } as const)
+      if (result.ok) announce(m.review_announce_rest_picked({ count: unreviewed }))
+      return result
+    },
   }
 
-  // The table's height comes from the space left once the preview has its minimum (STAGE_MIN_PX): the
-  // dragged or remembered "about 8 rows" is the most it takes, and never less than three rows.
-  const rowsCap = rootSize.height > 0 ? Math.max(ROW_PX * 4 + 2, rootSize.height - STAGE_MIN_PX - REVIEW_CHROME_PX) : Number.POSITIVE_INFINITY
-  const rowsPx = Math.min(dragPx ?? prefs.rowsHeightPx, rowsCap)
-  const showStage = !(view === "table" && height === "full")
-  const thresholdInfo = threshold ? thresholdMatches(threshold) : null
-  const unitFor = (metric: MetricKey) => frames.find((f) => f.builtIn[metric])?.builtIn[metric]?.unit ?? ""
-  const withKey = (label: string, shortcut: string) => m.shell_with_shortcut({ label, shortcut })
-
-  const plateCaption = current ? (
-    // Wraps instead of scrolling sideways on a narrow window (WCAG 1.4.10): the controls drop below the name, then wrap.
-    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs">
-      <span className="min-w-0 truncate font-medium" title={current.asset.copies[0]?.path}>
-        {names.get(current.asset.id)}
-      </span>
-      <span className="shrink-0 text-muted-foreground tabular-nums">{m.review_frame_position({ index: index + 1, total: ordered.length })}</span>
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-        {field?.cfa ? (
-          <Pill tone="muted" title={m.review_cfa_title()}>
-            {m.review_cfa({ cfa: field.cfa })}
-          </Pill>
-        ) : null}
-        <Toggle variant="outline" size="sm" className="h-6 gap-1 px-2 text-xs" pressed={corners} onPressedChange={toggleCorners} aria-label={m.review_corner_inspector()} title={withKey(m.review_corners(), `${MOD_LABEL}${REVIEW_KEY.inspector}`)}>
-          <Scan aria-hidden="true" className="size-3.5" />
-          <span className="@max-[62rem]:sr-only">{m.review_corners()}</span>
-        </Toggle>
-        {corners ? (
-          <>
-            <Toggle variant="outline" size="sm" className="h-6 px-2 text-xs" pressed={cornerOverlay.fwhm} onPressedChange={(on) => setCornerOverlay((o) => ({ ...o, fwhm: on }))} aria-label={m.review_fwhm_overlay()}>
-              {METRIC_LABEL.fwhm}
-            </Toggle>
-            <Toggle variant="outline" size="sm" className="h-6 px-2 text-xs" pressed={cornerOverlay.eccentricity} onPressedChange={(on) => setCornerOverlay((o) => ({ ...o, eccentricity: on }))} aria-label={m.review_ecc_overlay()}>
-              {m.review_ecc_short()}
-            </Toggle>
-          </>
-        ) : (
-          <>
-            <ToggleGroup value={[plateView.zoom]} onValueChange={(v) => v[0] && setPlateView((p) => ({ ...p, zoom: v[0] as Zoom }))} variant="outline" size="sm" spacing={0} aria-label={m.review_zoom()}>
-              {(["fit", "1", "2"] as const).map((z) => (
-                <ToggleGroupItem key={z} value={z} className="h-6 px-2 text-xs">
-                  {ZOOM_LABEL[z]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            {zoomed ? <HelpTip label={m.review_pan_help()}>{m.review_pan_tip()}</HelpTip> : null}
-          </>
-        )}
-        <ToggleGroup value={[plateView.stretch]} onValueChange={(v) => v[0] && setPlateView((p) => ({ ...p, stretch: v[0] as PlateView["stretch"] }))} variant="outline" size="sm" spacing={0} aria-label={m.review_display_stretch()}>
-          {(["linear", "auto", "strong"] as const).map((s) => (
-            <ToggleGroupItem key={s} value={s} className="h-6 px-2 text-xs">
-              {STRETCH_LABEL[s]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <Button size="icon-sm" variant="outline" aria-label={withKey(m.review_cmd_previous(), REVIEW_KEY.previous)} disabled={index <= 0} onClick={() => step(-1)}>
-          <ChevronLeft aria-hidden="true" />
-        </Button>
-        <Button size="icon-sm" variant="outline" aria-label={withKey(m.review_cmd_next(), REVIEW_KEY.next)} disabled={index >= ordered.length - 1} onClick={() => step(1)}>
-          <ChevronRight aria-hidden="true" />
-        </Button>
-        <Button size="icon-sm" variant="outline" aria-label={withKey(fullscreen ? m.review_leave_fullscreen() : m.review_cmd_fullscreen(), REVIEW_KEY.fullscreen)} aria-pressed={fullscreen} onClick={() => setFullscreen((f) => !f)}>
-          {fullscreen ? <Minimize aria-hidden="true" /> : <Expand aria-hidden="true" />}
-        </Button>
-        {inspectorOverlay && !fullscreen ? (
-          <Toggle variant="outline" size="sm" className="h-6 min-w-6 px-1.5" pressed={inspectorShown} onPressedChange={setInspectorShown} aria-label={withKey(m.review_frame_inspector(), REVIEW_KEY.inspector)}>
-            <PanelRight aria-hidden="true" />
-          </Toggle>
-        ) : null}
-      </div>
-    </div>
-  ) : null
-
-  const plateFor = (f: NonNullable<typeof field>, label: string, primary: boolean) =>
-    corners ? (
-      <CornerGrid field={f} stretch={plateView.stretch} overlay={cornerOverlay} label={label} />
+  const list =
+    view === "table" ? (
+      <DataTable
+        label={m.review_frames_in_review()}
+        rows={height === "strip" ? (current ? [current] : []) : ordered}
+        columns={columns}
+        getRowId={(f) => f.asset.id}
+        selection={{ selected: [...selected], onChange: (ids) => setSelected(new Set(ids)), rowLabel: (f) => names.get(f.asset.id) ?? f.asset.fileName }}
+        sort={sort}
+        onSortChange={setSort}
+        activeRowId={current?.asset.id ?? null}
+        onRowClick={(f) => select(f.asset.id)}
+        rowLabel={(f) => names.get(f.asset.id) ?? f.asset.fileName}
+        rowActions={(f) => rowItems(f.asset.id)}
+        toolbar={{ actions: session ? [selectByThreshold, pickRest] : [selectByThreshold] }}
+        batchActions={(ids) => marksFor(frames.filter((f) => ids.includes(f.asset.id)))}
+        empty={emptyList}
+        scroll="fill"
+      />
     ) : (
+      <FrameThumbnails
+        layout={view === "grid" ? "grid" : "strip"}
+        label={view === "grid" ? m.review_frame_grid() : m.review_view_filmstrip()}
+        items={ordered.map((f) => ({
+          id: f.asset.id,
+          name: names.get(f.asset.id) ?? f.asset.fileName,
+          file: fileOf(f),
+          unreadable: f.availability === "available" ? null : say(m, previewUnavailableReason(f.availability)),
+          status: <QualityLabel frame={f} short />,
+          statusText: qualityWord(m, f),
+          dimmed: f.bucket === "rejected",
+        }))}
+        activeId={current?.asset.id ?? null}
+        selected={selected}
+        onActivate={activate}
+        empty={emptyList}
+        menu={{ items: rowItems, runner }}
+        onColumns={(n) => {
+          gridCols.current = n
+        }}
+      />
+    )
+
+  const unavailableText = (f: ReviewFrame) => (f.availability !== "available" ? say(m, previewUnavailableReason(f.availability)) : m.review_no_pixel_data())
+  const plateOf = (f: ReviewFrame, img: PlateImage | null, fld: typeof field, primary: boolean) => {
+    const label = names.get(f.asset.id) ?? f.asset.fileName
+    if (!img || !fld) return <UnknownValue label={unavailableText(f)} />
+    if (corners) return <CornerGrid field={fld} stretch={plateView.stretch} overlay={cornerOverlay} label={label} />
+    return (
       <Plate
-        field={f}
+        image={img}
         view={plateView}
         onView={setPlateView}
         label={label}
-        starsOn={primary && starsOn}
+        stars={primary ? stars : undefined}
         starId={primary ? (star?.id ?? null) : null}
-        onStar={(s) => {
-          if (!primary) return
-          setStar(s)
-          setTab("stars")
-        }}
+        onStar={
+          primary
+            ? (s: StarRecord) => {
+                setStar(s)
+                setTab("stars")
+              }
+            : undefined
+        }
         onWindow={primary ? setShownWindow : undefined}
+        onReadout={primary ? setReadout : undefined}
       />
     )
+  }
+  const readoutText = readout ? (readoutValue === null || Number.isNaN(readoutValue) ? m.review_readout_invalid({ x: formatCount(readout.x), y: formatCount(readout.y) }) : m.review_readout({ x: formatCount(readout.x), y: formatCount(readout.y), value: formatCount(Math.round(readoutValue)) })) : null
+  const panes: WorkspacePane[] = current
+    ? [
+        {
+          id: "current",
+          caption: (
+            <>
+              {names.get(current.asset.id)}
+              {" · "}
+              {m.review_frame_position({ index: index + 1, total: ordered.length })}
+              {field?.cfa ? <Pill tone="muted">{m.review_cfa({ cfa: field.cfa })}</Pill> : null}
+              {readoutText ? ` · ${readoutText}` : null}
+            </>
+          ),
+          content: plateOf(current, image, field, true),
+        },
+        ...(compare
+          ? [
+              {
+                id: "reference",
+                caption: (
+                  <DisplayMenu
+                    label={reference ? m.review_reference_of({ name: names.get(reference.asset.id) ?? "" }) : m.review_compare_reference()}
+                    align="start"
+                    groups={[
+                      {
+                        kind: "radio",
+                        id: "reference",
+                        label: m.review_reference_label(),
+                        value: reference?.asset.id ?? "",
+                        options: frames.filter((f) => f !== current).map((f) => ({ value: f.asset.id, label: names.get(f.asset.id) ?? f.asset.fileName })),
+                        onChange: (id) => setRefId(id),
+                      },
+                    ]}
+                  />
+                ),
+                content: reference ? plateOf(reference, refImage, refField, false) : <UnknownValue label={m.review_no_reference()} />,
+              },
+            ]
+          : []),
+      ]
+    : []
 
-  const plates =
-    current === null ? (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">{m.review_no_current_frame()}</div>
-    ) : (
-      <div className="flex min-h-0 flex-1 gap-2">
-        <PlateSlot
-          label={compare ? m.review_compare_current({ name: names.get(current.asset.id) ?? "" }) : null}
-          field={field}
-          unavailable={unavailableReason}
-          render={(f) => plateFor(f, m.review_preview_of({ name: names.get(current.asset.id) ?? "" }), true)}
-        />
-        {compare ? (
-          <PlateSlot
-            label={
-              <span className="flex min-w-0 items-center gap-1.5">
-                {m.review_reference_label()}
-                <MiniSelect
-                  label={m.review_compare_reference()}
-                  className="max-w-56"
-                  value={reference?.asset.id ?? "none"}
-                  onChange={(v) => setRefId(v === "none" ? null : v)}
-                  options={[{ value: "none", label: m.review_choose_frame() }, ...ordered.map((f) => ({ value: f.asset.id, label: names.get(f.asset.id) ?? f.asset.fileName }))]}
-                />
-              </span>
-            }
-            field={refField}
-            unavailable={!reference ? m.review_no_reference() : reference.availability !== "available" ? say(m, previewUnavailableReason(reference.availability)) : !refField ? m.review_no_pixels() : null}
-            render={(f) => plateFor(f, m.review_reference_of({ name: reference ? (names.get(reference.asset.id) ?? "") : "" }), false)}
-          />
-        ) : null}
-      </div>
-    )
+  const plotFrames = frames
+  const series: PlotSeries[] = PLOT_METRICS.map((metric) => {
+    const unit = frames.find((f) => f.builtIn[metric])?.builtIn[metric]?.unit ?? ""
+    return {
+      id: metric,
+      label: METRIC_LABEL[metric],
+      points: plotFrames.flatMap((f) => {
+        const value = f.builtIn[metric]?.value
+        return value === null || value === undefined ? [] : [{ id: f.asset.id, index: f.order, value, name: names.get(f.asset.id) ?? f.asset.fileName, rejected: f.bucket === "rejected" }]
+      }),
+      format: (value) => formatMetricFixed(m, { value, unit }),
+      tick: (value) => (unit === "stars" || unit === "ADU" ? formatCount(Math.round(value)) : formatMetricFixed(m, { value, unit })),
+    }
+  })
 
-  const plotsStrip = (
-    <div className={cn("shrink-0 border-t border-separator px-2 py-1.5", rootSize.height > 0 && rootSize.height < 600 ? "h-24" : "h-28")}>
-      <SessionPlots
-        frames={shown}
-        activeId={current?.asset.id ?? null}
-        selected={selected}
-        threshold={threshold}
-        onSelect={(id) => activate(id, "set")}
-        onThreshold={
-          threshold
-            ? (metric, value) => setThreshold({ ...threshold, metric, value: Number(value.toFixed(metric === "star-count" || metric === "background" ? 0 : 2)) })
+  const displayGroups: DisplayGroup[] = [
+    {
+      kind: "radio",
+      id: "view",
+      label: m.review_view(),
+      value: view,
+      options: [
+        { value: "table", label: m.review_view_table() },
+        { value: "filmstrip", label: m.review_view_filmstrip() },
+        { value: "grid", label: m.review_view_grid() },
+      ],
+      onChange: (v) => chooseView(v as ListView),
+    },
+    ...(view === "table"
+      ? [
+          {
+            kind: "radio" as const,
+            id: "height",
+            label: m.review_table_height(),
+            value: height,
+            options: (["rows", "strip", "full"] as const).map((h) => ({ value: h, label: heightLabel(m, h) })),
+            onChange: (h: string) => setHeight(h as TableHeight),
+          },
+        ]
+      : []),
+    { kind: "radio", id: "zoom", label: m.review_zoom(), value: plateView.zoom, options: ZOOMS.map((z) => ({ value: z, label: ZOOM_LABEL[z] })), onChange: (z) => setPlateView((v) => ({ ...v, zoom: z as Zoom, centre: null })) },
+    { kind: "radio", id: "stretch", label: m.review_display_stretch(), value: plateView.stretch, options: STRETCHES.map((s) => ({ value: s, label: STRETCH_LABEL[s] })), onChange: (s) => setPlateView((v) => ({ ...v, stretch: s as Stretch })) },
+    {
+      kind: "check",
+      id: "overlays",
+      label: m.display_menu_overlays(),
+      items: [
+        { id: "stars", label: m.review_tab_stars(), checked: starsOn },
+        { id: "corners", label: m.review_corners(), checked: corners, shortcut: `${MOD_LABEL}${REVIEW_KEY.inspector}` },
+        { id: "fwhm", label: m.review_fwhm_overlay(), checked: cornerOverlay.fwhm, disabled: !corners },
+        { id: "ecc", label: m.review_ecc_overlay(), checked: cornerOverlay.eccentricity, disabled: !corners },
+      ],
+      onChange: (id, on) => {
+        if (id === "stars") setStarsOn(on)
+        else if (id === "corners") toggleCorners()
+        else setCornerOverlay((o) => (id === "fwhm" ? { ...o, fwhm: on } : { ...o, eccentricity: on }))
+      },
+    },
+    { kind: "radio", id: "names", label: m.review_frame_names(), value: prefs.namePreset, options: NAME_PRESETS.map((p) => ({ value: p.id, label: p.label, detail: p.template })), onChange: (id) => setReviewPrefs({ namePreset: id }) },
+    {
+      kind: "columns",
+      id: "columns",
+      label: m.review_columns(),
+      columns: allColumns.map((c) => ({ id: c.id, label: c.header, checked: c.id === "frame" || prefs.columns.includes(c.id), required: c.id === "frame" })),
+      onChange: (id, on) => setReviewPrefs({ columns: on ? [...prefs.columns, id] : prefs.columns.filter((c) => c !== id) }),
+    },
+    {
+      kind: "check",
+      id: "behaviour",
+      items: [
+        { id: "inspector", label: m.review_show_inspector(), checked: overlayMode.current ? overlayInspector : prefs.inspectorOpen, shortcut: REVIEW_KEY.inspector },
+        { id: "advance", label: m.review_auto_advance_after_mark(), checked: prefs.autoAdvance },
+      ],
+      onChange: (id, on) => {
+        if (id === "advance") setReviewPrefs({ autoAdvance: on })
+        else if (overlayMode.current) setOverlayInspector(on)
+        else setReviewPrefs({ inspectorOpen: on })
+      },
+    },
+  ]
+
+  const aside = (overlay: boolean): WorkspaceAside | null => {
+    overlayMode.current = overlay
+    if (!current || !(overlay ? overlayInspector : prefs.inspectorOpen)) return null
+    return {
+      label: m.review_frame_inspector(),
+      title: names.get(current.asset.id) ?? current.asset.fileName,
+      closeLabel: withKey(m, m.review_close_inspector(), REVIEW_KEY.inspector),
+      onClose: () => (overlay ? setOverlayInspector(false) : setReviewPrefs({ inspectorOpen: false })),
+      children: (
+        <Inspector frame={current} catalog={catalog} field={field} window={shownWindow} readout={readoutValue} star={star} onStar={setStar} tab={tab} onTab={setTab} marks={marksFor(targets)} runner={runner} />
+      ),
+    }
+  }
+
+  const records = Object.values(catalog.measurementImports).filter((record) => record.runId === scope.key)
+  const status = [
+    <>
+      {m.review_shown_of({ count: ordered.length, total: frames.length })}
+      {selected.size > 0 ? ` · ${m.status_bar_selected({ count: selected.size })}` : null}
+      {hiddenSelected > 0 ? ` (${m.review_hidden_count({ count: hiddenSelected })})` : null}
+    </>,
+    <MeasureStatus scope={scope} frames={frames} currentId={current?.asset.id ?? null} blocked={blocked(m.measure_frames_action())} />,
+    revealed ? (
+      <>
+        <PathText path={revealed} truncate />
+        <IconButton label={m.review_dismiss_path()} icon={X} onClick={() => setRevealed(null)} />
+      </>
+    ) : null,
+    <ActionButton action={{ id: "import", label: m.review_import_measurements_ellipsis(), opensDialog: true, run: () => setImportOpen(true) }} />,
+    records.length > 0 ? <ActionButton action={{ id: "imports", label: m.review_imported_measurements_ellipsis({ count: records.length }), opensDialog: true, run: () => setImportsOpen(true) }} /> : null,
+    runner.feedback,
+  ]
+
+  const currentName = current ? (names.get(current.asset.id) ?? current.asset.fileName) : ""
+
+  return (
+    <>
+      <Workspace
+        label={m.review_workspace_label()}
+        toolbar={{
+          start: (
+            <FilterControls
+              facets={{
+                items: [
+                  {
+                    id: "quality",
+                    label: m.review_col_quality(),
+                    kind: "single",
+                    value: filter === "all" ? "" : filter,
+                    options: FILTERS.filter((f) => f.id !== "all").map((f) => ({ value: f.id, label: f.label, count: counts[f.id] })),
+                  },
+                ],
+                onChange: (patch) => {
+                  const next = patch.quality
+                  if (typeof next === "string") latest.filter(next === "" ? "all" : (next as QualityFilter))
+                },
+              }}
+            />
+          ),
+          end: (
+            <>
+              <IconButton label={m.review_cmd_previous()} icon={ChevronLeft} shortcut={REVIEW_KEY.previous} disabled={index <= 0} onClick={() => step(-1)} />
+              <IconButton label={m.review_cmd_next()} icon={ChevronRight} shortcut={REVIEW_KEY.next} disabled={index < 0 || index >= ordered.length - 1} onClick={() => step(1)} />
+              <ActionButton action={{ id: "compare", label: compare ? m.review_compare_end() : m.review_compare(), icon: ArrowLeftRight, shortcut: REVIEW_KEY.compare, run: () => startCompare() }} />
+              <IconButton label={m.review_cmd_fullscreen()} icon={Expand} shortcut={REVIEW_KEY.fullscreen} disabled={!current} onClick={() => setFullscreen(true)} />
+              <DisplayMenu label={m.review_display()} groups={displayGroups} />
+            </>
+          ),
+        }}
+        list={list}
+        listHeight={view === "grid" ? "full" : view === "filmstrip" ? "strip" : height}
+        rowsPx={prefs.rowsHeightPx}
+        onRowsPx={(px) => setReviewPrefs({ rowsHeightPx: px })}
+        stage={panes}
+        stageEmpty={<UnknownValue label={m.review_no_current_frame()} />}
+        strip={<SessionPlots series={series} count={frames.length} activeId={current?.asset.id ?? null} selected={selected} threshold={threshold && threshold.value !== null ? { seriesId: threshold.metric, direction: threshold.direction, value: threshold.value } : null} onSelect={select} />}
+        aside={aside}
+        status={status}
+        statusLabel={m.review_status_line()}
+        fullscreen={
+          fullscreen && current
+            ? {
+                label: m.review_cmd_fullscreen(),
+                onExit: () => setFullscreen(false),
+                bar: (
+                  <>
+                    {currentName}
+                    <QualityLabel frame={current} />
+                    <ActionBar actions={marksFor(targets)} runner={runner} />
+                    <IconButton label={withKey(m, m.review_leave_fullscreen(), REVIEW_KEY.fullscreen)} icon={Minimize} onClick={() => setFullscreen(false)} />
+                  </>
+                ),
+              }
             : null
         }
       />
-    </div>
-  )
-
-  const inspector =
-    current && (inspectorOverlay ? inspectorShown : prefs.inspectorOpen) ? (
-      <Inspector
-        scope={scope}
-        frame={current}
-        name={names.get(current.asset.id) ?? current.asset.fileName}
-        catalog={catalog}
-        field={field}
-        window={shownWindow && field ? shownWindow : field ? plateWindow(field, 640, 420, { ...plateView, zoom: "fit" }) : null}
-        starsOn={starsOn}
-        onStarsOn={setStarsOn}
-        star={star}
-        onStar={(s) => {
-          setStar(s)
-          setStarsOn(true)
-          if (plateView.zoom === "fit") setPlateView((v) => ({ ...v, zoom: "1", centre: { x: s.x, y: s.y } }))
-          else setPlateView((v) => ({ ...v, centre: { x: s.x, y: s.y } }))
-        }}
-        tab={tab}
-        onTab={setTab}
-        targets={targets.length}
-        actions={{ mark: (v) => mark(v) }}
-        overlay={inspectorOverlay}
-        onClose={inspectorOverlay ? () => setInspectorShown(false) : undefined}
-      />
-    ) : null
-
-  const project = scope.project
-  const confirmFrames = projectConfirm ?? []
-  const bulkWords = { count: bulkMark?.list.length ?? 0, n: formatCount(bulkMark?.list.length ?? 0), quality: libraryWord(m, bulkMark?.value ?? "unreviewed") }
-  const confirmRuns = [...new Set(confirmFrames.flatMap((f) => (f.run && f.run.completion === "open" ? [f.run.name] : [])))]
-  // Unsaved run drafts this review made: Review's status line offers Save run (the toolbar's Next focuses it).
-  const drafts = scope.runs.filter((r) => r.draft && r.completion === "open" && !r.trashedAt)
-  // One draft: its Review step reads the draft note ("2 rejected, unsaved") while its link focuses Save run.
-  const draftReview = drafts.length === 1 ? runPipeline(state, drafts[0]!).steps[1]! : null
-  const draftNote = draftReview ? (draftReview.link.focusId === "review-save" ? say(m, draftReview.status) : m.status_unsaved_changes()) : drafts.length > 1 ? m.review_draft_panel_runs_unsaved({ count: drafts.length }) : null
-  const saveDrafts = () => {
-    for (const run of drafts) {
-      const result = saveRun(run.id)
-      if (!result.ok) return refuse(result, m.run_save_blocked())
-    }
-    setError(null)
-    announce(drafts.length === 1 ? m.review_announce_saved_revision({ name: drafts[0]!.name, revision: (drafts[0]!.revisions.at(-1)?.revision ?? 0) + 1 }) : m.review_announce_runs_saved({ count: drafts.length }))
-    statusLineRef.current?.focus()
-  }
-  const discardDrafts = () => {
-    for (const run of drafts) discardRunDraft(run.id)
-    announce(m.review_announce_discarded())
-    statusLineRef.current?.focus()
-  }
-  const pills = [
-    scope.membershipNote ? { label: scope.membershipNote.label, help: scope.membershipNote.help } : null,
-    ...scope.trashedPanels.map((p) => ({ label: m.review_panel_in_trash({ name: p }), help: m.review_trash_help() })),
-  ].filter((n): n is { label: string; help: string } => n !== null)
-
-  return (
-    <div ref={rootRef} className="@container flex min-h-[36.5rem] min-w-0 flex-1 flex-col" data-review={scope.key}>
-      <p className="sr-only" aria-live="polite">
-        {announcement}
-      </p>
-      {/* Toolbar: the list's filter, panel, view and height; selection, compare, display. One row from 784 px: labels fold to icons. */}
-      <div data-chrome className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator bg-[color-mix(in_oklch,var(--chrome)_45%,var(--background))] px-3 py-1">
-        <ToggleGroup value={[filter]} onValueChange={(v) => v[0] && setFilter(v[0] as QualityFilter)} variant="outline" size="sm" spacing={0} aria-label={m.review_quality_filter()} className="flex-wrap">
-          {FILTERS.map((f) => (
-            <ToggleGroupItem key={f.id} value={f.id} className="h-6 gap-1 px-2 text-xs" title={`⌥${f.key}`}>
-              {f.label}
-              <span className="text-muted-foreground tabular-nums">{counts[f.id]}</span>
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        {context.kind === "group" ? (
-          <MiniSelect
-            label={m.review_panel_filter()}
-            value={panelId}
-            onChange={setPanelId}
-            options={[{ value: "all", label: m.review_all_panels() }, ...scope.panels.map((p) => ({ value: p.id, label: m.review_panel_n({ n: p.n }) }))]}
-          />
-        ) : null}
-        <ToggleGroup
-          value={[view]}
-          onValueChange={(v) => {
-            const next = v[0] as ListView | undefined
-            if (!next) return
-            if (next === "grid" && view !== "grid") setBeforeGrid(view as Exclude<ListView, "grid">)
-            setView(next)
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          aria-label={m.review_view()}
-        >
-          <ToggleGroupItem value="table" className="h-6 gap-1 px-2 text-xs" title={m.review_view_table()}>
-            <LayoutList aria-hidden="true" className="size-3.5" />
-            <span className="@max-[62rem]:sr-only">{m.review_view_table()}</span>
-          </ToggleGroupItem>
-          <ToggleGroupItem value="filmstrip" className="h-6 gap-1 px-2 text-xs" title={m.review_view_filmstrip()}>
-            <Columns3 aria-hidden="true" className="size-3.5" />
-            <span className="@max-[62rem]:sr-only">{m.review_view_filmstrip()}</span>
-          </ToggleGroupItem>
-          <ToggleGroupItem value="grid" className="h-6 gap-1 px-2 text-xs" title={withKey(m.review_view_grid(), REVIEW_KEY.grid)}>
-            <Grid3x3 aria-hidden="true" className="size-3.5" />
-            <span className="@max-[62rem]:sr-only">{m.review_view_grid()}</span>
-          </ToggleGroupItem>
-        </ToggleGroup>
-        {view === "table" ? (
-          <Button size="sm" variant="outline" className="h-6 text-xs" onClick={cycleHeight} title={m.review_table_height_title({ current: heightLabel(m, height), key: REVIEW_KEY.height, next: heightLabel(m, HEIGHT_NEXT[height]) })}>
-            <Rows3 aria-hidden="true" />
-            <span className="@max-[62rem]:sr-only">{heightLabel(m, height)}</span>
-            <span className="sr-only">{m.review_table_height_sr()}</span>
-            <Kbd className="ml-0.5">{REVIEW_KEY.height}</Kbd>
-          </Button>
-        ) : null}
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-6 text-xs" />}>
-              <ListChecks aria-hidden="true" />
-              {m.review_select()}
-              {selected.size > 0 ? <span className="tabular-nums text-muted-foreground">{selected.size}</span> : null}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuItem onClick={selectAll}>
-                {m.review_select_all_shown_count({ count: ordered.length })}
-                <DropdownMenuShortcut>
-                  {MOD_LABEL}
-                  {REVIEW_KEY.selectAll}
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setThreshold(threshold ?? { metric: "fwhm", direction: "above", value: null })}>{m.review_select_by_threshold_menu()}</DropdownMenuItem>
-              <DropdownMenuItem disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
-                {m.selection_clear()}
-                <DropdownMenuShortcut>{m.key_escape()}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Toggle variant="outline" size="sm" className="h-6 text-xs" pressed={compare} onPressedChange={() => startCompare()} title={withKey(m.review_compare(), REVIEW_KEY.compare)}>
-            <ArrowLeftRight aria-hidden="true" />
-            <span className="@max-[62rem]:sr-only">{m.review_compare()}</span>
-          </Toggle>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="h-6 text-xs" title={m.review_display()} />}>
-              <Filter aria-hidden="true" />
-              <span className="@max-[62rem]:sr-only">{m.review_display()}</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{m.review_frame_names()}</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={prefs.namePreset} onValueChange={(v) => setReviewPrefs({ namePreset: String(v) })}>
-                  {NAME_PRESETS.map((p) => (
-                    <DropdownMenuRadioItem key={p.id} value={p.id}>
-                      <span className="flex min-w-0 flex-col">
-                        <span>{p.label}</span>
-                        <span className="font-mono text-[0.6875rem] text-muted-foreground">{p.template}</span>
-                      </span>
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{m.review_columns()}</DropdownMenuLabel>
-                {allColumns
-                  .filter((c) => c.id !== "frame")
-                  .map((c) => (
-                    <DropdownMenuCheckboxItem
-                      key={c.id}
-                      checked={prefs.columns.includes(c.id)}
-                      closeOnClick={false}
-                      onCheckedChange={(on) => setReviewPrefs({ columns: on ? [...prefs.columns, c.id] : prefs.columns.filter((id) => id !== c.id) })}
-                    >
-                      {c.header}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={prefs.autoAdvance} closeOnClick={false} onCheckedChange={(on) => setReviewPrefs({ autoAdvance: on })}>
-                {m.review_auto_advance_after_mark()}
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                checked={inspectorOverlay ? inspectorShown : prefs.inspectorOpen}
-                closeOnClick={false}
-                onCheckedChange={(on) => (inspectorOverlay ? setInspectorShown(on) : setReviewPrefs({ inspectorOpen: on }))}
-              >
-                {m.review_show_inspector()}
-                <DropdownMenuShortcut>{REVIEW_KEY.inspector}</DropdownMenuShortcut>
-              </DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button size="icon-sm" variant="ghost" aria-label={withKey(m.review_shortcuts_title(), REVIEW_KEY.shortcuts)} onClick={() => setShortcutsOpen(true)}>
-            <Keyboard aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-
-      {scope.readOnlyReason || error ? (
-        <div className="shrink-0 space-y-1 border-b border-separator px-3 py-1.5">
-          {scope.readOnlyReason ? <Refusal standing action={m.review_refusal_marks()} reason={scope.readOnlyReason} blockers={scope.readOnlyBlocker ? [scope.readOnlyBlocker] : []} /> : null}
-          {error ? <Refusal {...error} /> : null}
-        </div>
-      ) : null}
-
-      {threshold && thresholdInfo ? (
-        <div role="group" aria-label={m.review_select_by_threshold()} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-separator px-3 py-1 text-xs">
-          <span>{m.review_threshold_prefix()}</span>
-          <MiniSelect label={m.review_threshold_metric()} value={threshold.metric} onChange={(v) => setThreshold({ ...threshold, metric: v as MetricKey })} options={PLOT_METRICS.map((metric) => ({ value: metric, label: METRIC_LABEL[metric] }))} />
-          <MiniSelect
-            label={m.review_direction()}
-            value={threshold.direction}
-            onChange={(v) => setThreshold({ ...threshold, direction: v as Threshold["direction"] })}
-            options={[
-              { value: "above", label: m.review_above() },
-              { value: "below", label: m.review_below() },
-            ]}
-          />
-          <Input
-            type="number"
-            inputMode="decimal"
-            step="any"
-            aria-label={unitFor(threshold.metric) ? m.review_threshold_value_in({ unit: unitFor(threshold.metric) }) : m.review_threshold_value()}
-            className="h-6 w-24 text-xs"
-            value={threshold.value ?? ""}
-            onChange={(e) => setThreshold({ ...threshold, value: e.target.value === "" ? null : Number(e.target.value) })}
-          />
-          <span className="text-muted-foreground">{unitFor(threshold.metric)}</span>
-          <Button size="sm" disabled={threshold.value === null} onClick={() => applyThreshold(false)}>
-            {m.review_select_frames({ count: thresholdInfo.matches.length })}
-          </Button>
-          <Button size="sm" variant="outline" disabled={threshold.value === null} onClick={() => applyThreshold(true)}>
-            {m.review_add_to_selection()}
-          </Button>
-          {thresholdInfo.missing > 0 ? (
-            <Pill tone="muted" title={m.review_not_measured_never_selected()}>
-              {m.review_count_not_measured({ count: thresholdInfo.missing })}
-            </Pill>
-          ) : null}
-          <HelpTip label={m.review_threshold_help()}>{m.review_threshold_tip()}</HelpTip>
-          <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label={m.review_close_threshold()} onClick={() => setThreshold(null)}>
-            <X aria-hidden="true" />
-          </Button>
-        </div>
-      ) : null}
-
-      {view === "table" ? (
-        <div
-          className={cn("flex min-h-0 flex-col border-b border-separator", height === "full" ? "flex-1" : height === "rows" ? "shrink min-h-[calc(var(--row-h)*4+2px)]" : "shrink-0")}
-          style={height === "rows" ? { height: rowsPx } : height === "strip" ? { height: ROW_PX * 2 + 2 } : undefined}
-        >
-          <FrameTable {...listProps} columns={columns} sort={sort} onSort={setSort} strip={height === "strip"} />
-        </div>
-      ) : view === "filmstrip" ? (
-        <div className="shrink-0 border-b border-separator">
-          <Filmstrip {...listProps} disk={disk} catalog={catalog} />
-        </div>
-      ) : null}
-      {view === "table" && height === "rows" ? (
-        <RowsHandle
-          px={rowsPx}
-          onDrag={setDragPx}
-          onCommit={(px) => {
-            setDragPx(null)
-            setReviewPrefs({ rowsHeightPx: px })
-          }}
-        />
-      ) : null}
-
-      {showStage ? (
-        <div className={cn("relative flex flex-1", fullscreen ? "fixed inset-0 z-50 min-h-0 flex-col bg-background" : "min-h-[26rem]")} aria-label={fullscreen ? m.review_cmd_fullscreen() : undefined} role={fullscreen ? "region" : undefined}>
-          {fullscreen && current ? <FullscreenBar name={names.get(current.asset.id) ?? ""} frame={current} onExit={() => setFullscreen(false)} onMark={mark} disabled={scope.readOnlyReason} /> : null}
-          <div className="flex min-h-0 min-w-0 flex-1">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              {view === "grid" && !fullscreen ? (
-                <FrameGrid
-                  {...listProps}
-                  disk={disk}
-                  catalog={catalog}
-                  onColumns={(n) => {
-                    gridCols.current = n
-                  }}
-                />
-              ) : (
-                <div className="flex min-h-0 flex-1 flex-col gap-1.5 p-2">
-                  {plateCaption}
-                  {plates}
-                </div>
-              )}
-              {fullscreen ? null : plotsStrip}
-            </div>
-            {fullscreen ? null : inspector}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Status line: counts, measurement, notes, imports and the unsaved Review changes with Save run. */}
-      <footer
-        role="group"
-        ref={statusLineRef}
-        tabIndex={-1}
-        aria-label={m.review_status_line()}
-        data-chrome
-        className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-separator px-3 py-0.5 text-xs text-muted-foreground tabular-nums outline-none"
-      >
-        <span className="shrink-0">
-          {m.review_shown_of({ count: ordered.length, total: frames.length })}
-          {scope.trashedHidden > 0 ? ` · ${m.rungroup_in_trash({ count: scope.trashedHidden })}` : ""}
-          {selected.size > 0 ? (
-            <span className="text-foreground">
-              {" "}
-              · {m.status_bar_selected({ count: selected.size })}
-              {hiddenSelected > 0 ? ` (${m.review_hidden_count({ count: hiddenSelected })})` : ""}
-            </span>
-          ) : null}
-        </span>
-        <MeasureBar scope={scope} frames={frames} home={statusLineRef} />
-        {/* Sized by its pills, so on a narrow window it takes a line of its own rather than spilling sideways. */}
-        <span className="flex min-w-0 grow flex-wrap items-center gap-1.5">
-          {pills.map((p) => (
-            <span key={p.label} className="flex shrink-0 items-center gap-0.5">
-              <Pill tone="muted">{p.label}</Pill>
-              <HelpTip label={m.review_help_named({ name: p.label })}>{p.help}</HelpTip>
-            </span>
-          ))}
-          {revealed ? (
-            <span className="flex min-w-0 items-center gap-0.5">
-              <Pill tone="info" icon={FolderOpen} title={revealed} className="min-w-0">
-                {revealed}
-              </Pill>
-              <Button size="icon-xs" variant="ghost" aria-label={m.review_dismiss_path()} onClick={() => setRevealed(null)}>
-                <X aria-hidden="true" />
-              </Button>
-            </span>
-          ) : null}
-        </span>
-        {context.kind === "run" ? (
-          <Button size="xs" variant="ghost" className="shrink-0" onClick={() => setImportOpen(true)}>
-            <Upload aria-hidden="true" data-icon="inline-start" />
-            {m.shell_import()}
-          </Button>
-        ) : null}
-        {draftNote ? (
-          <span className="flex shrink-0 items-center gap-1.5 text-foreground">
-            <span className="font-medium">{draftNote}</span>
-            <Button size="xs" variant="ghost" onClick={discardDrafts}>
-              {m.review_discard()}
-            </Button>
-            <Button id="review-save" size="xs" variant="outline" onClick={saveDrafts}>
-              <Save aria-hidden="true" data-icon="inline-start" />
-              {m.review_save_runs({ count: drafts.length })}
-            </Button>
-          </span>
-        ) : null}
-      </footer>
-
-      <ReviewShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-      <ConfirmDialog
-        open={bulkMark !== null}
-        onOpenChange={(open) => !open && setBulkMark(null)}
-        title={m.review_bulk_mark_title(bulkWords)}
-        description={m.store_library_scope_detail()}
-        changes={[m.store_saved_frames_marked(bulkWords)]}
-        confirmLabel={m.store_label_mark_frames(bulkWords)}
-        onConfirm={() => {
-          if (bulkMark) mark(bulkMark.value, false, bulkMark.list, true)
-        }}
-      />
-      {context.kind === "run" ? (
-        <ImportDialog viewId={scope.key} viewAssetIds={new Set(frames.map((f) => f.asset.id))} open={importOpen} onOpenChange={setImportOpen} />
-      ) : null}
-      {context.kind === "run" && importOpen === false ? <ImportList scopeKey={scope.key} /> : null}
-      {project ? (
-        <ConfirmDialog
-          open={projectConfirm !== null}
-          onOpenChange={(open) => !open && setProjectConfirm(null)}
-          title={m.review_confirm_reject_title({ what: framesWhat(confirmFrames), project: project.name })}
-          description={m.review_confirm_reject_description()}
-          changes={[
-            m.review_confirm_reject_change({ frames: m.review_frames_count({ count: confirmFrames.length }) }),
-            m.review_confirm_out_of_totals({ project: project.name }),
-            ...(confirmRuns.length > 0 ? [m.review_confirm_out_of_draft({ runs: confirmRuns.join(", ") })] : []),
-          ]}
-          confirmLabel={m.review_confirm_reject_label({ count: confirmFrames.length })}
-          onConfirm={() => {
-            const result = setProjectOnlyReject(scope, confirmFrames, true)
-            if (result.ok) announce(m.review_announce_rejected_for({ project: project.name, frames: m.review_frames_count({ count: confirmFrames.length }) }))
-            return result
-          }}
-        />
-      ) : null}
-    </div>
-  )
-}
-
-function PlateSlot({ label, field, unavailable, render }: { label: ReactNode; field: ReturnType<typeof frameField>; unavailable: string | null; render: (field: NonNullable<ReturnType<typeof frameField>>) => ReactNode }) {
-  const m = useMessages()
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
-      {label ? <div className="flex min-h-6 items-center px-1 text-xs text-muted-foreground">{label}</div> : null}
-      {unavailable || !field ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center rounded-[3px] border border-dashed p-4 text-center text-sm text-muted-foreground">{unavailable ?? m.review_no_pixel_data()}</div>
-      ) : (
-        render(field)
-      )}
-    </div>
-  )
-}
-
-/** The drag handle of the "about 8 rows" height; ↑/↓ resize it a row at a time. The height is remembered (PIX-FR-10). */
-function RowsHandle({ px, onDrag, onCommit }: { px: number; onDrag: (px: number) => void; onCommit: (px: number) => void }) {
-  const m = useMessages()
-  const start = useRef<{ y: number; px: number } | null>(null)
-  const latest = useRef(px)
-  latest.current = px
-  const clamp = (v: number) => Math.round(Math.min(window.innerHeight * 0.7, Math.max(ROW_PX * 3, v)))
-  return (
-    <div
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label={m.review_table_height()}
-      aria-valuenow={Math.round(px / ROW_PX) - 1}
-      aria-valuetext={m.review_about_rows({ count: Math.round(px / ROW_PX) - 1 })}
-      tabIndex={0}
-      className="group relative z-10 -mt-px h-1.5 shrink-0 cursor-row-resize outline-none focus-visible:bg-ring/40"
-      onPointerDown={(event) => {
-        start.current = { y: event.clientY, px }
-        event.currentTarget.setPointerCapture(event.pointerId)
-      }}
-      onPointerMove={(event) => {
-        if (start.current) onDrag(clamp(start.current.px + event.clientY - start.current.y))
-      }}
-      onPointerUp={() => {
-        if (start.current) onCommit(latest.current)
-        start.current = null
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
-        event.preventDefault()
-        onCommit(clamp(px + (event.key === "ArrowDown" ? ROW_PX : -ROW_PX)))
-      }}
-    >
-      <span aria-hidden="true" className="absolute inset-x-0 top-1/2 h-px bg-separator group-hover:bg-primary" />
-      <span aria-hidden="true" className="absolute top-1/2 left-1/2 h-1 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/40 group-hover:bg-primary" />
-    </div>
-  )
-}
-
-function FullscreenBar({ name, frame, onExit, onMark, disabled }: { name: string; frame: ReviewFrame; onExit: () => void; onMark: (value: QualityValue) => void; disabled: string | null }) {
-  const m = useMessages()
-  return (
-    <div data-chrome className="flex h-9 shrink-0 items-center gap-3 border-b border-separator bg-chrome px-3 text-xs">
-      <span className="truncate font-medium">{name}</span>
-      <span className="text-muted-foreground">
-        {frame.bucket === "picked" ? m.review_picked() : frame.bucket === "rejected" ? m.review_rejected() : m.status_unreviewed()}
-      </span>
-      <div className="ml-auto flex items-center gap-1.5">
-        {(["usable", "unusable", "unreviewed"] as const).map((v) => (
-          <Button key={v} size="sm" variant="outline" disabled={disabled !== null} onClick={() => onMark(v)}>
-            {MARK_WORD[v]}
-            <Kbd>{v === "usable" ? REVIEW_KEY.pick : v === "unusable" ? REVIEW_KEY.reject : REVIEW_KEY.unreviewed}</Kbd>
-          </Button>
-        ))}
-        <Button size="sm" onClick={onExit}>
-          {m.review_leave_fullscreen()}
-          <Kbd>{m.key_escape()}</Kbd>
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-/** Recorded measurement imports of a run, each with its row review. */
-function ImportList({ scopeKey }: { scopeKey: string }) {
-  const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const imports = Object.values(catalog.measurementImports).filter((i) => i.runId === scopeKey)
-  const [open, setOpen] = useState(false)
-  if (imports.length === 0) return null
-  return (
-    <div className="shrink-0 border-t border-separator">
-      <button type="button" className="flex h-6 w-full items-center gap-2 px-3 text-left text-[0.6875rem] text-muted-foreground hover:text-foreground" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Upload aria-hidden="true" className="size-3" />
-        {open ? m.review_imports_hide_rows({ count: imports.length }) : m.review_imports_review_rows({ count: imports.length })}
-      </button>
-      {open ? (
-        <ul className="max-h-60 divide-y overflow-y-auto border-t">
-          {imports.map((record) => (
-            <ImportReview key={record.id} record={record} catalog={catalog} />
-          ))}
-        </ul>
-      ) : null}
-    </div>
+      <ThresholdDialog threshold={threshold} onThreshold={setThreshold} frames={shown} onApply={applyThreshold} onClose={() => setThreshold(null)} />
+      <ImportDialog scopeKey={scope.key} href={scope.href} viewAssetIds={new Set(frames.map((f) => f.asset.id))} open={importOpen} onOpenChange={setImportOpen} />
+      <ImportedMeasurementsDialog records={records} href={scope.href} open={importsOpen} onOpenChange={setImportsOpen} />
+      {runner.dialog}
+    </>
   )
 }
