@@ -8719,5 +8719,6 @@
         "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
       }
     }
-  ]
+  ],
+  "store_saved_added": "{name} adicionado"
 }

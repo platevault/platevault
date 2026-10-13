@@ -8663,5 +8663,6 @@
         "countPlural=*": "{name} is old · in {count} unfinished runs"
       }
     }
-  ]
+  ],
+  "store_saved_added": "Added {name}"
 }
