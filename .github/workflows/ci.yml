@@ -538,6 +538,18 @@ jobs:
         if: runner.os == 'Windows' && needs.changes.outputs.rust == 'true'
         run: cargo check --workspace --all-targets
 
+      # The workspace check above builds default features only. The MCP bridge
+      # (`dev-tools`) and tauri-plugin-webdriver (`e2e`) both call WebView2 COM
+      # through their own webview2-com/windows versions. Before this step,
+      # nothing compiled them on Windows before merge: the dev-tools clippy
+      # step is Linux-only, and e2e.yml builds `--features e2e` on Windows only
+      # on main pushes and manual dispatch. The tauri 2.12 bump (#1793) moved
+      # tauri to webview2-com 0.39 and broke both on Windows while every PR
+      # check stayed green.
+      - name: Windows desktop_shell check (e2e + dev-tools features)
+        if: runner.os == 'Windows' && needs.changes.outputs.rust == 'true'
+        run: cargo check -p desktop_shell --features e2e,dev-tools
+
       # Scope `cargo test` to the changed workspace members plus their
       # reverse-dependency closure (see scripts/ci-affected-crates.sh). Any
       # force_full trigger (Cargo.lock, workflows, …) or a rust-relevant file

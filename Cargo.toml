@@ -104,7 +104,10 @@ specta = { version = "2.0.0-rc.25", features = [
   "serde_json",
 ] }
 specta-typescript = "0.0.12"
-tauri = { version = "2.11", default-features = false, features = ["wry"] }
+# 2.12 is the floor tauri-plugin-updater 2.13 requires. `tauri build` refuses
+# to bundle when this crate and the `@tauri-apps/api` npm package in
+# apps/desktop/package.json differ on major.minor, so bump them together.
+tauri = { version = "2.12", default-features = false, features = ["wry"] }
 tauri-build = { version = "2.6", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
@@ -113,15 +116,18 @@ tauri-plugin-opener = "2"
 # PV_MCP_BRIDGE_ENABLE=1, then runs a WebSocket server on
 # 127.0.0.1:9223 (PV_MCP_BRIDGE_BIND overrides the address) for the
 # @hypothesi/tauri-mcp-server MCP server. Requires the dev-only tauri.dev.conf.json
-# overlay (withGlobalTauri).
-tauri-plugin-mcp-bridge = "0.11"
+# overlay (withGlobalTauri). 0.13.1 is the first release on tauri 2.12's
+# webview2-com 0.39 / windows 0.62; 0.11 does not compile on Windows against it.
+# It requires tauri ~2.12.2, so the next tauri minor bump needs a matching
+# bridge release.
+tauri-plugin-mcp-bridge = "0.13.1"
 # Spec 051 shell integration plugins (versions confirmed against crates.io
 # 2026-07-05; same tauri-apps/plugins-workspace release train as tauri 2.11.2,
 # except tauri-plugin-prevent-default which is community-maintained).
 tauri-plugin-single-instance = "2.4.2"
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-log = "2.8.0"
-tauri-plugin-updater = "2.10.1"
+tauri-plugin-updater = "2.13.3"
 # Needed by the updater's relaunch-to-apply step (`process:default`
 # capability); matches the `@tauri-apps/plugin-process` npm version already
 # pinned in `apps/desktop/package.json`.
@@ -178,6 +184,19 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # dev-dependencies (referenced via [dev-dependencies] in consuming crates):
 proptest = "1"
 rstest = "0.26"
+
+# tauri-plugin-webdriver (desktop_shell's `e2e` feature). 0.2.3, the latest
+# crates.io release, is on webview2-com 0.38 / windows 0.61 and does not
+# compile on Windows against tauri 2.12 (webview2-com 0.39 / windows 0.62).
+# This pins the upstream main merge of Choochmeque/tauri-plugin-webdriver#103
+# ("Update windows crates to 0.62 for tauri 2.12"), unreleased as of
+# 2026-10-13. Its crate sources differ from 0.2.3 only in those dependency
+# versions and one test assertion. Cargo fetches this git source in every build,
+# release builds included, so builds depend on upstream keeping rev d5ab2865
+# available. Drop this patch once a crates.io release newer than 0.2.3 ships
+# with webview2-com 0.39, and set that version in apps/desktop/src-tauri/Cargo.toml.
+[patch.crates-io]
+tauri-plugin-webdriver = { git = "https://github.com/Choochmeque/tauri-plugin-webdriver", rev = "d5ab2865b00160852d6341c247d0f7942f3d17fc" }
 
 # Release profile: thin LTO reduces binary size and cross-crate inlining cost
 # without the full-program ThinLTO latency of lto="fat". codegen-units=1 lets

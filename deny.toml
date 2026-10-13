@@ -149,11 +149,4 @@ ignore = [
   { id = "RUSTSEC-2024-0384", reason = "instant via notify-types; moka 0.12 transitive; no moka release without instant yet" },
   # paste: unmaintained, pulled in transitively by specta rc chain.
   { id = "RUSTSEC-2024-0436", reason = "paste via specta macros; pinned to specta 2.0.0-rc.25; unblock when specta stable ships" },
-  # unic-* crates: unmaintained, transitively required by urlpattern <- tauri-utils.
-  # The unic project is abandoned; tauri-utils will need to swap to a maintained alternative.
-  { id = "RUSTSEC-2025-0075", reason = "unic-char-property via tauri-utils/urlpattern; awaiting tauri upstream fix" },
-  { id = "RUSTSEC-2025-0080", reason = "unic-ucd-version via tauri-utils/urlpattern; awaiting tauri upstream fix" },
-  { id = "RUSTSEC-2025-0081", reason = "unic-ucd-ident via tauri-utils/urlpattern; awaiting tauri upstream fix" },
-  { id = "RUSTSEC-2025-0098", reason = "unic-ucd-ident (2nd advisory) via tauri-utils/urlpattern; awaiting tauri upstream fix" },
-  { id = "RUSTSEC-2025-0100", reason = "urlpattern itself unmaintained; tauri-utils transitive dep; awaiting tauri upstream fix" },
 ]
