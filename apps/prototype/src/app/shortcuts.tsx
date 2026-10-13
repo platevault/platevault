@@ -46,7 +46,7 @@ function modalOpen(): boolean {
  * that is not the current one, and once the flow is finished.
  */
 export function proceedOnScreen(): HTMLElement | null {
-  const footer = document.querySelector<HTMLElement>('#main [data-step-footer="current"]')
+  const footer = document.querySelector<HTMLElement>('#main [data-template="step"] [data-step-footer="current"]')
   return [...(footer?.querySelectorAll<HTMLElement>("[data-action]") ?? [])].at(-1) ?? null
 }
 
@@ -65,8 +65,8 @@ function runProceed(): boolean {
 
 /** ⌃n: the n-th step of the step page on screen. */
 function openStep(n: number): boolean {
-  const step = document.querySelectorAll<HTMLElement>("#main [data-step-strip] [data-step]")[n - 1]
-  if (!step || step.tagName !== "A" && step.tagName !== "BUTTON") return false
+  const step = document.querySelectorAll<HTMLElement>('#main [data-template="step"] [data-step-strip] [data-step]')[n - 1]
+  if (!step || (step.tagName !== "A" && step.tagName !== "BUTTON")) return false
   step.click()
   return true
 }
