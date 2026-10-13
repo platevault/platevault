@@ -342,7 +342,14 @@ export function useGoalsSection(project: Project): DetailSection {
       ? [
           { id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setDraft({ goalId: p.goal.id, target: targetKey(p.goal.subjectId, p.goal.panelId), channel: p.goal.channel, kinds: p.goal }) },
           { separator: true },
-          { id: "remove", label: m.goal_remove_goal({ channel: p.goal.channel }), icon: X, kind: "destructive", run: () => write(project.goals.filter((g) => g.id !== p.goal.id)) },
+          {
+            id: "remove",
+            label: m.goal_remove_goal({ channel: p.goal.channel }),
+            icon: X,
+            kind: "destructive",
+            confirm: { title: m.goal_remove_title({ channel: p.goal.channel, subject: subjectOf(p) }), confirm: { label: m.project_remove(), kind: "destructive" } },
+            run: () => write(project.goals.filter((g) => g.id !== p.goal.id)),
+          },
         ]
       : []
   const actions: Action[] = open
@@ -519,6 +526,7 @@ export function useSubjectsSection(project: Project): DetailSection {
   const rowActions = (r: SubjectRow): MenuItem[] => {
     const subject = r.progress.subject
     const target = subjectTarget(catalog, subject)
+    const goals = project.goals.filter((g) => g.subjectId === subject.id).length
     return [
       ...(target ? [{ id: "open-target", label: m.project_open_target(), icon: Crosshair, run: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id } }) }] : []),
       ...(open
@@ -526,7 +534,18 @@ export function useSubjectsSection(project: Project): DetailSection {
             ...(subject.mosaic ? [] : [{ id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setChanging(subject) }]),
             { id: "mosaic", label: subject.mosaic ? m.mosaic_edit() : m.mosaic_make(), icon: Grid2x2Plus, run: () => mosaicLink(subject.id) },
             { separator: true } as const,
-            { id: "remove", label: m.project_remove(), icon: X, kind: "destructive" as const, run: () => removeSubject(project.id, subject.id, project.revision) },
+            {
+              id: "remove",
+              label: m.project_remove(),
+              icon: X,
+              kind: "destructive" as const,
+              confirm: {
+                title: m.project_remove_from_title({ name: r.target, project: project.name }),
+                summary: goals > 0 ? m.project_remove_subject_goals({ count: goals }) : undefined,
+                confirm: { label: m.project_remove(), kind: "destructive" as const },
+              },
+              run: () => removeSubject(project.id, subject.id, project.revision),
+            },
           ]
         : []),
     ]
@@ -629,6 +648,7 @@ export function useRigsSection(project: Project): DetailSection {
                 users.length > 0
                   ? { action: m.project_refusal_remove_rig(), reason: m.project_used_by_runs({ count: users.length }), blockers: users.map((r) => ({ label: r.name, link: r.trashedAt ? trashLink(project) : runStepLink(r, runPipelineStep(r)) })) }
                   : undefined,
+              confirm: { title: m.project_remove_from_title({ name: rigName(m, catalog, id), project: project.name }), confirm: { label: m.project_remove(), kind: "destructive" as const } },
               run: () => removeRig(project.id, id as OpticalTrainId, project.revision),
             },
           ]

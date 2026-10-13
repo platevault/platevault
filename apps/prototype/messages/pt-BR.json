@@ -489,6 +489,7 @@
   "filter_bar_presets_saved": "Salvos",
   "filter_bar_preset_save_ellipsis": "Salvar atual…",
   "filter_bar_preset_delete": "Excluir",
+  "filter_bar_preset_delete_title": "Excluir o preset {name}?",
   "filter_bar_preset_new_title": "Novo preset",
   "filter_bar_preset_name": "Nome",
   "filter_bar_preset_create": "Criar preset",
@@ -1383,6 +1384,23 @@
   "goal_no_changes": "Nenhuma alteração de metas",
   "goal_apply_template": "Aplicar modelo",
   "goal_remove_goal": "Remover meta de {channel}",
+  "goal_remove_title": "Remover a meta de {channel} de {subject}?",
+  "project_remove_from_title": "Remover {name} de {project}?",
+  "project_remove_subject_goals": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Também remove {count} meta.",
+        "countPlural=*": "Também remove {count} metas."
+      }
+    }
+  ],
   "project_open_target": "Abrir Alvo",
   "mosaic_make": "Criar mosaico",
   "project_remove": "Remover",

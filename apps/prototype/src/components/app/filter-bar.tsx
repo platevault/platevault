@@ -6,7 +6,8 @@
  *   "All" first (its `value` is "" for All); a multi facet is a checkbox
  *   list whose trigger counts the values picked.
  * - Presets ▾: built-in presets, then the saved ones, "Save current…" and a
- *   Delete submenu. The host applies a preset; its filter values stay there.
+ *   Delete submenu, whose items confirm before the preset goes. The host
+ *   applies a preset; its filter values stay there.
  * - Under the row, removable chips for the active facet values with the
  *   match count and Clear filters (`FilterChips`).
  *
@@ -39,6 +40,7 @@ import { Input } from "@/components/ui/input"
 import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { ClearableInput } from "./clearable-input"
+import { ConfirmDialog } from "./confirm-dialog"
 import type { Facet, Preset } from "./contracts"
 import { type FilterChip, FilterChips, type FilterChipsProps } from "./data"
 import { CountBadge } from "./pill"
@@ -194,6 +196,7 @@ function PresetsMenu({ presets }: { presets: FilterPresets }) {
   const m = useMessages()
   const trigger = useRef<HTMLButtonElement>(null)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<Preset | null>(null)
   const builtIn = presets.items.filter((preset) => preset.source === "builtin")
   const saved = presets.items.filter((preset) => preset.source === "custom")
   const active = presets.items.find((preset) => preset.id === presets.active)
@@ -230,7 +233,7 @@ function PresetsMenu({ presets }: { presets: FilterPresets }) {
               <DropdownMenuSubTrigger>{m.filter_bar_preset_delete()}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 {saved.map((preset) => (
-                  <DropdownMenuItem key={preset.id} variant="destructive" onClick={() => remove(preset.id)}>
+                  <DropdownMenuItem key={preset.id} variant="destructive" onClick={() => setDeleting(preset)}>
                     {preset.label}
                   </DropdownMenuItem>
                 ))}
@@ -240,6 +243,19 @@ function PresetsMenu({ presets }: { presets: FilterPresets }) {
         </DropdownMenuContent>
       </DropdownMenu>
       {presets.save ? <SavePresetDialog open={saving} onOpenChange={setSaving} taken={presets.items.map((preset) => preset.label)} onSave={presets.save} returnFocus={trigger} /> : null}
+      {presets.remove ? (
+        <ConfirmDialog
+          open={deleting !== null}
+          onOpenChange={(open) => !open && setDeleting(null)}
+          title={m.filter_bar_preset_delete_title({ name: deleting?.label ?? "" })}
+          confirm={{ label: m.filter_bar_preset_delete(), kind: "destructive" }}
+          onConfirm={() => {
+            if (deleting) presets.remove?.(deleting.id)
+          }}
+          focusAfterConfirm={() => trigger.current}
+          focusAfterCancel={() => trigger.current}
+        />
+      ) : null}
     </>
   )
 }
