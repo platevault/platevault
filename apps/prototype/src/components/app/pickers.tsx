@@ -28,8 +28,9 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Spinner } from "@/components/ui/spinner"
 import { shiftNight } from "@/domain/planning"
 import { formatNight } from "@/lib/format"
-import { getLocale, type Locale } from "@/lib/i18n"
+import { getLocale } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { dayInWeek, startOfWeek, WEEK_START, type WeekStart } from "@/lib/week"
 import { IconButton } from "./actions"
 import { ActionError, Notice } from "./feedback"
 import { Field, type FieldProps, NumberField } from "./fields"
@@ -38,10 +39,6 @@ import { Field, type FieldProps, NumberField } from "./fields"
 // NightPicker
 // ---------------------------------------------------------------------------
 
-/** The first column of a calendar week, per locale: Monday in the UK, Sunday in Brazil. Keyed by Locale, so a new locale fails typecheck. */
-const WEEK_START: Record<Locale, 0 | 1> = { "en-GB": 1, "pt-BR": 0 }
-
-const dayOfWeek = (night: string) => new Date(`${night}T00:00:00Z`).getUTCDay()
 const monthOf = (night: string) => night.slice(0, 7)
 
 function shiftMonth(night: string, months: number): string {
@@ -53,9 +50,8 @@ function shiftMonth(night: string, months: number): string {
 }
 
 /** The weeks of a month as nights, padded with the neighbouring months' days to whole weeks. */
-function monthWeeks(month: string, weekStart: 0 | 1): string[][] {
-  const first = `${month}-01`
-  let night = shiftNight(first, -((dayOfWeek(first) - weekStart + 7) % 7))
+function monthWeeks(month: string, weekStart: WeekStart): string[][] {
+  let night = startOfWeek(`${month}-01`, weekStart)
   const weeks: string[][] = []
   do {
     const week: string[] = []
@@ -122,13 +118,13 @@ export function NightPicker({ value, onChange, today, min = today, weekStep = fa
   )
 }
 
-const GRID_KEYS: Record<string, (night: string, weekStart: 0 | 1) => string> = {
+const GRID_KEYS: Record<string, (night: string, weekStart: WeekStart) => string> = {
   ArrowLeft: (n) => shiftNight(n, -1),
   ArrowRight: (n) => shiftNight(n, 1),
   ArrowUp: (n) => shiftNight(n, -7),
   ArrowDown: (n) => shiftNight(n, 7),
-  Home: (n, s) => shiftNight(n, -((dayOfWeek(n) - s + 7) % 7)),
-  End: (n, s) => shiftNight(n, 6 - ((dayOfWeek(n) - s + 7) % 7)),
+  Home: (n, s) => startOfWeek(n, s),
+  End: (n, s) => shiftNight(n, 6 - dayInWeek(n, s)),
   PageUp: (n) => shiftMonth(n, -1),
   PageDown: (n) => shiftMonth(n, 1),
 }

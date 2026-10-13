@@ -1,10 +1,10 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §3.3 L2-domain): Plate, Histogram,
  * CornerGrid, FrameThumbnails, SessionPlots, StarCutouts, MoonLine, DarkLine,
- * AltitudeSpark, MosaicField and SiteMap. The plates render the prototype's
- * synthetic star field; the night visuals compute a real night at sample
- * sites; the mosaic is a 2 × 2 layout around M 31. Captions are reviewer
- * labels; site and frame names are sample data.
+ * AltitudeSpark, NightCalendar, MoonPhase, MosaicField and SiteMap. The
+ * plates render the prototype's synthetic star field; the night visuals
+ * compute a real night at sample sites; the mosaic is a 2 × 2 layout around
+ * M 31. Captions are reviewer labels; site and frame names are sample data.
  */
 import { lazy, Suspense, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
@@ -17,10 +17,11 @@ import { type MosaicFieldPanel, MosaicField, mosaicFreeSlots } from "@/component
 import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type Stretch, type ViewWindow, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
+import { type CalendarNight, NightCalendar } from "@/components/domain/night-calendar"
 import { StarCutouts } from "@/components/domain/star-cutouts"
 import { StatusBadge } from "@/components/app/status"
 import { Spinner } from "@/components/ui/spinner"
-import { defaultCriteria, nightSummary, upcomingNight } from "@/domain/planning"
+import { defaultCriteria, nightSummary, shiftNight, upcomingNight } from "@/domain/planning"
 import type { DiskFile, ObservingSite } from "@/domain/types"
 import { formatCount, formatDecimal } from "@/lib/format"
 import { detectedStars, linearHistogram, renderWindow, type StarField, starField } from "@/components/domain/raster"
@@ -204,6 +205,57 @@ function NightVisuals() {
   )
 }
 
+/**
+ * `count` nights at a sample site from `today`. The grid starts on this
+ * week's first day; its earlier nights, and any after the last one, show
+ * their date only. The counts are sample figures, zero on some nights; each
+ * card shows the night's darkness and Moon, as Home's does.
+ */
+function sampleNights(site: ObservingSite, today: string, count: number): CalendarNight[] {
+  const summaries = Array.from({ length: count + 1 }, (_, i) => nightSummary(site, shiftNight(today, i)))
+  return summaries.slice(0, count).map((summary, i): CalendarNight => {
+    const dark = summary.darkness
+    return {
+      night: summary.night,
+      moon: summary.moon,
+      waxing: summaries[i + 1]!.moon.illuminationPct > summary.moon.illuminationPct,
+      darkS: dark ? (Date.parse(dark.end) - Date.parse(dark.start)) / 1000 : null,
+      goals: (i * 5) % 4,
+      planned: i % 6 === 0 ? 1 : 0,
+      link: { to: "/targets", search: i === 0 ? {} : { night: summary.night } },
+      card: (
+        <>
+          <DarkLine darkness={dark} timeZone={site.timeZone} />
+          <MoonLine moon={summary.moon} timeZone={site.timeZone} />
+        </>
+      ),
+    }
+  })
+}
+
+function NightCalendars() {
+  const m = useMessages()
+  const autumn = "2026-10-14"
+  const midsummer = "2026-06-21"
+  const nights = useMemo(() => ({ here: sampleNights(UTRECHT, autumn, 30), north: sampleNights(FAR_NORTH, midsummer, 12) }), [])
+  return (
+    <ComponentSection components={["NightCalendar", "MoonPhase"]} description={m.catalogue_domain_calendar_desc()} level={3}>
+      <div className="space-y-3">
+        <Specimen caption={m.catalogue_domain_calendar_filled()}>
+          <div className="w-full max-w-xl">
+            <NightCalendar label={m.catalogue_domain_calendar_filled()} today={autumn} nights={nights.here} />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_night_no_dark()}>
+          <div className="w-full max-w-xl">
+            <NightCalendar label={m.catalogue_domain_night_no_dark()} today={midsummer} nights={nights.north} />
+          </div>
+        </Specimen>
+      </div>
+    </ComponentSection>
+  )
+}
+
 const FOV = { widthDeg: 1.2, heightDeg: 0.8 }
 
 function MosaicFields() {
@@ -268,6 +320,7 @@ export function DomainCatalogue() {
       <Histograms />
       <ReviewVisuals />
       <NightVisuals />
+      <NightCalendars />
       <MosaicFields />
       <SiteMaps />
     </Section>

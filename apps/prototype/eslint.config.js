@@ -57,6 +57,12 @@ export const COMPOSITION_ENFORCED = [
     files: ["src/features/v5/a-home/{sessions,session,session-intake,import,import-preview,import-model,import-run,parts,session-model,shell}.{ts,tsx}"],
   },
   {
+    // P2's Home in the shared a-home area; with P3's list above every a-home source file is enforced.
+    unit: "P2 Home",
+    area: { dir: "v5/a-home", depth: 0 },
+    files: ["src/features/v5/a-home/home.tsx"],
+  },
+  {
     // b-projects is P5's alone.
     unit: "P5 Projects",
     area: { dir: "v5/b-projects", depth: 0 },
