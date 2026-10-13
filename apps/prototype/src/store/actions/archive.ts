@@ -3,15 +3,40 @@
  * reviewed transfer per approval. The plan it moves comes from
  * `domain/archive.ts`; the "archive" operation's handler that runs it is
  * registered by slice B. Lifted verbatim from features/v5/b-projects/actions.ts.
+ * `offerFileRows` words a Trash offer as the confirm dialog's file rows, for
+ * Wrap up's Trash step and Sessions' Unusable purge alike.
  */
-import type { ArchiveMove, ArchiveRow } from "@/domain/archive"
+import type { FileRow } from "@/components/app/contracts"
+import type { ArchiveMove, ArchiveRow, TrashOffer } from "@/domain/archive"
 import { sessionTargetId } from "@/domain/derive"
 import { unitCount } from "@/domain/labels"
 import type { Catalog, OperationId, ProjectId, Session, SessionId } from "@/domain/types"
 import { formatBytes } from "@/lib/format"
-import { joinRefs, type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
+import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 import { store } from "@/store/core"
 import { startOperation } from "@/store/operations"
+
+/** The folder holding a path: "/Volumes/A/M31/x.fits" → "/Volumes/A/M31". */
+function folderOf(path: string): string {
+  return path.split("/").slice(0, -1).join("/")
+}
+
+/**
+ * A Trash offer as ConfirmDialog file rows: each entry moves to the OS Trash;
+ * each refusal stays, with its reason and, when it has one, the link that resolves it (P-TRASH2).
+ */
+export function offerFileRows(m: Messages, offer: TrashOffer): { moved: FileRow[]; kept: FileRow[] } {
+  return {
+    moved: offer.entries.map((entry) => ({ file: entry.label, from: folderOf(entry.path), action: "trash", size: entry.sizeBytes })),
+    kept: offer.refusals.map((refusal) => ({
+      file: refusal.label,
+      from: refusal.path === null ? "" : folderOf(refusal.path),
+      action: "trash",
+      size: 0,
+      status: { label: say(m, refusal.reason), ...(refusal.link ? { link: refusal.link } : {}) },
+    })),
+  }
+}
 
 export type TransferDirection = "archive" | "restore"
 

@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { sessionsArchivePlan } from "@/domain/archive"
+import { sessionsArchivePlan, type TrashOffer } from "@/domain/archive"
+import { m, msg } from "@/lib/i18n"
 import { createSeed } from "@/domain/seed"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { type ArchivePayload, startArchiveTransfer } from "./archive"
+import { type ArchivePayload, offerFileRows, startArchiveTransfer } from "./archive"
 
 let demo: PrototypeState
 beforeAll(() => {
@@ -38,5 +39,30 @@ describe("startArchiveTransfer", () => {
     const op = store.getState().operations[id]!
     expect((op.payload as unknown as ArchivePayload).href).toBe(`/projects/${project.id}`)
     expect(op.scope.projectId).toBe(project.id)
+  })
+})
+
+describe("offerFileRows", () => {
+  it("lists each entry as a move to the Trash and each refusal as a kept row with its reason and link", () => {
+    const link = { to: "/runs/$runId", params: { runId: "run_x" } }
+    const offer: TrashOffer = {
+      kind: "rejected-frames",
+      title: "",
+      count: 1,
+      sizeBytes: 100,
+      entries: [{ key: "a", label: "a.fits", path: "/Volumes/A/M31/a.fits", detail: null, sizeBytes: 100 }],
+      refusals: [
+        { key: "b", label: "b.fits", path: "/Volumes/A/M31/b.fits", reason: msg("wrapup_refusal_archive_moving"), link },
+        { key: "c", label: "c.fits", path: null, reason: msg("wrapup_refusal_outside_captures") },
+      ],
+      items: [],
+      keptLinks: 0,
+    }
+    const rows = offerFileRows(m, offer)
+    expect(rows.moved).toEqual([{ file: "a.fits", from: "/Volumes/A/M31", action: "trash", size: 100 }])
+    expect(rows.kept).toEqual([
+      { file: "b.fits", from: "/Volumes/A/M31", action: "trash", size: 0, status: { label: m.wrapup_refusal_archive_moving(), link } },
+      { file: "c.fits", from: "", action: "trash", size: 0, status: { label: m.wrapup_refusal_outside_captures() } },
+    ])
   })
 })
