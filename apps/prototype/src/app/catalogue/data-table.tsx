@@ -5,7 +5,8 @@
  * and a multi facet, Presets ▾ (built-in, unavailable, saved; Save current…
  * and Delete), selection with batch actions (one unavailable, one
  * confirmed, the rest under More), row actions (inline primary, ⋯, context
- * menu), expand with a nested table, and the loading, empty and error
+ * menu), the hover tint on rows with a primary action only, expand with a
+ * nested table, and the loading, empty and error
  * states. Reviewer controls switch the wide pinned layout and the
  * states; the shift line measures how far the table moved when the
  * selection last appeared or went (it must read 0 px). A second table
@@ -222,6 +223,7 @@ export function DataTableCatalogue() {
             <p data-catalogue-shift={shift}>{m.catalogue_datatable_shift({ px: String(shift) })}</p>
             <p>{lastAction ? m.catalogue_datatable_last_run({ action: lastAction.action, count: lastAction.count, n: formatCount(lastAction.count) }) : m.catalogue_datatable_no_action()}</p>
             <p>{m.catalogue_datatable_notes()}</p>
+            <p>{m.catalogue_datatable_hover()}</p>
           </div>
           <div ref={host}>
             <DataTable

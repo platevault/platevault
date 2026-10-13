@@ -522,6 +522,7 @@
   ],
   "catalogue_datatable_no_action": "Última ação: nenhuma",
   "catalogue_datatable_notes": "Alvo não ordena (estática). Câmera trunca e mostra o texto inteiro ao passar o ponteiro, só quando cortado.",
+  "catalogue_datatable_hover": "Passe o ponteiro sobre uma linha: uma linha com Revisar ganha tom, uma linha confirmada sem essa ação não muda, nem as linhas da tabela de altura fixa abaixo.",
   "catalogue_datatable_label": "Sessões de luz (amostra do catálogo)",
   "catalogue_datatable_preset_long": "Exposições longas",
   "catalogue_datatable_filter_bar_title": "FilterBar",

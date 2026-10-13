@@ -34,9 +34,17 @@
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
  *   and the first column stay in view while a wide table scrolls sideways,
  *   and so does the row-actions column at the right edge.
+ * - Truncation (`truncate` columns): a cell cuts its text with an ellipsis
+ *   and shows it in full on hover while it is cut. Its text has no
+ *   min-content width, so a frame too narrow for every column's text shrinks
+ *   the truncated columns, each in proportion to its width, while the others
+ *   keep theirs: the table stays inside its frame wherever the untruncated
+ *   columns fit.
  * - Click to act (opt-in `onRowClick`): a click on the row outside its
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
+ * - Hover: a row that acts (click to act, or a primary row action) tints
+ *   under the pointer; a row that does nothing on click stays still.
  */
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from "lucide-react"
 import {
@@ -236,6 +244,23 @@ function titleWhenCut(event: PointerEvent<HTMLElement>) {
   else element.removeAttribute("title")
 }
 
+/**
+ * A truncated cell's content. The grid's one `minmax(0, 1fr)` track gives it no min-content width, so under
+ * the table's auto layout a truncated column can give up width down to its header's, while every other
+ * column keeps its content width; the cell's `max-w-*` still caps how wide it grows. When the frame is too
+ * narrow, the truncated columns share what the other columns leave, each in proportion to its own width,
+ * and cut their text with the full text on hover (T2).
+ */
+function Truncated({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-1">
+      <div className="truncate" onPointerEnter={titleWhenCut}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function DataTable<T>({
   label,
   rows,
@@ -267,8 +292,10 @@ export function DataTable<T>({
   const baseId = useId()
   // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
   // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
-  // goes to the first control of the toolbar row.
-  const runner = useAction({ focusAfterConfirm: () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE) })
+  // goes to the first control of the toolbar row. Cancel and Escape return focus to the button that opened
+  // the confirmation, or to the first control of the batch bar (or toolbar row) when that button is gone (WCAG 2.4.3).
+  const slotFirst = () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)
+  const runner = useAction({ focusAfterConfirm: slotFirst, focusAfterCancel: slotFirst })
   const [ownSort, setOwnSort] = useState(initialSort ?? null)
   const sort = controlledSort === undefined ? ownSort : controlledSort
   const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
@@ -553,6 +580,8 @@ export function DataTable<T>({
                     data-alt={rowIndex % 2 === 1 || undefined}
                     data-selected={isSelected || undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
+                    // A row that acts (click to act, or a primary action) tints under the pointer; the others stay still.
+                    interactive={onRowClick !== undefined || primary !== null}
                     tabIndex={onRowClick ? -1 : undefined}
                     onClick={onRowClick ? rowClick(row) : undefined}
                     onKeyDown={onRowClick ? rowKey(row) : undefined}
@@ -569,9 +598,8 @@ export function DataTable<T>({
                       </TableCell>
                     ) : null}
                     {columns.map((column, columnIndex) => {
-                      const content = column.cell(row)
+                      const content = column.truncate ? <Truncated>{column.cell(row)}</Truncated> : column.cell(row)
                       const disclosure = columnIndex === 0 && expand !== undefined
-                      const truncate = column.truncate ? { className: "truncate", onPointerEnter: titleWhenCut } : undefined
                       return (
                         <TableCell
                           key={column.id}
@@ -580,12 +608,10 @@ export function DataTable<T>({
                           aria-label={disclosure && column.rowHeader ? nameOf(row) : undefined}
                           className={cn(
                             column.truncate ? "max-w-72" : "whitespace-nowrap",
-                            !disclosure && truncate?.className,
                             column.align === "right" && "text-right",
                             column.className,
                             columnIndex === 0 && pinned(columnPin),
                           )}
-                          onPointerEnter={disclosure ? undefined : truncate?.onPointerEnter}
                         >
                           {disclosure ? (
                             <div className="flex min-w-0 items-center gap-1">
@@ -603,9 +629,7 @@ export function DataTable<T>({
                               ) : (
                                 <span aria-hidden="true" className="size-6 shrink-0" />
                               )}
-                              <div className={cn("min-w-0", truncate?.className)} onPointerEnter={truncate?.onPointerEnter}>
-                                {content}
-                              </div>
+                              <div className="min-w-0">{content}</div>
                             </div>
                           ) : (
                             content
