@@ -7,8 +7,13 @@
  * - Each template fills a frame the height of a short window, with the demo
  *   seed (Welcome › Load demo library). Here the templates title their page
  *   as h2, as a child area does, so the catalogue keeps its heading order.
+ * - The ListPage holds a NightPicker in its header context, and its table
+ *   fills the body (`scroll="fill"`).
  * - The DetailPanel docks at the side from 1400 px wide and at the bottom
- *   below; its Display menu pins it, and its leading edge resizes it.
+ *   below; its Display menu pins it and, on the side, sets its width
+ *   (Narrow, Medium, Wide), and its leading edge resizes it.
+ * - The StepPage sits under view tabs (Runs · Wrap up); "Full-height step"
+ *   switches it to `fill`, where the body takes the region and scrolls itself.
  * - The line under a frame measures how far the table, the panel or the
  *   step pane moved on the last selection, row or step change (it reads
  *   0 px), and names the last action run.
@@ -27,6 +32,7 @@ import { KeyValueList, PathText } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
 import { EmptyState, type PageNotice } from "@/components/app/feedback"
 import { SwitchField } from "@/components/app/fields"
+import { NightPicker } from "@/components/app/pickers"
 import { SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
 import { stepEditable } from "@/components/app/step-flow"
@@ -188,6 +194,8 @@ function ListDemo() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [notice, setNotice] = useState(false)
   const [last, setLast] = useState<string | null>(null)
+  // The page's context control: the night the list is read for, seeded with the latest night.
+  const [night, setNight] = useState<string | null>(null)
   const host = useRef<HTMLDivElement>(null)
   const shift = useShift(host, "table, [data-detail-panel]", `${selected.join(",")}|${openId ?? ""}`)
 
@@ -198,6 +206,8 @@ function ListDemo() {
   const channels = distinct(sessions.map((s) => s.channel ?? "–")).sort()
   const needle = query.trim().toLowerCase()
   const shown = sessions.filter((s) => (channel === "" || (s.channel ?? "–") === channel) && name(s).toLowerCase().includes(needle))
+  const nights = live.map((s) => s.night).sort()
+  const latestNight = nights.at(-1)
   const open = openId ? catalog.sessions[openId] : undefined
   const ran = (label: string) => () => setLast(label)
   const trash: Action = { id: "trash", label: m.run_move_to_trash(), kind: "destructive", opensDialog: true, run: ran(m.run_move_to_trash()) }
@@ -253,6 +263,7 @@ function ListDemo() {
             level={2}
             title={m.nav_sessions()}
             summary={m.project_sessions_count({ count: sessions.length })}
+            context={latestNight ? <NightPicker value={night ?? latestNight} onChange={setNight} today={latestNight} min={nights[0]} /> : undefined}
             actions={actions}
             menu={menu}
             notice={pageNotice}
@@ -485,6 +496,8 @@ function StepDemo() {
   const [viewing, setViewing] = useState<string>(RUN_STEPS[0])
   const [selected, setSelected] = useState<string[]>([])
   const [last, setLast] = useState<string | null>(null)
+  // Fill: the step body takes the full region and scrolls itself (the review Workspace's case).
+  const [fill, setFill] = useState(false)
   const host = useRef<HTMLDivElement>(null)
   const shift = useShift(host, "[data-step-strip], [data-step-region], [data-step-footer]", `${viewing}|${at}|${finished}|${selected.length}`)
   if (!run || !project) return <NoSeed />
@@ -536,15 +549,16 @@ function StepDemo() {
       setSelected([])
     },
   }
-  const body =
+  const rows =
     viewing === "select" ? (
       <DataTable
         label={m.nav_sessions()}
         rows={sessions}
         columns={sessionColumns(m, catalog)}
         getRowId={(s) => s.id}
-        scroll="none"
-        selection={editable ? { selected, onChange: setSelected, rowLabel: name, countLabel: (count) => m.project_sessions_selected({ count }) } : undefined}
+        scroll={fill ? "fill" : "none"}
+        // Selection = membership (§5.4): the run's sessions are the data, so no batch bar replaces the toolbar row.
+        selection={editable ? { selected, onChange: setSelected, rowLabel: name, countLabel: (count) => m.project_sessions_selected({ count }), membership: true } : undefined}
       />
     ) : (
       <KeyValueList
@@ -555,11 +569,18 @@ function StepDemo() {
         ]}
       />
     )
+  // In fill mode the body owns its padding and its scroll; the region adds neither.
+  const body = fill ? <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">{rows}</div> : rows
 
   return (
     <ComponentSection components={["StepPage"]} description={m.catalogue_templates_step_desc()}>
       <div className="space-y-2">
-        <ActionButton action={restart} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton action={restart} />
+          <Toggle variant="outline" size="sm" pressed={fill} onPressedChange={setFill}>
+            {m.catalogue_templates_fill_toggle()}
+          </Toggle>
+        </div>
         <Frame host={host}>
           <StepPage
             level={2}
@@ -580,6 +601,19 @@ function StepDemo() {
             viewing={viewing}
             onSelectStep={setViewing}
             stepsLabel={m.catalogue_templates_run_steps()}
+            views={{
+              label: m.catalogue_templates_project_views(),
+              value: "wrap-up",
+              items: [
+                { id: "runs", label: m.common_runs() },
+                { id: "wrap-up", label: m.run_wrap_up() },
+              ],
+              // The host switches template for another view; the specimen records the choice.
+              onChange: (id) => {
+                if (id === "runs") setLast(m.common_runs())
+              },
+            }}
+            fill={fill}
             step={body}
           />
         </Frame>
