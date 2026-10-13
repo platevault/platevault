@@ -8648,6 +8648,164 @@
     }
   ],
   "store_saved_added": "Added {name}",
+  "catalogue_fields_notes_sample": "Imaged from the back garden; flats at dusk.",
+  "catalogue_fields_notes_error": "Notes over 500 characters",
+  "catalogue_fields_group_caption": "Two goals with a Remove action named after each group · a hours-or-frames error · disabled.",
+  "goal_channel_goal": "{channel} goal",
+  "goal_hours_or_frames": "Enter hours or frames",
+  "catalogue_fields_cell_kind": "Kind",
+  "catalogue_fields_cell_kind_of": "Kind of {name}",
+  "catalogue_fields_cell_caption": "Cell mode (hideLabel): the label names the control for screen readers only; the row keeps its height.",
+  "goal_add": "Add goal",
+  "goal_from_template": "From template",
+  "project_goals_title": "Goals",
+  "project_edit": "Edit",
+  "startrun_mosaic_subject": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · mosaic of {count} panel",
+        "countPlural=*": "{name} · mosaic of {count} panels"
+      }
+    }
+  ],
+  "startrun_rig_ready": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} ready session",
+        "countPlural=*": "{name} · {count} ready sessions"
+      }
+    }
+  ],
+  "projects_search": "Search Projects",
+  "projects_search_placeholder": "Project or subject",
+  "projects_no_match": "No Project matches",
+  "goal_counts": "Counts",
+  "goal_unit_time": "Time",
+  "goal_change_new": "New: {line}",
+  "goal_change_removed": "Removed: {line}",
+  "goal_change_from_to": "{from} → {to}",
+  "goal_edit_title": "Edit {channel} goal",
+  "mosaic_apply_layout": "Lay out",
+  "mosaic_col_placement": "Placement",
+  "mosaic_edit": "Edit mosaic",
+  "mosaic_exclude": "Exclude",
+  "mosaic_include": "Include",
+  "mosaic_layout_grid": "{cols} × {rows}",
+  "mosaic_no_free_slot": "no free slot",
+  "project_all_rigs_added": "every rig is in the Project",
+  "project_closed": "Project closed",
+  "project_closed_notice": "Closed {date} · goal figures frozen",
+  "project_col_below_bar": "Below bar",
+  "project_col_channel_ratio": "Channel ratio",
+  "project_col_panel_balance": "Panel balance",
+  "project_col_progress": "Progress",
+  "project_col_window": "Window",
+  "project_darkness": "Darkness",
+  "project_goals_of": "Goals of {name}",
+  "project_moon": "Moon",
+  "project_reopen_project": "Reopen project",
+  "project_reopen_summary": "No file moves · goal figures read the library again",
+  "project_reopen_summary_archived": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "No file moves · {count} archived session stays archived",
+        "countPlural=*": "No file moves · {count} archived sessions stay archived"
+      }
+    }
+  ],
+  "project_restore_all": "Restore every session",
+  "project_target_chosen": "Chosen: {name}",
+  "project_views": "Project tabs",
+  "project_window_line": "{start}–{end} · {alt}° · Moon {moon}°",
+  "project_site": "Site",
+  "trash_empty_named_title": "Empty {name}?",
+  "trash_empty_summary": "Prepared folders go to the OS Trash · Results stay",
+  "trash_empty_summary_results": "Prepared folders and Results go to the OS Trash",
+  "trash_empty_with_results": "Empty with Results",
+  "trash_no_match": "No run matches",
+  "trash_search": "Search the Trash",
+  "trash_search_placeholder": "Run, subject or rig",
+  "trash_results_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file",
+        "countPlural=*": "{count} files"
+      }
+    }
+  ],
+  "wrapup_archive_moves": "Archive moves",
+  "wrapup_cleanup_summary": "{links} links · {copies} copies · {size}",
+  "wrapup_col_detail": "Detail",
+  "wrapup_col_items": "Items",
+  "wrapup_col_view": "View",
+  "wrapup_files_of": "Files of {name}",
+  "wrapup_group_line": [
+    {
+      "declarations": [
+        "input name",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} item",
+        "countPlural=*": "{name} · {count} items"
+      }
+    }
+  ],
+  "wrapup_location_default": "{name} (default)",
+  "wrapup_nothing_to_archive": "Nothing to archive",
+  "wrapup_nothing_to_trash": "Nothing to trash",
+  "wrapup_show_open_runs": "Runs to finish",
+  "wrapup_stays_used_by": "Stays · used by {names}",
+  "wrapup_steps": "Wrap up steps",
+  "wrapup_trash_confirm_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {count} item to Trash?",
+        "countPlural=*": "Move {count} items to Trash?"
+      }
+    }
+  ],
   "sessions_empty_needs_review": "None need review",
   "sessions_cant_trash": "Can't move to Trash",
   "sessions_all_kept": [

@@ -1,69 +1,23 @@
 /**
- * Slice B writes that the foundation does not provide: the "archive"
- * operation, Archive at Wrap up and Restore of archived sessions after
- * Reopen (STO-FR-13, D-W69, P-ARC1), one reviewed transfer per approval.
- * Each session moves whole or stays: every frame is verified (volume, bytes
- * against the reviewed digest, a free destination) before any frame of that
- * session moves. Prepared links pointing at a moved copy are rebuilt to its
- * new path, so no run reference dangles (STO-FR-06). The slice registry
- * imports this module for its handler; subject and mosaic writes live in
- * `subject-actions.ts`.
+ * Slice B's "archive" operation handler: Archive at Wrap up and Restore of
+ * archived sessions after Reopen (STO-FR-13, D-W69, P-ARC1), one reviewed
+ * transfer per approval; `startArchiveTransfer` (store/actions/archive.ts)
+ * starts one. Each session moves whole or stays: every frame is verified
+ * (volume, bytes against the reviewed digest, a free destination) before
+ * any frame of that session moves. Prepared links pointing at a moved copy
+ * are rebuilt to its new path, so no run reference dangles (STO-FR-06). The
+ * slice registry imports this module for the handler.
  */
+import type { ArchiveMove } from "@/domain/archive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
-import type { Catalog, Disk, OperationId, ProjectId, SessionId } from "@/domain/types"
-import { formatBytes, formatCount } from "@/lib/format"
-import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
-import { nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
-import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
-import { type ArchiveMove, type ArchiveRow, sessionRef } from "./model"
-
-// ---------------------------------------------------------------------------
-// Archive and Restore transfers
-// ---------------------------------------------------------------------------
-
-export type TransferDirection = "archive" | "restore"
-
-interface ArchivePayload {
-  /** Null for Archive… from Sessions (round 6): sessions in no Project. */
-  projectId: ProjectId | null
-  direction: TransferDirection
-  queue: Array<{ sessionId: SessionId; moves: ArchiveMove[]; folder: string }>
-  moved: SessionId[]
-  href: string
-}
-
-/** Start an approved Archive or Restore of the reviewed rows; returns the operation id. Without a Project it archives sessions from Sessions. */
-export function startArchiveTransfer(projectId: ProjectId | null, rows: ArchiveRow[], direction: TransferDirection): OperationId {
-  const state = store.getState()
-  const project = projectId ? state.catalog.projects[projectId] : undefined
-  const name = project ? project.name : projectId ? msg("project_noun") : msg("session_count", { count: rows.length })
-  const payload: ArchivePayload = {
-    projectId,
-    direction,
-    queue: rows.map((r) => ({ sessionId: r.session.id, moves: r.moves, folder: r.folder })),
-    moved: [],
-    href: projectId ? `/projects/${projectId}` : "/sessions",
-  }
-  return startOperation({
-    kind: "archive",
-    title: direction === "archive" ? msg("op_archive_title", { name }) : msg("op_restore_title", { name }),
-    scope: { projectId: projectId ?? undefined, sessionIds: rows.map((r) => r.session.id) },
-    total: rows.length,
-    unit: "sessions",
-    items: rows.map((r) => ({
-      id: r.session.id,
-      label: sessionRef(state.catalog, r.session),
-      path: r.folder,
-      status: "pending",
-      phase: null,
-      detail: joinRefs([unitCount("frames", r.moves.length), verbatim(formatBytes(r.sizeBytes))], " · "),
-    })),
-    payload: payload as unknown as Record<string, unknown>,
-    canCancel: false,
-  })
-}
+import type { Catalog, Disk, OperationId } from "@/domain/types"
+import { formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, msg } from "@/lib/i18n"
+import type { ArchivePayload, TransferDirection } from "@/store/actions/archive"
+import { nowIso, type PrototypeState, withCatalog } from "@/store/core"
+import { type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 
 /** Re-verify a session's moves immediately before they run (D19); the first failure keeps the whole session. */
 function verify(state: PrototypeState, moves: ArchiveMove[]): MessageRef | null {
