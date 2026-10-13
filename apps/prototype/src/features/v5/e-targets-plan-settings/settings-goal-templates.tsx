@@ -60,6 +60,8 @@ interface Draft {
   id: string | null
   name: string
   values: GoalTemplateValue[]
+  /** The conditions a duplicate copies from its source (C7); an edit leaves them to the store, which keeps the saved ones. */
+  conditions?: GoalTemplate["conditions"]
   /** Title of the dialog. */
   title: string
 }
@@ -89,7 +91,7 @@ function TemplateDialog({ draft, onClose, taken }: { draft: Draft | null; onClos
     else if (empty.length > 0) next.goals = m.template_hours_or_frames({ channels: empty.join(", ") })
     setErrors(next)
     if (next.name || next.goals) return
-    const { result } = saveGoalTemplate({ id: values.id, name, values: values.values })
+    const { result } = saveGoalTemplate({ id: values.id, name, values: values.values, conditions: values.conditions })
     if (result.ok) onClose()
     else setFailure(result.message)
   }
@@ -193,7 +195,7 @@ export function GoalTemplatesSettingsPage() {
   function duplicate(t: GoalTemplate) {
     let name = m.template_copy_name({ name: t.name })
     for (let n = 2; allNames.some((x) => x.toLowerCase() === name.toLowerCase()); n += 1) name = m.template_copy_name_numbered({ name: t.name, n: String(n) })
-    setDraft({ id: null, name, values: structuredClone(t.values), title: m.template_duplicate_title({ name: t.name }) })
+    setDraft({ id: null, name, values: structuredClone(t.values), conditions: structuredClone(t.conditions), title: m.template_duplicate_title({ name: t.name }) })
   }
   const create = () => setDraft({ id: null, name: "", values: [], title: m.template_new() })
 
