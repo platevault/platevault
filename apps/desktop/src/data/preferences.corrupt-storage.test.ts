@@ -63,4 +63,25 @@ describe('getPreferences with a corrupted stored value', () => {
     expect(getPreferences().density).toBe('compact');
     expect(getPreferences().defaultProjectView).toBe('pipeline');
   });
+
+  // astro-plan-bzzbp: installs upgraded from a build without the setting keep
+  // the automatic update check on.
+  it('turns the automatic update check on for a bag written before the setting existed', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ density: 'compact', setupCompleted: true }),
+    );
+    const getPreferences = await freshGetPreferences();
+    expect(getPreferences().checkUpdatesAutomatically).toBe(true);
+    expect(getPreferences().setupCompleted).toBe(true);
+  });
+
+  it('keeps the automatic update check on when the stored value is the wrong type', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ checkUpdatesAutomatically: 'false' }),
+    );
+    const getPreferences = await freshGetPreferences();
+    expect(getPreferences().checkUpdatesAutomatically).toBe(true);
+  });
 });
