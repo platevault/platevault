@@ -8552,6 +8552,7 @@
   "catalogue_templates_last_action": "Última ação: {action}",
   "catalogue_templates_no_seed": "Nenhuma biblioteca de demonstração carregada",
   "catalogue_templates_detail_desc": "Uma página de detalhe: o caminho, o título com seu status, o menu do objeto, abas de visualização e uma coluna de caixas. Uma linha de sessão abre seus detalhes no mesmo painel que numa página de lista.",
+  "catalogue_templates_detail_aside_desc": "Uma página de detalhe com uma coluna lateral: a partir de 1280 px de largura as caixas formam duas colunas, as seções à esquerda e a coluna lateral à direita. Mais estreita, elas se empilham numa só coluna, as seções primeiro.",
   "catalogue_templates_add_sessions": "Adicionar sessões",
   "catalogue_templates_project_views": "Visualizações do Projeto",
   "catalogue_templates_overview": "Visão geral",

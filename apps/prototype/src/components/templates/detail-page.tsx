@@ -9,10 +9,14 @@
  * - Sections: each a Box holding a BoxTable or a KeyValueList, with a count
  *   and standard actions in its header. The section column scrolls; the
  *   header stays.
+ * - Aside: a second column of sections. From 1280 px wide the sections form
+ *   the left column and the aside the right; narrower, everything stacks in
+ *   one column, the sections first, then the aside. Without an aside the
+ *   page is one column.
  * - Detail: an item of a section table opens `detail` beside the sections,
  *   as on a ListPage.
  *
- * Home is a DetailPage with sections only (Q8).
+ * Home is a DetailPage with sections and an aside (C8).
  */
 import type { ReactNode } from "react"
 import { Box } from "@/components/app/box"
@@ -50,35 +54,40 @@ export interface DetailPageProps {
   views?: PageViews
   notice?: PageNotice | null
   sections: DetailSection[]
+  /** The right column from 1280 px; below, it stacks under `sections`. */
+  aside?: DetailSection[]
   detail?: PageDetail | null
 }
 
-export function DetailPage({ path, title, level = 1, status, actions, menu, views, notice, sections, detail }: DetailPageProps) {
+export function DetailPage({ path, title, level = 1, status, actions, menu, views, notice, sections, aside = [], detail }: DetailPageProps) {
   const sectionLevel = level === 1 ? 2 : 3
+  const box = (section: DetailSection) => (
+    <Box
+      key={section.id}
+      id={section.id}
+      level={sectionLevel}
+      title={section.title}
+      count={section.count}
+      flush={section.flush}
+      actions={headerActions(asStandard(section.actions))}
+    >
+      {section.content}
+    </Box>
+  )
   return (
     <div data-template="detail" className="flex min-h-0 flex-1 flex-col">
       <PageHeader level={level} path={path} title={title} meta={status} actions={headerActions(actions, menu)} notice={notice} className={headerBar(level)} />
       <ViewTabs views={views}>
         <DetailDock detail={detail} level={level}>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="space-y-4 px-5 py-4">
-              {sections.map((section) => {
-                const sectionActions = asStandard(section.actions)
-                return (
-                  <Box
-                    key={section.id}
-                    id={section.id}
-                    level={sectionLevel}
-                    title={section.title}
-                    count={section.count}
-                    flush={section.flush}
-                    actions={headerActions(sectionActions)}
-                  >
-                    {section.content}
-                  </Box>
-                )
-              })}
-            </div>
+            {aside.length === 0 ? (
+              <div className="space-y-4 px-5 py-4">{sections.map(box)}</div>
+            ) : (
+              <div className="grid gap-4 px-5 py-4 xl:grid-cols-2 xl:items-start" data-detail-columns="">
+                <div className="min-w-0 space-y-4">{sections.map(box)}</div>
+                <div className="min-w-0 space-y-4">{aside.map(box)}</div>
+              </div>
+            )}
           </div>
         </DetailDock>
       </ViewTabs>

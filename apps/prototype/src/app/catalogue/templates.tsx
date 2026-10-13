@@ -480,6 +480,46 @@ function DetailDemo() {
   )
 }
 
+/** DetailPage with an aside: two columns from 1280 px, one column below it (sections first). */
+function DetailAsideDemo() {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const project = Object.values(catalog.projects)[0]
+  if (!project) return <NoSeed />
+  const subjectName = (subject: Subject) => catalog.targets[subject.targetId]?.name ?? "-"
+  return (
+    <ComponentSection components={["DetailPage"]} description={m.catalogue_templates_detail_aside_desc()}>
+      <Frame>
+        <DetailPage
+          level={2}
+          title={project.name}
+          sections={[
+            {
+              id: "tpl-aside-facts",
+              title: m.settings_details(),
+              content: (
+                <KeyValueList
+                  items={[
+                    { label: m.project_subjects(), value: formatCount(project.subjects.length) },
+                    { label: m.project_rigs(), value: formatCount(project.rigIds.length) },
+                  ]}
+                />
+              ),
+            },
+            {
+              id: "tpl-aside-subjects",
+              title: m.project_subjects(),
+              count: project.subjects.length,
+              content: <KeyValueList items={project.subjects.map((subject) => ({ label: subjectName(subject), value: formatCount(project.goals.filter((g) => g.subjectId === subject.id).length) }))} />,
+            },
+          ]}
+          aside={[{ id: "tpl-aside-notes", title: m.newproject_notes(), content: <KeyValueList items={[{ label: m.newproject_notes(), value: project.notes || "–" }]} /> }]}
+        />
+      </Frame>
+    </ComponentSection>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // StepPage: a run's steps on local state; Proceed, then Finish run
 // ---------------------------------------------------------------------------
@@ -675,6 +715,7 @@ export function TemplatesCatalogue() {
     <div className="space-y-8">
       <ListDemo />
       <DetailDemo />
+      <DetailAsideDemo />
       <StepDemo />
       <SettingsDemo />
     </div>

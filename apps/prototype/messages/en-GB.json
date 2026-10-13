@@ -8524,6 +8524,7 @@
   "catalogue_templates_last_action": "Last action: {action}",
   "catalogue_templates_no_seed": "No demo library loaded",
   "catalogue_templates_detail_desc": "A detail page: the path, the title with its status, the object menu, view tabs and a column of boxes. A session row opens its details in the same dock as on a list page.",
+  "catalogue_templates_detail_aside_desc": "A detail page with an aside: from 1280 px wide the boxes form two columns, the sections on the left and the aside on the right. Narrower, they stack in one column, the sections first.",
   "catalogue_templates_add_sessions": "Add sessions",
   "catalogue_templates_project_views": "Project views",
   "catalogue_templates_overview": "Overview",
