@@ -289,7 +289,9 @@ async function installOnExit(): Promise<void> {
       body: update.body,
     });
     try {
-      await update.install();
+      // The user is quitting: on Windows the installer must not relaunch the
+      // app afterwards (tauri-plugin-updater 2.13 relaunches by default).
+      await update.install({ restartAfterInstall: false });
       downloaded = false;
     } catch (err) {
       console.warn('[updateSubscription] install on quit failed:', err);

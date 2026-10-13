@@ -176,11 +176,14 @@ describe('checkForUpdate', () => {
 
 describe('installUpdateNow', () => {
   it('downloads, then installs, then relaunches', async () => {
-    await checkFinds(makeUpdate());
+    const update = makeUpdate();
+    await checkFinds(update);
 
     await installUpdateNow();
 
     expect(calls).toEqual(['download', 'install', 'relaunch']);
+    // Install now keeps the plugin default: Windows relaunches after install.
+    expect(update.install).toHaveBeenCalledWith();
   });
 
   it('is a no-op before a check has found an update', async () => {
@@ -235,7 +238,8 @@ describe('installUpdateNow', () => {
 
 describe('installUpdateOnQuit', () => {
   it('downloads and arms the exit gate, but installs only from the exit path', async () => {
-    await checkFinds(makeUpdate());
+    const update = makeUpdate();
+    await checkFinds(update);
 
     await installUpdateOnQuit();
 
@@ -259,6 +263,8 @@ describe('installUpdateOnQuit', () => {
       'exit',
     ]);
     expect(mockRelaunch).not.toHaveBeenCalled();
+    // The user is quitting: the Windows installer must not relaunch the app.
+    expect(update.install).toHaveBeenCalledWith({ restartAfterInstall: false });
   });
 
   it('still exits when the install on quit fails', async () => {
