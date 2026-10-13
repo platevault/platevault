@@ -6,8 +6,10 @@
  *   below (FR-001). The user's pin (Bottom or Right) overrides it (FR-003);
  *   a Right pin docks at the bottom while the window is narrower than two
  *   minimum panels.
- * - The side panel is dragged or keyed between 320 px and half the room
- *   beside it (FR-005), so the page body keeps at least half.
+ * - The side panel is dragged, keyed or set by a width preset (Narrow,
+ *   Medium, Wide in its Display menu: the single-pointer way, WCAG 2.5.7)
+ *   between 320 px and half the room beside it (FR-005), so the page body
+ *   keeps at least half.
  * - Pin and width are kept per page (`dockId`) in localStorage. One store
  *   serves every panel of a page, so they always agree and a reload restores
  *   the choice.
@@ -78,6 +80,18 @@ function savePrefs(dockId: string, change: Partial<DockPrefs>) {
 /** A side panel width within its bounds: at least 320 px, at most `max` (half the room beside it). */
 export function clampDockWidth(px: number, max: number): number {
   return Math.round(Math.min(Math.max(px, DOCK_MIN_WIDTH_PX), Math.max(DOCK_MIN_WIDTH_PX, max)))
+}
+
+/** The side panel's width presets, offered in its Display menu. */
+export const DOCK_WIDTH_PRESETS = ["narrow", "medium", "wide"] as const
+export type DockWidthPreset = (typeof DOCK_WIDTH_PRESETS)[number]
+
+/** A preset's width for a room whose widest panel is `max`: the narrowest, halfway, or the widest. */
+export function presetDockWidth(preset: DockWidthPreset, max: number): number {
+  const widest = clampDockWidth(max, max)
+  if (preset === "narrow") return DOCK_MIN_WIDTH_PX
+  if (preset === "wide") return widest
+  return clampDockWidth((DOCK_MIN_WIDTH_PX + widest) / 2, max)
 }
 
 export interface AdaptiveDock {
