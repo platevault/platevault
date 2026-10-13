@@ -373,7 +373,10 @@ export interface SegmentedFieldProps<V extends string> extends FieldChrome {
   disabled?: boolean
 }
 
-/** Two to four mutually exclusive options shown side by side ("Mono · OSC", "Symlinks · Copies"). */
+/**
+ * Two to four mutually exclusive options shown side by side ("Mono · OSC", "Symlinks · Copies").
+ * In a box too narrow for one line the options wrap onto further lines inside it, never past its edge.
+ */
 export function SegmentedField<V extends string>({ value, options, onChange, disabled, ...chrome }: SegmentedFieldProps<V>) {
   return (
     <Field {...chrome}>
@@ -388,6 +391,7 @@ export function SegmentedField<V extends string>({ value, options, onChange, dis
           // Pressing the chosen option again would clear it; a segmented field always has one value.
           onValueChange={(next: unknown[]) => typeof next[0] === "string" && onChange(next[0] as V)}
           disabled={disabled}
+          className="max-w-full flex-wrap gap-y-1"
         >
           {options.map((option) => (
             <ToggleGroupItem key={option.value} value={option.value} disabled={option.disabled}>

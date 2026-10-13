@@ -7704,6 +7704,7 @@
     }
   ],
   "store_saved_added": "Added {name}",
+  "catalogue_fields_segmented_narrow": "narrow box: the options wrap onto a second line inside it",
   "common_percent": "{value}%",
   "catalogue_fields_notes_sample": "Imaged from the back garden; flats at dusk.",
   "catalogue_fields_notes_error": "Notes over 500 characters",

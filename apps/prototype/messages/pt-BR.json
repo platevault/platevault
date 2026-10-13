@@ -7732,6 +7732,7 @@
     }
   ],
   "store_saved_added": "{name} adicionado",
+  "catalogue_fields_segmented_narrow": "caixa estreita: as opções passam para uma segunda linha dentro dela",
   "common_percent": "{value}%",
   "catalogue_fields_notes_sample": "Imagens do quintal; flats ao entardecer.",
   "catalogue_fields_notes_error": "Notas com mais de 500 caracteres",
