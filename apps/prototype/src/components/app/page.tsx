@@ -1,12 +1,17 @@
 /**
  * Page-level layout primitives (foundation-owned): page header, sections,
- * list + detail, step indicator and the pre-created placeholder page.
+ * list + detail, step indicator and the pre-created placeholder page. The
+ * page templates (components/templates) build on PageHeader.
  */
 import { Check, ChevronRight } from "lucide-react"
-import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
 import { useMessages } from "@/app/preferences"
+import { CurrentLink } from "@/app/run-ui"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import type { StepLink } from "@/domain/derive"
 import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { NoticeSlot, type PageNotice } from "./feedback"
 
 const mountedTitles = new Map<symbol, { title: string; level: 1 | 2 }>()
 
@@ -31,16 +36,32 @@ export function useDocumentTitle(title: string, level: 1 | 2 = 1) {
   }, [title, level])
 }
 
+/** One parent of the page in its header path: "Projects", "M 42". */
+export interface PathItem {
+  label: string
+  /** Where the parent opens; a parent without a link reads as plain text. */
+  link?: StepLink
+}
+
 export interface PageHeaderProps {
   title: string
-  /** One sentence: what this surface is for. */
+  /** The page's parents, outermost first, as a breadcrumb before the title: Projects › M 42 › title. */
+  path?: PathItem[]
+  /** One short fact beside the title, such as a list's count ("128 sessions"). Never a sentence. */
+  summary?: string
+  /**
+   * @deprecated W4 removes it (plan §3.4, §6.1 W1): no description caption
+   * under the title. The title stands alone; a count goes in `summary`.
+   */
   description?: ReactNode
-  /** Small context line above the title, e.g. the parent Target or Project. */
+  /** @deprecated W4 removes it: pass the parents as `path`. */
   eyebrow?: ReactNode
   /** Status badges shown beside the title. */
   meta?: ReactNode
-  /** Page-level actions; the primary action goes last. */
+  /** Page-level actions; the primary action goes last. Templates pass an ActionBar. */
   actions?: ReactNode
+  /** The page's standing state (P7): one notice, fixed under the header bar. */
+  notice?: PageNotice | null
   className?: string
   /**
    * Heading level. Layout routes (View workspace, Settings) own the page h1;
@@ -50,15 +71,15 @@ export interface PageHeaderProps {
 }
 
 /**
- * Harness v4: a pane header, not a web page header. One compact bar: an
- * optional path (the eyebrow, rendered inline as a path control before the
- * title, never as a kicker above it), the title at 17 px, meta badges, and
- * actions on the right; the description is a one-line caption (11 px) that
- * truncates, with the whole text in its tooltip. Level 1 sticks to the top
- * of its pane so the title and actions never scroll away, and publishes its
- * height as --pane-header-h so focused controls scroll clear of it.
+ * Harness v4: a pane header, not a web page header. One compact bar: the
+ * path (a breadcrumb inline before the title, never a kicker above it), the
+ * title at 17 px, the summary, meta badges, and actions on the right. The
+ * notice slot sits under the bar, inside the header, so a standing state
+ * stays in view with it. Level 1 sticks to the top of its pane so the title
+ * and actions never scroll away, and publishes its height as
+ * --pane-header-h so focused controls scroll clear of it.
  */
-export function PageHeader({ title, description, eyebrow, meta, actions, className, level = 1 }: PageHeaderProps) {
+export function PageHeader({ title, path, summary, description, eyebrow, meta, actions, notice, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(title, level)
   const ref = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
@@ -87,6 +108,7 @@ export function PageHeader({ title, description, eyebrow, meta, actions, classNa
     >
       <div className="min-w-0 flex-[1_1_16rem]">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {path && path.length > 0 ? <HeaderPath path={path} /> : null}
           {eyebrow ? (
             <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground [&_a]:hover:text-foreground">
               {eyebrow}
@@ -94,6 +116,7 @@ export function PageHeader({ title, description, eyebrow, meta, actions, classNa
             </span>
           ) : null}
           <Heading className={cn("font-semibold text-balance", level === 1 ? "text-xl" : "text-lg")}>{title}</Heading>
+          {summary ? <span className="ml-1 text-sm text-muted-foreground tabular-nums">{summary}</span> : null}
           {meta ? <span className="ml-1 flex flex-wrap items-center gap-2">{meta}</span> : null}
         </div>
         {description ? (
@@ -103,7 +126,39 @@ export function PageHeader({ title, description, eyebrow, meta, actions, classNa
         ) : null}
       </div>
       {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
+      {notice ? (
+        <div className="basis-full">
+          <NoticeSlot notice={notice} />
+        </div>
+      ) : null}
     </header>
+  )
+}
+
+/** The header path: a breadcrumb of the page's parents, ending in the separator before the title. */
+function HeaderPath({ path }: { path: PathItem[] }) {
+  return (
+    <Breadcrumb className="min-w-0">
+      <BreadcrumbList className="gap-1.5">
+        {path.map((item, index) => (
+          <Fragment key={`${index}:${item.label}`}>
+            <BreadcrumbItem className="min-w-0">
+              {item.link ? (
+                <BreadcrumbLink
+                  render={<CurrentLink to={item.link.to as never} params={item.link.params as never} search={item.link.search as never} />}
+                  className="truncate"
+                >
+                  {item.label}
+                </BreadcrumbLink>
+              ) : (
+                <span className="truncate">{item.label}</span>
+              )}
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="opacity-70" />
+          </Fragment>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
   )
 }
 
