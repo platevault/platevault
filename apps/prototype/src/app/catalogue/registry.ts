@@ -10,6 +10,7 @@ import { DialogsCatalogue } from "./dialogs"
 import { DomainCatalogue } from "./domain"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
+import { GradeBadgesCatalogue } from "./grade-badges"
 import { PickersCatalogue } from "./pickers"
 import { PreviewsCatalogue } from "./previews"
 import { ShellPartsCatalogue } from "./shell-parts"
@@ -85,4 +86,5 @@ export const CATALOGUE: CatalogueEntry[] = [
     components: ["ListPage", "DetailPage", "StepPage", "SettingsPage", "ListSection", "DetailDock", "DetailPanel", "ViewTabs", "PageHeader", "Box", "BoxTable"],
     Entry: TemplatesCatalogue,
   },
+  { id: "grade-badges", components: ["GradeBadges"], Entry: GradeBadgesCatalogue },
 ]
