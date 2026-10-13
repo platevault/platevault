@@ -2450,14 +2450,14 @@ dependencies = [
 
 [[package]]
 name = "gio-sys"
-version = "0.21.5"
+version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0071fe88dba8e40086c8ff9bbb62622999f49628344b1d1bf490a48a29d80f22"
+checksum = "6c28739f914c15b87a9856000bed9cbd5b3a8afbca5e982d9a299e1601422cb5"
 dependencies = [
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "glib-sys 0.22.9",
+ "gobject-sys 0.22.9",
  "libc",
- "system-deps 7.0.8",
+ "system-deps 9.0.0",
  "windows-sys 0.61.2",
 ]
 
@@ -2486,9 +2486,9 @@ dependencies = [
 
 [[package]]
 name = "glib"
-version = "0.21.5"
+version = "0.22.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16de123c2e6c90ce3b573b7330de19be649080ec612033d397d72da265f1bd8b"
+checksum = "e4cf9e5bd8713f1990a92c422998826e0fb34824277b46bc59757373483c6694"
 dependencies = [
  "bitflags 2.13.1",
  "futures-channel",
@@ -2496,10 +2496,10 @@ dependencies = [
  "futures-executor",
  "futures-task",
  "futures-util",
- "gio-sys 0.21.5",
- "glib-macros 0.21.5",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "gio-sys 0.22.9",
+ "glib-macros 0.22.9",
+ "glib-sys 0.22.9",
+ "gobject-sys 0.22.9",
  "libc",
  "memchr",
  "smallvec",
@@ -2521,15 +2521,14 @@ dependencies = [
 
 [[package]]
 name = "glib-macros"
-version = "0.21.5"
+version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf59b675301228a696fe01c3073974643365080a76cc3ed5bc2cbc466ad87f17"
+checksum = "c9597c68fa7bdf4154a3079642cd21c4dccac0b0bdd2897d82861523bf91e7b9"
 dependencies = [
  "heck 0.5.0",
- "proc-macro-crate 3.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -2544,12 +2543,12 @@ dependencies = [
 
 [[package]]
 name = "glib-sys"
-version = "0.21.5"
+version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d95e1a3a19ae464a7286e14af9a90683c64d70c02532d88d87ce95056af3e6c"
+checksum = "99b38907e67e40dec9b60f858bcada952598719cb512a13eb13d6cdcd16f8295"
 dependencies = [
  "libc",
- "system-deps 7.0.8",
+ "system-deps 9.0.0",
 ]
 
 [[package]]
@@ -2584,13 +2583,13 @@ dependencies = [
 
 [[package]]
 name = "gobject-sys"
-version = "0.21.5"
+version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dca35da0d19a18f4575f3cb99fe1c9e029a2941af5662f326f738a21edaf294"
+checksum = "07595c9ba696bd9819cb6a8df39f08078f3dd679508fe052dd558492c2053834"
 dependencies = [
- "glib-sys 0.21.5",
+ "glib-sys 0.22.9",
  "libc",
- "system-deps 7.0.8",
+ "system-deps 9.0.0",
 ]
 
 [[package]]
@@ -2886,7 +2885,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.56.0",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -4798,9 +4797,9 @@ dependencies = [
 
 [[package]]
 name = "pkg-config"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
+checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platevault_core"
@@ -6647,9 +6646,9 @@ dependencies = [
 
 [[package]]
 name = "system-deps"
-version = "7.0.8"
+version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "396a35feb67335377e0251fcbc1092fc85c484bd4e3a7a54319399da127796e7"
+checksum = "8a0dae2cbca1f0ff93795713cfe0a4c02f760e3c0b8ae2ab4ec4045808ff429f"
 dependencies = [
  "cfg-expr 0.20.8",
  "heck 0.5.0",
@@ -6828,7 +6827,7 @@ dependencies = [
  "tray-icon",
  "url",
  "webkit2gtk",
- "webview2-com 0.39.1",
+ "webview2-com",
  "window-vibrancy",
  "windows 0.62.2",
 ]
@@ -6976,13 +6975,15 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-mcp-bridge"
-version = "0.11.2"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c97bb0d4c68e94ef4d132b6d572416b9d9144144ab185fe3c421f02340fee96e"
+checksum = "43f1ce740e913f8b1be3f3c0e86ad622a99121f64eb81f4e316fd80110224b15"
 dependencies = [
  "base64 0.22.1",
  "block2 0.5.1",
+ "cairo-rs",
  "futures-util",
+ "gio",
  "image",
  "jni 0.21.1",
  "objc2 0.5.2",
@@ -6998,9 +6999,10 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "uuid",
- "webview2-com 0.38.2",
- "windows 0.61.3",
- "windows-core 0.61.2",
+ "webkit2gtk",
+ "webview2-com",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -7087,16 +7089,15 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-webdriver"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a130e5cc896b52a87d618b53e1ba025954af7c004b8781a4ddee7298f7b3749a"
+version = "0.2.3"
+source = "git+https://github.com/Choochmeque/tauri-plugin-webdriver?rev=d5ab2865b00160852d6341c247d0f7942f3d17fc#d5ab2865b00160852d6341c247d0f7942f3d17fc"
 dependencies = [
  "async-trait",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "block2 0.6.2",
  "cairo-rs",
- "glib 0.21.5",
+ "glib 0.22.10",
  "gtk",
  "javascriptcore-rs",
  "objc2 0.6.4",
@@ -7113,9 +7114,9 @@ dependencies = [
  "tracing",
  "uuid",
  "webkit2gtk",
- "webview2-com 0.38.2",
- "windows 0.61.3",
- "windows-core 0.61.2",
+ "webview2-com",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -7154,7 +7155,7 @@ dependencies = [
  "thiserror 2.0.19",
  "url",
  "webkit2gtk",
- "webview2-com 0.39.1",
+ "webview2-com",
  "windows 0.62.2",
 ]
 
@@ -7179,7 +7180,7 @@ dependencies = [
  "tauri-utils",
  "url",
  "webkit2gtk",
- "webview2-com 0.39.1",
+ "webview2-com",
  "windows 0.62.2",
  "wry",
 ]
@@ -8244,26 +8245,12 @@ dependencies = [
 
 [[package]]
 name = "webview2-com"
-version = "0.38.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7130243a7a5b33c54a444e54842e6a9e133de08b5ad7b5861cd8ed9a6a5bc96a"
-dependencies = [
- "webview2-com-macros",
- "webview2-com-sys 0.38.2",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "windows-implement 0.60.2",
- "windows-interface 0.59.3",
-]
-
-[[package]]
-name = "webview2-com"
 version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f89fca7a704cee10dcb3654c1dbb8941d1783132f1917358af75bec37a7d7e6"
 dependencies = [
  "webview2-com-macros",
- "webview2-com-sys 0.39.1",
+ "webview2-com-sys",
  "windows 0.62.2",
  "windows-core 0.62.2",
 ]
@@ -8277,17 +8264,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "webview2-com-sys"
-version = "0.38.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "381336cfffd772377d291702245447a5251a2ffa5bad679c99e61bc48bacbf9c"
-dependencies = [
- "thiserror 2.0.19",
- "windows 0.61.3",
- "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -8970,7 +8946,7 @@ dependencies = [
  "url",
  "webkit2gtk",
  "webkit2gtk-sys",
- "webview2-com 0.39.1",
+ "webview2-com",
  "windows 0.62.2",
  "windows-core 0.62.2",
  "windows-version",
