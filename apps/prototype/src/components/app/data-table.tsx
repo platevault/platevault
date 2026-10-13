@@ -43,6 +43,8 @@
  * - Click to act (opt-in `onRowClick`): a click on the row outside its
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
+ * - Hover: a row that acts (click to act, or a primary row action) tints
+ *   under the pointer; a row that does nothing on click stays still.
  */
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from "lucide-react"
 import {
@@ -576,6 +578,8 @@ export function DataTable<T>({
                     data-alt={rowIndex % 2 === 1 || undefined}
                     data-selected={isSelected || undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
+                    // A row that acts (click to act, or a primary action) tints under the pointer; the others stay still.
+                    interactive={onRowClick !== undefined || primary !== null}
                     tabIndex={onRowClick ? -1 : undefined}
                     onClick={onRowClick ? rowClick(row) : undefined}
                     onKeyDown={onRowClick ? rowKey(row) : undefined}

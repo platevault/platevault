@@ -6,7 +6,8 @@
  *
  * A data row paints its tint (stripe, hover, selected, current) as the
  * variable `--row-bg` too, so cells pinned over the scrolled ones can paint
- * the same tint on an opaque surface.
+ * the same tint on an opaque surface. Only an `interactive` row (it acts on
+ * click, or has a primary action) tints under the pointer.
  */
 import { cva, type VariantProps } from "class-variance-authority"
 import type * as React from "react"
@@ -49,11 +50,11 @@ const tableRowVariants = cva("h-(--row-h)", {
     kind: {
       // `data-alt` marks every other row of a body; the stripe skips selected rows, so the selected tint always shows.
       data: [
-        "group/row border-b border-border/50 last:border-0 data-alt:not-data-selected:bg-foreground/[0.022] hover:bg-foreground/[0.06]",
-        "data-selected:bg-primary/16 data-selected:hover:bg-primary/22",
+        "group/row border-b border-border/50 last:border-0 data-alt:not-data-selected:bg-foreground/[0.022]",
+        "data-selected:bg-primary/16",
         "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
-        "[--row-bg:transparent] data-alt:not-data-selected:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_6%,transparent)]",
-        "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_22%,transparent)]",
+        "[--row-bg:transparent] data-alt:not-data-selected:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)]",
+        "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)]",
         "aria-[current=true]:[--row-bg:var(--accent)]",
       ],
       /** A group header row: its label spans the columns. */
@@ -63,12 +64,25 @@ const tableRowVariants = cva("h-(--row-h)", {
       /** A row that stands for the rows: loading, empty or error. */
       state: "border-b last:border-0",
     },
+    /**
+     * The pointer's tint, on a data row that acts: 5 % foreground, and on a striped row the stripe plus those
+     * 5 % (7 %), so the step is the same on both. The hover rules carry more conditions than the stripe, so they
+     * win over it; the current row keeps its own tint and edge, and a selected row deepens its own.
+     */
+    interactive: {
+      true: [
+        "hover:not-data-selected:not-aria-[current=true]:bg-foreground/5 hover:not-data-selected:not-aria-[current=true]:[--row-bg:color-mix(in_oklab,var(--foreground)_5%,transparent)]",
+        "hover:data-alt:not-data-selected:not-aria-[current=true]:bg-foreground/7 hover:data-alt:not-data-selected:not-aria-[current=true]:[--row-bg:color-mix(in_oklab,var(--foreground)_7%,transparent)]",
+        "data-selected:hover:not-aria-[current=true]:bg-primary/22 data-selected:hover:not-aria-[current=true]:[--row-bg:color-mix(in_oklab,var(--primary)_22%,transparent)]",
+      ],
+      false: "",
+    },
   },
-  defaultVariants: { kind: "data" },
+  defaultVariants: { kind: "data", interactive: false },
 })
 
-function TableRow({ className, kind, ...props }: React.ComponentProps<"tr"> & VariantProps<typeof tableRowVariants>) {
-  return <tr data-slot="table-row" className={cn(tableRowVariants({ kind }), className)} {...props} />
+function TableRow({ className, kind, interactive, ...props }: React.ComponentProps<"tr"> & VariantProps<typeof tableRowVariants>) {
+  return <tr data-slot="table-row" className={cn(tableRowVariants({ kind, interactive }), className)} {...props} />
 }
 
 /** A column header (`th scope="col"`). */

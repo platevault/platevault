@@ -522,6 +522,7 @@
   ],
   "catalogue_datatable_no_action": "Last action: none",
   "catalogue_datatable_notes": "Target is static (no sort). Camera truncates and shows its full text on hover only when cut.",
+  "catalogue_datatable_hover": "Hover a row: a row with Review tints, a confirmed row without it stays still, and so does every row of the fixed-height table below.",
   "catalogue_datatable_label": "Light sessions (catalogue sample)",
   "catalogue_datatable_preset_long": "Long subs",
   "catalogue_datatable_filter_bar_title": "FilterBar",

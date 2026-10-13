@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { m } from "@/lib/i18n"
-import type { Column, MenuItem } from "./contracts"
+import type { Action, Column, MenuItem } from "./contracts"
 import { DataTable, sortRows } from "./data-table"
 
 interface Frame {
@@ -192,6 +192,21 @@ describe("DataTable", () => {
     await user.unhover(text)
     await user.hover(text)
     expect(text).not.toHaveAttribute("title")
+  })
+
+  it("hover: only a row that acts tints under the pointer, never the open row", () => {
+    const rowOf = (name: string) => screen.getByRole("rowheader", { name }).closest("tr")!
+    const open: Action = { id: "open", label: "Open", run: vi.fn() }
+    const { unmount } = render(
+      <DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} rowLabel={(row) => row.name} primaryRowAction={(row) => (row.id === "a" ? open : null)} />,
+    )
+    // A primary action makes the row interactive; the hover tint also outranks the stripe and skips the current row.
+    expect(rowOf("Vega").className).toContain("hover:not-data-selected:not-aria-[current=true]:bg-foreground/5")
+    expect(rowOf("Altair").className).not.toMatch(/hover:/)
+    unmount()
+
+    render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} onRowClick={vi.fn()} />)
+    for (const name of ["Vega", "Altair", "Deneb"]) expect(rowOf(name).className).toMatch(/hover:\S*bg-/)
   })
 
   describe("selection", () => {
