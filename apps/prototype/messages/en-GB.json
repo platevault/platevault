@@ -32,7 +32,6 @@
   "nav_library": "Library",
   "nav_sessions": "Sessions",
   "nav_calibration": "Calibration",
-  "nav_storage": "Storage",
   "nav_activity": "Activity",
   "nav_settings": "Settings",
   "nav_welcome": "Welcome and setup",
@@ -2521,7 +2520,6 @@
   "targets_clear_search_first": "Clear search first",
   "targets_save_preset": "Save preset",
   "targets_clear_project": "Clear Project",
-  "targets_show": "Show",
   "targets_search_label": "Search targets, catalogues and SIMBAD",
   "targets_search_placeholder": "Targets, catalogues, SIMBAD",
   "targets_rig": "Rig",
@@ -2703,8 +2701,6 @@
   "storage_no_duplicates": "No duplicates",
   "storage_transfers": "Transfers",
   "storage_no_transfers": "No transfers",
-  "calibration_action_blocked": "{action} blocked",
-  "calibration_action_not_saved": "{action} not saved",
   "calibration_kind_dark": "Dark",
   "calibration_kind_flat": "Flat",
   "calibration_kind_bias": "Bias",
@@ -2720,10 +2716,8 @@
   "calibration_step_todo": "To do",
   "calibration_steps_of": "{name} steps",
   "calibration_raws_kept": "Kept",
-  "calibration_raws_restore": "In the OS Trash. Put them back and rescan to restore them.",
   "calibration_keep_raws": "Keep raws",
   "calibration_stack_again": "Stack again",
-  "calibration_detect_now": "Detect now",
   "calibration_trash_raws": "Trash raws",
   "calibration_show_master": "Show master",
   "calibration_process": "Process",
@@ -2737,8 +2731,6 @@
   "calibration_detected": "Detected",
   "calibration_ncombine": "NCOMBINE {count}",
   "calibration_stored": "Stored",
-  "calibration_folders_of": "{name} folders",
-  "calibration_tool_for": "Tool for {name}",
   "calibration_heading_flats": "Flats",
   "calibration_heading_darks": "Darks",
   "calibration_heading_bias": "Bias",
@@ -2747,61 +2739,23 @@
   "calibration_caption_darks": "Master darks",
   "calibration_caption_bias": "Master bias",
   "calibration_caption_dark_flats": "Master dark flats",
-  "calibration_key_train": "Train",
   "calibration_key_camera": "Camera",
   "calibration_key_exposure": "Exposure",
-  "calibration_key_gain": "Gain",
-  "calibration_key_offset": "Offset",
   "calibration_key_temp": "Temp",
   "calibration_origin_indexed": "Indexed",
   "calibration_origin_results": "Run Results",
   "calibration_origin_stacked": "Stacked",
   "calibration_origin_imported": "Imported",
-  "calibration_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} run",
-        "countPlural=*": "{count} runs"
-      }
-    }
-  ],
-  "calibration_sessions_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} session",
-        "countPlural=*": "{count} sessions"
-      }
-    }
-  ],
   "calibration_open_offer": "Open offer",
   "calibration_used_by": "Used by",
   "calibration_open_raw_session": "Open raw session",
-  "calibration_offered_in": "Offered in {name}",
   "calibration_offered": "Offered",
   "calibration_restore": "Restore",
   "calibration_offer_restored": "Offer restored",
   "calibration_open_run": "Open run",
   "calibration_dismissed": "Dismissed",
-  "calibration_no_dismissed": "No dismissed masters",
-  "calibration_dismissed_caption": "Dismissed masters and offers",
   "calibration_master": "Master",
   "calibration_run": "Run",
-  "calibration_refused_reason": "refused",
-  "calibration_import_refused_same": "{count} {reason}",
   "calibration_masters_count": [
     {
       "declarations": [
@@ -4608,14 +4562,9 @@
   "apps_move_away": "Move away",
   "apps_put_back": "Put back",
   "apps_fail_next_launch": "Fail next launch",
-  "settings_keep_raws_not_saved": "Keep raws not saved",
   "settings_raw_frames": "Raw frames",
   "settings_keep_raws": "Keep raw calibration frames",
-  "settings_keep_raws_about": "About keeping raw calibration frames",
   "settings_keep_raws_help": "Off: raws go to the OS Trash once their master registers.",
-  "settings_masters": "Masters",
-  "settings_layout": "Layout",
-  "settings_tools": "Tools",
   "template_frames": [
     {
       "declarations": [
@@ -7364,7 +7313,6 @@
     }
   ],
   "calibration_created": "Created",
-  "calibration_cant_dismiss": "Can't dismiss",
   "calibration_dismiss_master": "Dismiss master",
   "calibration_restore_master": "Restore master",
   "calibration_restored_master": "Restored {name}",
@@ -8750,6 +8698,99 @@
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
   "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "calibration_process_gone": "Unknown process",
+  "calibration_processes": "Processes",
+  "calibration_on": "On",
+  "calibration_off": "Off",
+  "calibration_views": "Calibration views",
+  "calibration_hidden": "Hidden",
+  "calibration_settings": "Calibration settings",
+  "calibration_settings_saved": "Calibration settings saved",
+  "calibration_unit_days": "days",
+  "calibration_master_age_help": "Darks, bias and dark flats older than this read Old. Flats never age.",
+  "calibration_replace": "Replace",
+  "calibration_replace_file": "Master file",
+  "calibration_replace_file_help": "A FITS or XISF master of the same kind.",
+  "calibration_replace_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Re-points {count} open run",
+        "countPlural=*": "Re-points {count} open runs"
+      }
+    }
+  ],
+  "calibration_replace_no_runs": "No open run uses this master",
+  "calibration_replace_finished_keep": "Finished runs keep the master they recorded.",
+  "calibration_import_none_imported": "No master imported",
+  "calibration_import_partly": "{imported} imported · {refused} not imported",
+  "calibration_import_select_files": "Select at least one file",
+  "calibration_import_folder_help": "Lists the folder's FITS and XISF masters with their match.",
+  "calibration_import_files": "Master files in {folder}",
+  "calibration_files_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file selected",
+        "countPlural=*": "{count} files selected"
+      }
+    }
+  ],
+  "calibration_import_no_files": "No master files in this folder",
+  "calibration_processes_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} process",
+        "countPlural=*": "{count} processes"
+      }
+    }
+  ],
+  "calibration_no_processes_help": "Import raw darks, flats or bias to start a process.",
+  "calibration_open_process": "Open process",
+  "calibration_search_processes": "Filter processes",
+  "calibration_hidden_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hidden",
+        "countPlural=*": "{count} hidden"
+      }
+    }
+  ],
+  "calibration_hidden_caption": "Hidden masters and dismissed offers",
+  "calibration_nothing_hidden": "Nothing hidden",
+  "calibration_age": "Age",
+  "calibration_age_old": "Old",
+  "calibration_age_days": "{n} d",
+  "calibration_replaced_by": "Replaced by {name}",
+  "calibration_replaced_by_label": "Replaced by",
+  "calibration_offer_dismissed": "Offer dismissed",
+  "calibration_hidden_on": "Hidden on",
   "catalogue_fields_notes_sample": "Imaged from the back garden; flats at dusk.",
   "catalogue_fields_notes_error": "Notes over 500 characters",
   "catalogue_fields_group_caption": "Two goals with a Remove action named after each group · a hours-or-frames error · disabled.",
@@ -8762,5 +8803,22 @@
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
   "catalogue_datatable_destination_cold": "Cold storage",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} is old · in {count} unfinished run",
+        "countPlural=*": "{name} is old · in {count} unfinished runs"
+      }
+    }
+  ],
+  "store_saved_added": "Added {name}",
   "common_percent": "{value}%"
 }
