@@ -180,6 +180,7 @@ export const REVIEW_KEY = {
   height: "T",
   inspector: "I",
   selectAll: "A",
+  finish: "↵",
   shortcuts: "?",
 } as const
 

@@ -22,6 +22,7 @@ import { StatusBarCatalogue } from "./status-bar"
 import { StepFlowCatalogue } from "./step-flow"
 import { TemplatesCatalogue } from "./templates"
 import { WalkCatalogue } from "./walk"
+import { WorkspaceCatalogue } from "./workspace"
 
 export interface CatalogueEntry {
   id: string
@@ -45,7 +46,11 @@ export const CATALOGUE: CatalogueEntry[] = [
   { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "UsedByPreview"], Entry: PreviewsCatalogue },
   { id: "dialogs", components: ["ConfirmDialog", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
   { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },
-  { id: "domain", components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "MosaicField", "SiteMap"], Entry: DomainCatalogue },
+  {
+    id: "domain",
+    components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "MosaicField", "SiteMap", "CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"],
+    Entry: DomainCatalogue,
+  },
   { id: "step-flow", components: ["StepStrip", "StepFooter"], Entry: StepFlowCatalogue },
   {
     id: "data-table",
@@ -116,4 +121,5 @@ export const CATALOGUE: CatalogueEntry[] = [
   { id: "palette", components: ["CommandPalette", "PaletteTrigger"], Entry: PaletteCatalogue },
   { id: "run-step", components: ["StepGlyph", "StepRail", "GateLabel", "CurrentLink", "useFollowLink", "gateWord", "stepName"], Entry: RunStepCatalogue },
   { id: "walk", components: ["CoachWalk"], Entry: WalkCatalogue },
+  { id: "workspace", components: ["Workspace"], Entry: WorkspaceCatalogue },
 ]

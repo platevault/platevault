@@ -24,7 +24,7 @@ import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, FolderOpen, ImageOff
 import { useEffect, useMemo, useRef, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { getPreferences, useMessages } from "@/app/preferences"
-import { MOD_LABEL } from "@/app/shortcuts"
+import { MOD_LABEL, REVIEW_KEY } from "@/app/shortcuts"
 import { ActionBar, ActionButton, IconButton, useAction } from "@/components/app/actions"
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { PathText } from "@/components/app/data"
@@ -61,23 +61,6 @@ import { QualityLabel, qualityWord } from "./quality"
 import { type Threshold, ThresholdDialog } from "./threshold"
 
 type ListView = "table" | "filmstrip" | "grid"
-
-/** The key glyphs of Review's hotkeys. Key names, not words: never translated. */
-export const REVIEW_KEY = {
-  next: "J",
-  previous: "K",
-  pick: "P",
-  reject: "X",
-  unreviewed: "U",
-  zoom: "Z",
-  fullscreen: "F",
-  compare: "C",
-  grid: "G",
-  height: "T",
-  inspector: "I",
-  selectAll: "A",
-  finish: "↵",
-} as const
 
 const HEIGHT_NEXT: Record<TableHeight, TableHeight> = { rows: "strip", strip: "full", full: "rows" }
 /** A mark on more frames than this asks first. */
