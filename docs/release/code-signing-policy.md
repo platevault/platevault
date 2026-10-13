@@ -39,7 +39,9 @@ binaries bundled with PlateVault are never signed with this certificate.
 
 Other platforms are outside SignPath:
 
-- macOS builds are ad-hoc signed, with no Apple Developer ID.
+- macOS builds are signed with a self-signed PlateVault certificate, with no
+  Apple Developer ID and no notarization. [macOS signing](./macos-signing.md)
+  covers first launch and the certificate.
 - Linux packages (AppImage, `.deb`, `.rpm`) are not code-signed.
 
 On every platform, independent of code signing:

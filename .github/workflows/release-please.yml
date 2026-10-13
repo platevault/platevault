@@ -153,6 +153,24 @@ jobs:
             exit 1
           fi
 
+      # Self-signed macOS signing (docs/release/macos-signing.md). With
+      # Developer ID signing off and the MACOS_SELF_SIGNED_* secrets set, this
+      # imports the stable identity named by vars.MACOS_SIGNING_IDENTITY into a
+      # temporary keychain and exports APPLE_SIGNING_IDENTITY to the later
+      # steps, so the bundler signs the .app with it instead of ad-hoc. It
+      # passes no notarization credentials, so the bundler skips notarization.
+      # The export goes through GITHUB_ENV, not a step-level `env:`, for the
+      # reason given above: the bundler treats a set but empty APPLE_* variable
+      # as a request to sign. With the secrets absent the script writes
+      # nothing, and the build stays ad-hoc signed.
+      - name: Import the self-signed macOS signing identity
+        if: runner.os == 'macOS' && vars.ENABLE_MACOS_SIGNING != 'true'
+        env:
+          MACOS_SELF_SIGNED_P12: ${{ secrets.MACOS_SELF_SIGNED_P12 }}
+          MACOS_SELF_SIGNED_P12_PASSWORD: ${{ secrets.MACOS_SELF_SIGNED_P12_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+        run: bash scripts/macos-import-signing-identity.sh
+
       # tauri-action auto-detects the package manager by checking for a
       # lockfile inside `projectPath` — apps/desktop has no pnpm-lock.yaml of
       # its own (it lives at the workspace root), so auto-detection would fall
@@ -220,6 +238,13 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         with: *tauri-action-inputs
+
+      # Records how the shipped .app is signed, and fails the leg if the
+      # self-signed identity was imported but the bundle is still ad-hoc
+      # signed or carries another authority.
+      - name: Check the macOS app signature
+        if: runner.os == 'macOS'
+        run: bash scripts/macos-check-app-signature.sh
 
       # Build provenance for the bundles this matrix leg produced: a signed statement of
       # which workflow run, at which commit, built these exact bytes. Complements the
