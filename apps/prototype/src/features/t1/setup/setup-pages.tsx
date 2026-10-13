@@ -29,17 +29,12 @@ import { useLocationActions } from "../components/location-actions"
 import { latestIndexRun, LocationRow } from "../components/location-row"
 import { framesInLocation, removeLocation, ROLE_COPY } from "../lib/locations"
 import { completeOnboarding, setRoleDeferred } from "../lib/writes"
+import { SETUP_STEP_IDS, type SetupStepId, setupSteps } from "./setup-language"
 
-const STEP_IDS = ["welcome", "locations", "indexing"] as const
-
-function SetupHeader({ step, title, description }: { step: (typeof STEP_IDS)[number]; title: string; description: ReactNode }) {
+function SetupHeader({ step, title, description }: { step: SetupStepId; title: string; description: ReactNode }) {
   const m = useMessages()
-  const steps = [
-    { id: "welcome", label: m.setup_step_welcome() },
-    { id: "locations", label: m.common_locations() },
-    { id: "indexing", label: m.setup_step_index() },
-  ]
-  const done = STEP_IDS.slice(0, STEP_IDS.indexOf(step))
+  const steps = setupSteps(m)
+  const done = SETUP_STEP_IDS.slice(0, SETUP_STEP_IDS.indexOf(step))
   return (
     <div className="space-y-4 px-6 pt-6">
       <StepIndicator steps={steps} current={step} completed={[...done]} label={m.setup_progress()} />
@@ -105,6 +100,10 @@ export function WelcomePage() {
             {empty ? m.setup_next_empty() : m.setup_next_registered()}
           </p>
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" render={<Link to="/setup/language" />}>
+              <ArrowLeft aria-hidden="true" data-icon="inline-start" />
+              {m.history_back()}
+            </Button>
             <Button render={<Link to="/setup/locations" />}>
               {empty ? m.setup_set_up_locations() : m.setup_continue()}
               <ArrowRight aria-hidden="true" data-icon="inline-end" />

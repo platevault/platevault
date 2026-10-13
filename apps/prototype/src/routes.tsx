@@ -28,6 +28,7 @@ import { LocationsPage } from "@/features/t1/settings/locations-page"
 import { SettingsLayout } from "@/features/t1/settings/settings-layout"
 import { SitesPage } from "@/features/t1/settings/sites-page"
 import { TargetLookupPage } from "@/features/t1/settings/target-lookup-page"
+import { SetupLanguagePage } from "@/features/t1/setup/setup-language"
 import { SetupIndexingPage, SetupLocationsPage, WelcomePage } from "@/features/t1/setup/setup-pages"
 import { SettingsApplicationsPage } from "@/features/t4/applications"
 import { HomePage } from "@/features/v5/a-home/home"
@@ -72,8 +73,8 @@ const rootRoute = createRootRoute({
   beforeLoad: ({ location }) => {
     const { catalog, settings } = store.getState()
     if (settings.onboarding.completedAt || FIRST_RUN_ALLOWED.some((prefix) => location.pathname === prefix || location.pathname.startsWith(`${prefix}/`))) return
-    // No location yet: start at Welcome. A location but unfinished setup: resume at the setup steps.
-    throw redirect({ to: isLibraryEmpty(catalog) ? "/welcome" : "/setup/locations" })
+    // No location yet: start at the Language step. A location but unfinished setup: resume at the setup steps.
+    throw redirect({ to: isLibraryEmpty(catalog) ? "/setup/language" : "/setup/locations" })
   },
 })
 
@@ -93,6 +94,7 @@ function stepFlowOr(Plain: () => ReactNode, Flow: () => ReactNode) {
 }
 
 // Onboarding (v4, minimal shell).
+const setupLanguageRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/language", component: SetupLanguagePage, validateSearch: looseSearch })
 const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/welcome", component: WelcomePage, validateSearch: looseSearch })
 const setupLocationsRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/locations", component: SetupLocationsPage, validateSearch: looseSearch })
 const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/indexing", component: SetupIndexingPage, validateSearch: looseSearch })
@@ -194,7 +196,7 @@ const settingsChildren = [
 const designSystemRoute = page("/design-system", DesignSystemPage)
 
 const routeTree = rootRoute.addChildren([
-  setupLayout.addChildren([welcomeRoute, setupLocationsRoute, setupIndexingRoute]),
+  setupLayout.addChildren([setupLanguageRoute, welcomeRoute, setupLocationsRoute, setupIndexingRoute]),
   appLayout.addChildren([
     homeRoute,
     homeConceptsRoute,

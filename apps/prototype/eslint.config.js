@@ -68,6 +68,12 @@ export const COMPOSITION_ENFORCED = [
     area: { dir: "v5/c-runs", depth: 0 },
     files: ["src/features/v5/c-runs/**/*.{ts,tsx}"],
   },
+  {
+    // t1/setup is shared with P11 (setup-pages.tsx), so only the Language step is listed.
+    unit: "Setup Language",
+    area: { dir: "t1", depth: 1 },
+    files: ["src/features/t1/setup/setup-language.tsx"],
+  },
 ]
 
 export default defineConfig(
