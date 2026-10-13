@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/platevault/platevault/compare/v0.6.0...v0.6.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **release:** ship macOS updates again and never publish a partial update manifest (port of 517959b5, [#1794](https://github.com/platevault/platevault/issues/1794)) ([3479900](https://github.com/platevault/platevault/commit/34799008411cb0bb7785cb802d48e1a9acdb893c))
+
 ## [0.6.0](https://github.com/platevault/platevault/compare/v0.5.0...v0.6.0) (2026-07-21)
 
 
