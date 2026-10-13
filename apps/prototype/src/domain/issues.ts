@@ -8,7 +8,7 @@
  *
  * The domain carries no copy: the hub and the status bar word each issue by
  * its `kind`, `count`, `name` and `bytes` from the message catalogue
- * (`issueCopy`, src/app/issues-hub.tsx).
+ * (`issueCopy`, src/components/app/issue-row.tsx).
  */
 import { inputDrift } from "./calibration"
 import { calibrationProcesses } from "./calibration-process"

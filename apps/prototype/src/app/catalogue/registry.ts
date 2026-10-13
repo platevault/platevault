@@ -5,18 +5,23 @@
  */
 import type { ComponentType } from "react"
 import { ActionsCatalogue } from "./actions"
+import { AppFrameCatalogue } from "./app-frame"
 import { DataTableCatalogue } from "./data-table"
 import { DialogsCatalogue } from "./dialogs"
 import { DomainCatalogue } from "./domain"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
 import { GradeBadgesCatalogue } from "./grade-badges"
+import { PaletteCatalogue } from "./palette"
 import { PickersCatalogue } from "./pickers"
 import { PreviewsCatalogue } from "./previews"
+import { RunStepCatalogue } from "./run-step"
 import { ShellPartsCatalogue } from "./shell-parts"
 import { StatusCatalogue } from "./status"
+import { StatusBarCatalogue } from "./status-bar"
 import { StepFlowCatalogue } from "./step-flow"
 import { TemplatesCatalogue } from "./templates"
+import { WalkCatalogue } from "./walk"
 
 export interface CatalogueEntry {
   id: string
@@ -87,4 +92,28 @@ export const CATALOGUE: CatalogueEntry[] = [
     Entry: TemplatesCatalogue,
   },
   { id: "grade-badges", components: ["GradeBadges"], Entry: GradeBadgesCatalogue },
+  { id: "app-frame", components: ["AppFrame", "SetupFrame", "MainArea"], Entry: AppFrameCatalogue },
+  {
+    id: "status-bar",
+    components: [
+      "StatusBar",
+      "StatusGroup",
+      "StatusLink",
+      "StatusText",
+      "StatusSelection",
+      "StatusOperation",
+      "MiniProgress",
+      "ListPopover",
+      "ListRows",
+      "ListOperationRow",
+      "ListSection",
+      "ListEmpty",
+      "ListFold",
+      "ListNotice",
+    ],
+    Entry: StatusBarCatalogue,
+  },
+  { id: "palette", components: ["CommandPalette", "PaletteTrigger"], Entry: PaletteCatalogue },
+  { id: "run-step", components: ["StepGlyph", "StepRail", "GateLabel", "CurrentLink", "useFollowLink", "gateWord", "stepName"], Entry: RunStepCatalogue },
+  { id: "walk", components: ["CoachWalk"], Entry: WalkCatalogue },
 ]
