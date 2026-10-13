@@ -36,31 +36,27 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) {
     let handle = app.clone();
     app.listen(ARM_EVENT, move |event| {
         let armed = serde_json::from_str::<bool>(event.payload()).unwrap_or(false);
-        handle
-            .state::<InstallOnQuitGate>()
-            .0
-            .store(armed, Ordering::SeqCst);
+        handle.state::<InstallOnQuitGate>().0.store(armed, Ordering::SeqCst);
     });
 }
 
 /// Defer the first quit after arming: prevent it and hand it to the frontend.
 pub fn on_run_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
     match event {
-        RunEvent::ExitRequested { api, .. } => {
-            if defer_to_frontend(app) {
-                api.prevent_exit();
-            }
-        }
-        RunEvent::WindowEvent {
-            label,
-            event: WindowEvent::CloseRequested { api, .. },
-            ..
-        } if label == MAIN_WINDOW_LABEL => {
-            if defer_to_frontend(app) {
-                api.prevent_close();
-            }
+        RunEvent::ExitRequested { api, .. } => defer_quit(app, || api.prevent_exit()),
+        RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { api, .. }, .. }
+            if label == MAIN_WINDOW_LABEL =>
+        {
+            defer_quit(app, || api.prevent_close());
         }
         _ => {}
+    }
+}
+
+/// Run `prevent` when the quit was handed to the frontend.
+fn defer_quit<R: Runtime>(app: &AppHandle<R>, prevent: impl FnOnce()) {
+    if defer_to_frontend(app) {
+        prevent();
     }
 }
 
@@ -98,9 +94,7 @@ mod tests {
     /// A mock app with the gate registered, a main window, and a counter of
     /// the install requests that window received.
     fn app_with_main_window() -> (App<MockRuntime>, Arc<AtomicUsize>) {
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("build mock app");
+        let app = mock_builder().build(mock_context(noop_assets())).expect("build mock app");
         register(app.handle());
         WebviewWindowBuilder::new(&app, MAIN_WINDOW_LABEL, WebviewUrl::default())
             .build()
