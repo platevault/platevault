@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest"
 import { m, say } from "@/lib/i18n"
-import { sessionsArchivePlan, unusableFramesOffer } from "./archive"
-import { defaultArchiveLocation, liveAssetIds, type World } from "./derive"
+import { type ArchiveOrigins, archivePlan, restorePlan, sessionsArchivePlan, trashOffer, unusableFramesOffer } from "./archive"
+import { archiveDestination, defaultArchiveLocation, liveAssetIds, projectMemberSessionIds, type World } from "./derive"
 import { qualityApplicability } from "./library"
 import { createSeed } from "./seed"
 import type { Session } from "./types"
@@ -71,5 +71,46 @@ describe("unusableFramesOffer", () => {
     const offer = unusableFramesOffer(demo, usable)
     expect(offer.count).toBe(0)
     expect(offer.title).toBe(m.wrapup_offer_rejected_none())
+  })
+})
+
+describe("archivePlan and restorePlan", () => {
+  it("archives a Project's member sessions to its archive location, and restores them to where they came from", () => {
+    const project = Object.values(demo.catalog.projects).find((p) => projectMemberSessionIds(demo.catalog, p.id).size > 0)!
+    const members = projectMemberSessionIds(demo.catalog, project.id)
+    const plan = archivePlan(demo, project)
+    expect(plan.destination?.id).toBe(archiveDestination(demo, project)?.id)
+    expect(plan.rows.length).toBeGreaterThan(0)
+    for (const row of plan.rows) expect(members.has(row.session.id)).toBe(true)
+    for (const { session } of plan.kept) expect(members.has(session.id)).toBe(true)
+
+    // As if the transfer ran: the frames now sit at their archive paths, and each one's origin is recorded.
+    const origins: ArchiveOrigins = {}
+    const assets = { ...demo.catalog.assets }
+    for (const move of plan.rows.flatMap((r) => r.moves)) {
+      origins[move.assetId] = move.from
+      const asset = assets[move.assetId]!
+      assets[move.assetId] = { ...asset, copies: asset.copies.map((c) => (c.path === move.from.path ? { ...c, ...move.to } : c)) }
+    }
+    const sessionIds = plan.rows.map((r) => r.session.id)
+    const archived = { ...project, archive: { at: "2026-10-13T00:00:00.000Z", sessionIds } }
+    const world: World = { ...demo, catalog: { ...demo.catalog, assets, projects: { ...demo.catalog.projects, [project.id]: archived } } }
+    const back = restorePlan(world, archived, origins, sessionIds)
+    for (const move of back.rows.flatMap((r) => r.moves)) expect(move.to).toEqual(origins[move.assetId])
+    expect(back.rows.length + back.refused.length).toBeGreaterThan(0)
+  })
+
+  it("has nothing to restore for sessions the Project never archived", () => {
+    const project = Object.values(demo.catalog.projects)[0]!
+    const plan = restorePlan(demo, { ...project, archive: null }, {}, [...projectMemberSessionIds(demo.catalog, project.id)])
+    expect(plan.rows).toEqual([])
+    expect(plan.blocked && say(m, plan.blocked)).toBe(m.project_nothing_to_restore())
+  })
+})
+
+describe("trashOffer", () => {
+  it("titles an empty offer with its 'none left' form", () => {
+    const offer = trashOffer("intermediates", demo.disk, new Map(), [], [], [])
+    expect(offer).toMatchObject({ kind: "intermediates", count: 0, sizeBytes: 0, keptLinks: 0, title: m.wrapup_offer_intermediates_none() })
   })
 })

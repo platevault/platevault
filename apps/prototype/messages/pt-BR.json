@@ -8868,5 +8868,22 @@
   "catalogue_templates_fill_toggle": "Etapa em altura total",
   "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
   "catalogue_datatable_destination_nas": "NAS de arquivo",
-  "catalogue_datatable_destination_cold": "Armazenamento frio"
+  "catalogue_datatable_destination_cold": "Armazenamento frio",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} está antigo · em {count} execução não concluída",
+        "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
+      }
+    }
+  ],
+  "store_saved_added": "{name} adicionado"
 }

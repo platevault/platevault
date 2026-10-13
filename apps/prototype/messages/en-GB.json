@@ -8812,5 +8812,22 @@
   "catalogue_templates_fill_toggle": "Full-height step",
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
-  "catalogue_datatable_destination_cold": "Cold storage"
+  "catalogue_datatable_destination_cold": "Cold storage",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} is old · in {count} unfinished run",
+        "countPlural=*": "{name} is old · in {count} unfinished runs"
+      }
+    }
+  ],
+  "store_saved_added": "Added {name}"
 }

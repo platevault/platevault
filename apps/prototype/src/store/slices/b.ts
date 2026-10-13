@@ -6,7 +6,7 @@
  * transfer succeeds (`closingOnSuccess`, §5.5, F2).
  */
 import { archiveHandler } from "@/features/v5/b-projects/actions"
-import type { ArchiveOrigins, OfferKind } from "@/features/v5/b-projects/model"
+import type { ArchiveOrigins, OfferKind } from "@/domain/archive"
 import type { OperationId, ProjectId } from "@/domain/types"
 import { closingOnSuccess } from "@/store/actions/projects"
 import type { SliceDefinition } from "./index"
