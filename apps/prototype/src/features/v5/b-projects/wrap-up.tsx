@@ -272,7 +272,7 @@ function CleanupTable({ rows, select }: { rows: CleanupRow[]; select: Select | n
     { id: "view", header: m.wrapup_col_view(), cell: view, sortValue: view },
     { id: "items", header: m.wrapup_col_items(), cell: (r) => formatCount(r.items.length), sortValue: (r) => r.items.length, align: "right" },
     { id: "size", header: m.dialog_col_size(), cell: (r) => formatBytes(r.bytes), sortValue: (r) => r.bytes, align: "right" },
-    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
   ]
   return (
     <DataTable
@@ -296,7 +296,7 @@ function TrashTable({ rows, select }: { rows: TrashRow[]; select: Select | null 
     { id: "detail", header: m.wrapup_col_detail(), cell: (r) => r.detail ?? "–", sortValue: (r) => r.detail, truncate: true },
     { id: "from", header: m.dialog_col_from(), cell: (r) => (r.path ? folderOf(r.path) : "–"), sortValue: (r) => r.path, truncate: true },
     { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
-    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
   ]
   return (
     <DataTable
@@ -335,7 +335,7 @@ function ArchiveTable({ project, rows, blocked, select, editable }: { project: P
     { id: "from", header: m.dialog_col_from(), cell: (r) => r.from, sortValue: (r) => r.from, truncate: true },
     { id: "to", header: m.dialog_col_to(), cell: (r) => r.to, sortValue: (r) => r.to, truncate: true },
     { id: "size", header: m.dialog_col_size(), cell: (r) => (r.row ? formatBytes(r.size) : "–"), sortValue: (r) => r.size, align: "right" },
-    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null },
+    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
   ]
   return (
     <DataTable

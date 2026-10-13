@@ -68,7 +68,8 @@ export function ProjectsPage() {
   const [query, setQuery] = useState("")
   const [state, setState] = useState<string>("open")
   const [editing, setEditing] = useState<Project | null>(null)
-  const shown = rows.filter((r) => (state === "" || r.status === state) && matchesQuery([r.project.name, ...r.subjects], query))
+  // An empty search matches every row (`matchesQuery` reads an empty query as no match).
+  const shown = rows.filter((r) => (state === "" || r.status === state) && (query.trim() === "" || matchesQuery([r.project.name, ...r.subjects], query)))
 
   const open = (r: Row, search: Record<string, string> = {}) => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search })
   const newProject: Action = { id: "new-project", label: m.newproject_title(), icon: Plus, kind: "primary", opensDialog: true, run: () => openSheet({ kind: "new-project" }) }
