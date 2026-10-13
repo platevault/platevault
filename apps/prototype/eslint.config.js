@@ -21,9 +21,12 @@ import alm from "./eslint-rules/no-user-string.js"
 export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__fixtures__/**"]
 
 /**
- * Feature files held to the composition rules as errors, one unit at a time
- * as it lands (R9-COMPOSITION-PLAN.md §7.4): file lists, never a whole
- * directory another unit still shares. `area` gives the I6 boundary.
+ * Files held to the composition rules as errors, one unit at a time as it
+ * lands (R9-COMPOSITION-PLAN.md §7.4): file lists, never a whole directory
+ * another unit still shares. `area` gives a feature's I4-I6 import
+ * boundary; app-shell files (src/app) take the syntax rules only, as in
+ * eslint.composition.config.js.
+ * @type {Array<{ unit: string, area: { dir: string, depth: number } | null, files: string[] }>}
  */
 export const COMPOSITION_ENFORCED = [
   {
@@ -35,6 +38,11 @@ export const COMPOSITION_ENFORCED = [
     unit: "P7 Targets",
     area: { dir: "v5/e-targets-plan-settings", depth: 0 },
     files: ["src/features/v5/e-targets-plan-settings/{targets,target,planned-tools,moon-limits,targets-model,parts,targets-presets}.{ts,tsx}"],
+  },
+  {
+    unit: "P1 Shell",
+    area: null,
+    files: ["src/app/{shell,status-bar,issues-hub,command-palette,onboarding,shortcuts,history,appearance,run-ui}.tsx", "src/app/{navigation,ui-state}.ts"],
   },
 ]
 
@@ -63,10 +71,8 @@ export default defineConfig(
   },
   ...COMPOSITION_ENFORCED.map(({ area, files }) => {
     /** @type {import("eslint").Linter.RulesRecord} */
-    const rules = {
-      "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX],
-      "no-restricted-imports": ["error", { patterns: areaImportPatterns(area) }],
-    }
+    const rules = { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX] }
+    if (area) rules["no-restricted-imports"] = ["error", { patterns: areaImportPatterns(area) }]
     return { files, ignores: I18N_IGNORES, rules }
   }),
 )
