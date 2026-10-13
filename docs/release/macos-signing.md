@@ -111,6 +111,37 @@ key embedded in the app.
   the secrets absent, the script does nothing and the build stays ad-hoc
   signed.
 - After the build, `scripts/macos-check-app-signature.sh` logs
-  `codesign -dv` and the designated requirement. It fails the leg if the
-  identity was imported but the `.app` is ad-hoc signed or signed by another
-  authority.
+  `codesign -dv` and the designated requirement. If the identity was
+  imported, it fails the leg when the `.app` is ad-hoc signed, signed by
+  another authority, or fails `codesign --verify --strict`. Without the
+  identity, an ad-hoc `.app` is only reported. A later step deletes the
+  signing keychain, even when an earlier step failed.
+
+### Check before the first self-signed release
+
+Do this by hand once, before the first release that is signed with the
+self-signed identity is published. Use a Mac that has never trusted the
+certificate, with PlateVault v0.6.1 installed from its GitHub release.
+
+1. Get a release-style build of the candidate: the `.app` from a run of the
+   macOS build leg with the signing secrets set. Check that
+   `codesign -dv --verbose=2 PlateVault.app` shows
+   `Authority=PlateVault Self-Signed` and `flags=0x10000(runtime)` (the
+   hardened runtime).
+2. Download the candidate in a browser, for example as a zip, so it carries
+   the quarantine attribute. Unzip it into a folder other than
+   **Applications** and open it. Approve it through **System Settings** ›
+   **Privacy & Security** › **Open Anyway**, as in
+   [First launch](#first-launch-on-macos-sequoia-and-later). The app must
+   start and open the library.
+3. On the Mac with v0.6.1, point the update check at a `latest.json` that
+   offers the candidate (a test release, or a local server), and install the
+   update from inside the app. After the relaunch, the app must run the new
+   version, and `codesign -dv` on `/Applications/PlateVault.app` must show
+   the self-signed authority.
+4. Check that macOS asks once for folder and drive access, and not again
+   after a second launch.
+
+If any step fails, do not publish the release. Deleting the
+`MACOS_SELF_SIGNED_*` secrets returns the release workflow to ad-hoc
+signing.

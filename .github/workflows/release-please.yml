@@ -239,12 +239,20 @@ jobs:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         with: *tauri-action-inputs
 
-      # Records how the shipped .app is signed, and fails the leg if the
-      # self-signed identity was imported but the bundle is still ad-hoc
-      # signed or carries another authority.
+      # Records how the shipped .app is signed. With the self-signed identity
+      # imported, it fails the leg if the bundle is still ad-hoc signed,
+      # carries another authority, or fails `codesign --verify --strict`.
+      # Without it, an ad-hoc bundle is only reported, so a release without the
+      # signing secrets still gets its latest.json.
       - name: Check the macOS app signature
         if: runner.os == 'macOS'
         run: bash scripts/macos-check-app-signature.sh
+
+      # The import step's keychain holds the private key. Delete it as soon as
+      # signing is over, even when an earlier step failed.
+      - name: Delete the macOS signing keychain
+        if: always() && runner.os == 'macOS'
+        run: security delete-keychain "${RUNNER_TEMP}/platevault-signing.keychain-db" || true
 
       # Build provenance for the bundles this matrix leg produced: a signed statement of
       # which workflow run, at which commit, built these exact bytes. Complements the
