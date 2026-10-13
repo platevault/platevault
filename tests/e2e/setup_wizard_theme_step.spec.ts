@@ -1,21 +1,70 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import type { Page, TestInfo } from '@playwright/test';
 import { expect, test } from './support/harness';
 
+// Each theme's display name is a catalogue message (settings_theme_name_*),
+// so the localized accessible name is read from the same key the picker
+// renders rather than retyped here per locale.
 const THEME_CASES = [
-  { id: 'warm-clay', label: 'Warm Clay', mode: 'light' },
-  { id: 'warm-slate', label: 'Warm Slate', mode: 'light' },
-  { id: 'observatory-dark', label: 'Observatory', mode: 'dark' },
-  { id: 'espresso-dark', label: 'Espresso', mode: 'dark' },
+  { id: 'warm-clay', nameKey: 'settings_theme_name_warm_clay', mode: 'light' },
   {
-    id: 'observatory-cool-light',
-    label: 'Observatory Cool',
+    id: 'warm-slate',
+    nameKey: 'settings_theme_name_warm_slate',
     mode: 'light',
   },
-  { id: 'observatory-cool', label: 'Observatory Cool', mode: 'dark' },
+  {
+    id: 'observatory-dark',
+    nameKey: 'settings_theme_name_observatory',
+    mode: 'dark',
+  },
+  {
+    id: 'espresso-dark',
+    nameKey: 'settings_theme_name_espresso',
+    mode: 'dark',
+  },
+  {
+    id: 'observatory-cool-light',
+    nameKey: 'settings_theme_name_observatory_cool_light',
+    mode: 'light',
+  },
+  {
+    id: 'observatory-cool',
+    nameKey: 'settings_theme_name_observatory_cool',
+    mode: 'dark',
+  },
 ] as const;
+
+/** The desktop message catalogue for `locale`, resolved from tests/e2e. */
+function readCatalogue(
+  testInfo: TestInfo,
+  locale: keyof typeof LOCALES,
+): Record<string, unknown> {
+  const file = path.resolve(
+    testInfo.project.testDir,
+    '../../apps/desktop/messages',
+    `${locale}.json`,
+  );
+  return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+}
+
+/**
+ * The swatch's accessible name: `<theme name> · <mode>`. A name that already
+ * ends in its mode (Observatory Cool · Light) carries it once, matching
+ * ThemePicker's `themeAccessibleLabel`.
+ */
+function themeAccessibleName(themeName: string, modeLabel: string): string {
+  const suffix = ` · ${modeLabel}`;
+  const base = themeName
+    .toLocaleLowerCase()
+    .endsWith(suffix.toLocaleLowerCase())
+    ? themeName.slice(0, -suffix.length)
+    : themeName;
+  return `${base}${suffix}`;
+}
 
 const LOCALES = {
   'en-GB': {
@@ -107,11 +156,12 @@ test.describe('setup wizard · Theme step', () => {
   for (const locale of Object.keys(LOCALES) as (keyof typeof LOCALES)[]) {
     test(`${locale} offers System and all six shipped themes`, async ({
       page,
-    }) => {
+    }, testInfo) => {
       await page.emulateMedia({ colorScheme: 'dark' });
       await openThemeStep(page, locale);
 
       const labels = LOCALES[locale];
+      const catalogue = readCatalogue(testInfo, locale);
       const picker = page.getByRole('group', { name: labels.picker });
       await expect(picker.getByRole('button')).toHaveCount(7);
 
@@ -124,8 +174,12 @@ test.describe('setup wizard · Theme step', () => {
 
       for (const theme of THEME_CASES) {
         const mode = theme.mode === 'light' ? labels.light : labels.dark;
+        const themeName = catalogue[theme.nameKey];
+        if (typeof themeName !== 'string') {
+          throw new Error(`${locale} catalogue has no ${theme.nameKey}`);
+        }
         const choice = picker.getByRole('button', {
-          name: `${theme.label} · ${mode}`,
+          name: themeAccessibleName(themeName, mode),
           exact: true,
         });
         await choice.click();
