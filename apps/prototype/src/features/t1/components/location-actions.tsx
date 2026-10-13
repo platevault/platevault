@@ -5,10 +5,13 @@
  * location's outcome and the dialogs the page renders once.
  *
  * `notify` picks where an outcome shows: "row" keeps it for `feedbackFor`
- * beside the location (setup), "toast" raises it as a toast with its one
- * follow-up (Settings › Locations, whose rows are DataTable rows).
+ * beside the location (setup); "runner" hands it to the action runner of the
+ * row action that started it (Settings › Locations, whose rows are DataTable
+ * rows): `locate` and `chooseAgain` then return a promise that settles with
+ * the flow, so a refusal or a failed write shows beside the row and a remap
+ * that went through is a toast with Rescan.
  */
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { ConfirmDialog, type ConfirmGroup } from "@/components/app/confirm-dialog"
@@ -18,7 +21,7 @@ import { FolderPicker } from "@/components/app/folder-picker"
 import type { Catalog, Location, LocationId, OperationId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { store } from "@/store/core"
+import { type CommitResult, store } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 import { applyRemap, computeRemap, framesInLocation, type RemapEntry, type RemapProof, repointLocation, validateLocation } from "../lib/locations"
 
@@ -56,7 +59,7 @@ export interface LocationActionsOptions {
   href: string
   onIndexStarted?: (operationId: OperationId) => void
   /** Where an outcome shows; default "row" (`feedbackFor`). */
-  notify?: "row" | "toast"
+  notify?: "row" | "runner"
 }
 
 export function useLocationActions({ href, onIndexStarted, notify = "row" }: LocationActionsOptions) {
@@ -64,19 +67,35 @@ export function useLocationActions({ href, onIndexStarted, notify = "row" }: Loc
   const [picker, setPicker] = useState<{ location: Location; mode: "again" | "locate" } | null>(null)
   const [proof, setProof] = useState<RemapProof | null>(null)
   const [feedback, setFeedback] = useState<{ locationId: LocationId; value: Feedback } | null>(null)
+  /** Settles the running flow's promise ("runner"); null when no flow runs. */
+  const settle = useRef<((result: CommitResult | void) => void) | null>(null)
+  /** The chooser reports Choose and then closes itself; that close is not a cancel. */
+  const choosing = useRef(false)
+
+  function finish(result?: CommitResult) {
+    settle.current?.(result)
+    settle.current = null
+  }
+
+  function open(location: Location, mode: "again" | "locate"): Promise<CommitResult | void> | void {
+    finish()
+    setPicker({ location, mode })
+    if (notify === "runner") return new Promise((resolve) => (settle.current = resolve))
+  }
 
   function index(location: Location) {
     setFeedback(null)
     // Start first: `onIndexStarted?.(startIndexing(…))` skips the argument when no callback is passed (Settings › Locations).
     const operationId = startIndexing([location.id])
     onIndexStarted?.(operationId)
+    finish()
   }
 
   /** The follow-up an outcome offers: Choose again after a refused remap, Retry after a failed write, Rescan after a remap. */
   function followUp(location: Location, value: Feedback): Action | undefined {
     if (value.tone === "error") return { id: "retry", label: m.verb_retry(), run: value.retry }
     if (value.tone === "done") return { id: "rescan", label: m.location_rescan(), run: () => index(location) }
-    return value.locate ? { id: "choose-again", label: m.location_choose_again(), opensDialog: true, run: () => setPicker({ location, mode: "locate" }) } : undefined
+    return value.locate ? { id: "choose-again", label: m.location_choose_again(), opensDialog: true, run: () => open(location, "locate") } : undefined
   }
 
   function report(location: Location, value: Feedback) {
@@ -84,8 +103,11 @@ export function useLocationActions({ href, onIndexStarted, notify = "row" }: Loc
       setFeedback({ locationId: location.id, value })
       return
     }
-    const message = value.tone === "refusal" ? `${value.title}: ${value.message}` : value.tone === "done" ? `${m.location_remap_saved()}: ${value.message}` : value.message
-    toast({ message, action: followUp(location, value) })
+    if (value.tone === "done") {
+      toast({ message: `${m.location_remap_saved()}: ${value.message}`, action: followUp(location, value) })
+      finish()
+    } else if (value.tone === "refusal") finish({ ok: false, reason: "refused", message: value.message, reasons: [] })
+    else finish({ ok: false, reason: "write-failed", message: value.message })
   }
 
   function review(location: Location, path: string) {
@@ -141,16 +163,28 @@ export function useLocationActions({ href, onIndexStarted, notify = "row" }: Loc
     <>
       <FolderPicker
         open={picker !== null}
-        onOpenChange={(open) => !open && setPicker(null)}
+        onOpenChange={(next) => {
+          if (next) return
+          setPicker(null)
+          if (!choosing.current) finish()
+          choosing.current = false
+        }}
         title={picker ? (picker.mode === "locate" ? m.settings_locate_named({ name: picker.location.displayName }) : m.location_choose_folder_for({ name: picker.location.displayName })) : m.import_choose_a_folder()}
         initialPath={picker?.location.path}
         chooseVerb={picker?.mode === "locate" ? m.verb_review() : m.verb_choose()}
-        onChoose={(path) => picker && chosen(picker.location, picker.mode, path)}
+        onChoose={(path) => {
+          choosing.current = true
+          if (picker) chosen(picker.location, picker.mode, path)
+        }}
       />
       {proof && proofLocation ? (
         <ConfirmDialog
           open
-          onOpenChange={(open) => !open && setProof(null)}
+          onOpenChange={(next) => {
+            if (next) return
+            setProof(null)
+            finish()
+          }}
           title={m.location_remap_title({ name: proofLocation.displayName, path: proof.toPath })}
           summary={`${m.location_volume_evidence()}: ${m.location_from()} ${volumes[0]} → ${m.location_to()} ${volumes[1]}`}
           groups={remapGroups(m, catalog, proof)}
@@ -173,8 +207,8 @@ export function useLocationActions({ href, onIndexStarted, notify = "row" }: Loc
 
   return {
     retry: index,
-    chooseAgain: (location: Location) => setPicker({ location, mode: "again" }),
-    locate: (location: Location) => setPicker({ location, mode: "locate" }),
+    chooseAgain: (location: Location) => open(location, "again"),
+    locate: (location: Location) => open(location, "locate"),
     feedbackFor,
     dialogs,
   }

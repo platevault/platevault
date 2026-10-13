@@ -154,7 +154,7 @@ export function LocationsPage() {
     if (search.add && (ROLE_ORDER as string[]).includes(search.add)) setAdding({ role: search.add as LocationRole })
   }
   const [editing, setEditing] = useState<Location | null>(null)
-  const actions = useLocationActions({ href: HREF, notify: "toast" })
+  const actions = useLocationActions({ href: HREF, notify: "runner" })
   const { save, indicator } = useSaveState()
 
   const indexingIds = new Set(
