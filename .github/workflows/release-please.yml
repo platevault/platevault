@@ -653,3 +653,36 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: gh release upload "${TAG}" latest.json --repo "${GITHUB_REPOSITORY}" --clobber
+
+  # Submits the release to the Windows Package Manager community repository
+  # (microsoft/winget-pkgs) as PlateVault.PlateVault, through
+  # vedantmgoyal9/winget-releaser, which runs `komac update` and opens the
+  # pull request from the winget-pkgs fork. It waits for updater-manifest so
+  # it reads the final installers: sign-windows, when enabled, replaces them
+  # first. A winget manifest pins each installer's SHA256, so an earlier run
+  # would point winget at bytes the release no longer serves.
+  #
+  # Off unless vars.ENABLE_WINGET_PUBLISH is 'true'. winget-releaser only adds
+  # versions to a package that already exists in winget-pkgs, so the owner
+  # turns this on after the first submission has merged
+  # (docs/release/winget.md). The WINGET_TOKEN secret is a classic personal
+  # access token with the public_repo and workflow scopes (fine-grained tokens
+  # cannot open the winget-pkgs pull request), from the account that holds the
+  # fork: vars.WINGET_FORK_USER, or the repository owner when that is unset.
+  winget:
+    name: Submit to winget
+    needs: [release-please, updater-manifest]
+    if: ${{ needs.release-please.outputs.release_created == 'true' && vars.ENABLE_WINGET_PUBLISH == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # the action reads the release's installers with github.token
+    steps:
+      - name: Submit the manifest update to winget-pkgs
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+        with:
+          identifier: PlateVault.PlateVault
+          release-tag: ${{ needs.release-please.outputs.tag_name }}
+          # The NSIS per-user setup.exe and the MSI, not their .sig files.
+          installers-regex: '_x64(-setup\.exe|_en-US\.msi)$'
+          fork-user: ${{ vars.WINGET_FORK_USER || github.repository_owner }}
+          token: ${{ secrets.WINGET_TOKEN }}
