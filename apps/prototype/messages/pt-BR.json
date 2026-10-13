@@ -8266,6 +8266,7 @@
   "stepflow_close_project": "Fechar projeto",
   "stepflow_close_project_title": "Fechar {name}?",
   "stepflow_finish_review": "Concluir revisão",
+  "stepflow_import": "Importar",
   "stepflow_finished_on": "Concluído em {date}",
   "stepflow_closed_on": "Fechado em {date}",
   "stepflow_step_todo": "{step}, a fazer",
@@ -8358,5 +8359,7 @@
       }
     }
   ],
-  "catalogue_stepflow_queue_empty": "Nenhuma outra sessão precisa de revisão"
+  "catalogue_stepflow_queue_empty": "Nenhuma outra sessão precisa de revisão",
+  "catalogue_stepflow_dialog_caption": "As etapas são botões locais. Prosseguir abre a próxima etapa no mesmo diálogo; só Importar, na última etapa, o fecha. Uma etapa anterior pode ser reaberta; uma posterior é somente leitura.",
+  "catalogue_stepflow_dialog_case": "etapas em um diálogo"
 }

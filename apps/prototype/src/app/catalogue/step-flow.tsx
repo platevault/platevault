@@ -11,18 +11,24 @@
  *   - Wrap up: strict order, local step buttons.
  *   - Session review: router links. Finish review opens the next session
  *     that needs review (C14).
+ * - FormDialog `steps`: a three-step import on local state. Proceed opens
+ *   the next step in the dialog; only the last step's Import closes it.
  *
- * Captions are reviewer labels. Targets, filters and nights are sample data.
+ * Captions are reviewer labels. Targets, filters, nights and folders are sample data.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Lock } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ActionButton } from "@/components/app/actions"
+import { ActionButton, actionLabel } from "@/components/app/actions"
 import type { Action, FlowStep, StepFlow } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
+import { KeyValueList } from "@/components/app/data"
+import { PathField, SegmentedField } from "@/components/app/fields"
+import { FormDialog } from "@/components/app/form-dialog"
 import { Section } from "@/components/app/page"
 import { StepFooter, StepStrip, stepEditable } from "@/components/app/step-flow"
+import { Button } from "@/components/ui/button"
 import type { StepLink } from "@/domain/derive"
 import { formatBytes, formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
@@ -479,6 +485,104 @@ function ReviewDemo() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// FormDialog steps: a short flow on local state; only the last step's Proceed closes it
+// ---------------------------------------------------------------------------
+
+const IMPORT_STEPS = ["folder", "mode", "preview"] as const
+type ImportMode = "copy" | "move"
+
+function DialogDemo() {
+  const m = useMessages()
+  const [progress, setProgress] = useState(() => start(IMPORT_STEPS))
+  const [folder, setFolder] = useState<string | null>(null)
+  const [mode, setMode] = useState<ImportMode>("copy")
+  const [imported, setImported] = useState<string | null>(null)
+  const modes = [
+    { value: "copy", label: m.import_copy() },
+    { value: "move", label: m.import_move() },
+  ] as const
+  const modeLabel = modes.find((option) => option.value === mode)?.label
+  const terminal = progress.current === IMPORT_STEPS.at(-1)
+  const record = (outcome: "finished" | "skipped") => () => setProgress((p) => advance(p, IMPORT_STEPS, outcome))
+  const gate = progress.current === "folder" && folder === null ? { reason: m.fields_path_none_folder(), blockers: [] } : null
+  const restart = () => {
+    setProgress(start(IMPORT_STEPS))
+    setFolder(null)
+    setMode("copy")
+  }
+  const flow: StepFlow = {
+    steps: flowSteps(
+      progress,
+      [
+        { id: "folder", label: m.import_column_folder(), summary: folder ?? undefined },
+        { id: "mode", label: m.import_copy_or_move(), summary: modeLabel, optional: true },
+        { id: "preview", label: m.import_preview() },
+      ],
+      gate,
+    ),
+    current: progress.current,
+    ordered: true,
+    proceed:
+      progress.finishedOn !== null
+        ? null
+        : terminal
+          ? {
+              id: "import",
+              label: m.stepflow_import(),
+              run: () => {
+                record("finished")()
+                setImported(folder)
+              },
+            }
+          : { id: "proceed", label: m.stepflow_proceed(), run: record("finished") },
+    next: null,
+    skip: { id: "skip", label: m.stepflow_skip(), run: record("skipped") },
+    reopen: (stepId) => ({ id: `reopen-${stepId}`, label: m.stepflow_reopen_step(), run: () => setProgress((p) => reopen(p, IMPORT_STEPS, stepId)) }),
+  }
+  const title = m.calibration_import_masters()
+  return (
+    <ComponentSection components={["FormDialog"]} description={m.catalogue_stepflow_dialog_caption()} level={3}>
+      <Specimen caption={m.catalogue_stepflow_dialog_case()}>
+        <FormDialog
+          title={title}
+          steps={flow}
+          onOpenChange={(open) => {
+            if (open) restart()
+          }}
+          trigger={
+            <Button variant="outline" size="sm">
+              {actionLabel({ id: "import-masters", label: title, opensDialog: true, run: () => undefined })}
+            </Button>
+          }
+        >
+          {({ step, editable }) => (
+            <>
+              <BodyState editable={editable} />
+              {step === "folder" ? <PathField label={m.import_column_folder()} mode="folder" value={folder} onChange={setFolder} disabled={!editable} /> : null}
+              {step === "mode" ? <SegmentedField label={m.import_copy_or_move()} value={mode} options={modes} onChange={setMode} disabled={!editable} /> : null}
+              {step === "preview" ? (
+                <KeyValueList
+                  items={[
+                    { label: m.import_column_folder(), value: folder ?? m.fields_path_none_folder(), mono: true },
+                    { label: m.import_copy_or_move(), value: modeLabel },
+                  ]}
+                />
+              ) : null}
+            </>
+          )}
+        </FormDialog>
+        {imported ? (
+          <span className="flex items-center gap-1.5 text-xs" data-dialog-outcome="">
+            <span className="text-muted-foreground">{m.import_imported()}</span>
+            <span className="font-mono">{imported}</span>
+          </span>
+        ) : null}
+      </Specimen>
+    </ComponentSection>
+  )
+}
+
 export function StepFlowCatalogue() {
   const m = useMessages()
   return (
@@ -488,6 +592,7 @@ export function StepFlowCatalogue() {
         <RunDemo />
         <WrapUpDemo />
         <ReviewDemo />
+        <DialogDemo />
       </div>
     </ComponentSection>
   )

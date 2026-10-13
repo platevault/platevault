@@ -8210,6 +8210,7 @@
   "stepflow_close_project": "Close project",
   "stepflow_close_project_title": "Close {name}?",
   "stepflow_finish_review": "Finish review",
+  "stepflow_import": "Import",
   "stepflow_finished_on": "Finished {date}",
   "stepflow_closed_on": "Closed {date}",
   "stepflow_step_todo": "{step}, to do",
@@ -8302,5 +8303,7 @@
       }
     }
   ],
-  "catalogue_stepflow_queue_empty": "No other session needs review"
+  "catalogue_stepflow_queue_empty": "No other session needs review",
+  "catalogue_stepflow_dialog_caption": "Steps are local buttons. Proceed opens the next step in the same dialog; only Import, on the last step, closes it. An earlier step reopens; a later one is read-only.",
+  "catalogue_stepflow_dialog_case": "steps in a dialog"
 }

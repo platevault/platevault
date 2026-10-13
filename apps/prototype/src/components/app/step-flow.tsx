@@ -10,26 +10,29 @@
  *   Each step is a link (`flow.linkFor`) or, for local steps, a button
  *   (`onSelect`), so every step is a Tab stop.
  * - `StepFooter`: one fixed-height row at the bottom of the step pane. The
- *   viewed step's summary sits on the left. On the right go Skip and Proceed
- *   for the current step, Reopen step for an earlier one, or the read-only
- *   refusal for a later one. Proceed is the only primary (F1).
+ *   viewed step's summary sits on the left. On the right go a ghost Skip and
+ *   Proceed for the current step, Reopen step for an earlier one, or the
+ *   read-only refusal for a later one. Proceed is the only primary (F1).
  * - `stepAccess`: the order rule (C3, F5, F7) in one place. Pages read it to
  *   make a step body read-only.
- * - `flowProceed` / `flowSkip`: the footer's two actions, for a host that
- *   renders its own footer (FormDialog's DialogFooter). An unmet gate on the
- *   current step makes Proceed focusable-disabled with its BlockersPreview.
+ * - `flowProceed` / `flowSkip`: the current step's two actions. An unmet gate
+ *   makes Proceed focusable-disabled with its BlockersPreview.
  * - `useFlowActions`: the same two actions, opening `flow.next` once they
- *   succeed. The footer uses it, and so does the ⌘↩ shortcut.
+ *   succeed. The ⌘↩ shortcut uses it.
+ * - `useStepActions`: the actions of the step on screen, by the order rule.
+ *   StepFooter and FormDialog `steps` (form-dialog.tsx) both show these, so a
+ *   page and a dialog act the same on every step (F9).
  */
 import { Circle, CircleArrowRight, CircleCheck, CircleSlash, Lock, type LucideIcon, OctagonX, RotateCcw } from "lucide-react"
 import { type FocusEvent, type ReactNode, useId, useLayoutEffect, useRef } from "react"
 import { useMessages } from "@/app/preferences"
 import { CurrentLink, useFollowLink } from "@/app/run-ui"
+import { Button } from "@/components/ui/button"
 import type { StepLink } from "@/domain/derive"
 import { m, type Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
-import { ActionButton, useAction } from "./actions"
+import { ActionButton, actionLabel, useAction } from "./actions"
 import type { Action, FlowStep, StepFlow } from "./contracts"
 import { BlockersPreview } from "./previews"
 import { Refusal } from "./refusal"
@@ -132,6 +135,30 @@ export function useFlowActions(flow: StepFlow): { proceed: Action | null; skip: 
   if (!next) return { proceed, skip }
   const opening = (action: Action): Action => ({ ...action, run: () => onSuccess(action.run(), () => follow(next)) })
   return { proceed: proceed && opening(proceed), skip: skip && opening(skip) }
+}
+
+/** The actions of the step on screen. */
+export interface StepActions {
+  access: StepAccess
+  /** The current step's Proceed, opening `flow.next` on success; null on any other step and once the flow is finished. */
+  proceed: Action | null
+  /** The current step's Skip, on an optional step only. */
+  skip?: Action
+  /** Reopen step, on an earlier step of an unfinished ordered flow. */
+  reopen?: Action
+}
+
+/**
+ * What the step on screen offers (C3, F5): the current step its Proceed and
+ * Skip; an earlier step of an ordered flow Reopen step; any other step
+ * nothing, since it is read-only or belongs to a flow without order.
+ */
+export function useStepActions(flow: StepFlow, viewing: string): StepActions {
+  const { proceed, skip } = useFlowActions(flow)
+  const access = stepAccess(flow, viewing)
+  if (access === "current") return { access, proceed, skip }
+  if (access === "reopenable" && flow.reopen) return { access, proceed: null, reopen: { ...flow.reopen(viewing), kind: "standard" } }
+  return { access, proceed: null }
 }
 
 // ---------------------------------------------------------------------------
@@ -285,8 +312,7 @@ export function StepFooter({ flow, viewing = flow.current }: StepFooterProps) {
   // The footer's last action (Proceed, or Reopen step), else the summary, which then reads the outcome.
   const focusTarget = () => [...(root.current?.querySelectorAll<HTMLElement>("[data-action]") ?? [])].at(-1) ?? summary.current
   const runner = useAction({ focusAfterConfirm: focusTarget })
-  const { proceed, skip } = useFlowActions(flow)
-  const access = stepAccess(flow, viewing)
+  const { access, proceed, skip, reopen } = useStepActions(flow, viewing)
   const step = stepOf(flow, viewing)
   const current = stepOf(flow, flow.current)
 
@@ -305,15 +331,20 @@ export function StepFooter({ flow, viewing = flow.current }: StepFooterProps) {
     actions = (
       <>
         {runner.feedback ?? (gate && proceed ? <Refusal standing action={m.actions_blocked({ action: proceed.label })} reason={gate.reason} blockers={gate.blockers} /> : null)}
-        {skip ? <ActionButton action={skip} runner={runner} /> : null}
+        {/* Skip is quiet: a ghost button in the footer's skip slot, never primary (F4). */}
+        {skip ? (
+          <Button variant="ghost" size="sm" data-action={skip.id} disabled={runner.pending !== null} onClick={() => runner.run(skip)}>
+            {actionLabel(skip)}
+          </Button>
+        ) : null}
         {proceed ? <ActionButton action={proceed} runner={runner} /> : null}
       </>
     )
-  } else if (access === "reopenable" && flow.reopen) {
+  } else if (reopen) {
     actions = (
       <>
         {runner.feedback}
-        <ActionButton action={{ ...flow.reopen(viewing), kind: "standard" }} runner={runner} />
+        <ActionButton action={reopen} runner={runner} />
       </>
     )
   } else if (access === "locked" && current) {
