@@ -31,6 +31,11 @@ export const COMPOSITION_ENFORCED = [
     area: { dir: "v5/e-targets-plan-settings", depth: 0 },
     files: ["src/features/v5/e-targets-plan-settings/{calibration,calibration-process,dialogs,calibration-model}.{ts,tsx}"],
   },
+  {
+    unit: "P7 Targets",
+    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
+    files: ["src/features/v5/e-targets-plan-settings/{targets,target,planned-tools,moon-limits,targets-model,parts,targets-presets}.{ts,tsx}"],
+  },
 ]
 
 export default defineConfig(
@@ -56,12 +61,12 @@ export default defineConfig(
       "alm/no-js-plural": "error",
     },
   },
-  ...COMPOSITION_ENFORCED.map(({ area, files }) => ({
-    files,
-    ignores: I18N_IGNORES,
-    rules: {
+  ...COMPOSITION_ENFORCED.map(({ area, files }) => {
+    /** @type {import("eslint").Linter.RulesRecord} */
+    const rules = {
       "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX],
       "no-restricted-imports": ["error", { patterns: areaImportPatterns(area) }],
-    },
-  })),
+    }
+    return { files, ignores: I18N_IGNORES, rules }
+  }),
 )
