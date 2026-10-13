@@ -1,27 +1,24 @@
 /**
- * Add a location (J19 S2-S4, flow A1-A2): the simulated folder picker first,
- * then a short dialog to confirm the path, display name and role. Registering
- * records access and indexing intent only (LIB-FR-02); nothing is indexed until
- * the user starts indexing.
+ * Add a location (J19 S2-S4, flow A1-A2): the folder chooser first, then a
+ * short dialog to confirm the folder, display name and role. Registering
+ * records access and indexing intent only (LIB-FR-02); nothing is indexed
+ * until the user starts indexing.
  */
-import { useId, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ActionError } from "@/components/app/feedback"
+import type { Action } from "@/components/app/contracts"
+import { PathField, SelectField, TextField } from "@/components/app/fields"
 import { FolderPicker } from "@/components/app/folder-picker"
-import { PathText } from "@/components/app/data"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FormDialog } from "@/components/app/form-dialog"
 import type { LocationId, LocationRole } from "@/domain/types"
 import { store, useStore } from "@/store/core"
-import { type LocationErrors, registerLocation, ROLE_COPY, ROLE_ORDER, suggestDisplayName, validateLocation } from "../lib/locations"
-import { FieldMessage, focusFirstInvalid, TextField } from "./form-field"
+import { registerLocation, ROLE_COPY, ROLE_ORDER, suggestDisplayName, validateLocation } from "../lib/locations"
+import { blockedByErrors } from "./form-blockers"
 
 export interface AddLocationFlowProps {
   /** Role chosen by the button that opened the flow; `null` lets the user pick it. */
   role: LocationRole | null
-  /** `true` opens the folder picker. The parent resets it through `onClose`. */
+  /** `true` opens the folder chooser. The parent resets it through `onClose`. */
   open: boolean
   onClose: () => void
   onAdded?: (id: LocationId) => void
@@ -36,55 +33,51 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
   const [step, setStep] = useState<"pick" | "details">("pick")
   const [path, setPath] = useState("")
   const [displayName, setDisplayName] = useState("")
+  const [nameTouched, setNameTouched] = useState(false)
   const [chosenRole, setChosenRole] = useState<LocationRole>(role ?? "captures")
-  const [errors, setErrors] = useState<LocationErrors>({})
-  const [writeError, setWriteError] = useState<string | null>(null)
-  const form = useRef<HTMLFormElement>(null)
-  const ids = { name: useId(), role: useId(), path: useId() }
   // Open where the user registered the last folder, as an OS dialog remembers it.
   const lastParent = useStore((s) => {
     const latest = Object.values(s.catalog.locations).sort((a, b) => b.registeredAt.localeCompare(a.registeredAt))[0]
     return latest ? latest.path.slice(0, latest.path.lastIndexOf("/")) : null
   })
   const effectiveRole = role ?? chosenRole
-  // The picker reports Choose and then closes itself; that close must not end the flow.
+  // The chooser reports Choose and then closes itself; that close must not end the flow.
   const justChose = useRef(false)
 
   function close() {
     setStep("pick")
     setPath("")
-    setErrors({})
-    setWriteError(null)
+    setNameTouched(false)
     onClose()
+  }
+
+  function pathChanged(next: string) {
+    setPath(next)
+    if (!nameTouched) setDisplayName(suggestDisplayName(store.getState().disk, next))
   }
 
   function chose(next: string) {
     justChose.current = true
-    setPath(next)
-    setDisplayName(suggestDisplayName(store.getState().disk, next))
-    setErrors({})
-    setWriteError(null)
+    pathChanged(next)
     setStep("details")
   }
 
-  function submit() {
-    const draft = { path, displayName, role: effectiveRole }
-    const found = validateLocation(store.getState().catalog, draft)
-    setErrors(found)
-    if (found.path || found.displayName) {
-      focusFirstInvalid(form.current)
-      return
-    }
-    const { result, id } = registerLocation(draft, href)
-    if (!result.ok || !id) {
-      setWriteError(result.ok ? m.location_not_saved() : result.message)
-      return
-    }
-    close()
-    onAdded?.(id)
+  const draft = { path, displayName, role: effectiveRole }
+  const errors = validateLocation(store.getState().catalog, draft)
+  const label = m.storage_add_location()
+  const confirm: Action = {
+    id: "add-location",
+    label,
+    kind: "primary",
+    unavailable: blockedByErrors(label, errors),
+    run: () => {
+      const { result, id } = registerLocation(draft, href)
+      if (!result.ok) return result
+      if (!id) return { ok: false, reason: "write-failed", message: m.location_not_saved() }
+      onAdded?.(id)
+      return result
+    },
   }
-
-  const copy = ROLE_COPY[effectiveRole]
 
   return (
     <>
@@ -100,81 +93,34 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
           if (path) setStep("details")
           else close()
         }}
-        title={role ? copy.picker : m.import_choose_a_folder()}
+        title={role ? ROLE_COPY[effectiveRole].picker : m.import_choose_a_folder()}
         initialPath={path || lastParent}
         onChoose={chose}
       />
-      <Dialog open={open && step === "details"} onOpenChange={(next) => !next && close()}>
-        <DialogContent className="sm:max-w-lg">
-          <form
-            ref={form}
-            noValidate
-            className="grid gap-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              submit()
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>{m.storage_add_location()}</DialogTitle>
-            </DialogHeader>
-            <Field className="gap-1.5" data-invalid={errors.path ? true : undefined}>
-              <span id={ids.path} className="text-sm font-medium">
-                {m.location_folder()}
-              </span>
-              <div
-                role="group"
-                aria-labelledby={ids.path}
-                aria-describedby={errors.path ? `${ids.path}-error` : undefined}
-                aria-invalid={errors.path ? true : undefined}
-                tabIndex={errors.path ? -1 : undefined}
-                // Focused only after a failed submit; draw the app's focus outline so the invalid field is located visually too.
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 focus:outline-2 focus:outline-offset-2 focus:outline-ring focus:outline-solid aria-invalid:border-destructive"
-              >
-                <PathText path={path} className="min-w-0 flex-1" />
-                <Button type="button" size="sm" variant="ghost" onClick={() => setStep("pick")}>
-                  {m.location_change()}
-                </Button>
-              </div>
-              <FieldMessage id={`${ids.path}-error`} message={errors.path} />
-            </Field>
-            <TextField
-              id={ids.name}
-              label={m.location_display_name()}
-              value={displayName}
-              onChange={setDisplayName}
-              error={errors.displayName}
-              autoFocus
-            />
-            {role ? null : (
-              <Field className="gap-1.5">
-                <FieldLabel id={ids.role}>{m.location_role()}</FieldLabel>
-                <Select
-                  items={roles.map((r) => ({ value: r, label: ROLE_COPY[r].title }))}
-                  value={chosenRole}
-                  onValueChange={(value) => setChosenRole(value as LocationRole)}
-                >
-                  <SelectTrigger aria-labelledby={ids.role} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {ROLE_COPY[r].title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-            {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
-            <DialogFooter>
-              <DialogClose render={<Button type="button" variant="outline" />}>{m.verb_cancel()}</DialogClose>
-              <Button type="submit">{m.storage_add_location()}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <FormDialog open={open && step === "details"} onOpenChange={(next) => !next && close()} title={label} confirm={confirm}>
+        <PathField
+          mode="folder"
+          label={m.location_folder()}
+          value={path || null}
+          onChange={pathChanged}
+          pickerTitle={ROLE_COPY[effectiveRole].picker}
+          initialPath={path || lastParent}
+          error={errors.path}
+        />
+        <TextField
+          label={m.location_display_name()}
+          value={displayName}
+          onChange={(value) => {
+            setDisplayName(value)
+            setNameTouched(true)
+          }}
+          error={nameTouched ? errors.displayName : undefined}
+          autoFocus
+        />
+        {role ? null : (
+          <SelectField label={m.location_role()} value={chosenRole} options={roles.map((r) => ({ value: r, label: ROLE_COPY[r].title }))} onChange={setChosenRole} />
+        )}
+      </FormDialog>
     </>
   )
 }

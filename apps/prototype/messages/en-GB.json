@@ -45,7 +45,7 @@
   "settings_target_lookup": "Target lookup",
   "settings_goal_templates": "Goal templates",
   "settings_applications": "Applications",
-  "settings_about": "About this prototype",
+  "settings_about": "About",
   "shell_skip_to_content": "Skip to main content",
   "shell_sidebar": "Sidebar",
   "shell_sidebar_show": "Show sidebar",
@@ -7495,6 +7495,101 @@
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
   "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "catalogue_feedback_save_state_desc": "One settings section's save state, beside its heading: Saved after a committed write; Not saved with Retry, which runs the same write again; Changed elsewhere. Nothing before the first save.",
+  "catalogue_feedback_save_succeeds": "write succeeds",
+  "catalogue_feedback_save_fails": "write fails, then Retry succeeds",
+  "catalogue_feedback_save_stale": "stale write",
+  "about_licence": "Licence",
+  "help_shortcuts": "Shortcuts",
+  "help_tips": "Tips",
+  "help_guide": "Guide",
+  "help_tip_marks": "Marks",
+  "help_tip_marks_value": "P, X and U mark the frame in the library, in every Project. Reject for this Project only stays in this Project.",
+  "help_tip_auto_advance": "Auto-advance",
+  "help_tip_auto_advance_value": "P, X or U moves on to the next frame.",
+  "help_tip_pan": "Pan",
+  "help_tip_pan_value": "Drag or use the arrow keys. Shift pans further.",
+  "help_tip_threshold": "Threshold",
+  "help_tip_threshold_value": "Click a plot to set the threshold. Selecting frames never changes their quality.",
+  "help_tip_duplicates": "Duplicates",
+  "help_tip_duplicates_value": "Library locations only; capture cards are never scanned. The copy in the earliest-registered location stays.",
+  "help_tip_default_site_value": "Plan and Planning use it unless you pick another. Reminders move with it.",
+  "help_tip_site_headers": "Sites from headers",
+  "help_tip_site_headers_value": "SITELAT and SITELONG that no saved site covers.",
+  "settings_lookup_result": "Result",
+  "settings_lookup_online_title": "Online lookup",
+  "site_list": "Sites",
+  "site_elevation_value": "{metres} m",
+  "site_degrees_value": "{degrees}°",
+  "location_registered": "Registered",
+  "location_retired_on": "Retired",
+  "location_retire_title": "Retire {name}?",
+  "location_col_name": "Name",
+  "location_col_state": "State",
+  "location_col_indexed": "Indexed",
+  "location_col_frames": "Frames",
+  "location_col_size": "Size",
+  "location_col_free": "Disk free",
+  "location_offline_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location offline",
+        "countPlural=*": "{n} locations offline"
+      }
+    }
+  ],
+  "location_list_title": "Registered folders",
+  "location_default_archive": "Default archive",
+  "duplicates_moving": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Moving {n} copy to the OS Trash",
+        "countPlural=*": "Moving {n} copies to the OS Trash"
+      }
+    }
+  ],
+  "verb_show": "Show",
+  "duplicates_col_outcome": "Outcome",
+  "duplicates_cant_trash": "Can't trash · {reason}",
+  "duplicates_scan_running": "Scan running",
+  "duplicates_none_movable": "Every frame keeps a copy that can't go",
+  "duplicates_found": "Found",
+  "duplicates_scan": "Scan",
+  "duplicates_movable": "Can move",
+  "duplicates_open_blocker": "Open: {reason}",
+  "apps_detected": "Detected",
+  "apps_other": "Other application",
+  "apps_none_detected": "None detected",
+  "apps_col_application": "Application",
+  "apps_col_profile": "Profile",
+  "apps_col_path": "Path",
+  "apps_col_detected": "Detected",
+  "apps_col_arguments": "Arguments",
+  "apps_arguments_title": "Arguments for {name}",
+  "apps_add": "Add application",
+  "apps_name": "Name",
+  "apps_change_action": "Change",
+  "apps_locate_action": "Locate",
+  "apps_edit_arguments": "Edit arguments",
+  "apps_remove": "Remove application",
+  "apps_list_title": "Profiles",
+  "apps_none": "No applications",
   "calibration_process_gone": "Unknown process",
   "calibration_processes": "Processes",
   "calibration_on": "On",

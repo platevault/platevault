@@ -12,6 +12,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
+/** @deprecated Use `TextField` from `@/components/app/fields` (plan §3.3 P6). W3b moves its last importers off it and W4 deletes this file (plan §7.5). */
 export interface TextFieldProps {
   id: string
   label: string
@@ -83,19 +84,28 @@ export function FieldMessage({ id, message }: { id: string; message?: string }) 
   )
 }
 
-/** After a failed submit, move focus to the first invalid control so its message is announced. */
+/**
+ * After a failed submit, move focus to the first invalid control so its message is announced.
+ * @deprecated FormDialog keeps its action unavailable while fields are invalid (plan §3.3 P6, P8). W3b moves its last importers off it and W4 deletes this file (plan §7.5).
+ */
 export function focusFirstInvalid(form: HTMLElement | null) {
   requestAnimationFrame(() => form?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
 }
 
-/** Parses a decimal number typed by the user; empty input is `null`, junk is `NaN`. */
+/**
+ * Parses a decimal number typed by the user; empty input is `null`, junk is `NaN`.
+ * @deprecated `NumberField` from `@/components/app/fields` hands over numbers (plan §3.3 P6). W3b moves its last importers off it and W4 deletes this file (plan §7.5).
+ */
 export function parseNumber(value: string): number | null {
   const trimmed = value.trim().replace(",", ".").replace("−", "-")
   if (!trimmed) return null
   return /^[-+]?\d*\.?\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN
 }
 
-/** "Ha, H-alpha" → ["Ha", "H-alpha"], trimmed and de-duplicated. */
+/**
+ * "Ha, H-alpha" → ["Ha", "H-alpha"], trimmed and de-duplicated.
+ * @deprecated W3b moves its last importers off it and W4 deletes this file (plan §7.5).
+ */
 export function parseAliases(value: string): string[] {
   return [...new Set(value.split(",").map((part) => part.trim()).filter(Boolean))]
 }

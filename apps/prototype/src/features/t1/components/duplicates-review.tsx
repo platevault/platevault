@@ -1,55 +1,52 @@
 /**
- * Duplicates review (P-STO2), a sheet over Settings › Locations opened by
- * `?duplicates=review` (the ⚠ duplicates issue links there). It lists the
- * byte-identical copies the latest automatic duplicate scan found that are
- * still live, one group per frame. The scan covers registered library
- * locations only, never a capture card (Round 6), and the copy to keep is
- * preselected (`keepChoice`: the one in the earliest-registered location; a
- * copy that cannot go to the OS Trash is kept, so the others can). A copy
- * linked by an unfinished run's view can't go (`trashBlock`, P-TRASH2) and
- * leads to that run. Per group: Move others to Trash; for every group: Move
- * all to Trash. Each move is confirmed with its count and bytes, plus the
- * kept-view links that go with it, and runs through the shared OS Trash
- * engine: nothing is deleted permanently, and the issue clears as the copies
- * leave. Scan again lives here, the scan otherwise runs by itself.
+ * Duplicates review (P-STO2; plan §4b), a large FormDialog opened by
+ * `?duplicates=review` over Settings › Locations (the duplicates issue links
+ * there). One table lists the byte-identical copies the latest automatic
+ * duplicate scan found that are still live, grouped by frame. The scan
+ * covers registered library locations only, never a capture card (Round 6),
+ * and the copy to keep is preselected (`keepChoice`: the one in the
+ * earliest-registered location; a copy that cannot go to the OS Trash is
+ * kept, so the others can). A copy linked by an unfinished run's view can't
+ * go (`trashBlock`, P-TRASH2) and its row leads to that run. Per frame: Move
+ * others to Trash, confirmed with its files; for every frame: Move all to
+ * Trash. Both run through the shared OS Trash engine, so nothing is deleted
+ * permanently, and the issue clears as the copies leave.
  */
+import { useNavigate } from "@tanstack/react-router"
 import { Copy } from "lucide-react"
-import { useId, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { Box } from "@/components/app/box"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { EmptyState } from "@/components/app/feedback"
+import { ActionBar, ActionButton } from "@/components/app/actions"
+import type { Action, Column, FileRow, MenuItem } from "@/components/app/contracts"
+import { KeyValueList, PathText } from "@/components/app/data"
+import { DataTable } from "@/components/app/data-table"
+import { EmptyState, toast } from "@/components/app/feedback"
+import { FormDialog } from "@/components/app/form-dialog"
 import { OperationPanel } from "@/components/app/operation-panel"
-import { Pill } from "@/components/app/pill"
-import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
-import { HelpTip } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { unitCount } from "@/domain/labels"
 import { type DuplicateGroup, duplicateFindings, keepChoice, keptViewLinks, runningDuplicateScan, runViewLinks, type TrashBlock, trashBlock } from "@/domain/storage"
-import type { AssetCopy, Catalog, OperationId } from "@/domain/types"
+import type { AssetCopy, Catalog } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { cleanUpDuplicates, startDuplicateScan } from "@/store/actions/storage"
 import { useStore } from "@/store/core"
 
-export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="right" className="gap-0 p-0 data-[side=right]:w-[46rem] data-[side=right]:max-w-[94vw] data-[side=right]:sm:max-w-[94vw]" data-duplicates-review>
-        {open ? <ReviewBody /> : null}
-      </SheetContent>
-    </Sheet>
-  )
+/** One copy of one frame, as a table row. */
+interface CopyRow {
+  id: string
+  group: DuplicateGroup
+  copy: AssetCopy
+  kept: boolean
+  /** Why this leaving copy can't go to the OS Trash; null when it can, or when it is the kept copy. */
+  block: TrashBlock | null
 }
 
 function locationName(catalog: Catalog, copy: AssetCopy): string {
   return catalog.locations[copy.locationId]?.displayName ?? copy.path
 }
 
-function ReviewBody() {
+export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: () => void }) {
   const m = useMessages()
+  const navigate = useNavigate()
   const findings = useStore(duplicateFindings)
   const scanning = useStore((s) => runningDuplicateScan(s.operations))
   const catalog = useStore((s) => s.catalog)
@@ -57,9 +54,6 @@ function ReviewBody() {
   const links = useMemo(() => runViewLinks(catalog, disk), [catalog, disk])
   // The copy to keep per frame, once the user picks one; the preselection otherwise.
   const [picked, setPicked] = useState<Record<string, string>>({})
-  const [confirming, setConfirming] = useState<DuplicateGroup[] | null>(null)
-  const [trashOperationId, setTrashOperationId] = useState<OperationId | null>(null)
-  const [refused, setRefused] = useState<RefusalProps | null>(null)
   const groups = findings?.groups ?? []
 
   const keptPath = (g: DuplicateGroup) => (g.copies.some((c) => c.path === picked[g.assetId]) ? picked[g.assetId]! : keepChoice(disk, links, g).path)
@@ -67,165 +61,99 @@ function ReviewBody() {
   // Copies of one frame move together or not at all (D-W57): one copy that cannot go holds back its group.
   const blocked = (g: DuplicateGroup) => leaving(g).map((c) => trashBlock(disk, links, c.path)).find((b) => b !== null) ?? null
   const movable = groups.filter((g) => blocked(g) === null)
+  const movableCopies = movable.reduce((n, g) => n + leaving(g).length, 0)
 
-  function scanAgain() {
-    setRefused(refusalFrom(startDuplicateScan(), m.storage_scan_again()))
+  const rows: CopyRow[] = groups.flatMap((g) =>
+    g.copies.map((copy) => {
+      const kept = copy.path === keptPath(g)
+      return { id: copy.path, group: g, copy, kept, block: kept ? null : trashBlock(disk, links, copy.path) }
+    }),
+  )
+
+  /** Moves the leaving copies of `chosen` to the OS Trash as one background operation. */
+  function move(chosen: DuplicateGroup[]) {
+    const copies = chosen.reduce((n, g) => n + leaving(g).length, 0)
+    cleanUpDuplicates(chosen.map((g) => ({ assetId: g.assetId, paths: leaving(g).map((c) => c.path) })))
+    toast({ message: m.duplicates_moving({ count: copies, n: formatCount(copies) }), action: { id: "show", label: m.verb_show(), run: () => void navigate({ to: "/activity" }) } })
   }
 
-  const confirmed = confirming ?? []
-  const confirmCopies = confirmed.reduce((n, g) => n + leaving(g).length, 0)
-  const confirmBytes = confirmed.reduce((n, g) => n + leaving(g).length * g.sizeBytes, 0)
-  const confirmLinks = keptViewLinks(
-    links,
-    confirmed.flatMap((g) => leaving(g).map((c) => c.path)),
-  ).length
-  const byLocation = new Map<string, { copies: number; bytes: number }>()
-  for (const g of confirmed) {
-    for (const copy of leaving(g)) {
-      const name = locationName(catalog, copy)
-      const sum = byLocation.get(name) ?? { copies: 0, bytes: 0 }
-      byLocation.set(name, { copies: sum.copies + 1, bytes: sum.bytes + g.sizeBytes })
+  function moveOthers(g: DuplicateGroup): Action {
+    const files: FileRow[] = leaving(g).map((c) => ({ file: g.fileName, from: c.path, action: "trash", size: g.sizeBytes }))
+    const viewLinks = keptViewLinks(
+      links,
+      files.map((f) => f.from),
+    ).length
+    const block = blocked(g)
+    return {
+      id: "move-others",
+      label: m.duplicates_move_others(),
+      kind: "destructive",
+      opensDialog: true,
+      unavailable: block ? { action: m.trash_cant(), reason: say(m, block.reason), blockers: [] } : undefined,
+      confirm: {
+        title: m.wrapup_offer_duplicates({ count: files.length, n: formatCount(files.length), size: formatBytes(files.length * g.sizeBytes) }),
+        summary: [m.duplicates_frames_keep_copy({ count: 1, n: formatCount(1) }), ...(viewLinks > 0 ? [m.trash_also_removes_links({ count: viewLinks })] : [])].join(" · "),
+        groups: [{ label: locationName(catalog, leaving(g)[0]!), rows: files, defaultOpen: true }],
+        confirm: { label: m.run_move_to_trash(), kind: "destructive" },
+      },
+      run: () => move([g]),
     }
   }
 
+  function keep(row: CopyRow): Action {
+    return { id: "keep", label: m.duplicates_keep_copy(), run: () => setPicked((prev) => ({ ...prev, [row.group.assetId]: row.copy.path })) }
+  }
+
+  const columns: Column<CopyRow>[] = [
+    { id: "location", header: m.location_label(), rowHeader: true, sortValue: (r) => locationName(catalog, r.copy), cell: (r) => locationName(catalog, r.copy) },
+    { id: "path", header: m.location_path(), truncate: true, sortValue: (r) => r.copy.path, cell: (r) => <PathText path={r.copy.path} truncate /> },
+    {
+      id: "status",
+      header: m.duplicates_col_outcome(),
+      sortValue: (r) => (r.kept ? 0 : r.block ? 2 : 1),
+      cell: (r) => (r.kept ? m.status_keep() : r.block ? m.duplicates_cant_trash({ reason: say(m, r.block.reason) }) : m.session_os_trash()),
+    },
+  ]
+
+  const scanAgain: Action = { id: "scan-again", label: m.storage_scan_again(), unavailable: scanning ? { action: m.storage_scan_again(), reason: m.duplicates_scan_running(), blockers: [] } : undefined, run: () => startDuplicateScan() }
+  const moveAll: Action = {
+    id: "move-all",
+    label: m.duplicates_move_all(),
+    kind: "destructive",
+    unavailable: movable.length === 0 ? { action: m.trash_cant(), reason: m.duplicates_none_movable(), blockers: [] } : undefined,
+    run: () => move(movable),
+  }
+
   return (
-    <>
-      <SheetHeader className="flex-row flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator py-2 pr-12" data-chrome>
-        <SheetTitle>{m.storage_duplicates()}</SheetTitle>
-        <HelpTip>{m.duplicates_scope_help()}</HelpTip>
-        {findings && findings.copies > 0 ? <Pill tone="warning">{m.issue_duplicates({ count: findings.copies, bytes: formatBytes(findings.bytes) })}</Pill> : null}
-        {findings ? <span className="text-xs text-muted-foreground tabular-nums">{m.duplicates_scanned({ date: formatDateTime(findings.scan.settledAt ?? findings.scan.createdAt) })}</span> : null}
-        <Button size="sm" variant="outline" className="ml-auto" disabled={scanning !== null} onClick={scanAgain} data-scan-again>
-          {m.storage_scan_again()}
-        </Button>
-      </SheetHeader>
-
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 text-sm">
-        {refused ? <Refusal {...refused} /> : null}
-        {trashOperationId ? <OperationPanel operationId={trashOperationId} itemLimit={4} /> : null}
-        {scanning ? <OperationPanel operationId={scanning.id} itemLimit={0} /> : null}
-        {groups.length === 0 ? (
-          scanning ? null : (
-            <EmptyState
-              icon={Copy}
-              title={findings ? m.storage_no_duplicates() : m.storage_not_scanned()}
-              action={
-                <Button size="sm" variant="outline" onClick={scanAgain}>
-                  {m.storage_scan_again()}
-                </Button>
-              }
-            />
-          )
-        ) : (
-          groups.map((g) => (
-            <DuplicateGroupBox
-              key={g.assetId}
-              group={g}
-              catalog={catalog}
-              keptPath={keptPath(g)}
-              blocked={blocked(g)}
-              onKeep={(path) => setPicked((prev) => ({ ...prev, [g.assetId]: path }))}
-              onMove={() => setConfirming([g])}
-              refusalOf={(copy) => trashBlock(disk, links, copy.path)}
-            />
-          ))
-        )}
-      </div>
-
-      {groups.length > 0 ? (
-        <SheetFooter className="flex-row items-center justify-end gap-2 border-t border-separator">
-          <span className="mr-auto text-xs text-muted-foreground tabular-nums">{m.location_copies_count({ count: movable.reduce((n, g) => n + leaving(g).length, 0), n: formatCount(movable.reduce((n, g) => n + leaving(g).length, 0)) })}</span>
-          <Button disabled={movable.length === 0} onClick={() => setConfirming(movable)} data-move-all>
-            {m.duplicates_move_all()}
-          </Button>
-        </SheetFooter>
-      ) : null}
-
-      <ConfirmDialog
-        open={confirming !== null}
-        onOpenChange={(next) => !next && setConfirming(null)}
-        title={m.wrapup_offer_duplicates({ count: confirmCopies, n: formatCount(confirmCopies), size: formatBytes(confirmBytes) })}
-        description={null}
-        changes={[
-          ...[...byLocation.entries()].map(([location, sum]) => m.duplicates_change_location({ location, files: say(m, unitCount("files", sum.copies)), bytes: formatBytes(sum.bytes) })),
-          ...(confirmLinks > 0 ? [m.trash_also_removes_links({ count: confirmLinks })] : []),
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={m.storage_duplicates()} size="lg" confirm={moveAll}>
+      <KeyValueList
+        items={[
+          { label: m.duplicates_found(), value: findings ? m.issue_duplicates({ count: findings.copies, bytes: formatBytes(findings.bytes) }) : m.storage_not_scanned() },
+          { label: m.duplicates_scan(), value: findings ? m.duplicates_scanned({ date: formatDateTime(findings.scan.settledAt ?? findings.scan.createdAt) }) : m.storage_not_scanned() },
+          { label: m.duplicates_movable(), value: m.location_copies_count({ count: movableCopies, n: formatCount(movableCopies) }) },
         ]}
-        unchanged={[m.duplicates_frames_keep_copy({ count: confirmed.length, n: formatCount(confirmed.length) })]}
-        confirmLabel={m.run_move_to_trash()}
-        tone="destructive"
-        onConfirm={() => {
-          if (!confirming) return
-          setTrashOperationId(cleanUpDuplicates(confirming.map((g) => ({ assetId: g.assetId, paths: leaving(g).map((c) => c.path) }))))
-          setConfirming(null)
-        }}
       />
-    </>
-  )
-}
-
-interface DuplicateGroupBoxProps {
-  group: DuplicateGroup
-  catalog: Catalog
-  keptPath: string
-  /** Why the copies leaving cannot go, or null. */
-  blocked: TrashBlock | null
-  onKeep: (path: string) => void
-  onMove: () => void
-  refusalOf: (copy: AssetCopy) => TrashBlock | null
-}
-
-/** One frame's byte-identical copies: Keep this copy (a radio per copy), then Move others to Trash. */
-function DuplicateGroupBox({ group, catalog, keptPath, blocked, onKeep, onMove, refusalOf }: DuplicateGroupBoxProps) {
-  const m = useMessages()
-  const id = useId()
-  return (
-    <Box
-      title={
-        <span className="inline-flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-mono text-foreground" title={group.fileName}>
-            {group.fileName}
-          </span>
-          <span className="font-normal tabular-nums">{formatBytes(group.sizeBytes)}</span>
-        </span>
-      }
-      actions={
-        <Button size="xs" variant="outline" disabled={blocked !== null} title={blocked ? say(m, blocked.reason) : undefined} onClick={onMove} data-move-others={group.assetId}>
-          {m.duplicates_move_others()}
-        </Button>
-      }
-      flush
-    >
-      <RadioGroup aria-label={m.duplicates_keep_copy()} value={keptPath} onValueChange={(value) => onKeep(String(value))} className="gap-0" data-duplicate-group={group.assetId}>
-        {group.copies.map((copy, index) => {
-          const kept = copy.path === keptPath
-          const refusal = kept ? null : refusalOf(copy)
-          const itemId = `${id}-${index}`
-          return (
-            <div key={copy.path} className="flex min-h-(--row-h) min-w-0 items-center gap-2 border-b border-border/50 px-3 py-(--row-py) last:border-0" data-copy-kept={kept || undefined}>
-              <RadioGroupItem id={itemId} value={copy.path} />
-              <label htmlFor={itemId} className="flex min-w-0 flex-1 items-center gap-2">
-                <Pill tone="muted">{locationName(catalog, copy)}</Pill>
-                <span className="truncate font-mono text-xs text-muted-foreground" title={copy.path}>
-                  {copy.path}
-                </span>
-              </label>
-              {kept ? (
-                <Pill tone="success">{m.status_keep()}</Pill>
-              ) : refusal?.link ? (
-                <Pill tone="warning" link={refusal.link} className="shrink-0">
-                  {m.trash_cant()} · {say(m, refusal.reason)} ▸
-                </Pill>
-              ) : refusal ? (
-                <span className="shrink-0 text-xs text-warning">
-                  {m.trash_cant()} · {say(m, refusal.reason)}
-                </span>
-              ) : (
-                <span className="shrink-0 text-xs text-muted-foreground">{m.session_os_trash()}</span>
-              )}
-            </div>
-          )
-        })}
-      </RadioGroup>
-    </Box>
+      <ActionBar actions={[scanAgain]} />
+      {scanning ? <OperationPanel operationId={scanning.id} itemLimit={0} /> : null}
+      {groups.length === 0 ? (
+        scanning ? null : <EmptyState icon={Copy} title={findings ? m.storage_no_duplicates() : m.storage_not_scanned()} action={<ActionButton action={scanAgain} />} />
+      ) : (
+        <DataTable<CopyRow>
+          label={m.storage_duplicates()}
+          rows={rows}
+          columns={columns}
+          getRowId={(r) => r.id}
+          rowLabel={(r) => `${r.group.fileName} · ${locationName(catalog, r.copy)}`}
+          groups={{ key: (r) => r.group.assetId, label: (_key, groupRows) => (groupRows[0] ? `${groupRows[0].group.fileName} · ${formatBytes(groupRows[0].group.sizeBytes)}` : "") }}
+          primaryRowAction={(r) => (r.kept ? null : keep(r))}
+          rowActions={(r): MenuItem[] => [
+            ...(r.kept ? [] : [keep(r)]),
+            ...(r.block?.link ? [{ id: "open-blocker", label: m.duplicates_open_blocker({ reason: say(m, r.block.reason) }), run: () => void navigate({ to: r.block!.link!.to as never, params: r.block!.link!.params as never, search: r.block!.link!.search as never }) }] : []),
+            { separator: true },
+            moveOthers(r.group),
+          ]}
+        />
+      )}
+    </FormDialog>
   )
 }

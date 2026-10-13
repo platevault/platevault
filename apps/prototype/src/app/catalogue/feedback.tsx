@@ -6,10 +6,37 @@
  */
 import { Archive, Trash2 } from "lucide-react"
 import { useMessages } from "@/app/preferences"
-import { ActionError, NoticeSlot, toast } from "@/components/app/feedback"
+import { ActionError, NoticeSlot, toast, useSaveState } from "@/components/app/feedback"
 import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
+import type { CommitResult } from "@/store/core"
 import { ComponentSection, Specimen } from "./specimen"
+
+/** One section's save: the button runs `write` through the hook, and the hook's indicator follows it. */
+function SaveSpecimen({ caption, write }: { caption: string; write: () => CommitResult }) {
+  const m = useMessages()
+  const { save, indicator } = useSaveState()
+  return (
+    <Specimen caption={caption}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" variant="outline" onClick={() => save(write)}>
+          {m.settings_save()}
+        </Button>
+        {indicator}
+      </div>
+    </Specimen>
+  )
+}
+
+/** Fails the first write, so Retry shows; the retried write succeeds. */
+function failOnce(message: string): () => CommitResult {
+  let failed = false
+  return () => {
+    if (failed) return { ok: true }
+    failed = true
+    return { ok: false, reason: "write-failed", message }
+  }
+}
 
 export function FeedbackCatalogue() {
   const m = useMessages()
@@ -62,6 +89,14 @@ export function FeedbackCatalogue() {
           <Specimen caption="null">
             <NoticeSlot notice={null} />
           </Specimen>
+        </div>
+      </ComponentSection>
+
+      <ComponentSection components={["useSaveState"]} description={m.catalogue_feedback_save_state_desc()}>
+        <div className="space-y-3">
+          <SaveSpecimen caption={m.catalogue_feedback_save_succeeds()} write={() => ({ ok: true })} />
+          <SaveSpecimen caption={m.catalogue_feedback_save_fails()} write={failOnce(m.store_not_saved_message({ label: m.ds_target_correction() }))} />
+          <SaveSpecimen caption={m.catalogue_feedback_save_stale()} write={() => ({ ok: false, reason: "stale", message: m.ds_save_stale({ from: 3, to: 4 }) })} />
         </div>
       </ComponentSection>
 

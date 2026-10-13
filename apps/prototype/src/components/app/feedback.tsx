@@ -13,7 +13,7 @@
  * Nothing is inserted above a list.
  */
 import { CircleAlert, CircleHelp, Info, type LucideIcon, OctagonX, RotateCw, TriangleAlert, Unplug } from "lucide-react"
-import { type ReactNode, useEffect, useRef } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { showToast } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import type { CommitResult } from "@/store/core"
 import type { Action } from "./contracts"
 import { StatusBadge, type StatusValue, statusMeta } from "./status"
 
@@ -236,6 +237,39 @@ export function SaveState({ state, onRetry, onReview, message }: SaveStateProps)
       {message && (state === "failed" || state === "stale") ? <p className="w-full text-xs text-muted-foreground">{message}</p> : null}
     </div>
   )
+}
+
+/** What `useSaveState` shows: the last write's outcome, and how to retry a failed one. */
+interface SaveOutcome {
+  state: StatusValue<"save">
+  message?: string
+  retry?: () => void
+}
+
+export interface SaveStateHook {
+  /** Runs one durable write (a store action) and records its outcome; returns the write's result. */
+  save: (write: () => CommitResult | void) => CommitResult | void
+  /** The section's `SaveState`; null before the first save, since nothing has been written from here yet. */
+  indicator: ReactNode
+}
+
+/**
+ * The save state of one settings section (D08): every change saves through
+ * its store action at once. A write that succeeds reads "Saved"; a failed or
+ * refused write stays "Not saved" with Retry, which runs the same write
+ * again; a stale write reads "Changed elsewhere" with the commit message.
+ */
+export function useSaveState(): SaveStateHook {
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null)
+  function save(write: () => CommitResult | void): CommitResult | void {
+    const result = write()
+    if (!result || result.ok) setOutcome({ state: "saved" })
+    else if (result.reason === "stale") setOutcome({ state: "stale", message: result.message })
+    else setOutcome({ state: "failed", message: result.message, retry: () => void save(write) })
+    return result
+  }
+  const indicator = outcome ? <SaveState state={outcome.state} message={outcome.message} onRetry={outcome.retry} /> : null
+  return { save, indicator }
 }
 
 /**

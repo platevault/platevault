@@ -37,7 +37,8 @@ export function SettingsSection({ title, actions, level = 3, children }: Setting
   const id = useId()
   return (
     <Section title={title} actions={actions} level={level} id={id}>
-      <div className="divide-y divide-border rounded-md border border-border">
+      {/* The rows lay out by this list's width, not the window's: label beside control from 28rem (@md), stacked below, so a narrow pane never squeezes the control to nothing. */}
+      <div className="@container divide-y divide-border rounded-md border border-border">
         <InSettingsSection.Provider value>{children}</InSettingsSection.Provider>
       </div>
     </Section>
@@ -73,9 +74,9 @@ export function SettingsRow({ label, help, children }: SettingsRowProps) {
       aria-labelledby={labelsControl ? undefined : ids.labelId}
       aria-describedby={labelsControl ? undefined : ids.helpId}
       data-settings-row
-      className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-4"
+      className="flex flex-col gap-2 px-3 py-2.5 @md:flex-row @md:items-start @md:gap-4"
     >
-      <div className="grid min-w-0 content-start gap-1 sm:w-48 sm:shrink-0 sm:pt-1.5">
+      <div className="grid min-w-0 content-start gap-1 @md:w-48 @md:shrink-0 @md:pt-1.5">
         {labelsControl ? (
           <Label id={ids.labelId} htmlFor={ids.controlId} className="leading-snug">
             {label}
