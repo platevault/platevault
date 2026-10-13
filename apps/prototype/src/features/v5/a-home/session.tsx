@@ -1,367 +1,249 @@
 /**
- * S12 Session detail (slice A): one library light session.
- *
- * Two views in the same header (`?view=review` switches): Detail, with the
- * Target and rig evidence (Confirm Target / Confirm rig; a session imported
- * as Unclassified offers File into Target instead, P-IMP2, and a confirmed
- * Target the pointing disagrees with reads a mismatch warning), the Projects
- * that consider it a candidate, the runs that use it, its frames and
- * headers, and Add to Project (also adds the rig, D-W59) or Create Project
- * prefilled; and Review, which mounts slice D's `SessionReview` as the
- * full-height review region (library marks only, PIX-FR-18).
+ * S12 Session detail (slice A) as a DetailPage: one library light session's
+ * facts. Intake (Target → Rig → Review) is the session's StepPage
+ * (`?step=`, session-intake.tsx), opened by Review frames; this page shows
+ * where intake stands, the Projects that consider the session a candidate,
+ * the runs that use it, its frames and its header values (each with where
+ * it came from).
  *
  * A raw calibration session is not a library session: it reads where its
  * calibration process stands (P-CAL3) and links to the Calibration library.
  */
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { Eye, FolderOpen } from "lucide-react"
-import { useState } from "react"
+import { useNavigate, useParams } from "@tanstack/react-router"
+import { Copy, Eye, ListChecks } from "lucide-react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
-import { GateLabel, stepName } from "@/app/run-ui"
-import { Box } from "@/components/app/box"
-import { EvidenceList, KeyValueList, PathText } from "@/components/app/data"
-import { type Column, DataTable } from "@/components/app/data-table"
-import { Notice } from "@/components/app/feedback"
-import { PageBody, PageHeader } from "@/components/app/page"
-import { CountBadge, Pill } from "@/components/app/pill"
-import type { MenuEntry } from "@/components/app/row-menu"
-import { StatusBadge, type Tone } from "@/components/app/status"
+import { useFollowLink } from "@/app/run-ui"
+import { BoxTable } from "@/components/app/box"
+import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import { KeyValueList, PathText } from "@/components/app/data"
+import type { PageNotice } from "@/components/app/feedback"
+import { Pill } from "@/components/app/pill"
+import { StatusBadge } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { DetailPage } from "@/components/templates/detail-page"
 import { CALIBRATION_STEP_NAME, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
-import { formatHours, rigName, runPipeline, runStepLink, sessionRigId, sessionTargetId } from "@/domain/derive"
-import { pointingAgainst } from "@/domain/indexing"
+import { formatHours, rigName, runFlowState, runStepLink, sessionIntakeEntry, sessionIntakeLink, type SessionReadiness, sessionRigId, sessionTargetId } from "@/domain/derive"
+import { STEP_NAME } from "@/domain/labels"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
 import { sessionLongLabel } from "@/domain/membership"
-import type { Asset, Session } from "@/domain/types"
-import { formatCount, formatDateTime, formatDec, formatDegrees, formatExposure, formatNight, formatRa } from "@/lib/format"
+import type { Asset, Run, Session } from "@/domain/types"
+import { formatCount, formatDateTime, formatDec, formatExposure, formatNight, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import type { SearchParams } from "@/routes"
-import { filedUnclassified } from "@/store/actions/library"
 import { type PrototypeState, useStore } from "@/store/core"
-import { SessionReview } from "../d-review/review"
 import { typeLabel } from "./import-model"
-import { AddToProjectMenu, type AddedNotice, ConfirmRigControl, ConfirmTargetControl, CreateProjectButton, FileIntoTargetControl } from "./parts"
-import { sessionReviewSearch, sessionRows } from "./session-model"
+import { addToProjectItems } from "./parts"
+import { type SessionRow, sessionRows } from "./session-model"
 
 export function SessionPage() {
   const { sessionId = "" } = useParams({ strict: false }) as { sessionId?: string }
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const m = useMessages()
   if (!session) return <MissingRecord title={m.session_missing_title()} backTo="/sessions" backLabel={m.session_open_sessions()} />
-  // Keyed by session: the Confirm Target / rig choices start from this session's own value, never the previous session's.
-  return session.imageType === "light" ? <SessionDetail key={sessionId} sessionId={sessionId} /> : <CalibrationSession session={session} />
+  return session.imageType === "light" ? <SessionDetail session={session} /> : <CalibrationSession session={session} />
 }
 
-function processPill(m: Messages, status: ProcessStatus): { label: string; tone: Tone } {
-  const pill: Record<ProcessStatus, { label: () => string; tone: Tone }> = {
-    "awaiting-stack": { label: m.import_route_stack, tone: "info" },
-    stacking: { label: m.session_process_stacking, tone: "info" },
-    importing: { label: m.session_process_importing, tone: "info" },
-    "trashing-raws": { label: m.session_process_trashing, tone: "info" },
-    failed: { label: m.status_failed, tone: "danger" },
-    done: { label: m.session_process_done, tone: "success" },
-  }
-  const { label, tone } = pill[status]
-  return { label: label(), tone }
+const PROCESS_STATUS: Record<ProcessStatus, { label: (m: Messages) => string; tone: "info" | "danger" | "success" }> = {
+  "awaiting-stack": { label: (m) => m.import_route_stack(), tone: "info" },
+  stacking: { label: (m) => m.session_process_stacking(), tone: "info" },
+  importing: { label: (m) => m.session_process_importing(), tone: "info" },
+  "trashing-raws": { label: (m) => m.session_process_trashing(), tone: "info" },
+  failed: { label: (m) => m.status_failed(), tone: "danger" },
+  done: { label: (m) => m.session_process_done(), tone: "success" },
 }
 
 /** Raw calibration frames are input to a calibration process, never a library session (P-CAL3). */
 function CalibrationSession({ session }: { session: Session }) {
+  const m = useMessages()
+  const navigate = useNavigate()
   const view = useStore((s) => {
     const process = processForSession(s.catalog, session.id)
     return process ? processView(s.catalog, process) : null
   })
-  const m = useMessages()
-  const pill = view ? processPill(m, view.status) : null
+  const status = view ? PROCESS_STATUS[view.status] : null
+  const items = [
+    { label: m.session_observing_night(), value: formatNight(session.night, true) },
+    { label: m.session_frame_type(), value: typeLabel(m, session.imageType) },
+    { label: m.sessions_column_frames(), value: view ? m.session_raw_frames({ count: view.frames, frames: formatCount(view.frames) }) : m.session_raw_frames({ count: session.assetIds.length, frames: formatCount(session.assetIds.length) }) },
+    ...(view ? [{ label: m.session_process(), value: say(m, view.name) }] : []),
+    ...(view?.failure ? [{ label: m.status_failed(), value: `${m.session_step_failed({ step: say(m, CALIBRATION_STEP_NAME[view.failure.step]) })} · ${say(m, view.failure.reason)}` }] : []),
+  ]
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title={sessionLongLabel(m, session)}
-        eyebrow={<Link to="/sessions">{m.nav_sessions()}</Link>}
-        meta={pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <Pill tone="muted">{m.status_role_calibration()}</Pill>}
-        actions={
-          <Button size="sm" render={<Link to="/calibration" />}>
-            {m.session_open_calibration()}
-          </Button>
-        }
-      />
-      <PageBody>
-        <Notice
-          tone="info"
-          title={
-            view
-              ? `${say(m, view.name)} · ${m.session_raw_frames({ count: view.frames, frames: formatCount(view.frames) })}`
-              : m.session_raw_frames({ count: session.assetIds.length, frames: formatCount(session.assetIds.length) })
-          }
-        >
-          {view?.failure ? `${m.session_step_failed({ step: say(m, CALIBRATION_STEP_NAME[view.failure.step]) })} · ${say(m, view.failure.reason)}` : null}
-        </Notice>
-      </PageBody>
-    </div>
+    <DetailPage
+      path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
+      title={sessionLongLabel(m, session)}
+      status={status ? <Pill tone={status.tone}>{status.label(m)}</Pill> : <Pill tone="muted">{m.status_role_calibration()}</Pill>}
+      actions={[{ id: "open-calibration", label: m.session_open_calibration(), run: () => void navigate({ to: "/calibration" }) }]}
+      sections={[{ id: "calibration", title: m.status_role_calibration(), content: <KeyValueList items={items} columns={2} /> }]}
+    />
   )
 }
 
-function SessionDetail({ sessionId }: { sessionId: string }) {
+function SessionDetail({ session }: { session: Session }) {
+  const m = useMessages()
+  const follow = useFollowLink()
   const state = useStore((s) => s)
-  const search = useSearch({ strict: false }) as SearchParams
-  const navigate = useNavigate()
-  const m = useMessages()
+  const row = sessionRows(state).find((r) => r.session.id === session.id)
+  if (!row) return null
   const { catalog } = state
-  const session = catalog.sessions[sessionId]!
-  const row = sessionRows(state).find((r) => r.session.id === sessionId)
-  const [notice, setNotice] = useState<AddedNotice | null>(null)
-  const reviewing = search.view === "review" && !row?.trashed
-  const unreviewed = row?.unreviewed ?? 0
-  const frames = row?.frames ?? session.assetIds.length
-  const setView = (view: string) =>
-    void navigate({ to: "/sessions/$sessionId", params: { sessionId }, search: view === "review" ? sessionReviewSearch(unreviewed) : {}, replace: false })
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title={sessionLongLabel(m, session)}
-        eyebrow={<Link to="/sessions">{m.nav_sessions()}</Link>}
-        description={`${session.objectLabel ? m.session_object({ name: session.objectLabel }) : m.session_no_object()} · ${m.session_frame_count({ count: frames, frames: formatCount(frames) })} · ${formatHours(row?.seconds ?? 0)}`}
-        meta={
-          row?.trashed ? (
-            <StatusBadge kind="quality" value="unusable" label={m.status_trashed()} />
-          ) : row?.needsTarget ? (
-            <StatusBadge kind="association" value="needs-review" label={m.sessions_filter_needs_target()} />
-          ) : row?.notInProject ? (
-            <StatusBadge kind="association" value="unresolved" label={m.sessions_filter_not_in_project()} />
-          ) : null
-        }
-        actions={
-          <>
-            {row && !row.trashed && !reviewing ? (
-              <>
-                <CreateProjectButton sessionId={sessionId} />
-                {row.notInProject || row.candidateOf.length > 0 ? <AddToProjectMenu sessionId={sessionId} onAdded={setNotice} /> : null}
-              </>
-            ) : null}
-            {row && !row.trashed ? (
-              <ToggleGroup aria-label={m.session_view()} size="sm" variant="outline" spacing={0} value={[reviewing ? "review" : "detail"]} onValueChange={(value) => value[0] && setView(value[0] as string)}>
-                <ToggleGroupItem value="detail">{m.session_detail()}</ToggleGroupItem>
-                <ToggleGroupItem value="review" className="gap-1.5" data-session-review-tab>
-                  {m.step_review()}
-                  {unreviewed > 0 ? <CountBadge count={unreviewed} tone="warning" label={m.session_frames_unreviewed({ count: unreviewed, frames: formatCount(unreviewed) })} /> : null}
-                </ToggleGroupItem>
-              </ToggleGroup>
-            ) : null}
-          </>
-        }
-      />
-      {reviewing ? (
-        <SessionReview sessionId={sessionId} />
-      ) : (
-        <DetailBody state={state} session={session} row={row} notice={notice} onDismiss={() => setNotice(null)} onReview={() => setView("review")} />
-      )}
-    </div>
-  )
-}
-
-function DetailBody({
-  state,
-  session,
-  row,
-  notice,
-  onDismiss,
-  onReview,
-}: {
-  state: PrototypeState
-  session: Session
-  row: ReturnType<typeof sessionRows>[number] | undefined
-  notice: AddedNotice | null
-  onDismiss: () => void
-  onReview: () => void
-}) {
-  const { catalog } = state
-  const m = useMessages()
-  const [targetNote, setTargetNote] = useState<string | null>(null)
-  const targetId = sessionTargetId(session)
-  const target = targetId ? catalog.targets[targetId] : undefined
-  // Confirming a Target the pointing disagrees with is allowed (round 6); the box says so.
-  const against = target && session.target.status === "confirmed" ? pointingAgainst(target, session.pointing) : null
-  const unclassified = !row?.trashed && filedUnclassified(state, session)
-  const rigId = sessionRigId(session)
   const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is Asset => a !== undefined)
+  const review: Action = { id: "review", label: m.session_review_frames(), icon: ListChecks, kind: row.queued ? "primary" : "standard", run: () => follow(sessionIntakeEntry(catalog, session)) }
+  const menu: MenuItem[] = row.trashed ? [] : addToProjectItems(m, catalog, session.id)
+  const notice: PageNotice | null = row.trashed ? { tone: "warning", title: m.session_in_os_trash() } : null
+  const hours = formatHours(row.seconds)
+
   return (
-    <PageBody className="space-y-4">
-      {row?.trashed ? <Notice tone="warning" title={m.session_in_os_trash()} /> : null}
-      {notice ? (
-        <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={onDismiss}>{m.session_dismiss()}</Button>}>
-          {notice.note}
-        </Notice>
-      ) : null}
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Box
-          id="target"
-          level={2}
-          title={m.sessions_column_target()}
-          actions={
-            <span className="flex items-center gap-1.5">
-              {targetId ? <Pill tone={session.target.status === "confirmed" ? "success" : "info"}>{target?.name ?? targetId}</Pill> : <Pill tone="warning">{unclassified ? m.import_type_unclassified() : m.session_unsettled()}</Pill>}
-              {target && against && !against.inside ? (
-                <span className="flex items-center gap-0.5" data-target-mismatch>
-                  <Pill tone="warning">{m.session_pointing_mismatch()}</Pill>
-                  <NoteMarker label={m.session_pointing_mismatch()} rows={[{ label: m.evidence_source_pointing(), value: m.indexing_pointing_from_centre({ angle: formatDegrees(against.separationDeg), name: target.name }) }]} />
-                </span>
-              ) : null}
-            </span>
-          }
-        >
-          <div className="space-y-2">
-            {session.target.evidence.length > 0 ? <EvidenceList evidence={session.target.evidence} caption={m.session_target_evidence({ name: sessionLongLabel(m, session) })} /> : <p className="text-xs text-muted-foreground">{m.session_no_evidence()}</p>}
-            {row?.trashed ? null : unclassified ? <FileIntoTargetControl sessionId={session.id} onDone={setTargetNote} /> : <ConfirmTargetControl sessionId={session.id} onDone={setTargetNote} />}
-            {targetNote ? <p className="text-xs text-success" role="status">{targetNote}</p> : null}
-          </div>
-        </Box>
-        <Box id="rig" level={2} title={m.sessions_column_rig()} actions={rigId ? <Pill tone={session.equipment.status === "confirmed" ? "success" : "info"}>{rigName(m, catalog, rigId)}</Pill> : <Pill tone="warning">{m.session_unsettled()}</Pill>}>
-          <div className="space-y-2">
-            <EvidenceList evidence={session.equipment.evidence} caption={m.session_rig_evidence({ name: sessionLongLabel(m, session) })} />
-            {!row?.trashed ? <ConfirmRigControl sessionId={session.id} /> : null}
-          </div>
-        </Box>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Box
-          id="projects"
-          level={2}
-          flush
-          title={
-            <span className="flex items-center gap-1.5">
-              {m.nav_projects()} <CountBadge count={row?.candidateOf.length ?? 0} label={m.home_project_count({ count: row?.candidateOf.length ?? 0 })} />
-            </span>
-          }
-        >
-          {row && row.candidateOf.length > 0 ? (
-            <ul className="divide-y divide-border/60 text-sm">
-              {row.candidateOf.map(({ project, candidate }) => (
-                <li key={project.id} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-2 px-3 py-(--row-py)">
-                  <Link to="/projects/$projectId" params={{ projectId: project.id }} className="font-medium underline-offset-2 hover:underline">
-                    {project.name}
-                  </Link>
-                  <span className="flex items-center gap-1.5">
-                    {project.state === "done" ? <Pill tone="muted">{m.status_done()}</Pill> : null}
-                    <Pill tone="info">{m.status_candidate()}</Pill>
-                    <NoteMarker label={m.session_why_candidate({ name: project.name })} rows={[{ label: m.session_reason(), value: say(m, candidate.reason) }]} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="px-3 py-2 text-sm text-muted-foreground">{row?.needsTarget ? m.session_needs_target_first() : m.session_none()}</p>
-          )}
-        </Box>
-        <Box
-          id="runs"
-          level={2}
-          flush
-          title={
-            <span className="flex items-center gap-1.5">
-              {m.common_runs()} <CountBadge count={row?.runs.length ?? 0} label={m.sessions_run_count({ count: row?.runs.length ?? 0 })} />
-            </span>
-          }
-        >
-          <RunsList state={state} runs={row?.runs ?? []} />
-        </Box>
-      </div>
-
-      <Box
-        id="frames"
-        level={2}
-        flush
-        title={
-          <span className="flex items-center gap-1.5">
-            {m.sessions_column_frames()} <CountBadge count={assets.length} label={m.session_frame_count({ count: assets.length, frames: formatCount(assets.length) })} />
-          </span>
-        }
-        actions={
-          !row?.trashed ? (
-            <Button size="sm" variant="outline" onClick={onReview}>
-              <Eye aria-hidden="true" data-icon="inline-start" />
-              {m.verb_review()}
-            </Button>
-          ) : null
-        }
-      >
-        <FramesTable state={state} assets={assets} sessionId={session.id} reviewable={!row?.trashed} />
-      </Box>
-
-      <Box id="evidence" level={2} title={m.session_headers()}>
-        <Metadata state={state} session={session} />
-      </Box>
-    </PageBody>
+    <DetailPage
+      path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
+      title={sessionLongLabel(m, session)}
+      status={<ReadinessBadge readiness={row.readiness} unreviewed={row.unreviewed} trashed={row.trashed} />}
+      actions={row.trashed ? [] : [review]}
+      menu={{ label: m.session_label(), items: menu }}
+      notice={notice}
+      sections={[
+        { id: "intake", title: m.session_intake(), content: <IntakeFacts row={row} />, actions: row.trashed ? [] : intakeActions(m, follow, session) },
+        { id: "projects", title: m.nav_projects(), count: row.candidateOf.length, flush: true, content: <ProjectsTable row={row} /> },
+        { id: "runs", title: m.common_runs(), count: row.runs.length, flush: true, content: <RunsTable state={state} runs={row.runs} /> },
+        { id: "frames", title: m.sessions_column_frames(), count: assets.length, flush: true, content: <FramesTable state={state} assets={assets} session={session} reviewable={!row.trashed} /> },
+        { id: "headers", title: m.session_headers(), content: <Metadata state={state} session={session} hours={hours} /> },
+      ]}
+    />
   )
 }
 
-function RunsList({ state, runs }: { state: PrototypeState; runs: ReturnType<typeof sessionRows>[number]["runs"] }) {
+function intakeActions(m: Messages, follow: (link: ReturnType<typeof sessionIntakeLink>) => void, session: Session): Action[] {
+  return [
+    { id: "intake-target", label: m.session_choose_target(), run: () => follow(sessionIntakeLink(session.id, "target")) },
+    { id: "intake-rig", label: m.session_choose_rig(), run: () => follow(sessionIntakeLink(session.id, "rig")) },
+  ]
+}
+
+/** Where intake stands, as one status word: Ready, or the step it still needs (C10). The Sessions list, the detail and the intake show the same. */
+export function ReadinessBadge({ readiness, unreviewed, trashed }: { readiness: SessionReadiness; unreviewed: number; trashed: boolean }) {
   const m = useMessages()
-  if (runs.length === 0) return <p className="px-3 py-2 text-sm text-muted-foreground">{m.home_none()}</p>
+  if (trashed) return <StatusBadge kind="run" value="trashed" />
+  if (readiness === "ready") return <StatusBadge kind="gate" value="ready" />
+  const label = readiness === "needs-target" ? m.sessions_filter_needs_target() : readiness === "needs-rig" ? m.sessions_rig_needs_review() : m.flow_frames_unreviewed({ count: unreviewed })
+  return <StatusBadge kind="gate" value="review" label={label} />
+}
+
+function IntakeFacts({ row }: { row: SessionRow }) {
+  const m = useMessages()
+  const { session } = row
+  const targetSettled = sessionTargetId(session) !== null
+  const rigSettled = sessionRigId(session) !== null
   return (
-    <ul className="divide-y divide-border/60 text-sm">
-      {runs.map((run) => {
-        const pipeline = runPipeline(state, run)
-        const link = runStepLink(run, pipeline.current.id)
-        const project = state.catalog.projects[run.projectId]
-        return (
-          <li key={run.id} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-2 px-3 py-(--row-py)">
-            <span className="flex min-w-0 items-center gap-2">
-              <Link to={link.to as never} params={link.params as never} className="font-medium underline-offset-2 hover:underline">
-                {run.name}
-              </Link>
-              <span className="truncate text-xs text-muted-foreground">
-                {project?.name} · {rigName(m, state.catalog, run.rigId)}
-              </span>
-              {run.draft ? <Pill tone="muted">{m.status_draft()}</Pill> : null}
-            </span>
-            <GateLabel state={pipeline.current.state} label={`${stepName(m, pipeline.current.id)} · ${say(m, pipeline.current.status)}`} />
-          </li>
-        )
-      })}
-    </ul>
+    <KeyValueList
+      columns={2}
+      items={[
+        { label: m.sessions_column_target(), value: targetSettled ? (row.targetName ?? "–") : <StatusBadge kind="association" value={session.target.status} label={m.sessions_filter_needs_target()} /> },
+        { label: m.session_target_status(), value: <StatusBadge kind="association" value={session.target.status} /> },
+        { label: m.sessions_column_rig(), value: rigSettled && row.rig ? say(m, row.rig) : <StatusBadge kind="association" value={session.equipment.status} label={m.sessions_rig_needs_review()} /> },
+        { label: m.session_rig_status(), value: <StatusBadge kind="association" value={session.equipment.status} /> },
+        { label: m.step_review(), value: row.unreviewed > 0 ? m.flow_frames_unreviewed({ count: row.unreviewed }) : <StatusBadge kind="gate" value="ready" /> },
+        { label: m.session_header_label(), value: session.objectLabel ?? m.session_none() },
+      ]}
+    />
   )
 }
 
-function FramesTable({ state, assets, sessionId, reviewable }: { state: PrototypeState; assets: Asset[]; sessionId: string; reviewable: boolean }) {
-  const navigate = useNavigate()
+function ProjectsTable({ row }: { row: SessionRow }) {
   const m = useMessages()
+  const follow = useFollowLink()
+  type Item = SessionRow["candidateOf"][number]
+  const open = (item: Item) => follow({ to: "/projects/$projectId", params: { projectId: item.project.id } })
+  const columns: Column<Item>[] = [
+    { id: "project", header: m.project_noun(), rowHeader: true, truncate: true, sortValue: (c) => c.project.name, cell: (c) => c.project.name },
+    { id: "state", header: m.session_project_state(), sortValue: (c) => c.project.state, cell: (c) => <StatusBadge kind="project" value={c.project.state === "open" ? "open" : "done"} /> },
+    { id: "reason", header: m.session_reason(), truncate: true, sortValue: (c) => say(m, c.candidate.reason), cell: (c) => say(m, c.candidate.reason) },
+  ]
+  return (
+    <BoxTable
+      label={m.nav_projects()}
+      rows={row.candidateOf}
+      columns={columns}
+      getRowId={(c) => c.project.id}
+      rowLabel={(c) => c.project.name}
+      rowActions={(c) => [{ id: "open", label: m.verb_open(), icon: Eye, run: () => open(c) }]}
+      onRowClick={open}
+      empty={row.needsTarget ? m.session_needs_target_first() : m.session_none()}
+    />
+  )
+}
+
+function RunsTable({ state, runs }: { state: PrototypeState; runs: Run[] }) {
+  const m = useMessages()
+  const follow = useFollowLink()
+  const flows = new Map(runs.map((run) => [run.id, runFlowState(state, run)]))
+  const open = (run: Run) => follow(runStepLink(run, flows.get(run.id)!.current))
+  const step = (run: Run) => say(m, STEP_NAME[flows.get(run.id)!.current])
+  const summary = (run: Run) => {
+    const flow = flows.get(run.id)!
+    const current = flow.steps.find((s) => s.id === flow.current)
+    return current?.summary ? say(m, current.summary) : "–"
+  }
+  const columns: Column<Run>[] = [
+    { id: "run", header: m.session_run(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
+    { id: "project", header: m.project_noun(), truncate: true, sortValue: (r) => state.catalog.projects[r.projectId]?.name ?? "", cell: (r) => state.catalog.projects[r.projectId]?.name ?? "–" },
+    { id: "rig", header: m.sessions_column_rig(), truncate: true, sortValue: (r) => rigName(m, state.catalog, r.rigId), cell: (r) => rigName(m, state.catalog, r.rigId) },
+    { id: "step", header: m.session_run_step(), sortValue: step, cell: step },
+    { id: "status", header: m.session_run_status(), truncate: true, sortValue: summary, cell: (r) => (r.draft ? `${m.status_draft()} · ${summary(r)}` : summary(r)) },
+  ]
+  return (
+    <BoxTable
+      label={m.common_runs()}
+      rows={runs}
+      columns={columns}
+      getRowId={(r) => r.id}
+      rowLabel={(r) => r.name}
+      rowActions={(r) => [{ id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) }]}
+      onRowClick={open}
+      empty={m.session_none()}
+    />
+  )
+}
+
+function FramesTable({ state, assets, session, reviewable }: { state: PrototypeState; assets: Asset[]; session: Session; reviewable: boolean }) {
+  const m = useMessages()
+  const follow = useFollowLink()
+  const quality = (a: Asset) => (a.trashed ? "trashed" : qualityApplicability(a) === "applicable" ? a.quality.value : qualityApplicability(a))
   const columns: Column<Asset>[] = [
-    { id: "file", header: m.session_column_file(), rowHeader: true, truncate: true, sortValue: (a) => a.fileName, cell: (a) => <span title={a.copies[0]?.path}>{a.fileName}</span> },
+    { id: "file", header: m.session_column_file(), rowHeader: true, truncate: true, sortValue: (a) => a.fileName, cell: (a) => a.fileName },
     {
       id: "quality",
       header: m.session_column_quality(),
-      sortValue: (a) => a.quality.value,
+      sortValue: quality,
       cell: (a) => {
-        if (a.trashed) return <StatusBadge kind="quality" value="unusable" label={m.status_trashed()} />
+        if (a.trashed) return <StatusBadge kind="run" value="trashed" />
         const applies = qualityApplicability(a)
         return applies === "applicable" ? <StatusBadge kind="quality" value={a.quality.value} /> : <StatusBadge kind="quality" value={applies} />
       },
     },
-    { id: "exposure", header: m.session_column_exposure(), align: "right", cell: (a) => formatExposure(a.observed.exposureS) },
+    { id: "exposure", header: m.session_column_exposure(), align: "right", sortValue: (a) => a.observed.exposureS, cell: (a) => formatExposure(a.observed.exposureS) },
     {
       id: "availability",
       header: m.session_column_availability(),
-      cell: (a) => (a.trashed ? <Pill tone="muted">{m.session_os_trash()}</Pill> : <StatusBadge kind="availability" value={assetAvailability(state.disk, state.catalog, a)} />),
+      sortValue: (a) => (a.trashed ? "trash" : assetAvailability(state.disk, state.catalog, a)),
+      cell: (a) => (a.trashed ? m.session_os_trash() : <StatusBadge kind="availability" value={assetAvailability(state.disk, state.catalog, a)} />),
     },
-    { id: "copies", header: m.session_column_copies(), align: "right", sortValue: (a) => a.copies.length, cell: (a) => <span className="tabular-nums" title={a.copies.map((c) => c.path).join("\n")}>{a.copies.length}</span> },
-    { id: "sha", header: m.session_column_sha(), cell: (a) => <span className="font-mono text-xs text-muted-foreground">{a.sha256.slice(0, 12)}…</span> },
+    { id: "copies", header: m.session_column_copies(), align: "right", sortValue: (a) => a.copies.length, cell: (a) => formatCount(a.copies.length) },
+    { id: "sha", header: m.session_column_sha(), truncate: true, sortValue: (a) => a.sha256, cell: (a) => `${a.sha256.slice(0, 12)}…` },
   ]
-  const menu = (a: Asset): MenuEntry[] => [
-    { heading: a.fileName },
-    ...(reviewable && !a.trashed ? [{ label: m.verb_review(), icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId }, search: { view: "review", assetId: a.id } }) }] : []),
-    { label: m.session_copy_path(), icon: FolderOpen, disabled: a.copies.length === 0, onSelect: () => void navigator.clipboard?.writeText(a.copies[0]?.path ?? "") },
+  const items = (a: Asset): MenuItem[] => [
+    ...(reviewable && !a.trashed ? [{ id: "review", label: m.verb_review(), icon: Eye, run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: session.id }, search: { step: "review", assetId: a.id } }) }] : []),
+    {
+      id: "copy-path",
+      label: m.session_copy_path(),
+      icon: Copy,
+      unavailable: a.copies.length === 0 ? { action: m.session_copy_path(), reason: m.session_no_copies(), blockers: [] } : undefined,
+      run: () => void navigator.clipboard?.writeText(a.copies[0]?.path ?? ""),
+    },
   ]
-  return <DataTable label={m.sessions_column_frames()} rows={assets} columns={columns} getRowId={(a) => a.id} initialSort={{ columnId: "file", direction: "asc" }} className="rounded-none border-0" contextMenu={menu} />
+  return <BoxTable label={m.sessions_column_frames()} rows={assets} columns={columns} getRowId={(a) => a.id} rowLabel={(a) => a.fileName} rowActions={items} initialSort={{ columnId: "file", direction: "asc" }} />
 }
 
 /** Header values; where each came from sits in its note. */
-function Metadata({ state, session }: { state: PrototypeState; session: Session }) {
+function Metadata({ state, session, hours }: { state: PrototypeState; session: Session; hours: string }) {
   const { catalog } = state
   const m = useMessages()
   const first = catalog.assets[session.assetIds[0] ?? ""]
@@ -370,8 +252,7 @@ function Metadata({ state, session }: { state: PrototypeState; session: Session 
   const locations = [...new Set(session.assetIds.flatMap((id) => catalog.assets[id]?.copies.map((c) => c.locationId) ?? []))].map((id) => catalog.locations[id]?.displayName ?? id)
   const sourced = (value: string, source: string) => (
     <>
-      {value}
-      <NoteMarker label={m.session_source_of({ value })} rows={[{ label: m.evidence_column_source(), value: source }]} className="ml-1" />
+      {value} <NoteMarker label={m.session_source_of({ value })} rows={[{ label: m.evidence_column_source(), value: source }]} />
     </>
   )
   const fromHeader = (keyword: string) => m.session_header_source({ keyword })
@@ -385,6 +266,7 @@ function Metadata({ state, session }: { state: PrototypeState; session: Session 
     { label: m.session_frame_type(), value: typedAtImport ? sourced(typeLabel(m, first.imageType), m.session_typed_at_import()) : sourced(typeLabel(m, session.imageType), fromHeader("IMAGETYP")) },
     { label: m.session_filter(), value: sourced(session.channel ?? m.session_none(), fromHeader("FILTER")) },
     { label: m.session_column_exposure(), value: sourced(formatExposure(session.exposureS), fromHeader("EXPTIME")) },
+    { label: m.session_integration(), value: hours },
     { label: m.session_camera(), value: sourced(session.cameraName ?? m.status_unknown(), fromHeader("INSTRUME")) },
     { label: m.session_telescope(), value: sourced(session.telescopeName ?? m.status_unknown(), fromHeader("TELESCOP")) },
     { label: m.session_gain_offset(), value: `${session.gain ?? "–"} · ${session.offset ?? "–"}` },
