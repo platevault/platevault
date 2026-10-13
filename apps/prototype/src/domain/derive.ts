@@ -315,6 +315,30 @@ export function panelForSession(catalog: Catalog, subject: Subject, session: Ses
   return { panelId: null, flag: "off-panel", detail: PANEL_FLAG_NAME["off-panel"] }
 }
 
+/**
+ * The panel whose centre is nearest a session's pointing, on the tangent
+ * plane: where clicking a flagged session places it (round 5). Null without
+ * pointing or panels; the row's menu still offers every panel.
+ */
+export function nearestPanel<P extends { ra: number; dec: number }>(pointing: Session["pointing"], panels: P[]): P | null {
+  if (!pointing) return null
+  let best: P | null = null
+  let bestDistance = Infinity
+  for (const panel of panels) {
+    let dRa = pointing.ra - panel.ra
+    if (dRa > 180) dRa -= 360
+    if (dRa < -180) dRa += 360
+    const x = dRa * Math.cos((panel.dec * Math.PI) / 180)
+    const y = pointing.dec - panel.dec
+    const distance = x * x + y * y
+    if (distance < bestDistance) {
+      best = panel
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
 // ---------------------------------------------------------------------------
 // Projects: state, runs, candidates and members (D-W33, D-W34, D-W37)
 // ---------------------------------------------------------------------------
