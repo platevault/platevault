@@ -101,6 +101,15 @@ function NumberAndChoiceFields() {
           ]}
         />
       </div>
+      <Caption>{m.catalogue_fields_segmented_narrow()}</Caption>
+      <div className="w-28 rounded-md border border-dashed p-2" data-specimen="segmented-narrow">
+        <SegmentedField
+          label={m.session_filter()}
+          value={filter}
+          onChange={setFilter}
+          options={filters}
+        />
+      </div>
     </ComponentSection>
   )
 }

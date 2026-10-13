@@ -83,7 +83,8 @@ export function ThemeSwatch({ id, className }: { id: ThemeId; className?: string
 
 const OPTION = "flex cursor-default flex-col gap-1.5 rounded-lg border border-border p-1.5 hover:bg-foreground/5 has-data-checked:border-ring has-data-checked:bg-accent/40 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring"
 
-const GRID = "grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-2"
+/** One swatch column at least 9.5rem wide, or the whole box when it is narrower, so the grid never runs past its edge. */
+const GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(9.5rem,100%),1fr))] gap-2"
 
 export function ThemePicker() {
   const m = useMessages()
@@ -98,6 +99,8 @@ export function ThemePicker() {
         size="sm"
         spacing={0}
         aria-label={m.theme_picker_mode()}
+        // In a narrow box the modes wrap onto a second line inside it, never past its edge.
+        className="max-w-full flex-wrap gap-y-1"
       >
         {MODES.map((option) => {
           const Icon = MODE_ICON[option]

@@ -8785,5 +8785,6 @@
       }
     }
   ],
-  "store_saved_added": "Added {name}"
+  "store_saved_added": "Added {name}",
+  "catalogue_fields_segmented_narrow": "narrow box: the options wrap onto a second line inside it"
 }

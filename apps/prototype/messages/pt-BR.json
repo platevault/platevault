@@ -8841,5 +8841,6 @@
       }
     }
   ],
-  "store_saved_added": "{name} adicionado"
+  "store_saved_added": "{name} adicionado",
+  "catalogue_fields_segmented_narrow": "caixa estreita: as opções passam para uma segunda linha dentro dela"
 }
