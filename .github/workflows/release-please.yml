@@ -655,34 +655,100 @@ jobs:
         run: gh release upload "${TAG}" latest.json --repo "${GITHUB_REPOSITORY}" --clobber
 
   # Submits the release to the Windows Package Manager community repository
-  # (microsoft/winget-pkgs) as PlateVault.PlateVault, through
-  # vedantmgoyal9/winget-releaser, which runs `komac update` and opens the
-  # pull request from the winget-pkgs fork. It waits for updater-manifest so
-  # it reads the final installers: sign-windows, when enabled, replaces them
-  # first. A winget manifest pins each installer's SHA256, so an earlier run
-  # would point winget at bytes the release no longer serves.
+  # (microsoft/winget-pkgs) as PlateVault.PlateVault with Komac, which writes
+  # the new version's manifests and opens the pull request from the bot
+  # account's winget-pkgs fork. It waits for updater-manifest so it reads the
+  # final installers: sign-windows, when enabled, replaces them first. A winget
+  # manifest pins each installer's SHA256, so an earlier run would point winget
+  # at bytes the release no longer serves.
   #
-  # Off unless vars.ENABLE_WINGET_PUBLISH is 'true'. winget-releaser only adds
+  # Off unless vars.ENABLE_WINGET_PUBLISH is 'true'. `komac update` only adds
   # versions to a package that already exists in winget-pkgs, so the owner
   # turns this on after the first submission has merged
-  # (docs/release/winget.md). The WINGET_TOKEN secret is a classic personal
-  # access token with the public_repo and workflow scopes (fine-grained tokens
-  # cannot open the winget-pkgs pull request), from the account that holds the
-  # fork: vars.WINGET_FORK_USER, or the repository owner when that is unset.
+  # (docs/release/winget.md).
+  #
+  # Token isolation: WINGET_TOKEN is a classic personal access token (public_repo
+  # and workflow scopes; fine-grained tokens cannot open the winget-pkgs pull
+  # request) of a dedicated bot account, vars.WINGET_FORK_USER, that owns the
+  # fork and has no write access to any platevault repository. Only the step
+  # that runs Komac sees it. Komac is a pinned release binary checked against
+  # its published SHA256, not a tool installed from a moving branch, and the
+  # job checks out nothing.
   winget:
     name: Submit to winget
     needs: [release-please, updater-manifest]
     if: ${{ needs.release-please.outputs.release_created == 'true' && vars.ENABLE_WINGET_PUBLISH == 'true' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read # the action reads the release's installers with github.token
+      contents: read # gh api reads the release's assets with github.token
+    env:
+      KOMAC_VERSION: 2.16.0
+      # SHA256 of komac-2.16.0-x86_64-unknown-linux-gnu.tar.gz, from the
+      # release's SHA256SUMS (https://github.com/russellbanks/Komac/releases/tag/v2.16.0).
+      KOMAC_SHA256: 7d2707fa6210f2789a3702de49fbd150b736dbf426ee0b9bc8e098736f9fd82d
     steps:
+      - name: Check the winget configuration
+        env:
+          FORK_USER: ${{ vars.WINGET_FORK_USER }}
+          HAS_TOKEN: ${{ secrets.WINGET_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FORK_USER}" ]; then
+            echo "::error::ENABLE_WINGET_PUBLISH is 'true' but WINGET_FORK_USER is empty. Set it to the bot account that owns the winget-pkgs fork (docs/release/winget.md)."
+            exit 1
+          fi
+          if [ "${HAS_TOKEN}" != "true" ]; then
+            echo "::error::ENABLE_WINGET_PUBLISH is 'true' but the WINGET_TOKEN secret is empty."
+            exit 1
+          fi
+
+      - name: Install Komac
+        run: |
+          set -euo pipefail
+          tarball="komac-${KOMAC_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          cd "${RUNNER_TEMP}"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "${tarball}" \
+            "https://github.com/russellbanks/Komac/releases/download/v${KOMAC_VERSION}/${tarball}"
+          echo "${KOMAC_SHA256}  ${tarball}" | sha256sum --check --strict
+          mkdir komac
+          tar -xzf "${tarball}" -C komac komac
+          echo "${RUNNER_TEMP}/komac" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/komac/komac" --version
+
+      # The NSIS per-user setup.exe and the MSI, not their .sig files.
+      - name: Find the release's Windows installers
+        id: installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          mapfile -t urls < <(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            --jq '.assets[] | select(.name | test("_x64(-setup\\.exe|_en-US\\.msi)$")) | .browser_download_url')
+          if [ "${#urls[@]}" -ne 2 ]; then
+            echo "::error::expected the x64 setup.exe and .msi on ${TAG}, found ${#urls[@]}: ${urls[*]:-none}"
+            exit 1
+          fi
+          printf '%s\n' "${urls[@]}"
+          {
+            echo "version=${TAG#v}"
+            echo "urls=${urls[*]}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Submit the manifest update to winget-pkgs
-        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
-        with:
-          identifier: PlateVault.PlateVault
-          release-tag: ${{ needs.release-please.outputs.tag_name }}
-          # The NSIS per-user setup.exe and the MSI, not their .sig files.
-          installers-regex: '_x64(-setup\.exe|_en-US\.msi)$'
-          fork-user: ${{ vars.WINGET_FORK_USER || github.repository_owner }}
-          token: ${{ secrets.WINGET_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          KOMAC_FORK_OWNER: ${{ vars.WINGET_FORK_USER }}
+          VERSION: ${{ steps.installers.outputs.version }}
+          URLS: ${{ steps.installers.outputs.urls }}
+          FORCE_HYPERLINK: "0" # print the pull request URL as plain text
+        run: |
+          set -euo pipefail
+          read -ra urls <<< "${URLS}"
+          komac sync-fork
+          komac update PlateVault.PlateVault --version "${VERSION}" --urls "${urls[@]}" --submit \
+            | tee "${RUNNER_TEMP}/komac-update.log"
+          pr_url="$(grep -Eo 'https://github\.com/microsoft/winget-pkgs/pull/[0-9]+' "${RUNNER_TEMP}/komac-update.log" | tail -n 1 || true)"
+          echo "winget-pkgs pull request: ${pr_url:-not found in the Komac output}"
+          echo "winget-pkgs pull request: ${pr_url:-not found in the Komac output}" >> "${GITHUB_STEP_SUMMARY}"

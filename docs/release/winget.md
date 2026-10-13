@@ -18,56 +18,83 @@ once each one is merged into winget-pkgs.
 ## How releases reach winget
 
 The `winget` job in `.github/workflows/release-please.yml` runs after every
-published release, once the updater manifest is out. It uses
-[WinGet Releaser](https://github.com/vedantmgoyal9/winget-releaser), which
-runs [Komac](https://github.com/russellbanks/Komac) `update`. For the
-release tag, the job:
+published release, once the updater manifest is out. It downloads a pinned
+[Komac](https://github.com/russellbanks/Komac) release binary, checks it
+against the SHA256 that the Komac release publishes, and runs
+`komac update --submit`. For the release tag, the job:
 
 1. picks the release assets that match `_x64(-setup\.exe|_en-US\.msi)$`;
-2. syncs the winget-pkgs fork with upstream;
+2. syncs the bot account's winget-pkgs fork with upstream;
 3. writes the new version's manifests, with each installer's SHA256;
-4. opens a pull request to microsoft/winget-pkgs from the fork.
+4. opens a pull request to microsoft/winget-pkgs from the fork, and writes
+   its URL to the job summary.
 
 The job runs after `updater-manifest`, so the installers are final: when
 Windows signing is on, `sign-windows` has already replaced them with signed
 copies. winget then validates the pull request, and a moderator merges it.
 
 The job is off until the repository variable `ENABLE_WINGET_PUBLISH` is
-`true`. WinGet Releaser only adds versions to a package that already exists
+`true`. `komac update` only adds versions to a package that already exists
 in winget-pkgs, so the first version goes in by hand, as below.
+
+### Token isolation
+
+The token belongs to a dedicated bot account that owns the winget-pkgs fork
+and has **no write access to any platevault repository**. A leaked token can
+act only as the bot: it can push to the bot's own repositories, such as the
+fork, and open pull requests, but cannot change PlateVault's code or
+releases. Only the step that runs Komac sees the token. The job checks out
+no code, and Komac is a fixed release checked by SHA256. To move to a newer
+Komac, change `KOMAC_VERSION` and
+`KOMAC_SHA256` together, with the SHA256 taken from that release's
+`SHA256SUMS`.
 
 ## Owner steps
 
 Only the owner can do these. Do them once, in this order.
 
-1. **Fork winget-pkgs.** Open <https://github.com/microsoft/winget-pkgs> and
-   click **Fork**. Fork into the `platevault` organization, which is the
-   job's default, or into a personal account. For a personal account, run:
+1. **Create the bot account and its fork.**
+   1. Sign out of GitHub, or use a private browser window. Open
+      <https://github.com/signup> and create a new account for the bot, for
+      example `platevault-winget-bot`, with its own email address. Turn on
+      two-factor authentication: **Settings** › **Password and
+      authentication** › **Enable two-factor authentication**.
+   2. Do not add the bot to the `platevault` organization, and do not invite
+      it as a collaborator on any platevault repository.
+   3. Signed in as the bot, open <https://github.com/microsoft/winget-pkgs>
+      and click **Fork** › **Create fork**, with the bot as the owner.
+   4. As the owner, record the bot's name:
 
-   ```sh
-   gh variable set WINGET_FORK_USER --repo platevault/platevault --body <account>
-   ```
+      ```sh
+      gh variable set WINGET_FORK_USER --repo platevault/platevault --body platevault-winget-bot
+      ```
 
-2. **Create the token.** Signed in as an account that can push to the fork,
-   open GitHub › **Settings** › **Developer settings** › **Personal access
-   tokens** › **Tokens (classic)** › **Generate new token (classic)**. Select
-   the scopes `public_repo` and `workflow`. Both tools need a classic token:
-   a fine-grained token cannot open the winget-pkgs pull request
+2. **Create the bot's token.** Signed in as the bot, open **Settings** ›
+   **Developer settings** › **Personal access tokens** › **Tokens
+   (classic)** › **Generate new token** › **Generate new token (classic)**.
+   Name it `platevault winget`, pick an expiry date, and select only the
+   scopes `public_repo` and `workflow`. Click **Generate token** and copy it.
+   Komac needs a classic token, because a fine-grained token cannot open the
+   winget-pkgs pull request
    ([Komac #310](https://github.com/russellbanks/Komac/issues/310)).
    `workflow` lets the fork sync when upstream changes its workflow files.
    Note the expiry date: the job fails once the token expires.
-3. **Store the token.** Run this, and paste the token at the prompt:
+3. **Store the token.** As the owner, run this, and paste the bot's token at
+   the prompt:
 
    ```sh
    gh secret set WINGET_TOKEN --repo platevault/platevault
    ```
 
-4. **Submit the first version.** Install Komac (`brew install komac`, or
-   `winget install --id RussellBanks.Komac`). Preview the manifests with
-   `--dry-run`, then run the same command with `--submit` instead:
+4. **Submit the first version.** Install Komac 2.16.0 (`brew install komac`,
+   or `winget install --id RussellBanks.Komac`). Use the bot's token from
+   step 2, so the pull request comes from the bot's fork. Preview the
+   manifests with `--dry-run`, then run the same command with `--submit`
+   instead:
 
    ```sh
-   export GITHUB_TOKEN="$(gh auth token)" # or the token from step 2
+   read -rs -p 'Bot token: ' GITHUB_TOKEN && export GITHUB_TOKEN && echo
+   export KOMAC_FORK_OWNER=platevault-winget-bot
    komac new PlateVault.PlateVault --version 0.6.1 \
      --urls https://github.com/platevault/platevault/releases/download/v0.6.1/PlateVault_0.6.1_x64-setup.exe \
             https://github.com/platevault/platevault/releases/download/v0.6.1/PlateVault_0.6.1_x64_en-US.msi \
@@ -107,17 +134,21 @@ Only the owner can do these. Do them once, in this order.
    ```
 
    From the next release on, the `winget` job opens the pull request for each
-   new version. Its log ends with the pull request URL.
+   new version and writes its URL to the job summary.
 
 ## When the job fails
 
-- *Package 'PlateVault.PlateVault' does not exist*: the first submission
-  has not merged yet. Finish owner step 5, then re-run the job.
-- *does not have the correct permissions* or *failed to sync upstream
-  changes*: the token has expired, lacks a scope, or belongs to an account
-  that cannot push to the fork. Make a new token (owner step 2) and store it
-  (owner step 3). Or sync the fork on GitHub (**Sync fork**), then re-run the
-  job.
-- *No release assets found*: the release has no installer whose name
-  matches the pattern above. Check the release's assets and the `build`
-  job.
+- *WINGET_FORK_USER is empty* or *the WINGET_TOKEN secret is empty*: an owner
+  step is missing. Do owner step 1.4 or step 3, then re-run the job.
+- *computed checksum did NOT match* in **Install Komac**: the downloaded
+  Komac is not the pinned release. Do not change `KOMAC_SHA256` to make it
+  pass; check the Komac release first.
+- *expected the x64 setup.exe and .msi*: the release does not have exactly
+  one installer of each kind matching the pattern above. Check the release's
+  assets and the `build` job.
+- Komac reports that PlateVault.PlateVault does not exist: the first
+  submission has not merged yet. Finish owner step 5, then re-run the job.
+- Komac reports a permission or fork-sync error: the token has expired,
+  lacks a scope, or does not belong to `WINGET_FORK_USER`. Make a new token
+  (owner step 2) and store it (owner step 3). Or, signed in as the bot, click
+  **Sync fork** on the fork, then re-run the job.
