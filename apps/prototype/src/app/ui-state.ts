@@ -12,12 +12,11 @@ import type { ProjectId, SessionId, TargetId } from "@/domain/types"
 export type GlobalPanel = "palette" | "shortcuts" | "simulation" | null
 
 /**
- * Workflow sheets (IA S4, S13). Each slice renders its own sheet host,
- * mounted once at the app root; any screen opens one with `openSheet`.
+ * Workflow sheets (IA S4). Each slice renders its own sheet host, mounted
+ * once at the app root; any screen opens one with `openSheet`. Import (S13)
+ * is the `/import` StepPage, not a sheet.
  */
 export type WorkflowSheet =
-  /** S13 Import (slice A): the Lightroom-style entry (D-W11). */
-  | { kind: "import" }
   /** S4 New Project (slice B); `fromSessionId` prefills its Target and rig (LIB-FR-17); `targetId` prefills a subject (S10 Target detail). */
   | { kind: "new-project"; fromSessionId?: SessionId; targetId?: TargetId }
   /** "Start a processing run": one subject and one rig of the Project (slice B, PRJ-FR-10). */

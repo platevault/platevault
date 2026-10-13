@@ -116,7 +116,7 @@ export function HomePage() {
               <FolderPlus data-icon="inline-start" aria-hidden="true" />
               {m.newproject_open()}
             </Button>
-            <Button size="sm" onClick={() => openSheet({ kind: "import" })}>
+            <Button size="sm" render={<Link to="/import" />}>
               <Download data-icon="inline-start" aria-hidden="true" />
               {m.import_open()}
             </Button>

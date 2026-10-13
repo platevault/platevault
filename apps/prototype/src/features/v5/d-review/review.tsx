@@ -9,14 +9,9 @@
  * stay until their importers move to session intake, and mark the library
  * only; W4 (astro-plan-o1wsa) deletes them.
  */
-import type { ProjectId, RunGroupId, RunId, SessionId } from "@/domain/types"
+import type { SessionReviewProps } from "@/components/app/contracts"
+import type { ProjectId, RunGroupId, RunId } from "@/domain/types"
 import { ReviewWorkspace } from "./frame-review"
-
-export interface SessionReviewProps {
-  sessionId: SessionId
-  /** The host's Finish review; the workspace's Finish command (⌘↵) calls it once no frame is Unreviewed. */
-  onFinished?: () => void
-}
 
 /** The Review step body of session intake. */
 export function SessionReview({ sessionId, onFinished }: SessionReviewProps) {

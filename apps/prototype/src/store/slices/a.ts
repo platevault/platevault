@@ -34,8 +34,8 @@ export interface AState {
   /** Home: Done Projects are hidden behind "Show done" (D-W48). */
   showDone: boolean
   importDraft: ImportDraft
-  /** The Import sheet shows this operation's progress and outcome until the user starts another. */
-  lastImport: { kind: "import" | "index"; operationId: OperationId } | null
+  /** The Import page shows this operation's progress and outcome until the user starts another. */
+  lastImport: { kind: "import"; operationId: OperationId } | null
 }
 
 export const aSlice: SliceDefinition<AState> = {

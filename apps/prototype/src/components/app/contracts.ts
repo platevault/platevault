@@ -129,3 +129,14 @@ export interface Column<T> {
   /** Truncate long text (paths, names); the full text shows only when it is cut (§6.2 T2). */
   truncate?: boolean
 }
+
+/**
+ * The session intake Review step's body (P-REV2, C14): the review workspace
+ * for one session. The intake StepPage (P3) hosts it with `fill`; P4
+ * implements it (`SessionReview`), and the route injects it.
+ */
+export interface SessionReviewProps {
+  sessionId: string
+  /** The host's Finish review; the workspace's Finish command (⌘↵) calls it once no frame is Unreviewed. */
+  onFinished?: () => void
+}

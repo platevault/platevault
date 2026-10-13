@@ -25,7 +25,7 @@ import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/app/run-ui"
 import { ActionBar, useAction } from "@/components/app/actions"
-import type { Action, Column, StepFlow } from "@/components/app/contracts"
+import type { Action, Column, SessionReviewProps, StepFlow } from "@/components/app/contracts"
 import { EvidenceList, KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
 import { SelectField } from "@/components/app/fields"
@@ -48,8 +48,8 @@ import { type PrototypeState, useStore } from "@/store/core"
 import { addToProjectItems } from "./parts"
 import { ReadinessBadge, SessionPage } from "./session"
 
-/** The intake Review step's body: the review workspace for one session. */
-export type SessionReviewBody = ComponentType<{ sessionId: string; onFinished: () => void }>
+/** The intake Review step's body: the review workspace for one session (`SessionReview`, injected by the route). */
+export type SessionReviewBody = ComponentType<SessionReviewProps>
 
 const TARGET_FIELDS: CorrectionField[] = ["target"]
 const RIG_FIELDS: CorrectionField[] = ["equipment", "filter", "exposure", "focal-length"]

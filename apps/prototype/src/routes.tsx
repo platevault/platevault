@@ -31,8 +31,7 @@ import { TargetLookupPage } from "@/features/t1/settings/target-lookup-page"
 import { SetupIndexingPage, SetupLocationsPage, WelcomePage } from "@/features/t1/setup/setup-pages"
 import { SettingsApplicationsPage } from "@/features/t4/applications"
 import { HomePage } from "@/features/v5/a-home/home"
-import { ImportRoute } from "@/features/v5/a-home/import"
-import { ImportFlowPage } from "@/features/v5/a-home/import-flow"
+import { ImportPage } from "@/features/v5/a-home/import"
 import { SessionPage } from "@/features/v5/a-home/session"
 import { SessionIntakePage } from "@/features/v5/a-home/session-intake"
 import { SessionsPage } from "@/features/v5/a-home/sessions"
@@ -41,6 +40,7 @@ import { ProjectsPage } from "@/features/v5/b-projects/projects"
 import { ProjectTrashPage } from "@/features/v5/b-projects/trash"
 import { RunGroupPage } from "@/features/v5/c-runs/group"
 import { RunPage } from "@/features/v5/c-runs/run"
+import { SessionReview } from "@/features/v5/d-review/review"
 import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
 import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
 import { CalibrationProcessPage } from "@/features/v5/e-targets-plan-settings/calibration-process"
@@ -97,9 +97,9 @@ const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/we
 const setupLocationsRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/locations", component: SetupLocationsPage, validateSearch: looseSearch })
 const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/indexing", component: SetupIndexingPage, validateSearch: looseSearch })
 
-// S1 Home is the start page (D-W39); S13 Import is a sheet over `/import`, and `/import?step=` its staged flow.
+// S1 Home is the start page (D-W39); S13 Import is a StepPage at `/import` (`?step=source|preview`).
 const homeRoute = page("/", HomePage)
-const importRoute = page("/import", stepFlowOr(ImportRoute, ImportFlowPage))
+const importRoute = page("/import", ImportPage)
 
 // Home concepts for the C8 choice (bead astro-plan-5kpyp): a lazy chunk, removed once C8 is decided.
 const homeConceptsRoute = createRoute({
@@ -149,7 +149,8 @@ const planRoute = createRoute({
 
 // Library: S12 Sessions (`?step=` is a session's intake flow), S14 Calibration with its process flows; `/storage` (S15, P-STO2) redirects to Settings › Locations. Footer: S17 Activity.
 const sessionsRoute = page("/sessions", SessionsPage)
-const sessionRoute = page("/sessions/$sessionId", stepFlowOr(SessionPage, SessionIntakePage))
+// `?step=target|rig|review` is session intake; its Review step body is the review workspace (P4), injected here.
+const sessionRoute = page("/sessions/$sessionId", stepFlowOr(SessionPage, () => <SessionIntakePage review={SessionReview} />))
 const calibrationRoute = page("/calibration", CalibrationPage)
 const calibrationProcessRoute = page("/calibration/processes/$processId/$step", CalibrationProcessPage)
 const storageRoute = createRoute({
