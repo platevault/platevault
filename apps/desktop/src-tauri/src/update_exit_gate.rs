@@ -84,3 +84,60 @@ fn defer_to_frontend<R: Runtime>(app: &AppHandle<R>) -> bool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+
+    use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+    use tauri::{App, WebviewUrl, WebviewWindowBuilder};
+
+    use super::*;
+
+    /// A mock app with the gate registered, a main window, and a counter of
+    /// the install requests that window received.
+    fn app_with_main_window() -> (App<MockRuntime>, Arc<AtomicUsize>) {
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("build mock app");
+        register(app.handle());
+        WebviewWindowBuilder::new(&app, MAIN_WINDOW_LABEL, WebviewUrl::default())
+            .build()
+            .expect("build main window");
+        let installs = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&installs);
+        app.listen(INSTALL_EVENT, move |_| {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+        (app, installs)
+    }
+
+    #[test]
+    fn unarmed_gate_never_defers_a_quit() {
+        let (app, installs) = app_with_main_window();
+
+        assert!(!defer_to_frontend(app.handle()));
+        assert_eq!(installs.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn armed_gate_defers_exactly_one_quit_to_the_main_window() {
+        let (app, installs) = app_with_main_window();
+        app.emit(ARM_EVENT, true).expect("arm");
+
+        assert!(defer_to_frontend(app.handle()), "first quit is deferred");
+        assert!(!defer_to_frontend(app.handle()), "second quit proceeds");
+        assert_eq!(installs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn disarmed_gate_lets_the_quit_proceed() {
+        let (app, installs) = app_with_main_window();
+        app.emit(ARM_EVENT, true).expect("arm");
+        app.emit(ARM_EVENT, false).expect("disarm");
+
+        assert!(!defer_to_frontend(app.handle()));
+        assert_eq!(installs.load(Ordering::SeqCst), 0);
+    }
+}

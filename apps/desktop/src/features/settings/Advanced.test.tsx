@@ -49,25 +49,33 @@ vi.mock('@/features/setup/sources-store', () => ({
   resetWizardStateWithSources: mockResetWizardStateWithSources,
 }));
 
-// Update section (#845/#869/#873/#888) — mocked so each test controls the
-// phase directly instead of exercising the real Tauri updater plugin.
+// Update section (#845/#869/#873, astro-plan-mkkgi) — the actions are mocked
+// so each test controls the phase directly instead of exercising the real
+// Tauri updater plugin; the pure `canInstall` stays real.
 const {
   mockGetUpdateSnapshot,
   mockSubscribeUpdate,
   mockCheckForUpdate,
+  mockInstallUpdateNow,
+  mockInstallUpdateOnQuit,
   mockRestartPendingUpdate,
   mockGetRunningVersion,
 } = vi.hoisted(() => ({
   mockGetUpdateSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
   mockSubscribeUpdate: vi.fn().mockReturnValue(() => {}),
   mockCheckForUpdate: vi.fn().mockResolvedValue(undefined),
+  mockInstallUpdateNow: vi.fn().mockResolvedValue(undefined),
+  mockInstallUpdateOnQuit: vi.fn().mockResolvedValue(undefined),
   mockRestartPendingUpdate: vi.fn().mockResolvedValue(undefined),
   mockGetRunningVersion: vi.fn().mockResolvedValue(null),
 }));
-vi.mock('@/data/updateSubscription', () => ({
+vi.mock('@/data/updateSubscription', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/data/updateSubscription')>()),
   getUpdateSnapshot: mockGetUpdateSnapshot,
   subscribeUpdate: mockSubscribeUpdate,
   checkForUpdate: mockCheckForUpdate,
+  installUpdateNow: mockInstallUpdateNow,
+  installUpdateOnQuit: mockInstallUpdateOnQuit,
   restartPendingUpdate: mockRestartPendingUpdate,
   getRunningVersion: mockGetRunningVersion,
 }));
@@ -179,8 +187,8 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
-// ── Software Update section (#845 version display, #888 staged flow,
-// absorbing #869 relaunch-after-install and #873 failed-check states) ──────
+// ── Software Update section (#845 version display, astro-plan-mkkgi
+// install-on-choice, #869 relaunch-after-install, #873 failed-check states) ──
 
 describe('Advanced — Software Update section', () => {
   it('shows the running app version when available (#845)', async () => {
@@ -211,6 +219,9 @@ describe('Advanced — Software Update section', () => {
     );
     expect(screen.queryByTestId('update-restart-btn')).not.toBeInTheDocument();
     expect(screen.queryByTestId('update-retry-btn')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('update-install-now-btn'),
+    ).not.toBeInTheDocument();
   });
 
   it('shows a distinct check-failed state with a retry action, not "up to date" (#873)', async () => {
@@ -228,15 +239,41 @@ describe('Advanced — Software Update section', () => {
     expect(mockCheckForUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a restart action once an update is staged and ready', async () => {
-    mockGetUpdateSnapshot.mockReturnValue({ phase: 'ready', version: '0.6.0' });
+  it('offers Install now and Install on quit for an available update, without starting either', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'available',
+      version: '0.6.0',
+    });
     render(<Advanced save={vi.fn()} />);
 
     expect(await screen.findByTestId('update-status')).toHaveTextContent(
-      '0.6.0',
+      /0\.6\.0 is available/,
     );
-    fireEvent.click(await screen.findByTestId('update-restart-btn'));
-    expect(mockRestartPendingUpdate).toHaveBeenCalledTimes(1);
+    expect(mockInstallUpdateNow).not.toHaveBeenCalled();
+    expect(mockInstallUpdateOnQuit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('update-install-now-btn'));
+    expect(mockInstallUpdateNow).toHaveBeenCalledTimes(1);
+    const onQuit = screen.getByTestId('update-install-on-quit-btn');
+    await waitFor(() => expect(onQuit).toBeEnabled());
+    fireEvent.click(onQuit);
+    expect(mockInstallUpdateOnQuit).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads "will install when you quit" once queued, offering only Install now', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'install-on-quit',
+      version: '0.6.0',
+    });
+    render(<Advanced save={vi.fn()} />);
+
+    expect(await screen.findByTestId('update-status')).toHaveTextContent(
+      /install when you quit/i,
+    );
+    expect(screen.getByTestId('update-install-now-btn')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('update-install-on-quit-btn'),
+    ).not.toBeInTheDocument();
   });
 
   it('reads "installed — restart manually", not a failure banner, when relaunch fails after install (#869)', async () => {
@@ -250,7 +287,8 @@ describe('Advanced — Software Update section', () => {
     const status = await screen.findByTestId('update-status');
     expect(status).toHaveTextContent(/restart the app manually/i);
     expect(status).not.toHaveTextContent(/failed/i);
-    expect(await screen.findByTestId('update-restart-btn')).toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId('update-restart-btn'));
+    expect(mockRestartPendingUpdate).toHaveBeenCalledTimes(1);
   });
 });
 

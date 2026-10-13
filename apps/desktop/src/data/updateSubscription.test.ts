@@ -2,19 +2,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Staged update flow (#888, absorbs #869/#873) + running-version display
- * (#845). Exercises the frontend-driven check/download/restart state machine
- * directly against mocked `@tauri-apps/plugin-updater`/`plugin-process`/
- * `api/app` modules — `IS_MOCK` is false in the vitest environment (see
- * vitest.config.ts), so these dynamic imports actually resolve and must be
- * mocked per test.
+ * Install-on-choice update flow (astro-plan-mkkgi, keeps #869/#873) and
+ * running-version display (#845). Exercises the frontend-driven
+ * check / download / install state machine against mocked
+ * `@tauri-apps/plugin-updater`, `plugin-process`, `api/event` and `api/app`
+ * modules — `IS_MOCK` is false in the vitest environment (see
+ * vitest.config.ts), so these dynamic imports resolve and must be mocked.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockCheck, mockRelaunch, mockGetVersion } = vi.hoisted(() => ({
+const {
+  mockCheck,
+  mockRelaunch,
+  mockExit,
+  mockGetVersion,
+  mockListen,
+  mockEmit,
+} = vi.hoisted(() => ({
   mockCheck: vi.fn(),
   mockRelaunch: vi.fn(),
+  mockExit: vi.fn(),
   mockGetVersion: vi.fn(),
+  mockListen: vi.fn(),
+  mockEmit: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/plugin-updater', () => ({
@@ -22,6 +32,11 @@ vi.mock('@tauri-apps/plugin-updater', () => ({
 }));
 vi.mock('@tauri-apps/plugin-process', () => ({
   relaunch: mockRelaunch,
+  exit: mockExit,
+}));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: mockListen,
+  emit: mockEmit,
 }));
 vi.mock('@tauri-apps/api/app', () => ({
   getVersion: mockGetVersion,
@@ -29,6 +44,8 @@ vi.mock('@tauri-apps/api/app', () => ({
 
 import {
   checkForUpdate,
+  installUpdateNow,
+  installUpdateOnQuit,
   restartPendingUpdate,
   startUpdateSubscription,
   stopUpdateSubscription,
@@ -36,19 +53,60 @@ import {
   getRunningVersion,
 } from './updateSubscription';
 
-function makeUpdate(
-  overrides: Partial<{ version: string; body: string | null }> = {},
-) {
-  return {
-    version: '0.6.0',
-    body: 'Release notes',
-    downloadAndInstall: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
+const ARM_EVENT = 'update:install-on-quit-armed';
+const INSTALL_EVENT = 'update:install-on-quit';
+
+/** Records the order of every updater/process side effect. */
+let calls: string[] = [];
+/** The exit-path handler registered for INSTALL_EVENT, once armed. */
+let exitHandler: (() => void) | null = null;
+const unlisten = vi.fn();
+
+/** A resolved side effect that records `name` in `calls`. */
+function recorder(name: string) {
+  return () => {
+    calls.push(name);
+    return Promise.resolve();
   };
 }
 
-beforeEach(() => {
+function makeUpdate() {
+  return {
+    version: '0.6.0',
+    body: 'Release notes',
+    download: vi.fn(recorder('download')),
+    install: vi.fn(recorder('install')),
+    downloadAndInstall: vi.fn(recorder('downloadAndInstall')),
+    close: vi.fn(() => Promise.resolve()),
+  };
+}
+
+/** Run the check with `update` available, landing on 'available'. */
+async function checkFinds(update: ReturnType<typeof makeUpdate>) {
+  mockCheck.mockResolvedValue(update);
+  await checkForUpdate();
+}
+
+/** Let fire-and-forget work (the exit handler, teardown's disarm) finish. */
+async function settle() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+beforeEach(async () => {
+  stopUpdateSubscription();
+  await settle();
   vi.clearAllMocks();
+  calls = [];
+  exitHandler = null;
+  mockListen.mockImplementation((event: string, handler: () => void) => {
+    if (event === INSTALL_EVENT) exitHandler = handler;
+    return Promise.resolve(unlisten);
+  });
+  mockEmit.mockImplementation((event: string, payload: unknown) =>
+    recorder(`emit:${event}:${String(payload)}`)(),
+  );
+  mockRelaunch.mockImplementation(recorder('relaunch'));
+  mockExit.mockImplementation(recorder('exit'));
 });
 
 describe('checkForUpdate', () => {
@@ -60,16 +118,19 @@ describe('checkForUpdate', () => {
     expect(getUpdateSnapshot()).toEqual({ phase: 'up-to-date' });
   });
 
-  it('downloads and verifies immediately, landing on ready without relaunching (#888)', async () => {
+  it('a check alone never downloads, installs or relaunches', async () => {
     const update = makeUpdate();
-    mockCheck.mockResolvedValue(update);
 
-    await checkForUpdate();
+    await checkFinds(update);
 
-    expect(update.downloadAndInstall).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([]);
+    expect(update.download).not.toHaveBeenCalled();
+    expect(update.install).not.toHaveBeenCalled();
+    expect(update.downloadAndInstall).not.toHaveBeenCalled();
     expect(mockRelaunch).not.toHaveBeenCalled();
+    expect(mockEmit).not.toHaveBeenCalled();
     expect(getUpdateSnapshot()).toEqual({
-      phase: 'ready',
+      phase: 'available',
       version: '0.6.0',
       body: 'Release notes',
     });
@@ -85,48 +146,166 @@ describe('checkForUpdate', () => {
     expect(snapshot.error).toBe('network unreachable');
   });
 
-  it('sets download-failed (not check-failed) when downloadAndInstall rejects', async () => {
-    const update = makeUpdate({
-      // @ts-expect-error overriding to a rejecting fn for this case
-      downloadAndInstall: vi.fn().mockRejectedValue(new Error('disk full')),
+  it('frees the superseded update when a re-check replaces it', async () => {
+    const first = makeUpdate();
+    await checkFinds(first);
+
+    await checkFinds(makeUpdate());
+
+    expect(first.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('installUpdateNow', () => {
+  it('downloads, then installs, then relaunches', async () => {
+    await checkFinds(makeUpdate());
+
+    await installUpdateNow();
+
+    expect(calls).toEqual(['download', 'install', 'relaunch']);
+  });
+
+  it('is a no-op before a check has found an update', async () => {
+    mockCheck.mockResolvedValue(null);
+    await checkForUpdate();
+
+    await installUpdateNow();
+
+    expect(calls).toEqual([]);
+  });
+
+  it('sets download-failed and never installs when the download or verification fails', async () => {
+    const update = makeUpdate();
+    update.download.mockRejectedValueOnce(new Error('signature mismatch'));
+    await checkFinds(update);
+
+    await installUpdateNow();
+
+    expect(update.install).not.toHaveBeenCalled();
+    expect(getUpdateSnapshot()).toMatchObject({
+      phase: 'download-failed',
+      error: 'signature mismatch',
+      version: '0.6.0',
     });
-    mockCheck.mockResolvedValue(update);
+  });
+
+  it('sets install-failed and does not relaunch when the install fails', async () => {
+    const update = makeUpdate();
+    update.install.mockRejectedValueOnce(new Error('installer failed'));
+    await checkFinds(update);
+
+    await installUpdateNow();
+
+    expect(mockRelaunch).not.toHaveBeenCalled();
+    expect(getUpdateSnapshot()).toMatchObject({
+      phase: 'install-failed',
+      error: 'installer failed',
+    });
+  });
+
+  it('retries from download-failed by downloading again', async () => {
+    const update = makeUpdate();
+    update.download.mockRejectedValueOnce(new Error('disk full'));
+    await checkFinds(update);
+    await installUpdateNow(); // -> download-failed
+
+    await installUpdateNow();
+
+    expect(calls).toEqual(['download', 'install', 'relaunch']);
+  });
+});
+
+describe('installUpdateOnQuit', () => {
+  it('downloads and arms the exit gate, but installs only from the exit path', async () => {
+    await checkFinds(makeUpdate());
+
+    await installUpdateOnQuit();
+
+    expect(calls).toEqual(['download', `emit:${ARM_EVENT}:true`]);
+    expect(getUpdateSnapshot()).toMatchObject({
+      phase: 'install-on-quit',
+      version: '0.6.0',
+    });
+    expect(exitHandler).not.toBeNull();
+
+    // The backend deferred the user's quit: install, then exit.
+    exitHandler?.();
+    await settle();
+
+    expect(calls).toEqual([
+      'download',
+      `emit:${ARM_EVENT}:true`,
+      'install',
+      'exit',
+    ]);
+    expect(mockRelaunch).not.toHaveBeenCalled();
+  });
+
+  it('still exits when the install on quit fails', async () => {
+    const update = makeUpdate();
+    update.install.mockRejectedValueOnce(new Error('pkexec dismissed'));
+    await checkFinds(update);
+    await installUpdateOnQuit();
+
+    exitHandler?.();
+    await settle();
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+
+  it('does not arm the gate when the download fails', async () => {
+    const update = makeUpdate();
+    update.download.mockRejectedValueOnce(new Error('offline'));
+    await checkFinds(update);
+
+    await installUpdateOnQuit();
+
+    expect(mockEmit).not.toHaveBeenCalled();
+    expect(getUpdateSnapshot().phase).toBe('download-failed');
+  });
+
+  it('Install now from install-on-quit disarms, reuses the download and installs', async () => {
+    await checkFinds(makeUpdate());
+    await installUpdateOnQuit();
+
+    await installUpdateNow();
+
+    expect(calls).toEqual([
+      'download',
+      `emit:${ARM_EVENT}:true`,
+      `emit:${ARM_EVENT}:false`,
+      'install',
+      'relaunch',
+    ]);
+    expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+
+  it('a re-check while install-on-quit is staged keeps the staged update', async () => {
+    await checkFinds(makeUpdate());
+    await installUpdateOnQuit();
+    mockCheck.mockClear();
 
     await checkForUpdate();
 
-    const snapshot = getUpdateSnapshot();
-    expect(snapshot.phase).toBe('download-failed');
-    expect(snapshot.error).toBe('disk full');
-    expect(snapshot.version).toBe('0.6.0');
+    expect(mockCheck).not.toHaveBeenCalled();
+    expect(getUpdateSnapshot().phase).toBe('install-on-quit');
   });
 });
 
 describe('restartPendingUpdate', () => {
-  it('is a no-op outside ready/restart-failed', async () => {
-    mockCheck.mockResolvedValue(null);
-    await checkForUpdate(); // -> up-to-date
+  it('is a no-op outside restart-failed', async () => {
+    await checkFinds(makeUpdate()); // -> available
 
     await restartPendingUpdate();
 
     expect(mockRelaunch).not.toHaveBeenCalled();
   });
 
-  it('relaunches once an update is ready', async () => {
-    mockCheck.mockResolvedValue(makeUpdate());
-    await checkForUpdate(); // -> ready
-    mockRelaunch.mockResolvedValue(undefined);
-
-    await restartPendingUpdate();
-
-    expect(mockRelaunch).toHaveBeenCalledTimes(1);
-  });
-
   it('sets restart-failed (not a failure banner) when relaunch fails after a successful install (#869)', async () => {
-    mockCheck.mockResolvedValue(makeUpdate());
-    await checkForUpdate(); // -> ready (downloadAndInstall already succeeded)
-    mockRelaunch.mockRejectedValue(new Error('relaunch denied'));
+    await checkFinds(makeUpdate());
+    mockRelaunch.mockRejectedValueOnce(new Error('relaunch denied'));
 
-    await restartPendingUpdate();
+    await installUpdateNow();
 
     const snapshot = getUpdateSnapshot();
     expect(snapshot.phase).toBe('restart-failed');
@@ -135,33 +314,35 @@ describe('restartPendingUpdate', () => {
     expect(snapshot.version).toBe('0.6.0');
   });
 
-  it('retrying restart from restart-failed relaunches again', async () => {
-    mockCheck.mockResolvedValue(makeUpdate());
-    await checkForUpdate();
+  it('retrying restart from restart-failed relaunches without reinstalling', async () => {
+    const update = makeUpdate();
+    await checkFinds(update);
     mockRelaunch.mockRejectedValueOnce(new Error('relaunch denied'));
-    await restartPendingUpdate(); // -> restart-failed
+    await installUpdateNow(); // -> restart-failed
 
-    mockRelaunch.mockResolvedValueOnce(undefined);
     await restartPendingUpdate();
 
     expect(mockRelaunch).toHaveBeenCalledTimes(2);
+    expect(update.install).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('startUpdateSubscription — __PV_TEST__ override', () => {
   beforeEach(() => {
-    stopUpdateSubscription();
     delete (window as Window & { __PV_TEST__?: unknown }).__PV_TEST__;
   });
 
   it('seeds state from window.__PV_TEST__.updateState, skipping the real check', async () => {
     (window as Window & { __PV_TEST__?: unknown }).__PV_TEST__ = {
-      updateState: { phase: 'ready', version: '99.0.0' },
+      updateState: { phase: 'available', version: '99.0.0' },
     };
 
     await startUpdateSubscription();
 
-    expect(getUpdateSnapshot()).toEqual({ phase: 'ready', version: '99.0.0' });
+    expect(getUpdateSnapshot()).toEqual({
+      phase: 'available',
+      version: '99.0.0',
+    });
     expect(mockCheck).not.toHaveBeenCalled();
   });
 
@@ -180,14 +361,15 @@ describe('startUpdateSubscription — __PV_TEST__ override', () => {
     expect(getUpdateSnapshot()).toEqual({ phase: 'up-to-date' });
   });
 
-  it('falls through to IS_MOCK no-op when the hook is absent', async () => {
-    // No __PV_TEST__ set; IS_MOCK is false in vitest (VITE_USE_MOCKS unset),
-    // so it will call checkForUpdate() — mock it to resolve immediately.
-    mockCheck.mockResolvedValue(null);
+  it('runs one check-only pass when the hook is absent', async () => {
+    const update = makeUpdate();
+    mockCheck.mockResolvedValue(update);
 
     await startUpdateSubscription();
 
     expect(mockCheck).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([]);
+    expect(getUpdateSnapshot().phase).toBe('available');
   });
 });
 

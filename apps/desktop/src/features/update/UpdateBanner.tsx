@@ -35,9 +35,7 @@ const SHOWN: ReadonlySet<UpdatePhase> = new Set([
 
 export function UpdateBanner() {
   const state = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
-  const [dismissedVersion, setDismissedVersion] = useState<string | null>(
-    null,
-  );
+  const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
   const version = state.version ?? '';
   if (!SHOWN.has(state.phase) || version === dismissedVersion) return null;

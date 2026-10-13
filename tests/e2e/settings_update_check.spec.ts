@@ -8,10 +8,10 @@
  * a real Tauri updater host. `startUpdateSubscription()` reads the hook before
  * the IS_MOCK guard, so it fires for every phase even in a VITE_USE_MOCKS env.
  *
- * Validates the Settings → Advanced Software Update section against the three
- * externally-observable phases: up-to-date, ready (update available), and
- * check-failed. The downloading/download-failed/restart-failed phases require
- * a real Tauri download step and are not covered here.
+ * Validates the Settings → Advanced Software Update section and the shell
+ * update notice against the externally-observable phases: up-to-date,
+ * available, and check-failed. The download/install phases require a real
+ * Tauri updater and are covered by the vitest suite for updateSubscription.
  */
 import type { Page } from '@playwright/test';
 import {
@@ -58,25 +58,34 @@ test.describe('Journey 17 · Software update check (mock-mode, spec 051)', () =>
     await expect(page.getByTestId('update-retry-btn')).toHaveCount(0);
   });
 
-  test('shows "update available" with version when update state is ready', async ({
+  test('offers Install now and Install on quit when an update is available', async ({
     page,
   }) => {
     seedUpdateState(page, {
-      phase: 'ready',
+      phase: 'available',
       version: '99.0.0',
       body: 'Test release notes',
     });
 
     await page.goto('/#/settings/advanced');
 
-    // Status reads the ready message with the spoofed version.
+    // Status reads the available message with the spoofed version.
     await expect(page.getByTestId('update-status')).toHaveText(
-      'Update 99.0.0 ready — restart to finish installing.',
+      'Update 99.0.0 is available.',
     );
 
-    // Restart & Install button is visible and enabled.
-    await expect(page.getByTestId('update-restart-btn')).toBeVisible();
-    await expect(page.getByTestId('update-restart-btn')).toBeEnabled();
+    // Both install choices are offered in Settings and in the shell notice.
+    await expect(page.getByTestId('update-install-now-btn')).toBeEnabled();
+    await expect(page.getByTestId('update-install-on-quit-btn')).toBeEnabled();
+    await expect(page.getByTestId('update-banner-status')).toHaveText(
+      'Update 99.0.0 is available.',
+    );
+    await expect(
+      page.getByTestId('update-banner-install-now-btn'),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId('update-banner-install-on-quit-btn'),
+    ).toBeVisible();
   });
 
   test('shows "check failed" message when update state is check-failed', async ({
@@ -98,7 +107,9 @@ test.describe('Journey 17 · Software update check (mock-mode, spec 051)', () =>
     await expect(page.getByTestId('update-retry-btn')).toBeVisible();
     await expect(page.getByTestId('update-retry-btn')).toBeEnabled();
 
-    // Restart button must NOT be shown (update not downloaded).
+    // No install or restart choice while nothing is available.
+    await expect(page.getByTestId('update-install-now-btn')).toHaveCount(0);
     await expect(page.getByTestId('update-restart-btn')).toHaveCount(0);
+    await expect(page.getByTestId('update-banner')).toHaveCount(0);
   });
 });

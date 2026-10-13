@@ -159,7 +159,11 @@ export async function checkForUpdate(): Promise<void> {
       return;
     }
     pending = update;
-    setState({ phase: 'available', version: update.version, body: update.body });
+    setState({
+      phase: 'available',
+      version: update.version,
+      body: update.body,
+    });
   } catch (err) {
     setState({ phase: 'check-failed', error: pluginErrMessage(err) });
   }
@@ -169,13 +173,21 @@ export async function checkForUpdate(): Promise<void> {
  * the verified bytes. Returns false (state set to 'download-failed') on error. */
 async function ensureDownloaded(update: Update): Promise<boolean> {
   if (downloaded) return true;
-  setState({ phase: 'downloading', version: update.version, body: update.body });
+  setState({
+    phase: 'downloading',
+    version: update.version,
+    body: update.body,
+  });
   try {
     await update.download();
     downloaded = true;
     return true;
   } catch (err) {
-    setState({ ...current, phase: 'download-failed', error: pluginErrMessage(err) });
+    setState({
+      ...current,
+      phase: 'download-failed',
+      error: pluginErrMessage(err),
+    });
     return false;
   }
 }
@@ -197,7 +209,11 @@ export async function installUpdateNow(): Promise<void> {
   try {
     await update.install();
   } catch (err) {
-    setState({ ...current, phase: 'install-failed', error: pluginErrMessage(err) });
+    setState({
+      ...current,
+      phase: 'install-failed',
+      error: pluginErrMessage(err),
+    });
     return;
   }
   downloaded = false;
@@ -225,10 +241,18 @@ export async function installUpdateOnQuit(): Promise<void> {
     await emit(ARM_EVENT, true);
   } catch (err) {
     await disarmInstallOnQuit();
-    setState({ ...current, phase: 'install-failed', error: pluginErrMessage(err) });
+    setState({
+      ...current,
+      phase: 'install-failed',
+      error: pluginErrMessage(err),
+    });
     return;
   }
-  setState({ phase: 'install-on-quit', version: update.version, body: update.body });
+  setState({
+    phase: 'install-on-quit',
+    version: update.version,
+    body: update.body,
+  });
 }
 
 /**
@@ -242,7 +266,11 @@ async function installOnExit(): Promise<void> {
   unlistenExit?.();
   unlistenExit = null;
   if (update && downloaded) {
-    setState({ phase: 'installing', version: update.version, body: update.body });
+    setState({
+      phase: 'installing',
+      version: update.version,
+      body: update.body,
+    });
     try {
       await update.install();
       downloaded = false;
@@ -259,7 +287,11 @@ async function relaunchInto(): Promise<void> {
     const { relaunch } = await import('@tauri-apps/plugin-process');
     await relaunch();
   } catch (err) {
-    setState({ ...current, phase: 'restart-failed', error: pluginErrMessage(err) });
+    setState({
+      ...current,
+      phase: 'restart-failed',
+      error: pluginErrMessage(err),
+    });
   }
 }
 
