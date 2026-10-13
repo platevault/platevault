@@ -3018,7 +3018,7 @@
   "run_results_accept_named": "Accept {name}",
   "run_results_reject_named": "Reject {name}",
   "run_results_no_products": "No products yet",
-  "run_results_attach_title": "Attach a Result",
+  "run_results_attach_title": "Attach a result",
   "run_results_file_path": "File path",
   "run_results_channel_optional": "Channel (optional)",
   "run_results_channel_placeholder": "Ha",

@@ -3074,7 +3074,7 @@
   "run_results_accept_named": "Aceitar {name}",
   "run_results_reject_named": "Rejeitar {name}",
   "run_results_no_products": "Nenhum produto ainda",
-  "run_results_attach_title": "Anexar um Resultado",
+  "run_results_attach_title": "Anexar um resultado",
   "run_results_file_path": "Caminho do arquivo",
   "run_results_channel_optional": "Canal (opcional)",
   "run_results_channel_placeholder": "Ha",
