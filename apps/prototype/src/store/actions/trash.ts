@@ -15,7 +15,7 @@ import { stepRecord } from "@/domain/calibration-process"
 import { fileAt, filesUnder, removeFile } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
-import { keptViewLinks, runViewLinks, type RunViewLinks, trashBlock } from "@/domain/storage"
+import { keptViewLinks, runViewLinks, type RunViewLinks, type TrashItem, trashBlock } from "@/domain/storage"
 import type { AssetId, CalibrationProcessId, Disk, DiskFile, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
 import { fileName, formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
@@ -23,14 +23,8 @@ import { nowIso, type PrototypeState, store } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { freshId } from "./shared"
 
-/** One path to move. Items sharing an `assetId` move together or not at all. */
-export interface TrashItem {
-  path: string
-  assetId?: AssetId
-  resultId?: ResultId
-  /** Refused before the move, for example "Offline" for a folder that cannot be listed. */
-  refusedReason?: MessageRef
-}
+/** One path to move; defined in the domain so the pure Trash offers (`domain/archive.ts`) can build items. */
+export type { TrashItem }
 
 export interface MoveToOsTrash {
   kind: TrashEpisodeKind
