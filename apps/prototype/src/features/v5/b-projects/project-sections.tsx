@@ -236,7 +236,7 @@ export function useCandidatesSection(project: Project): DetailSection {
 
   const label = (r: CandidateRow) => `${subjectName(m, catalog, r.subject)} · ${sessionLine(m, r.session)}`
   const columns: Column<CandidateRow>[] = [
-    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true },
+    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
     { id: "subject", header: m.project_col_subject(), cell: (r) => (r.placement ? `${subjectName(m, catalog, r.subject)} · ${r.placement}` : subjectName(m, catalog, r.subject)), sortValue: (r) => subjectName(m, catalog, r.subject), truncate: true },
     { id: "rig", header: m.project_col_rig(), cell: (r) => rigName(m, catalog, r.rigId), sortValue: (r) => rigName(m, catalog, r.rigId), truncate: true },
     { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(r.frames), sortValue: (r) => r.frames, align: "right" },
@@ -332,7 +332,7 @@ export function useGoalsSection(project: Project): DetailSection {
     { id: "subject", header: m.project_col_subject(), cell: subjectOf, sortValue: subjectOf, rowHeader: true, truncate: true },
     { id: "channel", header: m.run_col_channel(), cell: (p) => p.goal.channel, sortValue: (p) => p.goal.channel },
     { id: "goal", header: m.project_goals_title(), cell: (p) => kindsLine(m, p.goal), sortValue: (p) => kindsLine(m, p.goal) },
-    { id: "progress", header: m.project_col_progress(), cell: (p) => say(m, p.amounts), sortValue: (p) => p.measure.fraction ?? 0 },
+    { id: "progress", header: m.project_col_progress(), cell: (p) => say(m, p.amounts), sortValue: (p) => p.measure.fraction ?? 0, truncate: true },
     { id: "below", header: m.project_col_below_bar(), cell: (p) => (p.belowBarLine ? say(m, p.belowBarLine) : "–"), sortValue: (p) => p.belowBar.seconds },
     { id: "status", header: m.rungroup_col_status(), cell: (p) => <StatusBadge kind="checklist" value={goalStatus(p)} />, sortValue: goalStatus },
   ]
@@ -507,9 +507,10 @@ export function useSubjectsSection(project: Project): DetailSection {
       id: "kind",
       header: m.project_col_kind(),
       cell: (r) => (r.progress.subject.mosaic ? m.mosaic_of_panels({ count: r.progress.subject.mosaic.panels.length }) : m.project_target_label()),
+      truncate: true,
       sortValue: (r) => r.progress.subject.mosaic?.panels.length ?? 0,
     },
-    { id: "progress", header: m.project_col_progress(), cell: (r) => (r.progress.line ? say(m, r.progress.line) : "–"), sortValue: (r) => r.progress.fraction },
+    { id: "progress", header: m.project_col_progress(), cell: (r) => (r.progress.line ? say(m, r.progress.line) : "–"), sortValue: (r) => r.progress.fraction, truncate: true },
     { id: "balance", header: m.project_col_panel_balance(), cell: (r) => balanceLine(m, r.progress), sortValue: (r) => Number(r.progress.balanced), truncate: true },
     { id: "ratio", header: m.project_col_channel_ratio(), cell: (r) => (r.progress.ratio ? say(m, r.progress.ratio.line) : "–"), sortValue: (r) => (r.progress.ratio ? say(m, r.progress.ratio.line) : null), truncate: true },
     { id: "window", header: m.project_col_window(), cell: (r) => (r.progress.window ? say(m, r.progress.window.line) : "–"), sortValue: (r) => r.progress.window?.nightsLeft ?? null },
@@ -608,7 +609,7 @@ export function useRigsSection(project: Project): DetailSection {
   const columns: Column<string>[] = [
     { id: "rig", header: m.project_col_rig(), cell: (id) => rigName(m, catalog, id), sortValue: (id) => rigName(m, catalog, id), rowHeader: true, truncate: true },
     { id: "camera", header: m.project_col_camera(), cell: camera, sortValue: camera },
-    { id: "channels", header: m.project_col_channels(), cell: (id) => projectChannels(catalog, [id as OpticalTrainId]).join(", ") || "–", sortValue: (id) => projectChannels(catalog, [id as OpticalTrainId]).length },
+    { id: "channels", header: m.project_col_channels(), cell: (id) => projectChannels(catalog, [id as OpticalTrainId]).join(", ") || "–", sortValue: (id) => projectChannels(catalog, [id as OpticalTrainId]).length, truncate: true },
     { id: "field", header: m.project_col_field(), cell: field, sortValue: field },
     { id: "candidates", header: m.project_candidates(), cell: (id) => candidates.filter((c) => c.rigId === id).length, sortValue: (id) => candidates.filter((c) => c.rigId === id).length, align: "right" },
   ]

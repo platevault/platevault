@@ -122,7 +122,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
     )
 
   const fitColumns: Column<RigFit>[] = [
-    { id: "rig", header: m.targets_rig(), rowHeader: true, sortValue: (f) => say(m, f.rig), cell: (f) => say(m, f.rig) },
+    { id: "rig", header: m.targets_rig(), rowHeader: true, truncate: true, sortValue: (f) => say(m, f.rig), cell: (f) => say(m, f.rig) },
     {
       id: "field",
       header: m.target_field(),
@@ -139,7 +139,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
   ]
 
   const projectColumns: Column<ProjectUse>[] = [
-    { id: "project", header: m.nav_projects(), rowHeader: true, sortValue: (u) => u.project.name, cell: (u) => u.project.name },
+    { id: "project", header: m.nav_projects(), rowHeader: true, truncate: true, sortValue: (u) => u.project.name, cell: (u) => u.project.name },
     { id: "status", header: m.target_project_state(), sortValue: (u) => projectStatus(u.project), cell: (u) => <StatusBadge kind="project" value={projectStatus(u.project)} /> },
     { id: "goals", header: m.plan_goals(), align: "right", sortValue: (u) => (u.total > 0 ? u.met / u.total : null), cell: (u) => (u.total > 0 ? m.projects_goals_met({ met: u.met, total: u.total }) : m.projects_no_goals()) },
     { id: "window", header: m.tonight_window(), sortValue: (u) => u.window, cell: (u) => u.window ?? "–" },
@@ -156,8 +156,8 @@ function TargetDetail({ targetId }: { targetId: string }) {
     { id: "night", header: m.tonight_night(), rowHeader: true, sortValue: (s) => s.night, cell: (s) => formatNight(s.night, true) },
     { id: "channel", header: m.target_channel(), sortValue: (s) => s.channel, cell: (s) => s.channel ?? "–" },
     { id: "frames", header: m.calibration_frames(), align: "right", sortValue: (s) => frames(s), cell: (s) => frames(s) },
-    { id: "rig", header: m.targets_rig(), sortValue: (s) => rigName(m, catalog, sessionRigId(s)), cell: (s) => rigName(m, catalog, sessionRigId(s)) },
-    { id: "site", header: m.session_capture_site(), sortValue: (s) => captureSite(catalog, s)?.name ?? null, cell: (s) => captureSite(catalog, s)?.name ?? "–" },
+    { id: "rig", header: m.targets_rig(), truncate: true, sortValue: (s) => rigName(m, catalog, sessionRigId(s)), cell: (s) => rigName(m, catalog, sessionRigId(s)) },
+    { id: "site", header: m.session_capture_site(), truncate: true, sortValue: (s) => captureSite(catalog, s)?.name ?? null, cell: (s) => captureSite(catalog, s)?.name ?? "–" },
   ]
   function frames(s: Session): number {
     return s.assetIds.filter((id) => !catalog.assets[id]?.trashed).length
