@@ -12,7 +12,7 @@ import { calibrationPlan, type CalibrationPlan, handoffCalibration, handsOff, KI
 import { CALIBRATION_STEPS, stackRefusals } from "./calibration-process"
 import { latestCorrection } from "./corrections"
 import { filesUnder, volumeForPath } from "./disk"
-import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
+import { BANDS, GOAL_CHANNELS, isGoalChannel, NARROW_BANDS, numberText, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
 import {
   assetAvailability,
   coverageFraction,
@@ -24,9 +24,9 @@ import {
   sessionFootprint,
 } from "./library"
 import { memberSessions, runSummary, sessionExposureS, sessionRef } from "./membership"
-import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight } from "./planning"
+import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight, windowProgress, type WindowProgress } from "./planning"
 import { angularSeparationDeg, type FieldOfView, fieldOfView } from "./sky"
-import { goalMeasure, type GoalMeasure, type NamingValues, namingValues } from "./templates"
+import { goalMeasure, type GoalMeasure, type GoalUnit, type NamingValues, namingValues, subjectConditions } from "./templates"
 import type {
   AppSettings,
   Asset,
@@ -46,8 +46,10 @@ import type {
   RunFlowStepId,
   WrapUpStepRecord,
   Disk,
+  FrozenGoal,
   Goal,
   GoalChannel,
+  GoalFreeze,
   GoalTemplateValue,
   IsoDateTime,
   Location,
@@ -73,9 +75,10 @@ import type {
   SessionId,
   SimulationFaults,
   Subject,
+  SubjectConditions,
   Target,
 } from "./types"
-import { fileName, formatCount } from "@/lib/format"
+import { fileName, formatCount, formatDecimal } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 /** The read-only slice of the prototype state derivations need; `PrototypeState` satisfies it. */
@@ -573,6 +576,8 @@ export interface GoalProgress {
   captured: FrameTotals
   /** Members the goal's quality bar cannot judge (no applicable measurement); they do not count (PRJ-FR-03). */
   unknownQuality: number
+  /** Usable frames in project that the bar's FWHM limit leaves out (C7); zero without a limit. */
+  belowBar: FrameTotals
   met: boolean
   /** The goal's one unit, its amount and what remains, in that unit (C7, `goalMeasure` in templates.ts). */
   measure: GoalMeasure
@@ -585,17 +590,24 @@ export interface GoalProgress {
   line: MessageRef
   /** The line without its channel: "6h10 in project · 9h15 captured · goal 10h", beside a channel chip. */
   amounts: MessageRef
+  /** "+2h10 below bar" (or "+12 frames below bar" for a frame goal) beside the line (C7); null when nothing is below the bar. */
+  belowBarLine: MessageRef | null
+  /** The figures are the ones frozen when the Project closed (C7), not the live library's. */
+  frozen: boolean
 }
 
-function admitsQuality(catalog: Catalog, asset: Asset, bar: Goal["qualityBar"]): boolean | null {
-  if (!bar) return true
+/** What a goal's quality bar makes of one frame in project (C7). */
+type FrameVerdict = "counted" | "below-bar" | "unmeasured" | "not-counted"
+
+function frameVerdict(catalog: Catalog, asset: Asset, bar: Goal["qualityBar"]): FrameVerdict {
+  if (!bar) return "counted"
   const usable = asset.quality.value === "usable" && qualityApplicability(asset) === "applicable"
-  if (bar.kind === "usable-only") return usable
-  if (bar.kind === "usable-max-fwhm" && !usable) return false
+  if (bar.kind === "usable-only") return usable ? "counted" : "not-counted"
+  if (bar.kind === "usable-max-fwhm" && !usable) return "not-counted"
   const record = catalog.measurements[asset.id]
   const fwhm = record && measurementApplies(asset, record) ? record.metrics.find((m) => m.key === "fwhm" && m.unit === "arcsec") : undefined
-  if (!fwhm || fwhm.value === null) return null
-  return fwhm.value <= bar.maxArcsec
+  if (!fwhm || fwhm.value === null) return "unmeasured"
+  return fwhm.value <= bar.maxArcsec ? "counted" : "below-bar"
 }
 
 function goalMatches(catalog: Catalog, goal: Goal, session: Session, subject: Subject, rigId: OpticalTrainId): boolean {
@@ -604,22 +616,37 @@ function goalMatches(catalog: Catalog, goal: Goal, session: Session, subject: Su
   return panelForSession(catalog, subject, session, rigId).panelId === goal.panelId
 }
 
+/** One goal's counted totals: the live library's, or the ones Close froze (`FrozenGoal`). */
+type GoalCounts = Omit<FrozenGoal, "goalId">
+
 /**
- * Progress of every goal. "in project" counts frames in the latest saved
- * memberships of the Project's runs outside its Trash (each frame once),
- * leaving out run exclusions and rejections, Trashed
- * frames and frames the quality bar does not admit. "captured" counts every
- * candidate frame plus those members, Trashed frames aside, so "in project"
- * never exceeds "captured" (D-W66).
+ * Counts each goal against the live library. "in project" counts frames in
+ * the latest saved memberships of the Project's runs outside its Trash (each
+ * frame once), leaving out run exclusions and rejections, Trashed frames and
+ * frames the quality bar does not admit; those the bar's FWHM limit leaves
+ * out count as below the bar. "captured" counts every candidate frame plus
+ * those members, Trashed frames aside, so "in project" never exceeds
+ * "captured" (D-W66).
  */
-export function goalProgress(catalog: Catalog, project: Project): GoalProgress[] {
+function liveCounter(catalog: Catalog, project: Project): (goal: Goal) => GoalCounts {
   const runs = projectRuns(catalog, project.id)
   const candidates = projectMatches(catalog, project)
-  return project.goals.map((goal): GoalProgress => {
+  const total = (ids: Set<AssetId>) => {
+    const totals = zero()
+    for (const id of ids) {
+      const asset = catalog.assets[id]
+      if (!asset) continue
+      totals.frames += 1
+      totals.seconds += effectiveExposureS(catalog, asset)
+    }
+    return totals
+  }
+  return (goal) => {
     const subject = findSubject(project, goal.subjectId)
     const inProjectIds = new Set<AssetId>()
     const capturedIds = new Set<AssetId>()
-    let unknownQuality = 0
+    const belowBarIds = new Set<AssetId>()
+    const unmeasuredIds = new Set<AssetId>()
     if (subject) {
       for (const run of runs) {
         if (run.subjectId !== subject.id || (goal.panelId && run.panelId !== goal.panelId)) continue
@@ -631,9 +658,10 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
           if (!asset || asset.trashed || !session || goalChannel(catalog, session) !== goal.channel) continue
           capturedIds.add(id)
           if (!revision.included.includes(id)) continue
-          const admitted = admitsQuality(catalog, asset, goal.qualityBar)
-          if (admitted === null) unknownQuality += 1
-          else if (admitted) inProjectIds.add(id)
+          const verdict = frameVerdict(catalog, asset, goal.qualityBar)
+          if (verdict === "counted") inProjectIds.add(id)
+          else if (verdict === "below-bar") belowBarIds.add(id)
+          else if (verdict === "unmeasured") unmeasuredIds.add(id)
         }
       }
       for (const candidate of candidates) {
@@ -641,41 +669,292 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
         for (const id of liveAssetIds(catalog, candidate.session)) capturedIds.add(id)
       }
     }
-    const total = (ids: Set<AssetId>) => {
-      const totals = zero()
-      for (const id of ids) {
-        const asset = catalog.assets[id]
-        if (!asset) continue
-        totals.frames += 1
-        totals.seconds += effectiveExposureS(catalog, asset)
-      }
-      return totals
-    }
-    const inProject = total(inProjectIds)
-    const captured = total(capturedIds)
-    const measure = goalMeasure(goal, inProject, captured)
-    const amount = (n: number) => (measure.unit === "time" ? verbatim(formatHours(n)) : framesRef(n))
-    const amounts =
-      measure.target !== null
-        ? msg("domain_goal_amounts", { inProject: amount(measure.inProject), captured: amount(measure.captured), target: amount(measure.target) })
-        : msg("domain_goal_amounts_no_target", { inProject: amount(measure.inProject), captured: amount(measure.captured) })
-    return {
-      goal,
-      inProject,
-      captured,
-      unknownQuality,
-      met: measure.met,
-      measure,
-      remainingS: measure.unit === "time" ? measure.remaining : null,
-      line: msg("domain_goal_line", { channel: goal.channel, amounts }),
-      amounts,
-    }
+    return { inProject: total(inProjectIds), captured: total(capturedIds), belowBar: total(belowBarIds), unknownQuality: unmeasuredIds.size }
+  }
+}
+
+function progressOf(goal: Goal, counts: GoalCounts, frozen: boolean): GoalProgress {
+  const { inProject, captured, belowBar, unknownQuality } = counts
+  const measure = goalMeasure(goal, inProject, captured)
+  const count = (n: number) => (measure.unit === "time" ? verbatim(formatHours(n)) : framesRef(n))
+  const amounts =
+    measure.target !== null
+      ? msg("domain_goal_amounts", { inProject: count(measure.inProject), captured: count(measure.captured), target: count(measure.target) })
+      : msg("domain_goal_amounts_no_target", { inProject: count(measure.inProject), captured: count(measure.captured) })
+  return {
+    goal,
+    inProject,
+    captured,
+    unknownQuality,
+    belowBar,
+    met: measure.met,
+    measure,
+    remainingS: measure.unit === "time" ? measure.remaining : null,
+    line: msg("domain_goal_line", { channel: goal.channel, amounts }),
+    amounts,
+    belowBarLine: belowBar.frames > 0 ? msg("domain_goal_below_bar", { amount: count(measure.unit === "time" ? belowBar.seconds : belowBar.frames) }) : null,
+    frozen,
+  }
+}
+
+/**
+ * Progress of every goal (`liveCounter` says what counts). A closed Project
+ * reads the figures frozen at Close (C7, `freezeGoals`), so later library
+ * changes leave them as they were; an open one, or a closed one saved
+ * without them, reads the live library.
+ */
+export function goalProgress(catalog: Catalog, project: Project): GoalProgress[] {
+  const freeze = project.state === "done" ? project.goalFreeze : null
+  const frozen = new Map((freeze?.goals ?? []).map((g) => [g.goalId, g]))
+  let live: ((goal: Goal) => GoalCounts) | null = null
+  return project.goals.map((goal) => {
+    const held = frozen.get(goal.id)
+    if (held) return progressOf(goal, held, true)
+    live ??= liveCounter(catalog, project)
+    return progressOf(goal, live(goal), false)
   })
+}
+
+/**
+ * The goal figures to keep when a Project closes (C7): every goal counted
+ * against the live library at `at`. Close writes them into
+ * `Project.goalFreeze` with the Done state; Reopen clears them.
+ */
+export function freezeGoals(catalog: Catalog, project: Project, at: IsoDateTime): GoalFreeze {
+  const count = liveCounter(catalog, project)
+  return { at, goals: project.goals.map((goal) => ({ goalId: goal.id, ...count(goal) })) }
 }
 
 /** "1 frame", "1,200 frames". */
 function framesRef(count: number): MessageRef {
   return msg("project_frames_count", { count, n: formatCount(count) })
+}
+
+// ---------------------------------------------------------------------------
+// Subject progress (C7): mosaic coverage, panel balance, channel ratio and
+// the deadline or season window
+// ---------------------------------------------------------------------------
+
+/** One panel's counted amount on a channel, against the panels' mean (`panelBalance`). */
+export interface PanelShare {
+  panel: MosaicPanel
+  /** Counted in project, in the balance's unit: seconds of Usable frames inside the bar, or frames. */
+  counted: number
+  /** Signed percent from the panels' mean; 0 while nothing is counted. */
+  deviationPct: number
+  within: boolean
+}
+
+/** Mosaic panel balance on one channel (C7). */
+export interface PanelBalance {
+  channel: GoalChannel
+  unit: GoalUnit
+  tolerancePct: number
+  /** The panels' mean counted amount, in `unit`. */
+  mean: number
+  /** In panel order. */
+  panels: PanelShare[]
+  balanced: boolean
+  /** Out of balance: the panel furthest from the mean, the one below it on a tie (it is the one to image); null when balanced. */
+  furthest: PanelShare | null
+  /** "Panels within ±10%", "Panel 3 100% below average · limit ±10%". */
+  line: MessageRef
+}
+
+/**
+ * Panel balance on one channel (C7): each panel's counted amount stays within
+ * ±`tolerancePct` of the panels' mean. The user's "within ±N % of each other"
+ * is read as a band around the mean, so each panel has one signed deviation
+ * to show and the panel furthest behind is the one to image next; a
+ * max-minus-min spread was the alternative, but it names no panel. Revisit
+ * if the user means the spread. While nothing is counted the panels are even.
+ */
+export function panelBalance(channel: GoalChannel, unit: GoalUnit, counted: Array<{ panel: MosaicPanel; counted: number }>, tolerancePct: number): PanelBalance {
+  const mean = counted.length === 0 ? 0 : counted.reduce((sum, p) => sum + p.counted, 0) / counted.length
+  const panels = counted.map(({ panel, counted: amount }): PanelShare => {
+    const deviationPct = mean > 0 ? ((amount - mean) / mean) * 100 : 0
+    // A hair of slack, so an amount exactly on the limit reads as within despite float rounding.
+    return { panel, counted: amount, deviationPct, within: Math.abs(deviationPct) <= tolerancePct + 1e-9 }
+  })
+  const balanced = panels.every((p) => p.within)
+  const furthest = balanced ? null : panels.reduce((a, b) => (Math.abs(b.deviationPct) > Math.abs(a.deviationPct) || (Math.abs(b.deviationPct) === Math.abs(a.deviationPct) && b.deviationPct < a.deviationPct) ? b : a))
+  const pct = numberText(tolerancePct)
+  const line = !furthest
+    ? msg("domain_balance_within", { pct })
+    : msg(furthest.deviationPct < 0 ? "domain_balance_below" : "domain_balance_above", { panel: panelRef(furthest.panel), deviation: formatCount(Math.round(Math.abs(furthest.deviationPct))), pct })
+  return { channel, unit, tolerancePct, mean, panels, balanced, furthest, line }
+}
+
+/** One channel's share of a ratio (`channelRatio`). */
+export interface RatioPart {
+  channel: GoalChannel
+  /** In the ratio's unit. */
+  amount: number
+  /** `amount` over the smallest non-zero amount; null while every amount is zero. */
+  part: number | null
+}
+
+/** A subject's channel ratio: counted, next to the ratio its goals imply (C7; a display, never a goal). */
+export interface ChannelRatio {
+  unit: GoalUnit
+  counted: RatioPart[]
+  /** Null when the goals mix time and frames, or one has no amount: they imply no ratio. */
+  implied: RatioPart[] | null
+  /** "Ha 1.8 : OIII 1.0 counted · goals Ha 1.0 : OIII 1.0". */
+  line: MessageRef
+}
+
+function ratioParts(amounts: Array<{ channel: GoalChannel; amount: number }>): RatioPart[] {
+  const smallest = Math.min(...amounts.map((a) => a.amount).filter((a) => a > 0))
+  return amounts.map(({ channel, amount }) => ({ channel, amount, part: Number.isFinite(smallest) ? amount / smallest : null }))
+}
+
+function ratioRef(parts: RatioPart[]): MessageRef {
+  if (parts.every((p) => p.part === null)) return verbatim("–")
+  return joinRefs(
+    parts.map((p) => msg("domain_ratio_part", { channel: p.channel, part: formatDecimal(p.part ?? 0, 1) })),
+    " : ",
+  )
+}
+
+/**
+ * A subject's channel ratio (C7): its counted time per channel, Usable frames
+ * inside each goal's bar, next to the ratio its goals imply; in frames when
+ * every goal counts frames. A mosaic's panels add up per channel. Channels
+ * follow `GOAL_CHANNELS`. Null below two channels: one channel has no ratio.
+ */
+export function channelRatio(progress: GoalProgress[]): ChannelRatio | null {
+  const channels = GOAL_CHANNELS.filter((c) => progress.some((p) => p.goal.channel === c))
+  if (channels.length < 2) return null
+  const unit: GoalUnit = progress.every((p) => p.measure.unit === "frames") ? "frames" : "time"
+  const sum = (channel: GoalChannel, of: (p: GoalProgress) => number) => progress.filter((p) => p.goal.channel === channel).reduce((n, p) => n + of(p), 0)
+  const counted = ratioParts(channels.map((channel) => ({ channel, amount: sum(channel, (p) => (unit === "time" ? p.inProject.seconds : p.inProject.frames)) })))
+  const implies = progress.every((p) => p.measure.amount !== null && p.measure.unit === unit)
+  const implied = implies ? ratioParts(channels.map((channel) => ({ channel, amount: sum(channel, (p) => p.measure.target ?? 0) }))) : null
+  const line = implied ? msg("domain_ratio_line", { counted: ratioRef(counted), implied: ratioRef(implied) }) : msg("domain_ratio_counted", { counted: ratioRef(counted) })
+  return { unit, counted, implied, line }
+}
+
+/** One channel of a subject: a plain subject's goal, or a mosaic's goal per panel (C7). */
+export interface ChannelProgress {
+  channel: GoalChannel
+  /** In panel order for a mosaic. */
+  goals: GoalProgress[]
+  /** The least complete goal: what the channel's progress shows (C7). */
+  weakest: GoalProgress
+  /** Mosaic panel balance; null for a plain subject or with fewer than two panels holding a goal. */
+  balance: PanelBalance | null
+}
+
+/** A subject's goals and conditions together (C7, `subjectProgress`). */
+export interface SubjectProgress {
+  subject: Subject
+  conditions: SubjectConditions
+  goals: GoalProgress[]
+  /** In `GOAL_CHANNELS` order. */
+  channels: ChannelProgress[]
+  /** Share of the goals met, 0 to 1: a plain subject's mean over its goals, a mosaic's weakest panel's. Null without an amount. */
+  fraction: number | null
+  /** A mosaic's least complete panel, which `fraction` shows; null for a plain subject. */
+  weakestPanel: MosaicPanel | null
+  /** Every goal met, every panel's for a mosaic (C7); a subject without goals never is. Panel balance is shown beside it, never holds it. */
+  complete: boolean
+  /** Every channel's panels within the panel balance; true for a plain subject. */
+  balanced: boolean
+  ratio: ChannelRatio | null
+  /** Nights left and the planning priority; null without a window or a planning night. */
+  window: WindowProgress | null
+  /** "Panel 3 · 21%" for a mosaic, "62%" for a plain subject; null without an amount. */
+  line: MessageRef | null
+}
+
+const average = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length
+
+function summary(subject: Subject, goals: GoalProgress[], tonight: NightDate | null): SubjectProgress {
+  const conditions = subjectConditions(subject)
+  const panels = subject.mosaic?.panels ?? []
+  const panelOrder = (p: GoalProgress) => panels.findIndex((panel) => panel.id === p.goal.panelId)
+  const channels = GOAL_CHANNELS.flatMap((channel): ChannelProgress[] => {
+    const own = goals.filter((p) => p.goal.channel === channel).sort((a, b) => panelOrder(a) - panelOrder(b))
+    if (own.length === 0) return []
+    const weakest = own.reduce((a, b) => ((b.measure.fraction ?? 0) < (a.measure.fraction ?? 0) ? b : a))
+    const onPanels = panels.flatMap((panel) => {
+      const held = own.filter((p) => p.goal.panelId === panel.id)
+      return held.length > 0 ? [{ panel, held }] : []
+    })
+    if (onPanels.length < 2) return [{ channel, goals: own, weakest, balance: null }]
+    const unit: GoalUnit = onPanels.every(({ held }) => held.every((p) => p.measure.unit === "frames")) ? "frames" : "time"
+    const counted = onPanels.map(({ panel, held }) => ({ panel, counted: held.reduce((n, p) => n + (unit === "time" ? p.inProject.seconds : p.inProject.frames), 0) }))
+    return [{ channel, goals: own, weakest, balance: panelBalance(channel, unit, counted, conditions.panelBalancePct) }]
+  })
+  const fractions = (of: GoalProgress[]) => of.map((p) => p.measure.fraction).filter((f): f is number => f !== null)
+  let fraction: number | null = null
+  let weakestPanel: MosaicPanel | null = null
+  if (subject.mosaic) {
+    for (const panel of panels) {
+      const own = fractions(goals.filter((p) => p.goal.panelId === panel.id))
+      if (own.length === 0) continue
+      const share = average(own)
+      if (fraction === null || share < fraction) {
+        fraction = share
+        weakestPanel = panel
+      }
+    }
+  } else {
+    const own = fractions(goals)
+    fraction = own.length > 0 ? average(own) : null
+  }
+  const percent = fraction === null ? null : formatCount(Math.floor(fraction * 100))
+  return {
+    subject,
+    conditions,
+    goals,
+    channels,
+    fraction,
+    weakestPanel,
+    complete: goals.length > 0 && goals.every((p) => p.met),
+    balanced: channels.every((c) => c.balance?.balanced ?? true),
+    ratio: channelRatio(goals),
+    window: conditions.window && tonight ? windowProgress(conditions.window, tonight) : null,
+    line: percent === null ? null : weakestPanel ? msg("domain_subject_weakest_panel", { panel: panelRef(weakestPanel), percent }) : msg("domain_subject_percent", { percent }),
+  }
+}
+
+/**
+ * Each subject's goals with its conditions (C7): a mosaic completes when
+ * every panel meets its goals and its progress shows the weakest panel;
+ * per channel, the panels' balance; the channel ratio; and, from `tonight`
+ * (the planning night, `upcomingNight`), the nights left in its window.
+ */
+export function subjectProgress(catalog: Catalog, project: Project, tonight: NightDate | null): SubjectProgress[] {
+  const progress = goalProgress(catalog, project)
+  return project.subjects.map((subject) => summary(subject, progress.filter((p) => p.goal.subjectId === subject.id), tonight))
+}
+
+/** One subject in Planning's deadline order (`planningPriorities`). */
+export interface SubjectPriority {
+  project: Project
+  subject: Subject
+  window: WindowProgress
+  /** `deadlinePriority` (planning.ts): rises from 0 to 1 over the window's last nights. */
+  priority: number
+}
+
+/**
+ * Planning's order for subjects with a window (C7): the incomplete subjects
+ * of open Projects whose window has not passed, highest priority first, then
+ * fewest nights left. Planning raises a subject as its date nears.
+ */
+export function planningPriorities(catalog: Catalog, tonight: NightDate): SubjectPriority[] {
+  const out: SubjectPriority[] = []
+  for (const project of Object.values(catalog.projects)) {
+    if (project.state !== "open" || !project.subjects.some((s) => subjectConditions(s).window)) continue
+    for (const progress of subjectProgress(catalog, project, tonight)) {
+      if (progress.complete || !progress.window || progress.window.state === "passed") continue
+      out.push({ project, subject: progress.subject, window: progress.window, priority: progress.window.priority })
+    }
+  }
+  return out.sort((a, b) => b.priority - a.priority || a.window.nightsLeft - b.window.nightsLeft)
 }
 
 // ---------------------------------------------------------------------------

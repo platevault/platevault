@@ -5506,6 +5506,54 @@
   "domain_goal_amounts": "{inProject} in project · {captured} captured · goal {target}",
   "domain_goal_amounts_no_target": "{inProject} in project · {captured} captured",
   "domain_goal_line": "{channel} {amounts}",
+  "domain_goal_below_bar": "+{amount} below bar",
+  "domain_balance_setting": "Panel balance ±{pct}%",
+  "domain_balance_within": "Panels within ±{pct}%",
+  "domain_balance_below": "{panel} {deviation}% below average · limit ±{pct}%",
+  "domain_balance_above": "{panel} {deviation}% above average · limit ±{pct}%",
+  "domain_window_finish_by": "Finish by {night}",
+  "domain_window_season": "Season {from} – {to}",
+  "domain_window_rule_season": "Season from visibility",
+  "domain_window_none": "No deadline",
+  "domain_window_nights_left": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} night left",
+        "countPlural=*": "{n} nights left"
+      }
+    }
+  ],
+  "domain_window_opens_in": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Opens in {n} night",
+        "countPlural=*": "Opens in {n} nights"
+      }
+    }
+  ],
+  "domain_window_finish_by_passed": "Finish-by date passed",
+  "domain_window_season_over": "Season over",
+  "domain_ratio_part": "{channel} {part}",
+  "domain_ratio_line": "{counted} counted · goals {implied}",
+  "domain_ratio_counted": "{counted} counted",
+  "domain_subject_weakest_panel": "{percent}% · weakest {panel}",
+  "domain_subject_percent": "{percent}%",
   "domain_gate_sessions_selected": "Sessions selected",
   "domain_gate_no_sessions": "No sessions yet.",
   "domain_gate_no_unresolved": "No unresolved inputs",
@@ -8145,6 +8193,7 @@
   "seed_project_m31_notes": "Broadband first; narrowband blend later.",
   "seed_project_heart_notes": "Ha first; OIII when the Moon allows.",
   "seed_dark_exception_reason": "Darks stacked in PixInsight",
+  "seed_template_hoo_mosaic": "HOO mosaic",
   "picker_today": "Today",
   "picker_week_previous": "Previous week",
   "picker_week_next": "Next week",

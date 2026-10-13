@@ -4,10 +4,10 @@
  * with `say(m, …)` in the reader's language. Status words with their glyphs
  * live in `components/app/status.tsx`.
  */
-import { formatCount } from "@/lib/format"
-import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { formatCount, formatDecimal } from "@/lib/format"
+import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { Band, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, WrapUpStepId } from "./types"
+import type { Band, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 export const RUN_STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
 
@@ -71,11 +71,35 @@ export function isGoalChannel(value: string): value is GoalChannel {
   return (GOAL_CHANNELS as string[]).includes(value)
 }
 
-/** "Usable", "FWHM ≤ 2.5″", "Usable, FWHM ≤ 2.5″". */
+/** "Usable", "FWHM ≤ 2.5″", "Usable, FWHM ≤ 2.5″"; the limit in the reader's digits ("2,5″" in pt-BR). */
 export function qualityBarRef(bar: QualityBar | null): MessageRef {
   if (!bar) return msg("domain_quality_any")
   if (bar.kind === "usable-only") return msg("status_usable")
-  return bar.kind === "max-fwhm" ? msg("domain_quality_max_fwhm", { arcsec: bar.maxArcsec }) : msg("domain_quality_usable_max_fwhm", { arcsec: bar.maxArcsec })
+  const arcsec = numberText(bar.maxArcsec)
+  return bar.kind === "max-fwhm" ? msg("domain_quality_max_fwhm", { arcsec }) : msg("domain_quality_usable_max_fwhm", { arcsec })
+}
+
+/** A setting's number in the reader's digits, as precise as it was typed up to two decimals: "10", "3.5", "5.25" ("3,5" in pt-BR). */
+export function numberText(value: number): string {
+  if (Number.isInteger(value)) return formatCount(value)
+  const tenths = value * 10
+  return formatDecimal(value, Math.abs(tenths - Math.round(tenths)) < 1e-9 ? 1 : 2)
+}
+
+/** "Panel balance ±10%": a subject's or template's mosaic panel balance (C7). */
+export function panelBalanceRef(pct: number): MessageRef {
+  return msg("domain_balance_setting", { pct: numberText(pct) })
+}
+
+/** "Finish by 30 Nov", "Season 13 Oct – 2 Dec": a subject's window (C7). */
+export function windowRef(window: SubjectWindow): MessageRef {
+  return window.kind === "finish-by" ? msg("domain_window_finish_by", { night: nightRef(window.night) }) : msg("domain_window_season", { from: nightRef(window.from), to: nightRef(window.to) })
+}
+
+/** "No deadline", "Finish by 30 Nov", "Season from visibility": a template's window rule (C7). */
+export function windowRuleRef(rule: WindowRule | null): MessageRef {
+  if (!rule) return msg("domain_window_none")
+  return rule.kind === "finish-by" ? msg("domain_window_finish_by", { night: nightRef(rule.night) }) : msg("domain_window_rule_season")
 }
 
 /**
