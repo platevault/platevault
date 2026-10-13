@@ -2,8 +2,8 @@
  * Simulation controls (foundation-owned, prototype only). Reach offline,
  * unreadable, drift, restore, copy, collision, new-arrival, failed-write,
  * resolver, clock, permission and no-site states without a real
- * filesystem. Opened from the toolbar "Prototype" button; Settings › About
- * embeds `SimulationControls`.
+ * filesystem. Opened from the toolbar "Prototype" button and the palette's
+ * Prototype controls command.
  */
 import { useParams } from "@tanstack/react-router"
 import { FlaskConical, RotateCcw } from "lucide-react"
@@ -25,6 +25,7 @@ import { formatNight } from "@/lib/format"
 import { type MessageRef, msg, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
+import { updateApp } from "@/store/actions/settings"
 import { resetPrototype } from "@/store"
 import { removableDevices } from "@/domain/devices"
 import { runSimulations } from "@/features/v5/c-runs/actions"
@@ -113,6 +114,7 @@ export function SimulationControls() {
   const arrived = useStore(() => newCapturesArrived())
   const devices = useStore((s) => removableDevices(s.disk))
   const stacking = useStore((s) => calibrationProcesses(s.catalog).filter((v) => v.status === "stacking"))
+  const apps = useStore((s) => s.disk.apps)
   const m = useMessages()
   const [folderQuery, setFolderQuery] = useState("")
   const [path, setPath] = useState("")
@@ -400,6 +402,17 @@ export function SimulationControls() {
             checked={faults.developerMode === "off"}
             onChange={(value) => setWindowsWithoutDeveloperMode(value)}
           />
+        </div>
+      </Section>
+
+      <Section title={m.settings_applications()} level={3}>
+        <div className="divide-y rounded-md border px-3">
+          {apps.map((app) => (
+            <ToggleRow key={app.id} label={app.name} path={app.path} detail={app.present ? m.apps_present() : m.apps_moved_away()} checked={app.present} onChange={(present) => updateApp(app.id, { present })} />
+          ))}
+          {apps.map((app) => (
+            <ToggleRow key={`${app.id}-launch`} label={m.apps_fail_next_launch()} detail={app.name} checked={app.launchFails} onChange={(launchFails) => updateApp(app.id, { launchFails })} />
+          ))}
         </div>
       </Section>
 

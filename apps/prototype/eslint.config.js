@@ -74,6 +74,18 @@ export const COMPOSITION_ENFORCED = [
     area: { dir: "t1", depth: 1 },
     files: ["src/features/t1/setup/setup-language.tsx"],
   },
+  {
+    // t1/components also holds the deprecated form-field, row-menu and location-row, which P10 and P11 still import; only P9's rebuilt files are listed.
+    unit: "P9 Settings A",
+    area: { dir: "t1", depth: 1 },
+    files: ["src/features/t1/settings/**/*.{ts,tsx}", "src/features/t1/components/{add-location-flow,duplicates-review,location-actions,form-blockers}.{ts,tsx}"],
+  },
+  {
+    // t4 is P9's alone.
+    unit: "P9 Settings A",
+    area: { dir: "t4", depth: 0 },
+    files: ["src/features/t4/**/*.{ts,tsx}"],
+  },
 ]
 
 export default defineConfig(
