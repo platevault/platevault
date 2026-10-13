@@ -8704,6 +8704,23 @@
   "catalogue_templates_settings_desc": "Uma área de Configurações: o título, linhas de configuração e uma seção de lista com um Adicionar no cabeçalho.",
   "catalogue_templates_indexing": "Indexação",
   "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} está antigo · em {count} execução não concluída",
+        "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
+      }
+    }
+  ],
+  "store_saved_added": "{name} adicionado",
   "catalogue_fields_notes_sample": "Imagens do quintal; flats ao entardecer.",
   "catalogue_fields_notes_error": "Notas com mais de 500 caracteres",
   "catalogue_fields_group_caption": "Duas metas com uma ação Remover nomeada pelo grupo · um erro de horas ou frames · desativado.",

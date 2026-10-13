@@ -8648,6 +8648,23 @@
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
   "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} is old · in {count} unfinished run",
+        "countPlural=*": "{name} is old · in {count} unfinished runs"
+      }
+    }
+  ],
+  "store_saved_added": "Added {name}",
   "catalogue_fields_notes_sample": "Imaged from the back garden; flats at dusk.",
   "catalogue_fields_notes_error": "Notes over 500 characters",
   "catalogue_fields_group_caption": "Two goals with a Remove action named after each group · a hours-or-frames error · disabled.",

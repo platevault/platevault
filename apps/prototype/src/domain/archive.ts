@@ -7,11 +7,11 @@
  * taking `World` in place of `PrototypeState` so the domain stays store-free.
  */
 import { fileAt, fileKey, freeBytes } from "./disk"
-import { defaultArchiveLocation, liveAssetIds, sessionNamingValues, type StepLink, type World } from "./derive"
+import { archiveDestination, defaultArchiveLocation, liveAssetIds, projectMemberSessionIds, sessionNamingValues, type StepLink, type World } from "./derive"
 import { qualityApplicability } from "./library"
 import { keptCopy, keptViewLinks, runViewLinks, type RunViewLinks, type TrashBlock, trashBlock, type TrashItem } from "./storage"
 import { namingTemplate, resolveNamingTemplate } from "./templates"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, Operation, Session, SessionId, Volume } from "./types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, Operation, Project, Session, SessionId, Volume } from "./types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { m, type MessageRef, msg } from "@/lib/i18n"
 
@@ -102,7 +102,8 @@ const OFFER_TITLE: Record<OfferKind, { some: (count: OfferCount) => string; none
   "duplicate-copies": { some: (c) => m.wrapup_offer_duplicates(c), none: () => m.wrapup_offer_duplicates_none() },
 }
 
-function offer(kind: OfferKind, disk: Disk, links: RunViewLinks, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
+/** A Trash offer of `kind` over its entries and items: its title, the bytes it reclaims and the kept-view links that leave with it. */
+export function trashOffer(kind: OfferKind, disk: Disk, links: RunViewLinks, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
   const paths = items.map((i) => i.path)
   const sizeBytes = reclaimBytes(disk, paths)
   const title = entries.length === 0 ? OFFER_TITLE[kind].none() : OFFER_TITLE[kind].some({ count: entries.length, n: formatCount(entries.length), size: formatBytes(sizeBytes) })
@@ -172,7 +173,7 @@ export function unusableFramesOffer(state: Pick<World, "catalog" | "disk" | "ope
     })
     for (const copy of asset.copies) items.push({ path: copy.path, assetId: id })
   }
-  return offer("rejected-frames", disk, links, entries, refusals, items)
+  return trashOffer("rejected-frames", disk, links, entries, refusals, items)
 }
 
 // ---------------------------------------------------------------------------
@@ -285,4 +286,60 @@ export function sessionsArchivePlan(state: World, sessions: Session[]): ArchiveP
     destination ? null : msg("wrapup_no_archive_location"),
   )
   return { ...plan, kept: [] }
+}
+
+/**
+ * Archive of a Project at Wrap up (STO-FR-13, P-ARC1): its member sessions
+ * transfer to the chosen archive location (the Project's own, else the
+ * Default) along the naming template. A session that a run in another
+ * Project not marked Done uses stays and is listed as kept (D-W46); being
+ * another Project's candidate does not count.
+ */
+export function archivePlan(state: World, project: Project, destinationId?: string | null): ArchivePlan {
+  const { catalog } = state
+  const archived = new Set(project.archive?.sessionIds ?? [])
+  const usedElsewhere = new Map<SessionId, string[]>()
+  for (const other of Object.values(catalog.projects)) {
+    if (other.id === project.id || other.state === "done") continue
+    for (const id of projectMemberSessionIds(catalog, other.id)) usedElsewhere.set(id, [...(usedElsewhere.get(id) ?? []), other.name])
+  }
+  const members = [...projectMemberSessionIds(catalog, project.id)]
+    .map((id) => catalog.sessions[id])
+    .filter((s): s is Session => s !== undefined && !archived.has(s.id))
+    .sort((a, b) => a.night.localeCompare(b.night))
+  const kept = members.filter((s) => usedElsewhere.has(s.id)).map((session) => ({ session, projects: usedElsewhere.get(session.id)! }))
+  const chosen = destinationId ? catalog.locations[destinationId] : undefined
+  const destination = chosen && chosen.role === "archive" && !chosen.retiredAt ? chosen : archiveDestination(state, project)
+  const plan = planOver(
+    state,
+    members.filter((s) => !usedElsewhere.has(s.id)),
+    (session, asset) => (destination ? { locationId: destination.id, volumeId: destination.volumeId, path: joinPath(templatedFolder(state, destination.path, session), asset.fileName) } : null),
+    destination,
+    destination ? null : msg("wrapup_no_archive_location"),
+  )
+  return { ...plan, kept }
+}
+
+/** Where each archived frame came from, recorded by the archive transfer so Restore puts it back. */
+export type ArchiveOrigins = Record<AssetId, CopyRef>
+
+/**
+ * Restore archived sessions of a Reopened Project (D-W69, STO-AC-22): a
+ * reviewed transfer back to where Archive found them; a frame without a
+ * recorded origin goes to the first Captures location along the template.
+ */
+export function restorePlan(state: World, project: Project, origins: ArchiveOrigins, sessionIds: SessionId[]): ArchivePlan {
+  const { catalog } = state
+  const captures = Object.values(catalog.locations).find((l) => l.role === "captures" && !l.retiredAt) ?? null
+  const sessions = sessionIds.map((id) => catalog.sessions[id]).filter((s): s is Session => s !== undefined && (project.archive?.sessionIds ?? []).includes(s.id))
+  const plan = planOver(
+    state,
+    sessions,
+    (session, asset) =>
+      origins[asset.id] ?? (captures ? { locationId: captures.id, volumeId: captures.volumeId, path: joinPath(templatedFolder(state, captures.path, session), asset.fileName) } : null),
+    captures,
+    null,
+  )
+  // Restore writes back to each origin's own volume; the free-space check above uses the Captures fallback only.
+  return { ...plan, kept: [], blocked: plan.rows.length === 0 && plan.refused.length === 0 ? msg("project_nothing_to_restore") : null }
 }
