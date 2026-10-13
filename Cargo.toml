@@ -190,9 +190,11 @@ rstest = "0.26"
 # compile on Windows against tauri 2.12 (webview2-com 0.39 / windows 0.62).
 # This pins the upstream main merge of Choochmeque/tauri-plugin-webdriver#103
 # ("Update windows crates to 0.62 for tauri 2.12"), unreleased as of
-# 2026-10-13. Its Rust sources differ from 0.2.3 only in those dependency
-# versions. Drop this patch once a crates.io release newer than 0.2.3 ships with
-# webview2-com 0.39, and set that version in apps/desktop/src-tauri/Cargo.toml.
+# 2026-10-13. Its crate sources differ from 0.2.3 only in those dependency
+# versions and one test assertion. Cargo fetches this git source in every build,
+# release builds included, so builds depend on upstream keeping rev d5ab2865
+# available. Drop this patch once a crates.io release newer than 0.2.3 ships
+# with webview2-com 0.39, and set that version in apps/desktop/src-tauri/Cargo.toml.
 [patch.crates-io]
 tauri-plugin-webdriver = { git = "https://github.com/Choochmeque/tauri-plugin-webdriver", rev = "d5ab2865b00160852d6341c247d0f7942f3d17fc" }
 
