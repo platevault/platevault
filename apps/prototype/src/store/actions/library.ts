@@ -85,10 +85,10 @@ function applyToDraft(runId: RunId, assetIds: AssetId[], reject: boolean): Commi
  * library-wide (`markFrames` with "unusable"). Refused, writing nothing; W3
  * removes the caller (d-review/marks.ts) and W4 this function.
  */
-export function rejectForProjectOnly(runId: RunId, _assetIds: AssetId[], _rejected: boolean): CommitResult {
+export function rejectForProjectOnly(runId: RunId, assetIds: AssetId[], rejected: boolean): CommitResult {
   const run = store.getState().catalog.runs[runId]
   if (!run) return MISSING
-  return setProjectRejection(run.projectId, _assetIds, _rejected)
+  return setProjectRejection(run.projectId, assetIds, rejected)
 }
 
 function correction(session: Session, field: CatalogCorrection["field"], observed: string | null, corrected: string): CatalogCorrection[] {
