@@ -88,3 +88,22 @@ Each stub renders a `PageHeader` with a placeholder title and nothing else. Each
 | `/settings/help` | `HelpPage` (`features/t1/settings/help-page.tsx`), a Settings child, not yet in the section menu | `settings_help` |
 
 `routes.tsx` sends `?step=` to the flow component (`stepFlowOr`). Without `step`, `/import` and `/sessions/$sessionId` render as before.
+
+## Gate
+
+Every prototype unit runs these in `apps/prototype` before it delivers:
+
+- `pnpm i18n:compile`
+- `node_modules/.bin/tsc -p tsconfig.json --noEmit --incremental false` (`src/` and `.storybook/`)
+- `node_modules/.bin/tsc -p tsconfig.node.json --noEmit` (`vite.config.ts`, `vitest.config.ts`, `vitest.globalSetup.ts`)
+- `node_modules/.bin/eslint --max-warnings 0 src/`
+- `node scripts/check-i18n-catalog.mjs`
+- `node scripts/check-i18n-locale-drift.mjs`
+- `node scripts/check-copy.mjs`
+- `pnpm test`: the L2 contract tests (C12).
+- `pnpm build-storybook`: the catalogue as stories (C12).
+- `pnpm lint:composition`: report the deltas for your files; your files add no new warning.
+
+**Tests (C12).** Vitest with Testing Library on jsdom, which is where Base UI runs its own suite, so its portals, focus management and pointer handling are proven there. `vitest.globalSetup.ts` runs `pnpm i18n:compile` once per run, and `src/test/setup.ts` sets the en-GB locale. Tests sit next to their component as `*.test.tsx` and find controls by role and catalogue copy (`m.verb_cancel()`). They test consumer-visible behaviour only: order, focus, keys, ARIA. `pnpm test` runs them once, and `pnpm test:watch` keeps vitest watching.
+
+**Storybook (C12).** `pnpm storybook` (dev, port 6180) and `pnpm build-storybook` (static, `storybook-static/`). There is one story per `CATALOGUE` entry: `app/catalogue/<id>.stories.tsx` renders the registered entry component, so the demos exist once. `app/catalogue/stories.test.ts` fails when an entry has no story, so register an entry together with its story file. The toolbar switches the language (en-GB, pt-BR) and the theme through `setLocale` and `setTheme` in `app/preferences.ts`.
