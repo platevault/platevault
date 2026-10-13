@@ -14,10 +14,12 @@
 //!   Quit, see `bootstrap/menu.rs`) or a close of the main window. The quit is
 //!   prevented, the main window is sent [`INSTALL_EVENT`], and a watchdog
 //!   starts.
-//! - **Installing, not acknowledged:** the frontend answers with
-//!   [`STARTED_EVENT`] before it calls `install()`. Without that answer within
-//!   [`ACK_TIMEOUT`] the watchdog exits the app, and a further quit exits at
-//!   once, so a frontend that never answers cannot trap the user.
+//! - **Installing, not acknowledged:** before it calls `install()`, the
+//!   frontend asks [`update_install_on_quit_begin`], and installs only when
+//!   that answers `true`. Without that request within [`ACK_TIMEOUT`] the
+//!   watchdog exits the app, and a further quit exits at once, so a frontend
+//!   that never answers cannot trap the user. Once either has released the
+//!   quit, the request answers `false` and nothing is installed.
 //! - **Installing, acknowledged:** every further quit is blocked, because an
 //!   `AppImage` install renames the running image before writing the new one
 //!   (tauri-plugin-updater `updater.rs:1003-1040`) and exiting in between
@@ -25,10 +27,12 @@
 //!   [`FINISHED_EVENT`] (back to Idle) and then exits; if it never does, the
 //!   watchdog exits after [`INSTALL_CEILING`].
 //!
-//! Quits that never reach `ExitRequested` bypass the gate: on macOS the Dock's
-//! Quit and logout send `terminate:`, which tao turns straight into
-//! `RunEvent::Exit`. The verified bytes are dropped, nothing is installed,
-//! and a later check offers the update again.
+//! A quit from outside the app never reaches `ExitRequested` or the main
+//! window's `CloseRequested`, so it exits without installing: the macOS Dock
+//! or app-switcher Quit (`terminate:`), signing out or shutting down on any
+//! OS (Windows `WM_ENDSESSION`, a Linux session's SIGTERM), a force quit, or
+//! a crash. Nothing about the update is persisted, so the next launch's check
+//! offers it again.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -36,20 +40,21 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, Runtime, WindowEvent};
 
+use contracts_core::ContractError;
+
 use crate::MAIN_WINDOW_LABEL;
 
 /// Frontend → backend: payload `true` arms the gate, `false` disarms it.
 pub const ARM_EVENT: &str = "update:install-on-quit-armed";
 /// Backend → main window: the user is quitting; install, then exit.
 pub const INSTALL_EVENT: &str = "update:install-on-quit";
-/// Frontend → backend: the install is starting; hold further quits.
-pub const STARTED_EVENT: &str = "update:install-on-quit-started";
 /// Frontend → backend: the install is over (either way); the next quit exits.
 pub const FINISHED_EVENT: &str = "update:install-on-quit-finished";
 
-/// How long the main window has to acknowledge [`INSTALL_EVENT`]. The
-/// frontend only unhooks a listener and sends one event before answering, so
-/// a few seconds means it is gone (reloaded, or its webview is wedged).
+/// How long the main window has to call [`update_install_on_quit_begin`]
+/// after [`INSTALL_EVENT`]. The frontend only unhooks a listener before
+/// asking, so a few seconds means it is gone (reloaded, or its webview is
+/// wedged).
 const ACK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The longest an acknowledged install may hold the quit. Chosen for the
@@ -87,7 +92,8 @@ struct Gate {
     data_dir: PathBuf,
 }
 
-/// Managed handle so run-event and listener callbacks reach the one gate.
+/// Managed handle so run-event, listener and command callbacks reach the one
+/// gate.
 struct InstallOnQuitGate(Arc<Gate>);
 
 impl Gate {
@@ -110,11 +116,6 @@ impl Gate {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    #[cfg(test)]
-    fn phase(&self) -> Phase {
-        self.lock().phase
-    }
-
     /// Arm or disarm. An install already under way is left alone.
     fn set_armed(&self, armed: bool) {
         let mut state = self.lock();
@@ -125,11 +126,15 @@ impl Gate {
         };
     }
 
-    fn acknowledge(&self) {
+    /// Move an unacknowledged install to acknowledged. `true` only when this
+    /// call made that move, so the caller may install: the quit is now held.
+    fn acknowledge(&self) -> bool {
         let mut state = self.lock();
-        if state.phase == (Phase::Installing { acknowledged: false }) {
-            state.phase = Phase::Installing { acknowledged: true };
+        if state.phase != (Phase::Installing { acknowledged: false }) {
+            return false;
         }
+        state.phase = Phase::Installing { acknowledged: true };
+        true
     }
 
     fn finish(&self) {
@@ -175,8 +180,7 @@ impl Gate {
     }
 
     /// Return to Idle if install `generation` is still Installing with an
-    /// acknowledgement `expirable` accepts. `true` when it did, so the caller
-    /// should exit.
+    /// acknowledgement `expirable` accepts. `true` when it did.
     fn expire(&self, generation: u64, expirable: impl Fn(bool) -> bool) -> bool {
         let mut state = self.lock();
         let expired = state.generation == generation
@@ -187,25 +191,40 @@ impl Gate {
         expired
     }
 
+    /// The acknowledgement deadline for install `generation` has passed: exit
+    /// if the frontend never began. `true` when it exited.
+    fn ack_deadline(&self, generation: u64) -> bool {
+        let expired = self.expire(generation, |acknowledged| !acknowledged);
+        if expired {
+            tracing::warn!("update install on quit was never acknowledged; exiting");
+            (self.exit)();
+        }
+        expired
+    }
+
+    /// The install ceiling for `generation` has passed: exit if the install
+    /// still holds the quit.
+    fn ceiling_deadline(&self, generation: u64) {
+        if self.expire(generation, |_| true) {
+            tracing::warn!("update install on quit passed {:?}; exiting", self.ceiling);
+            (self.exit)();
+        }
+    }
+
     fn spawn_watchdog(self: &Arc<Self>, generation: u64) {
         let gate = Arc::clone(self);
         std::thread::spawn(move || {
             std::thread::sleep(gate.ack_timeout);
-            if gate.expire(generation, |acknowledged| !acknowledged) {
-                tracing::warn!("update install on quit was never acknowledged; exiting");
-                (gate.exit)();
+            if gate.ack_deadline(generation) {
                 return;
             }
             std::thread::sleep(gate.ceiling.saturating_sub(gate.ack_timeout));
-            if gate.expire(generation, |_| true) {
-                tracing::warn!("update install on quit passed {:?}; exiting", gate.ceiling);
-                (gate.exit)();
-            }
+            gate.ceiling_deadline(generation);
         });
     }
 }
 
-/// Manage the gate and listen for the frontend's arm, start and finish events.
+/// Manage the gate and listen for the frontend's arm and finish events.
 pub fn register<R: Runtime>(app: &AppHandle<R>, data_dir: PathBuf) {
     let handle = app.clone();
     let gate = Gate::new(data_dir, ACK_TIMEOUT, INSTALL_CEILING, move || handle.exit(0));
@@ -220,9 +239,26 @@ fn register_gate<R: Runtime>(app: &AppHandle<R>, gate: Gate) {
     app.listen(ARM_EVENT, move |event| {
         armed.set_armed(serde_json::from_str::<bool>(event.payload()).unwrap_or(false));
     });
-    let started = Arc::clone(&gate);
-    app.listen(STARTED_EVENT, move |_| started.acknowledge());
     app.listen(FINISHED_EVENT, move |_| gate.finish());
+}
+
+/// `update_install_on_quit_begin` — the main window, answering
+/// [`INSTALL_EVENT`], asks to start installing. `true` when the gate now holds
+/// the quit, so the install may run; `false` when the quit was already
+/// released (a second quit or the watchdog), so the frontend must not install.
+///
+/// # Errors
+///
+/// Never fails; the `Result` keeps the command surface's envelope uniform.
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value)] // Tauri injects the app handle by value
+pub fn update_install_on_quit_begin(app: AppHandle) -> Result<bool, ContractError> {
+    Ok(begin_install(&app))
+}
+
+fn begin_install<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.try_state::<InstallOnQuitGate>().is_some_and(|gate| gate.0.acknowledge())
 }
 
 /// Route quits through the gate: defer the first armed quit to the frontend,
@@ -269,30 +305,51 @@ mod tests {
 
     use tauri::test::{mock_builder, mock_context, noop_assets};
     use tauri::{WebviewUrl, WebviewWindowBuilder};
+    use tempfile::TempDir;
 
     use super::*;
 
-    const LONG: Duration = Duration::from_secs(3600);
-    const SHORT: Duration = Duration::from_millis(50);
+    /// Long enough that a spawned watchdog never wakes during a test; the
+    /// deadlines are driven directly through `ack_deadline` and
+    /// `ceiling_deadline` instead, so no test depends on timing.
+    const NEVER: Duration = Duration::from_secs(3600);
 
-    /// A gate with the given timeouts and a counter of watchdog exits.
-    fn new_gate(ack: Duration, ceiling: Duration) -> (Gate, Arc<AtomicUsize>) {
+    /// A gate whose clean-shutdown marker goes to a temp dir (kept alive by
+    /// the returned `TempDir`), with a counter of watchdog exits.
+    fn new_gate() -> (Gate, Arc<AtomicUsize>, TempDir) {
+        let dir = tempfile::tempdir().expect("temp data dir");
         let exits = Arc::new(AtomicUsize::new(0));
         let counted = Arc::clone(&exits);
-        let gate = Gate::new(PathBuf::new(), ack, ceiling, move || {
+        let gate = Gate::new(dir.path().to_path_buf(), NEVER, NEVER, move || {
             counted.fetch_add(1, Ordering::SeqCst);
         });
-        (gate, exits)
+        (gate, exits, dir)
     }
 
-    fn gate(ack: Duration, ceiling: Duration) -> (Arc<Gate>, Arc<AtomicUsize>) {
-        let (gate, exits) = new_gate(ack, ceiling);
-        (Arc::new(gate), exits)
+    fn gate() -> (Arc<Gate>, Arc<AtomicUsize>, TempDir) {
+        let (gate, exits, dir) = new_gate();
+        (Arc::new(gate), exits, dir)
+    }
+
+    fn phase(gate: &Gate) -> Phase {
+        gate.lock().phase
+    }
+
+    fn generation(gate: &Gate) -> u64 {
+        gate.lock().generation
+    }
+
+    /// Arm and take one quit, which the gate defers.
+    fn deferred() -> (Arc<Gate>, Arc<AtomicUsize>, TempDir) {
+        let (gate, exits, dir) = gate();
+        gate.set_armed(true);
+        assert!(gate.on_quit(|| true), "the first armed quit is deferred");
+        (gate, exits, dir)
     }
 
     #[test]
     fn unarmed_and_disarmed_gates_never_defer_a_quit() {
-        let (gate, _) = gate(LONG, LONG);
+        let (gate, _, _dir) = gate();
         assert!(!gate.on_quit(|| panic!("an idle gate must not notify")));
 
         gate.set_armed(true);
@@ -301,21 +358,36 @@ mod tests {
     }
 
     #[test]
-    fn an_unacknowledged_deferral_lets_the_next_quit_through() {
-        let (gate, _) = gate(LONG, LONG);
-        gate.set_armed(true);
+    fn begin_is_granted_while_the_quit_is_deferred() {
+        let (gate, _, _dir) = deferred();
 
-        assert!(gate.on_quit(|| true), "first quit is deferred");
-        assert!(!gate.on_quit(|| true), "the frontend never answered: second quit exits");
-        assert_eq!(gate.phase(), Phase::Idle);
+        assert!(gate.acknowledge(), "the install may run");
+        assert_eq!(phase(&gate), Phase::Installing { acknowledged: true });
+        assert!(!gate.acknowledge(), "a repeated begin is not granted twice");
+    }
+
+    #[test]
+    fn begin_is_refused_after_a_second_quit_released_the_gate() {
+        let (gate, _, _dir) = deferred();
+
+        assert!(!gate.on_quit(|| true), "the frontend had not begun: second quit exits");
+        assert!(!gate.acknowledge(), "a late begin must not install");
+        assert_eq!(phase(&gate), Phase::Idle);
+    }
+
+    #[test]
+    fn begin_is_refused_after_the_ack_deadline_exited() {
+        let (gate, exits, _dir) = deferred();
+
+        assert!(gate.ack_deadline(generation(&gate)));
+        assert_eq!(exits.load(Ordering::SeqCst), 1);
+        assert!(!gate.acknowledge(), "a late begin must not install");
     }
 
     #[test]
     fn an_acknowledged_install_blocks_quits_until_it_finishes() {
-        let (gate, _) = gate(LONG, LONG);
-        gate.set_armed(true);
-        assert!(gate.on_quit(|| true));
-        gate.acknowledge();
+        let (gate, _, _dir) = deferred();
+        assert!(gate.acknowledge());
 
         assert!(gate.on_quit(|| true), "quit during the install is blocked");
         gate.set_armed(false);
@@ -327,50 +399,53 @@ mod tests {
 
     #[test]
     fn a_failed_notification_lets_the_quit_through() {
-        let (gate, _) = gate(LONG, LONG);
+        let (gate, _, _dir) = gate();
         gate.set_armed(true);
 
         assert!(!gate.on_quit(|| false));
-        assert_eq!(gate.phase(), Phase::Idle);
+        assert_eq!(phase(&gate), Phase::Idle);
     }
 
     #[test]
-    fn the_watchdog_exits_when_the_frontend_never_acknowledges() {
-        let (gate, exits) = gate(SHORT, LONG);
-        gate.set_armed(true);
-        assert!(gate.on_quit(|| true));
+    fn the_ack_deadline_spares_an_acknowledged_install_and_the_ceiling_ends_it() {
+        let (gate, exits, _dir) = deferred();
+        let install = generation(&gate);
+        assert!(gate.acknowledge());
 
-        std::thread::sleep(SHORT * 5);
+        assert!(!gate.ack_deadline(install), "acknowledged: no exit at the ack deadline");
+        assert_eq!(exits.load(Ordering::SeqCst), 0);
 
-        assert_eq!(exits.load(Ordering::SeqCst), 1);
-        assert_eq!(gate.phase(), Phase::Idle);
-    }
-
-    #[test]
-    fn the_watchdog_waits_for_an_acknowledged_install_up_to_the_ceiling() {
-        let (gate, exits) = gate(SHORT, SHORT * 6);
-        gate.set_armed(true);
-        assert!(gate.on_quit(|| true));
-        gate.acknowledge();
-
-        std::thread::sleep(SHORT * 3);
-        assert_eq!(exits.load(Ordering::SeqCst), 0, "acknowledged: no exit at the ack timeout");
-
-        std::thread::sleep(SHORT * 6);
+        gate.ceiling_deadline(install);
         assert_eq!(exits.load(Ordering::SeqCst), 1, "the ceiling exits");
+        assert_eq!(phase(&gate), Phase::Idle);
     }
 
     #[test]
-    fn the_watchdog_does_nothing_once_the_install_finished() {
-        let (gate, exits) = gate(SHORT, SHORT * 2);
-        gate.set_armed(true);
-        assert!(gate.on_quit(|| true));
-        gate.acknowledge();
+    fn deadlines_do_nothing_once_the_install_finished() {
+        let (gate, exits, _dir) = deferred();
+        let install = generation(&gate);
+        assert!(gate.acknowledge());
         gate.finish();
 
-        std::thread::sleep(SHORT * 5);
+        assert!(!gate.ack_deadline(install));
+        gate.ceiling_deadline(install);
 
         assert_eq!(exits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_stale_deadline_never_ends_a_later_install() {
+        let (gate, exits, _dir) = deferred();
+        let first = generation(&gate);
+        assert!(!gate.on_quit(|| true), "released before begin");
+        gate.set_armed(true);
+        assert!(gate.on_quit(|| true), "a later install is deferred");
+
+        assert!(!gate.ack_deadline(first));
+        gate.ceiling_deadline(first);
+
+        assert_eq!(exits.load(Ordering::SeqCst), 0);
+        assert_eq!(phase(&gate), Phase::Installing { acknowledged: false });
     }
 
     /// Drives `on_run_event` through tauri's mock event loop: closing the
@@ -379,7 +454,7 @@ mod tests {
     #[test]
     fn on_run_event_defers_then_holds_then_releases_main_window_closes() {
         let app = mock_builder().build(mock_context(noop_assets())).expect("build mock app");
-        let (gate, exits) = new_gate(LONG, LONG);
+        let (gate, exits, _dir) = new_gate();
         register_gate(app.handle(), gate);
         WebviewWindowBuilder::new(&app, MAIN_WINDOW_LABEL, WebviewUrl::default())
             .build()
@@ -413,9 +488,9 @@ mod tests {
                     iterations += 1;
                     assert!(iterations < 10, "the mock loop never ended");
                     match (step, main) {
-                        // Deferred: the frontend starts installing, the user quits again.
+                        // Deferred: the frontend begins installing, the user quits again.
                         (0, Some(main)) => {
-                            handle.emit(STARTED_EVENT, ()).expect("ack");
+                            assert!(begin_install(handle), "begin is granted");
                             main.close().expect("second close");
                             step = 1;
                         }

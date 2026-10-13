@@ -110,9 +110,13 @@ install) leaves the previously running install completely untouched.
   still exits, the previous version stays installed, and the next launch's
   check offers the update again. If the app does not start installing within
   a few seconds of the quit, it exits without installing, and a second quit
-  before then exits at once. On macOS, quitting from the Dock and logging out
-  bypass the install: the app exits without installing, and a later check
-  offers the update again. It is never installed at launch.
+  before then exits at once. A quit from outside the app exits without
+  installing: the macOS Dock or app-switcher Quit, signing out or shutting
+  down on any OS (Windows `WM_ENDSESSION`, a Linux session's SIGTERM), a
+  force quit, or a crash. Nothing about the update, the Install on quit
+  choice or **Later** is saved between launches, so the next launch's
+  startup check shows the update notice again. It is never installed at
+  launch.
 
 ### S4 — Recover from a failed download or install {#S4}
 - **Do:** Choose Install now or Install on quit after the update endpoint
@@ -172,4 +176,6 @@ install) leaves the previously running install completely untouched.
   quit. S1 rewritten, S2 is Install now, new S3 Install on quit, old S3/S4
   renumbered S4/S5, SC1–SC4 and P1–P3 updated, `shell` surface added. S3
   records which quit routes install (app-menu Quit, Cmd/Ctrl+Q, closing the
-  main window), the hold while installing, and the macOS Dock/logout bypass.
+  main window), the hold while installing, and the quits from outside the
+  app (Dock, sign-out, shutdown, force quit, crash) that exit without
+  installing.

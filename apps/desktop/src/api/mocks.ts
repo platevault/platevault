@@ -1411,6 +1411,10 @@ const mockHandlers = {
     // Mock mode never has a crashed prior process.
     return { uncleanShutdown: false, interruptedPlanIds: [] };
   },
+  update_install_on_quit_begin: async () => {
+    // Mock mode has no updater and never defers a quit, so nothing may install.
+    return false;
+  },
   cleanup_policy_get: async () => {
     return mockCleanupPolicy;
   },

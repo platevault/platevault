@@ -116,6 +116,7 @@ use crate::commands::protection::{
     source_protection_set,
 };
 use crate::commands::recovery::recovery_status;
+use crate::update_exit_gate::update_install_on_quit_begin;
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
     equipment_list, roots_delete, roots_list, roots_register, roots_remap, roots_remap_apply,
@@ -302,6 +303,8 @@ macro_rules! app_commands {
             plans_confirm_destructive,
             // unclean-shutdown recovery (astro-plan-kyo7.48)
             recovery_status,
+            // install-on-quit exit gate (astro-plan-mkkgi)
+            update_install_on_quit_begin,
             // audit
             audit_list,
             audit_export,

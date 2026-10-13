@@ -18,6 +18,7 @@ const {
   mockGetVersion,
   mockListen,
   mockEmit,
+  mockBegin,
 } = vi.hoisted(() => ({
   mockCheck: vi.fn(),
   mockRelaunch: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockGetVersion: vi.fn(),
   mockListen: vi.fn(),
   mockEmit: vi.fn(),
+  mockBegin: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/plugin-updater', () => ({
@@ -37,6 +39,9 @@ vi.mock('@tauri-apps/plugin-process', () => ({
 vi.mock('@tauri-apps/api/event', () => ({
   listen: mockListen,
   emit: mockEmit,
+}));
+vi.mock('@/bindings/index', () => ({
+  commands: { updateInstallOnQuitBegin: mockBegin },
 }));
 vi.mock('@tauri-apps/api/app', () => ({
   getVersion: mockGetVersion,
@@ -55,7 +60,7 @@ import {
 
 const ARM_EVENT = 'update:install-on-quit-armed';
 const INSTALL_EVENT = 'update:install-on-quit';
-const STARTED = 'emit:update:install-on-quit-started:undefined';
+const BEGIN = 'begin';
 const FINISHED = 'emit:update:install-on-quit-finished:undefined';
 
 /** Records the order of every updater/process side effect. */
@@ -94,6 +99,13 @@ async function settle() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** Fire the backend's install-on-quit event and wait for the exit path to
+ * reach `exit()`; it loads host modules lazily, so it spans several ticks. */
+async function quitThroughGate() {
+  exitHandler?.();
+  await vi.waitFor(() => expect(mockExit).toHaveBeenCalledWith(0));
+}
+
 beforeEach(async () => {
   stopUpdateSubscription();
   await settle();
@@ -109,6 +121,10 @@ beforeEach(async () => {
   );
   mockRelaunch.mockImplementation(recorder('relaunch'));
   mockExit.mockImplementation(recorder('exit'));
+  mockBegin.mockImplementation(() => {
+    calls.push(BEGIN);
+    return Promise.resolve({ status: 'ok', data: true });
+  });
 });
 
 describe('checkForUpdate', () => {
@@ -230,15 +246,14 @@ describe('installUpdateOnQuit', () => {
     });
     expect(exitHandler).not.toBeNull();
 
-    // The backend deferred the user's quit: acknowledge, install, report the
+    // The backend deferred the user's quit: ask to begin, install, report the
     // install over, then exit.
-    exitHandler?.();
-    await settle();
+    await quitThroughGate();
 
     expect(calls).toEqual([
       'download',
       `emit:${ARM_EVENT}:true`,
-      STARTED,
+      BEGIN,
       'install',
       FINISHED,
       'exit',
@@ -252,23 +267,32 @@ describe('installUpdateOnQuit', () => {
     await checkFinds(update);
     await installUpdateOnQuit();
 
-    exitHandler?.();
-    await settle();
+    await quitThroughGate();
 
     expect(calls.slice(-2)).toEqual([FINISHED, 'exit']);
     expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  it('never installs on quit when the acknowledgement cannot be sent', async () => {
+  it('never installs on quit when the backend refuses the begin', async () => {
+    // A second quit or the watchdog already released the gate.
     const update = makeUpdate();
     await checkFinds(update);
     await installUpdateOnQuit();
-    mockEmit.mockImplementationOnce(() =>
-      Promise.reject(new Error('ipc down')),
-    );
+    mockBegin.mockResolvedValueOnce({ status: 'ok', data: false });
 
-    exitHandler?.();
-    await settle();
+    await quitThroughGate();
+
+    expect(update.install).not.toHaveBeenCalled();
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+
+  it('never installs on quit when the begin cannot be asked', async () => {
+    const update = makeUpdate();
+    await checkFinds(update);
+    await installUpdateOnQuit();
+    mockBegin.mockRejectedValueOnce(new Error('ipc down'));
+
+    await quitThroughGate();
 
     expect(update.install).not.toHaveBeenCalled();
     expect(mockExit).toHaveBeenCalledWith(0);

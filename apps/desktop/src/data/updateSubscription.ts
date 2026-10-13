@@ -41,9 +41,6 @@ const ARM_EVENT = 'update:install-on-quit-armed';
 /** Backend → main window: the user is quitting with the gate armed. Mirrors
  * `update_exit_gate::INSTALL_EVENT`. */
 const INSTALL_EVENT = 'update:install-on-quit';
-/** Frontend → backend: the install at quit is starting, so the backend holds
- * further quits. Mirrors `update_exit_gate::STARTED_EVENT`. */
-const STARTED_EVENT = 'update:install-on-quit-started';
 /** Frontend → backend: the install at quit is over; the exit may proceed.
  * Mirrors `update_exit_gate::FINISHED_EVENT`. */
 const FINISHED_EVENT = 'update:install-on-quit-finished';
@@ -274,17 +271,18 @@ export async function installUpdateOnQuit(): Promise<void> {
 
 /**
  * The exit path: the backend deferred a quit because the gate was armed.
- * Acknowledge first, so the backend holds further quits while installing
- * (and only install once it has), then install the staged update, report
- * the install over, and exit. The user asked to quit, so an install failure
- * still exits; the next launch's check offers the update again.
+ * Ask the backend to begin first, and install only when it answers that it
+ * now holds the quit: a second quit or its watchdog may already have let the
+ * app exit, and an install cut short by that exit could leave no app behind.
+ * Then report the install over, and exit. The user asked to quit, so an
+ * install failure still exits; the next launch's check offers the update
+ * again.
  */
 async function installOnExit(): Promise<void> {
   const update = pending;
   unlistenExit?.();
   unlistenExit = null;
-  const { emit } = await import('@tauri-apps/api/event');
-  if (update && downloaded && (await emitted(emit, STARTED_EVENT))) {
+  if (update && downloaded && (await beginInstallOnQuit())) {
     setState({
       phase: 'installing',
       version: update.version,
@@ -297,21 +295,30 @@ async function installOnExit(): Promise<void> {
       console.warn('[updateSubscription] install on quit failed:', err);
     }
   }
-  await emitted(emit, FINISHED_EVENT);
+  try {
+    const { emit } = await import('@tauri-apps/api/event');
+    await emit(FINISHED_EVENT);
+  } catch (err) {
+    console.warn(
+      '[updateSubscription] reporting install finished failed:',
+      err,
+    );
+  }
   const { exit } = await import('@tauri-apps/plugin-process');
   await exit(0);
 }
 
-/** Emit `event` to the backend; `false` (logged) when the emit failed. */
-async function emitted(
-  emit: (event: string) => Promise<void>,
-  event: string,
-): Promise<boolean> {
+/** Whether the backend granted the install at quit; `false` (logged) when
+ * it refused or could not be asked. */
+async function beginInstallOnQuit(): Promise<boolean> {
   try {
-    await emit(event);
-    return true;
+    const [{ commands }, { unwrap }] = await Promise.all([
+      import('@/bindings/index'),
+      import('@/api/ipc'),
+    ]);
+    return unwrap(await commands.updateInstallOnQuitBegin());
   } catch (err) {
-    console.warn(`[updateSubscription] emit ${event} failed:`, err);
+    console.warn('[updateSubscription] beginning install on quit failed:', err);
     return false;
   }
 }
