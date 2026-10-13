@@ -2805,7 +2805,6 @@
   "calibration_used_by": "Usado por",
   "calibration_open_raw_session": "Abrir sessão bruta",
   "calibration_offered": "Oferecido",
-  "calibration_restore": "Restaurar",
   "calibration_offer_restored": "Oferta restaurada",
   "calibration_open_run": "Abrir execução",
   "calibration_dismissed": "Dispensados",
@@ -8784,5 +8783,7 @@
       }
     }
   ],
-  "store_saved_added": "{name} adicionado"
+  "store_saved_added": "{name} adicionado",
+  "calibration_open_master": "Abrir master",
+  "calibration_shown_master": "{name} voltou para Masters"
 }

@@ -2749,7 +2749,6 @@
   "calibration_used_by": "Used by",
   "calibration_open_raw_session": "Open raw session",
   "calibration_offered": "Offered",
-  "calibration_restore": "Restore",
   "calibration_offer_restored": "Offer restored",
   "calibration_open_run": "Open run",
   "calibration_dismissed": "Dismissed",
@@ -8728,5 +8727,7 @@
       }
     }
   ],
-  "store_saved_added": "Added {name}"
+  "store_saved_added": "Added {name}",
+  "calibration_open_master": "Open master",
+  "calibration_shown_master": "{name} is back in Masters"
 }
