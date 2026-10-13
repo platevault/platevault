@@ -731,8 +731,9 @@ async fn boot(
         &bus,
         resolve_cache.clone(),
     );
-    // A `log:entry` the webview cannot take is logged at debug only: the
-    // durable `log.recent` pull serves the same rows.
+    // A `log:entry` the webview cannot take is logged at debug only. Durable
+    // audit rows come back through the `log.recent` pull; a lag diagnostic
+    // (`dia:N`, never persisted) is lost, and the next lag raises a new one.
     drop(tokio::spawn(crate::bootstrap::feeds::forward(
         app.clone(),
         crate::commands::log::LOG_ENTRY_EVENT,
