@@ -114,6 +114,7 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
       flow={flow}
       viewing={viewing}
       stepsLabel={m.session_intake_steps()}
+      fill={viewing === "review"}
       notice={viewing === "review" && lockedBy.length > 0 ? { tone: "info", title: m.flow_review_locked(), detail: lockedBy.map((r) => r.name).join(", ") } : null}
       step={body}
     />

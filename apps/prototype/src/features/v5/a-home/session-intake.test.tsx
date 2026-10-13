@@ -2,7 +2,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { sessionReadiness, sessionUnreviewedFrames } from "@/domain/derive"
+import { sessionReadiness, sessionRigId, sessionUnreviewedFrames } from "@/domain/derive"
 import { targetAtPointing } from "@/domain/indexing"
 import { createSeed } from "@/domain/seed"
 import type { Session } from "@/domain/types"
@@ -39,7 +39,7 @@ function proceedButton(): HTMLElement {
 }
 
 describe("Session intake gates (U11 sessionIntake)", () => {
-  it("Target gates Proceed on the picker's choice; Proceed confirms it and opens Rig", async () => {
+  it("Target gates Proceed on the picker's choice; Proceed confirms it and opens the next open step", async () => {
     const state = store.getState()
     const pointed = (s: Session) => s.target.value !== null || (s.pointing !== null && targetAtPointing(state.catalog, s.pointing.ra, s.pointing.dec) !== null)
     const session = lightSessions().find((s) => sessionReadiness(state.catalog, s) === "needs-target" && !filedUnclassified(state, s) && !pointed(s))
@@ -54,7 +54,8 @@ describe("Session intake gates (U11 sessionIntake)", () => {
     await waitFor(() => expect(proceedButton()).not.toHaveAttribute("aria-disabled", "true"))
     await user.click(proceedButton())
     await waitFor(() => expect(store.getState().catalog.sessions[session!.id]!.target).toMatchObject({ status: "confirmed", value: target.id }))
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ step: "rig" }))
+    // U11's `next`: the first later step not yet finished (Rig, or Review once the rig is settled).
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ step: sessionRigId(session!) ? "review" : "rig" }))
   })
 
   it("Finish review stays unavailable while a frame is Unreviewed, and writes nothing", async () => {
