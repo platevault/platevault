@@ -136,19 +136,31 @@ pub struct InMemoryOperationStateRepository {
     states: std::collections::BTreeMap<String, OperationState>,
 }
 
+// The stub does its work synchronously, so it returns ready futures rather
+// than `async fn` state machines (clippy::unused_async_trait_impl). Every caller
+// awaits the call immediately, so the eager write is not observable.
 impl OperationStateRepository for InMemoryOperationStateRepository {
-    async fn insert_operation_state(&mut self, state: &OperationState) -> DbResult<()> {
+    fn insert_operation_state(
+        &mut self,
+        state: &OperationState,
+    ) -> impl std::future::Future<Output = DbResult<()>> + Send {
         self.states.insert(state.id.clone(), state.clone());
-        Ok(())
+        std::future::ready(Ok(()))
     }
 
-    async fn update_operation_state(&mut self, state: &OperationState) -> DbResult<()> {
+    fn update_operation_state(
+        &mut self,
+        state: &OperationState,
+    ) -> impl std::future::Future<Output = DbResult<()>> + Send {
         self.states.insert(state.id.clone(), state.clone());
-        Ok(())
+        std::future::ready(Ok(()))
     }
 
-    async fn find_operation_state(&self, id: &str) -> DbResult<Option<OperationState>> {
-        Ok(self.states.get(id).cloned())
+    fn find_operation_state(
+        &self,
+        id: &str,
+    ) -> impl std::future::Future<Output = DbResult<Option<OperationState>>> + Send {
+        std::future::ready(Ok(self.states.get(id).cloned()))
     }
 }
 

@@ -664,66 +664,78 @@ fn parse_entity_type(s: &str) -> EntityType {
 // ── In-memory stub ────────────────────────────────────────────────────────────
 
 /// In-memory stub — compiles without sqlx; used by unit tests.
+///
+/// Its methods do no I/O, so they return ready futures rather than `async fn`
+/// state machines (clippy::unused_async_trait_impl). Every caller awaits the
+/// call immediately, so evaluating the result eagerly is not observable.
 #[derive(Default)]
 pub struct InMemoryLifecycleRepository;
 
 impl LifecycleRepository for InMemoryLifecycleRepository {
-    async fn load_asset_detail(
+    fn load_asset_detail(
         &self,
         entity_id: EntityId,
         entity_type: EntityType,
-    ) -> DbResult<AssetDetail> {
-        Ok(AssetDetail {
+    ) -> impl std::future::Future<Output = DbResult<AssetDetail>> + Send {
+        std::future::ready(Ok(AssetDetail {
             entity_id,
             entity_type,
             current_state: "unknown".to_owned(),
             provenance: HashMap::new(),
             history_truncated: false,
-        })
+        }))
     }
 
-    async fn list_assets_ledger(&self, _filter: LedgerFilter) -> DbResult<Vec<LedgerRow>> {
-        Ok(Vec::new())
+    fn list_assets_ledger(
+        &self,
+        _filter: LedgerFilter,
+    ) -> impl std::future::Future<Output = DbResult<Vec<LedgerRow>>> + Send {
+        std::future::ready(Ok(Vec::new()))
     }
 
-    async fn record_transition(&self, transition: TransitionRequest) -> DbResult<TransitionRecord> {
-        if transition.from_state == transition.to_state {
-            return Err(DbError::NotFound(format!(
+    fn record_transition(
+        &self,
+        transition: TransitionRequest,
+    ) -> impl std::future::Future<Output = DbResult<TransitionRecord>> + Send {
+        let result = if transition.from_state == transition.to_state {
+            Err(DbError::NotFound(format!(
                 "noop: {} is already in state {}",
                 transition.entity_id, transition.from_state
-            )));
-        }
-        Ok(TransitionRecord {
-            audit_id: AuditId::new(),
-            entity_id: transition.entity_id,
-            entity_type: transition.entity_type,
-            from_state: transition.from_state,
-            to_state: transition.to_state,
-            applied_at: Timestamp::now_utc(),
-        })
+            )))
+        } else {
+            Ok(TransitionRecord {
+                audit_id: AuditId::new(),
+                entity_id: transition.entity_id,
+                entity_type: transition.entity_type,
+                from_state: transition.from_state,
+                to_state: transition.to_state,
+                applied_at: Timestamp::now_utc(),
+            })
+        };
+        std::future::ready(result)
     }
 
-    async fn record_refused_transition(
+    fn record_refused_transition(
         &self,
         _transition: TransitionRequest,
         _refusal_code: &'static str,
         _refusal_message: &str,
         _refusal_params: Option<serde_json::Value>,
-    ) -> DbResult<AuditId> {
+    ) -> impl std::future::Future<Output = DbResult<AuditId>> + Send {
         // In-memory stub: no durable storage. Tests that need to assert the
         // refused audit row exists should use `SqliteLifecycleRepository`.
-        Ok(AuditId::new())
+        std::future::ready(Ok(AuditId::new()))
     }
 
-    async fn field_origins(
+    fn field_origins(
         &self,
         _entity_id: EntityId,
         _entity_type: EntityType,
-    ) -> DbResult<HashMap<String, ProvenanceTag>> {
+    ) -> impl std::future::Future<Output = DbResult<HashMap<String, ProvenanceTag>>> + Send {
         // The in-memory stub does not store provenance; tests that need a
         // populated map should use `SqliteLifecycleRepository` or wrap this
         // stub with a custom override.
-        Ok(HashMap::new())
+        std::future::ready(Ok(HashMap::new()))
     }
 }
 
