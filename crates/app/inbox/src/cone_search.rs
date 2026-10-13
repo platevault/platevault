@@ -799,7 +799,7 @@ mod tests {
         let resp =
             suggest(db.pool(), &resolver, "item-none", ConeSearchReason::Ingest).await.unwrap();
         assert_eq!(resp.pointing.source, PointingSource::None);
-        assert!(resp.suggestions.is_empty());
+        assert_eq!(resp.suggestions, [] as [contracts_core::cone_search::ConeSearchSuggestion; 0]);
     }
 
     #[tokio::test]

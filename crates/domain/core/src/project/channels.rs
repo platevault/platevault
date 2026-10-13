@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn infer_channels_empty_input_returns_empty() {
         let ch = infer_channels(&[]);
-        assert!(ch.is_empty());
+        assert_eq!(ch, [] as [Channel; 0]);
     }
 
     #[test]

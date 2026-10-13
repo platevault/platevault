@@ -591,7 +591,7 @@ async fn full_review_to_apply_audit_round_trip() {
         .await
         .expect("approve_plan");
     assert_eq!(approve_resp.new_state, "approved");
-    assert!(!approve_resp.approval_token.is_empty());
+    assert_ne!(approve_resp.approval_token, "");
 
     // 4. Apply via use-case layer.
     let apply_resp = app_core::plan_apply::apply_plan(

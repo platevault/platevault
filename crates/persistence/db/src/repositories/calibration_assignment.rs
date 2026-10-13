@@ -399,7 +399,7 @@ mod tests {
     #[tokio::test]
     async fn parse_mismatched_dimensions_empty() {
         let dims = parse_mismatched_dimensions("[]");
-        assert!(dims.is_empty());
+        assert_eq!(dims, [] as [std::string::String; 0]);
     }
 
     /// Graceful-degradation site (spec `n4_jsoncodec`): a corrupt
@@ -407,6 +407,6 @@ mod tests {
     #[tokio::test]
     async fn parse_mismatched_dimensions_corrupt_degrades_to_empty() {
         let dims = parse_mismatched_dimensions("not valid json");
-        assert!(dims.is_empty());
+        assert_eq!(dims, [] as [std::string::String; 0]);
     }
 }

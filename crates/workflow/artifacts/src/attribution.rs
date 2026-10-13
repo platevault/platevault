@@ -186,6 +186,6 @@ mod tests {
             &existing_launches,
             DEFAULT_ATTRIBUTION_WINDOW,
         );
-        assert!(candidates.is_empty());
+        assert_eq!(candidates, [] as [&String; 0]);
     }
 }

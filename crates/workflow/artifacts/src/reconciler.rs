@@ -155,7 +155,7 @@ mod tests {
 
         assert_eq!(report.new_files.len(), 1);
         assert_eq!(report.new_files[0].file_name, "integration_M31.xisf");
-        assert!(report.existing.is_empty());
+        assert_eq!(report.existing, [] as [(RelativePath, ReconcileOutcome); 0]);
     }
 
     #[test]

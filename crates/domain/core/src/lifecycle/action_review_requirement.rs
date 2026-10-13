@@ -69,6 +69,6 @@ mod tests {
     #[test]
     fn unknown_edge_returns_empty() {
         let fields = action_critical_fields(EntityType::Project, "ready", "processing");
-        assert!(fields.is_empty());
+        assert_eq!(fields, [] as [FieldPath; 0]);
     }
 }

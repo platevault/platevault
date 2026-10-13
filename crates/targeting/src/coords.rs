@@ -350,13 +350,13 @@ mod tests {
     #[test]
     fn empty_when_radius_negative_or_nan() {
         let cat = sample_catalog();
-        assert!(rank_candidates(M31, &cat, -1.0).is_empty());
-        assert!(rank_candidates(M31, &cat, f64::NAN).is_empty());
+        assert_eq!(rank_candidates(M31, &cat, -1.0), [] as [Candidate; 0]);
+        assert_eq!(rank_candidates(M31, &cat, f64::NAN), [] as [Candidate; 0]);
     }
 
     #[test]
     fn empty_catalog_yields_no_candidates() {
-        assert!(rank_candidates(M31, &[], 10.0).is_empty());
+        assert_eq!(rank_candidates(M31, &[], 10.0), [] as [Candidate; 0]);
     }
 
     #[test]

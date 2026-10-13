@@ -29,7 +29,7 @@ async fn register_and_list_source() {
     let resp = register_source(&pool, &req).await.unwrap();
     assert_eq!(resp.kind, SourceKind::LightFrames);
     assert_eq!(resp.path, "/astro/raw");
-    assert!(!resp.source_id.is_empty());
+    assert_ne!(resp.source_id, "");
 
     let all = list_sources(&pool).await.unwrap();
     assert_eq!(all.len(), 1);
@@ -115,7 +115,7 @@ async fn complete_first_run_requires_light_and_project() {
     };
     register_source(&pool, &req).await.unwrap();
     let resp = complete_first_run(&pool).await.unwrap();
-    assert!(!resp.completed_at.is_empty());
+    assert_ne!(resp.completed_at, "");
 
     // Verify state updated.
     let state = get_first_run_state(&pool).await.unwrap();
@@ -495,7 +495,7 @@ async fn relative_paths_for_root_empty_when_no_records() {
     .unwrap();
 
     let paths = relative_paths_for_root(&pool, &resp.source_id).await.unwrap();
-    assert!(paths.is_empty());
+    assert_eq!(paths, [] as [std::string::String; 0]);
 }
 
 #[tokio::test]

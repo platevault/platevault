@@ -220,7 +220,7 @@ async fn alias_add_inserts_user_alias() {
     let result = alias_add(db.pool(), &req).await.unwrap();
     assert_eq!(result.alias.alias, "Andromeda");
     assert_eq!(result.alias.kind, ContractAliasKind::User);
-    assert!(!result.alias.id.is_empty());
+    assert_ne!(result.alias.id, "");
 }
 
 #[tokio::test]

@@ -129,7 +129,7 @@ async fn create_project_setup_incomplete_no_sources() {
     let req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
     let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
     assert_eq!(result.lifecycle, "setup_incomplete");
-    assert!(result.channels.is_empty());
+    assert_eq!(result.channels, [] as [contracts_core::projects_v2::ProjectChannelDto; 0]);
     // Constitution II: create always produces a folder-structure plan.
     assert!(result.plan_id.is_some(), "create must return a plan_id");
 }

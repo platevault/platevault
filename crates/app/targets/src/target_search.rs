@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(s.object_type, TargetObjectType::Galaxy);
         assert_eq!(s.source, TargetSource::Seed);
         assert_eq!(s.matched_alias.as_deref(), Some("M 31"));
-        assert!(!s.target_id.is_empty());
+        assert_ne!(s.target_id, "");
     }
 
     /// #818 follow-up: the warm-complete sentinel (`simbad_oid = -1`, the
@@ -354,14 +354,14 @@ mod tests {
         let mut r = req("NGC");
         r.catalog_filter = vec![TargetCatalogId::Sharpless];
         let resp = search(&cache, &r).await.unwrap();
-        assert!(resp.suggestions.is_empty());
+        assert_eq!(resp.suggestions, [] as [contracts_core::targets::TargetSuggestion; 0]);
     }
 
     #[tokio::test]
     async fn search_blank_query_is_empty() {
         let cache = seeded_cache().await;
         let resp = search(&cache, &req("   ")).await.unwrap();
-        assert!(resp.suggestions.is_empty());
+        assert_eq!(resp.suggestions, [] as [contracts_core::targets::TargetSuggestion; 0]);
     }
 
     #[tokio::test]

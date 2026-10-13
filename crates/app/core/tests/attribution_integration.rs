@@ -204,10 +204,10 @@ async fn chosen_framing_pick_materializes_as_session_membership_once_the_plan_ap
     // Before apply: the pick is recorded on the plan, but no session exists
     // yet and framing membership is still empty (§II — nothing merges until
     // the reviewable plan actually applies).
-    assert!(framing_repo::list_session_ids_for_framing(pool, "framing-sc008")
-        .await
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        framing_repo::list_session_ids_for_framing(pool, "framing-sc008").await.unwrap(),
+        [] as [std::string::String; 0]
+    );
 
     app_core::inbox::plan_listener::start_inbox_plan_listener(
         pool.clone(),
