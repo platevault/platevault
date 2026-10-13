@@ -40,11 +40,11 @@ import { detectedStars, frameField, renderWindow, sampleAt, type StarRecord, typ
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { type WorkspaceAside, type WorkspacePane, Workspace } from "@/components/templates/workspace"
 import { sessionUnreviewedFrames } from "@/domain/derive"
-import { currentFile, previewUnavailableReason } from "@/domain/membership"
+import { currentFile, formatMetricFixed, previewUnavailableReason } from "@/domain/membership"
 import type { AssetId, QualityValue } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { formatMetric, METRIC_LABEL } from "@/store/actions/measure"
+import { METRIC_LABEL } from "@/store/actions/measure"
 import { markRestUsable } from "@/store/actions/library"
 import { type CommitResult, useStore } from "@/store/core"
 import { setFrameUi } from "./actions"
@@ -623,8 +623,8 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
         const value = f.builtIn[metric]?.value
         return value === null || value === undefined ? [] : [{ id: f.asset.id, index: f.order, value, name: names.get(f.asset.id) ?? f.asset.fileName, rejected: f.bucket === "rejected" }]
       }),
-      format: (value) => formatMetric({ value, unit }),
-      tick: (value) => (unit === "stars" || unit === "ADU" ? formatCount(Math.round(value)) : formatMetric({ value, unit })),
+      format: (value) => formatMetricFixed(m, { value, unit }),
+      tick: (value) => (unit === "stars" || unit === "ADU" ? formatCount(Math.round(value)) : formatMetricFixed(m, { value, unit })),
     }
   })
 
