@@ -344,6 +344,15 @@ Feedback walk of ~120 items; beads under epic astro-plan-0drm0. Research: R9-ANS
 
 ### Stack and updates, grilling round 3 (user, 2026-10-12; R9-SPIKE-*.md, R9-UPDATER-OPTIONS.md)
 - **S1 Stack: stay on Tauri + React.** The composition rebuild happens there; the services crate keeps a later switch possible.
-- **S2 Updater path:** under discussion (tradeoffs requested).
+- **S2 Updater path:** the user asked for the best of breed per OS and a check on SignPath's free certificate. Research: R10-UPDATER-BEST-OF-BREED.md (2026-10-13). Its decisions D1–D11 wait on the user.
 - **S3 Update behaviour:** nothing downloads until the user chooses to install. When an update is available, a notification offers **Install now** or **Install on quit**. Never at launch.
 - **S4:** fix the three release bugs now (macOS 0.6.0 build without a darwin manifest entry, Windows signing order breaking minisign, updater plugin bump).
+
+### Goals, grilling round 4 (user, 2026-10-13)
+- **C7 settled.** Each goal is time **or** frames. The conditions:
+  - **Quality bar:** optional per goal: "count only frames with FWHM ≤ x″". Frames over the bar show as "+N h below bar".
+  - **Channel balance: dropped as a goal (user).** The per-channel goals already set the ratio, and a ratio alone cannot say when a subject is done. The Project page shows each subject's channel ratio as counted, next to the ratio its goals imply.
+  - **Mosaic coverage:** each panel keeps its own goals. The subject completes when every panel meets them, and progress shows the weakest panel.
+  - **Mosaic panel balance (new, user):** per channel, panels stay within ±N % of each other in counted integration (Usable frames inside the quality bar; frames when the goal counts frames). The default is ±10 %, and the user can change it.
+  - **Deadline or season window:** optional per subject: a "Finish by" date or a season window pre-filled from the target's visibility. Progress shows the nights left, and Planning raises the subject's priority as the date nears.
+  - All of these are set in Settings › Goal templates and edited per subject. Goals freeze when the Project is closed.
