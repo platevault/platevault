@@ -14,6 +14,7 @@ import { PickersCatalogue } from "./pickers"
 import { PreviewsCatalogue } from "./previews"
 import { ShellPartsCatalogue } from "./shell-parts"
 import { StatusCatalogue } from "./status"
+import { StepFlowCatalogue } from "./step-flow"
 
 export interface CatalogueEntry {
   id: string
@@ -38,6 +39,7 @@ export const CATALOGUE: CatalogueEntry[] = [
   { id: "dialogs", components: ["ConfirmDialog", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
   { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },
   { id: "domain", components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "MosaicField", "SiteMap"], Entry: DomainCatalogue },
+  { id: "step-flow", components: ["StepStrip", "StepFooter"], Entry: StepFlowCatalogue },
   {
     id: "data-table",
     components: [

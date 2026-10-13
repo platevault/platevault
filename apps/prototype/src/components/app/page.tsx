@@ -172,12 +172,16 @@ export function ListDetail({ list, detail, listLabel, className }: ListDetailPro
   )
 }
 
+/** @deprecated Removed in W4 with `StepIndicator`: a flow's steps are `FlowStep`s (components/app/contracts.ts). */
 export interface Step {
   id: string
   label: string
 }
 
-/** Progress through a short, ordered flow (onboarding, review → apply). */
+/**
+ * Progress through a short, ordered flow (onboarding, review → apply).
+ * @deprecated Removed in W4: render `StepStrip` and `StepFooter` (components/app/step-flow.tsx) from a `StepFlow` (plan P11).
+ */
 export function StepIndicator({ steps, current, completed = [], label }: { steps: Step[]; current: string; completed?: string[]; label: string }) {
   const m = useMessages()
   return (
