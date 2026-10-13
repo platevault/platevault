@@ -592,7 +592,7 @@ mod tests {
         let mut members = result.framing.session_ids.clone();
         members.sort();
         assert_eq!(members, vec!["sess-a".to_owned(), "sess-b".to_owned()]);
-        assert!(!result.audit_id.is_empty());
+        assert_ne!(result.audit_id, "");
 
         // The merged-away framing row is gone.
         assert!(matches!(
@@ -861,10 +861,10 @@ mod tests {
         // The source framing lost its member and is itself flagged user_adjusted.
         let source_row = framing_repo::get_framing(db.pool(), "framing-r1").await.unwrap();
         assert_eq!(source_row.clustering, "user_adjusted");
-        assert!(framing_repo::list_session_ids_for_framing(db.pool(), "framing-r1")
-            .await
-            .unwrap()
-            .is_empty());
+        assert_eq!(
+            framing_repo::list_session_ids_for_framing(db.pool(), "framing-r1").await.unwrap(),
+            [] as [std::string::String; 0]
+        );
     }
 
     #[tokio::test]

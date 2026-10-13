@@ -528,7 +528,7 @@ mod tests {
         let bus = make_bus(&pool);
         let resp = get_state(&pool, &bus).await.unwrap();
         assert!(resp.state.current_step.is_none());
-        assert!(resp.state.completed_steps.is_empty());
+        assert_eq!(resp.state.completed_steps, [] as [std::string::String; 0]);
         assert!(!resp.state.dismissed);
     }
 
@@ -651,7 +651,7 @@ mod tests {
         let pool = setup_pool().await;
         activate_after_setup(&pool).await.unwrap();
         let resp = dismiss(&pool).await.unwrap();
-        assert!(!resp.dismissed_at.is_empty());
+        assert_ne!(resp.dismissed_at, "");
 
         // State should now be dismissed.
         let bus = make_bus(&pool);
@@ -712,7 +712,7 @@ mod tests {
 
         let resp = restart(&pool).await.unwrap();
         // A1 decision: Completed → Idle resets all progress.
-        assert!(resp.state.completed_steps.is_empty());
+        assert_eq!(resp.state.completed_steps, [] as [std::string::String; 0]);
         assert!(resp.state.current_step.is_none());
         assert!(!resp.state.dismissed);
     }
@@ -742,7 +742,7 @@ mod tests {
         // Second call: fresh Idle state returned.
         let resp = get_state(&pool, &bus).await.unwrap();
         assert!(resp.state.current_step.is_none());
-        assert!(resp.state.completed_steps.is_empty());
+        assert_eq!(resp.state.completed_steps, [] as [std::string::String; 0]);
         assert!(!resp.state.dismissed);
     }
 

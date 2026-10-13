@@ -884,7 +884,7 @@ mod tests {
         .expect("create_camera must write a durable audit row");
         assert_eq!(row.0, "equipment");
         assert_eq!(row.1, "applied");
-        assert!(!camera.id.is_empty());
+        assert_ne!(camera.id, "");
     }
 
     /// T127 "equipment failed": deleting a nonexistent camera writes a

@@ -867,7 +867,7 @@ async fn lifecycle_provenance_read() {
     let response = app_core::provenance_use_case::read_provenance(db.pool(), request).await;
     // Even for a non-existent entity, read_provenance returns a valid response
     // (not a panic or unrecoverable error).
-    assert!(!response.contract_version.is_empty());
+    assert_ne!(response.contract_version, "");
 }
 
 #[tokio::test]
@@ -882,7 +882,7 @@ async fn lifecycle_transition_preview() {
 
     let response = app_core::transition_use_case::preview_transition(request);
     // Preview is a pure function — no DB needed. It returns a valid response.
-    assert!(!response.contract_version.is_empty());
+    assert_ne!(response.contract_version, "");
 }
 
 #[tokio::test]
@@ -908,7 +908,7 @@ async fn lifecycle_transition_apply() {
             .await;
     // The entity doesn't exist so the transition will be refused, but the
     // command infrastructure should not panic.
-    assert!(!response.contract_version.is_empty());
+    assert_ne!(response.contract_version, "");
 }
 
 /// #665: a successful Project transition through the real Tauri command

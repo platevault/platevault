@@ -173,7 +173,7 @@ async fn generates_plan_for_project_with_selected_lights() {
     link_project_source(&db, "p1", "sess1").await;
 
     let resp = generate_source_view(db.pool(), &req("p1")).await.unwrap();
-    assert!(!resp.plan_id.is_empty());
+    assert_ne!(resp.plan_id, "");
     // No calibration assignment for sess1 → warning, not a failure.
     assert!(resp.warnings.iter().any(|w| w.code
         == contracts_core::source_view_generate::GenerationWarningCode::NoCalibrationApplied));

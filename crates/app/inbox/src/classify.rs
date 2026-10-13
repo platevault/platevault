@@ -1466,7 +1466,7 @@ mod tests {
         let resp = classify(db.pool(), req).await.unwrap();
         assert_eq!(resp.classification_type, "single_type");
         assert_eq!(resp.frame_type, Some("light".to_owned()));
-        assert!(!resp.content_signature.is_empty());
+        assert_ne!(resp.content_signature, "");
     }
 
     /// Build the standard one-light-frame fixture used by the #1101 regression

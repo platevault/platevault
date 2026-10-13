@@ -681,7 +681,7 @@ mod tests {
         assert!(got.is_some(), "M 31 must be resolvable from the seeded cache");
 
         // Re-warming is a no-op (idempotent upsert).
-        assert!(!cache.list().await.unwrap().is_empty());
+        assert_ne!(cache.list().await.unwrap(), [] as [simbad_resolver::CachedTarget; 0]);
         let reloaded = warm_cache(&cache, &seed, &ns()).await.unwrap();
         assert!(reloaded >= 80, "re-warm dedups by oid/id, not by row count delta");
     }

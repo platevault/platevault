@@ -484,7 +484,7 @@ mod tests {
         insert_view_with_items(&db, "view-r", "p-ready", "symlink").await;
 
         let resp = remove_prepared_view(db.pool(), "view-r").await.unwrap();
-        assert!(!resp.plan_id.is_empty());
+        assert_ne!(resp.plan_id, "");
 
         // Plan should exist in ready_for_review state.
         let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
@@ -592,7 +592,7 @@ mod tests {
         .unwrap();
 
         let resp = remove_prepared_view(db.pool(), "view-mixed").await.unwrap();
-        assert!(!resp.plan_id.is_empty());
+        assert_ne!(resp.plan_id, "");
     }
 
     #[tokio::test]
@@ -602,7 +602,7 @@ mod tests {
         insert_view_with_items(&db, "view-rg", "p-regen", "symlink").await;
 
         let resp = regenerate_prepared_view(db.pool(), "view-rg").await.unwrap();
-        assert!(!resp.plan_id.is_empty());
+        assert_ne!(resp.plan_id, "");
 
         let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
         assert_eq!(plan.origin, "prepared_view_regeneration");

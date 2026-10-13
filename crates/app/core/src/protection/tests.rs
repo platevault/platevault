@@ -220,7 +220,7 @@ async fn set_protection_emits_audit_event() {
     };
     let resp = set_source_protection(db.pool(), &bus, &set_req).await.unwrap();
     assert_eq!(resp.new_level, ProtectionLevel::Unprotected);
-    assert!(!resp.audit_id.is_empty());
+    assert_ne!(resp.audit_id, "");
 }
 
 /// FR-131/SC-009 (T123): `set_source_protection`'s returned `audit_id`

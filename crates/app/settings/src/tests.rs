@@ -499,7 +499,7 @@ async fn restore_defaults_restores_changed_keys() {
     let resp = restore_defaults(db.pool(), &bus, &restore_req).await.unwrap();
     assert_eq!(resp.status, RestoreDefaultsStatus::Success);
     assert!(resp.restored.contains(&"logLevel".to_owned()));
-    assert!(resp.already_at_default.is_empty());
+    assert_eq!(resp.already_at_default, [] as [std::string::String; 0]);
 
     // Verify it's back to default.
     let restored_val = repo::get_raw(db.pool(), "logLevel").await.unwrap();
@@ -512,7 +512,7 @@ async fn restore_defaults_noop_when_already_at_default() {
     let restore_req = RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
     let resp = restore_defaults(db.pool(), &bus, &restore_req).await.unwrap();
     assert_eq!(resp.status, RestoreDefaultsStatus::Noop);
-    assert!(resp.restored.is_empty());
+    assert_eq!(resp.restored, [] as [std::string::String; 0]);
     assert!(resp.already_at_default.contains(&"logLevel".to_owned()));
 }
 

@@ -253,7 +253,7 @@ mod tests {
         assert!(r.is_ok());
         let d = r.unwrap();
         assert!(!d.was_override);
-        assert!(d.mismatched_dimensions.is_empty());
+        assert_eq!(d.mismatched_dimensions, [] as [Dimension; 0]);
     }
 
     #[test]

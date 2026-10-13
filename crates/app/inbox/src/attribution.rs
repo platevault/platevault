@@ -1250,7 +1250,10 @@ mod tests {
         seed_evidence(db.pool(), "item-s2", "flat").await;
         seed_geometry_row(db.pool(), "item-s2", "flat_0001.fits", 83.634, 22.015, 1.2, None).await;
 
-        assert!(suggest_candidates(db.pool(), "item-s2").await.unwrap().is_empty());
+        assert_eq!(
+            suggest_candidates(db.pool(), "item-s2").await.unwrap(),
+            [] as [contracts_core::framing::IngestionAttributionCandidateDto; 0]
+        );
     }
 
     // ── apply_chosen_attribution ─────────────────────────────────────────────

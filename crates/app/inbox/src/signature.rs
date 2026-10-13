@@ -115,7 +115,7 @@ mod tests {
     fn empty_folder_has_deterministic_signature() {
         let sig = folder_signature(vec![]);
         // Deterministic: sha256 of empty input
-        assert!(!sig.is_empty());
+        assert_ne!(sig, "");
         assert_eq!(sig, folder_signature(vec![]));
     }
 
