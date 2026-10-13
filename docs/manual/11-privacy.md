@@ -26,9 +26,14 @@ off or avoid it in the current release.
   updater's name and version as its user agent, plus your IP address, as any
   web request does. It does not carry your PlateVault version, your library
   or anything about your files.
-- **What follows:** if the file lists a newer version, PlateVault downloads the
-  update package for your platform from GitHub straight away and checks its
-  signature before using it.
+- **What follows:** this depends on the version you run.
+  - Up to and including the 0.6.x releases, PlateVault downloads and installs
+    the update for your platform from GitHub as soon as the check finds one,
+    at launch. On Windows the installer starts and PlateVault quits.
+  - From 0.7.0, PlateVault tells you about the update and downloads nothing
+    until you choose **Install now** or **Install on quit**. It then downloads
+    the update package from GitHub and checks its signature before
+    installing it.
 - **How to turn it off:** the current release has no setting for this. To
   stop it, block `github.com` for PlateVault in your firewall.
 - **GitHub's policy:** [GitHub General Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
@@ -46,9 +51,9 @@ astronomiques de Strasbourg (CDS).
   **Search more catalogues (NED/VizieR)** uses the CDS Sesame service at
   `https://cds.unistra.fr`, which searches SIMBAD, NED and VizieR for you.
 - **When:**
-  - You type a target name of two or more characters in a target search box,
-    and it matches nothing local. The lookup runs after a short pause in
-    typing.
+  - You pause while typing two or more characters in a target search box.
+    PlateVault sends what you have typed so far, even when local results
+    already appear, unless that exact name is in its local cache.
   - You choose **Search more catalogues (NED/VizieR)** after a search finds
     nothing.
   - You apply an Inbox plan. PlateVault reads the `OBJECT` header of each new
@@ -58,9 +63,10 @@ astronomiques de Strasbourg (CDS).
     **Re-check** there. PlateVault sends the sky position from the frames'
     FITS headers and a search radius, and asks which objects lie in that
     area.
-- **What is sent:** the target name or `OBJECT` header value, or the sky
-  position (right ascension, declination and radius). The user agent names
-  the lookup library and its version. CDS also sees your IP address.
+- **What is sent:** the text typed so far, a target name, an `OBJECT` header
+  value, or a sky position (right ascension, declination and radius). The
+  user agent names the lookup library and its version. CDS also sees your IP
+  address.
 - **How to turn it off:** switch off **Settings → Target Resolution → Online
   SIMBAD resolution**. The same switch appears in the **Configuration** step
   of first-run setup. It is on by default. With it off, searches and imports
@@ -90,7 +96,9 @@ astronomiques de Strasbourg (CDS).
 ## Links you open yourself
 
 **Settings → Target Resolution** credits SIMBAD and OpenNGC with links to
-their websites. These open only when you click them.
+their websites. The **Pick on map** map shows OpenStreetMap and Leaflet
+credits, which link to their websites. These links open in your browser only
+when you click them.
 
 ## During installation on Windows
 

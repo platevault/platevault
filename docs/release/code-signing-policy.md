@@ -1,7 +1,9 @@
 # Code signing policy
 
-This is the code signing policy for PlateVault. It follows the
+This is the code signing policy for PlateVault. It is written to meet the
 [SignPath Foundation conditions for open-source projects](https://signpath.org/terms.html).
+PlateVault does not meet all of them yet; [Open conditions](#open-conditions)
+lists what must be done before the project applies.
 
 ## Status
 
@@ -26,10 +28,11 @@ is expected, and does not mean the file came from somewhere else.
 
 With the SignPath Foundation certificate, these Windows files will be signed:
 
-- `desktop_shell.exe`, the PlateVault application that both installers put
-  on your machine;
 - the NSIS installer, `PlateVault_<version>_x64-setup.exe`;
 - the MSI installer, `PlateVault_<version>_x64_en-US.msi`.
+
+The application inside them, `desktop_shell.exe`, stays unsigned until the
+release workflow signs it before it builds the installers.
 
 Only files built from this repository's source are signed. Third-party
 binaries bundled with PlateVault are never signed with this certificate.
@@ -79,6 +82,22 @@ PlateVault sends nothing to the maintainer. The app makes a few network
 requests, each tied to a feature. [Privacy and network access](../manual/11-privacy.md)
 lists them, links the privacy policies of the services involved, and says
 how to turn off or avoid each one.
+
+## Open conditions
+
+These SignPath conditions are not met yet. Each one blocks the application:
+
+- **Option to disable the update check.** The app checks GitHub for updates
+  at every start, with no setting to stop it. A "Check for updates
+  automatically" setting will add one.
+- **Privacy policy shown during installation.** Neither Windows installer
+  shows the privacy statement yet.
+- **Option to disable the observing-site map.** The map requests
+  OpenStreetMap tiles as soon as its form opens. It needs to load tiles only
+  when you ask for them. Target lookups to CDS already have an off switch,
+  **Online SIMBAD resolution**.
+- **Code signing policy on the release pages.** The GitHub release notes do
+  not link this page yet.
 
 ## Uninstalling
 

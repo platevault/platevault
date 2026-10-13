@@ -1,7 +1,7 @@
 <!-- Generated from a beads decision bead. Edit the bead, not this file:
      bd show astro-plan-eub2i -->
 ---
-number: 5
+number: 4
 title: "Decision: distribution strategy per OS (NSIS + SignPath later, macOS self-signed, Linux unchanged, winget, Store later, update-check setting)"
 status: accepted
 date: 2026-10-13

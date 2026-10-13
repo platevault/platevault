@@ -89,7 +89,7 @@ PlateVault names its folders after its application identifier,
 | macOS | `~/Library/Application Support/dev.astro-plan.astro-library-manager` | Library database, resolve cache, window position |
 | macOS | `~/Library/Logs/dev.astro-plan.astro-library-manager` | Logs |
 | macOS | `~/Library/Caches/`, `~/Library/WebKit/` and `~/Library/HTTPStorages/`, each in a `dev.astro-plan.astro-library-manager` folder | Web view caches |
-| macOS | `~/Library/Preferences/dev.astro-plan.astro-library-manager.plist` and `~/Library/Saved Application State/dev.astro-plan.astro-library-manager.savedState` | System preferences and window state |
+| macOS | `~/Library/Preferences/dev.astro-plan.astro-library-manager.plist` and `~/Library/Saved Application State/dev.astro-plan.astro-library-manager.savedState` | App preferences and saved window state |
 | Linux | `~/.local/share/dev.astro-plan.astro-library-manager` (or under `$XDG_DATA_HOME`) | Library database, resolve cache, logs |
 | Linux | `~/.config/dev.astro-plan.astro-library-manager` | Window position |
 | Linux | `~/.cache/dev.astro-plan.astro-library-manager` | Web view cache |

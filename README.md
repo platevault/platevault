@@ -106,7 +106,7 @@ role, and what will be signed.
 PlateVault sends nothing to the maintainer. It contacts GitHub to check for
 updates, CDS SIMBAD to look up target names, and OpenStreetMap for the
 observing-site map. [Privacy and network access](docs/manual/11-privacy.md)
-lists what each request sends and how to turn it off.
+lists what each request sends and how to turn it off or avoid it.
 
 ### Uninstalling
 
