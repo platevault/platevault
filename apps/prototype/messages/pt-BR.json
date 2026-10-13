@@ -8461,6 +8461,8 @@
   "stepflow_reopen_step": "Reabrir etapa",
   "stepflow_finish_run": "Concluir execução",
   "stepflow_finish_run_title": "Concluir {name}?",
+  "stepflow_finish_all_panels": "Concluir todos os painéis",
+  "stepflow_finish_all_panels_title": "Concluir todos os painéis de {name}?",
   "stepflow_close_project": "Fechar projeto",
   "stepflow_close_project_title": "Fechar {name}?",
   "stepflow_finish_review": "Concluir revisão",
@@ -8485,6 +8487,22 @@
     }
   ],
   "flow_inputs_changed": "Entradas alteradas · Atualizar",
+  "flow_panels_blocked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel bloqueado",
+        "countPlural=*": "{count} painéis bloqueados"
+      }
+    }
+  ],
+  "flow_group_no_live_panels": "Todos os painéis estão na Lixeira",
   "flow_resolve_calibration_first": "Resolva a calibração primeiro",
   "flow_choose_profile": "Escolha um perfil",
   "flow_corrected_values": [

@@ -8405,6 +8405,8 @@
   "stepflow_reopen_step": "Reopen step",
   "stepflow_finish_run": "Finish run",
   "stepflow_finish_run_title": "Finish {name}?",
+  "stepflow_finish_all_panels": "Finish all panels",
+  "stepflow_finish_all_panels_title": "Finish every panel of {name}?",
   "stepflow_close_project": "Close project",
   "stepflow_close_project_title": "Close {name}?",
   "stepflow_finish_review": "Finish review",
@@ -8429,6 +8431,22 @@
     }
   ],
   "flow_inputs_changed": "Inputs changed · Refresh",
+  "flow_panels_blocked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel blocked",
+        "countPlural=*": "{count} panels blocked"
+      }
+    }
+  ],
+  "flow_group_no_live_panels": "Every panel is in the Trash",
   "flow_resolve_calibration_first": "Resolve calibration first",
   "flow_choose_profile": "Choose a profile",
   "flow_corrected_values": [

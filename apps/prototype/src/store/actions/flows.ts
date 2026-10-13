@@ -29,7 +29,11 @@ import {
   calibrationStepLink,
   type DerivedStep,
   type FlowGate,
+  groupFlowState,
+  type GroupFlowState,
+  groupStepLink,
   nextInReviewQueue,
+  panelRef,
   runFlowState,
   type RunFlowState,
   runStepLink,
@@ -47,7 +51,7 @@ import {
 } from "@/domain/derive"
 import { fileAt } from "@/domain/disk"
 import { STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
-import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Run, RunFlowStepId, Session, TargetId, WrapUpStepId } from "@/domain/types"
+import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Run, RunFlowStepId, RunGroup, Session, TargetId, WrapUpStepId } from "@/domain/types"
 import { fileName } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
@@ -141,6 +145,66 @@ function runProceed(world: World, run: Run, m: Messages, host: RunFlowHost, stat
         confirm: { label: m.stepflow_finish_run() },
       }
       return { proceed: { id: "run-finish", label: m.stepflow_finish_run(), run: () => finishRun(run.id, { keepView: false }).result, confirm }, next: null }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Run group (§5.2)
+// ---------------------------------------------------------------------------
+
+export interface GroupFlowHost {
+  /**
+   * Prepare's commit step (F2): Prepare all with its folder-layout confirm.
+   * `start` starts every panel's preparation; the step reads Finished once
+   * every panel is prepared and verified.
+   */
+  prepare: { confirm?: ConfirmSpec; start: () => CommitResult }
+}
+
+/** Every panel's result: ok when all are, else the first refusal or failure. Every panel that can still moves on. */
+function allPanels(results: CommitResult[]): CommitResult {
+  return results.find((r) => !r.ok) ?? { ok: true }
+}
+
+/**
+ * The run group as a flow: the run flow's four steps over its live panels
+ * (`groupFlowState`). Proceed acts on every panel: Select saves each panel's
+ * draft, Calibrate records each panel's calibration, Prepare runs the host's
+ * Prepare all, and Results is Finish all panels, which finishes every
+ * panel's run and removes each run view (F6).
+ */
+export function groupFlow(world: World, group: RunGroup, m: Messages, host: GroupFlowHost): StepFlow {
+  const state = groupFlowState(world, group)
+  const steps = state.steps.map((step) => flowStep(m, step, STEP_NAME[step.id]))
+  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => groupStepLink(group, stepId as RunFlowStepId) }
+  if (state.finishedAt) return { ...base, proceed: null, next: null }
+  return { ...base, ...groupProceed(world, group, m, host, state) }
+}
+
+function groupProceed(world: World, group: RunGroup, m: Messages, host: GroupFlowHost, state: GroupFlowState): Pick<StepFlow, "proceed" | "next"> {
+  const proceed = (work: Action["run"], extra: Partial<Action> = {}): Action => ({ id: "group-proceed", label: m.stepflow_proceed(), run: work, ...extra })
+  const runs = state.panels.map((p) => p.run)
+  switch (state.current) {
+    case "select":
+      return { proceed: proceed(() => allPanels(runs.filter((run) => run.draft).map((run) => saveRun(run.id)))), next: groupStepLink(group, "calibrate") }
+    case "calibrate":
+      return { proceed: proceed(() => allPanels(runs.map((run) => recordRunCalibration(run.id)))), next: groupStepLink(group, "prepare") }
+    case "prepare":
+      return { proceed: proceed(host.prepare.start, host.prepare.confirm ? { confirm: host.prepare.confirm } : {}), next: null }
+    case "results": {
+      const open = state.panels.filter((p) => p.flow.finishedAt === null)
+      const groups = open.flatMap((p) => {
+        const rows = runViewRows(world, p.run)
+        return rows.length > 0 ? [{ label: say(m, panelRef(p.panel)), rows }] : []
+      })
+      const confirm: ConfirmSpec = {
+        title: m.stepflow_finish_all_panels_title({ name: group.name }),
+        summary: m.rungroup_panels_count({ count: open.length }),
+        groups: groups.length > 0 ? groups : undefined,
+        confirm: { label: m.stepflow_finish_all_panels() },
+      }
+      return { proceed: { id: "group-finish", label: m.stepflow_finish_all_panels(), run: () => allPanels(open.map((p) => finishRun(p.run.id, { keepView: false }).result)), confirm }, next: null }
     }
   }
 }
