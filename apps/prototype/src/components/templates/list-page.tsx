@@ -3,8 +3,10 @@
  * bar, optional view tabs, one DataTable with its toolbar, and the open
  * row's DetailPanel docked beside it (spec 054).
  *
- * - Header: the title, a summary (the count), at most one primary and three
- *   standard actions, and the object menu ("Calibration ▾") for the rest.
+ * - Header: the title, a summary (the count), the page's context controls
+ *   (`context`: the night and site pickers on Targets) beside the title, at
+ *   most one primary and three standard actions, and the object menu
+ *   ("Calibration ▾") for the rest. The bar wraps when it runs out of room.
  *   No description and no navigation buttons (C10): views are tabs, places
  *   are links.
  * - Body: the page never scrolls; the table frame does, under its pinned
@@ -14,6 +16,7 @@
  *   marks that row with `table.activeRowId`. Changing the open row keeps the
  *   panel's place and size.
  */
+import type { ReactNode } from "react"
 import type { Action } from "@/components/app/contracts"
 import { DataTable, type DataTableProps, type DataTableToolbar } from "@/components/app/data-table"
 import type { PageNotice } from "@/components/app/feedback"
@@ -30,6 +33,8 @@ export interface ListPageProps<T> {
   level?: 1 | 2
   /** The count beside the title: "128 sessions". */
   summary?: string
+  /** Controls that set what the whole list shows (NightPicker, SitePicker, DarkLine): beside the title, wrapping with it. */
+  context?: ReactNode
   /** At most one primary and three standard get a button; the rest go to the menu. */
   actions?: Action[]
   menu?: ObjectMenu
@@ -39,15 +44,14 @@ export interface ListPageProps<T> {
   detail?: PageDetail | null
 }
 
-export function ListPage<T>({ title, level = 1, summary, actions, menu, views, notice, table, detail }: ListPageProps<T>) {
+export function ListPage<T>({ title, level = 1, summary, context, actions, menu, views, notice, table, detail }: ListPageProps<T>) {
   return (
     <div data-template="list" className="flex min-h-0 flex-1 flex-col">
-      <PageHeader level={level} title={title} summary={summary} actions={headerActions(actions, menu)} notice={notice} className={headerBar(level)} />
+      <PageHeader level={level} title={title} summary={summary} meta={context} actions={headerActions(actions, menu)} notice={notice} className={headerBar(level)} />
       <ViewTabs views={views}>
         <DetailDock detail={detail} level={level}>
-          {/* The table fills the body: its wrapper becomes a column and its frame takes the rest (the frame scrolls, the page does not). */}
-          <div className="flex min-h-0 flex-1 flex-col px-5 pt-3 pb-4 *:flex *:min-h-0 *:flex-1 *:flex-col">
-            <DataTable {...table} scroll="frame" className="max-h-none min-h-0 flex-1" />
+          <div className="flex min-h-0 flex-1 flex-col px-5 pt-3 pb-4">
+            <DataTable {...table} scroll="fill" />
           </div>
         </DetailDock>
       </ViewTabs>
