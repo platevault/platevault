@@ -5,10 +5,11 @@
  * profiles (PREP-FR-01, PREP-FR-02). Failed writes stay unsaved with Retry;
  * the last saved value stays in effect.
  */
+import { PROFILE_IDS } from "@/domain/seed"
 import { clampMoonAvoidance, type MoonAvoidance } from "@/domain/planning"
 import { validateNamingTemplate } from "@/domain/templates"
 import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, InputMode, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
-import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
@@ -163,6 +164,55 @@ export function checkExecutable(profileId: ProfileId): CommitResult {
 
 export function setLaunchArgs(profileId: ProfileId, launchArgs: string): CommitResult {
   return patchProfile(profileId, msg("apps_launch_arguments"), { launchArgs })
+}
+
+const APPS_HREF = "/settings/applications"
+const BUILT_IN_PROFILES: ReadonlySet<ProfileId> = new Set(Object.values(PROFILE_IDS))
+
+/** A generic launcher profile the user adds: unverified, its executable observed on the simulated computer now. */
+export function addApplicationProfile(input: { name: string; executablePath: string | null; launchArgs: string }): { result: CommitResult; id: ProfileId } {
+  const name = input.name.trim()
+  const id = freshId("prof", name)
+  const profile: ApplicationProfile = {
+    id,
+    application: "generic",
+    name,
+    executablePath: input.executablePath,
+    executableState: observeExecutable(input.executablePath),
+    launchArgs: input.launchArgs,
+    capability: { verified: false, evidence: msg("seed_apps_evidence_generic"), inputWrite: "unknown", correctedMetadata: "none", masterStacking: false },
+  }
+  const result = commit(msg("store_label_add_named", { name }), (s) => withCatalog(s, (c) => ({ ...c, profiles: { ...c.profiles, [id]: profile } })), { href: APPS_HREF })
+  if (result.ok) recordSaved(msg("store_saved_added", { name }), null, APPS_HREF)
+  return { result, id }
+}
+
+/**
+ * Remove a profile the user added. Built-in profiles stay, and so does a
+ * profile any run (outside the Trash) has set up or prepared with, so no run
+ * loses the application it records.
+ */
+export function removeApplicationProfile(id: ProfileId): CommitResult {
+  const { catalog } = store.getState()
+  const profile = catalog.profiles[id]
+  if (!profile) return MISSING
+  const label = msg("project_remove_named", { name: profile.name })
+  if (BUILT_IN_PROFILES.has(id)) return refuse(msg("store_refused", { label }), [msg("status_built_in")], APPS_HREF)
+  const prepared = new Set(Object.values(catalog.preparations).filter((p) => p.profileId === id).map((p) => p.runId))
+  const runs = Object.values(catalog.runs).filter((run) => !run.trashedAt && (run.setup?.profileId === id || prepared.has(run.id)))
+  if (runs.length > 0) {
+    const usedBy = joinRefs([msg("calibration_used_by_runs", { count: runs.length }), joinRefs(runs.map((run) => verbatim(run.name)), ", ")], " · ")
+    return refuse(msg("store_refused", { label }), [usedBy], APPS_HREF)
+  }
+  const result = commit(label, (s) =>
+    withCatalog(s, (c) => {
+      const { [id]: _removed, ...profiles } = c.profiles
+      return { ...c, profiles }
+    }),
+    { href: APPS_HREF },
+  )
+  if (result.ok) recordSaved(msg("store_saved_removed", { name: profile.name }), null, APPS_HREF)
+  return result
 }
 
 /** Prototype control: move an application bundle away or arm a launch failure. Never writes the catalog. */

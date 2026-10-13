@@ -397,6 +397,22 @@
   "selection_show": "Show selected",
   "selection_clear": "Clear selection",
   "table_actions_column": "Actions",
+  "table_membership_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} included",
+        "countPlural=*": "{n} included"
+      }
+    }
+  ],
   "table_selected_count": [
     {
       "declarations": [
@@ -8578,6 +8594,9 @@
   "dock_right": "Right",
   "dock_close": "Close details",
   "dock_width": "Details width",
+  "dock_width_narrow": "Narrow",
+  "dock_width_medium": "Medium",
+  "dock_width_wide": "Wide",
   "catalogue_templates_list_desc": "A list page: one primary action, three standard ones, and the rest under the object menu. The table frame scrolls, never the page. A row opens its details beside the table from 1400 px wide, under it below that.",
   "catalogue_templates_notice_toggle": "Standing notice",
   "catalogue_templates_views": "Session types",
@@ -8596,6 +8615,27 @@
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
   "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "catalogue_templates_fill_toggle": "Full-height step",
+  "catalogue_datatable_fill": "Fill a fixed-height body",
+  "catalogue_datatable_destination_nas": "Archive NAS",
+  "catalogue_datatable_destination_cold": "Cold storage",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} is old · in {count} unfinished run",
+        "countPlural=*": "{name} is old · in {count} unfinished runs"
+      }
+    }
+  ],
+  "store_saved_added": "Added {name}",
   "calibration_process_gone": "Unknown process",
   "calibration_processes": "Processes",
   "calibration_on": "On",

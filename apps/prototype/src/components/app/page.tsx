@@ -13,27 +13,28 @@ import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { NoticeSlot, type PageNotice } from "./feedback"
 
-const mountedTitles = new Map<symbol, { title: string; level: 1 | 2 }>()
+const mountedTitles = new Map<symbol, string>()
 
 function applyDocumentTitle() {
-  const parts = [...mountedTitles.values()].sort((a, b) => b.level - a.level).map((entry) => entry.title)
-  document.title = [...parts, m.app_document_title()].join(" · ")
+  document.title = [...mountedTitles.values(), m.app_document_title()].join(" · ")
 }
 
 /**
- * Names the browser tab after the mounted page headings, child area first:
- * "Sessions · View workspace · PlateVault prototype" (WCAG 2.4.2).
+ * Names the browser tab after the page: "Sessions · PlateVault prototype"
+ * (WCAG 2.4.2). Only a page-level heading names it; a child area, a tab or
+ * a catalogue specimen (level 2) passes null and adds nothing.
  */
-export function useDocumentTitle(title: string, level: 1 | 2 = 1) {
+export function useDocumentTitle(title: string | null) {
   useEffect(() => {
+    if (title === null) return
     const key = Symbol(title)
-    mountedTitles.set(key, { title, level })
+    mountedTitles.set(key, title)
     applyDocumentTitle()
     return () => {
       mountedTitles.delete(key)
       applyDocumentTitle()
     }
-  }, [title, level])
+  }, [title])
 }
 
 /** One parent of the page in its header path: "Projects", "M 42". */
@@ -80,7 +81,7 @@ export interface PageHeaderProps {
  * --pane-header-h so focused controls scroll clear of it.
  */
 export function PageHeader({ title, path, summary, description, eyebrow, meta, actions, notice, className, level = 1 }: PageHeaderProps) {
-  useDocumentTitle(title, level)
+  useDocumentTitle(level === 1 ? title : null)
   const ref = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     const header = ref.current
@@ -222,7 +223,7 @@ export function ListDetail({ list, detail, listLabel, className }: ListDetailPro
       <nav aria-label={listLabel} className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">
         {list}
       </nav>
-      <div className="min-h-0 min-w-0 overflow-y-auto">{detail}</div>
+      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">{detail}</div>
     </div>
   )
 }

@@ -397,6 +397,22 @@
   "selection_show": "Mostrar selecionados",
   "selection_clear": "Limpar seleção",
   "table_actions_column": "Ações",
+  "table_membership_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} incluído",
+        "countPlural=*": "{n} incluídos"
+      }
+    }
+  ],
   "table_selected_count": [
     {
       "declarations": [
@@ -8634,6 +8650,9 @@
   "dock_right": "À direita",
   "dock_close": "Fechar detalhes",
   "dock_width": "Largura dos detalhes",
+  "dock_width_narrow": "Estreita",
+  "dock_width_medium": "Média",
+  "dock_width_wide": "Larga",
   "catalogue_templates_list_desc": "Uma página de lista: uma ação principal, três padrão e o resto no menu do objeto. A moldura da tabela rola, nunca a página. Uma linha abre seus detalhes ao lado da tabela a partir de 1400 px de largura, e abaixo dela em janelas mais estreitas.",
   "catalogue_templates_notice_toggle": "Aviso permanente",
   "catalogue_templates_views": "Tipos de sessão",
@@ -8652,6 +8671,27 @@
   "catalogue_templates_settings_desc": "Uma área de Configurações: o título, linhas de configuração e uma seção de lista com um Adicionar no cabeçalho.",
   "catalogue_templates_indexing": "Indexação",
   "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app",
+  "catalogue_templates_fill_toggle": "Etapa em altura total",
+  "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
+  "catalogue_datatable_destination_nas": "NAS de arquivo",
+  "catalogue_datatable_destination_cold": "Armazenamento frio",
+  "issue_master_old": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} está antigo · em {count} execução não concluída",
+        "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
+      }
+    }
+  ],
+  "store_saved_added": "{name} adicionado",
   "calibration_process_gone": "Processo desconhecido",
   "calibration_processes": "Processos",
   "calibration_on": "Ligado",
