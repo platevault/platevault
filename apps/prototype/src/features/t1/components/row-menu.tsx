@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { m } from "@/lib/i18n"
 
+/** @deprecated Pass `Action`s to DataTable `rowActions` (plan §3.3 P2). W3b moves its last importers off it and W4 deletes this file (plan §7.5). */
 export interface RowMenuItem {
   label: string
   /** Receives the menu trigger, so a dialog opened from the item can return focus to it. */
@@ -19,7 +20,10 @@ export interface RowMenuItem {
   destructive?: boolean
 }
 
-/** Row class that lets the pinned cell follow the row's hover surface. */
+/**
+ * Row class that lets the pinned cell follow the row's hover surface.
+ * @deprecated DataTable pins its own row-actions column (plan §3.3 P2). W3b moves its last importers off it and W4 deletes this file (plan §7.5).
+ */
 export const ROW_MENU_ROW = "group/row"
 
 /**
@@ -27,6 +31,7 @@ export const ROW_MENU_ROW = "group/row"
  * header keeps the table head's card surface, and body cells mix the row hover
  * colour over the page background exactly as `hover:bg-muted/60` composites.
  * Call it during render so the header follows the language.
+ * @deprecated Pass `rowActions` to DataTable (plan §3.3 P2). W3b moves its last importers off it and W4 deletes this file (plan §7.5).
  */
 export function rowMenuColumn<T>(name: (row: T) => string, items: (row: T) => RowMenuItem[]): Column<T> {
   return {

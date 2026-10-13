@@ -45,7 +45,7 @@
   "settings_target_lookup": "Busca de Alvos",
   "settings_goal_templates": "Modelos de metas",
   "settings_applications": "Aplicativos",
-  "settings_about": "Sobre este protótipo",
+  "settings_about": "Sobre",
   "shell_skip_to_content": "Pular para o conteúdo principal",
   "shell_sidebar": "Barra lateral",
   "shell_sidebar_show": "Mostrar barra lateral",
@@ -8706,5 +8706,100 @@
   "catalogue_templates_step_shift": "Deslocamento do layout na última mudança de etapa: {px} px",
   "catalogue_templates_settings_desc": "Uma área de Configurações: o título, linhas de configuração e uma seção de lista com um Adicionar no cabeçalho.",
   "catalogue_templates_indexing": "Indexação",
-  "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app"
+  "catalogue_templates_rescan_on_open": "Reescanear ao abrir o app",
+  "catalogue_feedback_save_state_desc": "O estado de salvamento de uma seção de configurações, ao lado do título: Salvo depois de uma gravação confirmada; Não salvo com Tentar de novo, que repete a mesma gravação; Alterado em outro lugar. Nada antes do primeiro salvamento.",
+  "catalogue_feedback_save_succeeds": "a gravação dá certo",
+  "catalogue_feedback_save_fails": "a gravação falha e depois Tentar de novo dá certo",
+  "catalogue_feedback_save_stale": "gravação desatualizada",
+  "about_licence": "Licença",
+  "help_shortcuts": "Atalhos",
+  "help_tips": "Dicas",
+  "help_guide": "Guia",
+  "help_tip_marks": "Marcações",
+  "help_tip_marks_value": "P, X e U marcam o frame na biblioteca, em todos os Projetos. Uma rejeição só neste Projeto vale só neste Projeto.",
+  "help_tip_auto_advance": "Avanço automático",
+  "help_tip_auto_advance_value": "P, X ou U passa para o próximo frame.",
+  "help_tip_pan": "Deslocar",
+  "help_tip_pan_value": "Arraste ou use as setas. Com Shift, desloca mais.",
+  "help_tip_threshold": "Limiar",
+  "help_tip_threshold_value": "Clique em um gráfico para definir o limiar. Selecionar frames nunca altera a qualidade deles.",
+  "help_tip_duplicates": "Duplicados",
+  "help_tip_duplicates_value": "Somente locais da biblioteca; cartões de captura nunca são verificados. Fica a cópia no local registrado primeiro.",
+  "help_tip_default_site_value": "O Plano e o Planejamento usam esse local, a menos que você escolha outro. Os lembretes vão junto.",
+  "help_tip_site_headers": "Locais dos cabeçalhos",
+  "help_tip_site_headers_value": "SITELAT e SITELONG que nenhum local salvo cobre.",
+  "settings_lookup_result": "Resultado",
+  "settings_lookup_online_title": "Busca online",
+  "site_list": "Locais",
+  "site_elevation_value": "{metres} m",
+  "site_degrees_value": "{degrees}°",
+  "location_registered": "Registrado em",
+  "location_retired_on": "Aposentado em",
+  "location_retire_title": "Aposentar {name}?",
+  "location_col_name": "Nome",
+  "location_col_state": "Estado",
+  "location_col_indexed": "Indexado",
+  "location_col_frames": "Frames",
+  "location_col_size": "Tamanho",
+  "location_col_free": "Livre no disco",
+  "location_offline_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} local offline",
+        "countPlural=*": "{n} locais offline"
+      }
+    }
+  ],
+  "location_list_title": "Pastas registradas",
+  "location_default_archive": "Arquivo padrão",
+  "duplicates_moving": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Movendo {n} cópia para a Lixeira do sistema",
+        "countPlural=*": "Movendo {n} cópias para a Lixeira do sistema"
+      }
+    }
+  ],
+  "verb_show": "Mostrar",
+  "duplicates_col_outcome": "Destino",
+  "duplicates_cant_trash": "Não vai para a Lixeira · {reason}",
+  "duplicates_scan_running": "Verificação em andamento",
+  "duplicates_none_movable": "Todo frame mantém uma cópia que não pode sair",
+  "duplicates_found": "Encontrado",
+  "duplicates_scan": "Verificação",
+  "duplicates_movable": "Pode mover",
+  "duplicates_open_blocker": "Abrir: {reason}",
+  "apps_detected": "Detectado",
+  "apps_other": "Outro aplicativo",
+  "apps_none_detected": "Nenhum detectado",
+  "apps_col_application": "Aplicativo",
+  "apps_col_profile": "Perfil",
+  "apps_col_path": "Caminho",
+  "apps_col_detected": "Detectado",
+  "apps_col_arguments": "Argumentos",
+  "apps_arguments_title": "Argumentos de {name}",
+  "apps_add": "Adicionar aplicativo",
+  "apps_name": "Nome",
+  "apps_change_action": "Alterar",
+  "apps_locate_action": "Localizar",
+  "apps_edit_arguments": "Editar argumentos",
+  "apps_remove": "Remover aplicativo",
+  "apps_list_title": "Perfis",
+  "apps_none": "Nenhum aplicativo"
 }

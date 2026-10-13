@@ -24,7 +24,10 @@ import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { framesInLocation } from "../lib/locations"
 
-/** The newest indexing run that covered this location, and its item for it. */
+/**
+ * The newest indexing run that covered this location, and its item for it.
+ * @deprecated Settings › Locations reads indexing state per row itself; only setup still uses it. W3b moves its last importers off it and W4 deletes this file (plan §7.5).
+ */
 export function latestIndexRun(operations: Record<string, Operation>, locationId: string): { op: Operation; item: OperationItem | null } | null {
   let latest: Operation | null = null
   for (const op of Object.values(operations)) {
@@ -34,6 +37,7 @@ export function latestIndexRun(operations: Record<string, Operation>, locationId
   return latest ? { op: latest, item: latest.items.find((i) => i.id === locationId) ?? null } : null
 }
 
+/** @deprecated Locations are DataTable rows (plan §3.5, C L3). W3b moves its last importers off it and W4 deletes this file (plan §7.5). */
 export interface LocationRowProps {
   location: Location
   /** Opened from `?locationId=` or the detail sheet. */
@@ -61,6 +65,7 @@ export interface LocationRowProps {
 // Recovery notices sit inside the row's card: inline, without a second border or surface.
 const INLINE_NOTICE = "rounded-none border-0 bg-transparent px-0 py-0"
 
+/** @deprecated Locations are DataTable rows (plan §3.5, C L3). W3b moves its last importers off it and W4 deletes this file (plan §7.5). */
 export function LocationRow({ location, current, actions, actionsIncludeRescan = false, onChooseAgain, onRetry, onLocate, onRetire, feedback, badges, headingLevel = 3, showDiskUse = false }: LocationRowProps) {
   const m = useMessages()
   const availability = useStore((s) => locationAvailability(s.disk, location))

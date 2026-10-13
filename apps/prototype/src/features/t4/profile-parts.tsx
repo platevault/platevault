@@ -1,134 +1,19 @@
 /**
- * Profile parts shared by Prepare and Settings › Applications: capability
- * claims as label and value rows with their evidence in a note (D04,
- * PREP-FR-01), the executable state, and the simulated application chooser.
+ * A profile's executable as Prepare shows it: what PlateVault detects there,
+ * then the located path. Settings › Applications shows the same two facts
+ * as table columns.
  */
-import { useEffect, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { type KeyValueItem, PathText } from "@/components/app/data"
-import { ActionError } from "@/components/app/feedback"
-import { NoteMarker, type NoteRow } from "@/components/app/tips"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { PathText } from "@/components/app/data"
+import { StatusBadge } from "@/components/app/status"
 import type { ApplicationProfile } from "@/domain/types"
-import { type Messages, say } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
-import { useStore } from "@/store/core"
-import { locateExecutable } from "@/store/actions/settings"
-import { T4Badge } from "./badges"
-
-/** The profile's capability claims as label and value rows; the evidence behind them is in `CapabilityNote`. */
-export function capabilityItems(m: Messages, profile: ApplicationProfile): KeyValueItem[] {
-  const c = profile.capability
-  return [
-    {
-      label: m.apps_input_writes(),
-      value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,
-    },
-  ]
-}
-
-/** ① beside the profile name: the recorded evidence, corrected values and what the profile does not support. */
-export function CapabilityNote({ profile }: { profile: ApplicationProfile }) {
-  const m = useMessages()
-  const c = profile.capability
-  const unsupported: string[] = []
-  if (c.correctedMetadata === "none") unsupported.push(m.apps_unsupported_corrected())
-  const rows: NoteRow[] = [
-    { label: m.apps_evidence(), value: c.verified ? `${say(m, c.evidence)} · ${m.apps_prototype_fixture()}` : say(m, c.evidence) },
-    {
-      label: m.apps_corrected_values(),
-      value: (
-        <>
-          <span className="block">{c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()}</span>
-          <span className="block opacity-75">{m.apps_rename_note()}</span>
-        </>
-      ),
-    },
-  ]
-  if (unsupported.length > 0) rows.push({ label: m.location_links_none(), value: unsupported.map((u) => <span key={u} className="block">{u}</span>) })
-  return <NoteMarker label={m.run_profile_evidence({ name: profile.name })} rows={rows} />
-}
 
 export function ExecutableState({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-2">
-      <T4Badge value={`executable:${profile.executableState}`} />
-      {profile.executablePath ? <PathText path={profile.executablePath} className="min-w-0" /> : <span className="text-xs text-muted-foreground">{m.apps_not_located()}</span>}
-    </span>
-  )
-}
-
-export interface LocateDialogProps {
-  profile: ApplicationProfile | null
-  onOpenChange: (open: boolean) => void
-  onLocated?: () => void
-}
-
-/** Prototype: simulated application chooser listing bundles on the simulated computer. */
-export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: LocateDialogProps) {
-  const m = useMessages()
-  const apps = useStore((s) => s.disk.apps)
-  const [path, setPath] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const legendId = useId()
-  useEffect(() => {
-    if (!profile) return
-    const match = apps.find((a) => a.present && a.name === (profile.application === "generic" ? "" : profile.name.split(" /")[0]))
-    // A recorded path whose bundle is gone is not preselected: confirming it would record the missing path again.
-    const recorded = apps.find((a) => a.present && a.path === profile.executablePath)
-    setPath(recorded?.path ?? match?.path ?? apps.find((a) => a.present)?.path ?? "")
-    setError(null)
-  }, [profile])
-  if (!profile) return null
-  const present = apps.filter((a) => a.present)
-  return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{profile.application === "generic" ? m.apps_locate_any() : m.settings_locate_named({ name: profile.name })}</DialogTitle>
-          <DialogDescription>{m.apps_locate_description()}</DialogDescription>
-        </DialogHeader>
-        <fieldset>
-          <legend id={legendId} className="mb-2 text-sm font-medium">
-            {m.settings_applications()}
-          </legend>
-          {present.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{m.apps_none_present()}</p>
-          ) : (
-            <RadioGroup aria-labelledby={legendId} value={path} onValueChange={(value) => setPath(String(value))} className="gap-1.5">
-              {present.map((app) => (
-                <label key={app.id} className={cn("flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 text-sm hover:bg-muted/60", path === app.path && "border-primary bg-primary/8")}>
-                  <RadioGroupItem value={app.path} className="mt-0.5" />
-                  <span className="min-w-0 space-y-0.5">
-                    <span className="block font-medium">{app.name}</span>
-                    <PathText path={app.path} className="text-muted-foreground" />
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
-          )}
-        </fieldset>
-        {error ? <ActionError message={error} /> : null}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {m.verb_cancel()}
-          </Button>
-          <Button
-            disabled={!present.some((a) => a.path === path)}
-            onClick={() => {
-              const result = locateExecutable(profile.id, path)
-              if (!result.ok) return setError(result.message)
-              onLocated?.()
-              onOpenChange(false)
-            }}
-          >
-            {m.apps_use_this()}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <StatusBadge kind="executable" value={profile.executableState} />
+      {profile.executablePath ? <PathText path={profile.executablePath} /> : m.apps_not_located()}
+    </>
   )
 }
