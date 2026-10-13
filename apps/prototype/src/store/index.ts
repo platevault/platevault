@@ -87,7 +87,7 @@ export function initializeStore() {
   window.addEventListener("pagehide", persistNow)
 }
 
-/** Replace all prototype data with a seed. Theme and density are kept. */
+/** Replace all prototype data with a seed. Appearance settings are kept. */
 export function resetPrototype(seed: SeedName) {
   store.replace(fromSeed(seed))
   persistNow()

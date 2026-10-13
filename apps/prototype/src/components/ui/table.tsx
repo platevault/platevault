@@ -2,7 +2,7 @@
  * Table parts (L1): the one table look. DataTable (components/app/
  * data-table.tsx) renders every table through them; features render
  * DataTable, never these parts (plan P4). Row height and cell padding follow
- * the density tokens `--row-h` and `--row-py`.
+ * the row tokens `--row-h` and `--row-py`.
  *
  * A data row paints its tint (stripe, hover, selected, current) as the
  * variable `--row-bg` too, so cells pinned over the scrolled ones can paint

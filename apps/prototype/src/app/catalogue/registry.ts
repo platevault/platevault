@@ -6,8 +6,11 @@
 import type { ComponentType } from "react"
 import { ActionsCatalogue } from "./actions"
 import { DataTableCatalogue } from "./data-table"
+import { DialogsCatalogue } from "./dialogs"
+import { DomainCatalogue } from "./domain"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
+import { PickersCatalogue } from "./pickers"
 import { PreviewsCatalogue } from "./previews"
 import { ShellPartsCatalogue } from "./shell-parts"
 import { StatusCatalogue } from "./status"
@@ -32,6 +35,9 @@ export const CATALOGUE: CatalogueEntry[] = [
   },
   { id: "status", components: ["StatusBadge", "Pill", "Tag", "CountBadge"], Entry: StatusCatalogue },
   { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "UsedByPreview"], Entry: PreviewsCatalogue },
+  { id: "dialogs", components: ["ConfirmDialog", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
+  { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },
+  { id: "domain", components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "MosaicField", "SiteMap"], Entry: DomainCatalogue },
   {
     id: "data-table",
     components: [

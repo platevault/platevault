@@ -6,6 +6,7 @@
  */
 import { formatCount } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import type { MoonAvoidance } from "./planning"
 import type { Band, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, WrapUpStepId } from "./types"
 
 export const RUN_STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
@@ -81,6 +82,7 @@ export function qualityBarRef(bar: QualityBar | null): MessageRef {
  * Default Moon constraints per band: broadband wants a dark Moon far away;
  * Ha and SII tolerate a bright Moon, OIII sits between (it is close to the
  * Moon's own spectrum).
+ * @deprecated One Moon-avoidance curve per filter replaces the two limits (C6): use `DEFAULT_MOON_AVOIDANCE`. W4 removes this.
  */
 export const DEFAULT_MOON_CONSTRAINTS: Record<Band, MoonConstraint> = {
   L: { minSeparationDeg: 90, maxIlluminationPct: 30 },
@@ -90,6 +92,25 @@ export const DEFAULT_MOON_CONSTRAINTS: Record<Band, MoonConstraint> = {
   Ha: { minSeparationDeg: 30, maxIlluminationPct: 100 },
   SII: { minSeparationDeg: 40, maxIlluminationPct: 100 },
   OIII: { minSeparationDeg: 60, maxIlluminationPct: 80 },
+}
+
+/**
+ * Default Moon-avoidance curve per band (C6; sources and dates in
+ * design/R10-MOON-MODEL.md). No source publishes per-filter values, so each
+ * group takes a cited setting:
+ * - broadband, ACP's starting point: 120° at full Moon, 14 days;
+ * - OIII, Target Scheduler's default and its narrowband suggestion: 60°, 7 days;
+ * - Ha and SII, the red lines that scattered moonlight reaches least: a
+ *   published Target Scheduler narrowband setting, 35°, 3 days.
+ */
+export const DEFAULT_MOON_AVOIDANCE: Record<Band, MoonAvoidance> = {
+  L: { separationDeg: 120, widthDays: 14 },
+  R: { separationDeg: 120, widthDays: 14 },
+  G: { separationDeg: 120, widthDays: 14 },
+  B: { separationDeg: 120, widthDays: 14 },
+  Ha: { separationDeg: 35, widthDays: 3 },
+  SII: { separationDeg: 35, widthDays: 3 },
+  OIII: { separationDeg: 60, widthDays: 7 },
 }
 
 /** Wrap up steps in order (P-WRAP1); Done follows the last. */

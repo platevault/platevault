@@ -1,0 +1,35 @@
+{
+  "$description": "PlateVault component tokens (DTCG Format 2025.10): sizes that belong to one component, aliased to or derived from sys tokens. scripts/themes.mjs checks every app.platevault.calc expression against its $value.",
+  "comp": {
+    "table": {
+      "row-h": { "$type": "dimension", "$description": "DataTable body and header rows.", "$value": "{sys.row-h}" }
+    },
+    "toolbar": {
+      "h": {
+        "$type": "dimension",
+        "$description": "The table toolbar row: a row height plus room around its controls.",
+        "$value": { "value": 2.125, "unit": "rem" },
+        "$extensions": { "app.platevault.calc": "{comp.table.row-h} + 2 * {sys.spacing}" }
+      }
+    },
+    "batchbar": {
+      "h": { "$type": "dimension", "$description": "The batch bar takes the toolbar's place at the same height, so selection never shifts the table.", "$value": "{comp.toolbar.h}" }
+    },
+    "dialog": {
+      "$type": "dimension",
+      "w-sm": { "$description": "Short forms (the dialog default).", "$value": { "value": 24, "unit": "rem" } },
+      "w-md": { "$description": "Confirmations.", "$value": { "value": 32, "unit": "rem" } },
+      "w-lg": { "$description": "Pickers and long forms.", "$value": { "value": 42, "unit": "rem" } }
+    },
+    "sheet": {
+      "shadow": {
+        "$type": "shadow",
+        "$description": "A side sheet's edge shadow, cast away from the window edge it hangs from.",
+        "$value": [
+          { "color": { "colorSpace": "oklch", "components": [0, 0, 0], "alpha": 0.35 }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 0, "unit": "px" }, "blur": { "value": 0, "unit": "px" }, "spread": { "value": 0.5, "unit": "px" } },
+          { "color": { "colorSpace": "oklch", "components": [0, 0, 0], "alpha": 0.45 }, "offsetX": { "value": -12, "unit": "px" }, "offsetY": { "value": 0, "unit": "px" }, "blur": { "value": 36, "unit": "px" }, "spread": { "value": -12, "unit": "px" } }
+        ]
+      }
+    }
+  }
+}
