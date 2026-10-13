@@ -16,7 +16,11 @@
     "lint:i18n": "node scripts/check-i18n-catalog.mjs && node scripts/check-i18n-locale-drift.mjs && node scripts/check-copy.mjs",
     "lint:composition": "node scripts/report-composition-lint.mjs",
     "lint:catalogue": "node scripts/check-catalogue.mjs",
-    "themes": "node scripts/themes.mjs"
+    "themes": "node scripts/themes.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "storybook": "storybook dev --host 127.0.0.1 --port 6180 --exact-port --no-open",
+    "build-storybook": "pnpm i18n:compile && storybook build"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
