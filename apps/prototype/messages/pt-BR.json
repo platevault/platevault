@@ -8801,5 +8801,28 @@
   "apps_edit_arguments": "Editar argumentos",
   "apps_remove": "Remover aplicativo",
   "apps_list_title": "Perfis",
-  "apps_none": "Nenhum aplicativo"
+  "apps_none": "Nenhum aplicativo",
+  "table_membership_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} incluído",
+        "countPlural=*": "{n} incluídos"
+      }
+    }
+  ],
+  "dock_width_narrow": "Estreita",
+  "dock_width_medium": "Média",
+  "dock_width_wide": "Larga",
+  "catalogue_templates_fill_toggle": "Etapa em altura total",
+  "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
+  "catalogue_datatable_destination_nas": "NAS de arquivo",
+  "catalogue_datatable_destination_cold": "Armazenamento frio"
 }
