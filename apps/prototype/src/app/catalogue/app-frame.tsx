@@ -7,7 +7,6 @@ import { Activity, Aperture, House, Settings } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
-import { EmptyState } from "@/components/app/feedback"
 import { type NavListGroup, NavList } from "@/components/app/nav-list"
 import { StatusBar, StatusText } from "@/components/app/status-bar"
 import { AppFrame, type AppFrameSidebar, SetupFrame } from "@/components/templates/app-frame"
@@ -46,7 +45,7 @@ function Frame({ narrow = false, startCollapsed = false }: { narrow?: boolean; s
       toolbar={{ leading: <IconButton label={m.history_back()} icon={ChevronLeft} /> }}
       statusBar={<StatusBar label={m.status_bar()} middle={<StatusText>{m.status_bar_idle()}</StatusText>} />}
     >
-      <EmptyState icon={House} title={m.nav_home()} className="m-auto max-w-sm flex-none" />
+      <p className="m-auto text-sm text-muted-foreground">{m.nav_home()}</p>
     </AppFrame>
   )
 }
@@ -74,7 +73,7 @@ export function AppFrameCatalogue() {
         <Specimen caption={m.catalogue_frame_setup()}>
           <div className="w-full">
             <SetupFrame specimen brand={{ name: m.app_name(), icon: Aperture }}>
-              <EmptyState icon={Aperture} title={m.onboarding_getting_started()} className="m-auto max-w-sm flex-none" />
+              <p className="m-auto text-sm text-muted-foreground">{m.onboarding_getting_started()}</p>
             </SetupFrame>
           </div>
         </Specimen>

@@ -58,12 +58,12 @@ export function StatusBarCatalogue() {
               }
               middle={
                 <StatusGroup label={m.status_running()} layout="work">
-                  <StatusOperation id="op1" title="Stack Dark 120 s" href="/activity" value={42} word="42%" onCancel={() => undefined} />
-                  <StatusOperation id="op2" title="Index NAS" href="/activity" value={null} word="" />
+                  <StatusOperation id="op1" title={m.nav_calibration()} href="/activity" value={42} word="42%" onCancel={() => undefined} />
+                  <StatusOperation id="op2" title={m.nav_sessions()} href="/activity" value={null} word="" />
                   <ListPopover open={more} onOpenChange={setMore} align="center" width="sm" label={m.status_running()} trigger={{ label: m.status_bar_more_running({ count: 1 }), content: "+1" }}>
                     <ListRows dense>
                       <ListOperationRow>
-                        <StatusOperation id="op3" title="Import 54 frames" href="/activity" value={10} word={m.status_paused()} expanded onCancel={() => undefined} />
+                        <StatusOperation id="op3" title={m.shell_import()} href="/activity" value={10} word={m.status_paused()} expanded onCancel={() => undefined} />
                       </ListOperationRow>
                     </ListRows>
                   </ListPopover>
