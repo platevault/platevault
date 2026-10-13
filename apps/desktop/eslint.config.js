@@ -29,10 +29,10 @@ import requireRootTestid from './eslint-rules/require-root-testid.js';
 //      rule, and the existing opt-outs are eslint-disable comments.
 
 // The i18n catalog migration is complete: the `alm/no-user-string` gate is
-// enforced across ALL of src (spec 046, FR-001 / SC-001 met). Every visible
-// string, including component-workbench stories, goes through the message
-// catalogue in en-GB and pt-BR. The i18n gate block below lists each excluded
-// path with its reason; nothing else may be excluded.
+// enforced across ALL of src (spec 046, FR-001 / SC-001 met). Every string a
+// story canvas renders goes through the message catalogue in en-GB and pt-BR,
+// as product UI does. The i18n gate block below lists each excluded path with
+// its reason; nothing else may be excluded.
 //
 // The per-line escape hatch `// eslint-disable-next-line alm/no-user-string --
 // <reason>` is reserved for these classes, each carrying its reason inline:
@@ -41,8 +41,19 @@ import requireRootTestid from './eslint-rules/require-root-testid.js';
 //   - mathematical notation: Δ deltas, p95 percentile, degree symbols;
 //   - code identifiers and paths: the project folder-tree preview;
 //   - decorative glyphs: the InfoTip "i" icon;
-//   - Storybook meta `title`: the story ID path, which Storybook's CSF indexer
-//     requires as a static literal.
+//   - story index entries (meta `title`, story `name`): sidebar entries in the
+//     workbench, not canvas copy. Storybook 10's CSF indexer
+//     (storybook/internal/csf-tools, `CsfFile._parseTitle` and the story
+//     annotation loop) reads them statically: a non-literal `title` throws
+//     "CSF: unexpected dynamic title", and a non-literal `name` is ignored,
+//     so the export name is shown instead. A catalogue call cannot be used
+//     for either. The story ID comes from the title and the export name, not
+//     from `name`. The rule flags `title`, so each one carries this disable;
+//     it does not inspect `name`, so a `name` needs no disable.
+//
+// The rule also leaves `parameters.docs.description` alone. That is reviewer
+// documentation, which the owner's rule exempts as internal docs, so it stays
+// in English.
 const I18N_MIGRATED = ['src/**/*.{ts,tsx}'];
 
 export default tseslint.config(

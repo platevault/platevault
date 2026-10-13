@@ -160,16 +160,30 @@ zero," and it prevents regressions afterward (FR-001, FR-012, SC-001, SC-002).
     frontend-bundle check greps the built dist for it.
 
   Component-workbench stories (`**/*.stories.tsx`, `src/stories/**`) and the
-  shipped `src/data/**` modules are under the gate: their visible strings are
-  catalogued in en-GB and pt-BR (`story_*` keys for story-only copy).
+  shipped `src/data/**` modules are under the gate. Every string a story canvas
+  renders is catalogued in en-GB and pt-BR, with `story_*` keys for copy that
+  only stories show.
 - An inline `// eslint-disable-next-line alm/no-user-string -- <reason>` escape
-  hatch, limited to: proper and brand names (PlateVault, PixInsight, Siril);
-  mathematical notation (Δ deltas, p95, degree symbols); code identifiers and
-  paths (the project folder-tree preview); decorative glyphs (the InfoTip
-  "i"); and the Storybook meta `title`, which is the story ID path and must be
-  a static literal for Storybook's CSF indexer. An abbreviation of a word (the
-  Inbox "+Nm" masters count) and a native dialog title the user sees are
-  user-facing and catalogued.
+  hatch, limited to:
+  - proper and brand names (PlateVault, PixInsight, Siril);
+  - mathematical notation (Δ deltas, p95, degree symbols);
+  - code identifiers and paths (the project folder-tree preview);
+  - decorative glyphs (the InfoTip "i");
+  - story index entries (meta `title` and story `name`): sidebar entries in
+    the workbench, not canvas copy. Storybook 10's CSF indexer
+    (`storybook/internal/csf-tools`, `CsfFile._parseTitle` and the story
+    annotation loop) reads them statically. A non-literal `title` throws
+    "CSF: unexpected dynamic title", and a non-literal `name` is ignored, so
+    the export name is shown instead. A catalogue call cannot be used for
+    either. The story ID comes from the title and the export name, not from
+    `name`. The rule flags `title`, so each one carries this disable; it does
+    not inspect `name`, so a `name` needs no disable.
+
+  An abbreviation of a word (the Inbox "+Nm" masters count) is user-facing and
+  catalogued, and so is a native dialog title the user sees.
+- The rule also leaves `parameters.docs.description` alone. That is reviewer
+  documentation, which the owner's rule exempts as internal docs, so it stays
+  in English.
 
 **Implementation choice**: prefer a **local custom rule** (a tiny rule module in
 `apps/desktop/eslint-rules/`) over a third-party plugin, because the existing repo
