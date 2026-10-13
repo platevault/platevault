@@ -291,9 +291,11 @@ pub fn build_app() -> tauri::App {
     }
 
     tb
-        // The native menu is installed in `boot`, once the saved locale is
-        // readable (astro-plan-bw4s6). Until then macOS would show Tauri's
-        // default menu, which is English, behind the splash.
+        // The native menu is installed in `boot`, as soon as the database is
+        // connected and the saved locale is readable (astro-plan-bw4s6).
+        // Until then macOS would show Tauri's default menu, which is English,
+        // behind the splash. If installing fails, `install_native_menu` falls
+        // back to that default menu, so the session never loses Cmd+Q.
         .enable_macos_default_menu(false)
         // Spec 051 US5 (T033): the native "Settings" menu item has no native
         // dialog of its own — emit a frontend event and let the existing
@@ -622,6 +624,31 @@ async fn boot(
         Err(e) => return fatal(&app, &format!("failed to connect to SQLite at {db_url}: {e}")),
     };
 
+    // Spec 051 US5 (T032): the native application menu — App submenu
+    // (About/Settings/Quit), Window submenu, and a standard Edit submenu
+    // (copy/cut/paste/select-all/undo/redo). Installed first, right after
+    // connecting and before the backup and migration, so Cmd+Q and the Edit
+    // shortcuts work behind the splash during a long migration. It is built
+    // in the locale saved in the settings DB, so it never shows in English to
+    // a user who chose another language (astro-plan-bw4s6). Does not touch
+    // any existing native/React context-menu code path (T035 — none exists
+    // in this crate to touch).
+    //
+    // The `settings` row is read BEFORE migration. That is safe because the
+    // read is a single `SELECT value FROM settings WHERE key = 'locale'` that
+    // writes nothing, and every failure is harmless: a fresh database has no
+    // `settings` table yet, and a future migration could reshape the table.
+    // Either way the error falls back to the base locale, which is exactly a
+    // first run's behaviour, and the frontend relabels the menu once it has
+    // resolved the locale.
+    let saved_locale = persistence_lifecycle::repositories::settings::get_raw(db.pool(), "locale")
+        .await
+        .unwrap_or_else(|e| {
+            tracing::info!("no saved locale for the native menu, using the base locale: {e}");
+            None
+        });
+    install_native_menu(&app, saved_locale.as_ref().and_then(serde_json::Value::as_str));
+
     // kyo7.28: back up the database before applying migrations to an existing,
     // behind-schema file.  Skip for fresh databases (no migration table yet)
     // and for in-memory connections.  run_pre_migration_backup owns the
@@ -656,21 +683,6 @@ async fn boot(
         return fatal(&app, &format!("failed to run migrations on {db_url}: {error}"));
     }
     let pool = db.pool().clone();
-
-    // Spec 051 US5 (T032): the native application menu — App submenu
-    // (About/Settings/Quit), Window submenu, and a standard Edit submenu
-    // (copy/cut/paste/select-all/undo/redo). Built here, behind the splash and
-    // before the main window, in the locale saved in the settings DB, so it
-    // never shows in English to a user who chose another language
-    // (astro-plan-bw4s6). Does not touch any existing native/React
-    // context-menu code path (T035 — none exists in this crate to touch).
-    let saved_locale = persistence_lifecycle::repositories::settings::get_raw(&pool, "locale")
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!("could not read the saved locale for the native menu: {e}");
-            None
-        });
-    install_native_menu(&app, saved_locale.as_ref().and_then(serde_json::Value::as_str));
 
     // Unclean-shutdown detection (astro-plan-kyo7.48): consume the clean-shutdown
     // marker written on the previous graceful exit. Absent marker => the process

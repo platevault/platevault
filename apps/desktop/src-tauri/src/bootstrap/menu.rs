@@ -309,11 +309,32 @@ fn build_native_menu<M: Manager<Wry>>(
 /// [`negotiate_locale`]), set it as the app menu, and keep its entries for
 /// [`native_menu_set_labels`]. Start-up calls this behind the splash, before
 /// the main window exists, so a user who chose another language never sees
-/// the menu in English. A failure is logged and leaves the app without a
-/// native menu, as before the menu existed.
+/// the menu in English.
+///
+/// `build_app` turns off Tauri's default macOS menu so it never shows in
+/// English behind the splash. A failure here therefore falls back to Tauri's
+/// default menu, so the session still has the Edit shortcuts and Cmd+Q. Both
+/// failures are logged.
 pub fn install_native_menu(app: &AppHandle<Wry>, saved_locale: Option<&str>) {
-    if let Err(e) = try_install_native_menu(app, saved_locale) {
-        tracing::warn!("native application menu not installed: {e}");
+    install_or_fall_back(
+        || try_install_native_menu(app, saved_locale),
+        || Menu::default(app).and_then(|menu| app.set_menu(menu)).map(drop),
+    );
+}
+
+/// Runs `install`; when it fails, logs why and runs `fall_back`, logging a
+/// second failure too. Split from [`install_native_menu`] so the fallback is
+/// testable without a platform menu.
+fn install_or_fall_back(
+    install: impl FnOnce() -> Result<(), String>,
+    fall_back: impl FnOnce() -> tauri::Result<()>,
+) {
+    let Err(e) = install() else {
+        return;
+    };
+    tracing::warn!("native application menu not installed, using the default menu: {e}");
+    if let Err(e) = fall_back() {
+        tracing::warn!("default application menu not installed either: {e}");
     }
 }
 
@@ -466,5 +487,50 @@ mod tests {
         )
         .expect_err("incomplete catalogue");
         assert!(err.contains("missing field `menu_settings`"), "{err}");
+    }
+
+    /// Which menu the app ended up with.
+    #[derive(Debug, PartialEq, Eq)]
+    enum Installed {
+        None,
+        Localised,
+        Default,
+    }
+
+    #[test]
+    fn a_failing_build_ends_with_the_default_menu_set() {
+        let installed = RefCell::new(Installed::None);
+        install_or_fall_back(
+            || Err("failed to build it: platform refused".to_owned()),
+            || {
+                *installed.borrow_mut() = Installed::Default;
+                Ok(())
+            },
+        );
+        assert_eq!(*installed.borrow(), Installed::Default);
+    }
+
+    #[test]
+    fn a_successful_install_keeps_the_localised_menu() {
+        let installed = RefCell::new(Installed::None);
+        install_or_fall_back(
+            || {
+                *installed.borrow_mut() = Installed::Localised;
+                Ok(())
+            },
+            || {
+                *installed.borrow_mut() = Installed::Default;
+                Ok(())
+            },
+        );
+        assert_eq!(*installed.borrow(), Installed::Localised);
+    }
+
+    #[test]
+    fn a_failing_fallback_is_logged_not_raised() {
+        install_or_fall_back(
+            || Err("failed to set it".to_owned()),
+            || Err(tauri::Error::FailedToReceiveMessage),
+        );
     }
 }
