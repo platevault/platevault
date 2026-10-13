@@ -280,6 +280,28 @@ export async function hydrateLocaleFromSettings(): Promise<Locale | undefined> {
   }
 }
 
+/**
+ * Relabels the native application menu in `locale` (astro-plan-bw4s6).
+ * No-ops outside Tauri; on any IPC failure the menu keeps its previous labels.
+ * `./nativeMenu` is imported lazily: it pulls in the whole message catalogue,
+ * which this module otherwise never loads.
+ */
+async function sendNativeMenuLabels(locale: Locale): Promise<void> {
+  try {
+    const { isTauri } = await importTauriCore();
+    if (!isTauri()) return;
+
+    const [{ commands }, { unwrap }, { nativeMenuLabels }] = await Promise.all([
+      importBindings(),
+      importIpc(),
+      import('./nativeMenu'),
+    ]);
+    unwrap(await commands.nativeMenuSetLabels(nativeMenuLabels(locale)));
+  } catch {
+    // Best-effort — a stale menu label never blocks or reverts the UI change.
+  }
+}
+
 interface LocaleContextValue {
   locale: Locale;
   /** Applies `next` without a reload (research D2) and re-renders the subtree. */
@@ -293,7 +315,9 @@ const LocaleContext = createContext<LocaleContextValue | undefined>(undefined);
  * change (research D2 — Paraglide messages are plain function calls, so
  * nothing updates without a re-render). Hydrates from the settings DB once
  * on mount; the effect is safe to run more than once (idempotent DB read)
- * and cancels its own state update if unmounted first.
+ * and cancels its own state update if unmounted first. The native menu
+ * follows the active locale too: its labels are sent on mount and on every
+ * change.
  */
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() =>
@@ -309,6 +333,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    void sendNativeMenuLabels(locale);
+  }, [locale]);
 
   const changeLocale = useCallback((next: Locale) => {
     const canonical = canonicalLocale(next);
