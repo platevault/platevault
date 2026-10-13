@@ -2421,22 +2421,13 @@
   "tonight_criteria_astronomical": "escuridão astronômica",
   "tonight_criteria_nautical": "escuridão náutica",
   "tonight_criteria_duration": "pelo menos {minutes} min",
-  "tonight_criteria_moon_illumination": "Lua ≤ {illumination}% quando acima",
-  "tonight_criteria_moon_separation": "Lua a ≥ {separation}° quando acima",
   "tonight_no_filters": "Sem filtros",
-  "target_project_badge": "Projeto {name}",
-  "tonight_limit_separation_field": "{band} separação mínima da Lua",
-  "tonight_limit_illumination_field": "{band} iluminação máxima da Lua",
   "tonight_moon_limits": "Limites da Lua",
-  "tonight_reset": "Redefinir",
   "tonight_filter": "Filtro",
-  "tonight_limit_separation_header": "Lua ≥",
-  "tonight_limit_illumination_header": "Ilum. ≤",
   "tonight_actions": "Ações",
   "tonight_no_window": "Sem janela esta noite",
   "tonight_altitude": "Altitude",
   "tonight_window": "Janela",
-  "tonight_method": "Método",
   "targets_name_empty": "{label}: digite um nome.",
   "targets_name_taken": "{label}: “{name}” já está em uso. Escolha outro nome.",
   "target_plan_tonight": "Planejar esta noite",
@@ -2466,7 +2457,6 @@
   "targets_preset_needs_rig": "Escolha um equipamento para usar este preset",
   "targets_preset_needs_narrowband": "O equipamento selecionado não tem filtro Ha, SII ou OIII",
   "targets_result_gone": "Este resultado não está mais disponível. Pesquise de novo.",
-  "plan_matches": "Resultados",
   "plan_unknown_target": "Alvo desconhecido",
   "tonight_no_coordinates": "Sem coordenadas catalogadas",
   "plan_site": "Local de planejamento",
@@ -2475,7 +2465,6 @@
   "plan_moon_away": "Lua a {separation}°",
   "plan_moon_up_best": "Lua a {separation}°, acima na melhor janela",
   "plan_moon_down_best": "Lua a {separation}°, abaixo na melhor janela",
-  "plan_moon_up": "acima",
   "plan_goals": "Metas",
   "plan_goals_short": [
     {
@@ -2513,158 +2502,140 @@
       }
     }
   ],
-  "plan_rows_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} linha",
-        "countPlural=*": "{count} linhas"
-      }
-    }
-  ],
   "plan_list_empty": "Lista do Plano vazia",
   "plan_show_all": "Mostrar tudo",
   "plan_dark": "Escuro",
   "plan_dark_none": "nenhum",
   "targets_browse_catalogues": "Explorar catálogos",
   "tonight_night": "Noite",
-  "tonight_times": "Horários",
   "tonight_criteria": "Critérios",
-  "tonight_method_value": "Sol e Lua de baixa precisão, grade de 10 min",
-  "targets_rig_lacks_filter": "O equipamento não tem filtro {band}",
-  "targets_unstar_named": "Remover {name} dos favoritos",
-  "targets_star_named": "Adicionar {name} aos favoritos",
   "targets_add_named": "Adicionar {name} aos alvos",
   "targets_designation": "Designação",
   "targets_type": "Tipo",
-  "targets_type_unknown": "Tipo de objeto desconhecido",
   "tonight_no_darkness": "Sem escuridão esta noite",
   "tonight_lunar": "Lunar",
   "tonight_img_time": "Tempo img",
-  "targets_filters": "Filtros",
-  "targets_filters_help": "Cada filtro esta noite sob seus limites da Lua. Tracejado: marginal. Riscado: ruim.",
   "targets_fit_per_rig": "Enquadramento por equipamento",
   "targets_fit": "Enquadramento",
   "tonight_opposition": "Oposição",
   "targets_source": "Origem",
-  "targets_add_to_targets": "Adicionar aos alvos",
-  "targets_star": "Adicionar ★",
-  "targets_unstar": "Remover ★",
   "targets_open_plan": "Mostrar planejados",
-  "targets_apply": "Aplicar",
-  "targets_rename_menu": "Renomear…",
-  "targets_delete_menu": "Excluir…",
-  "targets_good_for": "Bom esta noite para {band}",
-  "targets_good_for_menu": "Bom esta noite para…",
-  "targets_good_for_heading": "Bom esta noite para",
+  "targets_none_suitable": "Nenhum alvo adequado aos filtros escolhidos",
+  "targets_deadline": "Prazo",
+  "targets_fit_rig": "Enquadramento · {rig}",
+  "targets_in_my_targets": "Em Meus alvos",
+  "targets_my_add": "Adicionar a Meus alvos",
+  "targets_my_remove": "Remover de Meus alvos",
+  "targets_details": "Detalhes",
+  "targets_preset_none": "Sem preset",
+  "targets_planning_for": "Planejando {name}",
+  "targets_panel": "Painel",
+  "target_menu": "Alvo",
+  "target_project_state": "Estado",
+  "target_library_empty": "Nenhum quadro ainda",
+  "plan_first_already": "Já é o primeiro",
+  "plan_last_already": "Já é o último",
+  "plan_lead_minutes": "{count} min antes",
+  "plan_lead_hours": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} h antes",
+        "countPlural=*": "{count} h antes"
+      }
+    }
+  ],
+  "plan_lead_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dia antes",
+        "countPlural=*": "{count} dias antes"
+      }
+    }
+  ],
+  "plan_lead_custom": "Personalizado",
+  "plan_lead_amount": "Antecedência",
+  "plan_lead_unit": "Unidade",
+  "plan_lead_unit_minutes": "Minutos",
+  "plan_lead_unit_hours": "Horas",
+  "plan_lead_unit_days": "Dias",
+  "plan_lead_invalid": "Digite um número inteiro, até 7 dias",
+  "plan_reminders_site": "Local",
+  "plan_reminders_next": "Próximo lembrete",
+  "plan_export_events": "Eventos",
+  "tonight_curve_separation": "Separação na Lua cheia",
+  "tonight_curve_width": "Largura",
+  "catalogue_grade_badges_wrap": "Quebrando linha num espaço estreito",
+  "tonight_curve_days_unit": "dias",
+  "tonight_curve_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dia",
+        "countPlural=*": "{count} dias"
+      }
+    }
+  ],
+  "tonight_curve_default": "Padrão {value}",
+  "tonight_curve_number_needed": "Digite um número",
+  "tonight_curve_incomplete": "{band}: preencha os dois valores",
+  "domain_grade_badge": "{band} {grade}",
+  "domain_grade_good": "bom",
+  "domain_grade_marginal": "marginal",
+  "domain_grade_poor": "ruim",
+  "catalogue_grade_badges_desc": "Nota de cada filtro numa noite, só para exibição; o tom e o ícone indicam a nota.",
+  "catalogue_grade_badges_grades": "Todas as notas",
+  "catalogue_grade_badges_full": "Sete filtros",
+  "catalogue_grade_badges_one": "Um filtro",
+  "catalogue_grade_badges_none": "Sem veredito",
   "targets_project_rigs": "Equipamentos deste Projeto ({count})",
   "targets_no_match": "Nenhum resultado para “{query}”",
   "targets_choose_catalogue": "Escolha um catálogo ou preset",
   "targets_browse_messier": "Explorar Messier",
-  "targets_none_good": "Nenhum alvo com {band} ok esta noite",
   "targets_clear_filter": "Limpar filtro",
   "targets_none_match_preset": "Nenhum alvo corresponde a {name}",
   "targets_clear_preset": "Limpar preset",
   "targets_empty": "Nenhum alvo ainda",
-  "targets_clear_search_first": "Limpe a pesquisa primeiro",
-  "targets_save_preset": "Salvar preset",
   "targets_clear_project": "Limpar Projeto",
   "targets_search_label": "Pesquisar alvos, catálogos e SIMBAD",
   "targets_search_placeholder": "Alvos, catálogos, SIMBAD",
   "targets_rig": "Equipamento",
   "targets_moon_limits_for": "Limites da Lua para {band}",
-  "targets_off_while_searching": "Desligado durante a pesquisa",
-  "targets_good_chip": "{band} ok · {limit}",
-  "targets_clear_band_filter": "Limpar filtro {band}",
   "targets_catalogues": "Catálogos",
-  "targets_presets": "Presets",
-  "targets_preset_unavailable_sr": ": indisponível, {reason}",
-  "targets_more_for": "Mais para {name}",
   "targets_preset_unavailable": "{name} · indisponível",
-  "targets_clear_named": "Limpar {name}",
   "targets_simbad_searching": "Pesquisando no SIMBAD…",
   "targets_simbad_off": "SIMBAD desligado",
   "targets_simbad_unreachable": "SIMBAD inacessível",
-  "targets_simbad_searched": "SIMBAD pesquisado",
-  "targets_simbad_fixture": "Dados de exemplo (protótipo)",
   "targets_caption_search": "Resultados da pesquisa por {query}",
   "targets_caption_project": "Objetos de {name}",
   "targets_filters_band": "Filtros ({band})",
-  "targets_favourite": "Favorito",
-  "targets_about_column": "Sobre {name}",
-  "targets_sort_ascending": "crescente",
-  "targets_sort_descending": "decrescente",
-  "targets_preset_name": "Nome do preset",
-  "targets_rename_preset": "Renomear preset",
-  "targets_rename": "Renomear",
-  "targets_delete_preset_title": "Excluir o preset {name}?",
-  "targets_delete_preset_change": "Remove “{name}”",
-  "targets_delete_preset": "Excluir preset",
   "target_source_catalogue": "Catálogo incluído",
   "target_source_user": "Inserido por você",
   "target_source_resolver": "Resolvedor online",
-  "target_find": "Encontrar um Alvo",
   "target_find_placeholder": "Nome ou apelido",
-  "target_matching_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Alvo correspondente",
-        "countPlural=*": "{count} Alvos correspondentes"
-      }
-    }
-  ],
-  "target_targets_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Alvo",
-        "countPlural=*": "{count} Alvos"
-      }
-    }
-  ],
-  "target_favourite_sr": ", favorito",
-  "target_projects_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Projeto",
-        "countPlural=*": "{count} Projetos"
-      }
-    }
-  ],
-  "target_table_link": "Tabela de alvos",
   "target_open_targets": "Abrir Alvos",
-  "target_finder": "Localizador de alvos",
-  "target_no_coordinates": "Sem coordenadas",
   "target_best_none": "Nenhuma",
   "target_open_planner": "Abrir no Planejador",
   "target_open_equipment": "Abrir em Equipamentos",
-  "target_in_every_project": "Em todos os Projetos abertos",
   "target_tonight": "Esta noite",
   "target_identity": "Identidade",
   "target_aliases": "Apelidos",
@@ -2672,28 +2643,7 @@
   "target_coordinates": "Coordenadas",
   "target_angular_size": "Tamanho angular",
   "target_size_unknown": "Tamanho desconhecido",
-  "target_about_fit": "Sobre o enquadramento",
-  "target_fit_help": "Eixo maior contra o lado menor do campo de cada equipamento.",
   "target_field": "Campo",
-  "target_fov_unknown": "Câmera ou distância focal desconhecida",
-  "target_mosaic_panels": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} painel",
-        "countPlural=*": "{name} · {count} painéis"
-      }
-    }
-  ],
-  "target_planner": "Planejador",
-  "target_panel": "Painel {number}",
   "target_sessions_caption": "Sessões de {name}",
   "target_channel": "Canal",
   "calibration_frames": "Quadros",
@@ -7031,10 +6981,7 @@
   "op_measure_not_measured": "{count} não medidos: nenhuma cópia legível",
   "op_measure_summary": "{parts}.",
   "store_saved_preset": "Predefinição de Alvos salva: {name}",
-  "store_saved_preset_renamed": "Predefinição de Alvos renomeada: {name}",
-  "store_preset_was": "Era “{name}”.",
   "store_saved_preset_deleted": "Predefinição de Alvos excluída: {name}",
-  "store_saved_planning_site": "Local de planejamento: {name}",
   "op_offer_to_trash": "{offer} de {name} para a Lixeira",
   "seed_cleanup_summary": [
     {
@@ -7476,11 +7423,6 @@
   "plan_ics_description": "Altitude máx. {altitude}° · Lua {moon}%, a {separation}°",
   "duplicates_scope_help": "Somente locais da biblioteca; cartões de captura nunca são verificados. Mantém a cópia no local registrado primeiro.",
   "plan_night_empty": "Nada planejado para {night}",
-  "plan_lead_option": "{minutes} min antes",
-  "plan_cant_turn_on_reminders": "Não é possível ativar lembretes",
-  "plan_next_reminder": "Próximo {time}",
-  "plan_proto_next_reminder": "Protótipo: ir para o próximo lembrete",
-  "plan_export_calendar_open": "Exportar calendário…",
   "plan_export_summary": "{events} em {nights} · {site}",
   "plan_events_count": [
     {

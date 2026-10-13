@@ -1,146 +1,94 @@
 /**
- * Moon limits per filter (slice E: the Targets Planned view and the
- * good-tonight filter): each band's minimum Moon separation and maximum
- * illumination, the constraint behind "good tonight". Writes go through the
- * foundation's `setMoonConstraint` when a field is left or Enter is pressed;
- * a failed write keeps its message beside the fields.
+ * Moon limits (C6): one Moon-avoidance curve per filter, edited in a
+ * FormDialog. A curve keeps the Moon `separationDeg` from the target at full
+ * Moon, half that `widthDays` before or after full, and less as it thins
+ * (design/R10-MOON-MODEL.md). Grades and Img time on Targets both read these
+ * curves. The dialog edits a draft of every filter the selection passes;
+ * Save writes the changed ones through `setMoonAvoidance`, which clamps.
  */
-import { MoonStar } from "lucide-react"
-import { type KeyboardEvent, useId, useState } from "react"
+import { useEffect, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { ActionError } from "@/components/app/feedback"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { DEFAULT_MOON_CONSTRAINTS } from "@/domain/labels"
-import type { Band, MoonConstraint } from "@/domain/types"
-import { setMoonConstraint } from "@/store/actions/settings"
-import { useStore } from "@/store/core"
-import { BAND_ORDER } from "./good-tonight"
+import { KeyValueList } from "@/components/app/data"
+import { NumberField, SelectField } from "@/components/app/fields"
+import { FormDialog } from "@/components/app/form-dialog"
+import { BANDS, DEFAULT_MOON_AVOIDANCE } from "@/domain/labels"
+import { MOON_AVOIDANCE_LIMITS, type MoonAvoidance } from "@/domain/planning"
+import type { Band } from "@/domain/types"
+import { setMoonAvoidance } from "@/store/actions/settings"
+import { type CommitResult, useStore } from "@/store/core"
+import { avoidanceText } from "./good-tonight"
 
-type Field = keyof MoonConstraint
+type Draft = Record<Band, { separationDeg: number | null; widthDays: number | null }>
 
-const FIELD: Record<Field, { unit: string; max: number }> = {
-  minSeparationDeg: { unit: "°", max: 180 },
-  maxIlluminationPct: { unit: "%", max: 100 },
+function changed(draft: Draft[Band], curve: MoonAvoidance): boolean {
+  return draft.separationDeg !== curve.separationDeg || draft.widthDays !== curve.widthDays
 }
 
-function LimitInput({ band, field, value, onError }: { band: Band; field: Field; value: number; onError: (message: string | null) => void }) {
+export function MoonLimitsDialog({ open, onOpenChange, bands }: { open: boolean; onOpenChange: (open: boolean) => void; bands: readonly Band[] }) {
   const m = useMessages()
-  const [draft, setDraft] = useState<string | null>(null)
-  const meta = FIELD[field]
-  function commitDraft() {
-    if (draft === null) return
-    const parsed = Number.parseInt(draft, 10)
-    setDraft(null)
-    if (!Number.isFinite(parsed) || parsed === value) return
-    const result = setMoonConstraint(band, field === "minSeparationDeg" ? { minSeparationDeg: parsed } : { maxIlluminationPct: parsed })
-    onError(result.ok ? null : result.message)
+  const curves = useStore((s) => s.settings.moonAvoidance)
+  const ordered = BANDS.filter((b) => bands.includes(b))
+  const [band, setBand] = useState<Band>(ordered[0] ?? "L")
+  const [draft, setDraft] = useState<Draft>(curves)
+  const [tried, setTried] = useState(false)
+  // Each opening starts from the saved curves.
+  useEffect(() => {
+    if (!open) return
+    setDraft(curves)
+    setTried(false)
+    setBand(ordered[0] ?? "L")
+  }, [open])
+
+  const current = draft[band]
+  const missing = (value: number | null) => (tried && value === null ? m.tonight_curve_number_needed() : undefined)
+  const edit = (patch: Partial<Draft[Band]>) => setDraft((d) => ({ ...d, [band]: { ...d[band], ...patch } }))
+
+  function save(): CommitResult | void {
+    setTried(true)
+    const incomplete = ordered.find((b) => draft[b].separationDeg === null || draft[b].widthDays === null)
+    if (incomplete) {
+      setBand(incomplete)
+      return { ok: false, reason: "refused", message: m.tonight_curve_incomplete({ band: incomplete }), reasons: [] }
+    }
+    for (const b of ordered) {
+      if (!changed(draft[b], curves[b])) continue
+      const result = setMoonAvoidance(b, { separationDeg: draft[b].separationDeg!, widthDays: draft[b].widthDays! })
+      if (!result.ok) return result
+    }
   }
+
+  const fallback = DEFAULT_MOON_AVOIDANCE[band]
   return (
-    <span className="inline-flex items-center gap-0.5">
-      <Input
-        type="number"
-        inputMode="numeric"
-        min={0}
-        max={meta.max}
-        aria-label={field === "minSeparationDeg" ? m.tonight_limit_separation_field({ band }) : m.tonight_limit_illumination_field({ band })}
-        value={draft ?? String(value)}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commitDraft}
-        onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-          if (event.key === "Enter") commitDraft()
-          if (event.key === "Escape" && draft !== null) {
-            event.stopPropagation()
-            setDraft(null)
-          }
-        }}
-        className="h-6 w-14 px-1.5 text-right text-xs tabular-nums"
+    <FormDialog open={open} onOpenChange={onOpenChange} title={m.tonight_moon_limits()} size="md" confirm={{ id: "moon-limits-save", label: m.settings_save(), kind: "primary", run: save }}>
+      <SelectField label={m.tonight_filter()} value={band} options={ordered.map((b) => ({ value: b, label: b }))} onChange={setBand} />
+      <NumberField
+        label={m.tonight_curve_separation()}
+        unit="°"
+        min={MOON_AVOIDANCE_LIMITS.separationDeg.min}
+        max={MOON_AVOIDANCE_LIMITS.separationDeg.max}
+        step={1}
+        value={current.separationDeg}
+        onChange={(separationDeg) => edit({ separationDeg })}
+        description={m.tonight_curve_default({ value: `${fallback.separationDeg}°` })}
+        error={missing(current.separationDeg)}
       />
-      <span aria-hidden="true" className="w-3 text-xs text-muted-foreground">
-        {meta.unit}
-      </span>
-    </span>
-  )
-}
-
-/** The editor: one row per band, Moon ≥ separation and lit ≤ illumination. */
-export function MoonLimits({ bands }: { bands: Band[] }) {
-  const m = useMessages()
-  const constraints = useStore((s) => s.settings.moonConstraints)
-  const [error, setError] = useState<string | null>(null)
-  const headingId = useId()
-  const ordered = [...bands].sort((a, b) => BAND_ORDER.indexOf(a) - BAND_ORDER.indexOf(b))
-  const changed = ordered.filter((b) => constraints[b].minSeparationDeg !== DEFAULT_MOON_CONSTRAINTS[b].minSeparationDeg || constraints[b].maxIlluminationPct !== DEFAULT_MOON_CONSTRAINTS[b].maxIlluminationPct)
-  return (
-    <div className="space-y-2" role="group" aria-labelledby={headingId}>
-      <div className="flex items-center justify-between gap-2">
-        <h3 id={headingId} className="text-xs font-semibold text-muted-foreground">
-          {m.tonight_moon_limits()}
-        </h3>
-        {changed.length > 0 ? (
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={() => {
-              for (const band of changed) {
-                const result = setMoonConstraint(band, DEFAULT_MOON_CONSTRAINTS[band])
-                if (!result.ok) return setError(result.message)
-              }
-              setError(null)
-            }}
-          >
-            {m.tonight_reset()}
-          </Button>
-        ) : null}
-      </div>
-      <table className="w-full text-xs">
-        <thead className="text-[0.6875rem] text-muted-foreground">
-          <tr>
-            <th scope="col" className="pb-1 text-left font-medium">
-              {m.tonight_filter()}
-            </th>
-            <th scope="col" className="pb-1 text-right font-medium">
-              {m.tonight_limit_separation_header()}
-            </th>
-            <th scope="col" className="pb-1 text-right font-medium">
-              {m.tonight_limit_illumination_header()}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordered.map((band) => (
-            <tr key={band}>
-              <th scope="row" className="py-0.5 text-left font-medium">
-                {band}
-              </th>
-              <td className="py-0.5 text-right">
-                <LimitInput band={band} field="minSeparationDeg" value={constraints[band].minSeparationDeg} onError={setError} />
-              </td>
-              <td className="py-0.5 text-right">
-                <LimitInput band={band} field="maxIlluminationPct" value={constraints[band].maxIlluminationPct} onError={setError} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {error ? <ActionError message={error} /> : null}
-    </div>
-  )
-}
-
-/** "Moon limits" in a toolbar, opening the editor. */
-export function MoonLimitsButton({ bands }: { bands: Band[] }) {
-  const m = useMessages()
-  return (
-    <Popover>
-      <PopoverTrigger render={<Button size="sm" variant="outline" />}>
-        <MoonStar aria-hidden="true" data-icon="inline-start" />
-        {m.tonight_moon_limits()}
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-60">
-        <MoonLimits bands={bands} />
-      </PopoverContent>
-    </Popover>
+      <NumberField
+        label={m.tonight_curve_width()}
+        unit={m.tonight_curve_days_unit()}
+        min={MOON_AVOIDANCE_LIMITS.widthDays.min}
+        max={MOON_AVOIDANCE_LIMITS.widthDays.max}
+        step={1}
+        value={current.widthDays}
+        onChange={(widthDays) => edit({ widthDays })}
+        description={m.tonight_curve_default({ value: m.tonight_curve_days({ count: fallback.widthDays }) })}
+        error={missing(current.widthDays)}
+      />
+      <KeyValueList
+        items={ordered.map((b) => {
+          const d = draft[b]
+          return { label: b, value: d.separationDeg === null || d.widthDays === null ? "–" : avoidanceText({ separationDeg: d.separationDeg, widthDays: d.widthDays }) }
+        })}
+      />
+    </FormDialog>
   )
 }
