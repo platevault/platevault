@@ -22,4 +22,5 @@ export const mockPreferences: AppPreferences = {
   sessionsView: 'list',
   setupCompleted: false,
   detailDock: {},
+  checkUpdatesAutomatically: true,
 };

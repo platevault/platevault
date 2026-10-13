@@ -33,14 +33,25 @@ vi.mock('./settingsIpc', () => ({
   restartFirstRun: mockRestartFirstRun,
 }));
 
-const { mockSetPreference, mockResetPreferences } = vi.hoisted(() => ({
+// `setPreference`/`resetPreferences` are spies for the first-run and reset
+// controls; the rest of the store stays real, so the "Check for updates
+// automatically" toggle persists through `usePreference` to jsdom
+// localStorage. `actualReset` clears the real store between tests.
+const prefs = vi.hoisted(() => ({
   mockSetPreference: vi.fn(),
   mockResetPreferences: vi.fn(),
+  actualReset: (): void => {},
 }));
-vi.mock('@/data/preferences', () => ({
-  setPreference: mockSetPreference,
-  resetPreferences: mockResetPreferences,
-}));
+const { mockSetPreference, mockResetPreferences } = prefs;
+vi.mock('@/data/preferences', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/data/preferences')>();
+  prefs.actualReset = actual.resetPreferences;
+  return {
+    ...actual,
+    setPreference: prefs.mockSetPreference,
+    resetPreferences: prefs.mockResetPreferences,
+  };
+});
 
 const { mockResetWizardStateWithSources } = vi.hoisted(() => ({
   mockResetWizardStateWithSources: vi.fn(),
@@ -105,6 +116,7 @@ beforeEach(() => {
   mockGetUpdateSnapshot.mockReturnValue({ phase: 'idle' });
   mockSubscribeUpdate.mockReturnValue(() => {});
   mockGetRunningVersion.mockResolvedValue(null);
+  prefs.actualReset();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -210,18 +222,64 @@ describe('Advanced — Software Update section', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows "up to date" for idle/up-to-date and no restart/retry controls', async () => {
+  it('shows "up to date" with a manual check, and no restart/retry controls', async () => {
     mockGetUpdateSnapshot.mockReturnValue({ phase: 'up-to-date' });
     render(<Advanced save={vi.fn()} />);
 
     expect(await screen.findByTestId('update-status')).toHaveTextContent(
       /latest version/i,
     );
+    expect(screen.getByTestId('update-check-btn')).toBeInTheDocument();
     expect(screen.queryByTestId('update-restart-btn')).not.toBeInTheDocument();
     expect(screen.queryByTestId('update-retry-btn')).not.toBeInTheDocument();
     expect(
       screen.queryByTestId('update-install-now-btn'),
     ).not.toBeInTheDocument();
+  });
+
+  it('says no check has run yet when idle, instead of "up to date"', async () => {
+    render(<Advanced save={vi.fn()} />);
+
+    const status = await screen.findByTestId('update-status');
+    expect(status).toHaveTextContent(/hasn't checked/i);
+    expect(status).not.toHaveTextContent(/latest version/i);
+  });
+
+  it('turns "Check for updates automatically" on by default', async () => {
+    render(<Advanced save={vi.fn()} />);
+
+    expect(
+      await screen.findByLabelText('Check for updates automatically'),
+    ).toBeChecked();
+  });
+
+  it('keeps "Check for updates automatically" off across a reload', async () => {
+    render(<Advanced save={vi.fn()} />);
+    const toggle = await screen.findByLabelText(
+      'Check for updates automatically',
+    );
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    // A reload starts a fresh module instance that reads localStorage.
+    vi.resetModules();
+    const reloaded =
+      await vi.importActual<typeof import('@/data/preferences')>(
+        '@/data/preferences',
+      );
+    expect(reloaded.getPreferences().checkUpdatesAutomatically).toBe(false);
+  });
+
+  it('checks for updates on request while the automatic check is off', async () => {
+    render(<Advanced save={vi.fn()} />);
+    fireEvent.click(
+      await screen.findByLabelText('Check for updates automatically'),
+    );
+
+    fireEvent.click(screen.getByTestId('update-check-btn'));
+
+    expect(mockCheckForUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('shows a distinct check-failed state with a retry action, not "up to date" (#873)', async () => {

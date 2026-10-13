@@ -25,6 +25,7 @@ export function updateStatusMessage(state: UpdateState): string {
   const message = state.error ?? '';
   switch (state.phase) {
     case 'idle':
+      return m.settings_advanced_updates_not_checked();
     case 'up-to-date':
       return m.settings_advanced_updates_uptodate();
     case 'checking':
@@ -109,6 +110,16 @@ export function UpdateActions({ state, testIdPrefix }: UpdateActionsProps) {
           data-testid={`${testIdPrefix}-retry-btn`}
         >
           {m.settings_advanced_updates_check_retry()}
+        </Btn>
+      )}
+      {(state.phase === 'idle' || state.phase === 'up-to-date') && (
+        <Btn
+          size="sm"
+          onClick={() => void run(checkForUpdate)}
+          disabled={busy}
+          data-testid={`${testIdPrefix}-check-btn`}
+        >
+          {m.settings_advanced_updates_check_now()}
         </Btn>
       )}
     </>

@@ -70,4 +70,7 @@ pub struct AppPreferences {
     pub setup_completed: bool,
     /// Keyed by `dockId` (the adopting list page, e.g. `"sessions"`).
     pub detail_dock: std::collections::HashMap<String, DetailDockPref>,
+    /// Whether the app checks for updates at startup. Off: only a manual check
+    /// in Settings › Advanced contacts the update endpoint.
+    pub check_updates_automatically: bool,
 }

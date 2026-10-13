@@ -9,7 +9,7 @@
  * modules — `IS_MOCK` is false in the vitest environment (see
  * vitest.config.ts), so these dynamic imports resolve and must be mocked.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const {
   mockCheck,
@@ -57,6 +57,7 @@ import {
   getUpdateSnapshot,
   getRunningVersion,
 } from './updateSubscription';
+import { resetPreferences, setPreference } from './preferences';
 
 const ARM_EVENT = 'update:install-on-quit-armed';
 const INSTALL_EVENT = 'update:install-on-quit';
@@ -446,6 +447,49 @@ describe('startUpdateSubscription — __PV_TEST__ override', () => {
 
     expect(mockCheck).toHaveBeenCalledTimes(1);
     expect(calls).toEqual([]);
+    expect(getUpdateSnapshot().phase).toBe('available');
+  });
+});
+
+// astro-plan-bzzbp: Shell's mount effect calls startUpdateSubscription(); the
+// "Check for updates automatically" preference decides whether it contacts
+// the updater endpoint. The real preferences store runs on jsdom localStorage.
+describe('startUpdateSubscription — Check for updates automatically', () => {
+  beforeEach(() => {
+    delete (window as Window & { __PV_TEST__?: unknown }).__PV_TEST__;
+    resetPreferences();
+  });
+  afterEach(() => {
+    resetPreferences();
+  });
+
+  it('is on by default and runs the startup check once', async () => {
+    mockCheck.mockResolvedValue(null);
+
+    await startUpdateSubscription();
+    await startUpdateSubscription();
+
+    expect(mockCheck).toHaveBeenCalledTimes(1);
+    expect(getUpdateSnapshot()).toEqual({ phase: 'up-to-date' });
+  });
+
+  it('runs no check at startup when turned off', async () => {
+    setPreference('checkUpdatesAutomatically', false);
+
+    await startUpdateSubscription();
+
+    expect(mockCheck).not.toHaveBeenCalled();
+    expect(getUpdateSnapshot()).toEqual({ phase: 'idle' });
+  });
+
+  it('still checks when the user asks while it is off', async () => {
+    setPreference('checkUpdatesAutomatically', false);
+    await startUpdateSubscription();
+    mockCheck.mockResolvedValue(makeUpdate());
+
+    await checkForUpdate();
+
+    expect(mockCheck).toHaveBeenCalledTimes(1);
     expect(getUpdateSnapshot().phase).toBe('available');
   });
 });

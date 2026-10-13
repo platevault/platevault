@@ -87,9 +87,6 @@ how to turn off or avoid each one.
 
 These SignPath conditions are not met yet. Each one blocks the application:
 
-- **Option to disable the update check.** The app checks GitHub for updates
-  at every start, with no setting to stop it. A "Check for updates
-  automatically" setting will add one.
 - **Privacy policy shown during installation.** Neither Windows installer
   shows the privacy statement yet.
 - **Option to disable the observing-site map.** The map requests
@@ -98,6 +95,13 @@ These SignPath conditions are not met yet. Each one blocks the application:
   **Online SIMBAD resolution**.
 - **Code signing policy on the release pages.** The GitHub release notes do
   not link this page yet.
+
+These SignPath conditions are met:
+
+- **Option to disable the update check.** The automatic update check at
+  startup can be turned off with **Settings → Advanced → Software Update →
+  Check for updates automatically**. With it off, PlateVault contacts GitHub
+  for updates only when you click **Check for updates**.
 
 ## Uninstalling
 
