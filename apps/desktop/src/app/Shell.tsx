@@ -21,6 +21,7 @@ import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
 import { RecoveryBanner } from '@/features/recovery/RecoveryBanner';
+import { UpdateBanner } from '@/features/update/UpdateBanner';
 import { useOnboardingState, useWalkActive } from '@/features/onboarding/store';
 import { loadObservingState } from '@/shared/observing-sites/site-store';
 import {
@@ -117,9 +118,9 @@ function ShellInner() {
     { ignoreFormFields: false },
   );
 
-  // Spec 051 US10 (T058, #888 staged flow): run the frontend-driven update
-  // check for the whole app session, so it's captured even if the user
-  // hasn't opened Settings > Advanced yet.
+  // Spec 051 US10 (T058, astro-plan-mkkgi): run the check-only update
+  // subscription for the whole app session; UpdateBanner offers the install
+  // choice even if the user never opens Settings > Advanced.
   useEffect(() => {
     void startUpdateSubscription();
     return () => stopUpdateSubscription();
@@ -162,6 +163,7 @@ function ShellInner() {
         <Sidebar />
         <main className={frameMain} data-testid="frame-main">
           <RecoveryBanner />
+          <UpdateBanner />
           <Outlet />
         </main>
       </div>

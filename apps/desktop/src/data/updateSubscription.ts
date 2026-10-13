@@ -2,28 +2,45 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Signed auto-update subscription (spec 051 US10, T058; staged flow #888).
+ * Signed auto-update subscription (spec 051 US10, T058; astro-plan-mkkgi).
  *
- * The updater is frontend-driven: `checkForUpdate()` calls the
- * `@tauri-apps/plugin-updater` `check()` API directly (the real minisign
- * keypair and signing pipeline are wired — spec 051 SC-009/T059/T060, #762),
- * downloads and signature-verifies any available update immediately, then
- * stops — the install/relaunch step is deferred to an explicit user action
- * (`restartPendingUpdate`), per US10 AS1 and the #888 staged-flow decision.
- * This also resolves #873 (a failed check is a distinct `check-failed` phase,
- * never rendered as "up to date") and #869 (a `relaunch()` failure after a
- * successful `downloadAndInstall()` is a distinct `restart-failed` phase, not
- * "download failed" — the new version is already installed on disk).
+ * The updater is frontend-driven and runs on `@tauri-apps/plugin-updater`
+ * (real minisign keypair and signing pipeline: spec 051 SC-009/T059/T060,
+ * #762). Owner decision 2026-10-12: nothing downloads until the user chooses
+ * to install. This supersedes #888's download-first flow, which installed at
+ * launch: the plugin's install step runs the Windows installer and exits, and
+ * raises a pkexec prompt on deb/rpm.
  *
- * `startUpdateSubscription()` runs one check at app start; Settings > Advanced
- * subscribes to the resulting state and exposes a "check again" / "restart"
- * affordance depending on phase.
+ * - `checkForUpdate()` only checks. A found update lands on 'available' with
+ *   its version and notes; nothing is downloaded, installed or elevated.
+ * - `installUpdateNow()` downloads and signature-verifies, installs, then
+ *   relaunches. On Windows the install step itself quits into the installer.
+ * - `installUpdateOnQuit()` downloads and verifies now, then arms the
+ *   backend exit gate (`src-tauri/src/update_exit_gate.rs`). The next quit is
+ *   deferred once to this module, which installs and then exits.
+ *
+ * Failures stay distinct (#873, #869): 'check-failed', 'download-failed',
+ * 'install-failed', and 'restart-failed' when the update is installed but the
+ * relaunch failed.
+ *
+ * `startUpdateSubscription()` runs one check at app start. The update notice
+ * (`features/update/UpdateBanner.tsx`) and Settings > Advanced subscribe to
+ * the resulting state and offer the actions for each phase.
  *
  * In mock/test mode (VITE_USE_MOCKS=true) the Tauri updater/process APIs are
  * unavailable; every exported action is a no-op and the phase stays 'idle'.
  */
 
+import type { Update } from '@tauri-apps/plugin-updater';
+
 const IS_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
+
+/** Frontend → backend: payload `true` arms the install-on-quit exit gate,
+ * `false` disarms it. Mirrors `update_exit_gate::ARM_EVENT`. */
+const ARM_EVENT = 'update:install-on-quit-armed';
+/** Backend → main window: the user is quitting with the gate armed. Mirrors
+ * `update_exit_gate::INSTALL_EVENT`. */
+const INSTALL_EVENT = 'update:install-on-quit';
 
 // E2E test-injection seam: a journey spec can set this before navigation to
 // seed a specific update phase without a real Tauri updater host. Only
@@ -42,18 +59,46 @@ export type UpdatePhase =
   | 'checking'
   | 'up-to-date'
   | 'check-failed'
+  /** Found by the check; nothing downloaded yet. */
+  | 'available'
   | 'downloading'
   | 'download-failed'
-  | 'ready'
+  | 'installing'
+  | 'install-failed'
+  /** Downloaded and verified; installs when the app quits. */
+  | 'install-on-quit'
+  /** Installed, but the relaunch failed (#869). */
   | 'restart-failed';
 
 export interface UpdateState {
   phase: UpdatePhase;
-  /** Update version, once known (from 'checking' onward once found). */
+  /** Update version, once the check has found one. */
   version?: string;
   body?: string | null;
   /** Present for the '*-failed' phases. */
   error?: string;
+}
+
+/** Phases from which the user may choose Install now or Install on quit. */
+const INSTALLABLE: ReadonlySet<UpdatePhase> = new Set([
+  'available',
+  'download-failed',
+  'install-failed',
+  'install-on-quit',
+]);
+
+/** Phases in which a download or install is under way or staged. A re-check
+ * would drop the update the user already chose. */
+const COMMITTED: ReadonlySet<UpdatePhase> = new Set([
+  'downloading',
+  'installing',
+  'install-on-quit',
+  'restart-failed',
+]);
+
+/** Whether `state` offers Install now and Install on quit. */
+export function canInstall(state: UpdateState): boolean {
+  return INSTALLABLE.has(state.phase);
 }
 
 type Listener = () => void;
@@ -62,6 +107,13 @@ const IDLE_STATE: UpdateState = { phase: 'idle' };
 
 let current: UpdateState = IDLE_STATE;
 const listeners = new Set<Listener>();
+
+/** The update found by the last check; holds the verified bytes once
+ * `downloaded` is true. */
+let pending: Update | null = null;
+let downloaded = false;
+/** Removes the exit-path listener while the gate is armed. */
+let unlistenExit: (() => void) | null = null;
 
 function setState(next: UpdateState): void {
   current = next;
@@ -87,69 +139,166 @@ export function subscribeUpdate(listener: Listener): () => void {
 let subscribed = false;
 
 /**
- * Check for an update, and if one exists, download + signature-verify it
- * immediately (#888 staged flow). Never installs/relaunches — call
- * `restartPendingUpdate()` for that, on explicit user action.
+ * Check for an update. Never downloads, installs or elevates: a found update
+ * only lands on 'available'.
  *
- * Safe to call again from a 'check-failed' or 'download-failed' state (the
- * #873 retry affordance) or just to re-check while 'up-to-date'.
+ * Safe to call again from a failed or 'up-to-date' state (the #873 retry
+ * affordance). A no-op while an install the user chose is under way or staged.
  */
 export async function checkForUpdate(): Promise<void> {
   if (IS_MOCK) return;
+  if (COMMITTED.has(current.phase)) return;
 
   setState({ phase: 'checking' });
   try {
     const { check } = await import('@tauri-apps/plugin-updater');
     const update = await check();
+    await releasePending();
     if (!update) {
       setState({ phase: 'up-to-date' });
       return;
     }
-
-    setState({
-      phase: 'downloading',
-      version: update.version,
-      body: update.body,
-    });
-    await update.downloadAndInstall();
-    setState({ phase: 'ready', version: update.version, body: update.body });
+    pending = update;
+    setState({ phase: 'available', version: update.version, body: update.body });
   } catch (err) {
-    // Distinguish a failed *check* from a failed *download* so the retry
-    // affordance and copy match what actually failed (#873).
-    if (current.phase === 'downloading') {
-      setState({
-        ...current,
-        phase: 'download-failed',
-        error: pluginErrMessage(err),
-      });
-    } else {
-      setState({ phase: 'check-failed', error: pluginErrMessage(err) });
-    }
+    setState({ phase: 'check-failed', error: pluginErrMessage(err) });
+  }
+}
+
+/** Download and signature-verify the pending update once; later calls reuse
+ * the verified bytes. Returns false (state set to 'download-failed') on error. */
+async function ensureDownloaded(update: Update): Promise<boolean> {
+  if (downloaded) return true;
+  setState({ phase: 'downloading', version: update.version, body: update.body });
+  try {
+    await update.download();
+    downloaded = true;
+    return true;
+  } catch (err) {
+    setState({ ...current, phase: 'download-failed', error: pluginErrMessage(err) });
+    return false;
   }
 }
 
 /**
- * Install the staged update by relaunching the app. Only valid from 'ready'
- * or 'restart-failed' (retry) — a no-op otherwise.
- *
- * `downloadAndInstall()` has already succeeded by the time this is callable,
- * so a `relaunch()` failure must never read as "update failed": the new
- * version is already on disk (#869). It surfaces as 'restart-failed' with a
- * manual-restart hint instead.
+ * Install now (explicit user action): download and verify, install, then
+ * relaunch into the new version. On Windows the install step quits the app
+ * into the installer, so the relaunch is never reached there.
  */
-export async function restartPendingUpdate(): Promise<void> {
+export async function installUpdateNow(): Promise<void> {
   if (IS_MOCK) return;
-  if (current.phase !== 'ready' && current.phase !== 'restart-failed') return;
+  const update = pending;
+  if (!update || !canInstall(current)) return;
 
+  await disarmInstallOnQuit();
+  if (!(await ensureDownloaded(update))) return;
+
+  setState({ phase: 'installing', version: update.version, body: update.body });
+  try {
+    await update.install();
+  } catch (err) {
+    setState({ ...current, phase: 'install-failed', error: pluginErrMessage(err) });
+    return;
+  }
+  downloaded = false;
+  await relaunchInto();
+}
+
+/**
+ * Install on quit (explicit user action): download and verify now, then arm
+ * the exit gate so the next quit installs. Nothing is installed until then.
+ */
+export async function installUpdateOnQuit(): Promise<void> {
+  if (IS_MOCK) return;
+  const update = pending;
+  if (!update || !canInstall(current) || current.phase === 'install-on-quit') {
+    return;
+  }
+
+  if (!(await ensureDownloaded(update))) return;
+
+  try {
+    const { listen, emit } = await import('@tauri-apps/api/event');
+    unlistenExit ??= await listen(INSTALL_EVENT, () => {
+      void installOnExit();
+    });
+    await emit(ARM_EVENT, true);
+  } catch (err) {
+    await disarmInstallOnQuit();
+    setState({ ...current, phase: 'install-failed', error: pluginErrMessage(err) });
+    return;
+  }
+  setState({ phase: 'install-on-quit', version: update.version, body: update.body });
+}
+
+/**
+ * The exit path: the backend deferred a quit because the gate was armed.
+ * Install the staged update, then let the app exit. The user asked to quit,
+ * so an install failure still exits; the next launch's check offers the
+ * update again.
+ */
+async function installOnExit(): Promise<void> {
+  const update = pending;
+  unlistenExit?.();
+  unlistenExit = null;
+  if (update && downloaded) {
+    setState({ phase: 'installing', version: update.version, body: update.body });
+    try {
+      await update.install();
+      downloaded = false;
+    } catch (err) {
+      console.warn('[updateSubscription] install on quit failed:', err);
+    }
+  }
+  const { exit } = await import('@tauri-apps/plugin-process');
+  await exit(0);
+}
+
+async function relaunchInto(): Promise<void> {
   try {
     const { relaunch } = await import('@tauri-apps/plugin-process');
     await relaunch();
   } catch (err) {
-    setState({
-      ...current,
-      phase: 'restart-failed',
-      error: pluginErrMessage(err),
-    });
+    setState({ ...current, phase: 'restart-failed', error: pluginErrMessage(err) });
+  }
+}
+
+/**
+ * Retry the relaunch after an install whose relaunch failed. Only valid from
+ * 'restart-failed'; a no-op otherwise.
+ *
+ * The update is already installed on disk, so a `relaunch()` failure never
+ * reads as "update failed" (#869): it stays 'restart-failed' with a
+ * manual-restart hint.
+ */
+export async function restartPendingUpdate(): Promise<void> {
+  if (IS_MOCK) return;
+  if (current.phase !== 'restart-failed') return;
+  await relaunchInto();
+}
+
+/** Drop the exit-path listener and tell the backend not to defer the quit. */
+async function disarmInstallOnQuit(): Promise<void> {
+  if (!unlistenExit) return;
+  unlistenExit();
+  unlistenExit = null;
+  try {
+    const { emit } = await import('@tauri-apps/api/event');
+    await emit(ARM_EVENT, false);
+  } catch (err) {
+    console.warn('[updateSubscription] disarm install on quit failed:', err);
+  }
+}
+
+/** Free the plugin resource (and any downloaded bytes) of a superseded check. */
+async function releasePending(): Promise<void> {
+  const previous = pending;
+  pending = null;
+  downloaded = false;
+  try {
+    await previous?.close();
+  } catch (err) {
+    console.warn('[updateSubscription] releasing update failed:', err);
   }
 }
 
@@ -171,6 +320,8 @@ export async function startUpdateSubscription(): Promise<void> {
 /** Reset subscription state so a later `startUpdateSubscription()` re-checks. */
 export function stopUpdateSubscription(): void {
   subscribed = false;
+  void disarmInstallOnQuit();
+  void releasePending();
   setState(IDLE_STATE);
 }
 

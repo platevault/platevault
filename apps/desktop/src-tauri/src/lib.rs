@@ -14,6 +14,7 @@ pub mod frame_watcher;
 pub mod library_notifier;
 pub mod library_shell;
 pub mod resolve_cache;
+pub mod update_exit_gate;
 pub mod watcher;
 
 mod bootstrap;
@@ -251,9 +252,10 @@ pub fn build_app() -> tauri::App {
         // `process:default` (for the relaunch-to-apply step) are granted in
         // `capabilities/default.json`. `plugins.updater.pubkey` in
         // `tauri.conf.json` is the real minisign key (spec 051 SC-009/T059/
-        // T060, #762) — the check/download/verify/relaunch flow itself is
-        // frontend-driven (`updateSubscription.ts`, #888 staged flow), not
-        // triggered from this Rust process.
+        // T060, #762) — the check/download/verify/install flow itself is
+        // frontend-driven (`updateSubscription.ts`, astro-plan-mkkgi) and
+        // only downloads on the user's Install click. The one Rust-side hook
+        // is the install-on-quit gate in `run_app` (`update_exit_gate`).
         .plugin(build_updater_plugin())
         .plugin(tauri_plugin_process::init())
         // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
@@ -303,9 +305,8 @@ pub fn build_app() -> tauri::App {
             }
             // Quit (T034): `PredefinedMenuItem::quit` already calls
             // `app.exit(0)` internally — no separate handling needed here.
-            // This app has no existing close-confirmation logic to bypass
-            // (verified: no `on_window_event`/`CloseRequested` handler exists
-            // anywhere in this crate), so Quit is a plain, un-gated exit.
+            // The only gate on it is `update_exit_gate`, which defers one
+            // quit to install an update the user chose to install on quit.
         })
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
@@ -467,7 +468,12 @@ pub fn run_app(
     let boot_services = Arc::clone(&services);
     std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir, boot_services)));
 
-    app.run(move |_handle, event| {
+    // astro-plan-mkkgi: an armed "Install on quit" defers the first quit to the
+    // main window, which installs the staged update and then exits.
+    update_exit_gate::register(app.handle());
+
+    app.run(move |handle, event| {
+        update_exit_gate::on_run_event(handle, &event);
         // `RunEvent::Exit` is the final, non-cancellable event-loop hook — it
         // fires on graceful shutdown but never on SIGKILL/crash/power loss, so
         // a present marker at next boot reliably means "exited cleanly".
@@ -959,8 +965,8 @@ async fn boot(
     );
 
     // spec 051 US10: the startup update check moved to the frontend
-    // (`updateSubscription.ts`'s `startUpdateSubscription()`, #888 staged
-    // flow) — this process no longer runs its own independent check, which
+    // (`updateSubscription.ts`'s `startUpdateSubscription()`, check only)
+    // — this process no longer runs its own independent check, which
     // used to emit an `update-available` event nothing listens for anymore.
 
     // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
