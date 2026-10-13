@@ -17,6 +17,7 @@
   "verb_retry": "Retry",
   "verb_review": "Review",
   "verb_stack": "Stack",
+  "verb_save": "Save",
   "common_more": "More",
   "common_locations": "Locations",
   "common_runs": "Runs",
@@ -2880,6 +2881,8 @@
   "run_restored": "{name} restored",
   "run_restore_blocked": "Restore blocked",
   "run_reopen": "Reopen",
+  "run_reopen_run": "Reopen run",
+  "run_reopen_summary": "Its steps become editable again; no file moves",
   "run_reopen_blocked": "Reopen blocked",
   "run_clean_up": "Clean up",
   "run_move_to_trash": "Move to Trash",
@@ -2887,6 +2890,7 @@
   "run_trash_title": "Move {name} to the Trash?",
   "run_trash_waits": "Waits in {project}'s Trash at {step}",
   "run_trash_leaves": "Leaves run lists, pickers and goal totals",
+  "run_trash_waits_detail": "Restore brings it back as it was",
   "run_actions_for": "Actions for {name}",
   "run_remove": "Remove",
   "run_none": "None",
@@ -2898,6 +2902,7 @@
   "run_col_reason": "Reason",
   "run_col_state": "State",
   "run_col_kind": "Kind",
+  "run_col_source": "Source",
   "run_col_rig": "Rig",
   "run_select_pointing_inside_panel": "Pointing inside the panel",
   "run_selection_blocked": "Selection change blocked",
@@ -2908,6 +2913,22 @@
   "run_select_no_longer_matches": "No longer matches",
   "run_select_remove_session": "Remove {session} from the run",
   "run_select_in_run": "In the run",
+  "run_select_members_only": "In the run only",
+  "run_select_members_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session in the run",
+        "countPlural=*": "{count} sessions in the run"
+      }
+    }
+  ],
   "run_select_new_candidates": [
     {
       "declarations": [
@@ -2924,6 +2945,21 @@
     }
   ],
   "run_select_add_count": "Add {count}",
+  "run_select_add_new": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Add {count} new candidate",
+        "countPlural=*": "Add {count} new candidates"
+      }
+    }
+  ],
   "run_select_members_no_longer_match": [
     {
       "declarations": [
@@ -3020,6 +3056,7 @@
   "run_all_in_os_trash": "All in the OS Trash",
   "run_nothing_prepared": "Nothing prepared",
   "run_open_prepare": "Open Prepare",
+  "run_open_calibrate": "Open Calibrate",
   "run_clean_up_title": "Clean up {name}?",
   "run_clean_up_description": "Restorable from the OS Trash.",
   "run_clean_up_moves": [
@@ -3142,6 +3179,12 @@
   "run_cal_no_master": "No master",
   "run_cal_col_light_session": "Light session",
   "run_cal_col_master": "Master",
+  "run_cal_recommended": "Recommended",
+  "run_cal_other_masters": "Other masters",
+  "run_cal_without_master": "Without a master",
+  "run_cal_no_calibration": "No calibration",
+  "run_cal_master_for": "Master for {name}",
+  "run_cal_to_review_col": "To review",
   "run_cal_col_criteria": "Criteria",
   "run_cal_without": "Without {kind}",
   "run_cal_closest": "Closest · {name}",
@@ -3235,6 +3278,11 @@
   ],
   "run_results_folder": "Results folder",
   "run_results_look_again": "Look again",
+  "run_results_rescan": "Rescan",
+  "run_results_ignore": "Ignore",
+  "run_results_intermediate": "Intermediate",
+  "run_results_kind_of": "Kind for {name}",
+  "run_results_choose_file": "Choose a file",
   "run_results_attach_ellipsis": "Attach…",
   "run_results_attach": "Attach",
   "run_results_attach_blocked": "Attach blocked",
@@ -3319,6 +3367,8 @@
   "run_proto_source_drift_detail": "An outside tool rewrites one source; Open then finds the drift.",
   "run_prepare_blocked": "Prepare blocked",
   "run_prepare_ellipsis": "Prepare…",
+  "run_prepare_setup": "Setup",
+  "run_prepare_inputs": "Inputs",
   "run_prepare_title": "Prepare {name}?",
   "run_prepare_title_rev": "Prepare {name} (rev {revision})?",
   "run_prepare_confirm": [
@@ -3462,6 +3512,9 @@
   "run_entry_retired": "Retired: {name} is retired and never an input",
   "run_entry_its_location": "its location",
   "run_entry_not_found": "Not found at {path} at the last scan",
+  "run_entry_frame": "Frame",
+  "run_entry_master": "Master",
+  "run_entry_to_prepare": "To prepare",
   "run_entry_unresolved": "Unresolved member: it could not be read when it was selected",
   "run_entry_not_readable": "Not readable at {path}",
   "run_mode_needs_space": "Needs {bytes} · {free} free",
@@ -3604,6 +3657,10 @@
   "rungroup_panels": "Panels",
   "rungroup_review_status": "Review {status}",
   "rungroup_col_panel": "Panel",
+  "rungroup_col_candidates": "Candidates",
+  "rungroup_col_nearest": "Nearest panel",
+  "rungroup_col_folder": "Folder",
+  "rungroup_col_accepted": "Accepted",
   "rungroup_col_panel_run": "Panel run",
   "rungroup_col_status": "Status",
   "rungroup_panels_label": "Panels of {name}",
@@ -7101,6 +7158,7 @@
   "project_missing_title": "This Project is not in the catalog",
   "run_missing_title": "This run is not in the catalog",
   "run_step_missing_title": "This run step does not exist",
+  "run_open_current_step": "Open the current step",
   "rungroup_missing_title": "This run group is not in the catalog",
   "target_missing_title": "This Target is not in the catalog",
   "tonight_moon_phase_new": "New Moon",
@@ -7644,6 +7702,7 @@
   "run_rename": "Rename",
   "run_rename_ellipsis": "Rename…",
   "run_name_label": "Run name",
+  "run_edit": "Edit run",
   "run_col_coverage": "Coverage",
   "run_col_distance": "Distance",
   "run_select_order": "Order",
@@ -8100,6 +8159,12 @@
   ],
   "ds_folder_picker_title": "Folder picker",
   "simulation_ds_folder_picker_description": "Simulated OS folder chooser. Volumes and folders, including empty ones, come from the simulated disk; offline volumes and denied folders show why.",
+  "simulation_run_writes_outputs": "This run: the application writes outputs",
+  "simulation_run_finish_writing": "This run: files finish writing",
+  "simulation_run_better_master": "This run: a newer compatible master arrives",
+  "simulation_run_object_correction": "This run: record an OBJECT correction",
+  "simulation_run_source_drift": "This run: an outside tool rewrites a source frame",
+  "simulation_group_writes_mosaic": "This run group: the application writes the assembled mosaic",
   "ds_operation_title": "Operation",
   "ds_operation_description": "Running with progress, per-item outcomes and one settled status. Uses a real indexing run.",
   "simulation_copy_nothing": "Nothing to copy: no file or folder with files at {path}.",
@@ -8696,5 +8761,6 @@
   "catalogue_templates_fill_toggle": "Full-height step",
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
-  "catalogue_datatable_destination_cold": "Cold storage"
+  "catalogue_datatable_destination_cold": "Cold storage",
+  "common_percent": "{value}%"
 }

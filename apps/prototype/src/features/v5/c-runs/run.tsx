@@ -1,35 +1,37 @@
 /**
- * S5 Run (slice C): the run header (subject and rig as pills, fixed at
- * creation; the run status, e.g. "Blocked at Calibrate"; Rename, unique
- * within the Project; Complete, Reopen, Move to Trash, Restore and Clean up),
- * the step bar, and the Select, Calibrate, Prepare, Results and Done steps.
- * The Review step is slice D's `ReviewStep`, mounted here as the last child
- * of the pane's flex column (D-W3, D-W50, D-W49, D-W54, D-W5, D-W55, D-W51,
- * D-W4, D-W26, D-W72).
+ * S5 Run (slice C) as a StepPage (§5.4): Select → Calibrate → Prepare →
+ * Results on the run flow (`runFlow`), with Finish run as Results' Proceed.
+ * There is no Review step (review happens at intake, P-REV2) and no Done
+ * step. Run ▾ holds Edit run…, Open in {app}, Reopen run… and Move to
+ * Trash…. A Finished run is read-only, with Results reading "Finished
+ * {date}" and no Proceed; a trashed run is read-only with Restore in its
+ * notice (D-W72).
  */
-import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ChevronRight, Lock, Pencil, RotateCcw, Telescope, Trash2, Undo2, Wand2 } from "lucide-react"
+import { useNavigate, useParams } from "@tanstack/react-router"
 import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
-import { stepName } from "@/app/run-ui"
-import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { PageBody, PageHeader } from "@/components/app/page"
-import { Pill } from "@/components/app/pill"
-import { Button } from "@/components/ui/button"
-import { nextFrom, panelLabel, rigName, runPipeline, runStatus, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
-import { RUN_STEPS } from "@/domain/labels"
-import type { RunStep } from "@/domain/types"
+import { ActionButton } from "@/components/app/actions"
+import type { Action, MenuItem } from "@/components/app/contracts"
+import type { PageNotice } from "@/components/app/feedback"
+import { TextField } from "@/components/app/fields"
+import { FormDialog } from "@/components/app/form-dialog"
+import type { PathItem } from "@/components/app/page"
+import { StatusBadge } from "@/components/app/status"
+import { stepEditable } from "@/components/app/step-flow"
+import { StepPage } from "@/components/templates/step-page"
+import { groupStepLink, projectLink, RUN_FLOW_STEPS, runFlowState, runPreparations, runStepLink, trashRefusals } from "@/domain/derive"
+import { profileRef } from "@/domain/labels"
+import type { Run, RunFlowStepId } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
+import { type Messages, say } from "@/lib/i18n"
+import { runFlow } from "@/store/actions/flows"
 import { renameRun, reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
-import { useStore } from "@/store/core"
-import { NameDialog } from "../e-targets-plan-settings/dialogs"
-import { ReviewStep } from "../d-review/review"
+import { store, useStore } from "@/store/core"
+import { openPreparation, startPrepare } from "./actions"
 import { CalibrateStep } from "./calibrate-step"
-import { CompleteButton, DoneStep } from "./done-step"
-import { type RunContext, runContext } from "./model"
-import { OutcomeNotice, RunStatusLabel, StepBar, useOutcome } from "./parts"
-import { PrepareStep } from "./prepare-step"
+import { currentPreparation, preparePlan, type RunContext, runContext } from "./model"
+import { PrepareStep, prepareConfirm } from "./prepare-step"
 import { ResultsStep } from "./results-step"
 import { SelectStep } from "./select-step"
 
@@ -39,170 +41,122 @@ export function RunPage() {
   const state = useStore((s) => s)
   const ctx = runId ? runContext(state, runId) : null
   if (!ctx || ctx.run.projectId !== projectId) return <MissingRecord title={m.run_missing_title()} backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord title={m.run_step_missing_title()} backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel={m.review_open_select()} />
-  return <RunScreen ctx={ctx} step={step as RunStep} />
+  if (!isRunFlowStep(step)) return <MissingRecord title={m.run_step_missing_title()} backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/${runFlowState(state, ctx.run).current}`} backLabel={m.run_open_current_step()} />
+  return <RunScreen ctx={ctx} step={step} />
 }
 
-function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
+export function isRunFlowStep(step: string | undefined): step is RunFlowStepId {
+  return RUN_FLOW_STEPS.includes(step as RunFlowStepId)
+}
+
+function RunScreen({ ctx, step }: { ctx: RunContext; step: RunFlowStepId }) {
   const m = useMessages()
   const state = useStore((s) => s)
-  const { run, project, subject, panel, group } = ctx
-  const pipeline = runPipeline(state, run)
-  const outcome = useOutcome(`${run.id}:${step}`)
-  const subjectText = `${subject ? subjectName(m, state.catalog, subject) : m.project_unknown_subject()}${panel ? ` · ${panelLabel(m, panel)}` : ""}`
+  const [editing, setEditing] = useState(false)
+  const { run, project, group } = ctx
+  const plan = preparePlan(state, run)
+  const flow = runFlow(state, run, m, { prepare: { confirm: prepareConfirm(m, plan), start: () => startPrepare(run.id).result } })
+  const editable = stepEditable(flow, step)
+  const path: PathItem[] = [
+    { label: m.nav_projects(), link: { to: "/projects" } },
+    { label: project.name, link: projectLink(project.id) },
+    ...(group ? [{ label: group.name, link: groupStepLink(group, step) }] : []),
+  ]
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-screen="S5">
-      <PageHeader
+    <>
+      <StepPage
+        path={path}
         title={run.name}
-        eyebrow={
-          <>
-            <Link to="/projects/$projectId" params={{ projectId: project.id }}>
-              {project.name}
-            </Link>
-            {group ? (
-              <>
-                <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
-                <Link to="/projects/$projectId/groups/$groupId/$step" params={{ projectId: project.id, groupId: group.id, step }}>
-                  {group.name}
-                </Link>
-              </>
-            ) : null}
-          </>
+        status={<RunBadge run={run} />}
+        menu={{ label: m.project_run_noun_capital(), items: useRunMenu(ctx, () => setEditing(true)) }}
+        flow={flow}
+        viewing={step}
+        stepsLabel={m.calibration_steps_of({ name: run.name })}
+        notice={trashNotice(m, run)}
+        step={
+          step === "select" ? (
+            <SelectStep ctx={ctx} editable={editable} />
+          ) : step === "calibrate" ? (
+            <CalibrateStep key={run.id} ctx={ctx} editable={editable} />
+          ) : step === "prepare" ? (
+            <PrepareStep ctx={ctx} plan={plan} editable={editable} />
+          ) : (
+            <ResultsStep ctx={ctx} editable={editable} />
+          )
         }
-        meta={<RunStatusLabel status={runStatus(pipeline)} at />}
-        description={
-          <span className="flex flex-wrap items-center gap-1.5" data-run-facts>
-            <Pill tone="muted" icon={Telescope} title={m.run_subject_fixed()}>
-              {subjectText}
-            </Pill>
-            <Pill tone="muted" icon={Lock} title={m.run_rig_fixed()}>
-              {rigName(m, state.catalog, run.rigId)}
-            </Pill>
-          </span>
-        }
-        actions={<RunActions ctx={ctx} step={step} onOutcome={outcome.act} />}
       />
-      <StepBar
-        label={m.calibration_steps_of({ name: run.name })}
-        steps={pipeline.steps}
-        here={step}
-        nextId={nextFrom(pipeline.steps, pipeline.next, step)?.step?.id ?? null}
-        linkFor={(id) => runStepLink(run, id) as { to: string; params: Record<string, string> }}
-      />
-      {outcome.outcome || run.trashedAt ? (
-        <div className="space-y-2 px-5 pt-3">
-          <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} />
-          {run.trashedAt ? (
-            <div className="flex flex-wrap items-center gap-2" data-run-trashed>
-              <Pill tone="muted" icon={Trash2} title={m.run_restore_returns_to({ step: stepName(m, pipeline.current.id) })}>
-                {m.run_in_trash({ date: formatDateTime(run.trashedAt) })}
-              </Pill>
-              <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
-                {m.run_open_trash()}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {step === "review" ? (
-        <ReviewStep runId={run.id} />
-      ) : (
-        <PageBody>
-          {step === "select" ? <SelectStep ctx={ctx} /> : null}
-          {step === "calibrate" ? <CalibrateStep key={ctx.run.id} ctx={ctx} /> : null}
-          {step === "prepare" ? <PrepareStep ctx={ctx} /> : null}
-          {step === "results" ? <ResultsStep ctx={ctx} /> : null}
-          {step === "done" ? <DoneStep ctx={ctx} outcome={outcome} /> : null}
-        </PageBody>
-      )}
-    </div>
+      <EditRunDialog run={run} open={editing} onOpenChange={setEditing} />
+    </>
   )
 }
 
-/** Header actions: each one does what it says, or names why it is refused. On Done, Complete and Clean up live in the step itself. */
-function RunActions({ ctx, step: here, onOutcome }: { ctx: RunContext; step: RunStep; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
+/** The header's StatusBadge: Open, Finished (C2) or Trashed. */
+function RunBadge({ run }: { run: Run }) {
+  const m = useMessages()
+  if (run.trashedAt) return <StatusBadge kind="run" value="trashed" />
+  if (run.completion === "complete") return <StatusBadge kind="run" value="complete" label={m.status_finished()} />
+  return <StatusBadge kind="run" value="open" />
+}
+
+/** A trashed run's standing state: when it went, with Restore (D-W72). */
+function trashNotice(m: Messages, run: Run): PageNotice | null {
+  if (!run.trashedAt) return null
+  const restore: Action = { id: "restore", label: m.run_restore(), run: () => restoreRun(run.id) }
+  return { tone: "warning", title: m.run_in_trash({ date: formatDateTime(run.trashedAt) }), detail: m.run_trash_waits_detail(), actions: <ActionButton action={restore} /> }
+}
+
+/** Run ▾ (C-7): Edit run…, Open in {app} once prepared, Reopen run… once Finished, and Move to Trash…. */
+function useRunMenu(ctx: RunContext, edit: () => void): MenuItem[] {
   const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
-  const { run, project } = ctx
-  const [confirmTrash, setConfirmTrash] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const goTo = (step: RunStep) => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step } })
-  if (run.trashedAt) {
-    return (
-      <Button size="sm" onClick={() => onOutcome(restoreRun(run.id), { blocked: m.run_restore_blocked(), success: { title: m.run_restored({ name: run.name }), tone: "info" } })}>
-        <Undo2 aria-hidden="true" data-icon="inline-start" />
-        {m.run_restore()}
-      </Button>
-    )
+  const { run } = ctx
+  if (run.trashedAt) return []
+  const prep = currentPreparation(run, runPreparations(state.catalog, run.id))
+  const profile = prep ? state.catalog.profiles[prep.profileId] : undefined
+  const items: MenuItem[] = [{ id: "edit", label: m.run_edit(), opensDialog: true, run: edit }]
+  if (prep?.state === "prepared" && profile) items.push({ id: "open", label: m.run_open_in({ app: say(m, profileRef(profile)) }), run: () => openPreparation(run.id) })
+  if (run.completion === "complete") {
+    items.push({
+      id: "reopen",
+      label: m.run_reopen_run(),
+      confirm: { title: m.project_reopen_title({ name: run.name }), summary: m.run_reopen_summary(), confirm: { label: m.run_reopen_run() } },
+      run: () => {
+        const { result } = reopenRun(run.id)
+        if (result.ok) void navigate(runStepLink(run, runFlowState(store.getState(), store.getState().catalog.runs[run.id]!).current) as never)
+        return result
+      },
+    })
   }
-  const requestTrash = () => {
-    const blockers = trashRefusals(state, run)
-    if (blockers.length > 0) {
-      onOutcome(trashRun(run.id), { blocked: m.run_trash_blocked() })
-      return
-    }
-    setConfirmTrash(true)
-  }
+  const blockers = trashRefusals(state, run)
+  items.push({
+    id: "trash",
+    label: m.run_move_to_trash(),
+    kind: "destructive",
+    unavailable: blockers.length > 0 ? { action: m.run_trash_blocked(), reason: m.refusal_blockers({ count: blockers.length }), blockers: blockers.map((b) => ({ label: say(m, b) })) } : undefined,
+    confirm: { title: m.run_trash_title({ name: run.name }), summary: m.run_trash_leaves(), confirm: { label: m.run_move_to_trash(), kind: "destructive" } },
+    run: () => trashRun(run.id),
+  })
+  return items
+}
+
+/** Edit run (B S10): the run's name, unique within its Project among runs and run groups. */
+function EditRunDialog({ run, open, onOpenChange }: { run: Run; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const m = useMessages()
+  const [name, setName] = useState(run.name)
+  const confirm: Action = { id: "save-run", label: m.verb_save(), kind: "primary", run: () => renameRun(run.id, name) }
   return (
-    <>
-      {here === "done" ? null : run.completion === "complete" ? (
-        <>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const { result, step } = reopenRun(run.id)
-              if (onOutcome(result, { blocked: m.run_reopen_blocked() })) goTo(step)
-            }}
-          >
-            <RotateCcw aria-hidden="true" data-icon="inline-start" />
-            {m.run_reopen()}
-          </Button>
-          <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: "done" }} hash="cleanup" />}>
-            <Wand2 aria-hidden="true" data-icon="inline-start" />
-            {m.run_clean_up()}
-          </Button>
-        </>
-      ) : (
-        <CompleteButton ctx={ctx} onOutcome={onOutcome} variant="outline" />
-      )}
-      <Button size="sm" variant="ghost" onClick={() => setRenaming(true)}>
-        <Pencil aria-hidden="true" data-icon="inline-start" />
-        {m.run_rename_ellipsis()}
-      </Button>
-      <Button size="sm" variant="ghost" onClick={requestTrash}>
-        <Trash2 aria-hidden="true" data-icon="inline-start" />
-        {m.run_move_to_trash()}
-      </Button>
-      <NameDialog
-        open={renaming}
-        onOpenChange={setRenaming}
-        title={m.equipment_rename_title({ name: run.name })}
-        description=""
-        label={m.run_name_label()}
-        initial={run.name}
-        confirmLabel={m.run_rename()}
-        taken={[...Object.values(state.catalog.runs), ...Object.values(state.catalog.runGroups)].filter((r) => r.projectId === run.projectId && r.id !== run.id).map((r) => r.name)}
-        onSubmit={(name) => {
-          const result = renameRun(run.id, name)
-          return result.ok ? null : result.reason === "refused" ? result.reasons.join(" · ") : result.message
-        }}
-      />
-      <ConfirmDialog
-        open={confirmTrash}
-        onOpenChange={setConfirmTrash}
-        title={m.run_trash_title({ name: run.name })}
-        description={m.project_reopen_no_file_moves()}
-        changes={[m.run_trash_waits({ project: project.name, step: stepName(m, runPipeline(state, run).current.id) }), m.run_trash_leaves()]}
-        confirmLabel={m.run_move_to_trash()}
-        tone="destructive"
-        onConfirm={() => {
-          const result = trashRun(run.id)
-          onOutcome(result, { blocked: m.run_trash_blocked() })
-          return result
-        }}
-      />
-    </>
+    <FormDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setName(run.name)
+        onOpenChange(next)
+      }}
+      title={m.run_edit()}
+      size="sm"
+      confirm={confirm}
+    >
+      <TextField label={m.run_name_label()} value={name} onChange={setName} autoFocus />
+    </FormDialog>
   )
 }

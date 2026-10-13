@@ -17,6 +17,7 @@
   "verb_retry": "Tentar de novo",
   "verb_review": "Revisar",
   "verb_stack": "Empilhar",
+  "verb_save": "Salvar",
   "common_more": "Mais",
   "common_locations": "Locais",
   "common_runs": "Execuções",
@@ -2936,6 +2937,8 @@
   "run_restored": "{name} restaurada",
   "run_restore_blocked": "Restauração bloqueada",
   "run_reopen": "Reabrir",
+  "run_reopen_run": "Reabrir execução",
+  "run_reopen_summary": "As etapas voltam a ser editáveis; nenhum arquivo é movido",
   "run_reopen_blocked": "Reabertura bloqueada",
   "run_clean_up": "Limpar",
   "run_move_to_trash": "Mover para a Lixeira",
@@ -2943,6 +2946,7 @@
   "run_trash_title": "Mover {name} para a Lixeira?",
   "run_trash_waits": "Aguarda na Lixeira de {project} em {step}",
   "run_trash_leaves": "Sai das listas de execuções, seletores e totais de metas",
+  "run_trash_waits_detail": "Restaurar a traz de volta como estava",
   "run_actions_for": "Ações de {name}",
   "run_remove": "Remover",
   "run_none": "Nenhum",
@@ -2954,6 +2958,7 @@
   "run_col_reason": "Motivo",
   "run_col_state": "Estado",
   "run_col_kind": "Tipo",
+  "run_col_source": "Origem",
   "run_col_rig": "Equipamento",
   "run_select_pointing_inside_panel": "Apontamento dentro do painel",
   "run_selection_blocked": "Alteração da seleção bloqueada",
@@ -2964,6 +2969,22 @@
   "run_select_no_longer_matches": "Não corresponde mais",
   "run_select_remove_session": "Remover {session} da execução",
   "run_select_in_run": "Na execução",
+  "run_select_members_only": "Só na execução",
+  "run_select_members_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão na execução",
+        "countPlural=*": "{count} sessões na execução"
+      }
+    }
+  ],
   "run_select_new_candidates": [
     {
       "declarations": [
@@ -2980,6 +3001,21 @@
     }
   ],
   "run_select_add_count": "Adicionar {count}",
+  "run_select_add_new": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Adicionar {count} novo candidato",
+        "countPlural=*": "Adicionar {count} novos candidatos"
+      }
+    }
+  ],
   "run_select_members_no_longer_match": [
     {
       "declarations": [
@@ -3076,6 +3112,7 @@
   "run_all_in_os_trash": "Tudo na Lixeira do sistema",
   "run_nothing_prepared": "Nada preparado",
   "run_open_prepare": "Abrir Preparar",
+  "run_open_calibrate": "Abrir Calibrar",
   "run_clean_up_title": "Limpar {name}?",
   "run_clean_up_description": "Restaurável pela Lixeira do sistema.",
   "run_clean_up_moves": [
@@ -3198,6 +3235,12 @@
   "run_cal_no_master": "Nenhum master",
   "run_cal_col_light_session": "Sessão de lights",
   "run_cal_col_master": "Master",
+  "run_cal_recommended": "Recomendados",
+  "run_cal_other_masters": "Outros masters",
+  "run_cal_without_master": "Sem master",
+  "run_cal_no_calibration": "Sem calibração",
+  "run_cal_master_for": "Master para {name}",
+  "run_cal_to_review_col": "A revisar",
   "run_cal_col_criteria": "Critérios",
   "run_cal_without": "Sem {kind}",
   "run_cal_closest": "Mais próximo · {name}",
@@ -3291,6 +3334,11 @@
   ],
   "run_results_folder": "Pasta de Resultados",
   "run_results_look_again": "Procurar de novo",
+  "run_results_rescan": "Verificar de novo",
+  "run_results_ignore": "Ignorar",
+  "run_results_intermediate": "Intermediário",
+  "run_results_kind_of": "Tipo para {name}",
+  "run_results_choose_file": "Escolha um arquivo",
   "run_results_attach_ellipsis": "Anexar…",
   "run_results_attach": "Anexar",
   "run_results_attach_blocked": "Anexo bloqueado",
@@ -3375,6 +3423,8 @@
   "run_proto_source_drift_detail": "Uma ferramenta externa regrava uma origem; Abrir então detecta a divergência.",
   "run_prepare_blocked": "Preparo bloqueado",
   "run_prepare_ellipsis": "Preparar…",
+  "run_prepare_setup": "Configuração",
+  "run_prepare_inputs": "Entradas",
   "run_prepare_title": "Preparar {name}?",
   "run_prepare_title_rev": "Preparar {name} (rev {revision})?",
   "run_prepare_confirm": [
@@ -3518,6 +3568,9 @@
   "run_entry_retired": "Aposentado: {name} foi aposentado e nunca é entrada",
   "run_entry_its_location": "seu local",
   "run_entry_not_found": "Não encontrado em {path} na última varredura",
+  "run_entry_frame": "Frame",
+  "run_entry_master": "Master",
+  "run_entry_to_prepare": "A preparar",
   "run_entry_unresolved": "Membro não resolvido: não pôde ser lido quando foi selecionado",
   "run_entry_not_readable": "Ilegível em {path}",
   "run_mode_needs_space": "Requer {bytes} · {free} livres",
@@ -3660,6 +3713,10 @@
   "rungroup_panels": "Painéis",
   "rungroup_review_status": "Revisão {status}",
   "rungroup_col_panel": "Painel",
+  "rungroup_col_candidates": "Candidatos",
+  "rungroup_col_nearest": "Painel mais próximo",
+  "rungroup_col_folder": "Pasta",
+  "rungroup_col_accepted": "Aceitos",
   "rungroup_col_panel_run": "Execução do painel",
   "rungroup_col_status": "Situação",
   "rungroup_panels_label": "Painéis de {name}",
@@ -7157,6 +7214,7 @@
   "project_missing_title": "Este Projeto não está no catálogo",
   "run_missing_title": "Esta execução não está no catálogo",
   "run_step_missing_title": "Esta etapa da execução não existe",
+  "run_open_current_step": "Abrir a etapa atual",
   "rungroup_missing_title": "Este grupo de execuções não está no catálogo",
   "target_missing_title": "Este Alvo não está no catálogo",
   "tonight_moon_phase_new": "Lua nova",
@@ -7700,6 +7758,7 @@
   "run_rename": "Renomear",
   "run_rename_ellipsis": "Renomear…",
   "run_name_label": "Nome da execução",
+  "run_edit": "Editar execução",
   "run_col_coverage": "Cobertura",
   "run_col_distance": "Distância",
   "run_select_order": "Ordem",
@@ -8156,6 +8215,12 @@
   ],
   "ds_folder_picker_title": "Seletor de pastas",
   "simulation_ds_folder_picker_description": "Seletor de pastas do sistema simulado. Volumes e pastas, inclusive vazios, vêm do disco simulado; volumes offline e pastas negadas mostram o motivo.",
+  "simulation_run_writes_outputs": "Esta execução: o aplicativo grava saídas",
+  "simulation_run_finish_writing": "Esta execução: os arquivos terminam de ser gravados",
+  "simulation_run_better_master": "Esta execução: chega um master compatível mais novo",
+  "simulation_run_object_correction": "Esta execução: registrar uma correção de OBJECT",
+  "simulation_run_source_drift": "Esta execução: uma ferramenta externa regrava um frame de origem",
+  "simulation_group_writes_mosaic": "Este grupo: o aplicativo grava o mosaico montado",
   "ds_operation_title": "Operação",
   "ds_operation_description": "Em andamento com progresso, resultados por item e um status final. Usa uma indexação real.",
   "simulation_copy_nothing": "Nada para copiar: não há arquivo nem pasta com arquivos em {path}.",
@@ -8752,5 +8817,6 @@
   "catalogue_templates_fill_toggle": "Etapa em altura total",
   "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
   "catalogue_datatable_destination_nas": "NAS de arquivo",
-  "catalogue_datatable_destination_cold": "Armazenamento frio"
+  "catalogue_datatable_destination_cold": "Armazenamento frio",
+  "common_percent": "{value}%"
 }
