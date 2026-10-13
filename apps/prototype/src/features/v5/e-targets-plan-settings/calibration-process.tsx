@@ -80,7 +80,7 @@ function ProcessFlow({ process, viewing }: { process: CalibrationProcess; viewin
 
   const menu: MenuItem[] = []
   if (view.session) menu.push({ id: "open-session", label: m.calibration_open_raw_session(), run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: view.session!.id } }) })
-  if (view.master) menu.push({ id: "show-master", label: m.calibration_show_master(), run: () => follow({ to: "/calibration", search: { master: view.master!.id } }) })
+  if (view.master) menu.push({ id: "open-master", label: m.calibration_open_master(), run: () => follow({ to: "/calibration", search: { master: view.master!.id } }) })
   const status = PROCESS_STATUS[view.status]
 
   return (

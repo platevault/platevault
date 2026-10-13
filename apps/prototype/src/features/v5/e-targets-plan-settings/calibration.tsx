@@ -110,6 +110,8 @@ export function CalibrationPage() {
   const [camera, setCamera] = useState("")
   const [age, setAge] = useState("")
   const [detailId, setDetailId] = useState<MasterId | null>(search.master ?? null)
+  /** The Hidden row whose details are open: a hidden master and a dismissed offer of a listed master take different actions. */
+  const [hiddenRowId, setHiddenRowId] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [replacing, setReplacing] = useState<CalibrationMaster | null>(null)
@@ -156,7 +158,7 @@ export function CalibrationPage() {
     return result
   }
   const hide = (master: CalibrationMaster): Action => ({ id: "hide-master", label: m.calibration_hide_master(), run: () => said(hideMaster(master.id), m.calibration_hid_master({ name: fileName(master.path) })) })
-  const restore = (master: CalibrationMaster): Action => ({ id: "restore-master", label: m.calibration_restore_master(), run: () => said(restoreMaster(master.id), m.calibration_restored_master({ name: fileName(master.path) })) })
+  const show = (master: CalibrationMaster): Action => ({ id: "show-master", label: m.calibration_show_master(), run: () => said(restoreMaster(master.id), m.calibration_shown_master({ name: fileName(master.path) })) })
   const replace = (master: CalibrationMaster): Action => ({ id: "replace-master", label: m.calibration_replace(), opensDialog: true, run: () => setReplacing(master) })
   const details = (master: CalibrationMaster): Action => ({ id: "details", label: m.settings_details(), run: () => setDetailId(master.id) })
 
@@ -175,7 +177,7 @@ export function CalibrationPage() {
         dockId: "calibration-masters",
         title: masterLabel(m, open),
         status: <StatusBadge kind="master" value={open.state} />,
-        actions: open.dismissedAt ? (open.replacedBy ? [] : [restore(open)]) : [replace(open), hide(open)],
+        actions: open.dismissedAt ? (open.replacedBy ? [] : [show(open)]) : [replace(open), hide(open)],
         menu: { label: m.calibration_master(), items: masterLinks(open) },
         content: <KeyValueList items={masterFacts(m, catalog, disk, open, usage.get(open.id) ?? [], oldLabel(open), now)} />,
         onClose: () => setDetailId(null),
@@ -198,7 +200,7 @@ export function CalibrationPage() {
     const rowActions = (p: ProcessView): MenuItem[] => {
       const items: MenuItem[] = [{ id: "open-process", label: m.calibration_open_process(), run: () => openProcess(p) }]
       if (p.session) items.push({ id: "open-session", label: m.calibration_open_raw_session(), run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: p.session!.id } }) })
-      if (p.master) items.push({ id: "show-master", label: m.calibration_show_master(), run: () => setDetailId(p.master!.id) })
+      if (p.master) items.push({ id: "open-master", label: m.calibration_open_master(), run: () => setDetailId(p.master!.id) })
       return items
     }
     return (
@@ -234,18 +236,25 @@ export function CalibrationPage() {
 
   if (view === "hidden") {
     const shown = hidden.filter((d) => haystack(m, catalog, d.master).includes(needle) || (d.kind === "offer" && d.run.name.toLowerCase().includes(needle)))
-    const openHidden = open ? hidden.find((d) => d.master.id === open.id) : undefined
+    const openHidden = open ? (hidden.find((d) => hiddenId(d) === hiddenRowId && d.master.id === open.id) ?? hidden.find((d) => d.master.id === open.id)) : undefined
     const restoreHidden = (d: Dismissal): Action | null => {
-      if (d.kind === "offer") return { id: "restore-offer", label: m.calibration_restore(), run: () => said(restoreMasterOffer(d.run.id, d.master.id), m.calibration_offer_restored()) }
-      return d.master.replacedBy ? null : restore(d.master)
+      if (d.kind === "offer") return { id: "restore-offer", label: m.store_cal_restore_offer(), run: () => said(restoreMasterOffer(d.run.id, d.master.id), m.calibration_offer_restored()) }
+      return d.master.replacedBy ? null : show(d.master)
+    }
+    const openRun = (d: Dismissal): MenuItem[] => (d.kind === "offer" ? [{ id: "open-run", label: m.calibration_open_run(), run: () => follow(runStepLink(d.run, "calibrate")) }] : [])
+    const openRow = (d: Dismissal) => {
+      setHiddenRowId(hiddenId(d))
+      setDetailId(d.master.id)
     }
     const rowActions = (d: Dismissal): MenuItem[] => {
-      const items: MenuItem[] = [details(d.master)]
       const action = restoreHidden(d)
-      if (action) items.push(action)
-      if (d.kind === "offer") items.push({ id: "open-run", label: m.calibration_open_run(), run: () => follow(runStepLink(d.run, "calibrate")) })
-      return items
+      return [{ id: "details", label: m.settings_details(), run: () => openRow(d) }, ...(action ? [action] : []), ...openRun(d)]
     }
+    // The panel acts on the row it was opened from: Show master or Restore offer, never Hide.
+    const hiddenDetail: PageDetail | null =
+      detail && openHidden
+        ? { ...detail, actions: [restoreHidden(openHidden)].filter((a): a is Action => a !== null), menu: { label: m.calibration_master(), items: [...openRun(openHidden), ...masterLinks(openHidden.master)] } }
+        : detail
     return (
       <>
         <ListPage
@@ -258,7 +267,7 @@ export function CalibrationPage() {
             getRowId: hiddenId,
             initialSort: { columnId: "at", direction: "desc" },
             activeRowId: openHidden ? hiddenId(openHidden) : null,
-            onRowClick: (d) => setDetailId(d.master.id),
+            onRowClick: openRow,
             rowLabel: (d) => masterLabel(m, d.master),
             rowActions,
             primaryRowAction: restoreHidden,
@@ -270,7 +279,7 @@ export function CalibrationPage() {
               ),
             toolbar: { search: { label: m.calibration_filter_label(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery }, matchCount: shown.length },
           }}
-          detail={detail}
+          detail={hiddenDetail}
         />
         {dialogs}
       </>
