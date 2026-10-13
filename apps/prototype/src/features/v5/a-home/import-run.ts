@@ -10,20 +10,18 @@
  * pauses the import as Interrupted with its queue intact; Retry resumes it
  * once the source is back. Move hands the verified sources to the foundation
  * OS Trash engine ("import-move" episode) once every copy has verified; a
- * source whose copy failed is never trashed. Also: saving an Import source
- * and "Add existing library folder" (index in place).
+ * source whose copy failed is never trashed. Also: saving an Import source.
  */
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
 import { bundledTarget, readFiles } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
-import { registerLocation, type LocationDraft } from "@/features/t1/lib/locations"
 import { formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { sessionWithTarget } from "@/store/actions/library"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
-import { type OperationHandler, patchOperation, settleOperation, startIndexing, startOperation } from "@/store/operations"
+import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
 import type { ImportDraft } from "@/store/slices/a"
 import { type ImportPlan, routeFor, sourceOnline, type TargetChoice, TYPE_NAME } from "./import-model"
 
@@ -301,13 +299,4 @@ export function saveImportSource(name: string, path: string): CommitResult {
     updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, source: { kind: "saved", id }, newOnly: true } }))
   }
   return result
-}
-
-/** Add existing library folder: register it and index it in place; nothing in it moves (D-W11). */
-export function addLibraryFolder(draft: LocationDraft): { result: CommitResult; operationId: OperationId | null } {
-  const { result, id } = registerLocation(draft, "/import")
-  if (!result.ok || !id) return { result, operationId: null }
-  const operationId = startIndexing([id])
-  updateSlice("a", (a) => ({ ...a, lastImport: { kind: "index", operationId } }))
-  return { result, operationId }
 }

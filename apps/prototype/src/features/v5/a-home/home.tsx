@@ -24,10 +24,11 @@ import { GateLabel, StepGlyph, stepName, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import { Box } from "@/components/app/box"
 import { type Column, DataTable } from "@/components/app/data-table"
-import { announce, EmptyState, Notice } from "@/components/app/feedback"
+import { announce, EmptyState } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { CountBadge, Pill } from "@/components/app/pill"
 import { Refusal, type RefusalProps } from "@/components/app/refusal"
+import { RowActions } from "@/components/app/row-actions"
 import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
@@ -71,7 +72,7 @@ import { nowIso, type PrototypeState, updateSlice, useStore } from "@/store/core
 import { cancelOperation, pauseOperation, resumeOperation } from "@/store/operations"
 import { SessionReview } from "../d-review/review"
 import { wrapUpOf } from "../b-projects/model"
-import { AddToProjectDialog, AddToProjectMenu, type AddedNotice, addToProjectEntries, type PendingAdd, refusalOf } from "./parts"
+import { addToProjectItems, refusalOf } from "./parts"
 import { runToJoin } from "./session-model"
 
 const ROWS_PER_GROUP = 4
@@ -416,9 +417,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
   const navigate = useNavigate()
   const m = useMessages()
   const work = sessionsNeedingWork(catalog)
-  const [notice, setNotice] = useState<AddedNotice | null>(null)
   const [refusal, setRefusal] = useState<RefusalProps | null>(null)
-  const [adding, setAdding] = useState<PendingAdd | null>(null)
   const projectName = (id: string) => catalog.projects[id]?.name ?? m.home_column_project()
   // A session can be a candidate of several Projects; its library review is one.
   const unreviewed = [...new Map(work.unreviewed.map((u) => [u.session.id, u])).values()]
@@ -432,8 +431,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
       { heading: sessionLabel(m, session) },
       { label: m.verb_open(), icon: Eye, onSelect: () => openSession(sessionId) },
       { label: m.session_review_frames(), icon: ListChecks, onSelect: () => onReview(sessionId) },
-      { separator: true },
-      ...(sessionTargetId(session) ? addToProjectEntries(m, catalog, sessionId, setAdding) : [{ label: m.session_choose_target(), icon: Target, onSelect: () => openSession(sessionId, "target") }]),
+      ...(sessionTargetId(session) ? [] : [{ separator: true } as const, { label: m.session_choose_target(), icon: Target, onSelect: () => openSession(sessionId, "target") }]),
     ]
   }
 
@@ -454,11 +452,6 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
       }
     >
       <div className="space-y-3">
-        {notice ? (
-          <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={() => setNotice(null)}>{m.session_dismiss()}</Button>}>
-            {notice.note}
-          </Notice>
-        ) : null}
         {refusal ? <Refusal {...refusal} /> : null}
         {total === 0 ? (
           <p className="text-sm text-muted-foreground">{m.home_nothing_to_do()}</p>
@@ -503,7 +496,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                     key={session.id}
                     session={session}
                     detail={session.target.value ? (catalog.targets[session.target.value]?.name ?? "") : ""}
-                    action={<AddToProjectMenu sessionId={session.id} size="xs" onAdded={setNotice} />}
+                    action={<RowActions name={sessionLabel(m, session)} items={addToProjectItems(m, catalog, session.id)} />}
                   />
                 ))}
               </WorkGroup>
@@ -565,7 +558,6 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
           </ContextMenuArea>
         )}
       </div>
-      <AddToProjectDialog pending={adding} onClose={() => setAdding(null)} onAdded={setNotice} />
     </Box>
   )
 }
