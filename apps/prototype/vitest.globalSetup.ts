@@ -7,5 +7,11 @@ import { execFileSync } from "node:child_process"
  * package's own `i18n:compile` script, so the compile options stay in one place.
  */
 export default function setup(): void {
-  execFileSync("pnpm", ["i18n:compile"], { cwd: import.meta.dirname, stdio: "pipe" })
+  try {
+    execFileSync("pnpm", ["i18n:compile"], { cwd: import.meta.dirname, encoding: "utf8", stdio: "pipe" })
+  } catch (error) {
+    // pnpm and Paraglide report on both streams; vitest shows only this error.
+    const { stdout = "", stderr = "" } = error as { stdout?: string; stderr?: string }
+    throw new Error(`pnpm i18n:compile failed:\n${stdout}${stderr}`, { cause: error })
+  }
 }
