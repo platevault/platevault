@@ -15,6 +15,7 @@ import { PreviewsCatalogue } from "./previews"
 import { ShellPartsCatalogue } from "./shell-parts"
 import { StatusCatalogue } from "./status"
 import { StepFlowCatalogue } from "./step-flow"
+import { TemplatesCatalogue } from "./templates"
 
 export interface CatalogueEntry {
   id: string
@@ -79,4 +80,9 @@ export const CATALOGUE: CatalogueEntry[] = [
     Entry: FieldsCatalogue,
   },
   { id: "shell-parts", components: ["NavList", "ChecklistRing", "IssueRow", "ThemePicker", "ThemeMenuItems", "ThemeSwatch"], Entry: ShellPartsCatalogue },
+  {
+    id: "templates",
+    components: ["ListPage", "DetailPage", "StepPage", "SettingsPage", "ListSection", "DetailDock", "DetailPanel", "ViewTabs", "PageHeader", "Box", "BoxTable"],
+    Entry: TemplatesCatalogue,
+  },
 ]
