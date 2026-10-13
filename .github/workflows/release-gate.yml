@@ -22,7 +22,9 @@ name: Release Gate
 
 on:
   pull_request:
-    branches: [main]
+    # release/0.6.x carries the 0.6 maintenance release PR (release-please.yml
+    # on that branch targets it), so it gets the same gate as main's.
+    branches: [main, release/0.6.x]
   push:
     tags: ["v*"]
   workflow_dispatch: {}
