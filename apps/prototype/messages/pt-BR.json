@@ -8256,5 +8256,153 @@
   "catalogue_domain_mosaic_desc": "Painéis com o norte para cima e o leste à esquerda. Um painel é uma caixa de seleção e aceita uma sessão arrastada; um espaço tracejado adiciona um painel.",
   "catalogue_domain_mosaic_layout": "2 × 2, um excluído, espaços visíveis",
   "catalogue_domain_map_desc": "Blocos do OpenStreetMap em um pacote carregado sob demanda. O marcador segue os campos; um clique ou arrasto informa uma posição.",
-  "picker_site_manage_ellipsis": "Gerenciar locais…"
+  "picker_site_manage_ellipsis": "Gerenciar locais…",
+  "home_concept_title": "Conceitos de Início",
+  "home_concept_switch": "Conceito",
+  "home_concept_night": "Noite",
+  "home_concept_month": "Mês",
+  "home_concept_progress": "Progresso",
+  "home_concept_night_only": "Metas não cumpridas avaliadas para a noite escolhida e as 29 seguintes, e o próximo passo de cada Projeto aberto, o mais urgente primeiro",
+  "home_concept_month_only": "As próximas 30 noites lado a lado: escuridão, a Lua e as metas não cumpridas que cada noite favorece",
+  "home_concept_progress_only": "O que as noites recentes somaram a cada meta aberta, o que foi capturado mas ainda não está no Projeto e o que aguarda revisão",
+  "home_concept_planning": "Planejamento",
+  "home_concept_planned": "Planejados",
+  "home_concept_target_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} alvo",
+        "countPlural=*": "{count} alvos"
+      }
+    }
+  ],
+  "home_concept_nothing_planned": "Nada planejado",
+  "home_concept_best": "Melhor para as metas",
+  "home_concept_best_value": "{name} · {time}",
+  "home_concept_needs": "Pendências",
+  "home_concept_column_goal": "Meta",
+  "home_concept_column_channel": "Canal",
+  "home_concept_column_remaining": "Falta",
+  "home_concept_column_next_good": "Próxima boa",
+  "home_concept_column_good_nights": "Noites boas",
+  "home_concept_of_nights": "{count}/{total}",
+  "home_concept_grade_good": "Boa",
+  "home_concept_grade_marginal": "Marginal",
+  "home_concept_grade_poor": "Ruim",
+  "home_concept_goal_item": "{subject} · {channel}",
+  "home_concept_group": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} · {count} meta",
+        "countPlural=*": "{name} · {count} metas"
+      }
+    }
+  ],
+  "home_concept_goals_met": "Todas as metas cumpridas",
+  "home_concept_all_projects": "Todos os Projetos",
+  "home_concept_up_next": "A seguir",
+  "home_concept_column_project": "Projeto",
+  "home_concept_column_reason": "Motivo",
+  "home_concept_no_open_projects": "Nenhum Projeto aberto",
+  "home_concept_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame",
+        "countPlural=*": "{frames} frames"
+      }
+    }
+  ],
+  "home_concept_outlook": "Panorama",
+  "home_concept_column_night": "Noite",
+  "home_concept_column_dark": "Escuro",
+  "home_concept_moon": "Lua",
+  "home_concept_moon_value": "{illumination}% · {phase}",
+  "home_concept_column_good_for": "Boa para",
+  "home_concept_column_limited": "Limitada pela Lua",
+  "home_concept_goal_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} meta",
+        "countPlural=*": "{count} metas"
+      }
+    }
+  ],
+  "home_concept_open_in_targets": "Abrir em Alvos",
+  "home_concept_open_plan": "Abrir plano",
+  "home_concept_darkest": "Noite mais escura",
+  "home_concept_best_night": "Melhor noite",
+  "home_concept_night_fact": "{night} · {detail}",
+  "home_concept_goals_good": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Boa para {count} meta",
+        "countPlural=*": "Boa para {count} metas"
+      }
+    }
+  ],
+  "home_concept_night_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} noite",
+        "countPlural=*": "{count} noites"
+      }
+    }
+  ],
+  "home_concept_week": "{from}–{to}",
+  "home_concept_period": "Período",
+  "home_concept_capture_nights": "Noites de captura",
+  "home_concept_captured": "Capturado",
+  "home_concept_captured_value": "{frames} · {time}",
+  "home_concept_waiting_review": "Aguardando revisão",
+  "home_concept_session_item": "{session} · {frames}",
+  "home_concept_goals_moved": "Metas com avanço",
+  "home_concept_column_added": "Somado",
+  "home_concept_added": "+{amount}",
+  "home_concept_of_goal": "{amount} de {target}",
+  "home_concept_column_pending": "Pendente",
+  "home_concept_met": "Cumprida",
+  "home_concept_no_captures": "Nenhuma captura neste período"
 }
