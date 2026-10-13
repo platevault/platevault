@@ -29,6 +29,8 @@ Two things PlateVault will never do:
 | 8 | [Settings](./08-settings.md) | Every settings pane: appearance and themes, data sources, ingestion, planner tunables, and more |
 | 9 | [The safety model](./09-safety-model.md) | Reviewable plans, no silent overwrites, the audit log, archive-before-delete, protected sources |
 | 10 | [Troubleshooting](./10-troubleshooting.md) | Common error messages and what they mean, the log panel, gathering support data |
+| 11 | [Privacy and network access](./11-privacy.md) | Every network request the app makes, what it sends, and how to turn it off or avoid it |
+| 12 | [Uninstalling PlateVault](./12-uninstalling.md) | Removing each Windows, macOS and Linux package, and where your data lives |
 
 ## Conventions used in this manual
 
