@@ -658,6 +658,8 @@
     }
   ],
   "home_all": "All {count} ›",
+  "home_all_group": "{group} · All {count} ›",
+  "home_group_ready": "Ready to add",
   "home_ingestions": "Pending ingestions",
   "home_pending_work": "Pending work",
   "home_open_work": "Open work",

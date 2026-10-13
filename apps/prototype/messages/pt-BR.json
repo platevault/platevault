@@ -658,6 +658,8 @@
     }
   ],
   "home_all": "Todos ({count}) ›",
+  "home_all_group": "{group} · Todos ({count}) ›",
+  "home_group_ready": "Prontas para adicionar",
   "home_ingestions": "Ingestões pendentes",
   "home_pending_work": "Trabalho pendente",
   "home_open_work": "Trabalho em aberto",

@@ -138,7 +138,8 @@ function importFlow(m: Messages, plan: ImportPlan | null, draft: ImportDraft, st
 export function ImportPage() {
   const m = useMessages()
   const follow = useFollowLink()
-  const search = useSearch({ strict: false }) as { step?: string }
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as { step?: string; location?: string }
   const state = useStore((s) => s)
   const draft = state.slices.a.importDraft
   const plan = planImport(state, draft)
@@ -159,6 +160,17 @@ export function ImportPage() {
   useEffect(() => {
     if (preselectKey) selectSource(JSON.parse(preselectKey) as ImportSourceChoice)
   }, [preselectKey])
+  // `?location=<id>` (Home's Import and Retry): that location's folder becomes the source, a Captures one the destination too; the param then drops so the source stays changeable.
+  useEffect(() => {
+    if (!search.location) return
+    const location = state.catalog.locations[search.location]
+    if (location && !location.retiredAt) {
+      selectSource(choiceAt(state, location.path))
+      if (location.role === "captures") setDraft({ capturesLocationId: location.id })
+    }
+    void navigate({ to: "/import", search: { step: search.step ?? "source" }, replace: true } as never)
+    // Only the param's arrival applies it.
+  }, [search.location])
 
   const toSource: Action = { id: "to-source", label: m.import_choose_source(), run: () => follow(importLink("source")) }
   const body =

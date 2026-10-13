@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { World } from "./derive"
 import { writeFiles } from "./disk"
-import { homeStatus, LOW_SPACE_SHARE, newFileCount, openWork, pendingIngestions, type PendingWork, pendingWork } from "./home"
+import { homeStatus, newFileCount, openWork, pendingIngestions, type PendingWork, pendingWork } from "./home"
 import { isUnder } from "./indexing"
 import { deriveIssues } from "./issues"
 import { arrivalFiles, createSeed } from "./seed"
@@ -121,7 +121,8 @@ describe("homeStatus: locations and background jobs", () => {
     const row = () => homeStatus(world, NOW).locations.find((r) => r.location.id === location.id)!
     expect(row().space?.low).toBe(false)
     const used = volume.capacityBytes - row().space!.freeBytes
-    world.disk.volumes[volume.id] = { ...volume, capacityBytes: Math.ceil(used / (1 - LOW_SPACE_SHARE / 2)) }
+    // 1 % free: low under any threshold the owner may choose.
+    world.disk.volumes[volume.id] = { ...volume, capacityBytes: Math.ceil(used / 0.99) }
     expect(row().space?.low).toBe(true)
     world.disk.volumes[volume.id] = { ...world.disk.volumes[volume.id]!, mounted: false }
     expect(row()).toMatchObject({ availability: "offline", space: null, issue: { kind: "location-offline" } })

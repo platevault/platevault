@@ -186,7 +186,7 @@ export function HomePage() {
       title: m.home_pending_work(),
       count: work.length,
       flush: true,
-      actions: allAction(m, follow, "home-pending", work.length, { to: "/sessions" }),
+      actions: pendingAllActions(m, follow, work, catalog),
       content: <PendingTable rows={work} follow={follow} />,
     },
     {
@@ -267,11 +267,13 @@ function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follo
   ]
   const primary = (r: IngestionRow): Action | null => {
     const open = () => follow(locationLink(r.location.id))
+    // Import and Retry open Import with the location as its source (Q17); a scan cannot be undone, so Scan and Rescan open the location.
+    const importFrom = () => follow({ to: "/import", search: { step: "source", location: r.location.id } })
     switch (r.state.kind) {
       case "new-files":
-        return { id: "import", label: m.import_open(), run: open }
+        return { id: "import", label: m.import_open(), opensDialog: true, run: importFrom }
       case "stopped":
-        return { id: "retry", label: m.verb_retry(), run: open }
+        return { id: "retry", label: m.verb_retry(), run: importFrom }
       case "never-scanned":
         return { id: "scan", label: m.home_scan(), run: open }
       case "incomplete":
@@ -301,6 +303,40 @@ function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follo
 }
 
 // Pending work -----------------------------------------------------------------
+
+/**
+ * "All N ›" per kind of pending work the first rows leave out, each to its
+ * owning page filtered to those items: Sessions by facet, a run to its
+ * Project, Clean up to its Project's Clean up.
+ */
+function pendingAllActions(m: Messages, follow: Follow, work: PendingWork[], catalog: Catalog): Action[] {
+  const shown = new Set(work.slice(0, ROWS).map(workKey))
+  const kinds: PendingWork["kind"][] = ["needs-target", "unreviewed", "not-in-project", "ready-to-add", "clean-up"]
+  return kinds.flatMap((kind): Action[] => {
+    const rows = work.filter((w) => w.kind === kind)
+    const hidden = rows.filter((w) => !shown.has(workKey(w)))
+    const first = hidden[0]
+    if (!first) return []
+    const group: Record<PendingWork["kind"], () => string> = {
+      "needs-target": m.sessions_filter_needs_target,
+      unreviewed: m.status_needs_review,
+      "not-in-project": m.sessions_filter_not_in_project,
+      "ready-to-add": m.home_group_ready,
+      "clean-up": m.wrapup_cleanup_title,
+    }
+    const link: StepLink =
+      first.kind === "needs-target"
+        ? { to: "/sessions", search: { filter: "needs-target" } }
+        : first.kind === "unreviewed"
+          ? { to: "/sessions", search: { filter: "needs-review" } }
+          : first.kind === "not-in-project"
+            ? { to: "/sessions", search: { filter: "not-in-project" } }
+            : first.kind === "ready-to-add"
+              ? projectLink(first.projectId)
+              : cleanUpLink({ catalog }, first.run, first.project)
+    return [{ id: `home-pending-all-${kind}`, label: m.home_all_group({ group: group[kind](), count: formatCount(rows.length) }), run: () => follow(link) }]
+  })
+}
 
 function workKey(w: PendingWork): string {
   return w.kind === "clean-up" ? `clean-up:${w.run.id}` : `${w.kind}:${w.session.id}${w.kind === "ready-to-add" ? `:${w.projectId}` : ""}`

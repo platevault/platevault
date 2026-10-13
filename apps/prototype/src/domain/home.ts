@@ -2,7 +2,7 @@
  * Home's cross-area state (decision C8): what came in, what needs sorting,
  * what is open and what runs, each row with where its owning page shows it.
  * Every function joins existing derives; the one rule here is the low-space
- * share (`LOW_SPACE_SHARE`).
+ * threshold (`LOW_SPACE_SHARE`), pending the owner's decision.
  *
  * - `pendingIngestions`: per Captures location, a running import, a stopped
  *   or failed one, a location never scanned or whose last scan did not
@@ -248,8 +248,12 @@ export function openWork(world: World, nowMs: number, tonight: NightDate): OpenW
 // Status
 // ---------------------------------------------------------------------------
 
-/** A volume reads low on space below this share of its capacity free. */
-export const LOW_SPACE_SHARE = 0.1
+/**
+ * A volume reads low on space below this share of its capacity free.
+ * Pending owner decision (2026-10-13): the threshold, or a fixed free amount
+ * instead of a share, is the owner's call; 10 % stands in until then.
+ */
+const LOW_SPACE_SHARE = 0.1
 
 export interface LocationStatus {
   location: Location
