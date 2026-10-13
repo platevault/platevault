@@ -96,8 +96,6 @@ These SignPath conditions are not met yet. Each one blocks the application:
   OpenStreetMap tiles as soon as its form opens. It needs to load tiles only
   when you ask for them. Target lookups to CDS already have an off switch,
   **Online SIMBAD resolution**.
-- **Code signing policy on the release pages.** The GitHub release notes do
-  not link this page yet.
 
 ## Uninstalling
 

@@ -46,7 +46,8 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      release_body: ${{ steps.release.outputs.body }}
+      # The body with the code signing policy link (see the `notes` step).
+      release_body: ${{ steps.notes.outputs.body }}
     steps:
       # Mint a short-lived GitHub App installation token from the shared org
       # release app (contents:write + pull_requests:write). This is the
@@ -71,6 +72,27 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # SignPath Foundation's conditions (https://signpath.org/terms.html) ask
+      # for a "Code signing policy" link on every release page. release-please
+      # has no release-notes footer option (its config schema offers only
+      # pull-request-header and pull-request-footer), so this step appends the
+      # link to the body release-please wrote and saves it to the release. The
+      # build job passes the same body to tauri-action, so no leg drops it.
+      - name: Link the code signing policy from the release notes
+        id: notes
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+          RELEASE_PLEASE_BODY: ${{ steps.release.outputs.body }}
+        run: |
+          set -euo pipefail
+          body="$(printf '%s\n\n%s' "${RELEASE_PLEASE_BODY}" \
+            '[Code signing policy](https://github.com/platevault/platevault/blob/main/docs/release/code-signing-policy.md)')"
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --notes "${body}"
+          delimiter="BODY_$(openssl rand -hex 16)"
+          printf 'body<<%s\n%s\n%s\n' "${delimiter}" "${body}" "${delimiter}" >> "${GITHUB_OUTPUT}"
 
   build:
     name: Build & sign (${{ matrix.os }})
@@ -172,8 +194,8 @@ jobs:
       # already published a real (non-draft) GitHub Release for this tag, so
       # this step finds that release by tag and uploads bundles/signatures to
       # it directly. In v1, tauri-action also updates the existing release name
-      # and body from releaseName/releaseBody — we pass the same values
-      # release-please wrote, so the update is effectively a no-op.
+      # and body from releaseName/releaseBody. We pass the name and body the
+      # release-please job already saved, so the update is effectively a no-op.
       #
       # v1 breaking changes that do NOT bite us:
       #   - .app.tar.gz (macOS updater artifact) now embeds the app version in
