@@ -2,10 +2,11 @@ import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { m } from "@/lib/i18n"
 import type { Action } from "./contracts"
 import { TextField } from "./fields"
-import { FormDialog } from "./form-dialog"
+import { DialogFooter, FormDialog } from "./form-dialog"
 
 /** Fails unless each element comes after the one before it in document order. */
 function expectInOrder(...elements: HTMLElement[]) {
@@ -14,10 +15,11 @@ function expectInOrder(...elements: HTMLElement[]) {
   }
 }
 
-function RenameDialog({ confirm, skip }: { confirm: Action; skip?: Action }) {
+/** A dialog with one text field, where Enter submits the form by implicit submission. */
+function OneFieldDialog({ confirm }: { confirm: Action }) {
   const [name, setName] = useState("M 31 Ha")
   return (
-    <FormDialog open onOpenChange={() => {}} title="Rename run" confirm={confirm} skip={skip}>
+    <FormDialog open onOpenChange={() => {}} title="Edit run" confirm={confirm}>
       <TextField label="Name" value={name} onChange={setName} />
     </FormDialog>
   )
@@ -25,8 +27,15 @@ function RenameDialog({ confirm, skip }: { confirm: Action; skip?: Action }) {
 
 describe("DialogFooter", () => {
   it("puts Cancel first, then Skip, then the dialog's action", async () => {
-    render(<RenameDialog confirm={{ id: "save", label: "Save", kind: "primary", run: vi.fn() }} skip={{ id: "skip", label: "Skip", run: vi.fn() }} />)
-    const dialog = await screen.findByRole("dialog", { name: "Rename run" })
+    render(
+      <Dialog open>
+        <DialogContent>
+          <DialogTitle>Edit run</DialogTitle>
+          <DialogFooter confirm={{ id: "save", label: "Save", kind: "primary", run: vi.fn() }} skip={{ id: "skip", label: "Skip", run: vi.fn() }} />
+        </DialogContent>
+      </Dialog>,
+    )
+    const dialog = await screen.findByRole("dialog", { name: "Edit run" })
     const cancel = within(dialog).getByRole("button", { name: m.verb_cancel() })
     const skip = within(dialog).getByRole("button", { name: "Skip" })
     const save = within(dialog).getByRole("button", { name: "Save" })
@@ -38,7 +47,7 @@ describe("FormDialog", () => {
   it("submits on Enter in a field while the action is available", async () => {
     const user = userEvent.setup()
     const run = vi.fn()
-    render(<RenameDialog confirm={{ id: "save", label: "Save", kind: "primary", run }} />)
+    render(<OneFieldDialog confirm={{ id: "save", label: "Save", kind: "primary", run }} />)
     await user.type(await screen.findByRole("textbox", { name: "Name" }), "{Enter}")
     expect(run).toHaveBeenCalledOnce()
   })
@@ -47,8 +56,19 @@ describe("FormDialog", () => {
     const user = userEvent.setup()
     const run = vi.fn()
     const unavailable = { action: "Save", reason: "The name is taken", blockers: [] }
-    render(<RenameDialog confirm={{ id: "save", label: "Save", kind: "primary", run, unavailable }} />)
+    render(<OneFieldDialog confirm={{ id: "save", label: "Save", kind: "primary", run, unavailable }} />)
     await user.type(await screen.findByRole("textbox", { name: "Name" }), "{Enter}")
     expect(run).not.toHaveBeenCalled()
+  })
+
+  // A one-field form submits on Enter even without a submit button (implicit submission).
+  it("never runs a destructive action on Enter in a field, while a click still runs it", async () => {
+    const user = userEvent.setup()
+    const run = vi.fn()
+    render(<OneFieldDialog confirm={{ id: "delete", label: "Delete run", kind: "destructive", run }} />)
+    await user.type(await screen.findByRole("textbox", { name: "Name" }), "{Enter}")
+    expect(run).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Delete run" }))
+    expect(run).toHaveBeenCalledOnce()
   })
 })
