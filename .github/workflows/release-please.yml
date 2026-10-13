@@ -412,25 +412,26 @@ jobs:
 
       # minisign over the final bytes: Authenticode just rewrote these files.
       # Writes signed/<file>.sig, the same format the bundler writes, from the same
-      # key. Once @tauri-apps/cli is 2.12 or later, pass `--app-version` as well,
-      # so the trusted comment carries the version the way the bundler's 2.12
-      # signatures do. tauri-plugin-updater 2.13 checks a signed version whenever
-      # one is present; `requireSignedVersion` only decides whether a signature
-      # without one is rejected. Without `--app-version`, these signatures would
-      # break Windows updates alone if requireSignedVersion were ever turned on.
+      # key. `--app-version` records the release version in the trusted comment,
+      # as the bundler does for its own signatures, and it is read from the same
+      # tauri.conf.json the updater-manifest job announces in latest.json.
+      # tauri-plugin-updater 2.13 rejects an update whose signed version differs
+      # from latest.json's, and with `requireSignedVersion` on it also rejects a
+      # signature that carries no version.
       - name: Sign the signed bundles for the updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          app_version="$(jq -er .version apps/desktop/src-tauri/tauri.conf.json)"
           for submitted in to-sign/*; do
             name="$(basename -- "${submitted}")"
             if [ ! -f "signed/${name}" ]; then
               echo "::error::SignPath returned no signed/${name}. The artifact configuration must keep each file at the artifact root under its own name."
               exit 1
             fi
-            pnpm --dir apps/desktop exec tauri signer sign "${PWD}/signed/${name}"
+            pnpm --dir apps/desktop exec tauri signer sign --app-version "${app_version}" "${PWD}/signed/${name}"
           done
 
       # Attest the SIGNED bundles, and do it before the upload below. Authenticode
