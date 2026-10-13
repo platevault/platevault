@@ -5,7 +5,9 @@
  * - Sorting: a column sorts by its `sortValue` unless it is `static` (row
  *   actions, a thumbnail). The header is a borderless button with
  *   `aria-sort`; only the active column shows its arrow, and the arrow's room
- *   is kept so sorting never moves a header. Null values sort last.
+ *   is kept so sorting never moves a header. Null values sort last. The sort
+ *   is the table's own (`initialSort`) or the host's (`sort`, `onSortChange`),
+ *   and `sortRows` orders rows exactly as the table shows them.
  * - Selection: controlled checkbox column with a select-all for the rows
  *   shown. Filtering is the caller's job (`rows` are the rows the filters
  *   leave): selection ids are never dropped here, and the batch bar counts the
@@ -36,7 +38,7 @@
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
  */
-import { ArrowDown, ArrowUp, ChevronRight, X } from "lucide-react"
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from "lucide-react"
 import {
   type FocusEvent,
   Fragment,
@@ -56,6 +58,7 @@ import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCount } from "@/lib/format"
@@ -84,10 +87,15 @@ export interface DataTableSelection<T> {
   /** Accessible name fragment for the row checkbox, e.g. the session name. */
   rowLabel: (row: T) => string
   isSelectable?: (row: T) => boolean
-  /** The batch bar's count as one complete message, when the noun must agree ("3 sessões selecionadas"); default "3 selected". */
+  /** The count as one complete message, when the noun must agree ("3 sessões selecionadas", "12 sessions in the run"); default "3 selected" ("12 included" in membership). */
   countLabel?: (count: number) => string
-  /** Shows the selected rows the filters hide (clears the filters, or picks a "Selected" facet); the batch bar offers it as Show. */
+  /** Shows the selected rows the filters hide (clears the filters, or picks a "Selected" facet); the batch bar or the membership line offers it as Show. */
   onShowHidden?: () => void
+  /**
+   * The selection is the data (a run's sessions, §5.4): the toolbar row stays, no batch bar replaces it and
+   * `batchActions` are not shown. A line under the toolbar row counts the members and the ones the filters hide.
+   */
+  membership?: boolean
 }
 
 export interface DataTableGrouping<T> {
@@ -99,8 +107,46 @@ export interface DataTableGrouping<T> {
   compare?: (a: string, b: string) => number
 }
 
-/** The toolbar slot's content: the FilterBar controls, then the toolbar actions. `matchCount` defaults to the rows shown. */
+/** A table's sort: one column, ascending or descending. */
+export interface TableSort {
+  columnId: string
+  direction: "asc" | "desc"
+}
+
+/**
+ * The rows in the order a DataTable with this sort shows them (groups aside): by the column's
+ * `sortValue`, nulls last in either direction; unchanged for no sort, a static column or one without a value.
+ */
+export function sortRows<T>(rows: T[], columns: readonly ColumnContract<T>[], sort: TableSort | null): T[] {
+  const column = sort ? columns.find((c) => c.id === sort.columnId) : undefined
+  if (!sort || !column?.sortValue || column.static) return rows
+  const factor = sort.direction === "asc" ? 1 : -1
+  const value = column.sortValue
+  return [...rows].sort((a, b) => {
+    const va = value(a)
+    const vb = value(b)
+    if (va === null && vb === null) return 0
+    if (va === null) return 1
+    if (vb === null) return -1
+    return (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))) * factor
+  })
+}
+
+/**
+ * One labelled single choice in the toolbar that is not a filter: no "All" and no chip. Its trigger reads
+ * "Destination: Archive NAS ▾"; Archive's destination is the case.
+ */
+export interface DataTableToolbarSelect {
+  label: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (value: string) => void
+  disabled?: boolean
+}
+
+/** The toolbar slot's content: the FilterBar controls, then the select and the toolbar actions. `matchCount` defaults to the rows shown. */
 export interface DataTableToolbar extends FilterBarProps {
+  select?: DataTableToolbarSelect
   actions?: Action[]
 }
 
@@ -119,7 +165,11 @@ interface DataTableBaseProps<T> {
   columns: ColumnContract<T>[]
   getRowId: (row: T) => string
   selection?: DataTableSelection<T>
-  initialSort?: { columnId: string; direction: "asc" | "desc" }
+  /** The first sort of an uncontrolled table. */
+  initialSort?: TableSort
+  /** A controlled sort (null: unsorted): the host keeps it and gets each header click through `onSortChange`. */
+  sort?: TableSort | null
+  onSortChange?: (sort: TableSort) => void
   /** Shown instead of the body when there are no rows. */
   empty?: ReactNode
   loading?: boolean
@@ -129,8 +179,12 @@ interface DataTableBaseProps<T> {
   activeRowId?: string | null
   rowClassName?: (row: T) => string | undefined
   className?: string
-  /** "frame" (default) scrolls long tables inside their frame with a pinned header; "none" grows with content. */
-  scroll?: "frame" | "none"
+  /**
+   * "frame" (default) scrolls long tables inside their frame with a pinned header; "none" grows with content;
+   * "fill" makes the table take the rest of a flex-column parent (a template body) and scroll inside it, with
+   * the header row pinned and the toolbar row fixed above it.
+   */
+  scroll?: "frame" | "none" | "fill"
   /**
    * Show rows in groups inside this one table. Columns line up across groups
    * because they are one table; the sort applies within each group, and
@@ -189,6 +243,8 @@ export function DataTable<T>({
   getRowId,
   selection,
   initialSort,
+  sort: controlledSort,
+  onSortChange,
   empty,
   loading,
   error,
@@ -213,7 +269,8 @@ export function DataTable<T>({
   // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
   // goes to the first control of the toolbar row.
   const runner = useAction({ focusAfterConfirm: () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE) })
-  const [sort, setSort] = useState(initialSort ?? null)
+  const [ownSort, setOwnSort] = useState(initialSort ?? null)
+  const sort = controlledSort === undefined ? ownSort : controlledSort
   const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
   const [expanded, setExpanded] = useState(() => new Set(expand?.defaultExpanded ?? []))
   const frame = useRef<HTMLDivElement>(null)
@@ -221,10 +278,12 @@ export function DataTable<T>({
   const slot = useRef<HTMLDivElement>(null)
   const slotHadFocus = useRef(false)
   const selectedCount = selection?.selected.length ?? 0
-  useStatusSelection(selectedCount)
+  const membership = selection?.membership === true
+  // Members are data, not a selection to act on: the status bar does not count them.
+  useStatusSelection(membership ? 0 : selectedCount)
 
-  const hasSlot = toolbar !== undefined || (selection !== undefined && batchActions !== undefined)
-  const batchShown = hasSlot && selectedCount > 0
+  const hasSlot = toolbar !== undefined || membership || (selection !== undefined && batchActions !== undefined)
+  const batchShown = hasSlot && !membership && selectedCount > 0
   const chips = useFacetChips({ ...toolbar, matchCount: toolbar?.matchCount ?? rows.length })
 
   // Scroll padding the width of the pinned columns, so Tab never leaves a
@@ -249,20 +308,7 @@ export function DataTable<T>({
     slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)?.focus()
   }, [batchShown])
 
-  const sorted = useMemo(() => {
-    const column = sort ? columns.find((c) => c.id === sort.columnId) : undefined
-    if (!sort || !column?.sortValue || column.static) return rows
-    const factor = sort.direction === "asc" ? 1 : -1
-    const value = column.sortValue
-    return [...rows].sort((a, b) => {
-      const va = value(a)
-      const vb = value(b)
-      if (va === null && vb === null) return 0
-      if (va === null) return 1
-      if (vb === null) return -1
-      return (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))) * factor
-    })
-  }, [rows, columns, sort])
+  const sorted = useMemo(() => sortRows(rows, columns, sort), [rows, columns, sort])
 
   // One body per group (keeping the sort inside each), or one body for all rows.
   const bodies = useMemo(() => {
@@ -382,6 +428,7 @@ export function DataTable<T>({
     stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
     // A shown (deprecated) SelectionBar's height is left free (`--selection-bar-h`), so the bar never covers a row.
     scroll === "frame" && "max-h-[calc(100dvh-14rem-var(--selection-bar-h,0px))]",
+    scroll === "fill" && "min-h-0 flex-1",
     className,
   )
 
@@ -391,11 +438,11 @@ export function DataTable<T>({
       <button
         type="button"
         className={cn("group/sort inline-flex h-6 items-center gap-1 rounded-sm hover:text-foreground", column.align === "right" && "flex-row-reverse", active && "text-foreground")}
-        onClick={() =>
-          setSort((current) =>
-            current?.columnId === column.id ? { columnId: column.id, direction: current.direction === "asc" ? "desc" : "asc" } : { columnId: column.id, direction: "asc" },
-          )
-        }
+        onClick={() => {
+          const next: TableSort = sort?.columnId === column.id ? { columnId: column.id, direction: sort.direction === "asc" ? "desc" : "asc" } : { columnId: column.id, direction: "asc" }
+          if (controlledSort === undefined) setOwnSort(next)
+          onSortChange?.(next)
+        }}
       >
         {column.header}
         {/* Only the active column shows its arrow; the others keep its room, and hint it on hover and focus. */}
@@ -606,6 +653,8 @@ export function DataTable<T>({
   if (!hasSlot) {
     return (
       <>
+        {/* A refused or failed row action shows above the table it came from. */}
+        {runner.feedback}
         {framed}
         {runner.dialog}
       </>
@@ -613,12 +662,14 @@ export function DataTable<T>({
   }
 
   const hidden = selection ? selection.selected.length - shownSelectedOf(rows, getRowId, selectedSet) : 0
-  const countLabel = selection?.countLabel?.(selectedCount) ?? m.table_selected_count({ count: selectedCount, n: formatCount(selectedCount) })
+  const countLabel =
+    selection?.countLabel?.(selectedCount) ??
+    (membership ? m.table_membership_count({ count: selectedCount, n: formatCount(selectedCount) }) : m.table_selected_count({ count: selectedCount, n: formatCount(selectedCount) }))
   return (
-    <div className="space-y-1.5">
+    <div className={scroll === "fill" ? "flex min-h-0 flex-1 flex-col gap-1.5" : "space-y-1.5"}>
       <div
         ref={slot}
-        className={cn("flex min-w-0 items-center gap-2", TOOLBAR_ROW)}
+        className={cn("flex min-w-0 shrink-0 items-center gap-2", TOOLBAR_ROW)}
         onFocus={() => {
           slotHadFocus.current = true
         }}
@@ -639,9 +690,10 @@ export function DataTable<T>({
         ) : toolbar ? (
           <>
             <FilterControls {...toolbar} />
-            {toolbar.actions && toolbar.actions.length > 0 ? (
-              <div className="ml-auto shrink-0">
-                <ActionBar actions={toolbar.actions} runner={runner} />
+            {toolbar.select || (toolbar.actions && toolbar.actions.length > 0) ? (
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {toolbar.select ? <ToolbarSelect {...toolbar.select} /> : null}
+                {toolbar.actions && toolbar.actions.length > 0 ? <ActionBar actions={toolbar.actions} runner={runner} /> : null}
               </div>
             ) : null}
           </>
@@ -652,6 +704,7 @@ export function DataTable<T>({
           {batchShown ? countLabel : null}
         </span>
       </div>
+      {membership && selection ? <MembershipLine countLabel={countLabel} hidden={hidden} onShowHidden={selection.onShowHidden} /> : null}
       {runner.feedback}
       {toolbar ? <FilterChips {...chips} /> : null}
       {framed}
@@ -665,6 +718,51 @@ function shownSelectedOf<T>(rows: T[], getRowId: (row: T) => string, selected: S
   let shown = 0
   for (const row of rows) if (selected.has(getRowId(row))) shown += 1
   return shown
+}
+
+/** The toolbar's one labelled choice: "Destination: Archive NAS ▾" with a radio list; picking closes it. */
+function ToolbarSelect({ label, value, options, onChange, disabled = false }: DataTableToolbarSelect) {
+  const m = useMessages()
+  const chosen = options.find((option) => option.value === value)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger disabled={disabled} render={<Button size="sm" variant="outline" className="shrink-0" />}>
+        {chosen ? m.filter_bar_facet_value({ label, value: chosen.label }) : label}
+        <ChevronDown data-icon="inline-end" aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto min-w-48">
+        <DropdownMenuRadioGroup value={value} onValueChange={(next) => onChange(String(next))}>
+          {options.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** Membership mode's count line under the toolbar row: "12 sessions in the run · 2 hidden by filters [Show]". Always shown, so a change moves nothing. */
+function MembershipLine({ countLabel, hidden, onShowHidden }: { countLabel: string; hidden: number; onShowHidden?: () => void }) {
+  const m = useMessages()
+  return (
+    <div data-membership="" className="flex h-6 shrink-0 items-center gap-1 text-xs text-muted-foreground">
+      <span aria-live="polite" className="font-medium text-foreground tabular-nums">
+        {countLabel}
+      </span>
+      {hidden > 0 ? (
+        <>
+          <span className="truncate">· {m.table_selection_hidden({ count: hidden, n: formatCount(hidden) })}</span>
+          {onShowHidden ? (
+            <Button size="xs" variant="ghost" onClick={onShowHidden}>
+              {m.table_selection_show()}
+            </Button>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
 }
 
 /** The toolbar row while rows are selected: the count, what the filters hide, the batch actions and Clear selection. */
