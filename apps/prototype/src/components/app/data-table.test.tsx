@@ -169,6 +169,31 @@ describe("DataTable", () => {
     expect(sortRows(ROWS, COLUMNS, { columnId: "preview", direction: "asc" })).toBe(ROWS)
   })
 
+  it("truncate: the text sits in a track with no min-content width, and shows in full on hover only while cut", async () => {
+    const user = userEvent.setup()
+    const columns: Column<Frame>[] = [
+      { id: "name", header: "Name", cell: (row) => row.name, sortValue: (row) => row.name, rowHeader: true, truncate: true },
+      { id: "size", header: "Size", cell: (row) => row.size, sortValue: (row) => row.size, align: "right" },
+    ]
+    render(<DataTable label="Frames" rows={ROWS} columns={columns} getRowId={(row) => row.id} />)
+    const cell = screen.getByRole("rowheader", { name: "Vega" })
+    const text = within(cell).getByText("Vega")
+    // One minmax(0, 1fr) grid track: the column can narrow below its text, so the truncated columns share the frame.
+    expect(text).toHaveClass("truncate")
+    expect(text.parentElement).toHaveClass("grid", "grid-cols-1")
+    expect(cell).not.toHaveClass("whitespace-nowrap")
+    expect(screen.getByRole("cell", { name: "3" })).toHaveClass("whitespace-nowrap")
+
+    Object.defineProperty(text, "clientWidth", { configurable: true, value: 40 })
+    Object.defineProperty(text, "scrollWidth", { configurable: true, value: 80 })
+    await user.hover(text)
+    expect(text).toHaveAttribute("title", "Vega")
+    Object.defineProperty(text, "scrollWidth", { configurable: true, value: 40 })
+    await user.unhover(text)
+    await user.hover(text)
+    expect(text).not.toHaveAttribute("title")
+  })
+
   describe("selection", () => {
     const toolbar = { search: { label: "Search frames", value: "", onChange: vi.fn() } }
     const batch = () => [{ id: "trash", label: "Move to Trash", run: vi.fn() }]

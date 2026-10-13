@@ -34,6 +34,12 @@
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
  *   and the first column stay in view while a wide table scrolls sideways,
  *   and so does the row-actions column at the right edge.
+ * - Truncation (`truncate` columns): a cell cuts its text with an ellipsis
+ *   and shows it in full on hover while it is cut. Its text has no
+ *   min-content width, so a frame too narrow for every column's text shrinks
+ *   the truncated columns, each in proportion to its width, while the others
+ *   keep theirs: the table stays inside its frame wherever the untruncated
+ *   columns fit.
  * - Click to act (opt-in `onRowClick`): a click on the row outside its
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
@@ -234,6 +240,23 @@ function titleWhenCut(event: PointerEvent<HTMLElement>) {
   const element = event.currentTarget
   if (element.scrollWidth > element.clientWidth) element.title = element.textContent ?? ""
   else element.removeAttribute("title")
+}
+
+/**
+ * A truncated cell's content. The grid's one `minmax(0, 1fr)` track gives it no min-content width, so under
+ * the table's auto layout a truncated column can give up width down to its header's, while every other
+ * column keeps its content width; the cell's `max-w-*` still caps how wide it grows. When the frame is too
+ * narrow, the truncated columns share what the other columns leave, each in proportion to its own width,
+ * and cut their text with the full text on hover (T2).
+ */
+function Truncated({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-1">
+      <div className="truncate" onPointerEnter={titleWhenCut}>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 export function DataTable<T>({
@@ -569,9 +592,8 @@ export function DataTable<T>({
                       </TableCell>
                     ) : null}
                     {columns.map((column, columnIndex) => {
-                      const content = column.cell(row)
+                      const content = column.truncate ? <Truncated>{column.cell(row)}</Truncated> : column.cell(row)
                       const disclosure = columnIndex === 0 && expand !== undefined
-                      const truncate = column.truncate ? { className: "truncate", onPointerEnter: titleWhenCut } : undefined
                       return (
                         <TableCell
                           key={column.id}
@@ -580,12 +602,10 @@ export function DataTable<T>({
                           aria-label={disclosure && column.rowHeader ? nameOf(row) : undefined}
                           className={cn(
                             column.truncate ? "max-w-72" : "whitespace-nowrap",
-                            !disclosure && truncate?.className,
                             column.align === "right" && "text-right",
                             column.className,
                             columnIndex === 0 && pinned(columnPin),
                           )}
-                          onPointerEnter={disclosure ? undefined : truncate?.onPointerEnter}
                         >
                           {disclosure ? (
                             <div className="flex min-w-0 items-center gap-1">
@@ -603,9 +623,7 @@ export function DataTable<T>({
                               ) : (
                                 <span aria-hidden="true" className="size-6 shrink-0" />
                               )}
-                              <div className={cn("min-w-0", truncate?.className)} onPointerEnter={truncate?.onPointerEnter}>
-                                {content}
-                              </div>
+                              <div className="min-w-0">{content}</div>
                             </div>
                           ) : (
                             content
