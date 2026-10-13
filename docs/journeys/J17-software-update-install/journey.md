@@ -78,7 +78,7 @@ install) leaves the previously running install completely untouched.
   date". The section displays the currently running app version (#845).
 - **Planned:** a system notification carrying both Install now and Install
   on quit (owner, 2026-10-13), built per OS in the shared Rust updater and
-  tracked separately.
+  tracked separately (astro-plan-c72oo); the in-app notice is the interim.
 
 ### S2 — Install now {#S2}
 - **Do:** With "Update available" shown, choose **Install now**.

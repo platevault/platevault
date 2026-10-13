@@ -116,7 +116,6 @@ use crate::commands::protection::{
     source_protection_set,
 };
 use crate::commands::recovery::recovery_status;
-use crate::update_exit_gate::update_install_on_quit_begin;
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
     equipment_list, roots_delete, roots_list, roots_register, roots_remap, roots_remap_apply,
@@ -143,6 +142,7 @@ use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
 };
+use crate::update_exit_gate::update_install_on_quit_begin;
 
 /// Shared base for specta builder — chain common config and all production
 /// commands.  Returns the builder before any feature-gated commands are added.
