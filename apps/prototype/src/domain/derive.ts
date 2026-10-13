@@ -324,6 +324,35 @@ export function projectStatus(project: Project): ProjectStatus {
   return project.archive ? "archived" : "done"
 }
 
+/** The header's StatusBadge word (C2, D10): Open, Closed, or Archived (Closed with an Archive). */
+export const PROJECT_STATUS_NAME: Record<ProjectStatus, MessageRef> = { open: msg("status_open"), done: msg("status_closed"), archived: msg("status_archived") }
+
+export type ProjectTabId = "runs" | "wrap-up"
+
+export interface ProjectTabs {
+  status: ProjectStatus
+  tabs: Array<{ id: ProjectTabId; label: MessageRef; count: number | null }>
+  /** Wrap up's EmptyState until every run is Finished or Trashed (§5.5); null once Wrap up is available or the Project is closed. */
+  wrapUpUnavailable: FlowGate | null
+}
+
+/**
+ * The Project page's StatusBadge and its two tabs, Runs and Wrap up (D10, §5.7),
+ * in place of the stage strip (`projectStageStrip`). Runs counts the runs
+ * outside the Trash; Wrap up reads its one line until it is available.
+ */
+export function projectTabs(world: World, project: Project): ProjectTabs {
+  const wrapUp = wrapUpFlowState(world, project)
+  return {
+    status: projectStatus(project),
+    tabs: [
+      { id: "runs", label: msg("common_runs"), count: projectRuns(world.catalog, project.id).length },
+      { id: "wrap-up", label: msg("wrapup_action"), count: null },
+    ],
+    wrapUpUnavailable: wrapUp.unavailable,
+  }
+}
+
 /** Runs of a Project outside its Trash, oldest first. */
 export function projectRuns(catalog: Catalog, projectId: ProjectId): Run[] {
   return Object.values(catalog.runs)
@@ -1402,7 +1431,10 @@ export function projectNext(world: World, project: Project, nowMs: number, wrapU
   return { label: msg("domain_next_start_run"), reason: msg("domain_reason_choose_subject_rig"), link: projectLink(project.id, { start: "run" }), step: null }
 }
 
-/** Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run. */
+/**
+ * Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run.
+ * @deprecated D10: the StatusBadge (`projectTabs`, `PROJECT_STATUS_NAME`) and Up next (`projectNext`) replace stages; W3 migrates Home and the Projects list, W4 removes this.
+ */
 export function projectStage(world: World, project: Project): { label: MessageRef; step: RunStep | null; state: GateState } {
   if (project.state === "done") return { label: project.archive ? msg("status_archived") : msg("status_done"), step: null, state: "done" }
   const runs = projectRuns(world.catalog, project.id)
@@ -1486,6 +1518,7 @@ export type ProjectStageId = "open" | "runs" | "wrap-up" | "done" | "archived"
 /**
  * The Project header's stage strip: Open → Runs → Wrap up → Done (or
  * Archived). Earlier stages read done, the current one current.
+ * @deprecated D10: tabs Runs · Wrap up and a StatusBadge (`projectTabs`) replace the strip; P5 migrates the Project page, W4 removes this.
  */
 export function projectStageStrip(catalog: Catalog, project: Project): { current: ProjectStageId; stages: Array<{ id: ProjectStageId; label: MessageRef; state: "done" | "current" | "todo" }> } {
   const runs = projectRuns(catalog, project.id)
@@ -1744,9 +1777,10 @@ export interface RunFlowState {
  * Results' Proceed (D1, C2). There is no Review step (review happens at
  * intake, P-REV2) and no Done step. A step is finished only when every step
  * before it is; one that was settled before but no longer holds reads Redo.
- * - Select: a saved revision whose sessions are all Ready. A draft that only
- *   library marks made ("Inputs changed") keeps Select saved and gates
- *   Prepare with "Inputs changed · Refresh ▸" (C10).
+ * - Select: a saved revision with no draft, whose sessions are all Ready.
+ *   Library marks that change the membership of a run not yet prepared
+ *   leave a draft: Select is current again and Select and Prepare read
+ *   "Inputs changed · Refresh" until Proceed saves it (C10).
  * - Calibrate: every row has a master or No calibration, recorded.
  * - Prepare: the latest revision is prepared and verified.
  * - Results: finished by Finish run, once nothing is still being written.
@@ -1770,8 +1804,8 @@ export function runFlowState(world: World, run: Run): RunFlowState {
       : notReady.length > 0
         ? { reason: msg("flow_sessions_need_review", { count: notReady.length }), blockers: notReady.map((s) => ({ label: sessionRef(s), link: sessionIntakeLink(s.id, "review") })) }
         : null
-  const selectDone = latest !== null && (run.draft === null || inputsChanged) && selectGate === null
-  const selectSummary = run.draft && !inputsChanged ? msg("status_unsaved_changes") : latest ? msg("domain_status_saved_revision", { revision: latest.revision }) : msg("status_not_saved")
+  const selectDone = latest !== null && run.draft === null && selectGate === null
+  const selectSummary = inputsChanged ? msg("flow_inputs_changed") : run.draft ? msg("status_unsaved_changes") : latest ? msg("domain_status_saved_revision", { revision: latest.revision }) : msg("status_not_saved")
 
   // 2 Calibrate
   const setup = runSetup(catalog, run)
@@ -1794,16 +1828,14 @@ export function runFlowState(world: World, run: Run): RunFlowState {
   const profile = setup.profileId ? (catalog.profiles[setup.profileId] ?? null) : null
   const corrections = runCorrections(catalog, latest, profile)
   const prepared = prepCurrent?.state === "prepared" && !prepCurrent.unverified
-  const prepareDone = calibrateDone && !inputsChanged && prepared
+  const prepareDone = calibrateDone && prepared
   const prepareGate: FlowGate | null = !selectDone
     ? { reason: msg("domain_gate_save_first"), blockers: [{ label: stepLabel("select"), link: link("select") }] }
-    : inputsChanged
-      ? { reason: msg("flow_inputs_changed"), blockers: [{ label: msg("flow_inputs_changed"), link: link("select") }] }
-      : !calibrateDone
-        ? { reason: msg("flow_resolve_calibration_first"), blockers: [{ label: stepLabel("calibrate"), link: link("calibrate") }] }
-        : !profile
-          ? { reason: msg("flow_choose_profile"), blockers: [] }
-          : runningGate(running)
+    : !calibrateDone
+      ? { reason: msg("flow_resolve_calibration_first"), blockers: [{ label: stepLabel("calibrate"), link: link("calibrate") }] }
+      : !profile
+        ? { reason: msg("flow_choose_profile"), blockers: [] }
+        : runningGate(running)
   const prepState: MessageRef = !prepCurrent
     ? msg("status_not_started")
     : prepCurrent.state === "running" || prepCurrent.state === "paused"
@@ -1815,7 +1847,11 @@ export function runFlowState(world: World, run: Run): RunFlowState {
             ? msg("status_unverified")
             : msg("status_prepared")
           : msg("status_failed")
-  const prepareSummary = corrections.values.length > 0 ? joinRefs([prepState, msg("flow_corrected_values", { count: corrections.values.length })], " · ") : prepState
+  const prepareSummary = inputsChanged
+    ? msg("flow_inputs_changed")
+    : corrections.values.length > 0
+      ? joinRefs([prepState, msg("flow_corrected_values", { count: corrections.values.length })], " · ")
+      : prepState
 
   // 4 Results
   const { products } = runResults(catalog, run.id)
@@ -1849,9 +1885,12 @@ export type SessionIntakeStepId = "target" | "rig" | "review"
 
 export const SESSION_INTAKE_STEPS: SessionIntakeStepId[] = ["target", "rig", "review"]
 
+/** "Target", "Rig", "Review". */
+export const SESSION_INTAKE_NAME: Record<SessionIntakeStepId, MessageRef> = { target: msg("sessions_column_target"), rig: msg("sessions_column_rig"), review: msg("step_review") }
+
 export interface SessionIntakeState {
   steps: Array<DerivedStep<SessionIntakeStepId>>
-  /** The first step whose gate is unmet; Review once the session is Ready. */
+  /** The first step not settled; Review once the session is Ready. */
   current: SessionIntakeStepId
   readiness: SessionReadiness
   /** Unfinished runs whose prepared view holds the session's review (C10). */
@@ -1869,11 +1908,27 @@ export function nextInReviewQueue(catalog: Catalog, session: Session): Session |
   return after ?? queue[0] ?? null
 }
 
+/** Where intake opens a session: its first step that is not settled, else Review (C14). */
+export function sessionIntakeEntry(catalog: Catalog, session: Session): StepLink {
+  const readiness = sessionReadiness(catalog, session)
+  return sessionIntakeLink(session.id, readiness === "needs-target" ? "target" : readiness === "needs-rig" ? "rig" : "review")
+}
+
+/** Where Import ends (C14): the first imported session the review queue holds, at its first open step; null when every one is Ready. */
+export function importReviewLink(catalog: Catalog, sessionIds: SessionId[]): StepLink | null {
+  const imported = new Set(sessionIds)
+  const first = reviewQueue(catalog).find((s) => imported.has(s.id))
+  return first ? sessionIntakeEntry(catalog, first) : null
+}
+
 /**
  * Session intake: Target → Rig → Review, Finish review on the last step
  * (§5.3). Each step's data is the session's own, so a step reads finished
- * whenever its gate holds: a settled Target, a settled rig, 0 Unreviewed.
- * A Ready session's flow is finished.
+ * whenever it holds: a settled Target, a settled rig, 0 Unreviewed. Only
+ * Review has a domain gate (every frame Usable or Unusable, C10); Target's
+ * and Rig's Proceed confirm what the page's picker holds, so the builder
+ * gates them on that choice. A Ready session stays on Review, whose Finish
+ * review opens the next session the queue holds (C14).
  */
 export function sessionIntakeState(world: World, session: Session): SessionIntakeState {
   const { catalog } = world
@@ -1881,21 +1936,19 @@ export function sessionIntakeState(world: World, session: Session): SessionIntak
   const rigId = sessionRigId(session)
   const unreviewed = sessionUnreviewedFrames(catalog, session)
   const target = targetId ? catalog.targets[targetId] : undefined
-  const gates: Record<SessionIntakeStepId, FlowGate | null> = {
-    target: targetId ? null : { reason: msg("flow_confirm_target"), blockers: [] },
-    rig: rigId ? null : { reason: msg("flow_confirm_rig"), blockers: [] },
-    review: unreviewed > 0 ? { reason: msg("flow_frames_unreviewed", { count: unreviewed }), blockers: [] } : null,
-  }
+  const settled: Record<SessionIntakeStepId, boolean> = { target: targetId !== null, rig: rigId !== null, review: unreviewed === 0 }
+  const reviewGate: FlowGate | null = unreviewed > 0 ? { reason: msg("flow_frames_unreviewed", { count: unreviewed }), blockers: [] } : null
   const lockedBy = sessionReviewLock(world, session.id)
   const summaries: Record<SessionIntakeStepId, MessageRef> = {
     target: target ? verbatim(target.name) : msg("sessions_filter_needs_target"),
     rig: rigId ? rigRef(catalog, rigId) : msg("sessions_rig_needs_review"),
     review: lockedBy.length > 0 ? msg("flow_review_locked") : unreviewed > 0 ? msg("flow_frames_unreviewed", { count: unreviewed }) : msg("status_ready"),
   }
-  const current = SESSION_INTAKE_STEPS.find((id) => gates[id] !== null) ?? "review"
+  const current = SESSION_INTAKE_STEPS.find((id) => !settled[id]) ?? "review"
   const steps = SESSION_INTAKE_STEPS.map((id): DerivedStep<SessionIntakeStepId> => {
-    if (!gates[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
-    return { id, state: openState(id === current, id === current ? gates[id] : null, false), gate: id === current ? gates[id] : null, summary: summaries[id] }
+    if (settled[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
+    const gate = id === current && id === "review" ? reviewGate : null
+    return { id, state: openState(id === current, gate, false), gate, summary: summaries[id] }
   })
   const corrections = SESSION_CORRECTION_FIELDS.flatMap((field): CorrectedValue[] => {
     const correction = latestCorrection(session, field)
@@ -1930,6 +1983,8 @@ export function wrapUpRecordState(operations: Record<string, Operation>, record:
 export interface WrapUpFlowState {
   /** Every run outside the Trash is Finished: before then the tab shows "Finish every run first" (§5.5). */
   available: boolean
+  /** Until it is available (and the Project is open), the tab's one line: "Finish every run first · 2 open ▸" or "No runs yet". */
+  unavailable: FlowGate | null
   waitingOn: Run[]
   steps: Array<DerivedStep<WrapUpStepId>>
   /** The first step not finished or skipped, in the strict order (C3); Archive once the Project is closed. */
@@ -1953,6 +2008,7 @@ export function wrapUpFlowState(world: World, project: Project): WrapUpFlowState
   const waitingOn = runs.filter((r) => r.completion !== "complete")
   const closed = project.state === "done"
   const available = runs.length > 0 && waitingOn.length === 0
+  const unavailable = available || closed ? null : wrapUpUnavailable(runs, waitingOn)
   const records = WRAP_UP_STEPS.map((id) => ({ id, record: project.wrapUp[id], ...wrapUpRecordState(world.operations, project.wrapUp[id]) }))
   const settled = (s: WrapUpRecordState) => s === "finished" || s === "skipped"
   const firstOpen = records.find((r) => !settled(r.state))
@@ -1963,15 +2019,17 @@ export function wrapUpFlowState(world: World, project: Project): WrapUpFlowState
       state === "finished" && record ? finishedOn(record.at) : state === "skipped" ? msg("status_skipped") : state === "running" ? msg("status_running") : failed?.summary ?? null
     if ((closed || index < position) && settled(state)) return { id, state, gate: null, summary }
     if (index > position) return { id, state: record ? "redo" : "todo", gate: null, summary: null }
-    const gate: FlowGate | null = closed
-      ? null
-      : !available
-        ? { reason: msg("flow_finish_every_run", { count: waitingOn.length }), blockers: waitingOn.map((run) => ({ label: verbatim(run.name), link: runStepLink(run, "results") })) }
-        : runningGate(running)
+    const gate: FlowGate | null = closed ? null : (unavailable ?? runningGate(running))
     return { id, state: openState(true, gate, false), gate, summary }
   })
   const archive = records.find((r) => r.id === "archive")!
-  return { available, waitingOn, steps, current, closed, closing: closed ? [] : archive.running }
+  return { available, unavailable, waitingOn, steps, current, closed, closing: closed ? [] : archive.running }
+}
+
+/** Why Wrap up is not available yet: "Finish every run first · 2 open", naming each open run, or "No runs yet" (§5.5). */
+function wrapUpUnavailable(runs: Run[], waitingOn: Run[]): FlowGate {
+  if (runs.length === 0) return { reason: msg("project_no_runs"), blockers: [] }
+  return { reason: msg("flow_finish_every_run", { count: waitingOn.length }), blockers: waitingOn.map((run) => ({ label: verbatim(run.name), link: runStepLink(run, "results") })) }
 }
 
 // --- Calibration process (P-CAL3) -------------------------------------------

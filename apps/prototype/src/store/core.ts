@@ -20,8 +20,8 @@ import type { ActivityEvent, Catalog } from "@/domain/types"
 import { type MessageRef, m, msg, say } from "@/lib/i18n"
 import type { SliceId, SliceStates } from "./slices"
 
-/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. 10: Target evidence is pointing and user rows only (OBJECT is a label). 11: plans are per night (the seed's plan is tonight's). 12: run views are Symlinks or Copies (P-PREP3). 13: no product inputs; a Result can be rejected; a preparation counts its copied masters; a Complete run's calibration is what it recorded (Complete records its automatic choices). */
-export const SCHEMA_VERSION = 13
+/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. 10: Target evidence is pointing and user rows only (OBJECT is a label). 11: plans are per night (the seed's plan is tonight's). 12: run views are Symlinks or Copies (P-PREP3). 13: no product inputs; a Result can be rejected; a preparation counts its copied masters; a Complete run's calibration is what it recorded (Complete records its automatic choices). 14: no Project-only rejects (P-REJ2); a Wrap up step record lists the operations its Proceed started and its Redo flag (C3, F2); a replaced master names its replacement and settings hold Old masters after (C9); settings hold one Moon-avoidance curve per filter (C6). */
+export const SCHEMA_VERSION = 14
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number

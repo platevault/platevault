@@ -24,6 +24,7 @@
  * naming "Auto-apply pattern" (D-W58).
  */
 import type { MessageRef } from "@/lib/i18n"
+import type { MoonAvoidance } from "./planning"
 
 export type IsoDateTime = string
 /** Local observing-night date, `YYYY-MM-DD` of the evening the night began. */
@@ -1284,8 +1285,10 @@ export interface AppSettings {
   planningSiteId: SiteId | null
   /** The Default archive location (P-ARC1); a Project may pick another. */
   defaultArchiveLocationId: LocationId | null
-  /** Per-band Moon constraints behind "good tonight" (`goodTonight`). */
+  /** Per-band Moon constraints behind "good tonight" (`goodTonight`). @deprecated C6: `moonAvoidance` replaces it once P7 switches the Targets page; W4 removes it. */
   moonConstraints: Record<Band, MoonConstraint>
+  /** One Moon-avoidance curve per filter (C6, design/R10-MOON-MODEL.md): grades and Img time (`nightImaging`). Edited through `setMoonAvoidance`, which clamps. */
+  moonAvoidance: Record<Band, MoonAvoidance>
   onboarding: {
     completedAt: IsoDateTime | null
     /** Optional roles the user chose to set up later. */

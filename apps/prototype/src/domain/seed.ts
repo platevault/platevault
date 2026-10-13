@@ -34,9 +34,9 @@
  */
 import { fileName, formatCount } from "@/lib/format"
 import { joinRefs, m, msg, verbatim } from "@/lib/i18n"
-import { assignmentId, automaticAssignments, calibrationPlan } from "./calibration"
+import { assignmentId, automaticAssignments, calibrationPlan, DEFAULT_MASTER_MAX_AGE_DAYS } from "./calibration"
 import { CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
-import { DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
+import { DEFAULT_MOON_AVOIDANCE, DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
 import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
 import { confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
 import { addSessions, describeDiff, diffContent, emptyContent } from "./membership"
@@ -490,10 +490,12 @@ export function defaultSettings(): AppSettings {
     planningSiteId: null,
     defaultArchiveLocationId: null,
     moonConstraints: structuredClone(DEFAULT_MOON_CONSTRAINTS),
+    moonAvoidance: structuredClone(DEFAULT_MOON_AVOIDANCE),
     onboarding: { completedAt: null, deferredRoles: [] },
     lastOutputParent: null,
     naming: {},
     keepRawCalibration: false,
+    masterMaxAgeDays: DEFAULT_MASTER_MAX_AGE_DAYS,
     targetLookup: { enabled: true, provider: "cds-sesame" },
     defaultRunView: "symlink",
     developerModeCheck: "not-windows",
@@ -826,7 +828,6 @@ function demoSeed(): SeedData {
       state: "open",
       doneAt: null,
       archive: null,
-      rejections: {},
       createdAt: "2026-09-10T19:00:00.000Z",
       revision: 3,
     },
@@ -845,11 +846,11 @@ function demoSeed(): SeedData {
       ],
       // P-WRAP1: every run is Complete; Clean up is done, Trash and Archive are still to do. P-ARC1: it archives to the NAS.
       archiveLocationId: "loc_archive_nas",
-      wrapUp: { cleanup: { state: "done", at: "2026-09-10T08:31:00.000Z" } },
+      // Clean up records the run-view removal it started, so it reads Finished once that operation succeeded (F2).
+      wrapUp: { cleanup: { state: "done", at: "2026-09-10T08:31:00.000Z", operationIds: ["op_cleanup_m31"], redo: false } },
       state: "open",
       doneAt: null,
       archive: null,
-      rejections: {},
       createdAt: "2026-09-01T19:00:00.000Z",
       revision: 4,
     },
@@ -864,7 +865,6 @@ function demoSeed(): SeedData {
       state: "open",
       doneAt: null,
       archive: null,
-      rejections: {},
       createdAt: "2026-09-14T19:00:00.000Z",
       revision: 1,
     },

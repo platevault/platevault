@@ -8326,5 +8326,8 @@
     }
   ],
   "flow_settings_master_age": "Old masters after",
-  "flow_reason_whole_days": "Enter a whole number of days"
+  "flow_reason_whole_days": "Enter a whole number of days",
+  "status_closed": "Closed",
+  "calibration_hide_master": "Hide master",
+  "calibration_hid_master": "Hid {name}"
 }

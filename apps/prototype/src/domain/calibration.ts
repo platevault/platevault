@@ -543,11 +543,14 @@ export function handoffCalibration(catalog: Catalog, plan: CalibrationPlan): Cal
 /** Kinds whose masters age (C9): darks, bias and dark flats. Flats are exempt. */
 const AGEING_KINDS: ReadonlySet<CalibrationKind> = new Set(["dark", "bias", "dark-flat"])
 
+/** Settings › Old masters after, by default (C9). */
+export const DEFAULT_MASTER_MAX_AGE_DAYS = 90
+
 const DAY_MS = 86_400_000
 
 /**
  * "Old · 120 d": a dark, bias or dark flat older than
- * `settings.masterMaxAgeDays` (90 by default). Null for a younger master and
+ * `settings.masterMaxAgeDays` (`DEFAULT_MASTER_MAX_AGE_DAYS` by default). Null for a younger master and
  * for every flat. Age alone raises no issue: only an old master assigned to
  * an unfinished run does (`oldMastersInUse` in derive.ts).
  */

@@ -505,16 +505,28 @@ function editMaster(masterId: MasterId, label: MessageRef, saved: MessageRef, up
   return result
 }
 
-/** Dismiss (P-CAL2): the master leaves the library's list for its Dismissed filter and is never matched; refused while a run uses or offers it. */
-export function dismissMaster(masterId: MasterId): CommitResult {
+/** Take a master out of the library's list and out of matching (P-CAL2); refused while a run uses or offers it. */
+function hide(masterId: MasterId, label: MessageRef, saved: (name: string) => MessageRef): CommitResult {
   const { catalog, disk } = store.getState()
   const master = catalog.masters[masterId]
   if (!master) return MISSING
-  const label = msg("calibration_dismiss_master")
   const blockers = dismissBlockers(catalog, masterUsage(catalog, disk), masterId)
   if (blockers.length > 0) return refuse(msg("store_refused", { label }), blockers.map((run) => verbatim(run.name)), HREF)
   if (master.dismissedAt) return { ok: true }
-  return editMaster(masterId, label, msg("store_saved_dismissed", { name: fileName(master.path) }), (current) => ({ ...current, dismissedAt: nowIso() }))
+  return editMaster(masterId, label, saved(fileName(master.path)), (current) => ({ ...current, dismissedAt: nowIso() }))
+}
+
+/** Hide (C2, P-CAL2): the master leaves the library's list for Show hidden and is never matched; Restore brings it back. */
+export function hideMaster(masterId: MasterId): CommitResult {
+  return hide(masterId, msg("calibration_hide_master"), (name) => msg("calibration_hid_master", { name }))
+}
+
+/**
+ * Dismiss (P-CAL2), worded as before.
+ * @deprecated C2 renames the verb to Hide: use `hideMaster`. P8 migrates the Calibration page and W4 removes this.
+ */
+export function dismissMaster(masterId: MasterId): CommitResult {
+  return hide(masterId, msg("calibration_dismiss_master"), (name) => msg("store_saved_dismissed", { name }))
 }
 
 /** Restore (P-CAL2): a dismissed master is back in the library's list and matched again. */

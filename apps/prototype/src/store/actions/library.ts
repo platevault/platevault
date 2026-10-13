@@ -6,7 +6,7 @@
  * which moves the session's frames: source headers never change. A session
  * whose frames an unfinished run's prepared view holds keeps its marks (C10).
  */
-import { latestRevision, reviewLockGate, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
+import { latestRevision, liveAssetIds, reviewLockGate, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { confirmedEvidence, isUnder } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"

@@ -8382,5 +8382,8 @@
     }
   ],
   "flow_settings_master_age": "Masters antigos após",
-  "flow_reason_whole_days": "Informe um número inteiro de dias"
+  "flow_reason_whole_days": "Informe um número inteiro de dias",
+  "status_closed": "Fechado",
+  "calibration_hide_master": "Ocultar master",
+  "calibration_hid_master": "{name} ocultado"
 }
