@@ -55,7 +55,7 @@ export function MonthConcept({ ctx }: { ctx: ConceptContext }) {
           summary,
           darkS: dark ? (Date.parse(dark.end) - Date.parse(dark.start)) / 1000 : null,
           good: horizon.goals.filter((g) => g.grades?.[i] === "good"),
-          limited: horizon.goals.filter((g) => g.grades?.[i] === "poor"),
+          limited: horizon.goals.filter((g) => g.moonLimited?.[i] === true),
           planned: nightPlan(catalog, night),
         }
       }) ?? [],

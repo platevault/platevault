@@ -25,7 +25,12 @@ export interface ConceptContext {
   tonight: NightDate
 }
 
-/** The concepts' shared reading of the store, re-derived every 10 minutes of the (simulated) clock. */
+/**
+ * The concepts' shared reading of the store. The site, the clock and tonight
+ * re-derive only when the catalogue, the settings or a 10-minute step of the
+ * (simulated) clock changes, so a running operation's progress never redoes
+ * the 30-night horizon.
+ */
 export function useConceptContext(): ConceptContext {
   const disk = useStore((s) => s.disk)
   const catalog = useStore((s) => s.catalog)
@@ -33,13 +38,13 @@ export function useConceptContext(): ConceptContext {
   const settings = useStore((s) => s.settings)
   const faults = useStore((s) => s.faults)
   const bucket = Math.floor((Date.now() + faults.clockOffsetMs) / 600_000)
-  return useMemo(() => {
-    const world: World = { disk, catalog, operations, settings, faults }
-    const site = planningSite(world)
+  const sky = useMemo(() => {
+    const site = planningSite({ catalog, settings, faults })
     const nowMs = Date.parse(nowIso())
-    return { world, site, nowMs, tonight: site ? upcomingNight(site, nowMs) : nowIso().slice(0, 10) }
+    return { site, nowMs, tonight: site ? upcomingNight(site, nowMs) : nowIso().slice(0, 10) }
     // `bucket` re-derives tonight as the clock moves on.
-  }, [disk, catalog, operations, settings, faults, bucket])
+  }, [catalog, settings, faults, bucket])
+  return useMemo(() => ({ world: { disk, catalog, operations, settings, faults }, ...sky }), [disk, catalog, operations, settings, faults, sky])
 }
 
 /** A chosen night (`?night=`): a valid date after tonight, else tonight, as Targets reads it. */

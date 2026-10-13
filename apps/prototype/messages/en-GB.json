@@ -8211,6 +8211,7 @@
   "home_concept_progress_only": "What recent nights added to each open goal, what is captured but not yet in the Project, and what waits for review",
   "home_concept_planning": "Planning",
   "home_concept_planned": "Planned",
+  "home_concept_on_plan": "On plan",
   "home_concept_target_count": [
     {
       "declarations": [

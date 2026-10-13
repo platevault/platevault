@@ -88,7 +88,7 @@ export function NightConcept({ ctx, requestedNight, onNight }: { ctx: ConceptCon
           {plannedIds.has(g.subject.target.id) ? (
             <>
               {" "}
-              <Pill tone="info">{m.home_concept_planned()}</Pill>
+              <Pill tone="info">{m.home_concept_on_plan()}</Pill>
             </>
           ) : null}
         </>

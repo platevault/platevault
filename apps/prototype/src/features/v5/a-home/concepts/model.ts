@@ -51,6 +51,8 @@ export interface GoalOutlook {
   progress: GoalProgress
   /** One grade per horizon night; null when the subject has no position or the channel has no curve of its own (OSC, Dual-band). */
   grades: FilterGrade[] | null
+  /** Per night: poor only because of the Moon, the position being up in darkness for at least the minimum duration. */
+  moonLimited: boolean[] | null
 }
 
 export interface Horizon {
@@ -81,7 +83,7 @@ export function goalHorizon(catalog: Catalog, site: ObservingSite, nowMs: number
       bySubject.set(key, entry)
     }
     const graded = entry.centre !== null && isBand(progress.goal.channel)
-    entry.goals.push({ subject: entry.outlook, progress, grades: graded ? [] : null })
+    entry.goals.push({ subject: entry.outlook, progress, grades: graded ? [] : null, moonLimited: graded ? [] : null })
   }
 
   const entries = [...bySubject.values()]
@@ -98,7 +100,9 @@ export function goalHorizon(catalog: Catalog, site: ObservingSite, nowMs: number
       outlook.minutes.push(imaging.minutes)
       for (const goal of goals) {
         const filter = imaging.filters.find((f) => f.band === goal.progress.goal.channel)
-        if (goal.grades && filter) goal.grades.push(filter.grade)
+        if (!goal.grades || !goal.moonLimited || !filter) continue
+        goal.grades.push(filter.grade)
+        goal.moonLimited.push(filter.grade === "poor" && imaging.darkMinutes >= criteria.minDurationMin)
       }
     }
   }
