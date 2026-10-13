@@ -7,14 +7,19 @@
  * Demo contents:
  * - "Cygnus HOO 2026" (open): NGC 7000 and the 3-panel "IC 5070 mosaic";
  *   rigs RedCat 51 / ASI2600MM (mono: Ha, OIII, SII) and Esprit 100 /
- *   ASI533MC (OSC), HOO goals, an exposure mismatch on the OSC rig. Runs: one
+ *   ASI533MC (OSC), HOO goals counting Usable frames, an exposure mismatch on
+ *   the OSC rig. Goal conditions (C7): NGC 7000 has a "Finish by" date with
+ *   12 nights left when the demo loads; the mosaic has a season window
+ *   pre-filled from IC 5070's visibility and the default ±10% panel balance,
+ *   which its empty Panel 3 breaks. Runs: one
  *   Complete with Cleanup available, one at Review with unreviewed frames,
  *   one blocked at Calibrate, a run group whose Panel 2 is Partial and whose
  *   Panel 3 is in the Trash, and one trashed run in the Project Trash.
  * - "M 31 LRGB" (open, every run Complete): in Wrap up with Clean up done and
  *   Trash and Archive still to do (rejected frames, intermediates, duplicate
  *   copies); it archives to the NAS archive, not the Default. Its goals use
- *   every kind: integration with a quality bar, frame counts, Usable only.
+ *   every kind: integration with an FWHM bar (part of its L frames sit over
+ *   the limit: "below bar"), frame counts, Usable only.
  *   A master dark from its Results was dismissed (Restore offer); its run
  *   recorded flats and bias and no master dark (darks stacked in PixInsight).
  * - "Heart and Soul" (open): no runs, candidates waiting.
@@ -29,6 +34,8 @@
  *   found.
  * - Targets: favourites, a southern Target with no window tonight, a default
  *   site, and tonight's plan of two Targets.
+ * - Goal templates: one user template carrying conditions (C7): an FWHM bar,
+ *   a ±15% panel balance and a season window.
  *
  * All names, paths and counts are illustrative fixtures.
  */
@@ -41,8 +48,9 @@ import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from 
 import { confirmedEvidence, indexLocationsSync, stableHash } from "./indexing"
 import { addSessions, describeDiff, diffContent, emptyContent } from "./membership"
 import { simulateMeasurement } from "./measurement"
-import { upcomingNight } from "./planning"
+import { defaultCriteria, seasonWindow, shiftNight, upcomingNight } from "./planning"
 import { pixelScaleArcsec } from "./sky"
+import { DEFAULT_PANEL_BALANCE_PCT, qualityBarFor } from "./templates"
 import type {
   ActivityEvent,
   AppSettings,
@@ -72,6 +80,7 @@ import type {
   SimulatedApp,
   SimulationFaults,
   Subject,
+  SubjectConditions,
   Target,
   TrashEpisodeKind,
   Volume,
@@ -802,15 +811,22 @@ function demoSeed(): SeedData {
   const tuc = ensureTarget(catalog, "tgt_ngc104", "NGC 104", ["47 Tucanae", "Caldwell 106"], 6.024, -72.081, { width: 0.5, height: 0.5 })
   catalog.targets[tuc] = { ...catalog.targets[tuc]!, favourite: true }
 
-  // Projects.
-  const subject = (id: string, targetId: string, mosaic: Subject["mosaic"] = null): Subject => ({ id, targetId, mosaic })
-  const ngcSubject = subject("sub_ngc7000", ngc)
-  const mosaicSubject = subject("sub_ic5070", ic5070Target, {
-    name: "IC 5070 mosaic",
-    centre: { ...IC5070 },
-    panels: PANEL_DEC.map((dec, i) => ({ id: `pnl_${i + 1}`, n: i + 1, ra: IC5070.ra, dec, rotationDeg: 0 })),
-  })
-  const goal = (id: string, subjectId: string, channel: GoalChannel, hours: number | null, panelId: string | null = null, extra: Partial<Goal> = {}): Goal => ({ id, subjectId, panelId, channel, integrationS: hours === null ? null : hours * 3600, frameCount: null, qualityBar: null, ...extra })
+  // Projects. Goal conditions (C7) are relative to tonight at the default site, so the demo always has nights left.
+  const backyard = catalog.sites.site_backyard!
+  const tonight = upcomingNight(backyard, Date.now())
+  const subject = (id: string, targetId: string, mosaic: Subject["mosaic"] = null, conditions?: SubjectConditions): Subject => ({ id, targetId, mosaic, ...(conditions ? { conditions } : {}) })
+  const ngcSubject = subject("sub_ngc7000", ngc, null, { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: { kind: "finish-by", night: shiftNight(tonight, 11) } })
+  const mosaicSubject = subject(
+    "sub_ic5070",
+    ic5070Target,
+    {
+      name: "IC 5070 mosaic",
+      centre: { ...IC5070 },
+      panels: PANEL_DEC.map((dec, i) => ({ id: `pnl_${i + 1}`, n: i + 1, ra: IC5070.ra, dec, rotationDeg: 0 })),
+    },
+    { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: seasonWindow(IC5070, backyard, defaultCriteria(backyard), tonight) },
+  )
+  const goal = (id: string, subjectId: string, channel: GoalChannel, hours: number | null, panelId: string | null = null, extra: Partial<Goal> = {}): Goal => ({ id, subjectId, panelId, channel, integrationS: hours === null ? null : hours * 3600, frameCount: null, qualityBar: qualityBarFor(null), ...extra })
   const project = { archiveLocationId: null, wrapUp: {} }
   catalog.projects = {
     [PROJECT.cygnus]: {
@@ -837,12 +853,13 @@ function demoSeed(): SeedData {
       notes: m.seed_project_m31_notes(),
       subjects: [subject("sub_m31", m31)],
       rigIds: [RIG.fra],
-      // Every goal kind: integration with a quality bar (Usable and FWHM), frame counts, Usable only.
+      // Every goal kind: integration with an FWHM bar, frame counts, Usable only. The L bar sits inside the measured
+      // spread (about 4.7″ to 5.8″), so some L frames count and the rest show as below the bar (C7).
       goals: [
-        goal("goal_m31_l", "sub_m31", "L", 2, null, { qualityBar: { kind: "usable-max-fwhm", maxArcsec: 3 } }),
-        goal("goal_m31_r", "sub_m31", "R", null, null, { frameCount: 20, qualityBar: { kind: "usable-only" } }),
-        goal("goal_m31_g", "sub_m31", "G", null, null, { frameCount: 20, qualityBar: { kind: "usable-only" } }),
-        goal("goal_m31_b", "sub_m31", "B", null, null, { frameCount: 20, qualityBar: { kind: "usable-only" } }),
+        goal("goal_m31_l", "sub_m31", "L", 2, null, { qualityBar: qualityBarFor(5.25) }),
+        goal("goal_m31_r", "sub_m31", "R", null, null, { frameCount: 20 }),
+        goal("goal_m31_g", "sub_m31", "G", null, null, { frameCount: 20 }),
+        goal("goal_m31_b", "sub_m31", "B", null, null, { frameCount: 20 }),
       ],
       // P-WRAP1: every run is Complete; Clean up is done, Trash and Archive are still to do. P-ARC1: it archives to the NAS.
       archiveLocationId: "loc_archive_nas",
@@ -860,13 +877,23 @@ function demoSeed(): SeedData {
       notes: m.seed_project_heart_notes(),
       subjects: heartIds.map((x, i) => subject(`sub_heart_${i + 1}`, catalog.sessions[x.id]!.target.value!)),
       rigIds: [RIG.redcat],
-      goals: heartIds.flatMap((_, i) => [goal(`goal_heart_${i + 1}_ha`, `sub_heart_${i + 1}`, "Ha", 10), goal(`goal_heart_${i + 1}_oiii`, `sub_heart_${i + 1}`, "OIII", null, null, { frameCount: 120, qualityBar: { kind: "usable-only" } })]),
+      goals: heartIds.flatMap((_, i) => [goal(`goal_heart_${i + 1}_ha`, `sub_heart_${i + 1}`, "Ha", 10), goal(`goal_heart_${i + 1}_oiii`, `sub_heart_${i + 1}`, "OIII", null, null, { frameCount: 120 })]),
       ...project,
       state: "open",
       doneAt: null,
       archive: null,
       createdAt: "2026-09-14T19:00:00.000Z",
       revision: 1,
+    },
+  }
+  // A user goal template carrying every condition (C7): an FWHM bar, an edited panel balance and a season window.
+  catalog.goalTemplates = {
+    gtpl_user_hoo_mosaic: {
+      id: "gtpl_user_hoo_mosaic",
+      name: m.seed_template_hoo_mosaic(),
+      source: "user",
+      values: (["Ha", "OIII"] as const).map((channel) => ({ channel, integrationS: 4 * 3600, frameCount: null, qualityBar: qualityBarFor(3.5) })),
+      conditions: { panelBalancePct: 15, window: { kind: "season" } },
     },
   }
 
@@ -1161,7 +1188,6 @@ function demoSeed(): SeedData {
   catalog.importSources = { src_asiair: { id: "src_asiair", name: "ASIAIR", path: "/Volumes/ASIAIR", lastImportedAt: "2026-10-03T08:00:00.000Z", importedSha256: [] } }
 
   // Tonight's plan at the default site: NGC 7000 and M 33 (Round 6: each night has its own plan).
-  const tonight = upcomingNight(catalog.sites.site_backyard!, Date.now())
   for (const targetId of [ngc, s.m33.target.value!]) {
     catalog.plans[targetId] = { targetId, nights: [tonight], criteria: { minAltitudeDeg: 25, darkness: "astronomical", maxMoonIlluminationPct: null, minMoonSeparationDeg: null, minDurationMin: 60 }, updatedAt: "2026-10-01T18:00:00.000Z" }
   }

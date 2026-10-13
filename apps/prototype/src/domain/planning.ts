@@ -10,8 +10,8 @@
  * the filters and sums Img time from it in one pass.
  */
 import { angularSeparationDeg } from "./sky"
-import type { Band, CalendarExport, Catalog, MoonConstraint, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
-import { formatDateTime } from "@/lib/format"
+import type { Band, CalendarExport, Catalog, MoonConstraint, NightDate, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, SubjectWindow, Target, TargetId } from "./types"
+import { formatCount, formatDateTime } from "@/lib/format"
 import { m, msg, type MessageRef } from "@/lib/i18n"
 
 const RAD = Math.PI / 180
@@ -633,6 +633,105 @@ export function nightImaging(
     windows: imaging.map((run) => stretchOf(sky, run)),
     minutes: imaging.reduce((sum, run) => sum + runMinutes(run), 0),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Deadline or season window (C7): nights left and the priority rise
+// ---------------------------------------------------------------------------
+
+/** Nights a season window looks ahead: a year. */
+export const SEASON_SCAN_NIGHTS = 366
+
+/**
+ * One night's visibility of a position: the longest stretch, in minutes, in
+ * which it is dark and at or above the altitude limit, the Moon aside (a
+ * season is about the sky, not the Moon's phase).
+ */
+export function visibleMinutes(position: { ra: number; dec: number }, site: ObservingSite, criteria: Pick<PlanCriteria, "minAltitudeDeg" | "darkness">, night: NightDate): number {
+  const start0 = nightStartMs(site, night)
+  const sunLimit = criteria.darkness === "astronomical" ? -18 : -12
+  const visible = (i: number) => {
+    const jd = julianDay(start0 + i * SAMPLE_MIN * 60_000)
+    const sun = sunPosition(jd)
+    return altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd) <= sunLimit && altitudeDeg(position.ra, position.dec, site.latitude, site.longitude, jd) >= criteria.minAltitudeDeg
+  }
+  return Math.max(0, ...runsWhere((24 * 60) / SAMPLE_MIN + 1, visible).map(runMinutes))
+}
+
+/**
+ * The season window a subject's editor and a "Season" template rule pre-fill
+ * (C7): the run of nights, from `fromNight` on, on which the position is
+ * visible for at least `minDurationMin` (`visibleMinutes`). Visible on
+ * `fromNight`, it is the rest of the current season; otherwise the next
+ * season within the scan. Null when the position is never visible in the
+ * scan, or visible on every night of it: a Target up all year has no season.
+ */
+export function seasonWindow(
+  position: { ra: number; dec: number },
+  site: ObservingSite,
+  criteria: Pick<PlanCriteria, "minAltitudeDeg" | "darkness" | "minDurationMin">,
+  fromNight: NightDate,
+  scanNights = SEASON_SCAN_NIGHTS,
+): SubjectWindow | null {
+  let from: NightDate | null = null
+  let to: NightDate | null = null
+  for (let n = 0; n < scanNights; n += 1) {
+    const night = shiftNight(fromNight, n)
+    if (visibleMinutes(position, site, criteria, night) >= criteria.minDurationMin) {
+      from ??= night
+      to = night
+    } else if (from !== null && to !== null) return { kind: "season", from, to }
+  }
+  return from === null || to === null || from === fromNight ? null : { kind: "season", from, to }
+}
+
+/** Nights from one night to another: 0 for the same night, negative when `to` is earlier. */
+export function nightsBetween(from: NightDate, to: NightDate): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+}
+
+/** Planning raises a subject's priority over the last this-many nights of its window (C7). */
+export const PRIORITY_RISE_NIGHTS = 30
+
+/**
+ * Planning's priority from a deadline (C7), 0 to 1: 0 while more than
+ * `PRIORITY_RISE_NIGHTS` nights are left, then rising by one step a night to
+ * 1 on the last night. A window that has passed, or not yet opened, adds
+ * nothing: no night left to plan in it.
+ */
+export function deadlinePriority(nightsLeft: number): number {
+  if (nightsLeft <= 0) return 0
+  return Math.max(0, Math.min(1, (PRIORITY_RISE_NIGHTS + 1 - nightsLeft) / PRIORITY_RISE_NIGHTS))
+}
+
+/** A subject's window seen from tonight (`windowProgress`). */
+export interface WindowProgress {
+  window: SubjectWindow
+  /** "upcoming": a season that opens after tonight; "passed": its last night is before tonight. */
+  state: "upcoming" | "open" | "passed"
+  /** Nights left to image in it, tonight and the last night included; an upcoming season counts all its nights; 0 once passed. */
+  nightsLeft: number
+  /** Nights until an upcoming season opens; 0 otherwise. */
+  opensIn: number
+  /** `deadlinePriority` while the window is open; 0 otherwise. */
+  priority: number
+  /** "12 nights left", "Opens in 30 nights", "Season over", "Finish-by date passed". */
+  line: MessageRef
+}
+
+/** Progress shows the nights left and Planning reads the priority (C7). `tonight` is the planning night (`upcomingNight`). */
+export function windowProgress(window: SubjectWindow, tonight: NightDate): WindowProgress {
+  const last = window.kind === "finish-by" ? window.night : window.to
+  const nights = (count: number) => ({ count, n: formatCount(count) })
+  if (tonight > last) {
+    return { window, state: "passed", nightsLeft: 0, opensIn: 0, priority: 0, line: msg(window.kind === "season" ? "domain_window_season_over" : "domain_window_finish_by_passed") }
+  }
+  if (window.kind === "season" && tonight < window.from) {
+    const opensIn = nightsBetween(tonight, window.from)
+    return { window, state: "upcoming", nightsLeft: nightsBetween(window.from, last) + 1, opensIn, priority: 0, line: msg("domain_window_opens_in", nights(opensIn)) }
+  }
+  const nightsLeft = nightsBetween(tonight, last) + 1
+  return { window, state: "open", nightsLeft, opensIn: 0, priority: deadlinePriority(nightsLeft), line: msg("domain_window_nights_left", nights(nightsLeft)) }
 }
 
 /** Short zone name at an instant, e.g. "CEST". */

@@ -5,16 +5,21 @@
  * Wrap up (C3, D4) records each step when Proceed starts its work and reads
  * it Finished once that work succeeds (`wrapUpFlowState`); Close project
  * closes the Project when its Archive transfer succeeds (`closingOnSuccess`).
+ * Closing freezes the goal figures and Reopen makes them live again (C7,
+ * `closedProject`, `reopenedProject`); applying a goal template copies its
+ * conditions to each subject (`conditionsFromTemplate`).
  */
-import { markDoneBlockers, projectGoalSet, rigName, rigRef, sessionRigId, sessionTargetId, subjectName, wrapUpFlowState } from "@/domain/derive"
+import { freezeGoals, markDoneBlockers, planningSite, projectGoalSet, rigName, rigRef, sessionRigId, sessionTargetId, subjectCentre, subjectName, wrapUpFlowState } from "@/domain/derive"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
-import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
+import { defaultCriteria, seasonWindow, upcomingNight } from "@/domain/planning"
+import { BUILT_IN_GOAL_TEMPLATES, subjectConditionsFrom } from "@/domain/templates"
 import type {
   Catalog,
   Goal,
   GoalTemplate,
   GoalTemplateId,
   GoalTemplateValue,
+  IsoDateTime,
   LocationId,
   OperationId,
   OpticalTrainId,
@@ -23,6 +28,7 @@ import type {
   Run,
   SessionId,
   Subject,
+  SubjectConditions,
   TargetId,
   WrapUpStepId,
   WrapUpStepRecord,
@@ -64,6 +70,36 @@ export function goalsFromTemplate(template: GoalTemplate | undefined, subject: S
   return template ? goalsFromValues(template.values, subject) : []
 }
 
+/**
+ * The conditions a template gives one subject (C7, `subjectConditionsFrom`):
+ * a "Season" rule is pre-filled from the subject's visibility at the planning
+ * site from tonight on, and leaves no window without a site or coordinates.
+ */
+function conditionsFromTemplate(state: Pick<PrototypeState, "catalog" | "settings" | "faults">, template: GoalTemplate | undefined, subject: Subject): SubjectConditions {
+  return subjectConditionsFrom(template, () => {
+    const site = planningSite(state)
+    const centre = subjectCentre(state.catalog, subject)
+    return site && centre ? seasonWindow(centre, site, defaultCriteria(site), upcomingNight(site, Date.parse(nowIso()))) : null
+  })
+}
+
+/** Each subject with the template's conditions (C7); without a template the subjects stay as they are. */
+function withTemplateConditions(subjects: Subject[], template: GoalTemplate | undefined): Subject[] {
+  if (!template) return subjects
+  const state = store.getState()
+  return subjects.map((s) => ({ ...s, conditions: conditionsFromTemplate(state, template, s) }))
+}
+
+/** The Project closed at `at`, its goal figures frozen as they stand (C7, `freezeGoals`): every close goes through here. */
+function closedProject(catalog: Catalog, project: Project, at: IsoDateTime): Project {
+  return { ...project, state: "done", doneAt: at, goalFreeze: freezeGoals(catalog, project, at) }
+}
+
+/** The Project open again, its goals reading the live library (C7). */
+function reopenedProject(project: Project): Project {
+  return { ...project, state: "open", doneAt: null, goalFreeze: null }
+}
+
 export interface SubjectInput {
   targetId: TargetId
   mosaic: Subject["mosaic"]
@@ -76,12 +112,17 @@ export interface NewProjectInput {
   rigIds: OpticalTrainId[]
   /** Goal values per channel, typed in or prefilled from a template; copied once, so the Project keeps no link to a template (D-W30). */
   goals: GoalTemplateValue[]
+  /** The template the goal values were prefilled from: its conditions are copied to each subject (C7). Absent or null: the subjects keep the defaults. */
+  templateId?: GoalTemplateId | null
 }
 
 /** New Project (PRJ-FR-01): name, subjects, rigs and optional goals. Creates no run. */
 export function createProject(input: NewProjectInput): { result: CommitResult; projectId: ProjectId } {
   const id = freshId("prj", input.name)
-  const subjects: Subject[] = input.subjects.map((s) => ({ id: freshId("sub", s.targetId), targetId: s.targetId, mosaic: s.mosaic }))
+  const subjects: Subject[] = withTemplateConditions(
+    input.subjects.map((s) => ({ id: freshId("sub", s.targetId), targetId: s.targetId, mosaic: s.mosaic })),
+    goalTemplate(input.templateId ?? null),
+  )
   const project: Project = {
     id,
     name: input.name.trim(),
@@ -212,10 +253,14 @@ export function setGoals(projectId: ProjectId, goals: Goal[], expectRevision: nu
   return editProject(projectId, msg("plan_goals"), expectRevision, (p) => ({ ...p, goals }))
 }
 
-/** Apply a template: its values are copied in for every subject and replace the current goals (D-W30). */
+/** Apply a template: its values are copied in for every subject and replace the current goals (D-W30), and its conditions replace each subject's (C7). */
 export function applyGoalTemplate(projectId: ProjectId, templateId: GoalTemplateId, expectRevision: number): CommitResult {
   const template = goalTemplate(templateId)
-  return editProject(projectId, template ? msg("store_label_apply_named", { name: template.name }) : msg("goal_apply_template"), expectRevision, (p) => ({ ...p, goals: p.subjects.flatMap((s) => goalsFromTemplate(template, s)) }))
+  return editProject(projectId, template ? msg("store_label_apply_named", { name: template.name }) : msg("goal_apply_template"), expectRevision, (p) => ({
+    ...p,
+    subjects: withTemplateConditions(p.subjects, template),
+    goals: p.subjects.flatMap((s) => goalsFromTemplate(template, s)),
+  }))
 }
 
 /** The archive destination for this Project (P-ARC1); null returns it to the Default archive location. */
@@ -299,7 +344,10 @@ export function recordWrapUpStep(projectId: ProjectId, step: WrapUpStepId, outco
   const record: WrapUpStepRecord = { state: outcome.kind === "skipped" ? "skipped" : "done", at, operationIds: outcome.kind === "started" ? outcome.operationIds : [], redo: false }
   const closesNow = step === "archive" && record.operationIds.length === 0
   const label = outcome.kind === "skipped" ? msg("store_label_step_skipped", { step: WRAP_UP_NAME[step] }) : msg("store_label_step_done", { step: wrapUpLabel(step) })
-  return editProject(projectId, label, project.revision, (p) => ({ ...p, wrapUp: { ...p.wrapUp, [step]: record }, ...(closesNow ? { state: "done" as const, doneAt: at } : {}) }))
+  return editProject(projectId, label, project.revision, (p) => {
+    const recorded = { ...p, wrapUp: { ...p.wrapUp, [step]: record } }
+    return closesNow ? closedProject(store.getState().catalog, recorded, at) : recorded
+  })
 }
 
 /**
@@ -340,7 +388,7 @@ function closeWhenArchived(state: PrototypeState, operationId: OperationId): Pro
     const record = project.wrapUp.archive
     if (project.state !== "open" || !record || record.state !== "done" || record.redo || !record.operationIds.includes(operationId)) continue
     if (!record.operationIds.every((id) => state.operations[id]?.status === "succeeded")) continue
-    projects = { ...projects, [project.id]: { ...project, state: "done", doneAt: nowIso(), revision: project.revision + 1 } }
+    projects = { ...projects, [project.id]: { ...closedProject(state.catalog, project, nowIso()), revision: project.revision + 1 } }
   }
   return projects === state.catalog.projects ? state : { ...state, catalog: { ...state.catalog, projects } }
 }
@@ -392,14 +440,14 @@ export function markProjectDone(projectId: ProjectId): CommitResult {
   if (!project) return MISSING
   const open = markDoneBlockers(catalog, project)
   if (open.length > 0) return refuse(msg("store_refused", { label: msg("store_label_mark_named_done", { name: project.name }) }), open.map((r) => msg("store_reason_not_complete_fix", { name: r.name })), projectHref(projectId))
-  return editProject(projectId, msg("wrapup_mark_done"), project.revision, (p) => ({ ...p, state: "done", doneAt: nowIso() }))
+  return editProject(projectId, msg("wrapup_mark_done"), project.revision, (p) => closedProject(catalog, p, nowIso()))
 }
 
-/** Reopen moves no files; archived sessions keep reading Archived until restored (D-W69). */
+/** Reopen moves no files; archived sessions keep reading Archived until restored (D-W69). The goals read the live library again (C7). */
 export function reopenProject(projectId: ProjectId): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
-  return writeProject(projectId, msg("project_reopen"), project.revision, (p) => ({ ...p, state: "open", doneAt: null }))
+  return writeProject(projectId, msg("project_reopen"), project.revision, reopenedProject)
 }
 
 /**

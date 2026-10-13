@@ -24,6 +24,7 @@
  * naming "Auto-apply pattern" (D-W58).
  */
 import type { MessageRef } from "@/lib/i18n"
+import type { FrameTotals } from "./library"
 import type { MoonAvoidance } from "./planning"
 
 export type IsoDateTime = string
@@ -511,11 +512,37 @@ export interface Subject {
     centre: { ra: number; dec: number }
     panels: MosaicPanel[]
   } | null
+  /** Goal conditions beside the goals (C7). Absent reads as `DEFAULT_SUBJECT_CONDITIONS` (`subjectConditions` in templates.ts). */
+  conditions?: SubjectConditions
 }
 
 /**
- * A quality bar (D-W29, PRJ-FR-03): Usable frames only, a median FWHM limit
- * per frame, or both. Frames the bar cannot judge do not count.
+ * A subject's optional deadline (C7): "Finish by" a night, or a season window
+ * from one night to another, pre-filled from the Target's visibility
+ * (`seasonWindow` in planning.ts). Both ends are nights (evening dates) and
+ * count as included.
+ */
+export type SubjectWindow = { kind: "finish-by"; night: NightDate } | { kind: "season"; from: NightDate; to: NightDate }
+
+/** The goal conditions a subject holds beside its per-channel goals (C7, `HARNESS-V5-FEEDBACK-R1.md` "Goals, grilling round 4"). */
+export interface SubjectConditions {
+  /**
+   * Mosaic panel balance: per channel, every panel's counted amount stays
+   * within ± this many percent of the panels' mean (`panelBalance` in
+   * derive.ts). Kept inside `PANEL_BALANCE_LIMITS` by `clampPanelBalance`.
+   */
+  panelBalancePct: number
+  window: SubjectWindow | null
+}
+
+/**
+ * A quality bar (D-W29, PRJ-FR-03, C7). A goal counts Usable frames, and the
+ * optional bar narrows them to "FWHM ≤ x″": `usable-only` without a bar,
+ * `usable-max-fwhm` with one (`qualityBarFor` writes these, `fwhmBar` reads x).
+ * Frames the bar cannot judge do not count. `max-fwhm` (FWHM without the
+ * Usable mark) and a null bar (any frame) are read as before and are
+ * deprecated: C7 counts Usable frames only, so W3's editors stop writing them
+ * and W4 removes them.
  */
 export type QualityBar = { kind: "usable-only" } | { kind: "max-fwhm"; maxArcsec: number } | { kind: "usable-max-fwhm"; maxArcsec: number }
 
@@ -528,9 +555,9 @@ export type GoalChannel = Band | "OSC" | "Dual-band"
 
 /**
  * Goals for one subject (or one mosaic panel) and one channel (D-W29). A row
- * holds any of the three goal kinds: integration time, frame count and a
- * quality bar. Missing calibration and exposure mismatch are derived
- * warnings, never goals.
+ * holds one amount, time or frames (C7, `goalAmount`), and a quality bar.
+ * Missing calibration and exposure mismatch are derived warnings, never
+ * goals.
  */
 export interface Goal {
   id: GoalId
@@ -541,6 +568,22 @@ export interface Goal {
   integrationS: number | null
   frameCount: number | null
   qualityBar: QualityBar | null
+}
+
+/** One goal's counted totals at Close (C7): what `goalProgress` reads for a closed Project instead of the live library. */
+export interface FrozenGoal {
+  goalId: GoalId
+  inProject: FrameTotals
+  captured: FrameTotals
+  /** Usable frames in project that the bar's FWHM limit leaves out ("+N h below bar"). */
+  belowBar: FrameTotals
+  unknownQuality: number
+}
+
+/** Goal figures as they stood when the Project closed (C7); Reopen clears them, so an open Project always reads the live library. */
+export interface GoalFreeze {
+  at: IsoDateTime
+  goals: FrozenGoal[]
 }
 
 /** The three Wrap up steps after every run is Finished, in their strict order (P-WRAP1, C3): Clean up runs → Trash → Archive. */
@@ -579,6 +622,11 @@ export interface Project {
   state: "open" | "done"
   doneAt: IsoDateTime | null
   /**
+   * Goal figures frozen at Close (C7, `freezeGoals` in derive.ts); Reopen
+   * clears them. Absent or null: the goals read the live library.
+   */
+  goalFreeze?: GoalFreeze | null
+  /**
    * Archive after Done. It survives Reopen: archived sessions show as
    * Archived until the user restores them (D-W69).
    */
@@ -587,12 +635,25 @@ export interface Project {
   revision: number
 }
 
-/** One channel of a goal template: the same three goal kinds a Goal holds. */
+/** One channel of a goal template: the same amount and quality bar a Goal holds. */
 export interface GoalTemplateValue {
   channel: GoalChannel
   integrationS: number | null
   frameCount: number | null
   qualityBar: QualityBar | null
+}
+
+/**
+ * How a template sets a subject's window (C7): a fixed "Finish by" night, or
+ * the season, pre-filled from the subject's Target visibility when the
+ * template is applied (`subjectConditionsFrom` in templates.ts).
+ */
+export type WindowRule = { kind: "finish-by"; night: NightDate } | { kind: "season" }
+
+/** The subject conditions a goal template carries (C7, Settings › Goal templates). */
+export interface GoalTemplateConditions {
+  panelBalancePct: number
+  window: WindowRule | null
 }
 
 /** Built-in or user goal template; applying it copies its values into the Project (D-W30, D-W47). */
@@ -601,6 +662,8 @@ export interface GoalTemplate {
   name: string
   source: "built-in" | "user"
   values: GoalTemplateValue[]
+  /** Copied into each subject it is applied to (C7). Absent reads as `DEFAULT_TEMPLATE_CONDITIONS` (`templateConditions`). */
+  conditions?: GoalTemplateConditions
 }
 
 // ---------------------------------------------------------------------------

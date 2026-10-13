@@ -1,14 +1,26 @@
 /**
- * Goal templates (D-W30, D-W47, PRJ-FR-12), the goal unit rule (C7) and
- * naming templates (D-W20, STO-IMP-FR-07): the built-in values, the token
- * values every consumer builds the same way, and the pure template resolution
- * that New Project, Import, Archive, review names and Settings share. Nothing
- * here writes state.
+ * Goal templates (D-W30, D-W47, PRJ-FR-12), the goal unit rule and the goal
+ * conditions (C7), and naming templates (D-W20, STO-IMP-FR-07): the built-in
+ * values, the token values every consumer builds the same way, and the pure
+ * template resolution that New Project, Import, Archive, review names and
+ * Settings share. Nothing here writes state.
  */
 import { m, type MessageRef, msg } from "@/lib/i18n"
 import { nightOf } from "./indexing"
 import type { FrameTotals } from "./library"
-import type { FrameHeader, GoalChannel, GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken, QualityBar } from "./types"
+import type {
+  FrameHeader,
+  GoalChannel,
+  GoalTemplate,
+  GoalTemplateConditions,
+  GoalTemplateValue,
+  NamingFrameType,
+  NamingToken,
+  QualityBar,
+  Subject,
+  SubjectConditions,
+  SubjectWindow,
+} from "./types"
 
 const H = 3600
 const USABLE: QualityBar = { kind: "usable-only" }
@@ -89,6 +101,8 @@ export interface GoalMeasure {
   remaining: number | null
   /** "In project" reaches the amount; a goal without an amount is never met. */
   met: boolean
+  /** Share of the amount in project, 0 to 1 (1 exactly when met); null without an amount. */
+  fraction: number | null
 }
 
 /**
@@ -103,6 +117,7 @@ export function goalMeasure(goal: GoalFields, inProject: FrameTotals, captured: 
   const count = (totals: FrameTotals) => (unit === "time" ? totals.seconds : totals.frames)
   const target = amount === null ? null : amount.unit === "time" ? amount.seconds : amount.frames
   const done = count(inProject)
+  const met = target !== null && done >= target
   return {
     amount,
     unit,
@@ -110,8 +125,70 @@ export function goalMeasure(goal: GoalFields, inProject: FrameTotals, captured: 
     captured: count(captured),
     target,
     remaining: target === null ? null : Math.max(0, target - done),
-    met: target !== null && done >= target,
+    met,
+    fraction: target === null ? null : met ? 1 : done / target,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Goal conditions (C7, "Goals, grilling round 4"): quality bar, panel
+// balance, deadline or season window. Templates carry them.
+// ---------------------------------------------------------------------------
+
+/**
+ * The bar's FWHM limit, the x of "count only frames with FWHM ≤ x″" (C7);
+ * null without one.
+ */
+export function fwhmBar(bar: QualityBar | null): number | null {
+  return bar && bar.kind !== "usable-only" ? bar.maxArcsec : null
+}
+
+/** The bar a goal editor writes (C7): Usable frames, narrowed to FWHM ≤ x″ when a limit is set. Inverse of `fwhmBar`. */
+export function qualityBarFor(maxArcsec: number | null): QualityBar {
+  return maxArcsec === null ? { kind: "usable-only" } : { kind: "usable-max-fwhm", maxArcsec }
+}
+
+/** The panel balance a subject and a template start with: ±10 % (C7, the user's default). */
+export const DEFAULT_PANEL_BALANCE_PCT = 10
+
+/** The panel balance an edit keeps: at least ±1 %, at most ±100 % (`clampPanelBalance`). */
+export const PANEL_BALANCE_LIMITS = { minPct: 1, maxPct: 100 } as const
+
+/** A subject's conditions until it sets its own: the default panel balance, no window. */
+export const DEFAULT_SUBJECT_CONDITIONS: SubjectConditions = { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: null }
+
+/** A template's conditions until it sets its own: the default panel balance, no window. */
+export const DEFAULT_TEMPLATE_CONDITIONS: GoalTemplateConditions = { panelBalancePct: DEFAULT_PANEL_BALANCE_PCT, window: null }
+
+/** A panel balance inside `PANEL_BALANCE_LIMITS`; a value that is not a number reads as the default. */
+export function clampPanelBalance(pct: number): number {
+  if (!Number.isFinite(pct)) return DEFAULT_PANEL_BALANCE_PCT
+  return Math.min(PANEL_BALANCE_LIMITS.maxPct, Math.max(PANEL_BALANCE_LIMITS.minPct, pct))
+}
+
+/** A subject's goal conditions; a subject saved without them reads the defaults. */
+export function subjectConditions(subject: Subject): SubjectConditions {
+  return subject.conditions ?? DEFAULT_SUBJECT_CONDITIONS
+}
+
+/** A template's goal conditions; a template saved without them reads the defaults. */
+export function templateConditions(template: GoalTemplate): GoalTemplateConditions {
+  return template.conditions ?? DEFAULT_TEMPLATE_CONDITIONS
+}
+
+/**
+ * The conditions a template gives one subject when it is applied (C7): its
+ * panel balance, and its window rule resolved. "Finish by" copies the night;
+ * "Season" takes what `season` pre-fills from the subject Target's
+ * visibility (`seasonWindow` in planning.ts), and no window when the Target
+ * has no season. `season` is only called for a season rule. Without a
+ * template the subject keeps the defaults.
+ */
+export function subjectConditionsFrom(template: GoalTemplate | undefined, season: () => SubjectWindow | null): SubjectConditions {
+  if (!template) return DEFAULT_SUBJECT_CONDITIONS
+  const { panelBalancePct, window } = templateConditions(template)
+  const resolved: SubjectWindow | null = !window ? null : window.kind === "finish-by" ? { kind: "finish-by", night: window.night } : season()
+  return { panelBalancePct: clampPanelBalance(panelBalancePct), window: resolved }
 }
 
 // ---------------------------------------------------------------------------

@@ -85,10 +85,14 @@ export function renameRig(rigId: OpticalTrainId, name: string): CommitResult {
 // Goal templates
 // ---------------------------------------------------------------------------
 
-/** Create or update a user template; built-ins cannot be edited or deleted (PRJ-FR-12). */
+/**
+ * Create or update a user template; built-ins cannot be edited or deleted (PRJ-FR-12).
+ * An update without `conditions` keeps the ones the template holds (C7), so an editor that only shows the values loses none.
+ */
 export function saveGoalTemplate(template: Omit<GoalTemplate, "id" | "source"> & { id: GoalTemplateId | null }): { result: CommitResult; id: GoalTemplateId } {
   const id = template.id ?? freshId("gtpl", template.name)
-  const record: GoalTemplate = { ...template, id, source: "user" }
+  const conditions = template.conditions ?? (template.id ? store.getState().catalog.goalTemplates[template.id]?.conditions : undefined)
+  const record: GoalTemplate = { ...template, id, source: "user", ...(conditions ? { conditions } : {}) }
   const href = "/settings/goal-templates"
   const result = commit(msg("store_label_goal_template", { name: record.name }), (s) => withCatalog(s, (c) => ({ ...c, goalTemplates: { ...c.goalTemplates, [id]: record } })), { href })
   if (result.ok) recordSaved(msg("store_saved_goal_template", { name: record.name }), null, href)

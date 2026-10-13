@@ -5562,6 +5562,54 @@
   "domain_goal_amounts": "{inProject} no projeto · {captured} capturado · meta {target}",
   "domain_goal_amounts_no_target": "{inProject} no projeto · {captured} capturado",
   "domain_goal_line": "{channel} {amounts}",
+  "domain_goal_below_bar": "+{amount} fora do limite de qualidade",
+  "domain_balance_setting": "Equilíbrio dos painéis ±{pct}%",
+  "domain_balance_within": "Painéis dentro de ±{pct}%",
+  "domain_balance_below": "{panel} {deviation}% abaixo da média · limite ±{pct}%",
+  "domain_balance_above": "{panel} {deviation}% acima da média · limite ±{pct}%",
+  "domain_window_finish_by": "Terminar até {night}",
+  "domain_window_season": "Temporada {from} – {to}",
+  "domain_window_rule_season": "Temporada pela visibilidade",
+  "domain_window_none": "Sem prazo",
+  "domain_window_nights_left": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Falta {n} noite",
+        "countPlural=*": "Faltam {n} noites"
+      }
+    }
+  ],
+  "domain_window_opens_in": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Abre em {n} noite",
+        "countPlural=*": "Abre em {n} noites"
+      }
+    }
+  ],
+  "domain_window_finish_by_passed": "Prazo encerrado",
+  "domain_window_season_over": "Temporada encerrada",
+  "domain_ratio_part": "{channel} {part}",
+  "domain_ratio_line": "{counted} contado · metas {implied}",
+  "domain_ratio_counted": "{counted} contado",
+  "domain_subject_weakest_panel": "{percent}% · mais atrasado: {panel}",
+  "domain_subject_percent": "{percent}%",
   "domain_gate_sessions_selected": "Sessões selecionadas",
   "domain_gate_no_sessions": "Nenhuma sessão ainda.",
   "domain_gate_no_unresolved": "Nenhuma entrada sem resolver",
@@ -8201,6 +8249,7 @@
   "seed_project_m31_notes": "Banda larga primeiro; mistura com banda estreita depois.",
   "seed_project_heart_notes": "Ha primeiro; OIII quando a Lua permitir.",
   "seed_dark_exception_reason": "Darks empilhados no PixInsight",
+  "seed_template_hoo_mosaic": "Mosaico HOO",
   "picker_today": "Hoje",
   "picker_week_previous": "Semana anterior",
   "picker_week_next": "Próxima semana",
