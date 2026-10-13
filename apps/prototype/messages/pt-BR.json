@@ -567,7 +567,33 @@
   "fields_token_omit": "Omitir",
   "fields_token_omitted": "Omitido",
   "fields_template_preview": "Pré-visualização",
-  "confirm_changes": "Isto vai",
+  "dialog_changes": "Alterações",
+  "dialog_group": [
+    {
+      "declarations": [
+        "input label",
+        "input count",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{label} · {count} arquivo · {size}",
+        "countPlural=*": "{label} · {count} arquivos · {size}"
+      }
+    }
+  ],
+  "dialog_col_file": "Arquivo",
+  "dialog_col_from": "De",
+  "dialog_col_to": "Para",
+  "dialog_col_size": "Tamanho",
+  "dialog_col_status": "Situação",
+  "dialog_to_trash": "Lixeira",
+  "dialog_to_unlink": "Link removido",
+  "dialog_to_move": "Movido",
+  "dialog_to_copy": "Copiado",
   "confirm_unchanged": "Inalterado",
   "operation_progress_label": "Progresso de {title}",
   "operation_progress_value": "{done} de {total} {unit}, {percent}",
@@ -7730,10 +7756,22 @@
   "theme_picker_theme": "Tema",
   "actions_blocked": "{action}: bloqueado",
   "actions_for": "Ações de {name}",
-  "actions_confirm_group": [
+  "catalogue_dialogs_heading": "Diálogos",
+  "catalogue_dialogs_summary": "Todo diálogo termina em DialogFooter: primeiro Cancelar, depois a única ação, em todo sistema operacional. A ação é a principal, ou vermelha quando é destrutiva.",
+  "catalogue_dialogs_confirm_caption": "O foco começa em Cancelar quando a ação é destrutiva; senão, na ação. Esc cancela e o foco volta ao botão que abriu o diálogo. Use Tab até um grupo e pressione Enter ou Espaço para mostrar os arquivos.",
+  "catalogue_dialogs_form_caption": "O foco começa no primeiro campo e Enter envia, a menos que a ação seja destrutiva. Aponte ou use Tab até uma ação indisponível para ver o motivo.",
+  "catalogue_dialogs_state_default": "Padrão",
+  "catalogue_dialogs_state_destructive": "Destrutivo",
+  "catalogue_dialogs_state_busy": "Ocupado",
+  "catalogue_dialogs_state_error": "Erro com Tentar de novo",
+  "catalogue_dialogs_state_unavailable": "Desativado com motivo",
+  "catalogue_dialogs_state_folded": "Grupos de arquivos, recolhidos",
+  "catalogue_dialogs_state_unfolded": "Grupos de arquivos, expandidos",
+  "catalogue_dialogs_state_title_only": "Só o título",
+  "catalogue_dialogs_state_skip": "Etapa opcional com Pular",
+  "catalogue_dialogs_trash_title": [
     {
       "declarations": [
-        "input label",
         "input count",
         "local countPlural = count: plural"
       ],
@@ -7741,11 +7779,28 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{label} · {count} arquivo",
-        "countPlural=*": "{label} · {count} arquivos"
+        "countPlural=one": "Mover {count} arquivo para a Lixeira?",
+        "countPlural=*": "Mover {count} arquivos para a Lixeira?"
       }
     }
   ],
+  "catalogue_dialogs_totals": [
+    {
+      "declarations": [
+        "input size",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{size} · {count} local",
+        "countPlural=*": "{size} · {count} locais"
+      }
+    }
+  ],
+  "catalogue_dialogs_proceed": "Prosseguir",
   "catalogue_actions_heading": "Ações",
   "catalogue_actions_summary": "Uma Action aparece como botão do cabeçalho, item de menu nomeado, item ⋯ da linha, item do menu de contexto e comando da paleta, com o mesmo rótulo, atalho e motivo de indisponibilidade.",
   "catalogue_actions_roles_heading": "Papéis dos botões",
