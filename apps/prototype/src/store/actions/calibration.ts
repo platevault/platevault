@@ -478,15 +478,15 @@ export function replaceMaster(masterId: MasterId, path: string): MasterImportOut
   return { path, match, result: replaced.result, masterId: imported.masterId, repointed: replaced.repointed }
 }
 
-/** Settings › Old masters after (C9): darks, bias and dark flats older than this many days read "Old · {n} d". */
+/** Calibration settings › Old masters after (C9): darks, bias and dark flats older than this many days read "Old · {n} d". */
 export function setMasterMaxAgeDays(days: number): CommitResult {
-  if (!Number.isInteger(days) || days < 1) return refuse(msg("store_refused", { label: msg("flow_settings_master_age") }), [msg("flow_reason_whole_days")], "/settings/calibration")
-  return commit(msg("flow_settings_master_age"), (s) => ({ ...s, settings: { ...s.settings, masterMaxAgeDays: days } }), { href: "/settings/calibration" })
+  if (!Number.isInteger(days) || days < 1) return refuse(msg("store_refused", { label: msg("flow_settings_master_age") }), [msg("flow_reason_whole_days")], HREF)
+  return commit(msg("flow_settings_master_age"), (s) => ({ ...s, settings: { ...s.settings, masterMaxAgeDays: days } }), { href: HREF })
 }
 
-/** Settings › Keep raw calibration frames (off by default: raws go to the OS Trash once their master registers). */
+/** Calibration settings › Keep raw calibration frames (off by default: raws go to the OS Trash once their master registers). */
 export function setKeepRawCalibration(keep: boolean): CommitResult {
-  return commit(msg("settings_keep_raws"), (s) => ({ ...s, settings: { ...s.settings, keepRawCalibration: keep } }), { href: "/settings/calibration" })
+  return commit(msg("settings_keep_raws"), (s) => ({ ...s, settings: { ...s.settings, keepRawCalibration: keep } }), { href: HREF })
 }
 
 /** Restore offer (P-CAL2): a dismissed master offer is offered again on the run's Calibrate step. */

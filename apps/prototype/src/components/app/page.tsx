@@ -6,7 +6,7 @@
 import { Check, ChevronRight } from "lucide-react"
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
 import { useMessages } from "@/app/preferences"
-import { CurrentLink } from "@/app/run-ui"
+import { CurrentLink } from "@/components/app/run-step"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import type { StepLink } from "@/domain/derive"
 import { m } from "@/lib/i18n"

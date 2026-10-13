@@ -1,24 +1,28 @@
 /**
- * Command palette (foundation-owned): ⌘K / Ctrl+K. Jump to any surface or
- * named record (Projects, runs and run groups, Targets, sessions), or run a
- * global action. Slices add commands through their shell contribution.
- * Built on Base UI Dialog and Autocomplete (one primitive system; no cmdk).
+ * Command palette (foundation-owned): the commands of ⌘K / Ctrl+K. Jump to
+ * any surface or named record (Projects, runs and run groups, Targets,
+ * sessions), or run a registered app Action. Slices add commands through
+ * their shell contribution. The look lives in `@/components/app/palette`.
+ *
+ * App Actions (`useAppActions`) are the same descriptors the toolbar's More
+ * menu shows, turned into palette commands by `actionCommand`. The palette
+ * lists one "Theme…" entry, opening Settings › Appearance (A SH15), instead
+ * of one entry per theme.
  */
-import { Autocomplete } from "@base-ui/react/autocomplete"
-import { useRouter } from "@tanstack/react-router"
-import { CornerDownLeft, Search } from "lucide-react"
-import { useMemo, useRef } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { Kbd } from "@/components/ui/kbd"
+import { useNavigate, useRouter } from "@tanstack/react-router"
+import { FlaskConical, Keyboard, Languages, Palette, PanelLeft } from "lucide-react"
+import { type ActionRunner, actionCommand, useAction } from "@/components/app/actions"
+import type { Action } from "@/components/app/contracts"
+import { CommandPalette as PaletteDialog, type PaletteGroup } from "@/components/app/palette"
 import { groupHref, isTrashedSession, runHref } from "@/domain/derive"
 import { formatExposure, formatNight } from "@/lib/format"
 import { LOCALE_META, LOCALES } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { SHELLS } from "./contributions"
 import { ALL_NAV_ITEMS, STATIC_DESTINATIONS } from "./navigation"
-import { setLocale, setSingleKeyShortcuts, setTheme, useMessages, usePreferences } from "./preferences"
-import { THEMES } from "./themes"
+import { setLocale, setSingleKeyShortcuts, useMessages, usePreferences } from "./preferences"
 import type { PaletteCommand } from "./shell-contract"
+import { THEMES } from "./themes"
 import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
 const NO_COMMANDS = (): PaletteCommand[] => []
@@ -27,99 +31,117 @@ const contributed = SHELLS.map((shell) => shell.useCommands ?? NO_COMMANDS)
 /** Contributed commands join the built-in Actions group through this `group` value. */
 const ACTIONS = "Actions"
 
-interface Group {
-  value: string
-  /** The heading; a contributed group's `group` value as given. */
-  label: string
-  items: PaletteCommand[]
+/** The search words of each app action, en-GB. */
+export const APP_ACTION_KEYWORDS: Record<string, string> = {
+  "toggle-sidebar": "collapse expand sidebar",
+  "prototype-controls": "prototype simulation offline mount fault",
+  shortcuts: "help keys keyboard",
+  "single-keys": "keyboard speech accessibility",
+  theme: `appearance dark light ${THEMES.map((theme) => theme.name).join(" ")}`,
+  language: "language locale translation",
 }
 
-function useCommands(): Group[] {
+export interface AppActions {
+  toggleSidebar: Action
+  prototypeControls: Action
+  shortcuts: Action
+  singleKeys: Action
+  theme: Action
+  /** One per shipped locale other than the current one. */
+  languages: Action[]
+}
+
+/** The app's own Actions, for the palette and the toolbar's More menu. */
+export function useAppActions(): AppActions {
   const m = useMessages()
-  const { locale } = usePreferences()
+  const navigate = useNavigate()
+  const { locale, singleKeyShortcuts } = usePreferences()
+  return {
+    toggleSidebar: { id: "toggle-sidebar", label: m.palette_toggle_sidebar(), icon: PanelLeft, shortcut: "[", run: () => toggleSidebar() },
+    prototypeControls: { id: "prototype-controls", label: m.shell_prototype_controls(), icon: FlaskConical, opensDialog: true, run: () => openPanel("simulation") },
+    shortcuts: { id: "shortcuts", label: m.shortcuts_show(), icon: Keyboard, shortcut: "?", run: () => openPanel("shortcuts") },
+    singleKeys: singleKeyShortcuts
+      ? { id: "single-keys", label: m.palette_single_key_off(), icon: Keyboard, run: () => setSingleKeyShortcuts(false) }
+      : { id: "single-keys", label: m.palette_single_key_on(), icon: Keyboard, run: () => setSingleKeyShortcuts(true) },
+    theme: { id: "theme", label: m.shell_theme(), icon: Palette, opensDialog: true, run: () => void navigate({ to: "/settings/appearance" }) },
+    languages: LOCALES.filter((id) => id !== locale).map((id) => ({ id: `language-${id}`, label: m.shell_language_named({ name: LOCALE_META[id].nativeName }), icon: Languages, run: () => setLocale(id) })),
+  }
+}
+
+function useGroups(appActions: Action[], runner: ActionRunner): PaletteGroup[] {
+  const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const extra = contributed.flatMap((hook) => hook())
-  return useMemo(() => {
-    // Built-in items carry their group heading, so typing the heading finds them.
-    const goTo = m.palette_group_go_to()
-    const targets = m.nav_targets()
-    const projects = m.nav_projects()
-    const runs = m.common_runs()
-    const sessions = m.nav_sessions()
-    const actions = m.palette_group_actions()
-    const groups: Group[] = [
-      {
-        value: "go-to",
-        label: goTo,
-        items: [
-          ...ALL_NAV_ITEMS.map((item) => ({ id: `nav:${item.to}`, label: item.label, group: goTo, to: item.to })),
-          ...STATIC_DESTINATIONS.map((d) => ({ id: `nav:${d.to}`, label: d.label, group: goTo, to: d.to, keywords: d.keywords })),
-        ],
-      },
-      {
-        value: "targets",
-        label: targets,
-        items: Object.values(catalog.targets).map((t) => ({ id: `target:${t.id}`, label: t.name, group: targets, to: `/targets/${t.id}`, keywords: t.aliases.join(" ") })),
-      },
-      {
-        value: "projects",
-        label: projects,
-        items: Object.values(catalog.projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: projects, to: `/projects/${p.id}` })),
-      },
-      {
-        value: "runs",
-        label: runs,
-        items: [
-          ...Object.values(catalog.runs)
-            .filter((r) => !r.trashedAt && !r.groupId)
-            .map((r) => ({ id: `run:${r.id}`, label: r.name, group: runs, keywords: "processing run", to: runHref(r) })),
-          ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: runs, keywords: "run group mosaic panels", to: groupHref(g) })),
-        ],
-      },
-      {
-        value: "sessions",
-        label: sessions,
-        items: Object.values(catalog.sessions)
-          .filter((s) => s.imageType === "light" && !s.supersededBy && !isTrashedSession(catalog, s))
-          .map((s) => ({
-            id: `session:${s.id}`,
-            label: `${formatNight(s.night)} · ${s.channel ?? m.palette_session_no_filter()} · ${formatExposure(s.exposureS)} · ${s.objectLabel ?? m.palette_session_missing_object()}`,
-            group: sessions,
-            to: `/sessions/${s.id}`,
-          })),
-      },
-      {
-        value: ACTIONS,
-        label: actions,
-        items: [
-          ...THEMES.map((theme) => ({ id: `act:theme-${theme.id}`, label: m.shell_theme_named({ name: theme.name }), group: actions, keywords: `appearance ${theme.scheme}`, run: () => setTheme(theme.id) })),
-          { id: "act:theme-system", label: m.shell_theme_named({ name: m.shell_theme_match_system() }), group: actions, keywords: "appearance auto", run: () => setTheme("system") },
-          ...LOCALES.map((id) => ({ id: `act:locale-${id}`, label: m.shell_language_named({ name: LOCALE_META[id].nativeName }), group: actions, keywords: "language locale translation", run: () => setLocale(id) })),
-          { id: "act:sidebar", label: m.palette_toggle_sidebar(), group: actions, keywords: "collapse expand", run: () => toggleSidebar() },
-          { id: "act:sim", label: m.palette_open_simulation(), group: actions, keywords: "prototype offline mount fault", run: () => openPanel("simulation") },
-          { id: "act:keys", label: m.shortcuts_show(), group: actions, keywords: "help keys", run: () => openPanel("shortcuts") },
-          { id: "act:single-keys-off", label: m.palette_single_key_off(), group: actions, keywords: "keyboard speech accessibility", run: () => setSingleKeyShortcuts(false) },
-          { id: "act:single-keys-on", label: m.palette_single_key_on(), group: actions, keywords: "keyboard", run: () => setSingleKeyShortcuts(true) },
-          ...extra.filter((c) => c.group === ACTIONS),
-        ],
-      },
-    ]
-    const otherGroups = [...new Set(extra.filter((c) => c.group !== ACTIONS).map((c) => c.group))]
-    for (const value of otherGroups) groups.push({ value, label: value, items: extra.filter((c) => c.group === value) })
-    return groups.filter((g) => g.items.length > 0)
-  }, [m, locale, catalog, extra])
+  // Built-in items carry their group heading, so typing the heading finds them.
+  const goTo = m.palette_group_go_to()
+  const targets = m.nav_targets()
+  const projects = m.nav_projects()
+  const runs = m.common_runs()
+  const sessions = m.nav_sessions()
+  const actions = m.palette_group_actions()
+  const groups: PaletteGroup[] = [
+    {
+      value: "go-to",
+      label: goTo,
+      items: [
+        ...ALL_NAV_ITEMS.map((item) => ({ id: `nav:${item.to}`, label: item.label, group: goTo, to: item.to, keywords: item.keywords })),
+        ...STATIC_DESTINATIONS.map((d) => ({ id: `nav:${d.to}`, label: d.label, group: goTo, to: d.to, keywords: d.keywords })),
+      ],
+    },
+    {
+      value: "targets",
+      label: targets,
+      items: Object.values(catalog.targets).map((t) => ({ id: `target:${t.id}`, label: t.name, group: targets, to: `/targets/${t.id}`, keywords: t.aliases.join(" ") })),
+    },
+    {
+      value: "projects",
+      label: projects,
+      items: Object.values(catalog.projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: projects, to: `/projects/${p.id}` })),
+    },
+    {
+      value: "runs",
+      label: runs,
+      items: [
+        ...Object.values(catalog.runs)
+          .filter((r) => !r.trashedAt && !r.groupId)
+          .map((r) => ({ id: `run:${r.id}`, label: r.name, group: runs, keywords: "processing run", to: runHref(r) })),
+        ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: runs, keywords: "run group mosaic panels", to: groupHref(g) })),
+      ],
+    },
+    {
+      value: "sessions",
+      label: sessions,
+      items: Object.values(catalog.sessions)
+        .filter((s) => s.imageType === "light" && !s.supersededBy && !isTrashedSession(catalog, s))
+        .map((s) => ({
+          id: `session:${s.id}`,
+          label: `${formatNight(s.night)} · ${s.channel ?? m.palette_session_no_filter()} · ${formatExposure(s.exposureS)} · ${s.objectLabel ?? m.palette_session_missing_object()}`,
+          group: sessions,
+          to: `/sessions/${s.id}`,
+        })),
+    },
+    {
+      value: ACTIONS,
+      label: actions,
+      items: [
+        ...appActions.map((action) => actionCommand(action, actions, runner, APP_ACTION_KEYWORDS[action.id.startsWith("language-") ? "language" : action.id])),
+        ...extra.filter((c) => c.group === ACTIONS).map((c) => ({ ...c, group: actions })),
+      ],
+    },
+  ]
+  const otherGroups = [...new Set(extra.filter((c) => c.group !== ACTIONS).map((c) => c.group))]
+  for (const value of otherGroups) groups.push({ value, label: value, items: extra.filter((c) => c.group === value) })
+  return groups.filter((g) => g.items.length > 0)
 }
 
 export function CommandPalette() {
-  const m = useMessages()
   const { panel } = useShellUi()
   const router = useRouter()
-  const groups = useCommands()
-  const highlighted = useRef<PaletteCommand | undefined>(undefined)
+  const runner = useAction()
+  const app = useAppActions()
+  const groups = useGroups([app.theme, ...app.languages, app.toggleSidebar, app.shortcuts, app.singleKeys, app.prototypeControls], runner)
 
   function run(command: PaletteCommand) {
-    // An unavailable command stays listed with its reason, and Enter or a click does nothing.
-    if (command.unavailable !== undefined) return
     if (command.to) {
       // Navigate first, then close, so focus can land on the new page.
       router.history.push(command.to)
@@ -131,74 +153,10 @@ export function CommandPalette() {
   }
 
   return (
-    <Dialog open={panel === "palette"} onOpenChange={(open) => !open && closePanel()}>
-      <DialogContent showCloseButton={false} className="top-24 max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl">
-        <DialogTitle className="sr-only">{m.palette_title()}</DialogTitle>
-        <DialogDescription className="sr-only">{m.palette_description()}</DialogDescription>
-        <Autocomplete.Root
-          inline
-          open
-          items={groups}
-          autoHighlight="always"
-          itemToStringValue={(item: PaletteCommand) => `${item.label} ${item.keywords ?? ""} ${item.group}`}
-          onItemHighlighted={(item: PaletteCommand | undefined) => {
-            highlighted.current = item
-          }}
-        >
-          {/* The row carries the focus indicator; an outline on the input itself would be clipped by the dialog. */}
-          <div className="flex items-center gap-2 border-b px-3 focus-within:shadow-[inset_0_-2px_0_var(--ring)]">
-            <Search aria-hidden="true" className="size-4 text-muted-foreground" />
-            <Autocomplete.Input
-              data-palette-input
-              aria-label={m.palette_search_label()}
-              placeholder={m.shell_search_or_jump()}
-              className="h-11 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && highlighted.current) {
-                  event.preventDefault()
-                  run(highlighted.current)
-                }
-              }}
-            />
-            <Kbd>{m.key_escape()}</Kbd>
-          </div>
-          <Autocomplete.Empty>
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">{m.palette_empty()}</p>
-          </Autocomplete.Empty>
-          <Autocomplete.List className="max-h-[min(60dvh,26rem)] overflow-y-auto overscroll-contain p-1">
-            {(group: Group) => (
-              <Autocomplete.Group key={group.value} items={group.items} className="pb-1">
-                <Autocomplete.GroupLabel className="px-2 py-1.5 text-xs text-muted-foreground">{group.label}</Autocomplete.GroupLabel>
-                <Autocomplete.Collection>
-                  {(item: PaletteCommand) => (
-                    <Autocomplete.Item
-                      key={item.id}
-                      value={item}
-                      onClick={() => run(item)}
-                      aria-disabled={item.unavailable !== undefined || undefined}
-                      // The name is the label alone; the reason is its description and the shortcut stays visual.
-                      aria-label={item.shortcut !== undefined || item.unavailable !== undefined ? item.label : undefined}
-                      aria-describedby={item.unavailable !== undefined ? `palette-reason-${item.id}` : undefined}
-                      className="flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-highlighted:shadow-[inset_2px_0_0_var(--primary)]"
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate in-aria-disabled:opacity-50">{item.label}</span>
-                        {item.unavailable !== undefined ? (
-                          <span id={`palette-reason-${item.id}`} className="truncate text-xs text-muted-foreground">
-                            {item.unavailable}
-                          </span>
-                        ) : null}
-                      </span>
-                      {item.shortcut ? <Kbd className="in-aria-disabled:opacity-50">{item.shortcut}</Kbd> : null}
-                      {item.unavailable === undefined ? <CornerDownLeft aria-hidden="true" className="size-3.5 text-muted-foreground opacity-0 in-data-highlighted:opacity-100" /> : null}
-                    </Autocomplete.Item>
-                  )}
-                </Autocomplete.Collection>
-              </Autocomplete.Group>
-            )}
-          </Autocomplete.List>
-        </Autocomplete.Root>
-      </DialogContent>
-    </Dialog>
+    <>
+      <PaletteDialog open={panel === "palette"} onOpenChange={(open) => !open && closePanel()} groups={groups} onRun={run} />
+      {runner.feedback}
+      {runner.dialog}
+    </>
   )
 }

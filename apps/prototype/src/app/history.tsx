@@ -6,8 +6,7 @@
 import { useRouter } from "@tanstack/react-router"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useSyncExternalStore } from "react"
-import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { IconButton } from "@/components/app/actions"
 import { useMessages } from "./preferences"
 
 /** The furthest history index reached since the last push, so Forward knows whether it can go. */
@@ -32,23 +31,14 @@ function useHistoryPosition(): { canBack: boolean; canForward: boolean } {
   const [index, max, back] = value.split("/").map(Number)
   return { canBack: back === 1, canForward: (index ?? 0) < (max ?? 0) }
 }
-
 export function HistoryControl() {
   const m = useMessages()
   const { history } = useRouter()
   const { canBack, canForward } = useHistoryPosition()
-  const item = (label: string, Icon: typeof ChevronLeft, enabled: boolean, go: () => void) => (
-    <Tooltip>
-      <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} disabled={!enabled} focusableWhenDisabled onClick={go} />}>
-        <Icon aria-hidden="true" />
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
-    </Tooltip>
-  )
   return (
-    <div className="flex shrink-0 items-center" role="group" aria-label={`${m.history_back()} / ${m.history_forward()}`}>
-      {item(m.history_back(), ChevronLeft, canBack, () => history.back())}
-      {item(m.history_forward(), ChevronRight, canForward, () => history.forward())}
+    <div role="group" aria-label={`${m.history_back()} / ${m.history_forward()}`} data-history="">
+      <IconButton label={m.history_back()} icon={ChevronLeft} disabled={!canBack} focusableWhenDisabled onClick={() => history.back()} />
+      <IconButton label={m.history_forward()} icon={ChevronRight} disabled={!canForward} focusableWhenDisabled onClick={() => history.forward()} />
     </div>
   )
 }

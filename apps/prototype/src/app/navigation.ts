@@ -23,6 +23,8 @@ export interface NavItem {
   icon: LucideIcon
   /** Second key after `g` for the go-to shortcut. */
   goKey: string
+  /** Extra words the command palette matches, en-GB. */
+  keywords?: string
 }
 
 export interface NavGroup {
@@ -41,7 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     get label() { return m.nav_library() },
     items: [
       { to: "/sessions", get label() { return m.nav_sessions() }, icon: Layers, goKey: "s" },
-      { to: "/calibration", get label() { return m.nav_calibration() }, icon: SlidersHorizontal, goKey: "c" },
+      { to: "/calibration", get label() { return m.nav_calibration() }, icon: SlidersHorizontal, goKey: "c", keywords: "calibration raw frames keep trash masters stacking" },
     ],
   },
 ]
@@ -63,7 +65,10 @@ export interface Destination {
 export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destination[] }> = [
   {
     get group() { return m.settings_group_general() },
-    items: [{ to: "/settings/appearance", get label() { return m.settings_appearance() }, keywords: "theme dark light language locale portuguese gruvbox nord dracula solarized catppuccin tokyo one rose pine" }],
+    items: [
+      { to: "/settings/appearance", get label() { return m.settings_appearance() }, keywords: "theme dark light language locale portuguese gruvbox nord dracula solarized catppuccin tokyo one rose pine" },
+      { to: "/settings/help", get label() { return m.settings_help() }, keywords: "help shortcuts keyboard tips guide walk" },
+    ],
   },
   {
     get group() { return m.nav_library() },
@@ -71,7 +76,6 @@ export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destinati
       { to: "/settings/locations", get label() { return m.common_locations() }, keywords: "folders captures calibration results archive" },
       { to: "/settings/equipment", get label() { return m.settings_equipment() }, keywords: "rig optical train camera telescope filter mono osc" },
       { to: "/settings/naming", get label() { return m.settings_naming() }, keywords: "naming template tokens import archive folder" },
-      { to: "/settings/calibration", get label() { return m.nav_calibration() }, keywords: "calibration raw frames keep trash masters stacking" },
       { to: "/settings/sites", get label() { return m.settings_sites() }, keywords: "site default location latitude" },
       { to: "/settings/targets", get label() { return m.settings_target_lookup() }, keywords: "simbad sesame resolver online provider" },
     ],

@@ -1,10 +1,15 @@
 // @ts-check
-// ESLint carries only the i18n catalogue gate (port of apps/desktop's
-// `alm/*` rules): every user-visible string comes from messages/en-GB.json
-// through `m.<key>()` from '@/lib/i18n'. A hardcoded string is an error
-// anywhere under src/ (design/I18N.md). Type checking stays with `tsc`.
+// ESLint carries the i18n catalogue gate (port of apps/desktop's `alm/*`
+// rules): every user-visible string comes from messages/en-GB.json through
+// `m.<key>()` from '@/lib/i18n'. A hardcoded string is an error anywhere
+// under src/ (design/I18N.md). It also enforces the composition rules
+// (eslint-rules/composition.js) as errors on the files of units that
+// finished their migration (`COMPOSITION_ENFORCED`, the W3 ratchet); the
+// rest of src/ reports them through eslint.composition.config.js until W4.
+// Type checking stays with `tsc`.
 import { defineConfig } from "eslint/config"
 import tseslint from "typescript-eslint"
+import { areaImportPatterns, COMPOSITION_SYNTAX } from "./eslint-rules/composition.js"
 import alm from "./eslint-rules/no-user-string.js"
 
 // Outside the gate: only tests and fixtures, which carry assertion and
@@ -14,6 +19,32 @@ import alm from "./eslint-rules/no-user-string.js"
 // non-user string (proper name, code identifier) takes a per-line
 // `eslint-disable-next-line alm/no-user-string -- <reason>`.
 export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__fixtures__/**"]
+
+/**
+ * Files held to the composition rules as errors, one unit at a time as it
+ * lands (R9-COMPOSITION-PLAN.md §7.4): file lists, never a whole directory
+ * another unit still shares. `area` gives a feature's I4-I6 import
+ * boundary; app-shell files (src/app) take the syntax rules only, as in
+ * eslint.composition.config.js.
+ * @type {Array<{ unit: string, area: { dir: string, depth: number } | null, files: string[] }>}
+ */
+export const COMPOSITION_ENFORCED = [
+  {
+    unit: "P8 Calibration",
+    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
+    files: ["src/features/v5/e-targets-plan-settings/{calibration,calibration-process,dialogs,calibration-model}.{ts,tsx}"],
+  },
+  {
+    unit: "P7 Targets",
+    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
+    files: ["src/features/v5/e-targets-plan-settings/{targets,target,planned-tools,moon-limits,targets-model,parts,targets-presets}.{ts,tsx}"],
+  },
+  {
+    unit: "P1 Shell",
+    area: null,
+    files: ["src/app/{shell,status-bar,issues-hub,command-palette,onboarding,shortcuts,history,appearance,run-ui}.tsx", "src/app/{navigation,ui-state}.ts"],
+  },
+]
 
 export default defineConfig(
   {
@@ -38,4 +69,10 @@ export default defineConfig(
       "alm/no-js-plural": "error",
     },
   },
+  ...COMPOSITION_ENFORCED.map(({ area, files }) => {
+    /** @type {import("eslint").Linter.RulesRecord} */
+    const rules = { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX] }
+    if (area) rules["no-restricted-imports"] = ["error", { patterns: areaImportPatterns(area) }]
+    return { files, ignores: I18N_IGNORES, rules }
+  }),
 )

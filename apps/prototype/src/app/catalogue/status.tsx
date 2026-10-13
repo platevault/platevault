@@ -6,7 +6,7 @@
  */
 import { Radio } from "lucide-react"
 import { useMessages } from "@/app/preferences"
-import { stepName } from "@/app/run-ui"
+import { stepName } from "@/components/app/run-step"
 import { CountBadge, Pill } from "@/components/app/pill"
 import { STATUS, type StatusKind, StatusBadge, type StatusValue, type Tone } from "@/components/app/status"
 import { ComponentSection, Specimen } from "./specimen"

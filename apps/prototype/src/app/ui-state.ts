@@ -2,8 +2,9 @@
  * Shell-level UI state: which global panel is open (command palette,
  * keyboard shortcuts, simulation controls), which workflow sheet is open
  * (Import, New Project, Start a run), the sidebar collapse preference and the
- * Recent Projects of the source list. Module-level store so the header,
- * shortcuts and screens can open panels and sheets without prop drilling.
+ * recent Projects, sessions and Targets of the source list's Recent menus.
+ * Module-level store so the header, shortcuts and screens can open panels and
+ * sheets without prop drilling.
  */
 import { useSyncExternalStore } from "react"
 import type { ProjectId, SessionId, TargetId } from "@/domain/types"
@@ -24,16 +25,19 @@ export type WorkflowSheet =
   | null
 
 const SIDEBAR_KEY = "platevault.sidebar"
-const RECENT_KEY = "platevault.recentProjects"
-/** The source list's Recent group shows at most this many Projects. */
-export const RECENT_LIMIT = 3
+/** Each Recent menu lists at most this many records. */
+export const RECENT_LIMIT = 5
+
+export type RecentKind = "projects" | "sessions" | "targets"
+
+const RECENT_KEY: Record<RecentKind, string> = { projects: "platevault.recentProjects", sessions: "platevault.recentSessions", targets: "platevault.recentTargets" }
 
 interface ShellUiState {
   panel: GlobalPanel
   sheet: WorkflowSheet
   sidebarCollapsed: boolean
-  /** Projects opened most recently, newest first. */
-  recentProjectIds: ProjectId[]
+  /** The records opened most recently, newest first, per kind. */
+  recent: Record<RecentKind, string[]>
 }
 
 function readSidebar(): boolean {
@@ -44,16 +48,21 @@ function readSidebar(): boolean {
   }
 }
 
-function readRecent(): ProjectId[] {
+function readRecent(kind: RecentKind): string[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]")
+    const value: unknown = JSON.parse(localStorage.getItem(RECENT_KEY[kind]) ?? "[]")
     return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string").slice(0, RECENT_LIMIT) : []
   } catch {
     return []
   }
 }
 
-let current: ShellUiState = { panel: null, sheet: null, sidebarCollapsed: readSidebar(), recentProjectIds: readRecent() }
+let current: ShellUiState = {
+  panel: null,
+  sheet: null,
+  sidebarCollapsed: readSidebar(),
+  recent: { projects: readRecent("projects"), sessions: readRecent("sessions"), targets: readRecent("targets") },
+}
 const listeners = new Set<() => void>()
 
 function set(next: Partial<ShellUiState>) {
@@ -87,16 +96,17 @@ export function toggleSidebar() {
   set({ sidebarCollapsed })
 }
 
-/** A Project was opened: it leads the Recent group. */
-export function rememberProject(projectId: ProjectId) {
-  if (current.recentProjectIds[0] === projectId) return
-  const recentProjectIds = [projectId, ...current.recentProjectIds.filter((id) => id !== projectId)].slice(0, RECENT_LIMIT)
+/** A Project, session or Target was opened: it leads its Recent menu. */
+export function rememberRecent(kind: RecentKind, id: string) {
+  const ids = current.recent[kind]
+  if (ids[0] === id) return
+  const next = [id, ...ids.filter((other) => other !== id)].slice(0, RECENT_LIMIT)
   try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(recentProjectIds))
+    localStorage.setItem(RECENT_KEY[kind], JSON.stringify(next))
   } catch {
     // Recent applies for this session only.
   }
-  set({ recentProjectIds })
+  set({ recent: { ...current.recent, [kind]: next } })
 }
 
 export function useShellUi(): ShellUiState {

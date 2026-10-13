@@ -31,7 +31,6 @@
   "nav_library": "Library",
   "nav_sessions": "Sessions",
   "nav_calibration": "Calibration",
-  "nav_storage": "Storage",
   "nav_activity": "Activity",
   "nav_settings": "Settings",
   "nav_welcome": "Welcome and setup",
@@ -105,14 +104,13 @@
   "palette_title": "Command palette",
   "palette_description": "Type to search surfaces, records and actions. Use arrow keys to move and Enter to open.",
   "palette_search_label": "Search surfaces, records and actions",
-  "palette_empty": "No matches. Try a Target name, a surface such as Sessions, or an action such as Theme.",
+  "palette_empty": "Nothing matches",
   "palette_group_go_to": "Go to",
   "palette_group_actions": "Actions",
   "palette_settings_destination": "Settings: {name}",
   "palette_session_no_filter": "No filter",
   "palette_session_missing_object": "Missing OBJECT",
   "palette_toggle_sidebar": "Toggle sidebar",
-  "palette_open_simulation": "Open simulation controls",
   "palette_single_key_off": "Single-key shortcuts: Off",
   "palette_single_key_on": "Single-key shortcuts: On",
   "shortcuts_title": "Keyboard shortcuts",
@@ -123,13 +121,16 @@
   "shortcuts_search": "Search or jump to anything",
   "shortcuts_focus_search": "Focus the page search or filter",
   "shortcuts_toggle_sidebar": "Collapse or expand the sidebar",
-  "shortcuts_run_next": "Run the Next action of the open run or Project",
-  "shortcuts_go_to_step": "Go to step 1 to 6 of the open run or run group",
+  "shortcuts_proceed": "Proceed on the step on screen",
+  "shortcuts_go_to_step": "Go to a step of the flow on screen",
   "shortcuts_context_menu": "Open the context menu of the focused row",
   "shortcuts_go_to": "Go to {name}",
   "shortcuts_move_rows": "Move between table rows",
   "shortcuts_toggle_checkbox": "Toggle the focused checkbox",
   "shortcuts_close": "Close a dialog, menu or panel",
+  "shortcuts_group_app": "App",
+  "shortcuts_col_action": "Action",
+  "shortcuts_col_keys": "Keys",
   "issues_title": "Issues",
   "issues_none": "No issues",
   "issues_count": [
@@ -1102,6 +1103,7 @@
   "import_imported_before": "{count} imported before",
   "import_skipped": "Skipped",
   "import_duplicates": "Duplicates",
+  "import_match": "Match",
   "import_match_sha": "SHA-256 of a library frame",
   "import_name_taken": "Name taken",
   "import_name_taken_detail": "holds different bytes; nothing is overwritten",
@@ -2207,22 +2209,13 @@
   "tonight_criteria_astronomical": "astronomical darkness",
   "tonight_criteria_nautical": "nautical darkness",
   "tonight_criteria_duration": "at least {minutes} min",
-  "tonight_criteria_moon_illumination": "Moon ≤ {illumination}% when up",
-  "tonight_criteria_moon_separation": "Moon ≥ {separation}° away when up",
   "tonight_no_filters": "No filters",
-  "target_project_badge": "Project {name}",
-  "tonight_limit_separation_field": "{band} minimum Moon separation",
-  "tonight_limit_illumination_field": "{band} maximum Moon illumination",
   "tonight_moon_limits": "Moon limits",
-  "tonight_reset": "Reset",
   "tonight_filter": "Filter",
-  "tonight_limit_separation_header": "Moon ≥",
-  "tonight_limit_illumination_header": "Lit ≤",
   "tonight_actions": "Actions",
   "tonight_no_window": "No window tonight",
   "tonight_altitude": "Altitude",
   "tonight_window": "Window",
-  "tonight_method": "Method",
   "targets_name_empty": "{label}: enter a name.",
   "targets_name_taken": "{label}: “{name}” is already used. Choose another name.",
   "target_plan_tonight": "Plan tonight",
@@ -2252,7 +2245,6 @@
   "targets_preset_needs_rig": "Choose a rig to use this preset",
   "targets_preset_needs_narrowband": "The selected rig has no Ha, SII or OIII filter",
   "targets_result_gone": "This result is no longer available. Search again.",
-  "plan_matches": "Matches",
   "plan_unknown_target": "Unknown Target",
   "tonight_no_coordinates": "No catalogued coordinates",
   "plan_site": "Planning site",
@@ -2261,7 +2253,6 @@
   "plan_moon_away": "Moon {separation}° away",
   "plan_moon_up_best": "Moon {separation}° away, up in the best window",
   "plan_moon_down_best": "Moon {separation}° away, down in the best window",
-  "plan_moon_up": "up",
   "plan_goals": "Goals",
   "plan_goals_short": [
     {
@@ -2299,159 +2290,140 @@
       }
     }
   ],
-  "plan_rows_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} row",
-        "countPlural=*": "{count} rows"
-      }
-    }
-  ],
   "plan_list_empty": "Plan list empty",
   "plan_show_all": "Show all",
   "plan_dark": "Dark",
   "plan_dark_none": "none",
   "targets_browse_catalogues": "Browse catalogues",
   "tonight_night": "Night",
-  "tonight_times": "Times",
   "tonight_criteria": "Criteria",
-  "tonight_method_value": "Low-precision Sun and Moon, 10-min grid",
-  "targets_rig_lacks_filter": "The rig has no {band} filter",
-  "targets_unstar_named": "Remove {name} from favourites",
-  "targets_star_named": "Add {name} to favourites",
   "targets_add_named": "Add {name} to targets",
   "targets_designation": "Designation",
   "targets_type": "Type",
-  "targets_type_unknown": "Object type unknown",
   "tonight_no_darkness": "No darkness tonight",
   "tonight_lunar": "Lunar",
   "tonight_img_time": "Img time",
-  "targets_filters": "Filters",
-  "targets_filters_help": "Each filter tonight under its Moon limits. Dashed: marginal. Struck: poor.",
   "targets_fit_per_rig": "Fit per rig",
   "targets_fit": "Fit",
   "tonight_opposition": "Opposition",
   "targets_source": "Source",
-  "targets_add_to_targets": "Add to targets",
-  "targets_star": "Add ★",
-  "targets_unstar": "Remove ★",
   "targets_open_plan": "Show planned",
-  "targets_apply": "Apply",
-  "targets_rename_menu": "Rename…",
-  "targets_delete_menu": "Delete…",
-  "targets_good_for": "Good tonight for {band}",
-  "targets_good_for_menu": "Good tonight for…",
-  "targets_good_for_heading": "Good tonight for",
+  "targets_none_suitable": "No target suits the picked filters",
+  "targets_deadline": "Deadline",
+  "targets_fit_rig": "Fit · {rig}",
+  "targets_in_my_targets": "In My targets",
+  "targets_my_add": "Add to My targets",
+  "targets_my_remove": "Remove from My targets",
+  "targets_details": "Details",
+  "targets_preset_none": "No preset",
+  "targets_planning_for": "Planning {name}",
+  "targets_panel": "Panel",
+  "target_menu": "Target",
+  "target_project_state": "State",
+  "target_library_empty": "No frames yet",
+  "plan_first_already": "Already first",
+  "plan_last_already": "Already last",
+  "plan_lead_minutes": "{count} min before",
+  "plan_lead_hours": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} h before",
+        "countPlural=*": "{count} h before"
+      }
+    }
+  ],
+  "plan_lead_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day before",
+        "countPlural=*": "{count} days before"
+      }
+    }
+  ],
+  "plan_lead_custom": "Custom",
+  "plan_lead_amount": "Lead time",
+  "plan_lead_unit": "Unit",
+  "plan_lead_unit_minutes": "Minutes",
+  "plan_lead_unit_hours": "Hours",
+  "plan_lead_unit_days": "Days",
+  "plan_lead_invalid": "Enter a whole number, up to 7 days",
+  "plan_reminders_site": "Site",
+  "plan_reminders_next": "Next reminder",
+  "plan_export_events": "Events",
+  "tonight_curve_separation": "Separation at full Moon",
+  "tonight_curve_width": "Width",
+  "catalogue_grade_badges_wrap": "Wrapping in a narrow place",
+  "tonight_curve_days_unit": "days",
+  "tonight_curve_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day",
+        "countPlural=*": "{count} days"
+      }
+    }
+  ],
+  "tonight_curve_default": "Default {value}",
+  "tonight_curve_number_needed": "Enter a number",
+  "tonight_curve_incomplete": "{band}: enter both values",
+  "domain_grade_badge": "{band} {grade}",
+  "domain_grade_good": "good",
+  "domain_grade_marginal": "marginal",
+  "domain_grade_poor": "poor",
+  "catalogue_grade_badges_desc": "Display-only grade per filter for one night; tone and icon carry the grade.",
+  "catalogue_grade_badges_grades": "Every grade",
+  "catalogue_grade_badges_full": "Seven filters",
+  "catalogue_grade_badges_one": "One filter",
+  "catalogue_grade_badges_none": "No verdict",
   "targets_project_rigs": "This Project's rigs ({count})",
   "targets_no_match": "No match for “{query}”",
   "targets_choose_catalogue": "Choose a catalogue or preset",
   "targets_browse_messier": "Browse Messier",
-  "targets_none_good": "No target with {band} ok tonight",
   "targets_clear_filter": "Clear filter",
   "targets_none_match_preset": "No target matches {name}",
   "targets_clear_preset": "Clear preset",
   "targets_empty": "No targets yet",
-  "targets_clear_search_first": "Clear search first",
-  "targets_save_preset": "Save preset",
   "targets_clear_project": "Clear Project",
-  "targets_show": "Show",
   "targets_search_label": "Search targets, catalogues and SIMBAD",
   "targets_search_placeholder": "Targets, catalogues, SIMBAD",
   "targets_rig": "Rig",
   "targets_moon_limits_for": "Moon limits for {band}",
-  "targets_off_while_searching": "Off while searching",
-  "targets_good_chip": "{band} ok · {limit}",
-  "targets_clear_band_filter": "Clear {band} filter",
   "targets_catalogues": "Catalogues",
-  "targets_presets": "Presets",
-  "targets_preset_unavailable_sr": ": unavailable, {reason}",
-  "targets_more_for": "More for {name}",
   "targets_preset_unavailable": "{name} · unavailable",
-  "targets_clear_named": "Clear {name}",
   "targets_simbad_searching": "Searching SIMBAD…",
   "targets_simbad_off": "SIMBAD off",
   "targets_simbad_unreachable": "SIMBAD unreachable",
-  "targets_simbad_searched": "SIMBAD searched",
-  "targets_simbad_fixture": "Fixture data (prototype)",
   "targets_caption_search": "Search results for {query}",
   "targets_caption_project": "{name} subjects",
   "targets_filters_band": "Filters ({band})",
-  "targets_favourite": "Favourite",
-  "targets_about_column": "About {name}",
-  "targets_sort_ascending": "ascending",
-  "targets_sort_descending": "descending",
-  "targets_preset_name": "Preset name",
-  "targets_rename_preset": "Rename preset",
-  "targets_rename": "Rename",
-  "targets_delete_preset_title": "Delete preset {name}?",
-  "targets_delete_preset_change": "Removes “{name}”",
-  "targets_delete_preset": "Delete preset",
   "target_source_catalogue": "Bundled catalogue",
   "target_source_user": "Entered by you",
   "target_source_resolver": "Online resolver",
-  "target_find": "Find a Target",
   "target_find_placeholder": "Name or alias",
-  "target_matching_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} matching Target",
-        "countPlural=*": "{count} matching Targets"
-      }
-    }
-  ],
-  "target_targets_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Target",
-        "countPlural=*": "{count} Targets"
-      }
-    }
-  ],
-  "target_favourite_sr": ", favourite",
-  "target_projects_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Project",
-        "countPlural=*": "{count} Projects"
-      }
-    }
-  ],
-  "target_table_link": "Targets table",
   "target_open_targets": "Open Targets",
-  "target_finder": "Target finder",
-  "target_no_coordinates": "No coordinates",
   "target_best_none": "None",
   "target_open_planner": "Open in Planner",
   "target_open_equipment": "Open in Equipment",
-  "target_in_every_project": "In every open Project",
   "target_tonight": "Tonight",
   "target_identity": "Identity",
   "target_aliases": "Aliases",
@@ -2459,28 +2431,7 @@
   "target_coordinates": "Coordinates",
   "target_angular_size": "Angular size",
   "target_size_unknown": "Size unknown",
-  "target_about_fit": "About Fit",
-  "target_fit_help": "Major axis against the shorter side of each rig's field.",
   "target_field": "Field",
-  "target_fov_unknown": "Camera or focal length unknown",
-  "target_mosaic_panels": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} panel",
-        "countPlural=*": "{name} · {count} panels"
-      }
-    }
-  ],
-  "target_planner": "Planner",
-  "target_panel": "Panel {number}",
   "target_sessions_caption": "Sessions of {name}",
   "target_channel": "Channel",
   "calibration_frames": "Frames",
@@ -2543,8 +2494,6 @@
   "storage_no_duplicates": "No duplicates",
   "storage_transfers": "Transfers",
   "storage_no_transfers": "No transfers",
-  "calibration_action_blocked": "{action} blocked",
-  "calibration_action_not_saved": "{action} not saved",
   "calibration_kind_dark": "Dark",
   "calibration_kind_flat": "Flat",
   "calibration_kind_bias": "Bias",
@@ -2560,10 +2509,8 @@
   "calibration_step_todo": "To do",
   "calibration_steps_of": "{name} steps",
   "calibration_raws_kept": "Kept",
-  "calibration_raws_restore": "In the OS Trash. Put them back and rescan to restore them.",
   "calibration_keep_raws": "Keep raws",
   "calibration_stack_again": "Stack again",
-  "calibration_detect_now": "Detect now",
   "calibration_trash_raws": "Trash raws",
   "calibration_show_master": "Show master",
   "calibration_process": "Process",
@@ -2577,8 +2524,6 @@
   "calibration_detected": "Detected",
   "calibration_ncombine": "NCOMBINE {count}",
   "calibration_stored": "Stored",
-  "calibration_folders_of": "{name} folders",
-  "calibration_tool_for": "Tool for {name}",
   "calibration_heading_flats": "Flats",
   "calibration_heading_darks": "Darks",
   "calibration_heading_bias": "Bias",
@@ -2587,61 +2532,22 @@
   "calibration_caption_darks": "Master darks",
   "calibration_caption_bias": "Master bias",
   "calibration_caption_dark_flats": "Master dark flats",
-  "calibration_key_train": "Train",
   "calibration_key_camera": "Camera",
   "calibration_key_exposure": "Exposure",
-  "calibration_key_gain": "Gain",
-  "calibration_key_offset": "Offset",
   "calibration_key_temp": "Temp",
   "calibration_origin_indexed": "Indexed",
   "calibration_origin_results": "Run Results",
   "calibration_origin_stacked": "Stacked",
   "calibration_origin_imported": "Imported",
-  "calibration_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} run",
-        "countPlural=*": "{count} runs"
-      }
-    }
-  ],
-  "calibration_sessions_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} session",
-        "countPlural=*": "{count} sessions"
-      }
-    }
-  ],
   "calibration_open_offer": "Open offer",
   "calibration_used_by": "Used by",
   "calibration_open_raw_session": "Open raw session",
-  "calibration_offered_in": "Offered in {name}",
   "calibration_offered": "Offered",
-  "calibration_restore": "Restore",
   "calibration_offer_restored": "Offer restored",
   "calibration_open_run": "Open run",
   "calibration_dismissed": "Dismissed",
-  "calibration_no_dismissed": "No dismissed masters",
-  "calibration_dismissed_caption": "Dismissed masters and offers",
   "calibration_master": "Master",
   "calibration_run": "Run",
-  "calibration_refused_reason": "refused",
-  "calibration_import_refused_same": "{count} {reason}",
   "calibration_masters_count": [
     {
       "declarations": [
@@ -4392,14 +4298,9 @@
   "apps_move_away": "Move away",
   "apps_put_back": "Put back",
   "apps_fail_next_launch": "Fail next launch",
-  "settings_keep_raws_not_saved": "Keep raws not saved",
   "settings_raw_frames": "Raw frames",
   "settings_keep_raws": "Keep raw calibration frames",
-  "settings_keep_raws_about": "About keeping raw calibration frames",
   "settings_keep_raws_help": "Off: raws go to the OS Trash once their master registers.",
-  "settings_masters": "Masters",
-  "settings_layout": "Layout",
-  "settings_tools": "Tools",
   "template_frames": [
     {
       "declarations": [
@@ -6867,10 +6768,7 @@
   "op_measure_not_measured": "{count} not measured: no readable copy",
   "op_measure_summary": "{parts}.",
   "store_saved_preset": "Targets preset saved: {name}",
-  "store_saved_preset_renamed": "Targets preset renamed: {name}",
-  "store_preset_was": "Was “{name}”.",
   "store_saved_preset_deleted": "Targets preset deleted: {name}",
-  "store_saved_planning_site": "Planning site: {name}",
   "op_offer_to_trash": "{offer} of {name} to Trash",
   "seed_cleanup_summary": [
     {
@@ -7147,7 +7045,6 @@
     }
   ],
   "calibration_created": "Created",
-  "calibration_cant_dismiss": "Can't dismiss",
   "calibration_dismiss_master": "Dismiss master",
   "calibration_restore_master": "Restore master",
   "calibration_restored_master": "Restored {name}",
@@ -7294,11 +7191,6 @@
   "plan_ics_description": "Max altitude {altitude}° · Moon {moon}%, {separation}° away",
   "duplicates_scope_help": "Library locations only; capture cards are never scanned. Keeps the copy in the earliest-registered location.",
   "plan_night_empty": "Nothing planned for {night}",
-  "plan_lead_option": "{minutes} min before",
-  "plan_cant_turn_on_reminders": "Can't turn on reminders",
-  "plan_next_reminder": "Next {time}",
-  "plan_proto_next_reminder": "Prototype: jump to the next reminder",
-  "plan_export_calendar_open": "Export calendar…",
   "plan_export_summary": "{events} on {nights} · {site}",
   "plan_events_count": [
     {
@@ -7386,18 +7278,22 @@
   ],
   "shell_quit": "Quit",
   "shell_quit_app": "Quit PlateVault",
-  "onboarding_walk_sources_title": "Navigation",
-  "onboarding_walk_sources": "Home, Projects, Targets and the library, plus your recent Projects.",
-  "onboarding_walk_issues": "Everything that needs you, in one list.",
-  "onboarding_walk_next": "Each Project's next step. Click it to do it.",
-  "onboarding_walk_status_title": "Status bar",
-  "onboarding_walk_status": "Running work, issue counters and notifications.",
-  "onboarding_walk_targets": "Your Targets, the catalogues and each night's plan.",
-  "onboarding_walk_step": "{step} of {total}",
-  "onboarding_walk_skip": "Skip",
-  "onboarding_walk_done": "Done",
+  "onboarding_walk_sources_title": "Sources",
+  "onboarding_walk_sources": "Home · Projects · Targets · Library",
+  "onboarding_walk_issues": "Everything that needs attention",
+  "onboarding_walk_next_title": "Next",
+  "onboarding_walk_next": "Next step per Project",
+  "onboarding_walk_status_title": "Status",
+  "onboarding_walk_status": "Work · Issues · Notifications",
+  "onboarding_walk_targets": "Targets · Catalogues · Plan",
+  "walk_back": "Back",
+  "walk_next": "Next",
+  "walk_skip": "Skip",
+  "walk_done": "Done",
+  "walk_step": "{step} of {total}",
   "onboarding_getting_started": "Getting started",
   "onboarding_check_progress": "{done} of {total} done",
+  "onboarding_checklist_steps": "Steps",
   "onboarding_check_import": "Import your first captures",
   "onboarding_check_targets": "Confirm Targets",
   "onboarding_check_project": "Create your first Project",
@@ -7580,6 +7476,16 @@
   "settings_help": "Help",
   "checklist_ring_name": "{title}, {done} of {total} done",
   "checklist_dismiss": "Dismiss {title}",
+  "catalogue_app_frame_desc": "The app window: source list, toolbar, one scrolling content pane and the status bar. Setup uses SetupFrame.",
+  "catalogue_frame_wide": "Wide · sidebar",
+  "catalogue_frame_rail": "Wide · icon rail",
+  "catalogue_frame_narrow": "Narrow · drawer",
+  "catalogue_frame_setup": "Setup",
+  "catalogue_status_bar_desc": "The bottom bar: locations, selection, running work, issue counters and notifications, each list in a ListPopover.",
+  "catalogue_palette_desc": "The command palette: places, records and registered Actions in one searchable list.",
+  "catalogue_run_step_desc": "A run's gate glyphs and its six steps in one line.",
+  "catalogue_walk_desc": "The modal orientation walk: a cut-out around each anchor, Back, Next and Skip. A step without an anchor is passed over.",
+  "catalogue_walk_start": "Start the walk",
   "theme_picker_mode": "Mode",
   "theme_picker_light": "Light",
   "theme_picker_dark": "Dark",
@@ -8488,6 +8394,99 @@
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
   "catalogue_templates_rescan_on_open": "Rescan when the app opens",
+  "calibration_process_gone": "Unknown process",
+  "calibration_processes": "Processes",
+  "calibration_on": "On",
+  "calibration_off": "Off",
+  "calibration_views": "Calibration views",
+  "calibration_hidden": "Hidden",
+  "calibration_settings": "Calibration settings",
+  "calibration_settings_saved": "Calibration settings saved",
+  "calibration_unit_days": "days",
+  "calibration_master_age_help": "Darks, bias and dark flats older than this read Old. Flats never age.",
+  "calibration_replace": "Replace",
+  "calibration_replace_file": "Master file",
+  "calibration_replace_file_help": "A FITS or XISF master of the same kind.",
+  "calibration_replace_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Re-points {count} open run",
+        "countPlural=*": "Re-points {count} open runs"
+      }
+    }
+  ],
+  "calibration_replace_no_runs": "No open run uses this master",
+  "calibration_replace_finished_keep": "Finished runs keep the master they recorded.",
+  "calibration_import_none_imported": "No master imported",
+  "calibration_import_partly": "{imported} imported · {refused} not imported",
+  "calibration_import_select_files": "Select at least one file",
+  "calibration_import_folder_help": "Lists the folder's FITS and XISF masters with their match.",
+  "calibration_import_files": "Master files in {folder}",
+  "calibration_files_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file selected",
+        "countPlural=*": "{count} files selected"
+      }
+    }
+  ],
+  "calibration_import_no_files": "No master files in this folder",
+  "calibration_processes_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} process",
+        "countPlural=*": "{count} processes"
+      }
+    }
+  ],
+  "calibration_no_processes_help": "Import raw darks, flats or bias to start a process.",
+  "calibration_open_process": "Open process",
+  "calibration_search_processes": "Filter processes",
+  "calibration_hidden_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hidden",
+        "countPlural=*": "{count} hidden"
+      }
+    }
+  ],
+  "calibration_hidden_caption": "Hidden masters and dismissed offers",
+  "calibration_nothing_hidden": "Nothing hidden",
+  "calibration_age": "Age",
+  "calibration_age_old": "Old",
+  "calibration_age_days": "{n} d",
+  "calibration_replaced_by": "Replaced by {name}",
+  "calibration_replaced_by_label": "Replaced by",
+  "calibration_offer_dismissed": "Offer dismissed",
+  "calibration_hidden_on": "Hidden on",
   "catalogue_templates_fill_toggle": "Full-height step",
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
@@ -8509,6 +8508,8 @@
     }
   ],
   "store_saved_added": "Added {name}",
+  "calibration_open_master": "Open master",
+  "calibration_shown_master": "{name} is back in Masters",
   "sessions_empty_needs_review": "None need review",
   "sessions_cant_trash": "Can't move to Trash",
   "sessions_all_kept": [
