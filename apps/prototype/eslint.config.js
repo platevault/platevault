@@ -44,6 +44,12 @@ export const COMPOSITION_ENFORCED = [
     area: null,
     files: ["src/app/{shell,status-bar,issues-hub,command-palette,onboarding,shortcuts,history,appearance,run-ui}.tsx", "src/app/{navigation,ui-state}.ts"],
   },
+  {
+    // d-review is P4's alone (R9-COMPOSITION-PLAN.md §7.4), so the whole area is enforced.
+    unit: "P4 Review",
+    area: { dir: "v5/d-review", depth: 0 },
+    files: ["src/features/v5/d-review/**/*.{ts,tsx}"],
+  },
 ]
 
 export default defineConfig(
