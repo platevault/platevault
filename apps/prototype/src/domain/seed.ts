@@ -1138,6 +1138,8 @@ function demoSeed(): SeedData {
     m31Run.completedAt!,
     m31Run.revisions[0]!.sessions.map(({ sessionId }): CalibrationAssignment => ({ id: assignmentId(m31Run.id, sessionId, "dark"), lightSessionId: sessionId, kind: "dark", input: null, state: "exception", criteria: [], exception: { reason: m.seed_dark_exception_reason(), at: noDarkAt }, basis: { at: noDarkAt, files: [] } })),
   )
+  // The prepared open runs recorded their calibration at Calibrate's Proceed, before Prepare (§5.4), so Calibrate reads Finished.
+  for (const [r, at] of [[runD, "2026-09-25T20:25:00.000Z"], [p1, "2026-09-27T18:55:00.000Z"], [p2, "2026-09-27T18:55:00.000Z"]] as const) recordHandoff(catalog.runs[r.id]!, at)
 
   // One drifted-content frame: an M 31 L frame changed on disk after review (LIB-FR-09).
   const driftedId = s.m31.L.assetIds[6]!

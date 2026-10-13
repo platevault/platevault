@@ -1818,8 +1818,14 @@ export function runFlowState(world: World, run: Run): RunFlowState {
     : open.length > 0
       ? { reason: msg("blocker_calibration_review", { count: open.length }), blockers: open.map((row) => ({ label: joinRefs([KIND_NAME[row.kind], sessionRef(row.member.session)], " · "), link: link("calibrate") })) }
       : null
-  const calibrateSummary =
-    calibration.policy === "off" ? msg("run_cal_off") : open.length > 0 ? msg("domain_status_need_review", { count: open.length }) : msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length })
+  // Without a saved selection there is nothing to match yet: the gate says so, and no count is shown.
+  const calibrateSummary: MessageRef | null = !selectDone && !finishedRun
+    ? null
+    : calibration.policy === "off"
+      ? msg("run_cal_off")
+      : open.length > 0
+        ? msg("domain_status_need_review", { count: open.length })
+        : msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length })
 
   // 3 Prepare
   const preparations = runPreparations(catalog, run.id)
@@ -1869,7 +1875,7 @@ export function runFlowState(world: World, run: Run): RunFlowState {
     : { select: selectDone, calibrate: calibrateDone, prepare: prepareDone, results: false }
   const settledBefore: Record<RunFlowStepId, boolean> = { select: latest !== null, calibrate: run.calibration.length > 0, prepare: prep !== null, results: false }
   const gates: Record<RunFlowStepId, FlowGate | null> = { select: selectGate, calibrate: calibrateGate, prepare: prepareGate, results: resultsGate }
-  const summaries: Record<RunFlowStepId, MessageRef> = { select: selectSummary, calibrate: calibrateSummary, prepare: prepareSummary, results: resultsSummary }
+  const summaries: Record<RunFlowStepId, MessageRef | null> = { select: selectSummary, calibrate: calibrateSummary, prepare: prepareSummary, results: resultsSummary }
   const current = finishedRun ? "results" : RUN_FLOW_STEPS.find((id) => !done[id])!
   const steps = RUN_FLOW_STEPS.map((id): DerivedStep<RunFlowStepId> => {
     if (done[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
