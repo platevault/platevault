@@ -52,12 +52,12 @@ export interface ConfirmSpec {
   confirm: { label: string; kind?: ActionKind }
 }
 
-/** One file an operation moves, copies, unlinks or trashes. */
+/** One file an operation moves, copies, unlinks or trashes, or one it keeps where it is ("keep": a run's Products on Finish run). */
 export interface FileRow {
   file: string
   from: string
   to?: string
-  action: "trash" | "move" | "unlink" | "copy"
+  action: "trash" | "move" | "unlink" | "copy" | "keep"
   /** Bytes. */
   size: number
   /** A per-file refusal or note: "Read-only", "Linked by NGC 7000 OIII deep ▸". */

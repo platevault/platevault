@@ -192,7 +192,7 @@ interface IndexedRow extends FileRow {
   key: string
 }
 
-/** Where a file goes when the row names no destination. */
+/** Where a file goes when the row names no destination; a kept file stays in its folder. */
 function actionWord(m: Messages, action: FileRow["action"]): string {
   switch (action) {
     case "trash":
@@ -203,6 +203,8 @@ function actionWord(m: Messages, action: FileRow["action"]): string {
       return m.dialog_to_move()
     case "copy":
       return m.dialog_to_copy()
+    case "keep":
+      return m.dialog_to_keep()
   }
 }
 

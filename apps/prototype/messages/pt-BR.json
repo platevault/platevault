@@ -614,6 +614,7 @@
   "dialog_to_unlink": "Link removido",
   "dialog_to_move": "Movido",
   "dialog_to_copy": "Copiado",
+  "dialog_to_keep": "Fica",
   "confirm_unchanged": "Inalterado",
   "operation_progress_label": "Progresso de {title}",
   "operation_progress_value": "{done} de {total} {unit}, {percent}",

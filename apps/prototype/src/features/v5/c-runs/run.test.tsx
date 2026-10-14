@@ -2,7 +2,9 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it } from "vitest"
+import { fileAt } from "@/domain/disk"
 import { createSeed } from "@/domain/seed"
+import { fileName, formatBytes } from "@/lib/format"
 import { m } from "@/lib/i18n"
 import { markFrames } from "@/store/actions/library"
 import { SCHEMA_VERSION, store } from "@/store/core"
@@ -47,6 +49,38 @@ describe("Run page: Finish run (C2, §5.4)", () => {
     expect(await screen.findByText(m.stepflow_step_finished({ step: m.step_results() }))).toBeDefined()
     expect(within(await footer()).queryByRole("button", { name: new RegExp(`^(${m.stepflow_proceed()}|${m.stepflow_finish_run()})`) })).toBeNull()
     expect((await footer()).textContent).toContain(m.stepflow_finished_on({ date: "" }).trim())
+  })
+
+  /** Opens Finish run's confirm and returns the dialog. */
+  async function openFinish(user: ReturnType<typeof userEvent.setup>) {
+    renderRun(PANEL_RUN, "results")
+    await user.click(await within(await footer()).findByRole("button", { name: `${m.stepflow_finish_run()}…` }))
+    return screen.findByRole("alertdialog", { name: m.stepflow_finish_run_title({ name: store.getState().catalog.runs[PANEL_RUN.runId]!.name }) })
+  }
+
+  it("lists Products, empty when nothing was accepted, then the Run view it removes", async () => {
+    const user = userEvent.setup()
+    const dialog = await openFinish(user)
+    const groups = within(dialog).getAllByRole("listitem").map((item) => item.textContent ?? "")
+    expect(groups[0]).toBe(m.dialog_group({ label: m.run_results_products(), count: 0, size: formatBytes(0) }))
+    expect(groups[1]).toContain(m.run_check_mode())
+  })
+
+  it("lists each accepted Result under Products: file, folder and size, staying where it is", async () => {
+    // Panel 1 with one accepted Result: Run A's Ha master, attributed to the panel run.
+    const seed = createSeed("demo")
+    const source = seed.catalog.results.res_ngc_ha!
+    seed.catalog.results.res_p1_ha = { ...source, id: "res_p1_ha", runId: PANEL_RUN.runId }
+    store.replace({ ...seed, schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() })
+    const size = formatBytes(fileAt(seed.disk, source.path)!.sizeBytes)
+    const user = userEvent.setup()
+    const dialog = await openFinish(user)
+
+    await user.click(within(dialog).getByRole("button", { name: m.dialog_group({ label: m.run_results_products(), count: 1, size }) }))
+    const row = within(within(dialog).getByRole("table", { name: m.run_results_products() })).getByRole("row", { name: new RegExp(fileName(source.path)) })
+    expect(row.textContent).toContain(source.path.slice(0, source.path.lastIndexOf("/")))
+    expect(row.textContent).toContain(m.dialog_to_keep())
+    expect(row.textContent).toContain(size)
   })
 })
 
