@@ -1,15 +1,14 @@
 /**
- * Data display primitives (foundation-owned): key-value lists, evidence,
- * stats, paths, channel coverage and filter chips.
+ * Data display primitives (foundation-owned): key-value lists, stats,
+ * paths, channel coverage and filter chips. EvidenceList is in
+ * evidence-list.tsx (a DataTable, which itself uses FilterChips).
  */
-import { Check, CircleHelp, X } from "lucide-react"
+import { X } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import type { QualityBreakdown } from "@/domain/library"
-import type { Evidence } from "@/domain/types"
 import { formatCount, formatDateTime, formatDuration } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export interface KeyValueItem {
@@ -42,69 +41,6 @@ export function KeyValueList({ items, className, columns = 1 }: { items: KeyValu
           </div>
         ))}
       </dl>
-    </div>
-  )
-}
-
-const AGREEMENT = {
-  agrees: { icon: Check, word: (m: Messages) => m.evidence_agrees(), className: "text-success" },
-  conflicts: { icon: X, word: (m: Messages) => m.evidence_conflicts(), className: "text-destructive" },
-  unknown: { icon: CircleHelp, word: (m: Messages) => m.status_unknown(), className: "text-muted-foreground" },
-} as const
-
-function sourceName(m: Messages, source: Evidence["source"]): string {
-  const name: Record<Evidence["source"], () => string> = {
-    header: m.evidence_source_header,
-    pointing: m.evidence_source_pointing,
-    "equipment-record": m.evidence_source_equipment_record,
-    user: m.evidence_source_user,
-    resolver: m.evidence_source_resolver,
-    catalog: m.evidence_source_catalog,
-  }
-  return name[source]()
-}
-
-/**
- * Evidence used for an association (LIB-FR-05), observed values first. The
- * value cell may break inside a word so the table reflows at narrow widths
- * (WCAG 1.4.10); header keywords stay whole, and a container narrower than
- * the shortest columns scrolls the table, not the page.
- */
-export function EvidenceList({ evidence, caption }: { evidence: Evidence[]; caption: string }) {
-  const m = useMessages()
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <caption className="sr-only">{caption}</caption>
-        <thead className="text-xs text-muted-foreground">
-          <tr className="border-b">
-            <th scope="col" className="py-1.5 pr-2 text-left font-medium">{m.evidence_column_source()}</th>
-            <th scope="col" className="py-1.5 pr-2 text-left font-medium">{m.evidence_column_evidence()}</th>
-            <th scope="col" className="py-1.5 pr-2 text-left font-medium">{m.evidence_column_value()}</th>
-            <th scope="col" className="py-1.5 text-left font-medium">{m.evidence_column_result()}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {evidence.map((item) => {
-            const agreement = AGREEMENT[item.agrees === true ? "agrees" : item.agrees === false ? "conflicts" : "unknown"]
-            const Icon = agreement.icon
-            const label = say(m, item.label)
-            return (
-              <tr key={`${item.source}-${label}`} className="border-b last:border-0">
-                <td className="py-1.5 pr-2 text-muted-foreground">{sourceName(m, item.source)}</td>
-                <td className="py-1.5 pr-2 font-mono text-xs">{label}</td>
-                <td className="py-1.5 pr-2 [overflow-wrap:anywhere]">{say(m, item.value)}</td>
-                <td className={cn("py-1.5", agreement.className)}>
-                  <span className="inline-flex items-center gap-1">
-                    <Icon aria-hidden="true" className="size-3.5" />
-                    {agreement.word(m)}
-                  </span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
     </div>
   )
 }
