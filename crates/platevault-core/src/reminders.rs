@@ -279,7 +279,7 @@ impl ReminderScheduler {
     pub fn wake(&self) -> bool {
         let counted = self
             .lifecycle
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |state| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |state| {
                 (state & ENDED == 0).then(|| state.wrapping_add(WAKE))
             })
             .is_ok();

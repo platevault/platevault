@@ -631,7 +631,7 @@ impl Library {
         #[cfg(test)]
         if self
             .forced_conflicts
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |left| left.checked_sub(1))
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |left| left.checked_sub(1))
             .is_ok()
         {
             return Err(LibraryError::Conflict {
