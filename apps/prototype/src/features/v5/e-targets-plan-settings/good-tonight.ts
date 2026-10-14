@@ -120,10 +120,16 @@ export function bandOk(chips: readonly GradedBand[] | null, band: Band): boolean
   return chips?.some((c) => c.band === band && c.grade !== "poor") ?? false
 }
 
-/** Sort value of a chip strip: a band's minutes, or two points per good and one per marginal band. */
-export function chipsScore(chips: readonly GradedBand[] | null, band?: Band): number | null {
+/**
+ * Sort value of a chip strip. With picked bands (Q16): the longest Moon-clear time among them. Without: two
+ * points per good and one per marginal band, so the order follows the badges shown (poor is hidden, Q36).
+ */
+export function chipsScore(chips: readonly GradedBand[] | null, bands: readonly Band[] = []): number | null {
   if (!chips) return null
-  if (band) return chips.find((c) => c.band === band)?.minutes ?? null
+  if (bands.length > 0) {
+    const picked = chips.filter((c) => bands.includes(c.band))
+    return picked.length > 0 ? Math.max(...picked.map((c) => c.minutes)) : null
+  }
   return chips.reduce((sum, c) => sum + (c.grade === "good" ? 2 : c.grade === "marginal" ? 1 : 0), 0)
 }
 

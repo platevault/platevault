@@ -94,6 +94,10 @@
   --dialog-w-lg: 42rem;
   /* A side sheet's edge shadow, cast away from the window edge it hangs from. */
   --sheet-shadow: 0 0 0 0.5px oklch(0 0 0 / 0.35), -12px 0 36px -12px oklch(0 0 0 / 0.45);
+  /* The app window's minimum width (Q35): below it the window scrolls instead of reflowing. */
+  --window-min-w: 80rem;
+  /* The app window's minimum height (Q35). */
+  --window-min-h: 40rem;
 }
 
 :root,

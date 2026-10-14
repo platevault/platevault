@@ -1970,6 +1970,7 @@
   "catalogue_grade_badges_full": "Sete filtros",
   "catalogue_grade_badges_one": "Um filtro",
   "catalogue_grade_badges_none": "Sem veredito",
+  "catalogue_grade_badges_by_grade": "Uma etiqueta por nota, sem as ruins (coluna de tabela)",
   "targets_project_rigs": "Equipamentos deste Projeto ({count})",
   "targets_no_match": "Nenhum resultado para “{query}”",
   "targets_choose_catalogue": "Escolha um catálogo ou preset",

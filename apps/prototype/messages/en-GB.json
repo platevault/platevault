@@ -1956,6 +1956,7 @@
   "catalogue_grade_badges_full": "Seven filters",
   "catalogue_grade_badges_one": "One filter",
   "catalogue_grade_badges_none": "No verdict",
+  "catalogue_grade_badges_by_grade": "One badge per grade, poor hidden (a table column)",
   "targets_project_rigs": "This Project's rigs ({count})",
   "targets_no_match": "No match for “{query}”",
   "targets_choose_catalogue": "Choose a catalogue or preset",

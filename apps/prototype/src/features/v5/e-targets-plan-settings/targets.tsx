@@ -11,8 +11,11 @@
  *   the chosen night's plan).
  * - Toolbar: search (My targets, the library, the bundled catalogues and
  *   SIMBAD), the facets Catalogues (Browse), Suitable filters (any picked
- *   filter good or marginal under its Moon curve, C2/C6) and Rig, and the
- *   Presets ▾ menu (built-in, saved, Save current…, Delete).
+ *   filter good or marginal under its Moon curve, C2/C6; Q16) and Rig, and
+ *   the Presets ▾ menu (built-in, saved, Save current…, Delete).
+ * - Suitable filters column: one badge per grade, good then marginal, poor
+ *   hidden (Q36). It sorts by its grade points, or with picked filters by
+ *   their longest Moon-clear time.
  * - Order: Planning's (C7, `planningPriorities`): Targets whose Project
  *   window closes soonest first, so a subject rises as its deadline nears;
  *   then by designation. Every column sorts; the Planned view keeps the
@@ -173,7 +176,6 @@ export function TargetsPage() {
   const activeSaved = search.saved ? saved.find((p) => p.id === search.saved) : undefined
   const savedSort = activeSaved ? parseSort(activeSaved.view.sort) : null
   const firstSort: SortSpec | undefined = activeGood.length > 0 ? GOOD_TONIGHT_SORT : (activePreset?.sort ?? savedSort ?? undefined)
-  const sortBand = activeGood.length === 1 ? activeGood[0]! : null
 
   function setParams(patch: SearchParams) {
     navigate({
@@ -236,7 +238,7 @@ export function TargetsPage() {
     v.sky.status === "no-site" || !ctx ? noSite : v.sky.status === "no-coordinates" ? m.tonight_no_coordinates() : render(v.sky, ctx)
   const imgCell = (sky: SkyOk) => (sky.imgTimeS > 0 ? formatHours(sky.imgTimeS) : `${m.tonight_zero_hours()}${sky.zeroReason ? ` · ${zeroReasonWord(sky.zeroReason)}` : ""}`)
   const noWindow = (sky: SkyOk) => (sky.zeroReason ? zeroReasonText(sky.zeroReason) : m.tonight_no_window())
-  const okSort = (column: Parameters<typeof sortValue>[1]) => (v: RowView) => sortValue(v, column, sortBand)
+  const okSort = (column: Parameters<typeof sortValue>[1]) => (v: RowView) => sortValue(v, column, activeGood)
 
   // ------------------------------------------------------------------
   // Columns
@@ -248,14 +250,14 @@ export function TargetsPage() {
     sortValue: okSort("maxAlt"),
     cell: (v) => skyCell(v, (sky, c) => <AltitudeSpark night={c.grid} sky={sky} darkness={c.summary.darkness} minAltitudeDeg={c.criteria.minAltitudeDeg} timeZone={c.site.timeZone} />),
   }
-  const img: Column<RowView> = { id: "img", header: m.tonight_img_time(), align: "right", sortValue: okSort("img"), cell: (v) => skyCell(v, imgCell) }
+  const img: Column<RowView> = { id: "img", header: m.tonight_img_time(), align: "right", truncate: true, sortValue: okSort("img"), cell: (v) => skyCell(v, imgCell) }
   const filters: Column<RowView> = {
     id: "tonight",
-    header: sortBand ? m.targets_filters_band({ band: sortBand }) : m.domain_suitable_filters(),
+    header: activeGood.length > 0 ? m.targets_filters_band({ band: activeGood.join(", ") }) : m.domain_suitable_filters(),
     sortValue: okSort("tonight"),
-    cell: (v) => skyCell(v, (sky) => <GradeBadges grades={v.tonight} empty={noWindow(sky)} />),
+    cell: (v) => skyCell(v, (sky) => <GradeBadges grades={v.tonight} empty={noWindow(sky)} byGrade />),
   }
-  const priority: Column<RowView> = { id: "priority", header: m.targets_deadline(), sortValue: okSort("priority"), cell: (v) => (v.priority ? say(m, v.priority.window.line) : "–") }
+  const priority: Column<RowView> = { id: "priority", header: m.targets_deadline(), truncate: true, sortValue: okSort("priority"), cell: (v) => (v.priority ? say(m, v.priority.window.line) : "–") }
   const fits: Column<RowView>[] = rigIds.map((rigId, index) => ({
     id: `fit:${rigId}`,
     header: rigIds.length > 1 ? m.targets_fit_rig({ rig: catalog.opticalTrains[rigId]?.name ?? rigId }) : m.targets_fit(),
@@ -570,7 +572,7 @@ function PanelTable({ parent, ctx, inputs }: { parent: RowView; ctx: SkyContext 
     { id: "panel", header: m.targets_panel(), rowHeader: true, sortValue: (v) => v.row.designation, cell: (v) => v.row.designation },
     { id: "maxAlt", header: m.tonight_altitude(), sortValue: (v) => sky(v)?.peakDeg ?? null, cell: (v) => (sky(v) && ctx ? <AltitudeSpark night={ctx.grid} sky={sky(v)!} darkness={ctx.summary.darkness} minAltitudeDeg={ctx.criteria.minAltitudeDeg} timeZone={ctx.site.timeZone} /> : "–") },
     { id: "img", header: m.tonight_img_time(), align: "right", sortValue: (v) => sky(v)?.imgTimeS ?? null, cell: (v) => (sky(v) ? formatHours(sky(v)!.imgTimeS) : "–") },
-    { id: "tonight", header: m.domain_suitable_filters(), sortValue: (v) => sortValue(v, "tonight"), cell: (v) => <GradeBadges grades={v.tonight} empty={m.tonight_no_window()} /> },
+    { id: "tonight", header: m.domain_suitable_filters(), sortValue: (v) => sortValue(v, "tonight"), cell: (v) => <GradeBadges grades={v.tonight} empty={m.tonight_no_window()} byGrade /> },
   ]
   return <DataTable label={m.rungroup_panels_label({ name: parent.row.designation })} rows={panels} columns={columns} getRowId={(v) => v.row.key} scroll="none" />
 }

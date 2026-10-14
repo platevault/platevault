@@ -510,7 +510,7 @@ export function goodFor(views: RowView[], bands: readonly Band[]): RowView[] {
   return bands.length > 0 ? views.filter((v) => bands.some((band) => bandOk(v.tonight, band))) : views
 }
 
-/** Sort of the Suitable filters facet: the picked band's Moon-clear time, longest first. */
+/** Sort of the Suitable filters facet: the picked bands' longest Moon-clear time, longest first (Q16). */
 export const GOOD_TONIGHT_SORT: SortSpec = { column: "tonight", direction: "desc" }
 
 // ---------------------------------------------------------------------------
@@ -525,8 +525,8 @@ export function fitValue(fit: Fit | undefined): number | null {
   return fit.kind === "panels" ? 10 + fit.panels : fit.coverage
 }
 
-/** A column's sort value; `band` is the one picked Suitable filter, by whose Moon-clear time the Filters column then sorts. */
-export function sortValue(view: RowView, column: SortColumn, band?: Band | null): string | number | null {
+/** A column's sort value; `bands` are the picked Suitable filters, by whose longest Moon-clear time the Filters column then sorts. */
+export function sortValue(view: RowView, column: SortColumn, bands: readonly Band[] = []): string | number | null {
   const sky = view.sky.status === "ok" ? view.sky : null
   switch (column) {
     case "designation":
@@ -540,7 +540,7 @@ export function sortValue(view: RowView, column: SortColumn, band?: Band | null)
     case "img":
       return sky?.imgTimeS ?? null
     case "tonight":
-      return chipsScore(view.tonight, band ?? undefined)
+      return chipsScore(view.tonight, bands)
     case "opposition":
       return view.opposition
     case "sessions":

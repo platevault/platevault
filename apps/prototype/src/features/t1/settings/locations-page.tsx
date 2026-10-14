@@ -226,7 +226,7 @@ export function LocationsPage() {
     { id: "name", header: m.location_col_name(), rowHeader: true, truncate: true, sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
     { id: "role", header: m.location_role(), sortValue: (r) => ROLE_ORDER.indexOf(r.location.role), cell: (r) => <StatusBadge kind="role" value={r.location.role} /> },
     { id: "state", header: m.location_col_state(), sortValue: (r) => attentionRank(locationAttention(r)), cell: (r) => <LocationAttentionBadge state={locationAttention(r)} /> },
-    { id: "indexed", header: m.location_col_indexed(), sortValue: (r) => r.location.lastIndexedAt, cell: (r) => (r.location.lastIndexedAt ? formatDateTime(r.location.lastIndexedAt) : m.location_not_indexed_yet()) },
+    { id: "indexed", header: m.location_col_indexed(), truncate: true, sortValue: (r) => r.location.lastIndexedAt, cell: (r) => (r.location.lastIndexedAt ? formatDateTime(r.location.lastIndexedAt) : m.location_not_indexed_yet()) },
     { id: "frames", header: m.location_col_frames(), align: "right", sortValue: (r) => r.frames, cell: (r) => formatCount(r.frames) },
     { id: "size", header: m.location_col_size(), align: "right", sortValue: (r) => r.footprint, cell: (r) => (r.footprint === null ? "–" : formatBytes(r.footprint)) },
     { id: "free", header: m.location_col_free(), align: "right", sortValue: (r) => r.free, cell: (r) => (r.free === null ? "–" : formatBytes(r.free)) },

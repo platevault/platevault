@@ -5,6 +5,10 @@
  * grade never rests on colour alone. The strip is one image to assistive
  * technology, named "OIII good, Ha marginal". Without a verdict (no window
  * that night) it reads "–", with the reason when the host gives one.
+ *
+ * `byGrade` (a table column, Q36): one Pill per grade, good then marginal,
+ * each listing its filters ("Ha, OIII"); poor filters are left out. When
+ * every filter is poor it reads "–", with the poor grades as the reason.
  */
 import { Check, CircleDashed, type LucideIcon, X } from "lucide-react"
 import { useMessages } from "@/app/preferences"
@@ -27,7 +31,12 @@ export interface GradeBadgesProps {
   empty?: string
   /** Let the strip wrap onto more lines in a narrow place (a detail panel); a table row keeps it on one line. */
   wrap?: boolean
+  /** One badge per grade with its filters, poor filters hidden (a table column). */
+  byGrade?: boolean
 }
+
+/** The grades a badge per grade shows, in order; poor is left out. */
+const SHOWN_GRADES: readonly FilterGrade[] = ["good", "marginal"]
 
 const GRADE: Record<FilterGrade, { tone: Tone; icon: LucideIcon }> = {
   good: { tone: "success", icon: Check },
@@ -44,14 +53,20 @@ export function gradeStripLabel(m: Messages, grades: readonly GradeBadge[]): str
   return grades.map((g) => m.domain_grade_badge({ band: g.band, grade: gradeWord(m, g.grade) })).join(", ")
 }
 
-export function GradeBadges({ grades, empty, wrap = false }: GradeBadgesProps) {
+export function GradeBadges({ grades, empty, wrap = false, byGrade = false }: GradeBadgesProps) {
   const m = useMessages()
   if (!grades || grades.length === 0) return <UnknownValue label="–" reason={empty} />
+  if (byGrade && grades.every((g) => g.grade === "poor")) return <UnknownValue label="–" reason={gradeStripLabel(m, grades)} />
+  // In badge order, so the strip's name reads as it shows.
+  const shown = byGrade ? SHOWN_GRADES.flatMap((grade) => grades.filter((g) => g.grade === grade)) : grades
+  const badges = byGrade
+    ? SHOWN_GRADES.map((grade) => ({ grade, bands: shown.filter((g) => g.grade === grade).map((g) => g.band) })).filter((badge) => badge.bands.length > 0)
+    : shown.map((g) => ({ grade: g.grade, bands: [g.band] }))
   return (
-    <span role="img" aria-label={gradeStripLabel(m, grades)} className={cn("inline-flex items-center gap-0.5", wrap && "flex-wrap gap-y-1")} data-grade-badges>
-      {grades.map((g) => (
-        <Pill key={g.band} tone={GRADE[g.grade].tone} icon={GRADE[g.grade].icon} className="gap-0.5 px-1.5">
-          {g.band}
+    <span role="img" aria-label={gradeStripLabel(m, shown)} className={cn("inline-flex items-center gap-0.5", wrap && "flex-wrap gap-y-1")} data-grade-badges>
+      {badges.map((badge) => (
+        <Pill key={badge.bands.join()} tone={GRADE[badge.grade].tone} icon={GRADE[badge.grade].icon} className="gap-0.5 px-1.5">
+          {badge.bands.join(", ")}
         </Pill>
       ))}
     </span>
