@@ -41,6 +41,7 @@ Astronomical windows for a Target from a chosen planning site, opt-in reminders 
 
   Each value names the site and time zone. (D-W39)
 - **PLAN-AC-12**: Given no saved planning site, when Home requests Tonight, then it receives no windows and the reason "Add an observing site in Settings". (D-W39)
+- **PLAN-AC-13**: Given the user enables a reminder, then the lead time is a number with a unit (minutes, hours or days) that the user can type, plus presets, and every preset and the default are longer than 30 minutes. (D-W88)
 
 ### User Story 2 - Targets list (Priority: P1)
 
@@ -68,6 +69,8 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 - **PLAN-TGT-AC-14**: Given the Targets page opened through "Open in Planner" from a Project with two rigs, then the rig selector shows "this Project's rigs". Fit shows one value per rig, labeled with the rig name. The Filters strip shows the union of the bands either rig can capture, and Mosaic candidates and Fits nicely match a Target when it matches on either rig. (D-W37, D-W62)
 - **PLAN-TGT-AC-15**: Given no saved planning site, when the Targets page opens, then the planning columns show "-" and the page shows "Add an observing site in Settings". Search, Add to targets, ★ and Sessions still work. (D-W18)
 - **PLAN-TGT-AC-16**: Given M 31 marked ★ and the open Project "Summer nebulae" with subject IC 1396, which is not marked ★. When the Targets page opens on My targets, then it lists M 31 and IC 1396, and IC 1396 carries a "Summer nebulae" Project badge. (D-W60)
+- **PLAN-TGT-AC-17**: Given the Targets page on tonight, when the user chooses next week twice, then every column shows values for the night two weeks ahead and the night picker names it. Today returns the page to tonight. When Home's calendar opens Targets for a night, the page opens set to that night. (D-W88)
+- **PLAN-TGT-AC-18**: Given a night with a 60 % lit Moon, when the user chooses Ha and OIII in Suitable filters, then the table lists Targets by the clear time of those bands, and each band's grade comes from its Moon-avoidance curve, so Img time and the Filters strip agree. A poor band shows in the danger tone and a marginal band in the warning tone. (D-W88)
 
 ### User Story 3 - Equipment: rigs compose a camera, a telescope and filters (Priority: P2)
 
@@ -101,11 +104,11 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 ### Functional Requirements
 
 - **PLAN-FR-01**: Saved sites and a default site are set in Settings. The planning-site selector is independent of Projects and capture sites; changing it never alters Project subjects, run sessions or session sites. (D-W16)
-- **PLAN-FR-02**: A Target's Plan area sets altitude, darkness, Moon and minimum-duration criteria. Windows show their site and time-zone basis, and the active planning site is shown. Each open Project that has the Target as a subject shows its per-channel goal gap beside coverage. The gap names its "in project" and "captured" amounts with those labels. For a mosaic subject, the Plan area lists each of its panels. (D-W16, D-W36, D-W63)
+- **PLAN-FR-02**: A Target's Plan area sets altitude, darkness, Moon and minimum-duration criteria. The Moon criterion is one Moon-avoidance curve per filter: the separation it requires from the Moon is greatest at full Moon and shrinks as the Moon dims (the Lorentzian curve of ACP and Target Scheduler; R10-MOON-MODEL.md on `ui-harness-v5`). A sample counts when the Moon is below the horizon or at least that far away. Windows, Img time and band grades all use the same curve. Windows show their site and time-zone basis, and the active planning site is shown. Each open Project that has the Target as a subject shows its per-channel goal gap beside coverage. The gap names its "in project" and "captured" amounts with those labels. For a mosaic subject, the Plan area lists each of its panels. (D-W16, D-W36, D-W63, D-W88)
 - **PLAN-FR-03**: Mark Planned and Enable notifications are explicit opt-ins. Reminders use the displayed default site, and every reminder names it. Planning elsewhere never enables reminders there. Enabling reminders starts no indexing or image processing.
 - **PLAN-FR-04**: Export calendar confirms site, date range, time zone, and selected windows, then saves an .ics file through the native save dialog as a one-time snapshot.
 - **PLAN-FR-05**: Suitability is astronomical only: no weather, equipment, or processing-readiness claims, and no provider account or authorization.
-- **PLAN-FR-06**: Notifications require explicit criteria and lead time plus the default site, all named before activation. Each delivered reminder's target/site/window identity is recorded durably. Resume and restart recompute upcoming windows and suppress repeats of recorded identities. App-closed delivery needs an installed, tested scheduler; otherwise that capability is explicitly unavailable.
+- **PLAN-FR-06**: Notifications require explicit criteria and lead time plus the default site, all named before activation. The lead time is typed as a number with a unit (minutes, hours or days) or picked from presets; every preset and the default are longer than 30 minutes. Each delivered reminder's target/site/window identity is recorded durably. Resume and restart recompute upcoming windows and suppress repeats of recorded identities. App-closed delivery needs an installed, tested scheduler; otherwise that capability is explicitly unavailable. (D-W88)
 - **PLAN-FR-07**: Permission denial remains visible and offers Settings and Retry. No scheduler acknowledgment is represented as actual notification delivery.
 - **PLAN-FR-08**: Rust computes astronomical planning windows, Targets list values, Fit and Tonight through qualified shared skymath contracts. The frontend presents them and their controls without reimplementing scientific calculations. (D-W18, D-W23, D-W39)
 - **PLAN-FR-09**: Planning is keyed by Target. A Target can be planned, marked Planned, given reminders and exported without belonging to any Project. A Project owns no windows. Its page shows the windows of its own subjects, from the same Target planning at the active planning site, and offers "Open in Planner". (D-W16)
@@ -122,7 +125,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-TGT-FR-01**: The Targets page shows either "My targets" (the default) or "Browse catalogues". My targets lists the ★ favourites plus every subject of an open Project, and each such subject carries a badge naming its Project. ★ on a row adds or removes the favourite; a subject of an open Project stays listed with its badge either way. (D-W17, D-W60)
 - **PLAN-TGT-FR-02**: Browse catalogues lists rows only once at least one bundled catalogue (Messier, NGC, IC, Sharpless, LBN, LDN, Caldwell, Barnard) or a preset is chosen. With neither chosen, it lists no rows and asks for a catalogue or a preset. (D-W17)
 - **PLAN-TGT-FR-03**: Search covers My targets, the bundled catalogues and SIMBAD. It ignores case and whitespace, so "M31", "M 31" and "m31" match the same Target. It searches every row, not only rows already shown, and each result names its source. A result not in My targets offers "Add to targets" inline. Adding writes the Target into the library and My targets; a failed add shows the error with Retry. Searching alone writes nothing. When SIMBAD cannot be reached, the results say SIMBAD was not searched. (D-W17)
-- **PLAN-TGT-FR-04**: The table has these columns, with values for tonight at the active planning site under the planning criteria:
+- **PLAN-TGT-FR-04**: The table has these columns, with values for the selected night (tonight by default, PLAN-TGT-FR-16) at the active planning site under the planning criteria:
   - ★: favourite toggle, not sortable.
   - Designation and Type.
   - Max alt: peak altitude tonight.
@@ -135,7 +138,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
   Every column except ★ sorts ascending or descending. Unknown values sort last, and the default sort is Designation ascending. A Target without catalogued coordinates shows "-" with the reason. (D-W18)
 - **PLAN-TGT-FR-05**: An Img time of zero shows why: altitude, Moon or darkness. Img time for a Target equals the total of its Plan area windows for tonight under the same site and criteria. (D-W18)
-- **PLAN-TGT-FR-06**: The Filters strip shows bands L, R, G, B, Ha, SII and OIII, each marked viable or limited by the Moon tonight, with a recommendation label. With a rig selected it shows only the bands the rig's filters pass (PLAN-EQ-FR-03); with several rigs, such as "this Project's rigs", it shows the union of their bands. With no rig selected it shows all seven. (D-W18, D-W23, D-W31, D-W62)
+- **PLAN-TGT-FR-06**: The Filters strip shows bands L, R, G, B, Ha, SII and OIII, each graded good, marginal or poor for the night under its Moon-avoidance curve (PLAN-FR-02), with a recommendation label. A poor band uses the danger tone and a marginal band the warning tone. With a rig selected it shows only the bands the rig's filters pass (PLAN-EQ-FR-03); with several rigs, such as "this Project's rigs", it shows the union of their bands. With no rig selected it shows all seven. (D-W18, D-W23, D-W31, D-W62, D-W88)
 - **PLAN-TGT-FR-07**: Moon illumination and phase appear once, in the toolbar, for tonight at the active planning site. No row repeats them. (D-W18)
 - **PLAN-TGT-FR-08**: Captured shows, per channel, the integration of every session whose confirmed Target is this Target, whatever its quality. Trashed sessions and frames count toward neither Captured nor Sessions. (D-W18, D-W43)
 - **PLAN-TGT-FR-09**: The built-in presets are Best tonight (broadband), Narrowband (Moon up), Emission nebulae Ha, Galaxies dark sky and Planetary nebulae OIII. Mosaic candidates and Fits nicely join them under PLAN-TGT-FR-12. The app offers no "Avoid tonight" preset. Each preset's definition is shown with it:
@@ -146,7 +149,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - Planetary nebulae OIII: planetary nebulae with OIII viable.
 
   (D-W19)
-- **PLAN-TGT-FR-10**: The user can save the current Show mode, catalogues, preset, Fit filter and sort as a named preset, and rename or delete saved presets. Saved presets persist across restarts and are listed after the built-ins. Built-in presets cannot be edited or deleted. A saved preset that needs a rig or a narrowband filter follows the same availability rules as a built-in one. (D-W19)
+- **PLAN-TGT-FR-10**: The user can save the current Show mode, catalogues, preset, Fit filter and sort as a named preset, and rename or delete saved presets. Saved presets persist across restarts and sit in a Custom presets dropdown after the built-ins. Built-in presets cannot be edited or deleted. A saved preset that needs a rig or a narrowband filter follows the same availability rules as a built-in one. (D-W19, D-W88)
 - **PLAN-TGT-FR-11**: The toolbar's rig selector offers:
   - no rig, the default;
   - each rig from Settings > Equipment;
@@ -156,6 +159,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-TGT-FR-12**: Mosaic candidates (2 or more panels) and Fits nicely (coverage of 25% to 90%) are offered only with a rig selected. With two or more rigs, a Target matches when it matches on any of them. (D-W23, D-W37, D-W62)
 - **PLAN-TGT-FR-13**: Narrowband (Moon up), Emission nebulae Ha and Planetary nebulae OIII are hidden when a rig is selected and no filter on it passes Ha, SII or OIII. (D-W23, D-W31)
 - **PLAN-TGT-FR-14**: Selecting a row opens that Target's Plan area (PLAN-FR-02). (D-W16)
+- **PLAN-TGT-FR-15**: **Suitable filters**, which replaces "Good tonight for", is a toolbar filter that takes one or more bands. A chosen band admits a Target when that band is good or marginal for it on the selected night, and the list sorts by that band's clear time. (D-W88)
+- **PLAN-TGT-FR-16**: A night picker in the Targets toolbar sets the planning night, tonight by default, with previous week, next week and Today, which returns to tonight. Every value this section gives "for tonight" is given for the selected night. Opening Targets from a night on Home's calendar sets that night. (D-W88)
 
 #### Equipment: cameras, telescopes, filters and rigs
 
@@ -209,3 +214,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Root decision D19 has no PLAN consumer: no planning path consumes a recorded file, and calendar export writes computed windows.
 - Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, D-W63 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W36, D-W43 and D-W46 are read here where they constrain this feature's outputs.
 - Workflow decision D-W87 (Round 9 user item astro-plan-ngm9g, 2026-10-12) supersedes D-W31's ownership: filters, cameras and telescopes are their own Equipment records, and a rig selects them. The rest of D-W31 still applies, and the unknown-filter prompt now adds a filter record to the rig.
+- Workflow decision D-W88 (Round 9 C2 and C6, C8, user items, 2026-10-12 to 2026-10-13) sets one Moon-avoidance curve per filter for windows, Img time and grades, renames "Good tonight for" to Suitable filters with several bands, adds the night picker, moves saved presets into a Custom presets dropdown and makes the reminder lead time free entry with units, longer than 30 minutes.
