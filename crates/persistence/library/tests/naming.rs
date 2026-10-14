@@ -15,7 +15,10 @@ async fn naming_override_rows_set_replace_and_clear() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("catalog.sqlite");
     let catalog = Catalog::open(&path).await.unwrap();
-    assert!(catalog.naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        catalog.naming_overrides().await.unwrap(),
+        [] as [(platevault_model::NamingFrameType, std::string::String); 0]
+    );
 
     catalog.set_naming_override(NamingFrameType::MasterFlat, Some("m/{filter}/")).await.unwrap();
     catalog.set_naming_override(NamingFrameType::Light, Some("{target}/")).await.unwrap();
@@ -34,7 +37,10 @@ async fn naming_override_rows_set_replace_and_clear() {
         [(NamingFrameType::MasterFlat, "m/{filter}/".to_owned())]
     );
     catalog.clear_naming_overrides().await.unwrap();
-    assert!(catalog.naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        catalog.naming_overrides().await.unwrap(),
+        [] as [(platevault_model::NamingFrameType, std::string::String); 0]
+    );
     catalog.set_naming_override(NamingFrameType::Bias, Some("b/")).await.unwrap();
     catalog.close().await.unwrap();
 

@@ -7254,7 +7254,10 @@ mod tests {
             reopened.target(candidate.id).await.unwrap_err().response(None, None).kind,
             "not_found"
         );
-        assert!(reopened.list_targets(0, 10).await.unwrap().is_empty());
+        assert_eq!(
+            reopened.list_targets(0, 10).await.unwrap(),
+            [] as [platevault_model::TargetRecord; 0]
+        );
         assert!(reopened.save_target(&candidate, None).await.is_ok(), "unlimited writer saves");
     }
 
@@ -7271,7 +7274,10 @@ mod tests {
         let error = catalog.save_target(&candidate, None).await.unwrap_err();
         assert_eq!(error.response(None, None).kind, "persistence_failure");
         assert!(error.to_string().contains("full"), "{error}");
-        assert!(catalog.list_targets(0, 10).await.unwrap().is_empty());
+        assert_eq!(
+            catalog.list_targets(0, 10).await.unwrap(),
+            [] as [platevault_model::TargetRecord; 0]
+        );
 
         catalog.lift_writer_page_limit_for_test().await.unwrap();
         let saved = catalog.save_target(&candidate, None).await.unwrap();

@@ -520,7 +520,7 @@ mod moon_opposition_tests {
             assert!((0.0..=180.0).contains(&sep), "separation out of range: {sep}");
             let opp = r.opposition.as_ref().expect("finite RA/Dec must produce an opposition");
             assert!(opp.days_until <= 366);
-            assert!(!opp.date.is_empty());
+            assert_ne!(opp.date, "");
         }
         assert_eq!(resp.results[0].id, "m31");
         assert_eq!(resp.results[1].id, "m42");

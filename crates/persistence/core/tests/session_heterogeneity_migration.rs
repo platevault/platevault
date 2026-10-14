@@ -111,7 +111,10 @@ async fn full_chain_has_normalized_integer_relationships_and_no_relationship_jso
     .fetch_all(db.pool())
     .await
     .expect("inspect relationship columns");
-    assert!(!relationship_columns.is_empty());
+    assert_ne!(
+        relationship_columns,
+        [] as [(std::string::String, std::string::String, std::string::String); 0]
+    );
     assert!(relationship_columns.iter().all(|(_, _, ty)| ty == "INTEGER"));
 
     let forbidden_json_columns: Vec<(String, String)> = sqlx::query_as(

@@ -462,7 +462,7 @@ mod tests {
         ]);
         let result = resolve_v1(&pattern, &metadata).unwrap();
         assert_eq!(result.relative_path, "M101/Ha/2026-04-12/light/");
-        assert!(result.missing_tokens.is_empty());
+        assert_eq!(result.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -598,7 +598,7 @@ mod tests {
         let metadata = meta(&[("date", "2026-04-12")]);
         let result = resolve_v1(&pattern, &metadata).unwrap();
         assert_eq!(result.relative_path, "2026-04-12");
-        assert!(result.missing_tokens.is_empty());
+        assert_eq!(result.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -638,7 +638,7 @@ mod tests {
         let bundle = meta(&[("target", "M31"), ("filter", "Ha"), ("date", "2026-06-21")]);
         let r = resolve_pattern_str("{target}/{filter}/{date}/light/", &bundle).unwrap();
         assert_eq!(r.relative_path, "M31/Ha/2026-06-21/light");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -646,7 +646,7 @@ mod tests {
         let bundle = meta(&[("filter", "Ha")]);
         let r = resolve_pattern_str("masters/flats/{filter}/", &bundle).unwrap();
         assert_eq!(r.relative_path, "masters/flats/Ha");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -654,7 +654,7 @@ mod tests {
         let bundle = meta(&[("exposure", "300s")]);
         let r = resolve_pattern_str("darks/{exposure}/", &bundle).unwrap();
         assert_eq!(r.relative_path, "darks/300s");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -662,7 +662,7 @@ mod tests {
         let bundle = meta(&[]);
         let r = resolve_pattern_str("bias/", &bundle).unwrap();
         assert_eq!(r.relative_path, "bias");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -689,7 +689,7 @@ mod tests {
         let bundle = meta(&[]);
         let r = resolve_pattern_str("masters/bias/", &bundle).unwrap();
         assert_eq!(r.relative_path, "masters/bias");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -711,7 +711,7 @@ mod tests {
         let bundle = meta(&[("exposure", "300s")]);
         let r = resolve_pattern_str("darks/exp-{exposure}/", &bundle).unwrap();
         assert_eq!(r.relative_path, "darks/exp-300s");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -723,7 +723,7 @@ mod tests {
         let bundle = meta(&[("date", "2026-04-12")]);
         let r = resolve_pattern_str("{date}/", &bundle).unwrap();
         assert_eq!(r.relative_path, "2026-04-12");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -757,7 +757,7 @@ mod tests {
         let bundle = meta(&[]);
         let r = resolve_pattern_str("///", &bundle).unwrap();
         assert_eq!(r.relative_path, "");
-        assert!(r.missing_tokens.is_empty());
+        assert_eq!(r.missing_tokens, [] as [std::string::String; 0]);
     }
 
     // ── resolve_pattern_str: invalid chars in literal segments ─────────────

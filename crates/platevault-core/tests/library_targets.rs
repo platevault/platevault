@@ -55,7 +55,10 @@ fn user(designation: &str, aliases: &[&str]) -> TargetCandidate {
 async fn warm_search_ranks_a_saved_partial_alias_from_beyond_the_first_catalog_page() {
     let temp = tempfile::tempdir().unwrap();
     let library = open(&temp.path().join("library.sqlite")).await;
-    assert!(library.search_targets(&text("pvq", 2_000)).await.unwrap().is_empty());
+    assert_eq!(
+        library.search_targets(&text("pvq", 2_000)).await.unwrap(),
+        [] as [platevault_core::targets::TargetSearchHit; 0]
+    );
 
     for index in 0..1_000 {
         let bulk = user(&format!("Bulk {index:04}"), &[&format!("Pvq Bulk {index:04}")]);
@@ -230,7 +233,10 @@ async fn a_changed_seed_fact_replaces_the_bundled_record_in_a_warm_search() {
     let bundled = library.search_targets(&text("NGC 7000", 1)).await.unwrap().remove(0).candidate;
     library.catalog().record_seed_target(&bundled).await.unwrap();
 
-    assert!(library.search_targets(&text("pv seed refresh", 5)).await.unwrap().is_empty());
+    assert_eq!(
+        library.search_targets(&text("pv seed refresh", 5)).await.unwrap(),
+        [] as [platevault_core::targets::TargetSearchHit; 0]
+    );
     let warm = library.search_targets(&text("North America Nebula", 5)).await.unwrap();
     assert_eq!(warm[0].candidate.id, bundled.id);
 
@@ -275,7 +281,10 @@ async fn restart_reads_the_durable_catalog_instead_of_a_remembered_cache() {
     catalog.close().await.unwrap();
 
     let reopened = open(&database).await;
-    assert!(reopened.search_targets(&text("pv alpha", 5)).await.unwrap().is_empty());
+    assert_eq!(
+        reopened.search_targets(&text("pv alpha", 5)).await.unwrap(),
+        [] as [platevault_core::targets::TargetSearchHit; 0]
+    );
     let gamma = reopened.search_targets(&text("pv gamma", 5)).await.unwrap();
     assert_eq!(ids(&gamma), [alpha.id]);
     assert_eq!(gamma[0].candidate, renamed);

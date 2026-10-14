@@ -122,7 +122,10 @@ async fn existing_folder_never_reused() {
         .await
         .unwrap_err();
     refused(&error, "never reused");
-    assert!(world.catalog().view_preparations(world.run).await.unwrap().is_empty());
+    assert_eq!(
+        world.catalog().view_preparations(world.run).await.unwrap(),
+        [] as [platevault_core::PreparationRevision; 0]
+    );
     assert_eq!(tree(&existing), before);
 
     request.folder_name = Some(format!("{RUN} B"));
@@ -276,7 +279,7 @@ async fn copy_drift_blocks_item() {
     let retried =
         world.library.retry_preparation(outcome.revision.id, &Watch::quiet()).await.unwrap();
     assert_eq!(retried.revision.state, PreparationState::Prepared, "{retried:#?}");
-    assert!(retried.blocked.is_empty());
+    assert_eq!(retried.blocked, [] as [platevault_core::PreparedEntry; 0]);
 }
 
 /// PREP-AC-15, PREP-FR-10: Open re-verifies every entry before launch; a
@@ -553,7 +556,7 @@ async fn catalog_correction_patched_copy_or_excluded() {
     assert!(String::from_utf8_lossy(&patched[card * 80..card * 80 + 80])
         .starts_with("FILTER  = 'OIII    '"));
     let other = outcome.prepared.iter().find(|e| e.asset_id != Some(asset)).unwrap();
-    assert!(other.header_changes.is_empty());
+    assert_eq!(other.header_changes, [] as [platevault_core::CorrectedField; 0]);
     assert_eq!(digest(&path(&other.path)), digest(&path(other.source.as_ref().unwrap())));
     let opened = world.library.open_preparation(outcome.revision.id).await.unwrap();
     assert!(matches!(opened, OpenOutcome::Launched { .. }), "{opened:?}");
@@ -602,7 +605,7 @@ async fn catalog_correction_never_patches_links() {
     assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
     let entry = outcome.prepared.iter().find(|e| e.asset_id == Some(asset)).unwrap();
     assert_eq!(entry.kind, PreparedEntryKind::Symlink);
-    assert!(entry.header_changes.is_empty());
+    assert_eq!(entry.header_changes, [] as [platevault_core::CorrectedField; 0]);
     assert_eq!(fs::read_link(path(&entry.path)).unwrap(), source);
     assert_eq!(digest(&source), before);
 }

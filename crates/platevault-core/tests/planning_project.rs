@@ -348,7 +348,10 @@ async fn gap_names_in_project_and_captured() {
     assert!(mosaic.subject.mosaic && mosaic.subject.gaps.is_empty());
     let numbers: Vec<u32> = mosaic.subject.panels.iter().map(|panel| panel.number).collect();
     assert_eq!(numbers, [1, 2], "a mosaic lists each panel");
-    assert!(mosaic.subject.panels[0].gaps.is_empty());
+    assert_eq!(
+        mosaic.subject.panels[0].gaps,
+        [] as [platevault_core::planning_project::GoalGap; 0]
+    );
     let [panel_two] = mosaic.subject.panels[1].gaps.as_slice() else { panic!("{mosaic:#?}") };
     assert_eq!(panel_two.goal.panel_id, Some(project.subjects[1].panels[1].id));
     assert_eq!(panel_two.remaining, GapRemaining::Integration { seconds: seconds(7200) });

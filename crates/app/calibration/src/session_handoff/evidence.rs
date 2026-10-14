@@ -524,7 +524,7 @@ mod tests {
         assert!(ev.sufficient);
         assert_eq!(ev.automatic_eligibility, AutomaticEligibility::Eligible);
         assert_eq!(ev.thermal.state, ThermalState::Normal);
-        assert!(ev.warning_codes.is_empty());
+        assert_eq!(ev.warning_codes, [] as [std::string::String; 0]);
     }
 
     #[test]

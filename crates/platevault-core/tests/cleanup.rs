@@ -128,7 +128,7 @@ async fn cleanup_lists_only_prepared_entries_preselected() {
         .filter(|item| item.role == CleanupRole::Copy)
         .all(|item| item.relies_on.as_ref().is_some_and(|kept| sources.contains(&path(kept)))));
     assert_eq!(review.moves, 19);
-    assert!(review.staying.is_empty());
+    assert_eq!(review.staying, [] as [platevault_core::StayingItem; 0]);
 
     let selection =
         CleanupSelection { excluded_roles: vec![CleanupRole::Copy], ..CleanupSelection::default() };
@@ -310,7 +310,7 @@ async fn no_trash_location_items_stay_and_are_named() {
     assert_eq!(path(&review.staying[0].path), folder);
     let emptied = world.library.empty_trash(review.id.unwrap(), scratch.dyn_trash()).await.unwrap();
     assert!(emptied.run_removed);
-    assert!(scratch.moved().is_empty());
+    assert_eq!(scratch.moved(), [] as [std::path::PathBuf; 0]);
     assert_eq!(emptied.left.len(), 1);
     assert!(emptied.summary.contains(&folder.display().to_string()), "{}", emptied.summary);
     assert!(folder.join("Lights").is_dir(), "the folder stays where it is");
@@ -368,9 +368,18 @@ async fn empty_trash_moves_prepared_folders_and_results_only_when_ticked_and_rem
 
     let gone = world.catalog().view(world.run).await.unwrap_err();
     assert!(matches!(gone, LibraryError::NotFound(_)), "{gone}");
-    assert!(world.catalog().trashed_views(project).await.unwrap().is_empty());
-    assert!(world.catalog().view_preparations(world.run).await.unwrap().is_empty());
-    assert!(world.library.empty_trash_review(project, &[]).await.unwrap().runs.is_empty());
+    assert_eq!(
+        world.catalog().trashed_views(project).await.unwrap(),
+        [] as [platevault_core::TrashedRun; 0]
+    );
+    assert_eq!(
+        world.catalog().view_preparations(world.run).await.unwrap(),
+        [] as [platevault_core::PreparationRevision; 0]
+    );
+    assert_eq!(
+        world.library.empty_trash_review(project, &[]).await.unwrap().runs,
+        [] as [platevault_core::EmptyTrashRun; 0]
+    );
     // The outcome stays readable after the record is gone, and a resumed
     // Empty Trash moves nothing more.
     let again = world.library.empty_trash(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
@@ -477,7 +486,10 @@ async fn empty_trash_removes_trashed_panel_run_record() {
     let mut runs = runs;
     runs.sort_unstable();
     assert_eq!(runs, kept, "the group keeps its other panel runs");
-    assert!(world.catalog().trashed_views(world.project).await.unwrap().is_empty());
+    assert_eq!(
+        world.catalog().trashed_views(world.project).await.unwrap(),
+        [] as [platevault_core::TrashedRun; 0]
+    );
     assert_eq!(others(&tree), before, "other panels' folders and Results are untouched");
 }
 
@@ -696,7 +708,7 @@ async fn clean_up_keeps_entries_of_a_folder_that_resolves_elsewhere() {
         "{review:#?}"
     );
     assert_eq!((review.moves, review.id), (0, None), "{review:#?}");
-    assert!(trash.moved().is_empty());
+    assert_eq!(trash.moved(), [] as [std::path::PathBuf; 0]);
 }
 
 /// STO-FR-10, RES-FR-07: a Clean up reviewed while the run was Complete
@@ -842,5 +854,5 @@ async fn products_entries_clean_up_and_empty_trash() {
     assert!(trash.moved().contains(&copy) && !folder.exists(), "{:?}", trash.moved());
     assert_eq!(digest(&product), accepted, "the accepted product never moves");
     assert_eq!(world.catalog().result(id).await.unwrap().state, ResultState::Accepted);
-    assert!(world.catalog().run_result_users(world.run).await.unwrap().is_empty());
+    assert_eq!(world.catalog().run_result_users(world.run).await.unwrap(), [] as [uuid::Uuid; 0]);
 }

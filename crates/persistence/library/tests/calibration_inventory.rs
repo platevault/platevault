@@ -351,7 +351,7 @@ async fn matching_without_a_view_reads_the_current_sessions_and_refuses_a_stale_
         light.evidence.capture.get(EvidenceField::Night).unwrap().value,
         "2026-09-18@date-loc-noon"
     );
-    assert!(basis.decisions.is_empty());
+    assert_eq!(basis.decisions, [] as [platevault_model::CalibrationDecision; 0]);
     assert_eq!(basis.candidates.len(), 6, "every listed input, candidates included");
     let states: Vec<_> = matched.iter().map(|r| (r.kind, r.state)).collect();
     assert_eq!(

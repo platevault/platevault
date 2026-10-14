@@ -280,7 +280,7 @@ mod tests {
 
         let (failure, _) = move_file(&src, &dst).unwrap_err();
         // Could be SourceMissing or Unknown depending on OS rename error.
-        assert!(!failure.message.is_empty());
+        assert_ne!(failure.message, "");
     }
 
     // ── Cross-volume (EXDEV) branch coverage ──────────────────────────────────
@@ -328,7 +328,7 @@ mod tests {
             move_file_with_ops(&src, &dst, fake_exdev, fake_copy_fail, |p| std::fs::remove_file(p))
                 .unwrap_err();
 
-        assert!(!failure.message.is_empty());
+        assert_ne!(failure.message, "");
         assert!(!move_result.rollback_attempted, "copy never succeeded, no rollback to attempt");
         assert_eq!(move_result.rollback_outcome, RollbackOutcome::NotApplicable);
         // The injected copy failure never wrote to dest, so it must not exist.

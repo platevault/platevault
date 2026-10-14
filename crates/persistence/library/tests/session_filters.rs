@@ -432,7 +432,7 @@ async fn create_project_prefills_target_and_rig() {
     assert_eq!(prefill.subjects[0].target_id, world.ngc7000.candidate.id);
     assert!(!prefill.subjects[0].mosaic && prefill.subjects[0].panels.is_empty());
     assert_eq!(prefill.rig_ids, vec![world.esprit.id]);
-    assert!(prefill.goals.is_empty());
+    assert_eq!(prefill.goals, [] as [platevault_model::GoalInput; 0]);
     let saved = catalog.list_projects(&ProjectQuery::default()).await.unwrap();
     assert!(saved.is_empty(), "a prefill saves nothing");
 

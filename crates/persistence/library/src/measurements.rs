@@ -1466,7 +1466,10 @@ mod tests {
         assert_eq!(interrupted.state, RunState::Interrupted);
         assert_eq!(interrupted.counters.measured, 0);
         assert_eq!(reopened.import_review(reviewed.review_id).await.unwrap(), reviewed);
-        assert!(reopened.imported_values(&ids).await.unwrap().is_empty());
+        assert_eq!(
+            reopened.imported_values(&ids).await.unwrap(),
+            [] as [platevault_model::ImportedValue; 0]
+        );
         let records = reopened.frame_records(&ids[..1], &method()).await.unwrap();
         assert!(records[0].record.is_none());
 

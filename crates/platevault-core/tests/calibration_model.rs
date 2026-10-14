@@ -230,5 +230,5 @@ fn the_handoff_projects_only_accepted_and_excepted_assignments() {
     );
     let ready = plan(vec![accepted, excepted]).handoff();
     assert!(ready.ready);
-    assert!(ready.unresolved.is_empty());
+    assert_eq!(ready.unresolved, [] as [platevault_core::UnresolvedRequirement; 0]);
 }

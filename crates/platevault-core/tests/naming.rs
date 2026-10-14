@@ -73,14 +73,17 @@ async fn defaults_per_type() {
     );
     let resolved = library.resolve_naming(NamingFrameType::Light, &light_metadata()).await.unwrap();
     assert_eq!(resolved.relative_path, "M31/Ha/2026-04-12/light");
-    assert!(resolved.fallbacks.is_empty());
+    assert_eq!(resolved.fallbacks, [] as [platevault_core::NamingFallback; 0]);
 }
 
 #[tokio::test]
 async fn only_overrides_stored() {
     let temp = tempfile::tempdir().unwrap();
     let library = open(temp.path()).await;
-    assert!(library.catalog().naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        library.catalog().naming_overrides().await.unwrap(),
+        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+    );
 
     let saved = library
         .save_naming_template(NamingFrameType::Flat, "flats/{camera}/{filter}/")
@@ -111,7 +114,10 @@ async fn only_overrides_stored() {
 
     // Saving the default again removes the stored override.
     library.save_naming_template(NamingFrameType::Flat, "flats/{filter}/{date}/").await.unwrap();
-    assert!(library.catalog().naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        library.catalog().naming_overrides().await.unwrap(),
+        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+    );
 }
 
 #[tokio::test]
@@ -171,7 +177,10 @@ async fn overlong_templates_and_paths_refused() {
     // A long metadata value pushes the resolved path past the cap.
     let metadata = NamingMetadata { target: Some("t".repeat(199)), ..light_metadata() };
     assert_invalid(library.resolve_naming(NamingFrameType::Light, &metadata).await, "length");
-    assert!(library.catalog().naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        library.catalog().naming_overrides().await.unwrap(),
+        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+    );
 }
 
 #[tokio::test]
@@ -214,7 +223,10 @@ async fn preview_names_fallback_tokens() {
         [NamingFallback { token: "target".into(), value: "unclassified".into() }]
     );
     // Previewing stores nothing.
-    assert!(library.catalog().naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        library.catalog().naming_overrides().await.unwrap(),
+        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+    );
 }
 
 #[tokio::test]
@@ -229,7 +241,10 @@ async fn restore_defaults() {
     assert_eq!(restored, library.naming_templates().await.unwrap());
     assert_eq!(restored.len(), 7);
     assert!(restored.iter().all(|t| !t.overridden && t.template == t.default_template));
-    assert!(library.catalog().naming_overrides().await.unwrap().is_empty());
+    assert_eq!(
+        library.catalog().naming_overrides().await.unwrap(),
+        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+    );
     let resolved = library.resolve_naming(NamingFrameType::Light, &light_metadata()).await.unwrap();
     assert_eq!(resolved.relative_path, "M31/Ha/2026-04-12/light");
 }

@@ -337,7 +337,10 @@ async fn a_reminder_is_due_from_start_minus_lead_until_start_and_names_its_site(
     let window = first_window(&set, NIGHT);
     let due = due_at(&window, 60);
 
-    assert!(due_reminders(&subscription, &set, due - Duration::seconds(1)).is_empty());
+    assert_eq!(
+        due_reminders(&subscription, &set, due - Duration::seconds(1)),
+        [] as [platevault_core::UpcomingReminder; 0]
+    );
     let at_due = due_reminders(&subscription, &set, due);
     assert_eq!(at_due.iter().map(|reminder| reminder.window_key).collect::<Vec<_>>(), [window.key]);
     let reminder = &at_due[0];
@@ -355,8 +358,14 @@ async fn a_reminder_is_due_from_start_minus_lead_until_start_and_names_its_site(
     );
     assert_eq!((reminder.start_local, reminder.end_local), (window.start_local, window.end_local));
     assert_eq!((reminder.night, reminder.lead_minutes), (window.night, 60));
-    assert!(!due_reminders(&subscription, &set, window.start_utc - Duration::seconds(1)).is_empty());
-    assert!(due_reminders(&subscription, &set, window.start_utc).is_empty());
+    assert_ne!(
+        due_reminders(&subscription, &set, window.start_utc - Duration::seconds(1)),
+        [] as [platevault_core::UpcomingReminder; 0]
+    );
+    assert_eq!(
+        due_reminders(&subscription, &set, window.start_utc),
+        [] as [platevault_core::UpcomingReminder; 0]
+    );
 
     // Upcoming lists every window that has not started, by due instant.
     let upcoming = upcoming_reminders(&subscription, &set, due - Duration::seconds(1));
@@ -401,8 +410,14 @@ async fn windows_at_the_second_site_never_become_upcoming_or_due() {
     assert!(athens.windows().count() > 0, "the second site has windows to ignore");
     for window in athens.windows() {
         for now in [due_at(window, 180), window.start_utc - Duration::minutes(1)] {
-            assert!(due_reminders(&subscription, &athens, now).is_empty());
-            assert!(upcoming_reminders(&subscription, &athens, now).is_empty());
+            assert_eq!(
+                due_reminders(&subscription, &athens, now),
+                [] as [platevault_core::UpcomingReminder; 0]
+            );
+            assert_eq!(
+                upcoming_reminders(&subscription, &athens, now),
+                [] as [platevault_core::UpcomingReminder; 0]
+            );
         }
     }
     // Windows computed with other criteria than the subscribed ones are not
@@ -410,7 +425,10 @@ async fn windows_at_the_second_site_never_become_upcoming_or_due() {
     let other = PlanCriteria { moon: MoonCriterion::None, ..criteria() };
     let backyard = windows_at(&planning.ngc, &planning.backyard, other, NIGHT, 1);
     let window = first_window(&backyard, NIGHT);
-    assert!(due_reminders(&subscription, &backyard, due_at(&window, 180)).is_empty());
+    assert_eq!(
+        due_reminders(&subscription, &backyard, due_at(&window, 180)),
+        [] as [platevault_core::UpcomingReminder; 0]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -597,7 +615,10 @@ async fn permission_denied_before_submission_blocks_the_subscription_and_submits
     assert_eq!(blocked.revision, enabled.revision + 1);
     assert_eq!((blocked.criteria, blocked.lead_minutes), (enabled.criteria, 60));
     assert!(notifier.submissions().is_empty(), "{:?}", notifier.submissions());
-    assert!(planning.catalog.reminder_deliveries(0, 0).await.unwrap().is_empty());
+    assert_eq!(
+        planning.catalog.reminder_deliveries(0, 0).await.unwrap(),
+        [] as [platevault_core::ReminderDelivery; 0]
+    );
 }
 
 /// System sleep stalls monotonic timers while the wall clock moves on. The

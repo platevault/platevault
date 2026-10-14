@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn unrelated_topic_ticks_nothing() {
-        assert!(ticked_item_ids("plan.approved", &serde_json::json!({})).is_empty());
+        assert_eq!(ticked_item_ids("plan.approved", &serde_json::json!({})), [] as [&str; 0]);
     }
 
     #[test]
@@ -224,8 +224,10 @@ mod tests {
             ticked_item_ids("tool.launch", &serde_json::json!({ "outcome": "spawned" })),
             ["projects.launch_tool"]
         );
-        assert!(ticked_item_ids("tool.launch", &serde_json::json!({ "outcome": "spawn_failed" }))
-            .is_empty());
-        assert!(ticked_item_ids("tool.launch", &serde_json::json!({})).is_empty());
+        assert_eq!(
+            ticked_item_ids("tool.launch", &serde_json::json!({ "outcome": "spawn_failed" })),
+            [] as [&str; 0]
+        );
+        assert_eq!(ticked_item_ids("tool.launch", &serde_json::json!({})), [] as [&str; 0]);
     }
 }

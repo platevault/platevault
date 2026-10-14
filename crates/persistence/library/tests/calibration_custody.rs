@@ -259,7 +259,10 @@ async fn custody_facts_name_candidates_adopted_masters_and_retained_sources() {
 async fn references_name_adopted_masters_with_their_revisions() {
     let lib = library().await;
     let catalog = &lib.catalog;
-    assert!(catalog.calibration_references(&BTreeSet::new()).await.unwrap().is_empty());
+    assert_eq!(
+        catalog.calibration_references(&BTreeSet::new()).await.unwrap(),
+        [] as [platevault_model::AssetReference; 0]
+    );
     let source = asset_at(catalog, &lib.results, SOURCE).await;
     let held = catalog.location_assets(lib.calibration.id).await.unwrap();
     let mut asked = ids(&held);

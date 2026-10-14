@@ -182,7 +182,7 @@ async fn browse_without_catalogue_or_preset_lists_zero() {
     let mut browse = query(TargetsShow::Browse, Some(backyard), date!(2026 - 10 - 10));
 
     let empty = library.target_rows(&browse).await.unwrap();
-    assert!(empty.rows.is_empty());
+    assert_eq!(empty.rows, [] as [platevault_core::TargetRow; 0]);
     assert_eq!(empty.total, 0);
     assert!(empty.needs_catalogue_or_preset);
 
@@ -474,7 +474,7 @@ async fn no_site_shows_dash_and_add_site_reason() {
     library.set_favourite(m31.id, false).await.unwrap();
     let page =
         library.target_rows(&query(TargetsShow::MyTargets, None, date!(2026 - 10 - 10))).await;
-    assert!(page.unwrap().rows.is_empty());
+    assert_eq!(page.unwrap().rows, [] as [platevault_core::TargetRow; 0]);
 
     // A saved default site becomes the planning site when the query names none.
     library.add_to_my_targets(&AddTarget::Saved { id: m31.id }).await.unwrap();
@@ -518,7 +518,7 @@ async fn saved_preset_persists_rename_delete_builtin_immutable() {
         ]
     );
     assert!(presets.builtin.iter().all(|info| !info.definition.is_empty()));
-    assert!(presets.saved.is_empty());
+    assert_eq!(presets.saved, [] as [platevault_core::SavedPreset; 0]);
 
     let filters = PresetFilters {
         show: TargetsShow::Browse,
@@ -554,7 +554,7 @@ async fn saved_preset_persists_rename_delete_builtin_immutable() {
         .await
         .unwrap();
     let presets = library.targets_presets(RigSelection::None).await.unwrap();
-    assert!(presets.saved.is_empty());
+    assert_eq!(presets.saved, [] as [platevault_core::SavedPreset; 0]);
     assert_eq!(presets.builtin.len(), 5);
 }
 

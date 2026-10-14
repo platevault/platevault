@@ -52,7 +52,10 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
         .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
         .await
         .unwrap();
-    assert!(library.catalog().location_assets(location.id).await.unwrap().is_empty());
+    assert_eq!(
+        library.catalog().location_assets(location.id).await.unwrap(),
+        [] as [platevault_core::Asset; 0]
+    );
     let mut progress = library.subscribe_scan_progress();
     let started = library.start_scan(location.id, None).await.unwrap();
     assert_eq!(started.state, ScanState::Running);
@@ -243,7 +246,7 @@ async fn retry_runs_a_real_scoped_worker_and_offline_scan_retains_observations()
     let failed = terminal(&library, scan.id).await;
     assert_eq!(failed.state, ScanState::Failed);
     assert!(!failed.issues.is_empty());
-    assert!(failed.complete_scopes.is_empty());
+    assert_eq!(failed.complete_scopes, [] as [platevault_core::NativePath; 0]);
     let retained = library.catalog().asset(asset.id).await.unwrap();
     assert_eq!(retained.availability, Availability::Offline);
     assert_eq!(retained.fingerprint, asset.fingerprint);

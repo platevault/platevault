@@ -231,7 +231,10 @@ async fn trashed_run_never_blocked() {
     failed_preparation(&world).await;
     assert_eq!(blocked(&next(&world).await).0, world.run);
     world.library.move_view_to_trash(world.run).await.unwrap();
-    assert!(world.library.run_blockers(world.run).await.unwrap().is_empty());
+    assert_eq!(
+        world.library.run_blockers(world.run).await.unwrap(),
+        [] as [platevault_core::RunBlocker; 0]
+    );
     assert_eq!(next(&world).await, NextAction::StartRun);
     world.catalog().restore_view(world.run).await.unwrap();
     assert_eq!(blocked(&next(&world).await).0, world.run);
@@ -271,7 +274,7 @@ async fn next_rule4_start_run() {
     let home = dashboard(&world.library, false).await;
     assert!(home.projects[0].goals.iter().all(|goal| goal.met), "{:?}", home.projects[0].goals);
     assert_eq!(home.projects[0].next, NextAction::StartRun);
-    assert!(home.target_status.is_empty());
+    assert_eq!(home.target_status, [] as [platevault_core::TargetStatus; 0]);
 }
 
 /// PRJ-AC-22: with one open and one Done Project, Home lists only the open

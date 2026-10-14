@@ -370,7 +370,10 @@ async fn group_creates_one_run_per_confirmed_panel_no_whole_mosaic() {
     let error = world.library.create_view_group(&not_mosaic).await.unwrap_err();
     assert_eq!(kind(&error), "invalid_input", "{error}");
     let query = ViewQuery { project_id: Some(world.project.id), offset: 0, limit: 0 };
-    assert!(world.library.catalog().list_views(&query).await.unwrap().is_empty());
+    assert_eq!(
+        world.library.catalog().list_views(&query).await.unwrap(),
+        [] as [platevault_core::ViewListing; 0]
+    );
 
     let detail = world.group().await;
     let group = &detail.group;
@@ -392,7 +395,7 @@ async fn group_creates_one_run_per_confirmed_panel_no_whole_mosaic() {
     // Each in-panel session joins its panel run, its pointing as the reason.
     let [p1, p2, p3] = [&detail.panels[0], &detail.panels[1], &detail.panels[2]];
     assert_eq!(world.draft_selected(p1.view.id).await, world.ids(&[P1_A, P1_B]));
-    assert!(world.draft_selected(p2.view.id).await.is_empty());
+    assert_eq!(world.draft_selected(p2.view.id).await, [] as [uuid::Uuid; 0]);
     assert_eq!(world.draft_selected(p3.view.id).await, world.ids(&[P3]));
     let basis =
         world.library.catalog().view_membership(p1.view.id, Membership::Draft).await.unwrap();
@@ -412,7 +415,7 @@ async fn group_creates_one_run_per_confirmed_panel_no_whole_mosaic() {
     assert_eq!(kind(&error), "invalid_input", "refused before the write: {error}");
     assert!(error.to_string().contains("run group"), "{error}");
     assert_eq!(world.library.catalog().list_views(&query).await.unwrap().len(), 3);
-    assert!(world.draft_selected(p2.view.id).await.is_empty());
+    assert_eq!(world.draft_selected(p2.view.id).await, [] as [uuid::Uuid; 0]);
 }
 
 #[tokio::test]
@@ -774,7 +777,10 @@ async fn empty_trash_deletes_trashed_panel_run() {
     assert!(!after.filters.iter().any(|count| count.filter == PanelFilter::Panel { number: 2 }));
     let query = ViewQuery { project_id: Some(world.project.id), offset: 0, limit: 0 };
     assert_eq!(world.library.catalog().list_views(&query).await.unwrap().len(), 2);
-    assert!(world.library.catalog().trashed_views(world.project.id).await.unwrap().is_empty());
+    assert_eq!(
+        world.library.catalog().trashed_views(world.project.id).await.unwrap(),
+        [] as [platevault_core::TrashedRun; 0]
+    );
     // The session decided onto Panel 2 is new again; its pointing now gives
     // Panel 1 alone, and the user can decide it.
     let between = row(&after, world.sessions[BETWEEN]);

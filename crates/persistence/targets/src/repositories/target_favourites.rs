@@ -150,7 +150,7 @@ mod tests {
         remove_favourite(db.pool(), "t-003").await.unwrap();
 
         let ids = list_favourites(db.pool()).await.unwrap();
-        assert!(ids.is_empty());
+        assert_eq!(ids, [] as [std::string::String; 0]);
     }
 
     #[tokio::test]
@@ -162,14 +162,14 @@ mod tests {
         remove_favourite(db.pool(), "t-004").await.unwrap();
 
         let ids = list_favourites(db.pool()).await.unwrap();
-        assert!(ids.is_empty());
+        assert_eq!(ids, [] as [std::string::String; 0]);
     }
 
     #[tokio::test]
     async fn list_is_empty_when_nothing_favourited() {
         let db = setup_db().await;
         let ids = list_favourites(db.pool()).await.unwrap();
-        assert!(ids.is_empty());
+        assert_eq!(ids, [] as [std::string::String; 0]);
     }
 
     #[tokio::test]

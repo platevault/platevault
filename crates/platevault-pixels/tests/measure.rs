@@ -164,7 +164,7 @@ fn detection_is_complete_above_snr_20_and_rejects_hot_pixels_and_cosmic_rays() {
     let (star_count, fitted, fwhm, eccentricity, hfr) = star_metrics(&measurement);
     assert_eq!((star_count, fitted), (0, 0));
     assert!(fwhm.is_none() && eccentricity.is_none() && hfr.is_none());
-    assert!(measurement.stars.is_empty());
+    assert_eq!(measurement.stars, [] as [platevault_pixels::measure::Star; 0]);
 }
 
 /// With zero clipped noise the support threshold is the background itself:
@@ -222,7 +222,7 @@ fn elliptical_gaussian_fits_recover_centroid_fwhm_eccentricity_and_angle() {
     for truth in &stars {
         let star = nearest(&measurement.stars, truth.x, truth.y, 1.5).expect("star detected");
         assert_eq!(star.state, StarState::Fitted, "{truth:?}: {star:?}");
-        assert!(star.reasons.is_empty());
+        assert_eq!(star.reasons, [] as [platevault_pixels::measure::StarReason; 0]);
         let shape = star.shape.expect("fitted shape");
         let centroid = (star.x - truth.x).hypot(star.y - truth.y);
         let (major, minor) = truth.fwhm();
@@ -443,7 +443,7 @@ fn cfa_mosaics_report_background_only_and_multichannel_images_fail() {
         measurement.star_metrics,
         StarMetrics::Unavailable { reason: "cfa_star_metrics_unqualified" }
     ));
-    assert!(measurement.stars.is_empty());
+    assert_eq!(measurement.stars, [] as [platevault_pixels::measure::Star; 0]);
     assert_eq!(measurement.plane, 0);
 
     let channels: Vec<Plane> = (0..3)
@@ -556,5 +556,5 @@ fn cutouts_return_observed_fitted_and_residual_for_fitted_stars_only() {
     assert_eq!(failed.state, StarState::Failed);
     let cut = cutouts(&plane, failed);
     assert!(cut.fitted.is_none() && cut.residual.is_none());
-    assert!(!cut.observed.is_empty());
+    assert_ne!(cut.observed, [] as [f64; 0]);
 }

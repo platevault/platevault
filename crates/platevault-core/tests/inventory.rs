@@ -596,7 +596,7 @@ fn cancel_and_callback_failure_never_produce_complete_scopes() {
     .unwrap();
     assert_eq!(calls, 1, "no batch is delivered after cancellation");
     assert_eq!(observation.state, ScanState::Canceled);
-    assert!(observation.complete_scopes.is_empty());
+    assert_eq!(observation.complete_scopes, [] as [platevault_core::NativePath; 0]);
     assert_eq!(observation.files.len(), 1);
     assert!(!absence_provable(&observation, &rel("light_3.fits")));
     assert!(!absence_provable(&observation, &rel("never-existed.fits")));
@@ -685,7 +685,7 @@ fn root_replaced_mid_scan_fails_without_absence_and_discards_pending_batch() {
 
     assert_eq!(delivered, 1);
     assert_eq!(observation.state, ScanState::Failed);
-    assert!(observation.complete_scopes.is_empty());
+    assert_eq!(observation.complete_scopes, [] as [platevault_core::NativePath; 0]);
     assert_eq!(issue_at(&observation, "").availability, Availability::IdentityConflict);
     assert!(!absence_provable(&observation, &rel("b/light_1.fits")));
 }

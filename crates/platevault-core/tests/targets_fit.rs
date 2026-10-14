@@ -193,7 +193,7 @@ async fn fit_fits_n_panels_tiny_by_major_axis_over_short_side() {
 
     // With no rig there is no Fit column.
     let none = library.target_rows(&messier(RigSelection::None)).await.unwrap();
-    assert!(none.rigs.is_empty());
+    assert_eq!(none.rigs, [] as [platevault_core::TargetsRig; 0]);
     assert!(none.rows.iter().all(|row| row.fit.is_empty()));
 }
 

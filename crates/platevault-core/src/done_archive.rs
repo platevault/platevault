@@ -460,6 +460,6 @@ mod tests {
             vec![counted.key]
         );
         assert_eq!((offer.n, offer.size_bytes), (1, 64));
-        assert!(offer.refused.is_empty());
+        assert_eq!(offer.refused, [] as [platevault_model::RefusedFrame; 0]);
     }
 }

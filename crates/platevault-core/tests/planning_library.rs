@@ -455,7 +455,10 @@ async fn an_unknown_time_zone_stores_no_site() {
     let error = worked.library.save_site(None, None, &mars).await.unwrap_err();
     assert_eq!(kind(&error), "invalid_input", "{error}");
     assert!(error.to_string().contains("timeZone"), "{error}");
-    assert!(worked.library.catalog().list_sites().await.unwrap().sites.is_empty());
+    assert_eq!(
+        worked.library.catalog().list_sites().await.unwrap().sites,
+        [] as [platevault_core::ObservingSite; 0]
+    );
     assert!(worked.planning_rows().await.values().all(|count| *count == 0));
     worked.assert_originals();
 }
@@ -513,7 +516,7 @@ async fn reminder_review_and_activation_need_a_default_site_and_explicit_values(
     assert_eq!(review.permission, PermissionState::Granted);
     assert_eq!(review.app_closed_delivery, AppClosedDelivery::UNAVAILABLE);
     assert_eq!(review.subscription_revision, None);
-    assert!(!review.upcoming.is_empty());
+    assert_ne!(review.upcoming, [] as [platevault_core::UpcomingReminder; 0]);
     assert!(review.upcoming.iter().all(|reminder| reminder.site_id == backyard.id
         && reminder.site_name == "Backyard"
         && reminder.lead_minutes == 60
@@ -547,11 +550,11 @@ async fn the_scheduler_runs_only_while_a_subscription_is_enabled() {
     assert!(status.scheduler_running);
     assert_eq!(status.permission, PermissionState::Granted);
     assert_eq!(status.subscriptions, std::slice::from_ref(&enabled));
-    assert!(!status.upcoming.is_empty());
+    assert_ne!(status.upcoming, [] as [platevault_core::UpcomingReminder; 0]);
     // PLAN-AC-02: every upcoming reminder is at Backyard, none at the second site.
     assert!(status.upcoming.iter().all(|r| r.site_id == backyard.id && r.site_id != athens.id));
     assert!(status.upcoming.windows(2).all(|pair| pair[0].due_at <= pair[1].due_at));
-    assert!(status.deliveries.is_empty());
+    assert_eq!(status.deliveries, [] as [platevault_core::ReminderDelivery; 0]);
     assert_eq!(worked.operations().await, operations, "enabling starts no scan");
 
     let disabled = worked
@@ -562,7 +565,7 @@ async fn the_scheduler_runs_only_while_a_subscription_is_enabled() {
     assert_eq!(disabled.state, SubscriptionState::Disabled);
     let status = worked.status().await;
     assert!(!status.scheduler_running);
-    assert!(status.upcoming.is_empty());
+    assert_eq!(status.upcoming, [] as [platevault_core::UpcomingReminder; 0]);
 
     // A reopened catalog without an enabled subscription starts no scheduler;
     // one with an enabled subscription starts it when the notifier attaches.
@@ -670,7 +673,7 @@ async fn a_default_site_change_needs_reconfirmation_and_planned_enables_nothing(
     assert_eq!(moved.needs_reconfirmation, [worked.target.candidate.id]);
     let status = worked.status().await;
     assert!(!status.scheduler_running, "a subscription needing reconfirmation schedules nothing");
-    assert!(status.upcoming.is_empty());
+    assert_eq!(status.upcoming, [] as [platevault_core::UpcomingReminder; 0]);
     assert_eq!(status.subscriptions[0].state, SubscriptionState::NeedsReconfirmation);
     assert_eq!(status.subscriptions[0].revision, enabled.revision + 1);
 

@@ -163,7 +163,7 @@ async fn refuses_recorded_result_input() {
 
     let offer = sheet(&world, project).await.rejected_frames;
     assert_eq!(offer.n, 0, "{offer:#?}");
-    assert!(offer.frames.is_empty());
+    assert_eq!(offer.frames, [] as [platevault_core::RejectedFrame; 0]);
     assert_eq!(offer.refused.len(), 1, "{:?}", offer.refused);
     assert_eq!(offer.refused[0].frame_key, input.id);
     assert_eq!(

@@ -330,7 +330,7 @@ fn set_then_rise_never_dark_and_always_dark_nights_have_their_own_shapes() {
 
     let summer = PlanCriteria { moon: MoonCriterion::None, ..quickstart() };
     let bright = windows(&ngc, &backyard, date!(2026 - 06 - 20), 1, summer);
-    assert!(bright.nights[0].windows.is_empty());
+    assert_eq!(bright.nights[0].windows, [] as [platevault_core::ObservingWindow; 0]);
     assert_eq!(bright.nights[0].no_window_reason, Some(NoWindowReason::NeverDark));
 
     let civil =
@@ -435,7 +435,7 @@ fn boundaries_round_inward_and_windows_short_after_rounding_are_dropped() {
         1,
         PlanCriteria { min_duration_minutes: rounded + 1, ..quickstart() },
     );
-    assert!(short.nights[0].windows.is_empty());
+    assert_eq!(short.nights[0].windows, [] as [platevault_core::ObservingWindow; 0]);
     assert_eq!(short.nights[0].no_window_reason, Some(NoWindowReason::ShorterThanMinimum));
 }
 
@@ -444,11 +444,11 @@ fn targets_without_icrs_coordinates_have_no_nights_and_zones_must_be_bundled_ian
     let backyard = backyard();
     let unknown = windows(&target(None), &backyard, date!(2026 - 10 - 20), 3, quickstart());
     assert_eq!(unknown.unavailable_reason, Some(WindowUnavailableReason::TargetCoordinatesUnknown));
-    assert!(unknown.nights.is_empty());
+    assert_eq!(unknown.nights, [] as [platevault_core::NightPlan; 0]);
     let fk4 = target(Some(SkyCoordinates { ra_deg: 314.75, dec_deg: 44.33, frame: "fk4".into() }));
     let other = windows(&fk4, &backyard, date!(2026 - 10 - 20), 3, quickstart());
     assert_eq!(other.unavailable_reason, Some(WindowUnavailableReason::UnsupportedCoordinateFrame));
-    assert!(other.nights.is_empty());
+    assert_eq!(other.nights, [] as [platevault_core::NightPlan; 0]);
 
     for zone in ["Europe/Amsterdam", "Europe/Athens", "Arctic/Longyearbyen", "UTC"] {
         assert!(validate_time_zone(zone).is_ok(), "{zone}");

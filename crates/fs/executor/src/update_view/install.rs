@@ -220,7 +220,7 @@ mod tests {
         assert_eq!(outcome.content_fingerprint, expected);
 
         // Ownership token must be non-empty.
-        assert!(!outcome.ownership_token.is_empty());
+        assert_ne!(outcome.ownership_token, "");
     }
 
     #[test]

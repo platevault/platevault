@@ -597,7 +597,7 @@ async fn policy_off_leaves_suggestions() {
     assert_eq!(stale.response(None, None).kind, "conflict");
 
     let outcome = world.assign(1).await;
-    assert!(outcome.assigned.is_empty());
+    assert_eq!(outcome.assigned, [] as [platevault_core::RequirementKey; 0]);
     assert_eq!(outcome.plan.plan_revision, manual.revision, "nothing was written");
     for requirement in &outcome.plan.requirements {
         assert_eq!(requirement.state, RequirementState::Suggested);
@@ -729,7 +729,7 @@ async fn other_camera_not_candidate_other_train_incompatible() {
         assert_eq!(flats.reason, Some(UnresolvedReason::CriterionIncompatible));
     }
     let outcome = world.assign(1).await;
-    assert!(outcome.assigned.is_empty());
+    assert_eq!(outcome.assigned, [] as [platevault_core::RequirementKey; 0]);
 }
 
 /// CAL-FR-09: the readiness line counts light groups matched, needing review,
@@ -890,7 +890,7 @@ async fn adopted_master_drift_blocks_assignment() {
 
     rewrite(&original);
     let restored = world.assign(1).await;
-    assert!(restored.drifted.is_empty());
+    assert_eq!(restored.drifted, [] as [uuid::Uuid; 0]);
     for channel in ["Ha", "OIII"] {
         let darks = row(&restored.plan, channel, InputKind::Dark);
         assert_eq!(darks.state, RequirementState::Automatic, "{darks:#?}");
