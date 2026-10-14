@@ -13,16 +13,27 @@
  *   renders its own "reason ▸" trigger beside a refusal line.
  * - UsedByPreview: "Used by 6 runs ▸", a link to the full list, previewing
  *   the first rows.
+ * - MasterPreview: a calibration master's name, a link to it in the
+ *   Calibration library, previewing its facts (kind, camera, gain · offset,
+ *   temperature, exposure, frames, night), its age badge and how many runs
+ *   use it. The card holds no controls, so it takes no focus.
  *
  * The card opens over the page, so nothing moves when it opens (C-8).
  */
 import { Link } from "@tanstack/react-router"
 import { ChevronRight } from "lucide-react"
 import { type ComponentProps, type ReactElement, type ReactNode, cloneElement, useEffect, useId, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { KIND_NAME } from "@/domain/calibration"
 import type { StepLink } from "@/domain/derive"
+import type { CalibrationMaster } from "@/domain/types"
+import { formatCount, formatExposure, formatNight } from "@/lib/format"
+import { say } from "@/lib/i18n"
 import type { Blocker } from "./contracts"
+import { KeyValueList } from "./data"
+import { Pill } from "./pill"
 
 const FOCUSABLE = "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])"
 
@@ -168,6 +179,45 @@ export function UsedByPreview({ label, link, items }: UsedByPreviewProps) {
   return (
     <Preview trigger={trigger}>
       <Rows rows={items} />
+    </Preview>
+  )
+}
+
+export interface MasterPreviewProps {
+  /** The master's name as the page lists it: the trigger's text. */
+  label: string
+  /** The master in the Calibration library: `{ to: "/calibration", search: { master: id } }`. */
+  link: StepLink
+  master: Pick<CalibrationMaster, "kind" | "cameraName" | "gain" | "offset" | "ccdTempC" | "exposureS" | "frameCount">
+  /** The night the master was taken, YYYY-MM-DD. */
+  night: string
+  /** "Old · 120 d" once the master is past the age limit (`masterAge`); null while it is younger. */
+  age: string | null
+  /** How many runs hand the master off (`masterUsage`). */
+  usedBy: number
+}
+
+export function MasterPreview({ label, link, master, night, age, usedBy }: MasterPreviewProps) {
+  const m = useMessages()
+  const none = "–"
+  const items = [
+    { label: m.run_col_kind(), value: say(m, KIND_NAME[master.kind]) },
+    { label: m.calibration_key_camera(), value: master.cameraName ?? none },
+    { label: m.session_gain_offset(), value: `${master.gain ?? none} · ${master.offset ?? none}` },
+    { label: m.domain_criterion_temperature(), value: master.ccdTempC === null ? none : `${Math.round(master.ccdTempC)} °C` },
+    { label: m.calibration_key_exposure(), value: master.exposureS === null ? none : formatExposure(master.exposureS) },
+    { label: m.calibration_frames(), value: master.frameCount === null ? none : formatCount(master.frameCount) },
+    { label: m.tonight_night(), value: formatNight(night, true) },
+    { label: m.calibration_used_by(), value: m.calibration_used_by_runs({ count: usedBy }) },
+  ]
+  return (
+    <Preview trigger={<PlaceLink link={link}>{label}</PlaceLink>}>
+      {age ? (
+        <span className="flex">
+          <Pill tone="warning">{age}</Pill>
+        </span>
+      ) : null}
+      <KeyValueList items={items} />
     </Preview>
   )
 }

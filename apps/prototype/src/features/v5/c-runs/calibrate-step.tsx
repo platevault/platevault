@@ -3,7 +3,9 @@
  * session × calibration kind. The Master cell picks the master: the
  * compatible ones first in the matching rule's order, then the other
  * masters (an exception), then No calibration, which asks for no reason
- * (user item 147). The match columns stay visible (user items 151-155).
+ * (user item 147). Read-only, the cell names the master as a MasterPreview
+ * link to it in the Calibration library. The match columns stay visible
+ * (user items 151-155).
  * Auto-assign is the run's policy (D-W55): compatible masters are assigned
  * without a click. Batch: No calibration, or one master for every selected
  * row it fits. Proceed records the automatic choices (§5.4).
@@ -16,9 +18,11 @@ import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
 import { ComboboxField, type ComboboxGroupOptions, SwitchField } from "@/components/app/fields"
+import { MasterPreview } from "@/components/app/previews"
 import { Refusal, refusalFrom } from "@/components/app/refusal"
 import { StatusBadge } from "@/components/app/status"
-import { type Candidate, CRITERION_NAME, calibrationPlan, KIND_NAME, type RequirementRow, sessionIdsOf } from "@/domain/calibration"
+import { type CalSource, type Candidate, CRITERION_NAME, calibrationPlan, KIND_NAME, masterAge, type RequirementRow, sessionIdsOf } from "@/domain/calibration"
+import { masterUsage } from "@/domain/calibration-library"
 import { runSetup, workingContent } from "@/domain/derive"
 import type { MatchCriterionName } from "@/domain/types"
 import { formatNight } from "@/lib/format"
@@ -41,8 +45,12 @@ export function coveredSessions(m: Messages, row: RequirementRow): string {
   return `${night} · ${channels.join(", ")}`
 }
 
+function sourceLabel(source: CalSource): string {
+  return source.night ? `${source.name} · ${formatNight(source.night)}` : source.name
+}
+
 function candidateLabel(c: Candidate): string {
-  return c.source.night ? `${c.source.name} · ${formatNight(c.source.night)}` : c.source.name
+  return sourceLabel(c.source)
 }
 
 export function CalibrateStep({ ctx, editable }: { ctx: RunContext; editable: boolean }) {
@@ -78,6 +86,26 @@ export function CalibrateStep({ ctx, editable }: { ctx: RunContext; editable: bo
     ]
   }
   const valueOf = (r: RequirementRow): string | null => (r.state === "exception" && r.input === null ? NO_CALIBRATION : (r.input?.masterId ?? null))
+  // Read-only, the cell names the master and previews it; its Used by and age read as in the Calibration library.
+  const usage = changeable ? null : masterUsage(state.catalog, state.disk)
+  const now = Date.now() + state.faults.clockOffsetMs
+  const masterName = (r: RequirementRow) => {
+    const id = valueOf(r)
+    if (id === NO_CALIBRATION) return m.run_cal_no_calibration()
+    const master = id ? state.catalog.masters[id] : undefined
+    if (!r.source || !master) return "–"
+    const age = masterAge(master, state.settings, now)
+    return (
+      <MasterPreview
+        label={sourceLabel(r.source)}
+        link={{ to: "/calibration", search: { master: master.id } }}
+        master={r.source}
+        night={r.source.night ?? master.createdAt.slice(0, 10)}
+        age={age ? say(m, age.label) : null}
+        usedBy={usage?.get(master.id)?.length ?? 0}
+      />
+    )
+  }
 
   const rowActions = (r: RequirementRow): MenuItem[] => [
     ...(changeable && r.assignment ? [{ id: "automatic", label: m.run_cal_use_automatic(), icon: RotateCcw, run: () => clearCalibration(run.id, sessionIdsOf(r), r.kind) }] : []),
@@ -110,17 +138,19 @@ export function CalibrateStep({ ctx, editable }: { ctx: RunContext; editable: bo
     {
       id: "master",
       header: m.run_cal_col_master(),
-      cell: (r) => (
-        <ComboboxField
-          hideLabel
-          label={m.run_cal_master_for({ name: rowName(r) })}
-          value={valueOf(r)}
-          groups={masterGroups(r)}
-          placeholder={m.run_cal_no_master()}
-          disabled={!changeable}
-          onChange={(value) => act(choose(r, value))}
-        />
-      ),
+      cell: (r) =>
+        changeable ? (
+          <ComboboxField
+            hideLabel
+            label={m.run_cal_master_for({ name: rowName(r) })}
+            value={valueOf(r)}
+            groups={masterGroups(r)}
+            placeholder={m.run_cal_no_master()}
+            onChange={(value) => act(choose(r, value))}
+          />
+        ) : (
+          masterName(r)
+        ),
       sortValue: (r) => r.source?.name ?? "",
     },
     ...MATCH_COLUMNS.map(
