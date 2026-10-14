@@ -104,6 +104,15 @@ The foundation is owned by one agent: domain types, seed, derive functions, rout
 - Final copy polish.
 - Light-theme measurement, unless it is cheap.
 
+## UI conventions
+
+The UI conventions live in two places that agree (user, 2026-10-14; D-W91 in `specs/063-clean-rebuild-contract`, PR #1804):
+
+- **Design system:** documented as a DESIGN.md in the standard DESIGN.md design-system format, generated from `HIGH-LEVEL-DESIGN.md`. It replaces the legacy root `DESIGN.md` when the final frontend lands. Until that DESIGN.md exists, the source is `HIGH-LEVEL-DESIGN.md` §6 to §10 (layout patterns, tokens, component inventory, state conventions and copy conventions), with `R9-COMPOSITION-PLAN.md` §2b, §6.1 and §8.6. The legacy root `DESIGN.md` is not a source.
+- **Behavior:** the UI conventions section of the 063 spec (FR-025 to FR-032): one primary action per view, named menus, row actions in `⋯` and the context menu, a batch bar that replaces the toolbar, sortable tables, dialogs instead of side sheets, inert pills, confirmation only for irreversible actions, microcopy, keyboard access, and issues on the rows they affect with no issues hub.
+
+This document keeps the screens, routes and foundation contract. Where it disagrees with either source, the source wins.
+
 ## Foundation contract
 
 Read this before editing. The foundation owns every shared file below; a screen agent edits only its own slice files and messages the integration owner for a shared change. Route patterns live in `src/routes.tsx`. Run the app on port 5505 with `pnpm exec vite --host 127.0.0.1 --port 5505 --strictPort` and load the demo through Prototype › Load demo library.
