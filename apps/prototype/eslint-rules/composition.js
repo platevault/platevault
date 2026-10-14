@@ -83,7 +83,6 @@ export const COMPOSITION_SYNTAX = [
 /** §8.2: feature areas; each may import only itself among features. `depth` is how far a file sits below the area root. */
 export const AREAS = [
   { dir: "t1", depth: 1 },
-  { dir: "t3", depth: 0 },
   { dir: "t4", depth: 0 },
   { dir: "v5/a-home", depth: 0 },
   { dir: "v5/b-projects", depth: 0 },
