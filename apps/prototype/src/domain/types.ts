@@ -1411,7 +1411,12 @@ export interface SimulationFaults {
   noSite: boolean
   /** The simulated computer's Windows Developer Mode; PlateVault sees a change at its next check. */
   developerMode: DeveloperMode
+  /** The Quick actions switch: how the actions the owner ticked run (astro-plan-zzjlz; prototype only, never in Settings). */
+  quickActions: QuickActionMode
 }
+
+/** One-click runs a ticked action in place, with an Undo notice where it has an inverse; Open page sends it to the page that owns it. */
+export type QuickActionMode = "one-click" | "open-page"
 
 export interface Catalog {
   locations: Record<LocationId, Location>

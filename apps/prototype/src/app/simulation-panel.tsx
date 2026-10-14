@@ -10,6 +10,7 @@ import { FlaskConical, RotateCcw } from "lucide-react"
 import { useId, useMemo, useRef, useState } from "react"
 import { ActionButton } from "@/components/app/actions"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
+import { SegmentedField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,6 +22,7 @@ import { calibrationProcesses } from "@/domain/calibration-process"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/domain/planning"
+import type { QuickActionMode } from "@/domain/types"
 import { formatNight } from "@/lib/format"
 import { type MessageRef, msg, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -101,6 +103,21 @@ function ThisRunSection() {
   )
 }
 
+/** The Quick actions switch (astro-plan-zzjlz): how the actions the owner ticked run on every page. Persisted with the other simulation controls; never in Settings. */
+function QuickActionsSection() {
+  const m = useMessages()
+  const mode = useStore((s) => s.faults.quickActions)
+  const options = [
+    { value: "one-click", label: m.simulation_quick_one_click() },
+    { value: "open-page", label: m.simulation_quick_open_page() },
+  ] as const satisfies readonly { value: QuickActionMode; label: string }[]
+  return (
+    <Section title={m.simulation_actions_title()} level={3}>
+      <SegmentedField label={m.simulation_quick_actions()} description={m.simulation_quick_actions_detail()} value={mode} options={options} onChange={(value) => setFault("quickActions", value)} />
+    </Section>
+  )
+}
+
 export function SimulationControls() {
   const volumes = useStore((s) => s.disk.volumes)
   const denied = useStore((s) => s.disk.deniedPaths)
@@ -149,6 +166,7 @@ export function SimulationControls() {
   return (
     <div className="space-y-6">
       <ThisRunSection />
+      <QuickActionsSection />
       <Section title={m.folder_picker_volumes()} level={3} description={m.simulation_volumes_description()}>
         <div className="divide-y rounded-md border px-3">
           {Object.values(volumes).map((volume) => (

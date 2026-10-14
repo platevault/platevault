@@ -10,7 +10,9 @@
  *   menu (P13); the list's quality filter leads the toolbar.
  * - Selection swaps the table's toolbar for its batch bar (Picked ·
  *   Rejected · Unreviewed); "Select by threshold…" and "Pick the rest" sit
- *   in that toolbar. A mark on more than 20 frames asks first.
+ *   in that toolbar. A mark on more than 20 frames and Pick the rest ask
+ *   first under the Quick actions switch's Open page; One-click runs them at
+ *   once with an Undo notice (astro-plan-zzjlz).
  * - Hotkeys (PIX-FR-13) act the same in the table, the filmstrip and the
  *   grid, never while a field or a menu has focus, and follow the app's
  *   single-key setting (WCAG 2.1.4). They are listed on the Help page.
@@ -26,7 +28,7 @@ import { MissingRecord } from "@/app/missing-record"
 import { getPreferences, useMessages } from "@/app/preferences"
 import { MOD_LABEL, REVIEW_KEY } from "@/app/shortcuts"
 import { ActionBar, ActionButton, IconButton, useAction } from "@/components/app/actions"
-import type { Action, MenuItem } from "@/components/app/contracts"
+import type { Action, MenuItem, QuickUndo } from "@/components/app/contracts"
 import { PathText } from "@/components/app/data"
 import { DataTable, sortRows, type TableSort } from "@/components/app/data-table"
 import { DisplayMenu, type DisplayGroup } from "@/components/app/display-menu"
@@ -39,14 +41,14 @@ import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type 
 import { detectedStars, frameField, renderWindow, sampleAt, type StarRecord, type ViewWindow } from "@/components/domain/raster"
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { type WorkspaceAside, type WorkspacePane, Workspace } from "@/components/templates/workspace"
-import { sessionUnreviewedFrames } from "@/domain/derive"
+import { sessionUnreviewedFrames, unreviewedAssetIds } from "@/domain/derive"
 import { currentFile, formatMetricFixed, previewUnavailableReason } from "@/domain/membership"
 import type { AssetId, QualityValue } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { METRIC_LABEL } from "@/store/actions/measure"
-import { markRestUsable } from "@/store/actions/library"
-import { type CommitResult, useStore } from "@/store/core"
+import { markFrames, markRestUsable } from "@/store/actions/library"
+import { type CommitResult, store, useStore } from "@/store/core"
 import { setFrameUi } from "./actions"
 import { frameColumns } from "./columns"
 import { registerReviewCommands } from "./commands"
@@ -54,7 +56,7 @@ import { ImportDialog, ImportedMeasurementsDialog } from "./import-dialog"
 import { Inspector, type InspectorTab } from "./inspector"
 import { MARK_WORD, markAnnouncement, markLibrary } from "./marks"
 import { MeasureStatus } from "./measure-bar"
-import { bucketAfterMark, contextKey, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
+import { bucketAfterMark, contextKey, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewBucket, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
 import { displayName, NAME_PRESETS, namePreset } from "./names"
 import { setReviewPrefs, type TableHeight, useReviewPrefs } from "./prefs"
 import { QualityLabel, qualityWord } from "./quality"
@@ -63,8 +65,10 @@ import { type Threshold, ThresholdDialog } from "./threshold"
 type ListView = "table" | "filmstrip" | "grid"
 
 const HEIGHT_NEXT: Record<TableHeight, TableHeight> = { rows: "strip", strip: "full", full: "rows" }
-/** A mark on more frames than this asks first. */
+/** A mark on more frames than this asks first, or under the Quick actions switch's One-click offers an Undo instead. */
 const BULK_MARK_CONFIRM_OVER = 20
+/** The library mark that puts a frame back in a review bucket (the inverse of `bucketAfterMark`). */
+const MARK_OF: Record<ReviewBucket, QualityValue> = { picked: "usable", rejected: "unusable", unreviewed: "unreviewed" }
 /** Controls that own the arrow keys while they have focus. */
 const ARROW_OWNERS = "[role=tablist],[role=separator],[role=slider],[role=radiogroup],[role=menu],[role=listbox],[data-histogram],[data-workspace-handle]"
 
@@ -205,15 +209,30 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
 
   const markLabel: Record<QualityValue, string> = { usable: MARK_WORD.usable, unusable: MARK_WORD.unusable, unreviewed: MARK_WORD.unreviewed }
   const markKey: Record<QualityValue, string> = { usable: REVIEW_KEY.pick, unusable: REVIEW_KEY.reject, unreviewed: REVIEW_KEY.unreviewed }
+  /**
+   * The Undo of a bulk mark (owner tick A3): each frame back to the bucket it
+   * reads now, one mark per bucket. A decision that no longer applies to the
+   * frame's bytes reads Unreviewed, so it goes back to Unreviewed.
+   */
+  function marksBefore(list: ReviewFrame[], value: QualityValue): QuickUndo {
+    const byMark = new Map<QualityValue, ReviewFrame[]>()
+    for (const f of list) byMark.set(MARK_OF[f.bucket], [...(byMark.get(MARK_OF[f.bucket]) ?? []), f])
+    return {
+      message: m.store_saved_frames_marked({ count: list.length, n: formatCount(list.length), quality: markLabel[value] }),
+      run: () => (scope ? [...byMark].map(([was, frames]) => markLibrary(scope, frames, was)).find((result) => !result.ok) : undefined),
+    }
+  }
   function markAction(value: QualityValue, list: ReviewFrame[], always = false): Action {
     // The review's own words (Picked, Rejected, Unreviewed), as the buttons that ask read.
     const said = { count: list.length, n: formatCount(list.length), quality: markLabel[value] }
+    const bulk = list.length > BULK_MARK_CONFIRM_OVER
     return {
       id: `mark-${value}`,
       label: markLabel[value],
       shortcut: markKey[value],
       unavailable: list.length === 0 ? { action: markLabel[value], reason: m.review_no_current_frame(), blockers: [] } : blocked(markLabel[value]),
-      confirm: list.length > BULK_MARK_CONFIRM_OVER ? { title: m.review_bulk_mark_title(said), confirm: { label: m.store_label_mark_frames(said) } } : undefined,
+      confirm: bulk ? { title: m.review_bulk_mark_title(said), confirm: { label: m.store_label_mark_frames(said) } } : undefined,
+      quick: bulk ? { oneClick: { undo: () => marksBefore(list, value) }, openPage: "keep" } : undefined,
       run: () => mark(value, list, always),
     }
   }
@@ -472,11 +491,21 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const emptyList = <EmptyState icon={ImageOff} title={emptyTitle} action={filter !== "all" ? <ActionButton action={{ id: "show-all", label: m.review_show_all(), run: () => setFilter("all") }} /> : null} />
 
   const selectByThreshold: Action = { id: "threshold", label: m.review_select_by_threshold_menu(), opensDialog: true, run: () => setThreshold({ metric: "fwhm", direction: "above", value: null, add: false }) }
+  /** The frames Pick the rest is about to pick, as they are now, and their way back to Unreviewed. */
+  const restUnreviewed = (): QuickUndo => {
+    const ids = session ? unreviewedAssetIds(store.getState().catalog, session) : []
+    return {
+      message: m.store_saved_frames_marked({ count: ids.length, n: formatCount(ids.length), quality: markLabel.usable }),
+      run: () => markFrames(ids, "unreviewed", scope.href),
+    }
+  }
   const pickRest: Action = {
     id: "pick-rest",
     label: m.review_pick_rest(),
     unavailable: unreviewed === 0 ? { action: m.review_pick_rest(), reason: m.review_pick_rest_none(), blockers: [] } : blocked(m.review_pick_rest()),
     confirm: { title: m.review_pick_rest_title({ count: unreviewed, n: formatCount(unreviewed) }), confirm: { label: m.review_pick_rest_confirm({ count: unreviewed, n: formatCount(unreviewed) }) } },
+    // Owner tick A4: its Undo sets the frames it picks back to Unreviewed.
+    quick: { oneClick: { undo: () => restUnreviewed() }, openPage: "keep" },
     run: () => {
       const result = session ? markRestUsable(session.id) : ({ ok: true } as const)
       if (result.ok) announce(m.review_announce_rest_picked({ count: unreviewed }))
