@@ -16,7 +16,7 @@
  */
 import { useNavigate } from "@tanstack/react-router"
 import { FlaskConical, FolderPlus, FolderSearch, Play, RotateCw } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { useState } from "react"
 import { DeveloperModeStatus } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
 import { ActionBar, ActionButton } from "@/components/app/actions"
@@ -29,15 +29,16 @@ import { Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { StepPage } from "@/components/templates/step-page"
 import { locationAvailability } from "@/domain/library"
-import type { Availability, Location, LocationRole, Operation, OperationId } from "@/domain/types"
+import type { LocationRole, OperationId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { resetPrototype } from "@/store"
 import { updateSlice, useStore } from "@/store/core"
-import { isSettled, resumeOperation, startIndexing } from "@/store/operations"
+import { resumeOperation, startIndexing } from "@/store/operations"
 import { AddLocationFlow } from "../components/add-location-flow"
 import { useLocationActions } from "../components/location-actions"
-import { framesInLocation, removeLocation, ROLE_COPY, ROLE_ORDER } from "../lib/locations"
+import { LocationAttentionBadge } from "../components/location-attention"
+import { attentionRank, framesInLocation, indexingLocationIds, locationAttention, type LocationStatus, removeLocation, ROLE_COPY, ROLE_ORDER } from "../lib/locations"
 import { completeOnboarding, setRoleDeferred } from "../lib/writes"
 import { setupFlow } from "./setup-flow"
 
@@ -54,21 +55,9 @@ function registeredSummary(m: Messages, count: number): string | undefined {
 // Location rows (the Locations and Index tables)
 // ---------------------------------------------------------------------------
 
-interface LocationRow {
-  location: Location
-  availability: Availability
+/** A registered location as the setup tables show it. `indexing`: it cannot be removed from under its run (J19 S5). */
+interface LocationRow extends LocationStatus {
   frames: number
-  /** Waiting in or being read by an unsettled index run: it cannot be removed from under it (J19 S5). */
-  indexing: boolean
-}
-
-/** The locations of unsettled index runs that are still waiting or being read. */
-function indexingIds(operations: Record<string, Operation>): ReadonlySet<string> {
-  return new Set(
-    Object.values(operations)
-      .filter((op) => op.kind === "index" && !isSettled(op.status) && op.status !== "interrupted")
-      .flatMap((op) => op.items.filter((item) => item.status === "running" || item.status === "pending").map((item) => item.id)),
-  )
 }
 
 /** The registered locations, oldest first. */
@@ -76,23 +65,10 @@ function useLocationRows(): LocationRow[] {
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
   const operations = useStore((s) => s.operations)
-  const indexing = indexingIds(operations)
+  const indexing = indexingLocationIds(operations)
   return Object.values(catalog.locations)
     .sort((a, b) => a.registeredAt.localeCompare(b.registeredAt))
     .map((location) => ({ location, availability: locationAvailability(disk, location), frames: framesInLocation(catalog, location.id), indexing: indexing.has(location.id) }))
-}
-
-const SCOPE_RANK: Record<Location["scanScope"], number> = { incomplete: 3, never: 4, complete: 5 }
-
-/**
- * The one state that matters most, and its order, as Settings › Locations ranks them: availability, a denied
- * folder, indexing, then the scan scope. Access not checked yet reads as its scope (Not indexed).
- */
-function locationState(m: Messages, row: LocationRow): { rank: number; badge: ReactNode } {
-  if (row.availability !== "online") return { rank: 0, badge: <StatusBadge kind="availability" value={row.availability} /> }
-  if (row.location.access === "denied") return { rank: 1, badge: <StatusBadge kind="access" value="denied" /> }
-  if (row.indexing) return { rank: 2, badge: <StatusBadge kind="operation" value="running" label={m.location_indexing()} /> }
-  return { rank: SCOPE_RANK[row.location.scanScope], badge: <StatusBadge kind="scanScope" value={row.location.scanScope} /> }
 }
 
 /** Name, Path and State; the Index table adds Role and Frames. */
@@ -103,7 +79,7 @@ function locationColumns(m: Messages, all: boolean): Column<LocationRow>[] {
       ? [{ id: "role", header: m.location_role(), sortValue: (r: LocationRow) => ROLE_ORDER.indexOf(r.location.role), cell: (r: LocationRow) => <StatusBadge kind="role" value={r.location.role} /> }]
       : []),
     { id: "path", header: m.location_path(), truncate: true, sortValue: (r) => r.location.path, cell: (r) => <code>{r.location.path}</code> },
-    { id: "state", header: m.location_col_state(), sortValue: (r) => locationState(m, r).rank, cell: (r) => locationState(m, r).badge },
+    { id: "state", header: m.location_col_state(), sortValue: (r) => attentionRank(locationAttention(r)), cell: (r) => <LocationAttentionBadge state={locationAttention(r)} /> },
     ...(all ? [{ id: "frames", header: m.location_col_frames(), align: "right" as const, sortValue: (r: LocationRow) => r.frames, cell: (r: LocationRow) => formatCount(r.frames) }] : []),
   ]
 }

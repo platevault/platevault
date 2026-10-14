@@ -27,16 +27,16 @@ import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { defaultArchiveLocation } from "@/domain/derive"
 import { locationAvailability } from "@/domain/library"
 import { locationDiskUse } from "@/domain/storage"
-import type { Availability, Location, LocationRole } from "@/domain/types"
+import type { Location, LocationRole } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
-import { isSettled } from "@/store/operations"
 import { AddLocationFlow } from "../components/add-location-flow"
 import { DuplicatesReview } from "../components/duplicates-review"
 import { blockedByErrors } from "../components/form-blockers"
 import { useLocationActions } from "../components/location-actions"
-import { framesInLocation, removeLocation, retireLocation, reviewRetire, ROLE_COPY, ROLE_ORDER, sessionsInLocation, updateLocation, validateLocation } from "../lib/locations"
+import { LocationAttentionBadge } from "../components/location-attention"
+import { attentionRank, framesInLocation, indexingLocationIds, locationAttention, type LocationStatus, removeLocation, retireLocation, reviewRetire, ROLE_COPY, ROLE_ORDER, sessionsInLocation, updateLocation, validateLocation } from "../lib/locations"
 
 const HREF = "/settings/locations"
 
@@ -46,28 +46,11 @@ function count(message: (inputs: { count: number; n: string }) => string, value:
 }
 
 /** One location as the table shows it, read once per render. */
-interface LocationRow {
-  location: Location
-  availability: Availability
+interface LocationRow extends LocationStatus {
   frames: number
-  /** An index of this location is running or waiting. */
-  indexing: boolean
   footprint: number | null
   free: number | null
 }
-
-/** The one state that needs attention, most urgent first; null when the location is healthy (C L2: no nominal line). */
-type Attention = { kind: "availability"; value: Availability } | { kind: "access"; value: Location["access"] } | { kind: "indexing" } | { kind: "scanScope"; value: Location["scanScope"] } | null
-
-function attention(row: LocationRow): Attention {
-  if (row.availability === "retired" || row.availability === "offline") return { kind: "availability", value: row.availability }
-  if (row.location.access !== "ok") return { kind: "access", value: row.location.access }
-  if (row.indexing) return { kind: "indexing" }
-  if (row.location.scanScope !== "complete") return { kind: "scanScope", value: row.location.scanScope }
-  return null
-}
-
-const ATTENTION_ORDER = ["availability", "access", "indexing", "scanScope"] as const
 
 function EditLocationDialog({ location, onClose }: { location: Location | null; onClose: () => void }) {
   const m = useMessages()
@@ -157,11 +140,7 @@ export function LocationsPage() {
   const actions = useLocationActions({ href: HREF, notify: "runner" })
   const { save, indicator } = useSaveState()
 
-  const indexingIds = new Set(
-    Object.values(operations)
-      .filter((op) => op.kind === "index" && !isSettled(op.status) && op.status !== "interrupted")
-      .flatMap((op) => op.items.filter((item) => item.status === "running" || item.status === "pending").map((item) => item.id)),
-  )
+  const indexingIds = indexingLocationIds(operations)
   const rows: LocationRow[] = Object.values(catalog.locations).map((location) => {
     const use = location.retiredAt ? null : locationDiskUse(disk, location)
     return {
@@ -246,22 +225,7 @@ export function LocationsPage() {
   const columns: Column<LocationRow>[] = [
     { id: "name", header: m.location_col_name(), rowHeader: true, truncate: true, sortValue: (r) => r.location.displayName, cell: (r) => r.location.displayName },
     { id: "role", header: m.location_role(), sortValue: (r) => ROLE_ORDER.indexOf(r.location.role), cell: (r) => <StatusBadge kind="role" value={r.location.role} /> },
-    {
-      id: "state",
-      header: m.location_col_state(),
-      sortValue: (r) => {
-        const state = attention(r)
-        return state ? ATTENTION_ORDER.indexOf(state.kind) : ATTENTION_ORDER.length
-      },
-      cell: (r) => {
-        const state = attention(r)
-        if (!state) return null
-        if (state.kind === "indexing") return <StatusBadge kind="operation" value="running" label={m.location_indexing()} />
-        if (state.kind === "availability") return <StatusBadge kind="availability" value={state.value} />
-        if (state.kind === "access") return <StatusBadge kind="access" value={state.value} />
-        return <StatusBadge kind="scanScope" value={state.value} />
-      },
-    },
+    { id: "state", header: m.location_col_state(), sortValue: (r) => attentionRank(locationAttention(r)), cell: (r) => <LocationAttentionBadge state={locationAttention(r)} /> },
     { id: "indexed", header: m.location_col_indexed(), sortValue: (r) => r.location.lastIndexedAt, cell: (r) => (r.location.lastIndexedAt ? formatDateTime(r.location.lastIndexedAt) : m.location_not_indexed_yet()) },
     { id: "frames", header: m.location_col_frames(), align: "right", sortValue: (r) => r.frames, cell: (r) => formatCount(r.frames) },
     { id: "size", header: m.location_col_size(), align: "right", sortValue: (r) => r.footprint, cell: (r) => (r.footprint === null ? "–" : formatBytes(r.footprint)) },
