@@ -6,22 +6,24 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use uuid::Uuid;
 
-use super::{CaptureWatch, NewCaptureCount, OsProbe, RootProbe, Settings};
+use super::{CaptureWatch, NewCaptureCount, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE};
 use crate::inventory::RootStamp;
 use crate::library::{fixtures, Library};
 use crate::{LibraryError, Location, LocationRole, NativePath, ScanOperation, ScanState};
 
-/// Ticks short enough for tests; the OS watcher and walks are real.
+/// Ticks short enough for tests; the OS watcher, walks and shutdown grace are
+/// real.
 const FAST: Settings = Settings {
     debounce: Duration::from_millis(50),
     sweep: Duration::from_millis(200),
     capacity: 1024,
+    grace: SHUTDOWN_GRACE,
 };
 
 struct Fixture {
@@ -196,12 +198,15 @@ async fn a_new_file_removed_or_renamed_before_import_leaves_the_count() {
     fs::rename(root.join("c.fits"), root.join("c.fits.bak")).unwrap();
     count_is(&watch, location.id, 1).await;
 
-    // A night folder moved in brings frames no live event names: a rescan.
+    // A night folder moved in brings frames no live event names: the watcher
+    // asks for a rescan (as for an OS watcher error), which walks again.
+    let walks = watch.observed().walks.load(Ordering::SeqCst);
     let staged = fx.base.join("staged night");
     frame(&staged.join("d.fits"));
     frame(&staged.join("e.fits"));
     fs::rename(&staged, root.join("2026-10-14")).unwrap();
     count_is(&watch, location.id, 3).await;
+    assert!(watch.observed().walks.load(Ordering::SeqCst) > walks, "the new folder walked again");
     // Removing the folder removes what it held.
     fs::remove_dir_all(root.join("2026-10-14")).unwrap();
     count_is(&watch, location.id, 1).await;
@@ -455,4 +460,71 @@ async fn no_watcher_outlives_shutdown_or_the_handle() {
     })
     .await
     .expect("dropping the handle releases every watcher");
+}
+
+/// The OS probe, whose `stat` of the root hangs once `hang` is set, as one of
+/// a network mount whose server went away can, until the gate opens.
+#[derive(Default)]
+struct Gate {
+    hang: AtomicBool,
+    hanging: AtomicBool,
+    open: Mutex<bool>,
+    opened: Condvar,
+}
+
+impl Gate {
+    fn open(&self) {
+        *self.open.lock().unwrap() = true;
+        self.opened.notify_all();
+    }
+}
+
+struct Hanging(Arc<Gate>);
+
+impl RootProbe for Hanging {
+    fn stamp(&self, root: &Path) -> Option<RootStamp> {
+        if self.0.hang.load(Ordering::SeqCst) {
+            self.0.hanging.store(true, Ordering::SeqCst);
+            let mut open = self.0.open.lock().unwrap();
+            while !*open {
+                open = self.0.opened.wait(open).unwrap();
+            }
+        }
+        OsProbe.stamp(root)
+    }
+
+    fn validate(&self, location: &Location) -> Result<(), LibraryError> {
+        OsProbe.validate(location)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn shutdown_returns_while_a_root_check_hangs() {
+    let fx = fixture().await;
+    let location = captures(&fx.library, &fx.base.join("Captures")).await;
+    let gate = Arc::new(Gate::default());
+    let watch = CaptureWatch::start_with(&fx.library, FAST, Arc::new(Hanging(Arc::clone(&gate))));
+    count_is(&watch, location.id, 0).await;
+
+    gate.hang.store(true, Ordering::SeqCst);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !gate.hanging.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("a sweep checks the root");
+    // App exit waits on this: a hung check must not hold it.
+    let stopped = tokio::time::timeout(Duration::from_secs(5), watch.shutdown()).await;
+    gate.open();
+    assert!(stopped.is_ok(), "shutdown waited out a hung root check");
+
+    // The watcher goes as soon as the check returns.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while watch.observed().watchers.load(Ordering::SeqCst) != 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("every watcher is released once the check returns");
 }

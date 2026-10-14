@@ -44,7 +44,10 @@
 //!   so the files it indexed leave the count.
 //!
 //! [`CaptureWatch::shutdown`], or dropping the [`CaptureWatch`], stops every
-//! watcher.
+//! watcher. Shutdown waits a short grace at most: discovery `stat`s on its own
+//! task, and a `stat` of a network mount whose server went away can block, so
+//! a blocked discovery is canceled and releases its watchers when that call
+//! returns, never holding app exit.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -77,6 +80,8 @@ const SWEEP: Duration = Duration::from_secs(30);
 /// Live events one location queues between checks; more overflow into a
 /// rescan of the location.
 const EVENT_CAPACITY: usize = 1024;
+/// How long [`CaptureWatch::shutdown`] waits for discovery to stop.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
 /// The new files of one online Captures location.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +101,7 @@ pub struct CaptureWatch {
     stop: watch::Sender<bool>,
     counts: watch::Receiver<Vec<NewCaptureCount>>,
     task: Mutex<Option<JoinHandle<()>>>,
+    grace: Duration,
     #[cfg(test)]
     observed: Arc<Observed>,
 }
@@ -139,6 +145,7 @@ impl CaptureWatch {
             stop,
             counts,
             task: Mutex::new(Some(task)),
+            grace: settings.grace,
             #[cfg(test)]
             observed,
         }
@@ -158,12 +165,18 @@ impl CaptureWatch {
         self.counts.clone()
     }
 
-    /// Stop discovery and return once every watcher is released.
+    /// Stop discovery and return once every watcher is released, or once the
+    /// shutdown grace ran out while a file-system call held discovery: it is
+    /// then canceled and releases its watchers when that call returns.
     pub async fn shutdown(&self) {
         let _ = self.stop.send(true);
         let task = self.task.lock().unwrap_or_else(PoisonError::into_inner).take();
-        if let Some(task) = task {
-            let _ = task.await;
+        let Some(mut task) = task else {
+            return;
+        };
+        if tokio::time::timeout(self.grace, &mut task).await.is_err() {
+            tracing::warn!("new captures: a file-system call held discovery at shutdown");
+            task.abort();
         }
     }
 }
@@ -184,11 +197,12 @@ pub(crate) struct Settings {
     pub(crate) debounce: Duration,
     pub(crate) sweep: Duration,
     pub(crate) capacity: usize,
+    pub(crate) grace: Duration,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { debounce: DEBOUNCE, sweep: SWEEP, capacity: EVENT_CAPACITY }
+        Self { debounce: DEBOUNCE, sweep: SWEEP, capacity: EVENT_CAPACITY, grace: SHUTDOWN_GRACE }
     }
 }
 

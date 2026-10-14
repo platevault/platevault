@@ -202,6 +202,24 @@ pub(crate) enum Entry {
     Other,
 }
 
+/// What one entry is by the walker's rules, from its no-follow metadata: a
+/// link or junction is never entered, and a folder only on the root's volume.
+fn classify(meta: &Metadata, relative: &Path, root: &Stamp) -> Entry {
+    if fs_pathsafe::is_link_or_junction_metadata(meta) {
+        Entry::Other
+    } else if meta.is_dir() {
+        if identity::stamp(meta).same_device(root) {
+            Entry::Folder
+        } else {
+            Entry::Other
+        }
+    } else if meta.is_file() && format_of(relative) != ImageFormat::Unsupported {
+        Entry::Frame
+    } else {
+        Entry::Other
+    }
+}
+
 /// What `relative` (a path below `root`, whose stamp is `stamp`) is by the
 /// walker's rules: every folder from the root down must be a real folder on
 /// the root's volume.
@@ -216,17 +234,11 @@ pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry 
         let Ok(meta) = fs::symlink_metadata(&path) else {
             return Entry::Other;
         };
-        let last = components.peek().is_none();
-        if fs_pathsafe::is_link_or_junction_metadata(&meta) {
-            return Entry::Other;
+        let entry = classify(&meta, relative, &stamp.0);
+        if components.peek().is_none() {
+            return entry;
         }
-        if meta.is_dir() && identity::stamp(&meta).same_device(&stamp.0) {
-            if last {
-                return Entry::Folder;
-            }
-        } else if last && meta.is_file() && format_of(relative) != ImageFormat::Unsupported {
-            return Entry::Frame;
-        } else {
+        if entry != Entry::Folder {
             return Entry::Other;
         }
     }
@@ -273,15 +285,10 @@ pub(crate) fn frame_paths(
             let Ok(meta) = fs::symlink_metadata(root.join(&relative)) else {
                 continue;
             };
-            if fs_pathsafe::is_link_or_junction_metadata(&meta) {
-                continue;
-            }
-            if meta.is_dir() {
-                if identity::stamp(&meta).same_device(&stamp.0) {
-                    folders.push(relative);
-                }
-            } else if meta.is_file() && format_of(&relative) != ImageFormat::Unsupported {
-                frames.push(NativePath::from_path(&relative));
+            match classify(&meta, &relative, &stamp.0) {
+                Entry::Folder => folders.push(relative),
+                Entry::Frame => frames.push(NativePath::from_path(&relative)),
+                Entry::Other => {}
             }
         }
     }
