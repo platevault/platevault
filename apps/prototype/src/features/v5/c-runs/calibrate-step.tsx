@@ -3,7 +3,8 @@
  * session × calibration kind. The Master cell picks the master: the
  * compatible ones first in the matching rule's order, then the other
  * masters (an exception), then No calibration, which asks for no reason
- * (user item 147). Read-only, the cell names the master as a MasterPreview
+ * (user item 147); beside it, the chosen master's MasterPreview icon opens
+ * the same card. Read-only, the cell names the master as a MasterPreview
  * link to it in the Calibration library. The match columns stay visible
  * (user items 151-155).
  * Auto-assign is the run's policy (D-W55): compatible masters are assigned
@@ -86,14 +87,13 @@ export function CalibrateStep({ ctx, editable }: { ctx: RunContext; editable: bo
     ]
   }
   const valueOf = (r: RequirementRow): string | null => (r.state === "exception" && r.input === null ? NO_CALIBRATION : (r.input?.masterId ?? null))
-  // Read-only, the cell names the master and previews it; its Used by and age read as in the Calibration library.
-  const usage = changeable ? null : masterUsage(state.catalog, state.disk)
+  // The chosen master's preview; its Used by and age read as in the Calibration library.
+  const usage = masterUsage(state.catalog, state.disk)
   const now = Date.now() + state.faults.clockOffsetMs
-  const masterName = (r: RequirementRow) => {
+  const masterPreview = (r: RequirementRow, compact: boolean) => {
     const id = valueOf(r)
-    if (id === NO_CALIBRATION) return m.run_cal_no_calibration()
-    const master = id ? state.catalog.masters[id] : undefined
-    if (!r.source || !master) return "–"
+    const master = id && id !== NO_CALIBRATION ? state.catalog.masters[id] : undefined
+    if (!r.source || !master) return null
     const age = masterAge(master, state.settings, now)
     return (
       <MasterPreview
@@ -102,10 +102,12 @@ export function CalibrateStep({ ctx, editable }: { ctx: RunContext; editable: bo
         master={r.source}
         night={r.source.night ?? master.createdAt.slice(0, 10)}
         age={age ? say(m, age.label) : null}
-        usedBy={usage?.get(master.id)?.length ?? 0}
+        usedBy={usage.get(master.id)?.length ?? 0}
+        compact={compact}
       />
     )
   }
+  const masterName = (r: RequirementRow) => (valueOf(r) === NO_CALIBRATION ? m.run_cal_no_calibration() : (masterPreview(r, false) ?? "–"))
 
   const rowActions = (r: RequirementRow): MenuItem[] => [
     ...(changeable && r.assignment ? [{ id: "automatic", label: m.run_cal_use_automatic(), icon: RotateCcw, run: () => clearCalibration(run.id, sessionIdsOf(r), r.kind) }] : []),
@@ -147,6 +149,7 @@ export function CalibrateStep({ ctx, editable }: { ctx: RunContext; editable: bo
             groups={masterGroups(r)}
             placeholder={m.run_cal_no_master()}
             onChange={(value) => act(choose(r, value))}
+            after={masterPreview(r, true)}
           />
         ) : (
           masterName(r)

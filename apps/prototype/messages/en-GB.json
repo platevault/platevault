@@ -6597,6 +6597,7 @@
   "catalogue_previews_master_desc": "A master's name is a link to it in the Calibration library; hover or focus previews its kind, camera, gain · offset, temperature, exposure, frames, night, age and how many runs use it. The card holds no controls, so it takes no focus.",
   "catalogue_previews_master_young": "younger than the age limit, used by 2 runs",
   "catalogue_previews_master_old": "past the age limit, unused",
+  "catalogue_previews_master_compact": "compact: an icon link beside a picker that already shows the name; the card takes the name as its title",
   "catalogue_previews_preview_desc": "Preview is the L2 host the previews share; HoverCard is the L1 primitive on Base UI preview-card.",
   "catalogue_previews_with_title": "Preview with title",
   "catalogue_fields_text_caption": "Filled with help · empty with an error (aria-invalid, described by the message) · read-only · disabled · with an action beside the input.",

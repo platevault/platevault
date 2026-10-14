@@ -166,7 +166,7 @@ Kept in their slice, with one reader each: A `planImport`; B `doneOffers`, `arch
 
 - `src/store/slices/{a,b,c,d,e}.ts`: one state module per slice. Slice d holds the frame UI and the "measure" handler; slice e holds the setup and Target-lookup state.
 - Sheets: call `openSheet({ kind: "import" | "new-project" | "start-run", … })` (`src/app/ui-state.ts`). The host components mount through each slice's `shell.tsx` (`ShellContribution.Overlay`), and palette commands come from `useCommands`. Wrap up and the mosaic editor are Project pages, not sheets.
-- Frame review is slice D's `src/features/v5/d-review/` (`ReviewStep`, `GroupReviewStep`, `CandidateReview`), built on the v4 pieces kept in `src/features/t3/` (frame-preview, raster, measure, measurement-plot, csv, import-dialog, fields).
+- Frame review is slice D's `src/features/v5/d-review/` (`ReviewStep`, `GroupReviewStep`, `CandidateReview`). The v4 pieces it was built on (frame-preview, raster, measure, measurement-plot, csv, import-dialog) moved out of `src/features/t3/` in P4, and its last file, `fields.tsx`, was deleted once `components/app/fields.tsx` replaced it.
 - v4 code removed by this cutover can be read at commit `6ef221b1`: `src/features/t2` (Sessions, Targets, Projects, Activity), `src/features/t4` (calibration library, prepare, calibration area), `src/features/t5` (Results, Cleanup, Storage, transfers, plans) and `src/features/t3` (workspace, sessions, refresh, Views pages).
 
 ### Slice files

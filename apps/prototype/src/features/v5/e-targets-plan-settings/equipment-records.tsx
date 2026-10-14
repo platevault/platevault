@@ -32,9 +32,9 @@ import { bandsLine, type EquipmentKind, equipmentUsers, filterName, REDUCER_LIMI
 // Shared by the Equipment sections
 // ---------------------------------------------------------------------------
 
-/** "1.23° × 0.82° · 1.45″/px": units only, not translated. */
+/** "1.23° × 0.82° · 1.45″/px" ("1,23° × 0,82° · 1,45″/px" in pt-BR): units only, not translated. */
 export function formatFov(fov: { widthDeg: number; heightDeg: number; pixelScaleArcsec: number } | null): string {
-  return fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)} · ${fov.pixelScaleArcsec.toFixed(2)}″/px` : "–"
+  return fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)} · ${formatDecimal(fov.pixelScaleArcsec, 2)}″/px` : "–"
 }
 
 /** "1600 mm", or "–" without a value: units only, not translated. */
