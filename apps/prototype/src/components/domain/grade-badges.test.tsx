@@ -28,4 +28,35 @@ describe("GradeBadges", () => {
     expect(screen.queryByRole("img")).toBeNull()
     expect(container.textContent).toBe("–")
   })
+
+  it("shows one badge per grade with its filters, good first, and hides the poor ones (byGrade)", () => {
+    const { container } = render(
+      <GradeBadges
+        byGrade
+        grades={[
+          { band: "Ha", grade: "marginal" },
+          { band: "OIII", grade: "good" },
+          { band: "SII", grade: "good" },
+          { band: "L", grade: "poor" },
+        ]}
+      />,
+    )
+    const badges = [...container.querySelectorAll("[data-grade-badges] > *")].map((badge) => badge.textContent)
+    expect(badges).toEqual(["OIII, SII", "Ha"])
+    expect(screen.getByRole("img", { name: "OIII good, SII good, Ha marginal" })).toBeDefined()
+  })
+
+  it("reads a dash, with the poor grades as its reason, when every filter is poor (byGrade)", () => {
+    render(
+      <GradeBadges
+        byGrade
+        grades={[
+          { band: "Ha", grade: "poor" },
+          { band: "OIII", grade: "poor" },
+        ]}
+      />,
+    )
+    expect(screen.queryByRole("img")).toBeNull()
+    expect(screen.getByRole("button", { name: "–: Ha poor, OIII poor" })).toBeDefined()
+  })
 })

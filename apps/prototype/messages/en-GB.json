@@ -1956,6 +1956,7 @@
   "catalogue_grade_badges_full": "Seven filters",
   "catalogue_grade_badges_one": "One filter",
   "catalogue_grade_badges_none": "No verdict",
+  "catalogue_grade_badges_by_grade": "One badge per grade, poor hidden (a table column)",
   "targets_project_rigs": "This Project's rigs ({count})",
   "targets_no_match": "No match for “{query}”",
   "targets_choose_catalogue": "Choose a catalogue or preset",
@@ -7537,6 +7538,8 @@
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
   "catalogue_datatable_destination_cold": "Cold storage",
+  "catalogue_datatable_columns_title": "Columns menu",
+  "catalogue_datatable_columns_description": "Three columns can be hidden from the Columns menu, and two of them start hidden. The row header and the row actions always show, so the menu does not list them. The choice is kept across reloads.",
   "issue_master_old": [
     {
       "declarations": [

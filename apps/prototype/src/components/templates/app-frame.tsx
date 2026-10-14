@@ -2,7 +2,9 @@
  * AppFrame and SetupFrame (L3 templates; plan §3.4, HARNESS-V4 "native
  * window"). The window is the layout: a full-height source list, a unified
  * toolbar over the content, one scrolling content pane and a status bar.
- * The page itself never scrolls; only `MainArea` does.
+ * Only `MainArea` scrolls. The window is never smaller than the minimum
+ * window (1280 × 640, Q35: `--window-min-w`, `--window-min-h`): below it the
+ * page scrolls instead of reflowing.
  *
  * - Landmarks: the sidebar (`aside`, holding the navigation lists), the
  *   toolbar (`header`, banner), `main#main` and the status bar the host
@@ -83,9 +85,9 @@ export interface AppFrameProps {
   children: ReactNode
 }
 
-/** The window's height, or a fixed box for a catalogue specimen. */
+/** The window's height, at least the minimum window, or a fixed box for a catalogue specimen. */
 function frameClass(specimen: boolean): string {
-  return specimen ? "flex h-120 flex-col overflow-hidden rounded-lg border border-border" : "flex h-dvh flex-col overflow-hidden"
+  return specimen ? "flex h-120 flex-col overflow-hidden rounded-lg border border-border" : "flex h-dvh min-h-(--window-min-h) min-w-(--window-min-w) flex-col overflow-hidden"
 }
 
 /** The first stop of the window: moves focus to main, so the source list and toolbar can be skipped (WCAG 2.4.1). */

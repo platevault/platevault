@@ -161,6 +161,13 @@ export interface Column<T> {
   rowHeader?: boolean
   /** Truncate long text (paths, names); the full text shows only when it is cut (§6.2 T2). */
   truncate?: boolean
+  /**
+   * The user can hide it from the table's Columns menu. The row header always shows, so a `rowHeader` column
+   * is never hideable and never listed.
+   */
+  hideable?: boolean
+  /** A hideable column that starts hidden, until the user shows it from the Columns menu. */
+  defaultHidden?: boolean
 }
 
 /**

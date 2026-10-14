@@ -1,7 +1,8 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §3.3 P5, §8.3): GradeBadges, the
  * display-only grade strip of one night per filter. Every grade, a full
- * broadband-plus-narrowband strip, one filter, and the "–" without a verdict.
+ * broadband-plus-narrowband strip, one badge per grade (the table column),
+ * one filter, and the "–" without a verdict.
  * Captions are reviewer labels; band names are filter names.
  */
 import { useMessages } from "@/app/preferences"
@@ -39,6 +40,9 @@ export function GradeBadgesCatalogue() {
           <span className="w-40">
             <GradeBadges grades={FULL_STRIP} wrap />
           </span>
+        </Specimen>
+        <Specimen caption={m.catalogue_grade_badges_by_grade()}>
+          <GradeBadges grades={FULL_STRIP} byGrade />
         </Specimen>
         <Specimen caption={m.catalogue_grade_badges_one()}>
           <GradeBadges grades={[{ band: "OIII", grade: "good" }]} />

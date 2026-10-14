@@ -1970,6 +1970,7 @@
   "catalogue_grade_badges_full": "Sete filtros",
   "catalogue_grade_badges_one": "Um filtro",
   "catalogue_grade_badges_none": "Sem veredito",
+  "catalogue_grade_badges_by_grade": "Uma etiqueta por nota, sem as ruins (coluna de tabela)",
   "targets_project_rigs": "Equipamentos deste Projeto ({count})",
   "targets_no_match": "Nenhum resultado para “{query}”",
   "targets_choose_catalogue": "Escolha um catálogo ou preset",
@@ -2009,7 +2010,7 @@
   "target_field": "Campo",
   "target_sessions_caption": "Sessões de {name}",
   "target_channel": "Canal",
-  "calibration_frames": "Quadros",
+  "calibration_frames": "Frames",
   "target_add_to_title": "Adicionar {target} a {project}?",
   "target_adds_subject": "Adiciona {name} como objeto",
   "target_copies_goals": "Copia as metas: {goals}",
@@ -7551,6 +7552,8 @@
   "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
   "catalogue_datatable_destination_nas": "NAS de arquivo",
   "catalogue_datatable_destination_cold": "Armazenamento frio",
+  "catalogue_datatable_columns_title": "Menu Colunas",
+  "catalogue_datatable_columns_description": "Três colunas podem ser ocultadas pelo menu Colunas, e duas delas começam ocultas. O cabeçalho da linha e as ações da linha sempre aparecem, então o menu não as lista. A escolha é mantida entre recarregamentos.",
   "issue_master_old": [
     {
       "declarations": [

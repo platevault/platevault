@@ -73,15 +73,15 @@
   html {
     @apply font-sans;
     accent-color: var(--primary);
-    /* The window is the layout: panes scroll, the page never does. */
+    /* The window is the layout: panes scroll, the page never does, except below the minimum window (Q35), which the app frame keeps (`--window-min-w`, `--window-min-h`). */
     height: 100%;
-    overflow: hidden;
+    overflow: auto;
     scrollbar-color: var(--scrollbar) transparent;
     scrollbar-width: thin;
   }
 
   body {
-    @apply h-full overflow-hidden bg-background text-sm text-foreground antialiased;
+    @apply h-full bg-background text-sm text-foreground antialiased;
     font-variant-numeric: tabular-nums;
   }
 

@@ -30,6 +30,11 @@
           { "color": { "colorSpace": "oklch", "components": [0, 0, 0], "alpha": 0.45 }, "offsetX": { "value": -12, "unit": "px" }, "offsetY": { "value": 0, "unit": "px" }, "blur": { "value": 36, "unit": "px" }, "spread": { "value": -12, "unit": "px" } }
         ]
       }
+    },
+    "window": {
+      "$type": "dimension",
+      "min-w": { "$description": "The app window's minimum width (Q35): below it the window scrolls instead of reflowing.", "$value": { "value": 80, "unit": "rem" } },
+      "min-h": { "$description": "The app window's minimum height (Q35).", "$value": { "value": 40, "unit": "rem" } }
     }
   }
 }

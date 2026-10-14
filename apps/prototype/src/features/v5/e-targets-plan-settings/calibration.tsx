@@ -374,12 +374,12 @@ function masterColumns(m: Messages, catalog: Catalog, usage: Map<MasterId, Maste
   const users = (master: CalibrationMaster) => usage.get(master.id) ?? []
   return [
     { id: "master", header: m.calibration_master(), cell: label, sortValue: label, rowHeader: true, truncate: true },
-    { id: "filter", header: m.tonight_filter(), cell: (master) => master.channel ?? "–", sortValue: (master) => master.channel ?? "" },
+    { id: "filter", header: m.tonight_filter(), truncate: true, cell: (master) => master.channel ?? "–", sortValue: (master) => master.channel ?? "" },
     { id: "exposure", header: m.calibration_key_exposure(), cell: exposure, sortValue: (master) => master.exposureS, align: "right" },
     { id: "gain", header: m.session_gain_offset(), cell: gainOffset, sortValue: (master) => master.gain, align: "right" },
     { id: "temp", header: m.calibration_key_temp(), cell: temperature, sortValue: (master) => master.ccdTempC, align: "right" },
     { id: "frames", header: m.calibration_frames(), cell: (master) => (master.frameCount === null ? "–" : formatCount(master.frameCount)), sortValue: (master) => master.frameCount, align: "right" },
-    { id: "night", header: m.tonight_night(), cell: (master) => formatNight(night(master), true), sortValue: night },
+    { id: "night", header: m.tonight_night(), truncate: true, cell: (master) => formatNight(night(master), true), sortValue: night },
     { id: "used-by", header: m.calibration_used_by(), cell: (master) => <UsedBy usage={users(master)} />, sortValue: (master) => users(master).length },
     { id: "state", header: m.calibration_state(), cell: (master) => <MasterState master={master} old={oldLabel(master)} />, sortValue: (master) => `${oldLabel(master) ? 0 : 1}${master.state}` },
   ]
