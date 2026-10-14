@@ -82,7 +82,7 @@ async fn only_overrides_stored() {
     let library = open(temp.path()).await;
     assert_eq!(
         library.catalog().naming_overrides().await.unwrap(),
-        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+        [] as [(platevault_core::NamingFrameType, String); 0]
     );
 
     let saved = library
@@ -116,7 +116,7 @@ async fn only_overrides_stored() {
     library.save_naming_template(NamingFrameType::Flat, "flats/{filter}/{date}/").await.unwrap();
     assert_eq!(
         library.catalog().naming_overrides().await.unwrap(),
-        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+        [] as [(platevault_core::NamingFrameType, String); 0]
     );
 }
 
@@ -179,7 +179,7 @@ async fn overlong_templates_and_paths_refused() {
     assert_invalid(library.resolve_naming(NamingFrameType::Light, &metadata).await, "length");
     assert_eq!(
         library.catalog().naming_overrides().await.unwrap(),
-        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+        [] as [(platevault_core::NamingFrameType, String); 0]
     );
 }
 
@@ -225,7 +225,7 @@ async fn preview_names_fallback_tokens() {
     // Previewing stores nothing.
     assert_eq!(
         library.catalog().naming_overrides().await.unwrap(),
-        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+        [] as [(platevault_core::NamingFrameType, String); 0]
     );
 }
 
@@ -243,7 +243,7 @@ async fn restore_defaults() {
     assert!(restored.iter().all(|t| !t.overridden && t.template == t.default_template));
     assert_eq!(
         library.catalog().naming_overrides().await.unwrap(),
-        [] as [(platevault_core::NamingFrameType, std::string::String); 0]
+        [] as [(platevault_core::NamingFrameType, String); 0]
     );
     let resolved = library.resolve_naming(NamingFrameType::Light, &light_metadata()).await.unwrap();
     assert_eq!(resolved.relative_path, "M31/Ha/2026-04-12/light");

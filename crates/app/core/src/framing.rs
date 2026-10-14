@@ -863,7 +863,7 @@ mod tests {
         assert_eq!(source_row.clustering, "user_adjusted");
         assert_eq!(
             framing_repo::list_session_ids_for_framing(db.pool(), "framing-r1").await.unwrap(),
-            [] as [std::string::String; 0]
+            [] as [String; 0]
         );
     }
 

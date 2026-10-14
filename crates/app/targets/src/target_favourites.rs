@@ -139,7 +139,7 @@ mod tests {
     async fn list_is_empty_when_nothing_favourited() {
         let db = setup().await;
         let result = list(db.pool()).await.unwrap();
-        assert_eq!(result.target_ids, [] as [std::string::String; 0]);
+        assert_eq!(result.target_ids, [] as [String; 0]);
     }
 
     #[tokio::test]
@@ -255,7 +255,7 @@ mod tests {
         assert_eq!(removed.target_id, id.to_string());
 
         let listed = list(db.pool()).await.unwrap();
-        assert_eq!(listed.target_ids, [] as [std::string::String; 0]);
+        assert_eq!(listed.target_ids, [] as [String; 0]);
     }
 
     #[tokio::test]

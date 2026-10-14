@@ -536,7 +536,7 @@ async fn restore_brings_back_revisions_and_stage_exactly() {
     assert_eq!(world.members().await, members, "goal numbers read as before");
     assert_eq!(
         world.trash().await,
-        [] as [(std::string::String, platevault_core::RunStage, platevault_core::RunCompletion); 0]
+        [] as [(String, platevault_core::RunStage, platevault_core::RunCompletion); 0]
     );
     assert_eq!(tree(&world.root), files, "no file moved");
     assert_eq!(folders.held.lock().await[&id], prepared, "its folders are untouched");
@@ -584,7 +584,7 @@ async fn trash_refused_while_operation_running_names_it() {
     assert_eq!((world.listed().await, world.members().await), (listed, members), "nothing changes");
     assert_eq!(
         world.trash().await,
-        [] as [(std::string::String, platevault_core::RunStage, platevault_core::RunCompletion); 0]
+        [] as [(String, platevault_core::RunStage, platevault_core::RunCompletion); 0]
     );
 
     operations.clear(a).await;

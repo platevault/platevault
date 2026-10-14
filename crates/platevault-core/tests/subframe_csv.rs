@@ -185,7 +185,7 @@ fn units_follow_the_declared_scale_and_data_unit_rows() {
         assert_eq!((fwhm.class, fwhm.units), (ColumnClass::Mapped, Some(Units::Arcsec)));
         assert!(fwhm.units_basis.contains(&entry("Scale Unit", "Arcseconds (arcsec)")));
         assert!(fwhm.units_basis.contains(&entry("Subframe Scale", "1.50000")));
-        assert_eq!(fwhm.warnings, [] as [std::string::String; 0]);
+        assert_eq!(fwhm.warnings, [] as [String; 0]);
     }
     for header in ["Median", "Median Mean Deviation", "Noise"] {
         let median = column(&parsed, header);
@@ -226,7 +226,7 @@ fn default_scale_electrons_circular_psf_and_pixel_units_are_read_as_declared() {
         Preamble { scale_unit: "Pixels (pixel)", data_unit: "Normalized to [0,1]", ..PREAMBLE };
     let parsed = parse(&export(Some(&preamble(&pixels)), COLUMNS_30, &rows)).unwrap();
     assert_eq!(column(&parsed, "FWHM").units, Some(Units::Px));
-    assert_eq!(column(&parsed, "FWHM").warnings, [] as [std::string::String; 0]);
+    assert_eq!(column(&parsed, "FWHM").warnings, [] as [String; 0]);
     assert_eq!(column(&parsed, "Median").units, Some(Units::Normalized));
 }
 

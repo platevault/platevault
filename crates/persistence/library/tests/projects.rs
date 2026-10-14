@@ -17,9 +17,9 @@ use persistence_library::{Catalog, SessionQuery, SourceProbe, SuggestedAssociati
 use platevault_model::{
     Asset, AssociationKind, AssociationState, Availability, Equipment, EvidenceItem, GoalInput,
     GoalSpec, GoalTemplate, GoalTemplateInput, LibraryError, Location, PanelInput, Project,
-    ProjectCandidate, ProjectInput, ProjectQuery, ProjectState, Provenance, Quality,
-    QualityCriterion, RejectionMark, Revision, ScanFile, ScanObservation, ScanProgress, ScanState,
-    Session, SubjectInput, TargetRecord,
+    ProjectCandidate, ProjectInput, ProjectQuery, ProjectState, ProjectSummary, Provenance,
+    Quality, QualityCriterion, RejectionMark, Revision, ScanFile, ScanObservation, ScanProgress,
+    ScanState, Session, SubjectInput, TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -870,10 +870,7 @@ async fn project_write_changes_no_file_quality_or_membership() {
         ProjectQuery { target_id: Some(world.m81.candidate.id), ..ProjectQuery::default() };
     assert_eq!(catalog.list_projects(&m81_only).await.unwrap().len(), 1);
     let none = ProjectQuery { target_id: Some(Uuid::new_v4()), ..ProjectQuery::default() };
-    assert_eq!(
-        catalog.list_projects(&none).await.unwrap(),
-        [] as [platevault_model::ProjectSummary; 0]
-    );
+    assert_eq!(catalog.list_projects(&none).await.unwrap(), [] as [ProjectSummary; 0]);
     world.catalog.close().await.unwrap();
 
     // Every Project record survives a restart unchanged.
