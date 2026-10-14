@@ -1561,6 +1561,7 @@
   "trash_restore_to_group": "{name} → seu grupo de execuções",
   "trash_restore_to_runs": "{name} → execuções do Projeto",
   "trash_restore_run": "Restaurar execução",
+  "trash_run_restored": "Execução {name} restaurada",
   "trash_empty_runs_title": [
     {
       "declarations": [
@@ -2164,6 +2165,7 @@
   "run_restore": "Restaurar",
   "run_reopen_run": "Reabrir execução",
   "run_reopen_summary": "As etapas voltam a ser editáveis; nenhum arquivo é movido",
+  "run_reopened": "Execução {name} reaberta",
   "run_clean_up": "Limpar",
   "run_move_to_trash": "Mover para a Lixeira",
   "run_trash_blocked": "Mover para a Lixeira bloqueado",
@@ -6900,6 +6902,11 @@
   "simulation_run_writes_outputs": "O aplicativo grava saídas",
   "simulation_this_run_title": "Esta execução: {name}",
   "simulation_this_run_description": "Muda o aplicativo e o disco simulados da execução na tela.",
+  "simulation_actions_title": "Ações",
+  "simulation_quick_actions": "Ações rápidas",
+  "simulation_quick_actions_detail": "Um clique executa Restaurar execução, Reabrir execução, marcações em mais de 20 frames, Aprovar o resto e, no Início, Adicionar à execução, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém.",
+  "simulation_quick_one_click": "Um clique",
+  "simulation_quick_open_page": "Abrir página",
   "simulation_run_finish_writing": "Os arquivos terminam de ser gravados",
   "simulation_run_better_master": "Chega um master compatível mais novo",
   "simulation_run_object_correction": "Registrar uma correção de OBJECT",

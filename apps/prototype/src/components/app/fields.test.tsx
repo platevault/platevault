@@ -94,3 +94,45 @@ describe("Field cell mode (hideLabel)", () => {
     expect(screen.getByRole("spinbutton", { name: "Exposure of row 3" })).toHaveValue(300)
   })
 })
+
+describe("SelectField", () => {
+  const OPTIONS = [
+    { value: "light", label: "Light" },
+    { value: "flat", label: "Flat" },
+    { value: "dark", label: "Dark" },
+  ]
+
+  function Kind({ onChange }: { onChange: (value: string) => void }) {
+    const [value, setValue] = useState("light")
+    return (
+      <SelectField
+        label="Kind"
+        value={value}
+        options={OPTIONS}
+        onChange={(next) => {
+          setValue(next)
+          onChange(next)
+        }}
+      />
+    )
+  }
+
+  it("exposes only its named trigger: the form input holding the raw value is hidden from assistive technology", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const { container } = render(<Kind onChange={onChange} />)
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    expect(container.querySelector("input[aria-hidden='true']")).toHaveValue("light")
+
+    const trigger = screen.getByRole("combobox", { name: "Kind" })
+    expect(trigger).toHaveTextContent("Light")
+
+    trigger.focus()
+    await user.keyboard("{ArrowDown}")
+    expect(await screen.findByRole("listbox")).toBeInTheDocument()
+    await user.keyboard("{ArrowDown}{Enter}")
+    expect(onChange).toHaveBeenLastCalledWith("flat")
+    expect(screen.getByRole("combobox", { name: "Kind" })).toHaveTextContent("Flat")
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+  })
+})
