@@ -318,7 +318,7 @@ jobs:
       # `scripts` arms this too: the dev-surface guard below resolves the cargo
       # feature graph, so a scripts-only PR that edits the guard still needs the
       # pinned toolchain to run it against itself.
-      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: dtolnay/rust-toolchain@1.99.0
         if: >-
           needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true'
         with:
@@ -858,7 +858,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: dtolnay/rust-toolchain@1.99.0
       - uses: Swatinem/rust-cache@v2
 
       # Scope gate: only run when a change touches the measured crates.
