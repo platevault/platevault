@@ -22,11 +22,11 @@ import { StatusBadge } from "@/components/app/status"
 import { ListSection } from "@/components/templates/settings-page"
 import { rigFieldOfView, rigFilters, type StepLink } from "@/domain/derive"
 import { fieldOfView } from "@/domain/sky"
-import type { Camera, CameraKind, Catalog, Filter, OpticalTrain, Reducer, Telescope } from "@/domain/types"
+import type { Camera, CameraKind, Catalog, OpticalTrain, Reducer, Telescope } from "@/domain/types"
 import { formatDecimal, formatDegrees } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
-import { type EquipmentKind, equipmentUsers, REDUCER_LIMITS, removeEquipment, rigReducerFactor, saveCamera, saveReducer, saveRig, saveTelescope } from "./settings-actions"
+import { bandsLine, type EquipmentKind, equipmentUsers, filterName, REDUCER_LIMITS, removeEquipment, rigReducerFactor, saveCamera, saveReducer, saveRig, saveTelescope } from "./settings-actions"
 
 // ---------------------------------------------------------------------------
 // Shared by the Equipment sections
@@ -341,17 +341,6 @@ export function rigFiltersLine(m: Messages, catalog: Catalog, rig: OpticalTrain)
   return camera?.kind === "osc" ? m.equipment_no_filters_osc() : m.tonight_no_filters()
 }
 
-/** "Ha + OIII": the bands a filter passes. */
-export function bandsLine(filter: Pick<Filter, "bands">): string {
-  return filter.bands.join(" + ") || "–"
-}
-
-/** A filter as a rig's checkbox reads it: its name and bands, plus its FILTER matches when another filter has the same name. */
-function filterChoiceLabel(filter: Filter, all: Filter[]): string {
-  const twin = all.some((f) => f.id !== filter.id && f.name.toLowerCase() === filter.name.toLowerCase())
-  return twin ? `${filter.name} · ${bandsLine(filter)} · ${filter.matches.join(", ")}` : `${filter.name} · ${bandsLine(filter)}`
-}
-
 /**
  * Add rig… (`rig` null) or Edit a rig: Camera ▾ · Telescope ▾ · Reducer ▾ ·
  * Filters (C E2). The focal length is the telescope's times the reducer's
@@ -430,7 +419,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
       <ChoiceListField
         label={m.equipment_filters()}
         value={values.filterIds}
-        options={filters.map((f) => ({ value: f.id, label: filterChoiceLabel(f, filters) }))}
+        options={filters.map((f) => ({ value: f.id, label: `${filterName(f, filters)} · ${bandsLine(f)}` }))}
         onChange={(filterIds) => set({ filterIds })}
         error={shown(errors, "filterIds")}
         empty={m.tonight_no_filters()}

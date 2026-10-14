@@ -17,6 +17,17 @@ import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 
+/** "Ha + OIII": the bands a filter passes. */
+export function bandsLine(filter: Pick<Filter, "bands">): string {
+  return filter.bands.join(" + ") || "–"
+}
+
+/** A filter's name where several are listed together, followed by its FILTER matches when another of `among` has the same name ("Ha · Ha, H-alpha"). */
+export function filterName(filter: Filter, among: readonly Filter[]): string {
+  const twin = among.some((f) => f.id !== filter.id && f.name.toLowerCase() === filter.name.toLowerCase())
+  return twin ? `${filter.name} · ${filter.matches.join(", ")}` : filter.name
+}
+
 const HREF = "/settings/equipment"
 
 /** A renamed record keeps its old name as an alias, so headers that carry it still match. */

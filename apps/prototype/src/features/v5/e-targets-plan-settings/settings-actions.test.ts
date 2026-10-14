@@ -3,7 +3,7 @@ import { rigBands, unknownFilterValues } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { removeEquipment, saveFilter, saveRig } from "./settings-actions"
+import { filterName, removeEquipment, saveFilter, saveRig } from "./settings-actions"
 
 const RIG = "otr_esprit"
 
@@ -39,5 +39,18 @@ describe("Settings › Equipment: filters are records a rig selects (ngm9g)", ()
     saveRig(RIG, { name: rig.name, cameraId: rig.cameraId!, telescopeId: rig.telescopeId!, reducerId: null, focalLengthMm: rig.effectiveFocalLengthMm, filterIds: [] })
     expect(removeEquipment("filter", lExtreme.id).ok).toBe(true)
     expect(store.getState().catalog.filters[lExtreme.id]).toBeUndefined()
+  })
+})
+
+describe("Settings › Equipment: same-named filters read apart", () => {
+  it("two filters named Ha each add their FILTER matches, so their items differ", () => {
+    const filters = Object.values(store.getState().catalog.filters)
+    const has = filters.filter((f) => f.name === "Ha")
+    expect(has).toHaveLength(2)
+    const labels = has.map((f) => filterName(f, has))
+    expect(new Set(labels).size).toBe(2)
+    expect(labels).toEqual(expect.arrayContaining(["Ha · Ha, H-alpha", "Ha · Ha"]))
+    const oiii = filters.find((f) => f.name === "OIII")!
+    expect(filterName(oiii, filters)).toBe("OIII")
   })
 })
