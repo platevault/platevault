@@ -378,7 +378,7 @@ mod tests {
     #[tokio::test]
     async fn load_state_empty_when_no_rows() {
         let pool = setup().await;
-        assert!(load_state(&pool).await.unwrap().is_empty());
+        assert_eq!(load_state(&pool).await.unwrap(), [] as [OnboardingStateRow; 0]);
     }
 
     #[tokio::test]

@@ -194,7 +194,7 @@ mod tests {
             &existing_launches,
             DEFAULT_ATTRIBUTION_WINDOW,
         );
-        assert!(candidates.is_empty());
+        assert_eq!(candidates, [] as [&String; 0]);
     }
 
     /// An artifact recorded as produced by another tool is not a candidate for

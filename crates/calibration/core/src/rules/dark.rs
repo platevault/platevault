@@ -187,7 +187,7 @@ mod tests {
         );
         let m = m.unwrap();
         assert!((m.confidence - 1.0).abs() < 1e-9, "exact match confidence={}", m.confidence);
-        assert!(m.dimensions_mismatched.is_empty());
+        assert_eq!(m.dimensions_mismatched, [] as [MismatchedDim; 0]);
     }
 
     #[test]
