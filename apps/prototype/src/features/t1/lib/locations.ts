@@ -7,7 +7,7 @@
 import { locationAvailability } from "@/domain/library"
 import { fileAt, volumeForPath } from "@/domain/disk"
 import { isUnder, stableHash } from "@/domain/indexing"
-import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Volume } from "@/domain/types"
+import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Operation, Volume } from "@/domain/types"
 import { formatCount, formatExposure, formatNight } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
@@ -190,6 +190,47 @@ export function sessionsInLocation(catalog: Catalog, id: LocationId): number {
     if (session.assetIds.some((assetId) => catalog.assets[assetId]?.copies.some((c) => c.locationId === id))) count += 1
   }
   return count
+}
+
+/** The locations an unsettled index run is still reading or waiting to read; an interrupted run reads none. */
+export function indexingLocationIds(operations: Record<string, Operation>): ReadonlySet<LocationId> {
+  return new Set(
+    Object.values(operations)
+      .filter((op) => op.kind === "index" && !isSettled(op.status) && op.status !== "interrupted")
+      .flatMap((op) => op.items.filter((item) => item.status === "running" || item.status === "pending").map((item) => item.id)),
+  )
+}
+
+/** What a location table reads about one location now. */
+export interface LocationStatus {
+  location: Location
+  availability: Availability
+  /** An index of this location is running or waiting. */
+  indexing: boolean
+}
+
+/** The one state that needs attention, most urgent first; null when the location is healthy (C L2: no nominal line). */
+export type LocationAttention =
+  | { kind: "availability"; value: Availability }
+  | { kind: "access"; value: Location["access"] }
+  | { kind: "indexing" }
+  | { kind: "scanScope"; value: Location["scanScope"] }
+  | null
+
+const ATTENTION_ORDER = ["availability", "access", "indexing", "scanScope"] as const
+
+/** Offline or retired first, then access not granted (or not checked yet), a running index, and a scan scope that is not complete. */
+export function locationAttention({ location, availability, indexing }: LocationStatus): LocationAttention {
+  if (availability === "retired" || availability === "offline") return { kind: "availability", value: availability }
+  if (location.access !== "ok") return { kind: "access", value: location.access }
+  if (indexing) return { kind: "indexing" }
+  if (location.scanScope !== "complete") return { kind: "scanScope", value: location.scanScope }
+  return null
+}
+
+/** A State column's sort value: the order above, healthy locations last. */
+export function attentionRank(state: LocationAttention): number {
+  return state ? ATTENTION_ORDER.indexOf(state.kind) : ATTENTION_ORDER.length
 }
 
 export function removeLocation(id: LocationId, href: string): CommitResult {

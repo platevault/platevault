@@ -8,7 +8,6 @@ import { removeSite } from "@/domain/sites"
 import type { Catalog, ObservingSite, SiteId } from "@/domain/types"
 import { m, msg } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
-import { parseNumber } from "../components/form-field"
 import { save } from "./writes"
 
 const HREF = "/settings/sites"
@@ -45,8 +44,15 @@ export const TIME_ZONES: string[] = (() => {
   }
 })()
 
+/** A decimal number as the site form keeps it: empty is no value, anything else unreadable is NaN. A comma decimal and a typographic minus read as typed. */
+function parseDecimal(value: string): number | null {
+  const trimmed = value.trim().replace(",", ".").replace("−", "-")
+  if (!trimmed) return null
+  return /^[-+]?\d*\.?\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN
+}
+
 function inRange(value: string, min: number, max: number, message: string, optional = false): string | undefined {
-  const parsed = parseNumber(value)
+  const parsed = parseDecimal(value)
   if (parsed === null) return optional ? undefined : message
   return Number.isNaN(parsed) || parsed < min || parsed > max ? message : undefined
 }
@@ -71,12 +77,12 @@ export function saveSite(values: SiteValues, id: SiteId | null, makeDefault: boo
   const site: ObservingSite = {
     id: siteId,
     name,
-    latitude: parseNumber(values.latitude)!,
-    longitude: parseNumber(values.longitude)!,
-    elevationM: parseNumber(values.elevation),
+    latitude: parseDecimal(values.latitude)!,
+    longitude: parseDecimal(values.longitude)!,
+    elevationM: parseDecimal(values.elevation),
     timeZone: values.timeZone,
     twilight: values.twilight,
-    minAltitudeDeg: parseNumber(values.minAltitude)!,
+    minAltitudeDeg: parseDecimal(values.minAltitude)!,
   }
   return save(
     {

@@ -75,13 +75,19 @@ export const COMPOSITION_ENFORCED = [
     files: ["src/features/v5/c-runs/**/*.{ts,tsx}"],
   },
   {
-    // t1/setup is shared with P11 (setup-pages.tsx), so only the Language step is listed.
-    unit: "Setup Language",
+    // P11 (with the Language step) owns t1/setup and t1/lib; location-attention.tsx is its shared Locations state badge.
+    unit: "P11 Setup",
     area: { dir: "t1", depth: 1 },
-    files: ["src/features/t1/setup/setup-language.tsx"],
+    files: ["src/features/t1/setup/**/*.{ts,tsx}", "src/features/t1/lib/**/*.{ts,tsx}", "src/features/t1/components/location-attention.tsx"],
   },
   {
-    // t1/components also holds the deprecated form-field, row-menu and location-row, which P10 and P11 still import; only P9's rebuilt files are listed.
+    // e-targets-plan-settings is shared with P7, P8 and P10, so P11's Activity files are listed.
+    unit: "P11 Activity",
+    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
+    files: ["src/features/v5/e-targets-plan-settings/activity{,.test}.tsx"],
+  },
+  {
+    // t1/components also holds the deprecated form-field and row-menu, which only P10's files still import; only P9's rebuilt files are listed.
     unit: "P9 Settings A",
     area: { dir: "t1", depth: 1 },
     files: ["src/features/t1/settings/**/*.{ts,tsx}", "src/features/t1/components/{add-location-flow,duplicates-review,location-actions,form-blockers}.{ts,tsx}"],
