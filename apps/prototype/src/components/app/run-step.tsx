@@ -14,7 +14,7 @@
  *   run) once the route has rendered.
  * - `gateWord` and `stepName`: the words, in the chosen language.
  */
-import { createLink, useNavigate } from "@tanstack/react-router"
+import { createLink, useRouter } from "@tanstack/react-router"
 import { Circle, CircleArrowRight, CircleCheck, CircleDashed, CircleEllipsis, Loader, OctagonX } from "lucide-react"
 import type { AnchorHTMLAttributes, Ref } from "react"
 import { useMessages } from "@/app/preferences"
@@ -104,10 +104,11 @@ export function StepRail({ steps, current, label, compact = false }: { steps: Ru
   )
 }
 
+/** Every action runner holds one, so it reads the router without a warning where none is mounted (a component test); a link is followed only inside one. */
 export function useFollowLink() {
-  const navigate = useNavigate()
+  const router = useRouter({ warn: false })
   return (link: StepLink) => {
-    void navigate({ to: link.to as never, params: link.params as never, search: link.search as never }).then(() => {
+    void router.navigate({ to: link.to as never, params: link.params as never, search: link.search as never }).then(() => {
       if (link.focusId) requestAnimationFrame(() => document.getElementById(link.focusId!)?.focus())
     })
   }

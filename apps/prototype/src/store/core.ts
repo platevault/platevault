@@ -44,6 +44,10 @@ export const store = {
     if (!state) throw new Error("Store read before initializeStore()")
     return state
   },
+  /** The state, or null before initializeStore(): only for a reader that also renders with no data (an action trigger on its own in a component test). */
+  peek(): PrototypeState | null {
+    return state
+  },
   /** Replace state through an updater. Returning the same object is a no-op. */
   setState(updater: (current: PrototypeState) => PrototypeState) {
     const current = store.getState()
