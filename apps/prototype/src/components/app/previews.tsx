@@ -208,7 +208,7 @@ export function MasterPreview({ label, link, master, night, age, usedBy }: Maste
     { label: m.calibration_key_exposure(), value: master.exposureS === null ? none : formatExposure(master.exposureS) },
     { label: m.calibration_frames(), value: master.frameCount === null ? none : formatCount(master.frameCount) },
     { label: m.tonight_night(), value: formatNight(night, true) },
-    { label: m.calibration_used_by(), value: m.calibration_used_by_runs({ count: usedBy }) },
+    { label: m.calibration_used_by(), value: m.project_runs_count({ count: usedBy }) },
   ]
   return (
     <Preview trigger={<PlaceLink link={link}>{label}</PlaceLink>}>
