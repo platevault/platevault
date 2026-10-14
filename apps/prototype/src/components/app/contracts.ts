@@ -31,6 +31,39 @@ export interface Action {
   shortcut?: string
   /** More input follows, so menus add "…". */
   opensDialog?: boolean
+  /** An owner-ticked action's two forms under the prototype's Quick actions switch. Without it, the action runs the same in both modes. */
+  quick?: QuickAction
+}
+
+/** The Undo notice of a one-click action: what happened, and the action's existing inverse. */
+export interface QuickUndo {
+  /** The outcome: "M 31 LRGB restored". */
+  message: string
+  run: () => CommitResult | void
+}
+
+/**
+ * How an action the owner ticked runs in each mode of the Quick actions
+ * switch. Every runner (`useAction`) applies it, so pages declare both forms
+ * and never read the switch.
+ */
+export interface QuickAction {
+  /**
+   * One-click: `run` commits in place, without its `confirm`. `undo` is
+   * called just before `run`, so it captures the state its Undo restores; the
+   * notice shows once `run` succeeds. A refresh (a re-read or a recompute)
+   * offers no Undo.
+   */
+  oneClick: { undo: () => QuickUndo } | { refresh: true }
+  /**
+   * Open page: "keep" keeps the action as declared on the page that owns it,
+   * its `confirm` included. A link, for an action placed elsewhere, opens the
+   * owning page or flow at the item instead of running here; while it only
+   * navigates, `unavailable` does not apply. With `commit`, `run` commits
+   * first and the link shows the result in its flow (a session ticked on the
+   * run's Select step).
+   */
+  openPage: "keep" | { link: StepLink; commit?: boolean }
 }
 
 export type MenuItem = Action | { separator: true } | { heading: string } | { submenu: string; items: MenuItem[] }

@@ -25,11 +25,13 @@
  *   that night.
  *
  * Problems show on the row they affect (`issueCopy` words them as Issues
- * does). Row actions are Action descriptors: one click only where nothing
- * more is asked and the action can be undone (Add to run, Add to Plan),
- * each with an Undo toast; everything else opens its page. Status lists no
- * job that can pause (only scans and imports can, and they show in Pending
- * ingestions), so its jobs only open where their work lives.
+ * does). Row actions are Action descriptors. Add to run, Add to Plan, Scan
+ * and Rescan follow the prototype's Quick actions switch (astro-plan-zzjlz):
+ * One-click runs them here, Add to run and Add to Plan with an Undo notice;
+ * Open page opens the page that owns each, at that item. Everything else
+ * opens its page. Status lists no job that can pause (only scans and imports
+ * can, and they show in Pending ingestions), so its jobs only open where
+ * their work lives.
  */
 import { FolderPlus, Import, MapPin } from "lucide-react"
 import { useMemo } from "react"
@@ -40,7 +42,7 @@ import { ActionButton, ActionMenu } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { EmptyState, toast } from "@/components/app/feedback"
+import { EmptyState } from "@/components/app/feedback"
 import { issueCopy } from "@/components/app/issue-row"
 import { Pill } from "@/components/app/pill"
 import { UsedByPreview } from "@/components/app/previews"
@@ -58,6 +60,7 @@ import {
   planningSite,
   projectLink,
   runCandidates,
+  runStepLink,
   sessionIntakeEntry,
   sessionIntakeLink,
   type StepLink,
@@ -76,6 +79,7 @@ import { dayInWeek, WEEK_START } from "@/lib/week"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
 import { addRunSessions, removeRunSessions } from "@/store/actions/runs"
 import { nowIso, useStore } from "@/store/core"
+import { startIndexing } from "@/store/operations"
 import { runToJoin } from "./session-model"
 
 /** Rows a section shows before "All N ›" (C8). */
@@ -129,11 +133,6 @@ function targetsLink(night: NightDate, tonight: NightDate): StepLink {
 /** "All 12 ›": the owning page, from a section that shows only its first rows. */
 function allAction(m: Messages, follow: Follow, id: string, count: number, link: StepLink): Action[] {
   return count > ROWS ? [{ id: `${id}-all`, label: m.home_all({ count: formatCount(count) }), run: () => follow(link) }] : []
-}
-
-/** One click with an Undo toast (C8): the change commits at once and the toast offers its inverse. */
-function withUndo(m: Messages, message: string, undo: () => unknown): void {
-  toast({ message, action: { id: "undo", label: m.wrapup_undo(), run: () => void undo() } })
 }
 
 /** The goal's subject, with its panel for a mosaic panel's goal: "IC 5070 · Panel 2". */
@@ -267,18 +266,25 @@ function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follo
     },
   ]
   const primary = (r: IngestionRow): Action | null => {
-    const open = () => follow(locationLink(r.location.id))
-    // Import and Retry open Import with the location as its source (Q17); a scan cannot be undone, so Scan and Rescan open the location.
+    // Import and Retry open Import with the location as its source (Q17).
     const importFrom = () => follow({ to: "/import", search: { step: "source", location: r.location.id } })
+    // Scan and Rescan re-read the location (owner Q32, Q38): One-click scans in place with no Undo, its progress on this row; Open page opens the location.
+    const scan = (id: string, label: string): Action => ({
+      id,
+      label,
+      unavailable: r.availability === "offline" ? { action: label, reason: m.status_offline(), blockers: [] } : undefined,
+      quick: { oneClick: { refresh: true }, openPage: { link: locationLink(r.location.id) } },
+      run: () => void startIndexing([r.location.id]),
+    })
     switch (r.state.kind) {
       case "new-files":
         return { id: "import", label: m.import_open(), opensDialog: true, run: importFrom }
       case "stopped":
         return { id: "retry", label: m.verb_retry(), run: importFrom }
       case "never-scanned":
-        return { id: "scan", label: m.home_scan(), run: open }
+        return scan("scan", m.home_scan())
       case "incomplete":
-        return { id: "rescan", label: m.location_rescan(), run: open }
+        return scan("rescan", m.location_rescan())
       case "importing":
         return null
     }
@@ -400,18 +406,24 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
   )
 }
 
-/** Add to the open run's draft: one click, undone by taking the session out again. Without an open run, Start run… asks for the rest. */
+/**
+ * Add to the open run's draft. One-click adds it with an Undo notice that
+ * takes the session out again; Open page adds it and opens the run's Select
+ * step, where its row is ticked. Without an open run, Start run… asks for the rest.
+ */
 function addToRunAction(m: Messages, catalog: Catalog, w: Extract<PendingWork, { kind: "ready-to-add" }>): Action {
   const run = runToJoin(catalog, w.projectId, w.session.id)
   if (!run) return { id: "start-run", label: m.startrun_open(), opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: w.projectId }) }
   return {
     id: "add-to-run",
     label: m.target_add_to_named({ name: run.name }),
+    quick: {
+      oneClick: { undo: () => ({ message: m.home_added_to_draft({ session: sessionLongLabel(m, w.session), run: run.name }), run: () => removeRunSessions(run.id, [w.session.id]) }) },
+      openPage: { link: runStepLink(run, "select"), commit: true },
+    },
     run: () => {
       const reason = runCandidates(catalog, run).find((c) => c.session.id === w.session.id)?.reason ?? msg("home_candidate_of", { name: run.name })
-      const result = addRunSessions(run.id, [w.session.id], { kind: "candidate", detail: reason })
-      if (result.ok) withUndo(m, m.home_added_to_draft({ session: sessionLongLabel(m, w.session), run: run.name }), () => removeRunSessions(run.id, [w.session.id]))
-      return result
+      return addRunSessions(run.id, [w.session.id], { kind: "candidate", detail: reason })
     },
   }
 }
@@ -584,11 +596,12 @@ function TonightTable({ ctx, goals, nextGood, anyGoal }: { ctx: HomeContext; goa
     return {
       id: "add-to-plan",
       label: m.targets_add_to_plan(),
-      run: () => {
-        const result = addToPlan(target.id, tonight)
-        if (result.ok) withUndo(m, m.home_added_to_plan({ name: target.name }), () => removeFromPlan(target.id, tonight))
-        return result
+      quick: {
+        oneClick: { undo: () => ({ message: m.home_added_to_plan({ name: target.name }), run: () => removeFromPlan(target.id, tonight) }) },
+        // Targets › Planned for tonight (an absent night), with the Target's panel and its Add to Plan open.
+        openPage: { link: { to: "/targets", search: { view: "planned", open: target.id } } },
       },
+      run: () => addToPlan(target.id, tonight),
     }
   }
   return (

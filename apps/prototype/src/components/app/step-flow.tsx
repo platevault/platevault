@@ -31,8 +31,7 @@ import { Button } from "@/components/ui/button"
 import type { StepLink } from "@/domain/derive"
 import { m, type Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import type { CommitResult } from "@/store/core"
-import { ActionButton, actionLabel, useAction } from "./actions"
+import { ActionButton, actionLabel, onSuccess, useAction } from "./actions"
 import type { Action, FlowStep, StepFlow } from "./contracts"
 import { BlockersPreview } from "./previews"
 import { Refusal } from "./refusal"
@@ -108,17 +107,6 @@ export function flowProceed(flow: StepFlow): Action | null {
 export function flowSkip(flow: StepFlow): Action | undefined {
   if (!flow.skip || flow.proceed === null || !stepOf(flow, flow.current)?.optional) return undefined
   return { ...flow.skip, kind: "standard" }
-}
-
-type Outcome = ReturnType<Action["run"]>
-
-/** Calls `then` once a run succeeded (a void or ok result, sync or async) and passes the result on. */
-function onSuccess(outcome: Outcome, then: () => void): Outcome {
-  const settle = (result: CommitResult | void) => {
-    if (!result || result.ok) then()
-    return result
-  }
-  return outcome instanceof Promise ? outcome.then(settle) : settle(outcome)
 }
 
 /**

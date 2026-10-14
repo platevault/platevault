@@ -5,11 +5,12 @@
  * write the catalog directly; PlateVault observes their effects the next time
  * it reads the disk.
  */
+import { useSyncExternalStore } from "react"
 import { rawFrameIds } from "@/domain/calibration-process"
-import { arrivalFiles, deviceFiles, VOLUME_IDS } from "@/domain/seed"
+import { arrivalFiles, defaultFaults, deviceFiles, VOLUME_IDS } from "@/domain/seed"
 import { fakeSha256, fileAt, fileKey, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { CalibrationProcessId, Disk, DiskFile, SimulationFaults, VolumeId } from "@/domain/types"
+import type { CalibrationProcessId, Disk, DiskFile, QuickActionMode, SimulationFaults, VolumeId } from "@/domain/types"
 import { type MessageRef, msg } from "@/lib/i18n"
 import { nowIso, store } from "./core"
 
@@ -203,6 +204,13 @@ export function resetClock() {
 
 export function setFault<K extends keyof SimulationFaults>(key: K, value: SimulationFaults[K]) {
   store.setState((s) => ({ ...s, faults: { ...s.faults, [key]: value } }))
+}
+
+const quickActionMode = (): QuickActionMode => store.peek()?.faults.quickActions ?? defaultFaults().quickActions
+
+/** The Quick actions switch (astro-plan-zzjlz), as every action runner reads it: its default, One-click, until the store holds data. */
+export function useQuickActionMode(): QuickActionMode {
+  return useSyncExternalStore(store.subscribe, quickActionMode, quickActionMode)
 }
 
 /**
