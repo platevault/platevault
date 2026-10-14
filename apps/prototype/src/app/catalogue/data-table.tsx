@@ -11,7 +11,8 @@
  * states; the shift line measures how far the table moved when the
  * selection last appeared or went (it must read 0 px). A second table
  * fills a fixed-height body (`scroll="fill"`) under a toolbar with one
- * labelled select (Destination) and an action.
+ * labelled select (Destination) and an action. A third has hideable
+ * columns, two hidden by default, under its Columns menu.
  *
  * Every string, reviewer captions included, comes from the messages (m.*).
  */
@@ -305,6 +306,20 @@ export function DataTableCatalogue() {
             }}
           />
         </div>
+      </Section>
+      <Section title={m.catalogue_datatable_columns_title()} description={m.catalogue_datatable_columns_description()}>
+        <DataTable
+          label={m.catalogue_datatable_columns_title()}
+          rows={live}
+          columns={columns
+            .slice(0, 6)
+            .map((column) => (column.id === "frames" ? { ...column, hideable: true } : column.id === "integration" || column.id === "camera" ? { ...column, hideable: true, defaultHidden: true } : column))}
+          columnsId="catalogue.datatable"
+          getRowId={(s) => s.id}
+          rowLabel={sessionName}
+          rowActions={rowActions}
+          scroll="none"
+        />
       </Section>
       <Section title={m.catalogue_datatable_filter_bar_title()} description={m.catalogue_datatable_filter_bar_description()}>
         <FilterBar

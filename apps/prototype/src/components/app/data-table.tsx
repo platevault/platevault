@@ -40,6 +40,11 @@
  *   the truncated columns, each in proportion to its width, while the others
  *   keep theirs: the table stays inside its frame wherever the untruncated
  *   columns fit.
+ * - Columns menu (opt-in `hideable` columns): "Columns ▾" in the toolbar
+ *   row lists a checkbox per hideable column; `defaultHidden` ones start
+ *   hidden. The row header, the selection and the row actions always show
+ *   and are not listed. With `columnsId` the choice is kept per table across
+ *   reloads (column-choice.ts).
  * - Click to act (opt-in `onRowClick`): a click on the row outside its
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
  *   as does Enter on the focused row. Controls keep their own action.
@@ -73,9 +78,11 @@ import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { ActionBar, ActionButton, type ActionRunner, MenuItems, useAction } from "./actions"
 import { ClearableInput } from "./clearable-input"
+import { isColumnHideable, isColumnShown, useColumnChoice } from "./column-choice"
 import type { Action, Column as ColumnContract, MenuItem } from "./contracts"
 import { FilterChips } from "./data"
 import { ActionError } from "./feedback"
+import { DisplayMenu } from "./display-menu"
 import { type FilterBarProps, FilterControls, TOOLBAR_ROW, useFacetChips } from "./filter-bar"
 import { type MenuRow, menuRowAt, openMenuFromKeyboard, RowActions } from "./row-actions"
 import { type MenuEntry, menuContent } from "./row-menu"
@@ -217,6 +224,11 @@ interface DataTableBaseProps<T> {
   toolbar?: DataTableToolbar
   /** Actions on the whole selection, the rows the filters hide included; shown in the batch bar (three inline, the rest under More). */
   batchActions?: (selectedIds: string[]) => Action[]
+  /**
+   * The key the Columns menu's choice is kept under across reloads ("targets"); one per table. Without it the
+   * choice lasts while the table is mounted.
+   */
+  columnsId?: string
 }
 
 /** Row actions and expand name each row, so `rowLabel` comes with them. */
@@ -264,7 +276,8 @@ function Truncated({ children }: { children: ReactNode }) {
 export function DataTable<T>({
   label,
   rows,
-  columns,
+  columns: allColumns,
+  columnsId,
   getRowId,
   selection,
   initialSort,
@@ -308,8 +321,19 @@ export function DataTable<T>({
   const membership = selection?.membership === true
   // Members are data, not a selection to act on: the status bar does not count them.
   useStatusSelection(membership ? 0 : selectedCount)
+  const [columnChoice, setColumnShown] = useColumnChoice(columnsId)
+  // Sorting reads every column, so a sort on a column the user hid keeps the order it gave.
+  const columns = allColumns.filter((column) => isColumnShown(column, columnChoice))
+  const hideable = allColumns.filter(isColumnHideable)
+  const columnsMenu =
+    hideable.length > 0 ? (
+      <DisplayMenu
+        label={m.display_menu_columns()}
+        groups={[{ kind: "columns", id: "columns", columns: hideable.map((column) => ({ id: column.id, label: column.header, checked: isColumnShown(column, columnChoice) })), onChange: setColumnShown }]}
+      />
+    ) : null
 
-  const hasSlot = toolbar !== undefined || membership || (selection !== undefined && batchActions !== undefined)
+  const hasSlot = toolbar !== undefined || membership || (selection !== undefined && batchActions !== undefined) || columnsMenu !== null
   const batchShown = hasSlot && !membership && selectedCount > 0
   const chips = useFacetChips({ ...toolbar, matchCount: toolbar?.matchCount ?? rows.length })
 
@@ -335,7 +359,7 @@ export function DataTable<T>({
     slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)?.focus()
   }, [batchShown])
 
-  const sorted = useMemo(() => sortRows(rows, columns, sort), [rows, columns, sort])
+  const sorted = useMemo(() => sortRows(rows, allColumns, sort), [rows, allColumns, sort])
 
   // One body per group (keeping the sort inside each), or one body for all rows.
   const bodies = useMemo(() => {
@@ -714,15 +738,19 @@ export function DataTable<T>({
         ) : toolbar ? (
           <>
             <FilterControls {...toolbar} />
-            {toolbar.select || (toolbar.actions && toolbar.actions.length > 0) ? (
+            {columnsMenu || toolbar.select || (toolbar.actions && toolbar.actions.length > 0) ? (
               <div className="ml-auto flex shrink-0 items-center gap-2">
+                {columnsMenu}
                 {toolbar.select ? <ToolbarSelect {...toolbar.select} /> : null}
                 {toolbar.actions && toolbar.actions.length > 0 ? <ActionBar actions={toolbar.actions} runner={runner} /> : null}
               </div>
             ) : null}
           </>
         ) : (
-          <span className="text-xs text-muted-foreground tabular-nums">{m.table_row_count({ count: rows.length, n: formatCount(rows.length) })}</span>
+          <>
+            <span className="text-xs text-muted-foreground tabular-nums">{m.table_row_count({ count: rows.length, n: formatCount(rows.length) })}</span>
+            {columnsMenu ? <div className="ml-auto flex shrink-0 items-center">{columnsMenu}</div> : null}
+          </>
         )}
         <span className="sr-only" aria-live="polite">
           {batchShown ? countLabel : null}

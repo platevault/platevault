@@ -304,4 +304,73 @@ describe("DataTable", () => {
       })
     })
   })
+
+  describe("Columns menu", () => {
+    // Name is the row header, so `hideable` on it is ignored; Kind starts hidden.
+    const HIDEABLE: Column<Frame>[] = [
+      { id: "name", header: "Name", cell: (row) => row.name, sortValue: (row) => row.name, rowHeader: true, hideable: true },
+      { id: "size", header: "Size", cell: (row) => row.size, sortValue: (row) => row.size, align: "right", hideable: true },
+      { id: "kind", header: "Kind", cell: () => "Light", sortValue: () => "Light", hideable: true, defaultHidden: true },
+    ]
+    const Hideable = ({ columnsId }: { columnsId?: string }) => (
+      <DataTable label="Frames" rows={ROWS} columns={HIDEABLE} columnsId={columnsId} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={() => ITEMS} />
+    )
+    const headers = () => screen.getAllByRole("columnheader").map((cell) => cell.textContent)
+    const trigger = () => screen.getByRole("button", { name: m.display_menu_columns() })
+    const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(trigger())
+      return screen.findByRole("menu")
+    }
+
+    it("starts a defaultHidden column hidden and lists only the hideable columns, never the row header or the actions", async () => {
+      const user = userEvent.setup()
+      render(<Hideable />)
+      expect(headers()).toEqual(["Name", "Size", m.table_actions_column()])
+      const items = within(await openMenu(user)).getAllByRole("menuitemcheckbox")
+      expect(items.map((item) => item.textContent)).toEqual(["Size", "Kind"])
+      expect(items.map((item) => item.getAttribute("aria-checked"))).toEqual(["true", "false"])
+    })
+
+    it("toggling a column shows and hides it, and the menu stays open", async () => {
+      const user = userEvent.setup()
+      render(<Hideable />)
+      const menu = await openMenu(user)
+      await user.click(within(menu).getByRole("menuitemcheckbox", { name: "Kind" }))
+      expect(headers()).toEqual(["Name", "Size", "Kind", m.table_actions_column()])
+      await user.click(within(menu).getByRole("menuitemcheckbox", { name: "Size" }))
+      expect(headers()).toEqual(["Name", "Kind", m.table_actions_column()])
+      expect(screen.getAllByRole("row")[1]).toHaveTextContent("Light")
+      expect(menu).toBeInTheDocument()
+    })
+
+    it("works from the keyboard: Enter opens, arrows move, Space toggles, Escape closes back to the trigger", async () => {
+      const user = userEvent.setup()
+      render(<Hideable />)
+      trigger().focus()
+      await user.keyboard("{Enter}")
+      const items = within(await screen.findByRole("menu")).getAllByRole("menuitemcheckbox")
+      await user.keyboard("{ArrowDown}")
+      await waitFor(() => expect(items[1]).toHaveFocus())
+      await user.keyboard(" ")
+      expect(headers()).toContain("Kind")
+      await user.keyboard("{Escape}")
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument())
+      expect(trigger()).toHaveFocus()
+    })
+
+    it("keeps the choice under columnsId in localStorage, and a remounted table shows it again", async () => {
+      const user = userEvent.setup()
+      const view = render(<Hideable columnsId="test.kept" />)
+      await user.click(within(await openMenu(user)).getByRole("menuitemcheckbox", { name: "Kind" }))
+      expect(JSON.parse(localStorage.getItem("platevault.columns.test.kept") ?? "null")).toEqual({ kind: true })
+      view.unmount()
+      render(<Hideable columnsId="test.kept" />)
+      expect(headers()).toContain("Kind")
+    })
+
+    it("a table with no hideable column has no Columns menu", () => {
+      render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} />)
+      expect(screen.queryByRole("button", { name: m.display_menu_columns() })).not.toBeInTheDocument()
+    })
+  })
 })

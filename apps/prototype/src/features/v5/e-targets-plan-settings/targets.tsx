@@ -295,7 +295,7 @@ export function TargetsPage() {
         { id: "type", header: m.targets_type(), truncate: true, sortValue: okSort("type"), cell: (v) => (v.row.objectType ? say(m, objectTypeRef(v.row.objectType)) : "–") },
         ...(view === "browse" && !searched ? [] : [priority]),
         altitude,
-        { id: "lunar", header: m.tonight_lunar(), align: "right", sortValue: okSort("lunar"), cell: (v) => skyCell(v, (sky) => `${Math.round(sky.lunarDeg)}°`) },
+        { id: "lunar", header: m.tonight_lunar(), align: "right", hideable: true, defaultHidden: true, sortValue: okSort("lunar"), cell: (v) => skyCell(v, (sky) => `${Math.round(sky.lunarDeg)}°`) },
         img,
         filters,
         ...fits,
@@ -303,8 +303,8 @@ export function TargetsPage() {
           ? [{ id: "goals", header: m.plan_goals(), align: "right" as const, sortValue: (v: RowView) => (v.row.target ? (gapsByTarget.get(v.row.target.id) ?? 0) : null), cell: (v: RowView) => goalsCell(v) }]
           : []),
         { id: "projects", header: m.nav_projects(), truncate: true, sortValue: (v) => v.row.projects.map((p) => p.name).join(", ") || null, cell: (v) => v.row.projects.map((p) => p.name).join(", ") || "–" },
-        { id: "opposition", header: m.tonight_opposition(), sortValue: okSort("opposition"), cell: (v) => (v.opposition ? shortDate(v.opposition, ctx?.nowMs ?? Date.now()) : "–") },
-        { id: "sessions", header: m.nav_sessions(), align: "right", sortValue: okSort("sessions"), cell: (v) => (v.sessions > 0 ? String(v.sessions) : "–") },
+        { id: "opposition", header: m.tonight_opposition(), hideable: true, defaultHidden: true, sortValue: okSort("opposition"), cell: (v) => (v.opposition ? shortDate(v.opposition, ctx?.nowMs ?? Date.now()) : "–") },
+        { id: "sessions", header: m.nav_sessions(), align: "right", hideable: true, defaultHidden: true, sortValue: okSort("sessions"), cell: (v) => (v.sessions > 0 ? String(v.sessions) : "–") },
         { id: "captured", header: m.coverage_captured(), truncate: true, sortValue: okSort("captured"), cell: (v) => capturedText(v.captured) },
         ...(searched ? [{ id: "source", header: m.targets_source(), sortValue: okSort("source"), cell: (v: RowView) => rowSource(v.row) }] : []),
       ]
@@ -510,6 +510,7 @@ export function TargetsPage() {
           label: caption,
           rows: shown,
           columns,
+          columnsId: "targets",
           getRowId: (v) => v.row.key,
           rowLabel: (v) => v.row.designation,
           rowActions,

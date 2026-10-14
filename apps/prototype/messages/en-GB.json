@@ -7537,6 +7537,8 @@
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
   "catalogue_datatable_destination_cold": "Cold storage",
+  "catalogue_datatable_columns_title": "Columns menu",
+  "catalogue_datatable_columns_description": "Three columns can be hidden from the Columns menu, and two of them start hidden. The row header and the row actions always show, so the menu does not list them. The choice is kept across reloads.",
   "issue_master_old": [
     {
       "declarations": [
