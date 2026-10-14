@@ -110,7 +110,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-FR-09**: Planning is keyed by Target. A Target can be planned, marked Planned, given reminders and exported without belonging to any Project. A Project owns no windows. Its page shows the windows of its own subjects, from the same Target planning at the active planning site, and offers "Open in Planner". (D-W16)
 - **PLAN-FR-10**: "Open in Planner" opens the Targets page in the Project's context. The list is limited to the Project's subjects and the rig selector is set to "this Project's rigs". The Project context is shown and can be cleared, which returns the list to My targets. (D-W16, D-W37)
 - **PLAN-FR-11**: Tonight supplies Home's Tonight section for the default site. It holds:
-  - the best window tonight, with start, end and peak altitude, for each subject of a Project not marked Done and each Target in My targets;
+  - the best window tonight, with start, end and peak altitude, for each subject of a Project that is not Closed and each Target in My targets;
   - the Moon's illumination, phase, rise and set;
   - tonight's darkness window.
 
@@ -200,7 +200,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - [Product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the confirmed interactions and illustrative worked example.
 - This feature is independently specified; dependencies on other feature contracts are resolved in planning.
 - Conservative defaults and all human-approval gate waivers follow the root autonomous objective and decision register. Tests, requirements analysis, independent review and delivery evidence remain mandatory.
-- A Project's rigs (D-W37), Project subjects and goals (D-W9, D-W29, D-W36) and the Project Done state (D-W26, D-W46) are defined by the Project feature; this feature reads them.
+- A Project's rigs (D-W37), Project subjects and goals (D-W9, D-W29, D-W36) and the Project Closed state (D-W26, D-W46) are defined by the Project feature; this feature reads them.
 
 ## Decisions before feature approval
 
