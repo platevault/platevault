@@ -345,7 +345,7 @@ async fn thumbnail_never_starts_measurement() {
     assert!(review.running_run().await.unwrap().is_none());
     for state in review.frame_states(&ids).await.unwrap() {
         assert_eq!(state.state, FrameStateKind::NotMeasured, "{state:?}");
-        assert!(state.values.is_empty());
+        assert_eq!(state.values, [] as [platevault_core::MetricValue; 0]);
     }
     assert_eq!(shelf.library_state().await, before, "no asset, digest or session changes");
     assert_eq!(shelf.manifest(), manifest, "sources are only read");

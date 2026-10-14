@@ -260,7 +260,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(!result.updated_at.is_empty());
+        assert_ne!(result.updated_at, "");
         assert_eq!(result.project_id, "proj-n1");
 
         let content = get_note_content(&pool, "proj-n1").await.unwrap();

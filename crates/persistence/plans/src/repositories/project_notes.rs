@@ -119,7 +119,7 @@ mod tests {
         insert_project(&pool, "proj-n1").await;
 
         let ts = upsert_note(&pool, "note-001", "proj-n1", "Hello world").await.unwrap();
-        assert!(!ts.is_empty());
+        assert_ne!(ts, "");
 
         let row = get_note(&pool, "proj-n1").await.unwrap().unwrap();
         assert_eq!(row.content, "Hello world");

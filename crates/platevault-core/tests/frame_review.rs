@@ -346,7 +346,7 @@ async fn frame_states_come_from_the_catalog_and_a_run_queues_only_frames_without
     for state in &states {
         assert_eq!(state.state, FrameStateKind::NotMeasured);
         assert_eq!((state.measurement_id, state.values.len()), (None, 0));
-        assert!(state.imported.is_empty());
+        assert_eq!(state.imported, [] as [platevault_core::ImportedValue; 0]);
     }
     assert!(review.list_runs(0, 10).await.unwrap().is_empty(), "reading starts no run");
 
@@ -357,7 +357,7 @@ async fn frame_states_come_from_the_catalog_and_a_run_queues_only_frames_without
     let first = finished(review, first.operation_id).await;
     assert_eq!(first.state, RunState::Completed);
     assert_eq!(first.counters, counters(100, 0, 100, 0));
-    assert!(first.issues.is_empty());
+    assert_eq!(first.issues, [] as [platevault_core::RunIssue; 0]);
 
     // Frame states come from the catalog alone: the root is moved away.
     let away = indexed.temp.path().join("Captures.away");
@@ -489,7 +489,7 @@ async fn cancel_keeps_committed_records_and_reopening_marks_the_running_run_inte
     for state in &states {
         if !cached.contains(&state.asset_id) {
             assert_eq!(state.state, FrameStateKind::NotMeasured);
-            assert!(state.values.is_empty());
+            assert_eq!(state.values, [] as [platevault_core::MetricValue; 0]);
         }
     }
     assert_eq!(indexed.library_state().await, before, "cancel changes no library record");
@@ -773,7 +773,7 @@ async fn saturated_and_fitted_stars_disclose_their_basis_and_cutouts_refuse_chan
     assert_eq!(fitted_cutouts.residual.as_ref().map(Vec::len), Some(samples));
     let failed_cutouts =
         review.star_cutouts(&cutout(saturated.index, sha256.clone())).await.unwrap();
-    assert!(!failed_cutouts.observed.is_empty());
+    assert_ne!(failed_cutouts.observed, [] as [platevault_core::SampleNumber; 0]);
     assert_eq!((failed_cutouts.fitted, failed_cutouts.residual), (None, None));
 
     // Disclosure of an asset taken from frame_states.
@@ -945,7 +945,7 @@ async fn defect_and_cfa_frames_keep_masked_samples_and_mosaic_evidence() {
         let MeasurementOutcome::Measured { metrics, stars, .. } = &record.outcome else {
             panic!("{record:?}");
         };
-        assert!(stars.is_empty());
+        assert_eq!(stars.as_slice(), []);
         for metric in [
             MetricId::StarCount,
             MetricId::FittedStarCount,

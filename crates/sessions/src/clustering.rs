@@ -678,7 +678,7 @@ mod tests {
         ];
         let result = derive_clustering(&sessions, &[], &params());
 
-        assert!(result.new_framings.is_empty());
+        assert_eq!(result.new_framings, [] as [NewFramingGroup; 0]);
         for session in 1..=3 {
             assert!(matches!(
                 assignment_for(&result, session),
@@ -837,7 +837,7 @@ mod tests {
             *assignment_for(&result, 4),
             Assignment::Unassigned(UnassignedReason::MissingTarget)
         );
-        assert!(result.new_framings.is_empty());
+        assert_eq!(result.new_framings, [] as [NewFramingGroup; 0]);
     }
 
     // ── circular-mean wraparound at RA 0/360 ─────────────────────────────────
@@ -1046,6 +1046,6 @@ mod tests {
         let sessions = vec![geom(1, 10, "scope-a|cam-a", 100.0, 20.0, 0.0, Some(2.0))];
         let result = derive_clustering(&sessions, &existing, &params());
         assert_eq!(*assignment_for(&result, 1), Assignment::JoinExisting(framing_id));
-        assert!(result.new_framings.is_empty());
+        assert_eq!(result.new_framings, [] as [NewFramingGroup; 0]);
     }
 }

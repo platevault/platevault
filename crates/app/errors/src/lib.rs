@@ -184,7 +184,7 @@ mod tests {
     fn db_err_not_found_branch_has_no_recovery_action() {
         let err = db_err(persistence_core::DbError::NotFound("widget 1".to_owned()));
         assert!(!err.retryable);
-        assert!(err.recovery_actions.is_empty());
+        assert_eq!(err.recovery_actions, [] as [contracts_core::RecoveryAction; 0]);
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
         let err = f(persistence_core::DbError::NotFound("project 1".to_owned()));
         assert_eq!(err.code, ErrorCode::ProjectNotFound);
         assert!(!err.retryable);
-        assert!(err.recovery_actions.is_empty());
+        assert_eq!(err.recovery_actions, [] as [contracts_core::RecoveryAction; 0]);
     }
 
     #[test]

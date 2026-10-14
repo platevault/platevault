@@ -116,7 +116,7 @@ async fn applied_generation_plan_creates_real_link_and_recorded_view() {
         strict: false,
     };
     let gen_resp = generate_source_view(db.pool(), &req).await.expect("generate_source_view");
-    assert!(!gen_resp.plan_id.is_empty());
+    assert_ne!(gen_resp.plan_id, "");
 
     let items_before = plans_repo::list_plan_items(db.pool(), &gen_resp.plan_id).await.unwrap();
     let link_item = items_before.iter().find(|i| i.action == "link").expect("one link item");

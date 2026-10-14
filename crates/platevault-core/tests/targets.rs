@@ -159,7 +159,7 @@ fn typed_cone_returns_exactly_the_seed_objects_inside_it_nearest_first() {
     assert!(hits.windows(2).all(|w| w[0].separation_deg <= w[1].separation_deg));
 
     let far = TargetQuery { text: Some("NGC 7000".into()), cone: Some(center), limit: 5 };
-    assert!(index().search(&far, &[]).unwrap().is_empty());
+    assert_eq!(index().search(&far, &[]).unwrap(), [] as [targets::TargetSearchHit; 0]);
     let near = TargetQuery {
         text: Some("NGC 7000".into()),
         cone: Some(cone(314.7, 44.33, 0.5)),
@@ -458,7 +458,7 @@ fn missing_object_and_coordinates_stay_unresolved() {
             && has(&assessment.evidence, &unknown("pointing"))
     );
     assert_eq!(assess_target(&m31, &[]).state, AssociationState::Unresolved);
-    assert!(index().candidates_for_frames(&[bare], &[]).is_empty());
+    assert_eq!(index().candidates_for_frames(&[bare], &[]), [] as [targets::TargetAssessment; 0]);
 }
 
 #[test]

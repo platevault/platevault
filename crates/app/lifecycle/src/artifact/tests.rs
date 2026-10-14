@@ -33,7 +33,7 @@ async fn detect_inserts_classified_artifact() {
     .await
     .unwrap();
 
-    assert!(!id.is_empty());
+    assert_ne!(id, "");
 
     let artifacts = list(&pool, "proj-1", &[]).await.unwrap();
     assert_eq!(artifacts.len(), 1);

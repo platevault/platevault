@@ -586,7 +586,10 @@ async fn project_candidates_context_filtered_unreviewed() {
     assert_eq!(ids(&world.list(other, ReviewFilter::Unreviewed).await), vec![project, unreviewed]);
 
     // PIX-AC-06, PV-PIX-SC-05: listing starts no measurement and writes nothing.
-    assert!(world.review().list_runs(0, 10).await.unwrap().is_empty());
+    assert_eq!(
+        world.review().list_runs(0, 10).await.unwrap(),
+        [] as [platevault_core::MeasurementRun; 0]
+    );
     assert_eq!(world.assets().await, before, "no quality record changed");
     let unknown = ReviewContext::ProjectCandidates { project_id: Uuid::new_v4() };
     let error = world
@@ -615,7 +618,7 @@ async fn display_template_renames_nothing() {
     assert_eq!(listed, vec!["Ha_001.fits", "Ha_002.fits", "Ha_003.fits", "Ha_004.fits"]);
     for (frame, relative) in list.frames.iter().zip(NGC) {
         assert_eq!(frame.display.path, NativePath::from_path(&world.root.join(native(relative))));
-        assert!(frame.display.fallbacks.is_empty());
+        assert_eq!(frame.display.fallbacks, [] as [platevault_core::NamingFallback; 0]);
     }
 
     let tokens = NameTemplate::Tokens { template: "{filter}_{exposure}s".into() };

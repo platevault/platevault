@@ -176,8 +176,8 @@ mod tests {
         let mut watcher =
             notify::recommended_watcher(|_: Result<notify::Event, notify::Error>| {}).unwrap();
         let report = register_watch_paths(&mut watcher, &[path], false, false).unwrap();
-        assert!(!report.watched.is_empty());
-        assert!(report.skipped.is_empty());
+        assert_ne!(report.watched, [] as [std::path::PathBuf; 0]);
+        assert_eq!(report.skipped, [] as [(std::path::PathBuf, String); 0]);
     }
 
     #[test]

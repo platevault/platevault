@@ -474,7 +474,7 @@ async fn growing_file_waits_to_settle() {
     let offered = item(&settled, "light_002.fits");
     assert_eq!(offered.phase, ImportItemPhase::Ready, "offered once unchanged across checks");
     assert_eq!(offered.sha256.as_deref(), Some(digest(&growing).as_str()));
-    assert!(files_below(&fixture.captures).is_empty());
+    assert_eq!(files_below(&fixture.captures), [] as [std::path::PathBuf; 0]);
 }
 
 #[tokio::test]
@@ -735,7 +735,7 @@ async fn no_trash_volume_reports_copied_source_kept() {
         assert_eq!(digest(&fixture.destination(kept)), digest(source));
         assert!(source.exists(), "nothing is permanently deleted");
     }
-    assert!(trash.moved().is_empty());
+    assert_eq!(trash.moved(), [] as [std::path::PathBuf; 0]);
     assert_eq!(done.summary.sources_kept, 2);
     assert_eq!(done.summary.sources_trashed, 0);
     assert_eq!(done.summary.imported, 2);

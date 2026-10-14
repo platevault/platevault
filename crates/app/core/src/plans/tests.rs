@@ -221,7 +221,7 @@ async fn approve_plan_happy_path() {
     let resp = approve_plan(db.pool(), &bus, "p1", "tester").await.unwrap();
     assert_eq!(resp.plan_id, "p1");
     assert_eq!(resp.new_state, "approved");
-    assert!(!resp.approval_token.is_empty());
+    assert_ne!(resp.approval_token, "");
 
     let row = repo::get_plan(db.pool(), "p1", false).await.unwrap();
     assert_eq!(row.state, "approved");
@@ -305,7 +305,7 @@ async fn discard_plan_happy_path() {
 
     let resp = discard_plan(db.pool(), &bus, "p1").await.unwrap();
     assert_eq!(resp.plan_id, "p1");
-    assert!(!resp.discarded_at.is_empty());
+    assert_ne!(resp.discarded_at, "");
 
     let err = get_plan(db.pool(), "p1").await.unwrap_err();
     assert_eq!(err.code, ErrorCode::PlanNotFound);

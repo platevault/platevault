@@ -322,7 +322,7 @@ mod tests {
         };
         let resp = resolve_pattern(&req).unwrap();
         assert_eq!(resp.relative_path, "M101/Ha/2026-04-12/light/");
-        assert!(resp.missing_tokens.is_empty());
+        assert_eq!(resp.missing_tokens, [] as [String; 0]);
     }
 
     #[test]
@@ -385,7 +385,7 @@ mod tests {
         };
         let resp = preview_path_pattern(&req).unwrap();
         assert_eq!(resp.resolved_path, "masters/flats/Ha");
-        assert!(resp.missing_tokens.is_empty());
+        assert_eq!(resp.missing_tokens, [] as [String; 0]);
     }
 
     #[test]
@@ -401,7 +401,7 @@ mod tests {
         };
         let resp = preview_path_pattern(&req).unwrap();
         assert_eq!(resp.resolved_path, "M31/Ha/2026-06-21/light");
-        assert!(resp.missing_tokens.is_empty());
+        assert_eq!(resp.missing_tokens, [] as [String; 0]);
     }
 
     #[test]
@@ -423,7 +423,7 @@ mod tests {
         };
         let resp = preview_path_pattern(&req).unwrap();
         assert_eq!(resp.resolved_path, "bias");
-        assert!(resp.missing_tokens.is_empty());
+        assert_eq!(resp.missing_tokens, [] as [String; 0]);
     }
 
     #[test]

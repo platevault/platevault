@@ -174,7 +174,7 @@ async fn plan_generates_with_one_session() {
     assert_eq!(resp.plan.state, "open");
     assert_eq!(resp.plan.session_count, 1);
     assert_eq!(resp.plan.item_count, 1);
-    assert!(!resp.plan.plan_digest.is_empty());
+    assert_ne!(resp.plan.plan_digest, "");
 }
 
 #[tokio::test]

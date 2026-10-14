@@ -17,9 +17,9 @@ use persistence_library::{Catalog, SessionQuery, SourceProbe, SuggestedAssociati
 use platevault_model::{
     Asset, AssociationKind, AssociationState, Availability, Equipment, EvidenceItem, GoalInput,
     GoalSpec, GoalTemplate, GoalTemplateInput, LibraryError, Location, PanelInput, Project,
-    ProjectCandidate, ProjectInput, ProjectQuery, ProjectState, Provenance, Quality,
-    QualityCriterion, RejectionMark, Revision, ScanFile, ScanObservation, ScanProgress, ScanState,
-    Session, SubjectInput, TargetRecord,
+    ProjectCandidate, ProjectInput, ProjectQuery, ProjectState, ProjectSummary, Provenance,
+    Quality, QualityCriterion, RejectionMark, Revision, ScanFile, ScanObservation, ScanProgress,
+    ScanState, Session, SubjectInput, TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -502,7 +502,10 @@ async fn trashed_frames_never_in_candidates() {
     assert_eq!(trashed.availability, Availability::Trashed);
     let error = world.catalog.set_project_rejection(project.id, &[mark(&trashed, 0, true)]).await;
     assert_eq!(kind(&error.unwrap_err()), "invalid_input", "a Trashed frame takes no reject");
-    assert!(world.catalog.project_detail(project.id).await.unwrap().rejections.is_empty());
+    assert_eq!(
+        world.catalog.project_detail(project.id).await.unwrap().rejections,
+        [] as [platevault_model::ProjectRejection; 0]
+    );
 
     let world = world.trash(&[RC_HA_1]).await;
     let candidates = world.catalog.project_candidates(project.id).await.unwrap();
@@ -757,7 +760,7 @@ async fn mosaic_subject_panels_by_centre_and_rotation_unknown_rotation_allowed()
     // A single-Target subject takes goals without a panel.
     let single = vec![subject(&world.ngc7000)];
     let project = catalog.set_project_subjects(project.id, 2, &single).await.unwrap();
-    assert!(project.subjects[0].panels.is_empty());
+    assert_eq!(project.subjects[0].panels, [] as [platevault_model::SubjectPanel; 0]);
     assert_eq!(project.goals.len(), 1, "only the subject-wide quality bar still fits");
     let goals = vec![integration(&world.ngc7000, Some(1), "Ha", 3600)];
     let error = catalog.set_project_goals(project.id, 3, &goals).await.unwrap_err();
@@ -867,7 +870,7 @@ async fn project_write_changes_no_file_quality_or_membership() {
         ProjectQuery { target_id: Some(world.m81.candidate.id), ..ProjectQuery::default() };
     assert_eq!(catalog.list_projects(&m81_only).await.unwrap().len(), 1);
     let none = ProjectQuery { target_id: Some(Uuid::new_v4()), ..ProjectQuery::default() };
-    assert!(catalog.list_projects(&none).await.unwrap().is_empty());
+    assert_eq!(catalog.list_projects(&none).await.unwrap(), [] as [ProjectSummary; 0]);
     world.catalog.close().await.unwrap();
 
     // Every Project record survives a restart unchanged.

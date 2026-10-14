@@ -368,7 +368,7 @@ async fn missing_retained_original_blocks_removal() {
     assert_eq!(operation.items[0].outcome, Some(ItemOutcome::Blocked));
     assert_eq!(code(&operation.items[0]), Some(ReasonCode::KeptCopyUnproven));
     assert!(prepared.exists(), "insufficient retained-original proof keeps the hardlink");
-    assert!(trash.moved().is_empty());
+    assert_eq!(trash.moved(), [] as [std::path::PathBuf; 0]);
 }
 
 #[tokio::test]
@@ -523,7 +523,7 @@ async fn no_permanent_delete_fallback() {
     assert_eq!(code(&operation.items[0]), Some(ReasonCode::TrashUnsupported));
     assert_eq!(fs::read(&source).unwrap(), b"card frame", "copied, source kept");
     assert_eq!(fs::read(archive.join("M31/light_009.fits")).unwrap(), b"card frame");
-    assert!(card.moved().is_empty());
+    assert_eq!(card.moved(), [] as [std::path::PathBuf; 0]);
 }
 
 /// Same-session identity of the entry at `path`.

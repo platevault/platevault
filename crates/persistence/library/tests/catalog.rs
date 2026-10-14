@@ -726,7 +726,10 @@ async fn stale_assessment_of_same_grouping_revision_is_refused_and_confirmation_
     catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
     let after = catalog.session(session.id).await.unwrap().summary.session;
     assert_eq!(after.grouping_revision, session.grouping_revision, "same grouping revision");
-    assert!(catalog.session(session.id).await.unwrap().summary.successors.is_empty());
+    assert_eq!(
+        catalog.session(session.id).await.unwrap().summary.successors,
+        [] as [uuid::Uuid; 0]
+    );
 
     let fresh = assessment(&catalog, session.id).await;
     let stale = catalog
@@ -820,7 +823,7 @@ async fn stale_assessment_after_correction_or_metadata_only_observation_is_refus
     catalog.apply_correction_and_regroup(&[expected(&asset)], &[correction], group).await.unwrap();
     let detail = catalog.session(session.id).await.unwrap();
     assert_eq!(detail.summary.session.grouping_revision, session.grouping_revision);
-    assert!(detail.summary.successors.is_empty());
+    assert_eq!(detail.summary.successors, [] as [uuid::Uuid; 0]);
     let corrected = assessment(&catalog, session.id).await;
     assert_eq!(corrected.observations, assessed.observations, "fingerprints cannot detect it");
     let error = catalog.record_suggestions(&[suggest(&assessed)]).await.unwrap_err();
@@ -1058,7 +1061,7 @@ async fn failed_subtree_retry_reports_unreadable_scope_and_keeps_location_availa
     let issue = failed.issues.iter().find(|issue| issue.relative_path == missing).unwrap();
     assert_eq!(issue.availability, Availability::Unreadable, "failed scope is not available");
     assert!(failed.incomplete_scopes.contains(&missing));
-    assert!(failed.complete_scopes.is_empty());
+    assert_eq!(failed.complete_scopes, [] as [platevault_model::NativePath; 0]);
     let after = catalog.location(location.id).await.unwrap();
     assert_eq!(after.availability, Availability::Available, "root location state unchanged");
     assert!(catalog.location_failure(location.id).await.unwrap().is_none());
@@ -2990,7 +2993,10 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
     assert_eq!((status.progress.duplicate_candidates, status.progress.duplicates_verified), (3, 3));
     assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 4);
     assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
-    assert!(catalog.duplicate_verification_work(operation).await.unwrap().is_empty());
+    assert_eq!(
+        catalog.duplicate_verification_work(operation).await.unwrap(),
+        [] as [uuid::Uuid; 0]
+    );
     assert_eq!((tree(&fx.root), tree(&nas)), before, "sources unchanged");
 }
 

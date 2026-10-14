@@ -105,7 +105,7 @@ async fn osc_rig_with_empty_list_captures_rgb() {
     let rig = saved(&library, &esprit()).await;
     let read = library.rig(rig.id).await.unwrap();
     assert_eq!(read.equipment.color_kind, Some(ColorKind::Osc), "OSC comes from the camera");
-    assert!(read.filters.filters.is_empty());
+    assert_eq!(read.filters.filters, [] as [platevault_core::RigFilter; 0]);
     assert_eq!(read.bands, vec![Band::R, Band::G, Band::B]);
 }
 
@@ -236,7 +236,10 @@ async fn unmatched_filter_reads_unknown_and_add_changes_only_rig() {
         fx.library.rig_unknown_filters(Some(fx.redcat.id)).await.unwrap(),
         fx.halpha_unknown_on_redcat()
     );
-    assert!(fx.library.rig_unknown_filters(Some(fx.esprit.id)).await.unwrap().is_empty());
+    assert_eq!(
+        fx.library.rig_unknown_filters(Some(fx.esprit.id)).await.unwrap(),
+        [] as [platevault_core::RigFilterValues; 0]
+    );
 
     // "Add Halpha to RedCat" with band Ha.
     let rig = fx.library.rig(fx.redcat.id).await.unwrap();

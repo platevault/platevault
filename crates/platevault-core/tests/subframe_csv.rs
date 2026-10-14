@@ -185,7 +185,7 @@ fn units_follow_the_declared_scale_and_data_unit_rows() {
         assert_eq!((fwhm.class, fwhm.units), (ColumnClass::Mapped, Some(Units::Arcsec)));
         assert!(fwhm.units_basis.contains(&entry("Scale Unit", "Arcseconds (arcsec)")));
         assert!(fwhm.units_basis.contains(&entry("Subframe Scale", "1.50000")));
-        assert!(fwhm.warnings.is_empty());
+        assert_eq!(fwhm.warnings, [] as [String; 0]);
     }
     for header in ["Median", "Median Mean Deviation", "Noise"] {
         let median = column(&parsed, header);
@@ -226,7 +226,7 @@ fn default_scale_electrons_circular_psf_and_pixel_units_are_read_as_declared() {
         Preamble { scale_unit: "Pixels (pixel)", data_unit: "Normalized to [0,1]", ..PREAMBLE };
     let parsed = parse(&export(Some(&preamble(&pixels)), COLUMNS_30, &rows)).unwrap();
     assert_eq!(column(&parsed, "FWHM").units, Some(Units::Px));
-    assert!(column(&parsed, "FWHM").warnings.is_empty());
+    assert_eq!(column(&parsed, "FWHM").warnings, [] as [String; 0]);
     assert_eq!(column(&parsed, "Median").units, Some(Units::Normalized));
 }
 
@@ -237,7 +237,7 @@ fn columns_without_matching_rows_or_declared_units_read_unavailable() {
     let parsed = parse(&export(None, &header, &rows)).unwrap();
     assert_eq!(parsed.layout, ExportLayout::Columns30);
     assert_eq!(parsed.module_version, None);
-    assert!(parsed.preamble.is_empty());
+    assert_eq!(parsed.preamble, [] as [platevault_core::PreambleEntry; 0]);
     let class = |name: &str| {
         let column = column(&parsed, name);
         (column.class, column.reason.clone(), column.units)
@@ -344,7 +344,7 @@ fn decisions_are_never_imported_and_rows_that_do_not_parse_are_kept() {
     for unparsed in &parsed.rows[1..3] {
         assert_eq!(unparsed.index, None, "line {} is unparsed", unparsed.line);
         assert!(unparsed.reason.is_some());
-        assert!(unparsed.values.is_empty());
+        assert_eq!(unparsed.values, [] as [platevault_core::ImportCell; 0]);
     }
     assert_eq!(parsed.rows[3].index, Some(4));
 

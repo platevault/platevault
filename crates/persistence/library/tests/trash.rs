@@ -403,7 +403,7 @@ async fn sessions_trashed_filter_lists_last_observed_metadata_and_operation() {
         assert_eq!(frame.episode.storage_operation_id, operation);
         assert_eq!(&frame.episode.sha256, sha256);
         assert_eq!(frame.episode.complete_view_ids, views);
-        assert!(!frame.episode.trashed_at.is_empty());
+        assert_ne!(frame.episode.trashed_at, "");
         assert_eq!(frame.episode.put_back_at, None);
     }
     let of_session = TrashedQuery { session_id: Some(session.id), ..TrashedQuery::default() };
@@ -568,7 +568,10 @@ async fn record_trashed_is_atomic_and_idempotent_per_operation() {
         .await;
     assert_eq!(kind(&refused.unwrap_err()), "identity_conflict");
     assert_eq!(catalog.asset(first.id).await.unwrap().availability, Availability::Available);
-    assert!(catalog.trash_episodes(first.id).await.unwrap().is_empty());
+    assert_eq!(
+        catalog.trash_episodes(first.id).await.unwrap(),
+        [] as [persistence_library::TrashEpisode; 0]
+    );
     let malformed = catalog.record_trashed(operation, &[frame(&first, "abc".into())]).await;
     assert_eq!(kind(&malformed.unwrap_err()), "invalid_input");
 

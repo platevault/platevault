@@ -360,7 +360,10 @@ mod tests {
         };
         let effective = CaptureMetadata { filter: Some("OIII".into()), ..observed.clone() };
         assert_eq!(corrected_fields(&observed, &effective), [change("filter", "Ha", "OIII")]);
-        assert!(corrected_fields(&observed, &observed).is_empty());
+        assert_eq!(
+            corrected_fields(&observed, &observed),
+            [] as [platevault_model::CorrectedField; 0]
+        );
     }
 
     /// A patch never orphans CONTINUE cards or leaves a checksum stale: it

@@ -329,10 +329,10 @@ async fn reviewed_imports_attach_beside_built_in_values_and_change_no_library_re
     }
     assert_eq!(imported_of(UNMEASURED)[0].match_state, RowMatch::MatchedName);
     assert!(imported_of("night1/Ha_001.fits").is_empty(), "ambiguous rows stay unattached");
-    assert!(imported_of("night2/Ha_001.fits").is_empty());
+    assert_eq!(imported_of("night2/Ha_001.fits"), [] as [platevault_core::ImportedValue; 0]);
     let unmeasured = after.iter().find(|state| state.asset_id == id(UNMEASURED)).unwrap();
     assert_eq!(unmeasured.state, FrameStateKind::NotMeasured, "an import is not a measurement");
-    assert!(unmeasured.values.is_empty());
+    assert_eq!(unmeasured.values, [] as [platevault_core::MetricValue; 0]);
 
     // CSV B: no preamble, so FWHM, Median and Noise have no units.
     let csv_b = exports.join("b.csv");
@@ -371,7 +371,7 @@ async fn reviewed_imports_attach_beside_built_in_values_and_change_no_library_re
     let state = after.iter().find(|state| state.asset_id == chosen).unwrap();
     let built = built_in.iter().find(|state| state.asset_id == chosen).unwrap();
     assert_eq!(state.values, built.values);
-    assert!(!state.imported.is_empty());
+    assert_ne!(state.imported, [] as [platevault_core::ImportedValue; 0]);
     for value in &state.imported {
         assert_eq!(value.import_id, second.review_id);
         assert_eq!(value.match_state, RowMatch::Resolved);

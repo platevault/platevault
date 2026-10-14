@@ -267,7 +267,7 @@ async fn no_site_returns_reason() {
     for name in ["Backyard", "Not the default"] {
         let tonight = library.tonight(&query()).await.unwrap();
         assert_eq!(tonight.unavailable_reason, Some(PlanningUnknownReason::NoSite));
-        assert!(tonight.windows.is_empty());
+        assert_eq!(tonight.windows, [] as [platevault_core::tonight::TonightWindow; 0]);
         assert!(!tonight.has_window(m31.id));
         assert_eq!((tonight.site, tonight.time_zone, tonight.night), (None, None, None));
         assert_eq!((tonight.moon, tonight.darkness), (None, None));

@@ -363,6 +363,8 @@ pub enum ResolveError {
 /// Methods are modelled on the `target.resolve.json` operation. Implementations
 /// MUST be `Send + Sync` so the resolver can be shared across the ingest
 /// background queue (FR-013).
+// async-trait's generated bare `#[must_use]` trips clippy 1.99 `double_must_use`; macro output.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait Resolver: Send + Sync {
     /// Resolve a complete designation or common name to a canonical identity.
@@ -410,6 +412,8 @@ pub trait Resolver: Send + Sync {
 /// by mistake — only code that explicitly asks for `ExplicitResolver` can.
 /// Implemented by the production `targeting_resolver::simbad::SimbadResolver`
 /// (TAP-first, Sesame-fallback-on-miss) and, for tests, `FakeResolver`.
+// async-trait's generated bare `#[must_use]` trips clippy 1.99 `double_must_use`; macro output.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait ExplicitResolver: Resolver {
     /// Same contract as [`Resolver::resolve`], but permitted to consult a

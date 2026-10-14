@@ -99,7 +99,7 @@ async fn representative_repository_queries_cover_seeded_and_empty_surfaces() {
             .fetch_all(pool)
             .await
             .unwrap();
-    assert!(settings.is_empty());
+    assert_eq!(settings, [] as [(String, String); 0]);
     assert_eq!(count(pool, "SELECT COUNT(*) FROM library_root").await, 0);
     assert_eq!(count(pool, "SELECT COUNT(*) FROM calibration_master_view").await, 0);
     assert_eq!(count(pool, "SELECT COALESCE(MAX(number), 0) FROM plans").await, 0);

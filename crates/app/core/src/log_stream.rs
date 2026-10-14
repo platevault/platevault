@@ -449,7 +449,7 @@ mod tests {
         let result = recent_entries(&pool, RecentOptions::default()).await.unwrap();
         assert!(!result.truncated, "fresh start (no cursor) must never report truncated");
         assert_eq!(result.truncated_count, None);
-        assert!(result.entries.is_empty());
+        assert_eq!(result.entries, [] as [contracts_core::log::LogEntry; 0]);
 
         // Even once entries exist, a fresh-start (no cursor) request still
         // reports no gap: there is no prior client state to have gone stale.

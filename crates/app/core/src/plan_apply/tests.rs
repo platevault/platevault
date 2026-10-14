@@ -240,7 +240,7 @@ async fn apply_plan_starts_successfully() {
     let resp = apply_plan(db.pool(), &bus, "p1", "test-token", None).await.unwrap();
     assert_eq!(resp.plan_id, "p1");
     assert_eq!(resp.new_state, "applying");
-    assert!(!resp.run_id.is_empty());
+    assert_ne!(resp.run_id, "");
 
     // The background executor is spawned via `tokio::spawn`, and the
     // `#[tokio::test]` current-thread runtime only gives it a chance to

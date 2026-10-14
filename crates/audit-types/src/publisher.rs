@@ -16,6 +16,8 @@
 
 use crate::event_bus::Source;
 
+// async-trait's generated bare `#[must_use]` trips clippy 1.99 `double_must_use`; macro output.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait EventPublisher: Send + Sync {
     async fn publish(&self, topic: &str, source: Source, payload: serde_json::Value);

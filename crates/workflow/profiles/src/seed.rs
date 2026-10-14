@@ -141,7 +141,7 @@ mod tests {
         // which applies no working directory at all (`launch.rs:159-183`).
         let p = find("pixinsight").expect("pixinsight must be seeded");
         assert!(!p.supports_open_folder);
-        assert!(p.args_template.is_empty());
+        assert_eq!(p.args_template, [] as [ArgsToken; 0]);
         assert_eq!(p.bundle_id, Some("com.pixinsight.PixInsight"));
     }
 
@@ -166,7 +166,7 @@ mod tests {
         let p = find("planetary_suite").expect("planetary_suite must be seeded");
         assert_eq!(p.name, "Planetary Suite");
         assert!(!p.supports_open_folder);
-        assert!(p.args_template.is_empty());
+        assert_eq!(p.args_template, [] as [ArgsToken; 0]);
     }
 
     // ── Spec 049 US2 T023: WBPP layout groups by session/night → filter →

@@ -847,7 +847,7 @@ mod tests {
         assert!(resp.total_actions > 0, "confirmed plans should have actions");
         for p in &resp.plans {
             assert_eq!(p.item_name, "lights");
-            assert!(!p.plan_id.is_empty());
+            assert_ne!(p.plan_id, "");
             assert!(!p.actions.is_empty());
         }
     }

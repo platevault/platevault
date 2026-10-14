@@ -58,7 +58,7 @@ fn register_watch_paths_reports_a_gated_symlinked_root_as_skipped() {
 
     let report = register_watch_paths(&mut watcher(), &[path], false, false)
         .expect("a gated symlinked root is not a registration failure");
-    assert!(report.watched.is_empty());
+    assert_eq!(report.watched, [] as [std::path::PathBuf; 0]);
     assert_eq!(report.skipped.len(), 1);
     assert_eq!(report.skipped[0].0, link);
 }

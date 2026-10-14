@@ -99,7 +99,10 @@ async fn storage_journal_survives_reopen_and_refuses_stale_or_settled_changes() 
     let settled = catalog.settle_storage_operation(id).await.unwrap();
     assert_eq!(settled.state, StorageOperationState::Settled);
     assert_eq!(settled.items[1].reason.as_ref().unwrap().code, ReasonCode::TrashUnsupported);
-    assert!(catalog.unsettled_storage_operations().await.unwrap().is_empty());
+    assert_eq!(
+        catalog.unsettled_storage_operations().await.unwrap(),
+        [] as [platevault_model::StorageOperation; 0]
+    );
     let restart = catalog.start_storage_operation(id).await.unwrap_err();
     assert!(
         matches!(restart, LibraryError::InvalidInput(_)),

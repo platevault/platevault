@@ -1270,7 +1270,7 @@ mod tests {
     async fn project_ids_for_session_empty_when_unlinked() {
         let db = setup_db().await;
         let ids = project_ids_for_session(db.pool(), "no-such").await.unwrap();
-        assert!(ids.is_empty());
+        assert_eq!(ids, [] as [String; 0]);
     }
 
     async fn insert_acquisition_session(pool: &SqlitePool, id: &str, frame_ids: &str) {

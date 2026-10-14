@@ -158,7 +158,7 @@ async fn save_site_creates_revision_one_and_refuses_stale_revisions_and_duplicat
     let renamed = SiteInput { name: "  Back garden ".into(), ..backyard_input() };
     let saved = catalog.save_site(Some(backyard.id), Some(1), &renamed).await.unwrap();
     assert_eq!((saved.site.revision, saved.site.name.as_str()), (2, "Back garden"));
-    assert!(saved.needs_reconfirmation.is_empty());
+    assert_eq!(saved.needs_reconfirmation, [] as [uuid::Uuid; 0]);
     assert_eq!(saved.site.created_at, backyard.created_at);
 
     let before = dump(&fx.db, &PLANNING_TABLES).await;
@@ -192,7 +192,7 @@ async fn the_default_site_is_explicit_and_changing_it_reconfirms_other_subscript
 
     let set = catalog.set_default_site(Some(backyard.id), 0).await.unwrap();
     assert_eq!((set.settings.default_site_id, set.settings.revision), (Some(backyard.id), 1));
-    assert!(set.needs_reconfirmation.is_empty());
+    assert_eq!(set.needs_reconfirmation, [] as [uuid::Uuid; 0]);
     let stale = catalog.set_default_site(Some(athens.id), 0).await.unwrap_err();
     conflict_at(&stale, PLANNING_SETTINGS_ID, 1);
     let missing = catalog.set_default_site(Some(Uuid::new_v4()), 1).await.unwrap_err();
@@ -210,7 +210,7 @@ async fn the_default_site_is_explicit_and_changing_it_reconfirms_other_subscript
 
     // Re-saving the same default moves nothing; another default moves both.
     let same = catalog.set_default_site(Some(backyard.id), 1).await.unwrap();
-    assert!(same.needs_reconfirmation.is_empty());
+    assert_eq!(same.needs_reconfirmation, [] as [uuid::Uuid; 0]);
     let moved = catalog.set_default_site(Some(athens.id), 2).await.unwrap();
     assert_eq!(moved.settings.revision, 3);
     let mut both = vec![ngc.candidate.id, ic.candidate.id];
@@ -222,11 +222,10 @@ async fn the_default_site_is_explicit_and_changing_it_reconfirms_other_subscript
         assert_eq!(subscription.state, SubscriptionState::NeedsReconfirmation);
         assert_eq!((subscription.block_reason, subscription.actions.len()), (None, 0));
     }
-    assert!(catalog
-        .reminder_subscriptions(Some(SubscriptionState::Enabled))
-        .await
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        catalog.reminder_subscriptions(Some(SubscriptionState::Enabled)).await.unwrap(),
+        [] as [platevault_model::ReminderSubscription; 0]
+    );
 
     // Clearing the default reconfirms every subscription, wherever it is.
     let on_athens = SubscriptionWrite { expected: Some(2), ..write(&ngc, &athens, 3) };
@@ -250,7 +249,7 @@ async fn editing_a_subscribed_site_moves_its_subscriptions_to_reconfirmation() {
     catalog.put_reminder_subscription(&write(&ngc, &backyard, 1)).await.unwrap();
     let moved_elsewhere =
         catalog.save_site(Some(athens.id), Some(1), &athens_input()).await.unwrap();
-    assert!(moved_elsewhere.needs_reconfirmation.is_empty());
+    assert_eq!(moved_elsewhere.needs_reconfirmation, [] as [uuid::Uuid; 0]);
     let edited = SiteInput { elevation_m: Some(7.0), ..backyard_input() };
     let saved = catalog.save_site(Some(backyard.id), Some(1), &edited).await.unwrap();
     assert_eq!(saved.needs_reconfirmation, [ngc.candidate.id]);
