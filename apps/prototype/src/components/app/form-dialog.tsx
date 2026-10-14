@@ -146,6 +146,15 @@ export function useDialogCommit({ open, onOpenChange, focusAfterConfirm, focusAf
   const running = useRef(false)
   const confirmed = useRef(false)
   const isOpen = open ?? internalOpen
+  // The control focused as the dialog opens is its opener. A dialog opened from state (a row's Edit…, a section's Add…) has
+  // no trigger of its own, so closing returns focus there unless the host names another target (WCAG 2.4.3).
+  const opener = useRef<HTMLElement | null>(null)
+  const wasOpen = useRef(false)
+  if (isOpen && !wasOpen.current && typeof document !== "undefined") {
+    const focused = document.activeElement
+    opener.current = focused instanceof HTMLElement && focused !== document.body ? focused : null
+  }
+  wasOpen.current = isOpen
 
   function setOpen(next: boolean) {
     // A write in flight keeps the dialog, so its outcome is never lost.
@@ -192,7 +201,7 @@ export function useDialogCommit({ open, onOpenChange, focusAfterConfirm, focusAf
   function finalFocus(): HTMLElement | boolean {
     const target = (confirmed.current ? focusAfterConfirm : focusAfterCancel)?.()
     confirmed.current = false
-    if (!target) return true
+    if (!target) return opener.current?.isConnected ? opener.current : true
     // Headings and regions are not focusable until they carry a tabindex.
     if (!target.hasAttribute("tabindex") && target.tabIndex < 0) target.tabIndex = -1
     return target
