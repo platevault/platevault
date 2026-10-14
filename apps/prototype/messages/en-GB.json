@@ -674,9 +674,19 @@
   "home_import_paused": "Import paused · {percent}%",
   "home_importing": [
     {
-      "declarations": ["input count", "input files", "input percent", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "Importing {files} file · {percent}%", "countPlural=*": "Importing {files} files · {percent}%" }
+      "declarations": [
+        "input count",
+        "input files",
+        "input percent",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Importing {files} file · {percent}%",
+        "countPlural=*": "Importing {files} files · {percent}%"
+      }
     }
   ],
   "home_import_failed": "Import failed",
@@ -685,9 +695,18 @@
   "home_scan_unfinished": "Last scan didn't finish",
   "home_new_files": [
     {
-      "declarations": ["input count", "input files", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{files} new file", "countPlural=*": "{files} new files" }
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} new file",
+        "countPlural=*": "{files} new files"
+      }
     }
   ],
   "home_column_location": "Location",
@@ -700,9 +719,18 @@
   "home_clean_up_frees": "Clean up frees {bytes}",
   "home_clean_up_links": [
     {
-      "declarations": ["input count", "input n", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{n} link to remove", "countPlural=*": "{n} links to remove" }
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} link to remove",
+        "countPlural=*": "{n} links to remove"
+      }
     }
   ],
   "home_import_to_start": "Import captures to start sorting them.",
@@ -3374,28 +3402,10 @@
   "settings_raw_frames": "Raw frames",
   "settings_keep_raws": "Keep raw calibration frames",
   "settings_keep_raws_help": "Off: raws go to the OS Trash once their master registers.",
-  "template_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame",
-        "countPlural=*": "{n} frames"
-      }
-    }
-  ],
   "settings_name_required": "Name required",
   "template_add_channel": "Add a channel",
   "template_hours_or_frames": "Hours or frames needed · {channels}",
   "template_goals": "Goals",
-  "template_osc_about": "About OSC and Dual-band",
-  "template_osc_help": "OSC: no filter or a broadband filter on an OSC camera. Dual-band: a filter passing two narrow bands.",
   "template_table_caption": "{group} goal templates",
   "template_column_template": "Template",
   "template_copy_name": "{name} copy",
@@ -3413,34 +3423,10 @@
   "naming_type_flats": "Flats",
   "naming_type_darks": "Darks",
   "naming_type_bias": "Bias",
-  "naming_fallbacks": "Fallbacks",
-  "naming_no_fallbacks": "No fallbacks",
-  "naming_custom": "Custom",
-  "naming_restore_default": "Restore default",
   "naming_discard": "Discard",
-  "naming_tokens_about": "Tokens and fallbacks",
-  "naming_empty": "Empty",
-  "naming_chip_token": "{text}, {label} token",
-  "naming_chip_separator": "/, folder separator",
-  "naming_chip_text": "{text}, text",
-  "naming_chip_hint": "← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.",
-  "naming_move_left": "Move chip left",
-  "naming_move_right": "Move chip right",
-  "naming_insert_token": "Insert a token",
-  "naming_token_title": "{label}; falls back to “{fallback}”",
-  "naming_add_folder": "/ folder",
-  "naming_text_to_insert": "Text to insert",
-  "naming_text_placeholder": "Text",
-  "naming_add_text": "Add text",
   "naming_as_text": "As text",
-  "naming_not_saved": "Not saved · {errors}",
-  "naming_preview": "Preview",
-  "naming_unsaved": "Unsaved",
   "naming_preview_library": "Library · {from}",
-  "naming_preview_no_metadata": "No metadata",
-  "naming_frame_types": "Frame types",
   "equipment_pick_band": "Pick a band",
-  "equipment_add_value": "Add {value}",
   "equipment_add_filter": "Add filter",
   "equipment_matches_filter": "Matches FILTER",
   "equipment_comma_separated": "Comma-separated",
@@ -3455,60 +3441,15 @@
   "equipment_sensor_width": "Sensor width (px)",
   "equipment_sensor_height": "Sensor height (px)",
   "equipment_pixel_size": "Pixel size (µm)",
-  "equipment_focal_length": "Effective focal length (mm)",
   "equipment_field_of_view": "Field of view",
   "equipment_rename": "Rename",
-  "equipment_unknown_filter": [
-    {
-      "declarations": [
-        "input count",
-        "input value",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Unknown FILTER “{value}” · {n} session",
-        "countPlural=*": "Unknown FILTER “{value}” · {n} sessions"
-      }
-    }
-  ],
-  "equipment_not_now": "Not now",
-  "equipment_hidden": "Hidden",
-  "equipment_show": "Show",
   "equipment_camera": "Camera",
   "equipment_sensor": "Sensor",
   "equipment_telescope": "Telescope",
-  "equipment_derived": "Derived",
-  "equipment_osc_camera": "OSC camera",
   "equipment_filters": "Filters",
-  "equipment_to_rig": "to {name}",
   "equipment_no_filters_osc": "No filters · OSC",
-  "equipment_filters_of": "Filters of {name}",
-  "equipment_filter": "Filter",
-  "equipment_dual_band": "Dual-band",
   "equipment_rename_title": "Rename {name}",
   "equipment_rig_name": "Rig name",
-  "equipment_remove_filter_title": "Remove {filter} from {rig}?",
-  "equipment_remove_filter_change": "Remove {filter} ({bands})",
-  "equipment_remove_filter_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} session reads the filter as unknown",
-        "countPlural=*": "{n} sessions read the filter as unknown"
-      }
-    }
-  ],
   "equipment_no_rigs": "No rigs",
   "settings_lookup_test_heading": "Test",
   "review_filter_all": "All",
@@ -6403,9 +6344,6 @@
   "equipment_add_camera": "Add camera",
   "equipment_add_telescope": "Add telescope",
   "equipment_saved_named": "Saved {name}",
-  "equipment_add_camera_open": "Add camera…",
-  "equipment_add_telescope_open": "Add telescope…",
-  "equipment_add_rig_open": "Add rig…",
   "equipment_name": "Name",
   "equipment_native_focal_length": "Focal length (mm)",
   "equipment_aperture": "Aperture (mm)",
@@ -6417,7 +6355,6 @@
   "equipment_source": "Source",
   "equipment_cameras": "Cameras",
   "equipment_telescopes": "Telescopes",
-  "equipment_with_reducer": "with {factor}× reducer",
   "shell_quit_title": [
     {
       "declarations": [
@@ -7057,16 +6994,34 @@
   "calendar_never_dark": "never dark",
   "calendar_goals_suit": [
     {
-      "declarations": ["input count", "input n", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{n} goal suits it", "countPlural=*": "{n} goals suit it" }
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} goal suits it",
+        "countPlural=*": "{n} goals suit it"
+      }
     }
   ],
   "calendar_planned": [
     {
-      "declarations": ["input count", "input n", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{n} Target planned", "countPlural=*": "{n} Targets planned" }
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Target planned",
+        "countPlural=*": "{n} Targets planned"
+      }
     }
   ],
   "calendar_legend_moon": "Moon phase",
@@ -7819,5 +7774,98 @@
   "import_review_sessions": "Review sessions",
   "calibration_open_master": "Open master",
   "calibration_shown_master": "{name} is back in Masters",
-  "import_match": "Match"
+  "import_match": "Match",
+  "equipment_used_by_rigs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Used by {count} rig",
+        "countPlural=*": "Used by {count} rigs"
+      }
+    }
+  ],
+  "equipment_used_by_projects": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Used by {count} Project",
+        "countPlural=*": "Used by {count} Projects"
+      }
+    }
+  ],
+  "equipment_used_by_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session",
+        "countPlural=*": "{count} sessions"
+      }
+    }
+  ],
+  "equipment_used_by_masters": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "equipment_in_use": "In use",
+  "equipment_no_cameras": "No cameras",
+  "equipment_no_telescopes": "No telescopes",
+  "equipment_no_reducers": "No reducers",
+  "equipment_pixel_size_short": "Pixel size",
+  "equipment_optics": "Optics",
+  "equipment_rig_parts": "Parts",
+  "equipment_add_reducer": "Add reducer",
+  "equipment_reducers": "Reducers",
+  "equipment_reducer": "Reducer",
+  "equipment_no_reducer": "None",
+  "equipment_factor": "Factor",
+  "equipment_filter_twin": "Two filters named {name}",
+  "equipment_add_value_to_rig": "Add {value} to {rig}",
+  "equipment_filter_value": "FILTER value",
+  "equipment_unknown_filters": "Unknown filters",
+  "naming_folder_templates": "Folder templates",
+  "naming_no_changes": "No changes",
+  "store_label_naming_omit": "Omitted naming tokens",
+  "store_saved_naming_omit": "Omitted tokens saved",
+  "template_balance_range": "{min}–{max} %",
+  "template_balance_unit": "±%",
+  "template_window_finish_by": "Finish by",
+  "catalogue_fields_choice_list_caption": "Several picked, with help · none picked, with an error · options disabled · whole field disabled · no options (empty).",
+  "catalogue_fields_choice_list_help": "Bands the filter passes",
+  "catalogue_fields_token_table_caption": "A template field without its own token table, then the page's TokenTable with the Omit option.",
+  "catalogue_goal_fields_desc": "C7 goal fields: each goal counts time or frames with an optional FWHM bar; the per-channel template editor.",
+  "catalogue_goal_fields_time": "counts time, with a bar",
+  "catalogue_goal_fields_frames": "counts frames",
+  "catalogue_goal_fields_missing": "no amount (error)",
+  "catalogue_goal_fields_values": "goals and From template",
+  "catalogue_goal_fields_channels": "limited to the rig set's channels",
+  "catalogue_goal_fields_empty": "no goals (empty)"
 }

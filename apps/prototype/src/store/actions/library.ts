@@ -137,7 +137,7 @@ export interface FilingMove {
 
 /** The light template's folder under a location for these token values, without a trailing slash. */
 function lightFolder(state: PrototypeState, location: Location, values: NamingValues): string {
-  const { path } = resolveNamingTemplate(namingTemplate(state.settings.naming, "light"), values)
+  const { path } = resolveNamingTemplate(namingTemplate(state.settings.naming, "light"), values, state.settings.namingOmit)
   return `${location.path.replace(/\/+$/, "")}/${path.replace(/^\/+|\/+$/g, "")}`
 }
 

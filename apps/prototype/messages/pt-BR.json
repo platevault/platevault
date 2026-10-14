@@ -674,9 +674,19 @@
   "home_import_paused": "Importação pausada · {percent}%",
   "home_importing": [
     {
-      "declarations": ["input count", "input files", "input percent", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "Importando {files} arquivo · {percent}%", "countPlural=*": "Importando {files} arquivos · {percent}%" }
+      "declarations": [
+        "input count",
+        "input files",
+        "input percent",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Importando {files} arquivo · {percent}%",
+        "countPlural=*": "Importando {files} arquivos · {percent}%"
+      }
     }
   ],
   "home_import_failed": "Falha na importação",
@@ -685,9 +695,18 @@
   "home_scan_unfinished": "O último escaneamento não terminou",
   "home_new_files": [
     {
-      "declarations": ["input count", "input files", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{files} arquivo novo", "countPlural=*": "{files} arquivos novos" }
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} arquivo novo",
+        "countPlural=*": "{files} arquivos novos"
+      }
     }
   ],
   "home_column_location": "Local",
@@ -700,9 +719,18 @@
   "home_clean_up_frees": "Limpar libera {bytes}",
   "home_clean_up_links": [
     {
-      "declarations": ["input count", "input n", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{n} link a remover", "countPlural=*": "{n} links a remover" }
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} link a remover",
+        "countPlural=*": "{n} links a remover"
+      }
     }
   ],
   "home_import_to_start": "Importe capturas para começar a organizá-las.",
@@ -3388,28 +3416,10 @@
   "settings_raw_frames": "Frames brutos",
   "settings_keep_raws": "Manter frames brutos de calibração",
   "settings_keep_raws_help": "Desativado: os brutos vão para a Lixeira do sistema quando o master é registrado.",
-  "template_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame",
-        "countPlural=*": "{n} frames"
-      }
-    }
-  ],
   "settings_name_required": "Nome obrigatório",
   "template_add_channel": "Adicione um canal",
   "template_hours_or_frames": "Horas ou frames necessários · {channels}",
   "template_goals": "Metas",
-  "template_osc_about": "Sobre OSC e Dual-band",
-  "template_osc_help": "OSC: sem filtro ou com filtro de banda larga em câmera OSC. Dual-band: filtro que deixa passar duas bandas estreitas.",
   "template_table_caption": "Modelos de metas: {group}",
   "template_column_template": "Modelo",
   "template_copy_name": "{name} cópia",
@@ -3427,34 +3437,10 @@
   "naming_type_flats": "Flats",
   "naming_type_darks": "Darks",
   "naming_type_bias": "Bias",
-  "naming_fallbacks": "Substitutos",
-  "naming_no_fallbacks": "Sem substitutos",
-  "naming_custom": "Personalizado",
-  "naming_restore_default": "Restaurar padrão",
   "naming_discard": "Descartar",
-  "naming_tokens_about": "Tokens e substitutos",
-  "naming_empty": "Vazio",
-  "naming_chip_token": "{text}, token {label}",
-  "naming_chip_separator": "/, separador de pasta",
-  "naming_chip_text": "{text}, texto",
-  "naming_chip_hint": "← e → navegam entre os chips, ⌥← e ⌥→ movem um chip, Delete o remove.",
-  "naming_move_left": "Mover chip para a esquerda",
-  "naming_move_right": "Mover chip para a direita",
-  "naming_insert_token": "Inserir um token",
-  "naming_token_title": "{label}; substituto “{fallback}”",
-  "naming_add_folder": "/ pasta",
-  "naming_text_to_insert": "Texto a inserir",
-  "naming_text_placeholder": "Texto",
-  "naming_add_text": "Adicionar texto",
   "naming_as_text": "Como texto",
-  "naming_not_saved": "Não salvo · {errors}",
-  "naming_preview": "Prévia",
-  "naming_unsaved": "Não salvo",
   "naming_preview_library": "Biblioteca · {from}",
-  "naming_preview_no_metadata": "Sem metadados",
-  "naming_frame_types": "Tipos de frame",
   "equipment_pick_band": "Escolha uma banda",
-  "equipment_add_value": "Adicionar {value}",
   "equipment_add_filter": "Adicionar filtro",
   "equipment_matches_filter": "Corresponde a FILTER",
   "equipment_comma_separated": "Separados por vírgula",
@@ -3469,60 +3455,15 @@
   "equipment_sensor_width": "Largura do sensor (px)",
   "equipment_sensor_height": "Altura do sensor (px)",
   "equipment_pixel_size": "Tamanho do pixel (µm)",
-  "equipment_focal_length": "Distância focal efetiva (mm)",
   "equipment_field_of_view": "Campo de visão",
   "equipment_rename": "Renomear",
-  "equipment_unknown_filter": [
-    {
-      "declarations": [
-        "input count",
-        "input value",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "FILTER desconhecido “{value}” · {n} sessão",
-        "countPlural=*": "FILTER desconhecido “{value}” · {n} sessões"
-      }
-    }
-  ],
-  "equipment_not_now": "Agora não",
-  "equipment_hidden": "Ocultos",
-  "equipment_show": "Mostrar",
   "equipment_camera": "Câmera",
   "equipment_sensor": "Sensor",
   "equipment_telescope": "Telescópio",
-  "equipment_derived": "Calculado",
-  "equipment_osc_camera": "Câmera OSC",
   "equipment_filters": "Filtros",
-  "equipment_to_rig": "a {name}",
   "equipment_no_filters_osc": "Sem filtros · OSC",
-  "equipment_filters_of": "Filtros de {name}",
-  "equipment_filter": "Filtro",
-  "equipment_dual_band": "Dual-band",
   "equipment_rename_title": "Renomear {name}",
   "equipment_rig_name": "Nome do setup",
-  "equipment_remove_filter_title": "Remover {filter} de {rig}?",
-  "equipment_remove_filter_change": "Remover {filter} ({bands})",
-  "equipment_remove_filter_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} sessão passa a ler o filtro como desconhecido",
-        "countPlural=*": "{n} sessões passam a ler o filtro como desconhecido"
-      }
-    }
-  ],
   "equipment_no_rigs": "Nenhum setup",
   "settings_lookup_test_heading": "Teste",
   "review_filter_all": "Todos",
@@ -6417,9 +6358,6 @@
   "equipment_add_camera": "Adicionar câmera",
   "equipment_add_telescope": "Adicionar telescópio",
   "equipment_saved_named": "{name} salvo",
-  "equipment_add_camera_open": "Adicionar câmera…",
-  "equipment_add_telescope_open": "Adicionar telescópio…",
-  "equipment_add_rig_open": "Adicionar setup…",
   "equipment_name": "Nome",
   "equipment_native_focal_length": "Distância focal (mm)",
   "equipment_aperture": "Abertura (mm)",
@@ -6431,7 +6369,6 @@
   "equipment_source": "Origem",
   "equipment_cameras": "Câmeras",
   "equipment_telescopes": "Telescópios",
-  "equipment_with_reducer": "com redutor de {factor}×",
   "shell_quit_title": [
     {
       "declarations": [
@@ -7071,16 +7008,34 @@
   "calendar_never_dark": "nunca escurece",
   "calendar_goals_suit": [
     {
-      "declarations": ["input count", "input n", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{n} meta combina", "countPlural=*": "{n} metas combinam" }
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} meta combina",
+        "countPlural=*": "{n} metas combinam"
+      }
     }
   ],
   "calendar_planned": [
     {
-      "declarations": ["input count", "input n", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": { "countPlural=one": "{n} Alvo planejado", "countPlural=*": "{n} Alvos planejados" }
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Alvo planejado",
+        "countPlural=*": "{n} Alvos planejados"
+      }
     }
   ],
   "calendar_legend_moon": "Fase da Lua",
@@ -7833,5 +7788,98 @@
   "import_review_sessions": "Revisar sessões",
   "calibration_open_master": "Abrir master",
   "calibration_shown_master": "{name} voltou para Masters",
-  "import_match": "Correspondência"
+  "import_match": "Correspondência",
+  "equipment_used_by_rigs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Usado por {count} setup",
+        "countPlural=*": "Usado por {count} setups"
+      }
+    }
+  ],
+  "equipment_used_by_projects": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Usado por {count} projeto",
+        "countPlural=*": "Usado por {count} projetos"
+      }
+    }
+  ],
+  "equipment_used_by_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão",
+        "countPlural=*": "{count} sessões"
+      }
+    }
+  ],
+  "equipment_used_by_masters": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "equipment_in_use": "Em uso",
+  "equipment_no_cameras": "Sem câmeras",
+  "equipment_no_telescopes": "Sem telescópios",
+  "equipment_no_reducers": "Sem redutores",
+  "equipment_pixel_size_short": "Tamanho do pixel",
+  "equipment_optics": "Óptica",
+  "equipment_rig_parts": "Componentes",
+  "equipment_add_reducer": "Adicionar redutor",
+  "equipment_reducers": "Redutores",
+  "equipment_reducer": "Redutor",
+  "equipment_no_reducer": "Nenhum",
+  "equipment_factor": "Fator",
+  "equipment_filter_twin": "Dois filtros chamados {name}",
+  "equipment_add_value_to_rig": "Adicionar {value} a {rig}",
+  "equipment_filter_value": "Valor de FILTER",
+  "equipment_unknown_filters": "Filtros desconhecidos",
+  "naming_folder_templates": "Modelos de pasta",
+  "naming_no_changes": "Sem alterações",
+  "store_label_naming_omit": "Tokens de nomeação omitidos",
+  "store_saved_naming_omit": "Tokens omitidos salvos",
+  "template_balance_range": "{min}–{max} %",
+  "template_balance_unit": "±%",
+  "template_window_finish_by": "Concluir até",
+  "catalogue_fields_choice_list_caption": "Várias marcadas, com ajuda · nenhuma marcada, com erro · opções desativadas · campo todo desativado · sem opções (vazio).",
+  "catalogue_fields_choice_list_help": "Bandas que o filtro deixa passar",
+  "catalogue_fields_token_table_caption": "Um campo de modelo sem a sua própria tabela de tokens e, depois, a TokenTable da página com a opção Omitir.",
+  "catalogue_goal_fields_desc": "Campos de meta C7: cada meta conta tempo ou frames com uma barra de FWHM opcional; o editor de modelo por canal.",
+  "catalogue_goal_fields_time": "conta tempo, com barra",
+  "catalogue_goal_fields_frames": "conta frames",
+  "catalogue_goal_fields_missing": "sem quantidade (erro)",
+  "catalogue_goal_fields_values": "metas e Do modelo",
+  "catalogue_goal_fields_channels": "limitado aos canais dos setups",
+  "catalogue_goal_fields_empty": "sem metas (vazio)"
 }

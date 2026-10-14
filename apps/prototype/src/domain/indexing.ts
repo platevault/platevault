@@ -278,7 +278,7 @@ function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): Optic
     telescopeId: telescope.id,
     effectiveFocalLengthMm: telescope.focalLengthMm,
     notes: "",
-    filters: [],
+    filterIds: [],
   }
   catalog.opticalTrains[train.id] = train
   return train

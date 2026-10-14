@@ -131,7 +131,7 @@ function importStep(state: PrototypeState, process: CalibrationProcess): StepRes
   const values = session ? sessionMasterValues(state.catalog, session, process.kind) : headerNamingValues(source.header, `master-${process.kind}`)
   const night = session?.night ?? nightOf(source.header.dateObs)
   const ext = source.path.slice(source.path.lastIndexOf(".") + 1)
-  const path = masterStoragePath(storage, state.settings.naming, process.kind, values, night, ext)
+  const path = masterStoragePath(storage, state.settings, process.kind, values, night, ext)
   const volumeId = volumeForPath(state.disk, path)
   if (!volumeId || !state.disk.volumes[volumeId]?.mounted) return fail(state, process, "import", msg("issue_location_offline", { name: storage.displayName }))
   if (state.disk.deniedPaths.some((p) => isUnder(path, p))) return fail(state, process, "import", msg("status_access_denied"))

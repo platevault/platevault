@@ -17,6 +17,7 @@ import { type ReactNode, useId, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { CheckboxGroup } from "@/components/ui/checkbox-group"
 import { Combobox, ComboboxCollection, ComboboxContent, ComboboxEmpty, ComboboxGroup, ComboboxInput, ComboboxItem, ComboboxLabel, ComboboxList } from "@/components/ui/combobox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -439,6 +440,53 @@ export function SwitchField({ label, description, checked, onChange, disabled, i
   )
 }
 
+export interface ChoiceListFieldProps<V extends string> extends FieldChrome {
+  /** The options picked, in any order; `onChange` returns them in option order. */
+  value: readonly V[]
+  options: readonly FieldOption<V>[]
+  onChange: (value: V[]) => void
+  disabled?: boolean
+  /** Shown instead of the checkboxes when there is no option. */
+  empty?: ReactNode
+}
+
+/**
+ * Any number of choices from a short list: one checkbox per option, named
+ * together as one group by the field's label (`role="group"` with
+ * `aria-labelledby`), e.g. the bands a filter passes or the filters a rig
+ * carries. Picking none is a valid value; a host that needs one says so
+ * through `error`.
+ */
+export function ChoiceListField<V extends string>({ value, options, onChange, disabled, empty, ...chrome }: ChoiceListFieldProps<V>) {
+  return (
+    <Field {...chrome}>
+      {(control) =>
+        options.length === 0 && empty ? (
+          <p id={control.id} className="text-sm text-muted-foreground">
+            {empty}
+          </p>
+        ) : (
+          <CheckboxGroup
+            {...control}
+            role="group"
+            value={[...value]}
+            onValueChange={(next) => onChange(options.filter((option) => next.includes(option.value)).map((option) => option.value))}
+            disabled={disabled}
+            className="min-h-8 items-center"
+          >
+            {options.map((option) => (
+              <label key={option.value} className="inline-flex items-center gap-1.5 text-sm">
+                <Checkbox value={option.value} disabled={option.disabled} />
+                {option.label}
+              </label>
+            ))}
+          </CheckboxGroup>
+        )
+      }
+    </Field>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // PathField: a path chosen with the OS chooser
 // ---------------------------------------------------------------------------
@@ -545,46 +593,27 @@ export function resolveTokenTemplate(template: string, tokens: readonly Template
   return resolved.replace(/\/{2,}/g, "/").replace(/^\//, "")
 }
 
-export interface TokenTemplateFieldProps extends FieldChrome {
-  value: string
-  onChange: (value: string) => void
-  /** The token whitelist, in table order. */
-  tokens: readonly TemplateToken[]
+export interface TokenTableOptions {
   /** Tokens left out when their value is missing, instead of writing the fallback. */
   omitWhenMissing?: readonly string[]
   /** Adds an Omit checkbox per token to the table. */
   onOmitWhenMissingChange?: (tokens: string[]) => void
-  /** Shown before the preview path, e.g. the library root. */
-  prefix?: string
-  /** Real values for the first preview line, e.g. a library item; the tokens' examples otherwise. */
-  sample?: { label: string; values: TemplateValues }
-  /** Resolves the preview; `resolveTokenTemplate` by default. */
-  resolve?: (template: string, values: TemplateValues, omit: readonly string[]) => string
+}
+
+export interface TokenTableProps extends TokenTableOptions {
+  /** The token whitelist, in table order. */
+  tokens: readonly TemplateToken[]
 }
 
 /**
- * A `{token}` template typed as text: unknown tokens and stray braces are
- * inline errors, a live preview shows the result with the values available
- * and with them missing, and a table lists the tokens with their example and
- * what happens when the value is missing.
+ * The columns of a token table: each token with its name, a typical value
+ * and what it writes when the value is missing (its fallback, or nothing
+ * once omitted). A page with several templates over one token set shows the
+ * table once, as a ListSection, beside fields that pass `showTokens={false}`.
  */
-export function TokenTemplateField({ value, onChange, tokens, omitWhenMissing = [], onOmitWhenMissingChange, prefix, sample, resolve, error, ...chrome }: TokenTemplateFieldProps) {
+export function useTokenColumns({ omitWhenMissing = [], onOmitWhenMissingChange }: TokenTableOptions): Column<TemplateToken>[] {
   const m = useMessages()
-  const previewId = useId()
-  const errors = useTokenErrors(
-    value,
-    tokens.map((t) => t.token),
-    error,
-  )
-  const run = resolve ?? ((template: string, values: TemplateValues, omit: readonly string[]) => resolveTokenTemplate(template, tokens, values, omit))
-  const examples = Object.fromEntries(tokens.map((t) => [t.token, t.example]))
-  const shown = (path: string) => (
-    <>
-      {prefix ? <span className="text-muted-foreground">{prefix.endsWith("/") ? prefix : `${prefix}/`}</span> : null}
-      {path}
-    </>
-  )
-  const columns: Column<TemplateToken>[] = [
+  return [
     { id: "token", header: m.fields_token_col_token(), rowHeader: true, cell: (t) => <span className="font-mono text-xs">{`{${t.token}}`}</span>, sortValue: (t) => t.token },
     { id: "name", header: m.fields_token_col_name(), cell: (t) => t.label, sortValue: (t) => t.label },
     { id: "example", header: m.fields_token_col_example(), cell: (t) => <span className="font-mono text-xs">{t.example}</span>, sortValue: (t) => t.example },
@@ -610,6 +639,50 @@ export function TokenTemplateField({ value, onChange, tokens, omitWhenMissing = 
       },
     },
   ]
+}
+
+/** The token table on its own: one per page whose template fields pass `showTokens={false}`. */
+export function TokenTable({ tokens, ...options }: TokenTableProps) {
+  const m = useMessages()
+  const columns = useTokenColumns(options)
+  return <DataTable label={m.fields_tokens()} rows={[...tokens]} columns={columns} getRowId={(t) => t.token} scroll="none" />
+}
+
+export interface TokenTemplateFieldProps extends FieldChrome, TokenTableProps {
+  value: string
+  onChange: (value: string) => void
+  /** Shown before the preview path, e.g. the library root. */
+  prefix?: string
+  /** Real values for the first preview line, e.g. a library item; the tokens' examples otherwise. */
+  sample?: { label: string; values: TemplateValues }
+  /** Resolves the preview; `resolveTokenTemplate` by default. */
+  resolve?: (template: string, values: TemplateValues, omit: readonly string[]) => string
+  /** The field's own token table, on by default; off where the page shows one TokenTable for several fields. */
+  showTokens?: boolean
+}
+
+/**
+ * A `{token}` template typed as text: unknown tokens and stray braces are
+ * inline errors, a live preview shows the result with the values available
+ * and with them missing, and a table lists the tokens with their example and
+ * what happens when the value is missing.
+ */
+export function TokenTemplateField({ value, onChange, tokens, omitWhenMissing = [], onOmitWhenMissingChange, prefix, sample, resolve, showTokens = true, error, ...chrome }: TokenTemplateFieldProps) {
+  const m = useMessages()
+  const previewId = useId()
+  const errors = useTokenErrors(
+    value,
+    tokens.map((t) => t.token),
+    error,
+  )
+  const run = resolve ?? ((template: string, values: TemplateValues, omit: readonly string[]) => resolveTokenTemplate(template, tokens, values, omit))
+  const examples = Object.fromEntries(tokens.map((t) => [t.token, t.example]))
+  const shown = (path: string) => (
+    <>
+      {prefix ? <span className="text-muted-foreground">{prefix.endsWith("/") ? prefix : `${prefix}/`}</span> : null}
+      {path}
+    </>
+  )
   return (
     <Field
       {...chrome}
@@ -627,7 +700,7 @@ export function TokenTemplateField({ value, onChange, tokens, omitWhenMissing = 
               ]}
             />
           </div>
-          <DataTable label={m.fields_tokens()} rows={[...tokens]} columns={columns} getRowId={(t) => t.token} scroll="none" />
+          {showTokens ? <TokenTable tokens={tokens} omitWhenMissing={omitWhenMissing} onOmitWhenMissingChange={onOmitWhenMissingChange} /> : null}
         </div>
       }
     >

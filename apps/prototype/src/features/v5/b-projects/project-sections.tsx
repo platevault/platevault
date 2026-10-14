@@ -22,6 +22,7 @@ import { TargetPicker } from "@/components/app/pickers"
 import { Refusal } from "@/components/app/refusal"
 import { StatusBadge } from "@/components/app/status"
 import type { DetailSection } from "@/components/templates/detail-page"
+import { DEFAULT_GOAL, type GoalKinds, GoalKindsFields, goalKindsError, kindsLine } from "@/components/domain/goal-fields"
 import {
   type GoalProgress,
   type GroupPanelState,
@@ -67,7 +68,6 @@ import { addRig, addSubject, applyGoalTemplate, changeSubjectTarget, removeRig, 
 import { trashRun } from "@/store/actions/runs"
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, nowIso, type PrototypeState, useStore } from "@/store/core"
-import { DEFAULT_GOAL, type GoalKinds, GoalKindsFields, goalKindsError, kindsLine } from "./goals"
 import { goalTemplates, projectChannels, templateChanges } from "./model"
 import { type SubjectPick, useTargetSearch } from "./parts"
 import { StartRunDialog } from "./start-run"

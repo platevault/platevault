@@ -52,8 +52,8 @@ export type OperationId = string
 export type CameraId = string
 export type TelescopeId = string
 export type OpticalTrainId = string
-/** Rig filter id, unique within its rig. */
-export type RigFilterId = string
+export type ReducerId = string
+export type FilterId = string
 export type SiteId = string
 export type MeasurementImportId = string
 export type CalibrationProcessId = string
@@ -441,9 +441,11 @@ export interface Telescope {
 }
 
 /**
- * A rig: one optical train (camera plus telescope) taking part in Projects
- * (D-W37). Its filter list drives the Targets band strip, the narrowband
- * presets and the Fit column (D-W31).
+ * A rig: one optical train (camera plus telescope, optionally a reducer)
+ * taking part in Projects (D-W37). It selects its parts and its filters from
+ * the Equipment records and edits none of them (ngm9g, C E2). Its filters
+ * drive the Targets band strip, the narrowband presets and the Fit column
+ * (D-W31).
  */
 export interface OpticalTrain {
   id: OpticalTrainId
@@ -452,19 +454,27 @@ export interface OpticalTrain {
   source: RecordSource
   cameraId: CameraId | null
   telescopeId: TelescopeId | null
+  /** The reducer or extender in the train; null or absent without one. The effective focal length already includes its factor. */
+  reducerId?: ReducerId | null
   effectiveFocalLengthMm: number
-  /** Reducer or extender factor of a rig added by hand (0.8 for a 0.8× reducer); the effective focal length already includes it. */
-  reducer?: number
   notes: string
-  /** Plain filter list, the same form for mono and OSC cameras (PLAN-EQ-FR-01). */
-  filters: RigFilter[]
+  /** The filters the rig carries, the same form for mono and OSC cameras (PLAN-EQ-FR-01); Mono or OSC still comes from the camera. */
+  filterIds: FilterId[]
+}
+
+/** A focal reducer or extender: its factor scales the telescope's focal length (0.8 for a 0.8× reducer, 2 for a 2× Barlow). */
+export interface Reducer {
+  id: ReducerId
+  name: string
+  factor: number
 }
 
 /** The seven bands of the Targets Filters strip (PLAN-TGT-FR-06). */
 export type Band = "L" | "R" | "G" | "B" | "Ha" | "SII" | "OIII"
 
-export interface RigFilter {
-  id: RigFilterId
+/** A filter record (Settings › Equipment › Filters, ngm9g); rigs select it by id. */
+export interface Filter {
+  id: FilterId
   name: string
   /** FITS FILTER header values this filter matches, compared case-insensitively. */
   matches: string[]
@@ -1365,6 +1375,8 @@ export interface AppSettings {
   lastOutputParent: string | null
   /** Overridden naming templates only; the rest use the per-type defaults (STO-IMP-FR-07). */
   naming: Partial<Record<NamingFrameType, string>>
+  /** Tokens a naming template leaves out when their value is missing, instead of writing their fallback (wmbp9); the folder they leave empty collapses. */
+  namingOmit: NamingToken[]
   /** Keep raw calibration frames after their master registers; off moves them to the OS Trash (P-CAL3). */
   keepRawCalibration: boolean
   /** Darks, bias and dark flats older than this many days read "Old · {n} d" (C9; flats are exempt). */
@@ -1408,6 +1420,8 @@ export interface Catalog {
   targets: Record<TargetId, Target>
   cameras: Record<CameraId, Camera>
   telescopes: Record<TelescopeId, Telescope>
+  reducers: Record<ReducerId, Reducer>
+  filters: Record<FilterId, Filter>
   opticalTrains: Record<OpticalTrainId, OpticalTrain>
   sites: Record<SiteId, ObservingSite>
   projects: Record<ProjectId, Project>

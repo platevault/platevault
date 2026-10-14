@@ -280,11 +280,11 @@ function destinationFor(state: PrototypeState, location: Location, file: DiskFil
   if (routeFor(type) === "masters") {
     const kind = type.slice("master-".length) as CalibrationKind
     const ext = file.path.slice(file.path.lastIndexOf(".") + 1)
-    const destPath = masterStoragePath(location, state.settings.naming, kind, headerNamingValues(header, type), nightOf(header.dateObs), ext)
-    const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
+    const destPath = masterStoragePath(location, state.settings, kind, headerNamingValues(header, type), nightOf(header.dateObs), ext)
+    const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type), state.settings.namingOmit)
     return { destFolder: destPath.slice(0, destPath.lastIndexOf("/") + 1), destPath, fallbacks: resolved.fallbacks }
   }
-  const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type, target))
+  const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type, target), state.settings.namingOmit)
   const destFolder = joinPath(location.path, resolved.path.endsWith("/") ? resolved.path : `${resolved.path}/`)
   // Unclassified is the user's choice, not missing metadata: the Target column shows it.
   const fallbacks = type === "light" ? resolved.fallbacks.filter((t) => t !== "target") : resolved.fallbacks

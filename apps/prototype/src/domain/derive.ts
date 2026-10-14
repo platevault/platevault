@@ -39,6 +39,7 @@ import type {
   CalibrationProcessId,
   CalibrationStepId,
   Catalog,
+  Filter,
   CorrectionField,
   MasterId,
   MetadataDecision,
@@ -170,11 +171,16 @@ export function rigCameraKind(catalog: Catalog, rig: OpticalTrain): CameraKind |
   return camera?.kind ?? null
 }
 
-/** Bands a rig can capture: OSC adds R, G and B without a filter; each listed filter adds its bands (PLAN-EQ-FR-02). */
+/** The filter records a rig carries, in its order; an id no longer in the catalog is skipped. */
+export function rigFilters(catalog: Catalog, rig: OpticalTrain): Filter[] {
+  return rig.filterIds.flatMap((id) => catalog.filters[id] ?? [])
+}
+
+/** Bands a rig can capture: OSC adds R, G and B without a filter; each of its filters adds its bands (PLAN-EQ-FR-02). */
 export function rigBands(catalog: Catalog, rig: OpticalTrain): Band[] {
   const bands = new Set<Band>()
   if (rigCameraKind(catalog, rig) === "osc") for (const band of ["R", "G", "B"] as Band[]) bands.add(band)
-  for (const filter of rig.filters) for (const band of filter.bands) bands.add(band)
+  for (const filter of rigFilters(catalog, rig)) for (const band of filter.bands) bands.add(band)
   return BANDS.filter((band) => bands.has(band))
 }
 
@@ -195,11 +201,11 @@ export function rigFieldOfView(catalog: Catalog, rig: OpticalTrain): FieldOfView
   return fieldOfView(rig, camera)
 }
 
-/** The rig filter a FITS FILTER value matches, case-insensitively. */
-export function rigFilterFor(rig: OpticalTrain, value: string | null) {
+/** The rig's filter a FITS FILTER value matches, by name or by one of its matches, case-insensitively. */
+export function rigFilterFor(catalog: Catalog, rig: OpticalTrain, value: string | null): Filter | null {
   if (!value) return null
   const key = value.toLowerCase()
-  return rig.filters.find((f) => f.name.toLowerCase() === key || f.matches.some((m) => m.toLowerCase() === key)) ?? null
+  return rigFilters(catalog, rig).find((f) => f.name.toLowerCase() === key || f.matches.some((m) => m.toLowerCase() === key)) ?? null
 }
 
 /** FILTER values seen on a rig's sessions that match none of its filters: "Add {value} to {rig}" (PLAN-EQ-FR-04). */
@@ -209,7 +215,7 @@ export function unknownFilterValues(catalog: Catalog, rigId: OpticalTrainId): st
   const values = new Set<string>()
   for (const session of liveLightSessions(catalog)) {
     if (sessionRigId(session) !== rigId || !session.channel) continue
-    if (!rigFilterFor(rig, session.channel)) values.add(session.channel)
+    if (!rigFilterFor(catalog, rig, session.channel)) values.add(session.channel)
   }
   return [...values].sort()
 }
@@ -224,7 +230,7 @@ export function goalChannel(catalog: Catalog, session: Session): GoalChannel | n
   const rigId = sessionRigId(session)
   const rig = rigId ? catalog.opticalTrains[rigId] : undefined
   const osc = rig ? rigCameraKind(catalog, rig) === "osc" : false
-  const filter = rig ? rigFilterFor(rig, session.channel) : null
+  const filter = rig ? rigFilterFor(catalog, rig, session.channel) : null
   if (filter) {
     if (filter.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2) return "Dual-band"
     if (osc && filter.bands.every((b) => !NARROW_BANDS.includes(b))) return "OSC"

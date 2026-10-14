@@ -35,7 +35,7 @@ import { StatusBadge } from "@/components/app/status"
 import { useFlowActions } from "@/components/app/step-flow"
 import { StepPage } from "@/components/templates/step-page"
 import type { CorrectedValue, SessionIntakeStepId } from "@/domain/derive"
-import { isTrashedSession, SESSION_INTAKE_STEPS, sessionIntakeState, sessionReadiness, sessionRigId, sessionTargetId, sessionUnreviewedFrames } from "@/domain/derive"
+import { isTrashedSession, rigFilterFor, SESSION_INTAKE_STEPS, sessionIntakeState, sessionReadiness, sessionRigId, sessionTargetId, sessionUnreviewedFrames } from "@/domain/derive"
 import { pointingAgainst, targetAtPointing } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
@@ -222,7 +222,7 @@ function RigStep({ state, session, rigId, onRig, current }: { state: PrototypeSt
   const rigs = Object.values(state.catalog.opticalTrains).sort((a, b) => a.name.localeCompare(b.name))
   const rig = rigId ? state.catalog.opticalTrains[rigId] : undefined
   const channel = session.channel
-  const unknownFilter = rig !== undefined && channel !== null && !rig.filters.some((f) => f.matches.some((v) => v.toLowerCase() === channel.toLowerCase()))
+  const unknownFilter = rig !== undefined && channel !== null && rigFilterFor(state.catalog, rig, channel) === null
   const changed = rig !== undefined && (sessionRigId(session) !== rig.id || session.equipment.status !== "confirmed")
   const confirm: Action | null = !current && changed && rig ? { id: "confirm-rig", label: m.session_confirm_rig(), icon: Check, run: () => confirmRig(session.id, rig.id, session.revision) } : null
   const equipment: Action = { id: "equipment", label: m.session_open_equipment(), icon: Settings2, run: () => follow({ to: "/settings/equipment" }) }

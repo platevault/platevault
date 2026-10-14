@@ -223,7 +223,7 @@ function joinPath(...parts: string[]): string {
 
 /** The session's folder under a location, laid out by the light naming template (STO-IMP-FR-07). */
 function templatedFolder(state: World, root: string, session: Session): string {
-  const { path } = resolveNamingTemplate(namingTemplate(state.settings.naming, "light"), sessionNamingValues(state.catalog, session, "light"))
+  const { path } = resolveNamingTemplate(namingTemplate(state.settings.naming, "light"), sessionNamingValues(state.catalog, session, "light"), state.settings.namingOmit)
   return joinPath(root, path)
 }
 

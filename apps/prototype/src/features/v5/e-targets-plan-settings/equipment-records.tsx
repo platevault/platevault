@@ -1,422 +1,528 @@
 /**
- * Settings › Equipment, by hand (slice E, Round 6): gear not yet imaged with
- * is added as Manual (Add camera…, Add telescope…, Add rig…), and detected
- * cameras and telescopes are renamed and edited here too. A rig is a camera
- * on a telescope with the telescope's focal length and a reducer; its
- * effective focal length is their product. Cameras and telescopes list in
- * tables: a row opens its details; Edit is in its menus and in the details.
+ * Settings › Equipment, the records (slice E; plan §4a, C E1-E8, ngm9g):
+ * cameras, telescopes, reducers and rigs, each a ListSection whose ⋯ holds
+ * Edit… and Remove, and the FormDialogs that add or edit them. Gear not yet
+ * imaged with is added by hand (Manual, Round 6); detected records edit the
+ * same way. A camera, telescope or reducer holds its own properties. A rig
+ * only selects what it is made of: Camera ▾ · Telescope ▾ · Reducer ▾ ·
+ * Filters (C E2). Its focal length and field of view follow from those, and
+ * editing a rig never changes a camera.
  */
-import { type FormEvent, useEffect, useId, useState } from "react"
+import { Camera as CameraIcon, Pencil, Telescope as TelescopeIcon, Trash2, Waypoints, ZoomIn } from "lucide-react"
+import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { KeyValueList, type KeyValueItem } from "@/components/app/data"
-import { type Column, DataTable } from "@/components/app/data-table"
-import { ActionError } from "@/components/app/feedback"
+import { ActionButton } from "@/components/app/actions"
+import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import { KeyValueList } from "@/components/app/data"
+import { EmptyState } from "@/components/app/feedback"
+import { ChoiceListField, FieldGroup, NumberField, SegmentedField, SelectField, TextField } from "@/components/app/fields"
+import { FormDialog } from "@/components/app/form-dialog"
+import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ListSection } from "@/components/templates/settings-page"
+import { rigFieldOfView, rigFilters, type StepLink } from "@/domain/derive"
 import { fieldOfView } from "@/domain/sky"
-import type { Camera, CameraKind, OpticalTrain, Telescope } from "@/domain/types"
-import { FieldMessage, focusFirstInvalid, parseNumber, TextField } from "@/features/t1/components/form-field"
-import { rowMenuColumn } from "@/features/t1/components/row-menu"
+import type { Camera, CameraKind, Catalog, Filter, OpticalTrain, Reducer, Telescope } from "@/domain/types"
 import { formatDecimal, formatDegrees } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { type Messages, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
-import { saveCamera, saveRig, saveTelescope } from "./settings-actions"
+import { type EquipmentKind, equipmentUsers, REDUCER_LIMITS, removeEquipment, rigReducerFactor, saveCamera, saveReducer, saveRig, saveTelescope } from "./settings-actions"
+
+// ---------------------------------------------------------------------------
+// Shared by the Equipment sections
+// ---------------------------------------------------------------------------
 
 /** "1.23° × 0.82° · 1.45″/px": units only, not translated. */
 export function formatFov(fov: { widthDeg: number; heightDeg: number; pixelScaleArcsec: number } | null): string {
   return fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)} · ${fov.pixelScaleArcsec.toFixed(2)}″/px` : "–"
 }
 
-const positive = (v: number | null, whole = false) => v !== null && !Number.isNaN(v) && v > 0 && (!whole || Number.isInteger(v))
-
 /** "1600 mm", or "–" without a value: units only, not translated. */
 function formatMm(value: number | null): string {
   return value ? `${formatDecimal(value, value % 1 === 0 ? 0 : 1)} mm` : "–"
 }
 
-/** Mono or OSC (colour), a two-option radio group. */
-export function CameraKindField({ value, onChange }: { value: CameraKind; onChange: (kind: CameraKind) => void }) {
-  const m = useMessages()
-  const id = useId()
-  return (
-    <fieldset className="space-y-1.5">
-      <legend id={id} className="text-sm font-medium">
-        {m.equipment_camera_kind()}
-      </legend>
-      <div role="radiogroup" aria-labelledby={id} className="inline-flex rounded-md border border-separator p-px">
-        {(["mono", "osc"] as const).map((k) => (
-          <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)} className={cn("h-6 rounded-[4px] px-2 text-sm", value === k ? "bg-selected text-selected-foreground" : "hover:bg-foreground/[0.06]")}>
-            {k === "mono" ? m.equipment_mono() : m.equipment_osc_colour()}
-          </button>
-        ))}
-      </div>
-    </fieldset>
-  )
+/** "0.8×": a reducer's factor, units only. */
+function formatFactor(factor: number): string {
+  return `${formatDecimal(factor, factor % 1 === 0 ? 0 : 2)}×`
 }
 
-/** Add a camera (`camera` null) or edit one: name, kind, sensor and pixel size. */
-export function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera | null; onClose: () => void }) {
-  const m = useMessages()
-  const init = () => ({ name: camera?.name ?? "", kind: camera?.kind ?? ("mono" as CameraKind), width: camera ? String(camera.widthPx) : "", height: camera ? String(camera.heightPx) : "", pixel: camera ? String(camera.pixelSizeUm) : "" })
-  const [values, setValues] = useState(init)
-  const [errors, setErrors] = useState<Record<string, string | undefined>>({})
-  const [failure, setFailure] = useState<string | null>(null)
-  const ids = { name: useId(), width: useId(), height: useId(), pixel: useId() }
-  useEffect(() => {
-    if (open) {
-      setValues(init())
-      setErrors({})
-      setFailure(null)
-    }
-    // Reset only when the dialog opens.
-  }, [open])
+const positive = (v: number | null, whole = false): v is number => v !== null && !Number.isNaN(v) && v > 0 && (!whole || Number.isInteger(v))
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const [width, height, pixel] = [values.width, values.height, values.pixel].map(parseNumber)
-    const next = {
-      name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
-      width: positive(width ?? null, true) ? undefined : m.equipment_error_whole_pixels(),
-      height: positive(height ?? null, true) ? undefined : m.equipment_error_whole_pixels(),
-      pixel: positive(pixel ?? null) ? undefined : m.equipment_error_microns(),
-    }
-    setErrors(next)
-    if (Object.values(next).some(Boolean)) return focusFirstInvalid(event.currentTarget)
-    const result = saveCamera(camera?.id ?? null, { name: values.name.trim(), kind: values.kind, widthPx: width!, heightPx: height!, pixelSizeUm: pixel! })
-    if (result.ok) onClose()
-    else setFailure(result.message)
-  }
+/** A field's check: its message, or undefined when it passes. */
+export type FieldErrors<K extends string> = Partial<Record<K, string>>
 
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg" data-camera-dialog>
-        <form onSubmit={submit} noValidate className="space-y-3">
-          <DialogHeader>
-            <DialogTitle>{camera ? m.settings_edit_title({ name: camera.name }) : m.equipment_add_camera()}</DialogTitle>
-          </DialogHeader>
-          <TextField id={ids.name} label={m.equipment_name()} value={values.name} onChange={(name) => setValues({ ...values, name })} error={errors.name} autoFocus />
-          <CameraKindField value={values.kind} onChange={(kind) => setValues({ ...values, kind })} />
-          <div className="grid grid-cols-3 gap-3">
-            <TextField id={ids.width} label={m.equipment_sensor_width()} inputMode="numeric" value={values.width} onChange={(width) => setValues({ ...values, width })} error={errors.width} />
-            <TextField id={ids.height} label={m.equipment_sensor_height()} inputMode="numeric" value={values.height} onChange={(height) => setValues({ ...values, height })} error={errors.height} />
-            <TextField id={ids.pixel} label={m.equipment_pixel_size()} inputMode="decimal" value={values.pixel} onChange={(pixel) => setValues({ ...values, pixel })} error={errors.pixel} />
-          </div>
-          {failure ? <ActionError message={failure} /> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {m.verb_cancel()}
-            </Button>
-            <Button type="submit">{failure ? m.verb_retry() : camera ? m.settings_save() : m.equipment_add_camera()}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Add a telescope (`telescope` null) or edit one: name, focal length and aperture. */
-export function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescope: Telescope | null; onClose: () => void }) {
-  const m = useMessages()
-  const init = () => ({ name: telescope?.name ?? "", focal: telescope ? String(telescope.focalLengthMm) : "", aperture: telescope?.apertureMm ? String(telescope.apertureMm) : "" })
-  const [values, setValues] = useState(init)
-  const [errors, setErrors] = useState<Record<string, string | undefined>>({})
-  const [failure, setFailure] = useState<string | null>(null)
-  const ids = { name: useId(), focal: useId(), aperture: useId() }
-  useEffect(() => {
-    if (open) {
-      setValues(init())
-      setErrors({})
-      setFailure(null)
-    }
-    // Reset only when the dialog opens.
-  }, [open])
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const focal = parseNumber(values.focal)
-    const aperture = parseNumber(values.aperture)
-    const next = {
-      name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
-      focal: positive(focal) ? undefined : m.equipment_error_mm(),
-      aperture: aperture === null || positive(aperture) ? undefined : m.equipment_error_mm(),
-    }
-    setErrors(next)
-    if (Object.values(next).some(Boolean)) return focusFirstInvalid(event.currentTarget)
-    const result = saveTelescope(telescope?.id ?? null, { name: values.name.trim(), focalLengthMm: focal!, apertureMm: aperture })
-    if (result.ok) onClose()
-    else setFailure(result.message)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-md" data-telescope-dialog>
-        <form onSubmit={submit} noValidate className="space-y-3">
-          <DialogHeader>
-            <DialogTitle>{telescope ? m.settings_edit_title({ name: telescope.name }) : m.equipment_add_telescope()}</DialogTitle>
-          </DialogHeader>
-          <TextField id={ids.name} label={m.equipment_name()} value={values.name} onChange={(name) => setValues({ ...values, name })} error={errors.name} autoFocus />
-          <div className="grid grid-cols-2 gap-3">
-            <TextField id={ids.focal} label={m.equipment_native_focal_length()} inputMode="decimal" value={values.focal} onChange={(focal) => setValues({ ...values, focal })} error={errors.focal} />
-            <TextField id={ids.aperture} label={m.equipment_aperture()} inputMode="decimal" value={values.aperture} onChange={(aperture) => setValues({ ...values, aperture })} error={errors.aperture} />
-          </div>
-          {failure ? <ActionError message={failure} /> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {m.verb_cancel()}
-            </Button>
-            <Button type="submit">{failure ? m.verb_retry() : telescope ? m.settings_save() : m.equipment_add_telescope()}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** A select of records by name; `error` marks it invalid after a submit. */
-function RecordSelect({ id, label, value, items, onChange, error }: { id: string; label: string; value: string | null; items: Array<{ value: string; label: string }>; onChange: (value: string) => void; error?: string }) {
-  return (
-    <div className="space-y-1.5">
-      <Label id={`${id}-label`}>{label}</Label>
-      <Select items={items} value={value} onValueChange={(next) => onChange(String(next))}>
-        <SelectTrigger id={id} aria-labelledby={`${id}-label`} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <FieldMessage id={`${id}-error`} message={error} />
-    </div>
-  )
+/** The dialog action while a field fails its check: it stays focusable, and its preview names every field still to fix. */
+export function blockedBy(m: Messages, label: string, errors: FieldErrors<string>): Action["unavailable"] {
+  const messages = [...new Set(Object.values(errors).filter((message): message is string => Boolean(message)))]
+  if (messages.length === 0) return undefined
+  return { action: m.actions_blocked({ action: label }), reason: m.refusal_blockers({ count: messages.length }), blockers: messages.map((message) => ({ label: message })) }
 }
 
 /**
- * Add rig… (`rig` null): a camera on a telescope with a focal length and
- * reducer; the rig is Manual and its id comes back through `onSaved`. Edit
- * (a rig): the same choices for an existing rig. Camera and telescope
- * properties are edited on their own records, never through a rig.
+ * A controlled dialog's form: it starts from `initial` each time the dialog
+ * opens, and a field shows its check only once the user changed it, so a
+ * fresh form opens without errors.
  */
-export function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: OpticalTrain | null; onClose: () => void; onSaved?: (rigId: string) => void }) {
-  const m = useMessages()
-  const cameras = useStore((s) => Object.values(s.catalog.cameras).sort((a, b) => a.name.localeCompare(b.name)))
-  const telescopes = useStore((s) => Object.values(s.catalog.telescopes).sort((a, b) => a.name.localeCompare(b.name)))
-  const init = () =>
-    rig
-      ? { name: rig.name, named: true, cameraId: rig.cameraId as string | null, telescopeId: rig.telescopeId as string | null, focal: String(Math.round((rig.effectiveFocalLengthMm / (rig.reducer ?? 1)) * 10) / 10), reducer: String(rig.reducer ?? 1) }
-      : { name: "", named: false, cameraId: null as string | null, telescopeId: null as string | null, focal: "", reducer: "1" }
-  const [values, setValues] = useState(init)
-  const [errors, setErrors] = useState<Record<string, string | undefined>>({})
-  const [failure, setFailure] = useState<string | null>(null)
-  const ids = { name: useId(), camera: useId(), telescope: useId(), focal: useId(), reducer: useId() }
-  useEffect(() => {
+export function useDialogForm<T extends object>(open: boolean, initial: () => T) {
+  const [values, setValues] = useState<T>(initial)
+  const [touched, setTouched] = useState<ReadonlySet<keyof T>>(new Set())
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
     if (open) {
-      setValues(init())
-      setErrors({})
-      setFailure(null)
+      setValues(initial())
+      setTouched(new Set())
     }
-    // Reset only when the dialog opens.
-  }, [open])
-
-  const camera = cameras.find((c) => c.id === values.cameraId)
-  const telescope = telescopes.find((t) => t.id === values.telescopeId)
-  const focal = parseNumber(values.focal)
-  const reducer = parseNumber(values.reducer)
-  const effective = positive(focal) && positive(reducer) ? Math.round(focal! * reducer! * 10) / 10 : null
-  const fov = camera && effective ? fieldOfView({ id: "draft", name: values.name, source: "manual", cameraId: camera.id, telescopeId: values.telescopeId, effectiveFocalLengthMm: effective, notes: "", filters: [] }, camera) : null
-  /** The suggested name follows the picks until the user types one. */
-  const suggested = (cam: Camera | undefined, tel: Telescope | undefined) => (cam && tel ? m.equipment_rig_suggested({ telescope: tel.name, camera: cam.name }) : "")
-
-  function pick(patch: Partial<typeof values>) {
-    setValues((prev) => {
-      const next = { ...prev, ...patch }
-      const tel = telescopes.find((t) => t.id === next.telescopeId)
-      if (patch.telescopeId && tel) next.focal = String(tel.focalLengthMm)
-      if (!next.named) next.name = suggested(cameras.find((c) => c.id === next.cameraId), tel)
-      return next
-    })
   }
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const next = {
-      name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_rig_name() }),
-      camera: camera ? undefined : m.equipment_error_choose(),
-      telescope: telescope ? undefined : m.equipment_error_choose(),
-      focal: positive(focal) ? undefined : m.equipment_error_mm(),
-      reducer: reducer !== null && reducer >= 0.2 && reducer <= 3 ? undefined : m.equipment_error_reducer(),
-    }
-    setErrors(next)
-    if (Object.values(next).some(Boolean)) return focusFirstInvalid(event.currentTarget)
-    const { result, id } = saveRig(rig?.id ?? null, { name: values.name.trim(), cameraId: camera!.id, telescopeId: telescope!.id, focalLengthMm: focal!, reducer: reducer! })
-    if (!result.ok) return setFailure(result.message)
-    onClose()
-    onSaved?.(id)
+  function set(patch: Partial<T>) {
+    setValues((current) => ({ ...current, ...patch }))
+    setTouched((current) => new Set([...current, ...(Object.keys(patch) as (keyof T)[])]))
   }
+  function shown<K extends keyof T & string>(errors: FieldErrors<K>, key: K): string | undefined {
+    return touched.has(key) ? errors[key] : undefined
+  }
+  return { values, set, shown }
+}
 
+/** "Used by 2 rigs ▸": the users, each linked to its place; "–" without one. */
+function UsedBy({ label, items }: { label: string; items: { label: string; link: StepLink }[] }) {
+  const first = items[0]
+  if (!first) return "–"
+  return <UsedByPreview label={label} link={first.link} items={items} />
+}
+
+/** The rigs a camera, telescope, reducer or filter is on, as a Used by preview. */
+export function RigsUsing({ kind, id }: { kind: Exclude<EquipmentKind, "rig">; id: string }) {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const users = equipmentUsers(catalog, kind, id)
+  return <UsedBy label={m.equipment_used_by_rigs({ count: users.length })} items={users.map((u) => ({ label: say(m, u.label), link: u.link }))} />
+}
+
+/** Edit…, the one editor of a record. */
+export function editAction(m: Messages, run: () => void): Action {
+  return { id: "edit", label: m.settings_edit(), icon: Pencil, opensDialog: true, run }
+}
+
+/** Remove, with the trash icon: refused while the record is in use (its users listed), confirmed otherwise. */
+export function removeAction(m: Messages, catalog: Catalog, kind: EquipmentKind, record: { id: string; name: string }): Action {
+  const users = equipmentUsers(catalog, kind, record.id)
+  const label = m.settings_remove()
+  return {
+    id: "remove",
+    label,
+    icon: Trash2,
+    kind: "destructive",
+    unavailable: users.length > 0 ? { action: m.actions_blocked({ action: label }), reason: m.equipment_in_use(), blockers: users.map((u) => ({ label: say(m, u.label), link: u.link })) } : undefined,
+    confirm: { title: m.settings_remove_title({ name: record.name }), confirm: { label, kind: "destructive" } },
+    run: () => removeEquipment(kind, record.id),
+  }
+}
+
+/** A record's ⋯: Edit…, then Remove. */
+export function recordMenu(m: Messages, catalog: Catalog, kind: EquipmentKind, record: { id: string; name: string }, edit: () => void): MenuItem[] {
+  return [editAction(m, edit), { separator: true }, removeAction(m, catalog, kind, record)]
+}
+
+// ---------------------------------------------------------------------------
+// Cameras
+// ---------------------------------------------------------------------------
+
+interface CameraForm {
+  name: string
+  kind: CameraKind
+  width: number | null
+  height: number | null
+  pixel: number | null
+}
+
+/** Add a camera (`camera` null) or edit one: name, kind, sensor and pixel size. */
+function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera | null; onClose: () => void }) {
+  const m = useMessages()
+  const { values, set, shown } = useDialogForm<CameraForm>(open, () => ({
+    name: camera?.name ?? "",
+    kind: camera?.kind ?? "mono",
+    width: camera?.widthPx ?? null,
+    height: camera?.heightPx ?? null,
+    pixel: camera?.pixelSizeUm ?? null,
+  }))
+  const errors: FieldErrors<keyof CameraForm> = {
+    name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
+    width: positive(values.width, true) ? undefined : m.equipment_error_whole_pixels(),
+    height: positive(values.height, true) ? undefined : m.equipment_error_whole_pixels(),
+    pixel: positive(values.pixel) ? undefined : m.equipment_error_microns(),
+  }
+  const label = camera ? m.settings_save() : m.equipment_add_camera()
+  const confirm: Action = {
+    id: "camera-save",
+    label,
+    kind: "primary",
+    unavailable: blockedBy(m, label, errors),
+    run: () => saveCamera(camera?.id ?? null, { name: values.name.trim(), kind: values.kind, widthPx: values.width ?? 0, heightPx: values.height ?? 0, pixelSizeUm: values.pixel ?? 0 }),
+  }
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg" data-rig-dialog>
-        <form onSubmit={submit} noValidate className="space-y-3">
-          <DialogHeader>
-            <DialogTitle>{rig ? m.settings_edit_title({ name: rig.name }) : m.project_add_rig()}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <RecordSelect id={ids.camera} label={m.equipment_camera()} value={values.cameraId} items={cameras.map((c) => ({ value: c.id, label: c.name }))} onChange={(cameraId) => pick({ cameraId })} error={errors.camera} />
-            <RecordSelect id={ids.telescope} label={m.equipment_telescope()} value={values.telescopeId} items={telescopes.map((t) => ({ value: t.id, label: t.name }))} onChange={(telescopeId) => pick({ telescopeId })} error={errors.telescope} />
-            <TextField id={ids.focal} label={m.equipment_native_focal_length()} inputMode="decimal" value={values.focal} onChange={(f) => setValues({ ...values, focal: f })} error={errors.focal} />
-            <TextField id={ids.reducer} label={m.equipment_reducer_field()} inputMode="decimal" value={values.reducer} onChange={(r) => setValues({ ...values, reducer: r })} error={errors.reducer} />
-          </div>
-          {/* An existing rig keeps its name here; Rename changes it. */}
-          {rig ? null : <TextField id={ids.name} label={m.equipment_rig_name()} value={values.name} onChange={(name) => setValues({ ...values, name, named: name.trim() !== "" })} error={errors.name} />}
-          <p className="text-sm tabular-nums" aria-live="polite" data-rig-preview>
-            <span className="text-muted-foreground">{m.equipment_focal_length()} </span>
-            {formatMm(effective)}
-            <span className="text-muted-foreground"> · {m.equipment_field_of_view()} </span>
-            {formatFov(fov)}
-          </p>
-          {failure ? <ActionError message={failure} /> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              {m.verb_cancel()}
-            </Button>
-            <Button type="submit">{failure ? m.verb_retry() : rig ? m.settings_save() : m.project_add_rig()}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={camera ? m.settings_edit_title({ name: camera.name }) : m.equipment_add_camera()} confirm={confirm}>
+      <TextField label={m.equipment_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />
+      <SegmentedField
+        label={m.equipment_camera_kind()}
+        value={values.kind}
+        options={[
+          { value: "mono", label: m.equipment_mono() },
+          { value: "osc", label: m.equipment_osc_colour() },
+        ]}
+        onChange={(kind) => set({ kind })}
+      />
+      <FieldGroup label={m.equipment_sensor()}>
+        <NumberField label={m.equipment_sensor_width()} value={values.width} min={1} step={1} onChange={(width) => set({ width })} error={shown(errors, "width")} />
+        <NumberField label={m.equipment_sensor_height()} value={values.height} min={1} step={1} onChange={(height) => set({ height })} error={shown(errors, "height")} />
+        <NumberField label={m.equipment_pixel_size()} value={values.pixel} min={0.1} step={0.01} onChange={(pixel) => set({ pixel })} error={shown(errors, "pixel")} />
+      </FieldGroup>
+    </FormDialog>
   )
 }
 
-/** A camera's or telescope's details, opened from its row; Edit opens its editor. */
-function EquipmentDetail({ name, items, onEdit, onClose }: { name: string | null; items: KeyValueItem[]; onEdit: () => void; onClose: () => void }) {
+/** Every camera, detected or Manual: kind, sensor, pixel size and the rigs it is on. */
+export function CamerasSection() {
   const m = useMessages()
-  return (
-    <Sheet open={name !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-[30rem] sm:max-w-[30rem]" data-equipment-detail>
-        {name !== null ? (
-          <>
-            <SheetHeader>
-              <SheetTitle>{name}</SheetTitle>
-            </SheetHeader>
-            <div className="space-y-4 overflow-y-auto px-4 pb-4">
-              <KeyValueList items={items} />
-              <Button size="sm" variant="outline" onClick={onEdit}>
-                {m.settings_edit()}
-              </Button>
-            </div>
-          </>
-        ) : null}
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-/** The rigs built on a record, by name. */
-function rigNames(rigs: Record<string, OpticalTrain>, uses: (rig: OpticalTrain) => boolean): string {
-  const names = Object.values(rigs).filter(uses).map((r) => r.name).sort((a, b) => a.localeCompare(b))
-  return names.length > 0 ? names.join(", ") : "–"
-}
-
-/** Every camera, detected or Manual; a row opens its details, Edit is in its menus. */
-export function CamerasTable() {
-  const m = useMessages()
-  const cameras = useStore((s) => Object.values(s.catalog.cameras))
-  const rigs = useStore((s) => s.catalog.opticalTrains)
-  const [detailId, setDetailId] = useState<string | null>(null)
-  const [editing, setEditing] = useState<Camera | null>(null)
-  const detail = cameras.find((c) => c.id === detailId) ?? null
-  const usedBy = (id: string) => Object.values(rigs).filter((r) => r.cameraId === id).length
-  const entries = (c: Camera) => [
-    { label: m.settings_details(), onSelect: () => setDetailId(c.id) },
-    { label: m.settings_edit(), onSelect: () => setEditing(c) },
-  ]
+  const catalog = useStore((s) => s.catalog)
+  const [editing, setEditing] = useState<{ camera: Camera | null } | null>(null)
+  const rigCount = (c: Camera) => equipmentUsers(catalog, "camera", c.id).length
+  const add: Action = { id: "add-camera", label: m.equipment_add_camera(), opensDialog: true, run: () => setEditing({ camera: null }) }
   const columns: Column<Camera>[] = [
-    { id: "name", header: m.equipment_name(), cell: (c) => c.name, sortValue: (c) => c.name, rowHeader: true, truncate: true },
-    { id: "kind", header: m.equipment_camera_kind(), cell: (c) => (c.kind === "osc" ? m.equipment_osc() : m.equipment_mono()), sortValue: (c) => c.kind },
-    { id: "sensor", header: m.equipment_sensor(), cell: (c) => `${c.widthPx} × ${c.heightPx} px · ${formatDecimal(c.pixelSizeUm, 2)} µm`, className: "tabular-nums" },
-    { id: "rigs", header: m.project_rigs(), cell: (c) => usedBy(c.id), sortValue: (c) => usedBy(c.id), align: "right" },
-    { id: "source", header: m.equipment_source(), cell: (c) => <StatusBadge kind="source" value={c.source} />, sortValue: (c) => c.source },
-    rowMenuColumn((c) => c.name, entries),
+    { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (c) => c.name, cell: (c) => c.name },
+    { id: "kind", header: m.equipment_camera_kind(), sortValue: (c) => c.kind, cell: (c) => (c.kind === "osc" ? m.equipment_osc() : m.equipment_mono()) },
+    { id: "sensor", header: m.equipment_sensor(), align: "right", sortValue: (c) => c.widthPx * c.heightPx, cell: (c) => `${c.widthPx} × ${c.heightPx} px` },
+    { id: "pixel", header: m.equipment_pixel_size_short(), align: "right", sortValue: (c) => c.pixelSizeUm, cell: (c) => `${formatDecimal(c.pixelSizeUm, 2)} µm` },
+    { id: "rigs", header: m.project_rigs(), sortValue: rigCount, cell: (c) => <RigsUsing kind="camera" id={c.id} /> },
+    { id: "source", header: m.equipment_source(), sortValue: (c) => c.source, cell: (c) => <StatusBadge kind="source" value={c.source} /> },
   ]
   return (
     <>
-      <DataTable label={m.equipment_cameras()} rows={cameras} columns={columns} getRowId={(c) => c.id} initialSort={{ columnId: "name", direction: "asc" }} scroll="none" onRowClick={(c) => setDetailId(c.id)} contextMenu={entries} empty={<p className="p-3 text-sm text-muted-foreground">–</p>} />
-      <EquipmentDetail
-        name={detail?.name ?? null}
-        items={
-          detail
-            ? [
-                { label: m.equipment_camera_kind(), value: detail.kind === "osc" ? m.equipment_osc() : m.equipment_mono() },
-                { label: m.equipment_sensor(), value: `${detail.widthPx} × ${detail.heightPx} px · ${formatDecimal(detail.pixelSizeUm, 2)} µm` },
-                { label: m.project_rigs(), value: rigNames(rigs, (r) => r.cameraId === detail.id) },
-                { label: m.equipment_source(), value: <StatusBadge kind="source" value={detail.source} /> },
-              ]
-            : []
-        }
-        onEdit={() => {
-          setEditing(detail)
-          setDetailId(null)
+      <ListSection<Camera>
+        title={m.equipment_cameras()}
+        add={add}
+        table={{
+          label: m.equipment_cameras(),
+          rows: Object.values(catalog.cameras),
+          columns,
+          getRowId: (c) => c.id,
+          rowLabel: (c) => c.name,
+          initialSort: { columnId: "name", direction: "asc" },
+          empty: <EmptyState icon={CameraIcon} title={m.equipment_no_cameras()} action={<ActionButton action={add} />} />,
+          rowActions: (c) => recordMenu(m, catalog, "camera", c, () => setEditing({ camera: c })),
         }}
-        onClose={() => setDetailId(null)}
       />
-      <CameraDialog open={editing !== null} camera={editing} onClose={() => setEditing(null)} />
+      <CameraDialog open={editing !== null} camera={editing?.camera ?? null} onClose={() => setEditing(null)} />
     </>
   )
 }
 
-/** Every telescope, detected or Manual; a row opens its details, Edit is in its menus. */
-export function TelescopesTable() {
+// ---------------------------------------------------------------------------
+// Telescopes
+// ---------------------------------------------------------------------------
+
+interface TelescopeForm {
+  name: string
+  focal: number | null
+  aperture: number | null
+}
+
+/** Add a telescope (`telescope` null) or edit one: name, focal length and aperture. */
+function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescope: Telescope | null; onClose: () => void }) {
   const m = useMessages()
-  const telescopes = useStore((s) => Object.values(s.catalog.telescopes))
-  const rigs = useStore((s) => s.catalog.opticalTrains)
-  const [detailId, setDetailId] = useState<string | null>(null)
-  const [editing, setEditing] = useState<Telescope | null>(null)
-  const detail = telescopes.find((t) => t.id === detailId) ?? null
-  const usedBy = (id: string) => Object.values(rigs).filter((r) => r.telescopeId === id).length
-  const focal = (t: Telescope) => `${formatDecimal(t.focalLengthMm, 0)} mm`
-  const aperture = (t: Telescope) => (t.apertureMm ? `${formatDecimal(t.apertureMm, 0)} mm` : "–")
-  const entries = (t: Telescope) => [
-    { label: m.settings_details(), onSelect: () => setDetailId(t.id) },
-    { label: m.settings_edit(), onSelect: () => setEditing(t) },
-  ]
+  const { values, set, shown } = useDialogForm<TelescopeForm>(open, () => ({ name: telescope?.name ?? "", focal: telescope?.focalLengthMm ?? null, aperture: telescope?.apertureMm ?? null }))
+  const errors: FieldErrors<keyof TelescopeForm> = {
+    name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
+    focal: positive(values.focal) ? undefined : m.equipment_error_mm(),
+    aperture: values.aperture === null || positive(values.aperture) ? undefined : m.equipment_error_mm(),
+  }
+  const label = telescope ? m.settings_save() : m.equipment_add_telescope()
+  const confirm: Action = {
+    id: "telescope-save",
+    label,
+    kind: "primary",
+    unavailable: blockedBy(m, label, errors),
+    run: () => saveTelescope(telescope?.id ?? null, { name: values.name.trim(), focalLengthMm: values.focal ?? 0, apertureMm: values.aperture }),
+  }
+  return (
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={telescope ? m.settings_edit_title({ name: telescope.name }) : m.equipment_add_telescope()} size="sm" confirm={confirm}>
+      <TextField label={m.equipment_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />
+      <FieldGroup label={m.equipment_optics()}>
+        <NumberField label={m.equipment_native_focal_length()} value={values.focal} min={1} step={1} onChange={(focal) => set({ focal })} error={shown(errors, "focal")} />
+        <NumberField label={m.equipment_aperture()} value={values.aperture} min={1} step={1} onChange={(aperture) => set({ aperture })} error={shown(errors, "aperture")} />
+      </FieldGroup>
+    </FormDialog>
+  )
+}
+
+/** Every telescope, detected or Manual: focal length, aperture and the rigs it is on. */
+export function TelescopesSection() {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const [editing, setEditing] = useState<{ telescope: Telescope | null } | null>(null)
+  const rigCount = (t: Telescope) => equipmentUsers(catalog, "telescope", t.id).length
+  const add: Action = { id: "add-telescope", label: m.equipment_add_telescope(), opensDialog: true, run: () => setEditing({ telescope: null }) }
   const columns: Column<Telescope>[] = [
-    { id: "name", header: m.equipment_name(), cell: (t) => t.name, sortValue: (t) => t.name, rowHeader: true, truncate: true },
-    { id: "focal", header: m.run_field_focal_length(), cell: focal, sortValue: (t) => t.focalLengthMm, align: "right", className: "tabular-nums" },
-    { id: "aperture", header: m.equipment_aperture_short(), cell: aperture, sortValue: (t) => t.apertureMm, align: "right", className: "tabular-nums" },
-    { id: "rigs", header: m.project_rigs(), cell: (t) => usedBy(t.id), sortValue: (t) => usedBy(t.id), align: "right" },
-    { id: "source", header: m.equipment_source(), cell: (t) => <StatusBadge kind="source" value={t.source} />, sortValue: (t) => t.source },
-    rowMenuColumn((t) => t.name, entries),
+    { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (t) => t.name, cell: (t) => t.name },
+    { id: "focal", header: m.run_field_focal_length(), align: "right", sortValue: (t) => t.focalLengthMm, cell: (t) => formatMm(t.focalLengthMm) },
+    { id: "aperture", header: m.equipment_aperture_short(), align: "right", sortValue: (t) => t.apertureMm, cell: (t) => formatMm(t.apertureMm) },
+    { id: "rigs", header: m.project_rigs(), sortValue: rigCount, cell: (t) => <RigsUsing kind="telescope" id={t.id} /> },
+    { id: "source", header: m.equipment_source(), sortValue: (t) => t.source, cell: (t) => <StatusBadge kind="source" value={t.source} /> },
   ]
   return (
     <>
-      <DataTable label={m.equipment_telescopes()} rows={telescopes} columns={columns} getRowId={(t) => t.id} initialSort={{ columnId: "name", direction: "asc" }} scroll="none" onRowClick={(t) => setDetailId(t.id)} contextMenu={entries} empty={<p className="p-3 text-sm text-muted-foreground">–</p>} />
-      <EquipmentDetail
-        name={detail?.name ?? null}
-        items={
-          detail
-            ? [
-                { label: m.run_field_focal_length(), value: focal(detail) },
-                { label: m.equipment_aperture_short(), value: aperture(detail) },
-                { label: m.project_rigs(), value: rigNames(rigs, (r) => r.telescopeId === detail.id) },
-                { label: m.equipment_source(), value: <StatusBadge kind="source" value={detail.source} /> },
-              ]
-            : []
-        }
-        onEdit={() => {
-          setEditing(detail)
-          setDetailId(null)
+      <ListSection<Telescope>
+        title={m.equipment_telescopes()}
+        add={add}
+        table={{
+          label: m.equipment_telescopes(),
+          rows: Object.values(catalog.telescopes),
+          columns,
+          getRowId: (t) => t.id,
+          rowLabel: (t) => t.name,
+          initialSort: { columnId: "name", direction: "asc" },
+          empty: <EmptyState icon={TelescopeIcon} title={m.equipment_no_telescopes()} action={<ActionButton action={add} />} />,
+          rowActions: (t) => recordMenu(m, catalog, "telescope", t, () => setEditing({ telescope: t })),
         }}
-        onClose={() => setDetailId(null)}
       />
-      <TelescopeDialog open={editing !== null} telescope={editing} onClose={() => setEditing(null)} />
+      <TelescopeDialog open={editing !== null} telescope={editing?.telescope ?? null} onClose={() => setEditing(null)} />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Reducers
+// ---------------------------------------------------------------------------
+
+interface ReducerForm {
+  name: string
+  factor: number | null
+}
+
+/** Add a reducer or extender (`reducer` null) or edit one: its name and factor. */
+function ReducerDialog({ open, reducer, onClose }: { open: boolean; reducer: Reducer | null; onClose: () => void }) {
+  const m = useMessages()
+  const { values, set, shown } = useDialogForm<ReducerForm>(open, () => ({ name: reducer?.name ?? "", factor: reducer?.factor ?? null }))
+  const errors: FieldErrors<keyof ReducerForm> = {
+    name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
+    factor: values.factor !== null && values.factor >= REDUCER_LIMITS.min && values.factor <= REDUCER_LIMITS.max ? undefined : m.equipment_error_reducer(),
+  }
+  const label = reducer ? m.settings_save() : m.equipment_add_reducer()
+  const confirm: Action = { id: "reducer-save", label, kind: "primary", unavailable: blockedBy(m, label, errors), run: () => saveReducer(reducer?.id ?? null, { name: values.name.trim(), factor: values.factor ?? 1 }) }
+  return (
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={reducer ? m.settings_edit_title({ name: reducer.name }) : m.equipment_add_reducer()} size="sm" confirm={confirm}>
+      <TextField label={m.equipment_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />
+      <NumberField label={m.equipment_reducer_field()} value={values.factor} min={REDUCER_LIMITS.min} max={REDUCER_LIMITS.max} step={0.01} onChange={(factor) => set({ factor })} error={shown(errors, "factor")} />
+    </FormDialog>
+  )
+}
+
+/** Every reducer and extender: its factor and the rigs it is on. */
+export function ReducersSection() {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const [editing, setEditing] = useState<{ reducer: Reducer | null } | null>(null)
+  const add: Action = { id: "add-reducer", label: m.equipment_add_reducer(), opensDialog: true, run: () => setEditing({ reducer: null }) }
+  const columns: Column<Reducer>[] = [
+    { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
+    { id: "factor", header: m.equipment_factor(), align: "right", sortValue: (r) => r.factor, cell: (r) => formatFactor(r.factor) },
+    { id: "rigs", header: m.project_rigs(), sortValue: (r) => equipmentUsers(catalog, "reducer", r.id).length, cell: (r) => <RigsUsing kind="reducer" id={r.id} /> },
+  ]
+  return (
+    <>
+      <ListSection<Reducer>
+        title={m.equipment_reducers()}
+        add={add}
+        table={{
+          label: m.equipment_reducers(),
+          rows: Object.values(catalog.reducers),
+          columns,
+          getRowId: (r) => r.id,
+          rowLabel: (r) => r.name,
+          initialSort: { columnId: "name", direction: "asc" },
+          empty: <EmptyState icon={ZoomIn} title={m.equipment_no_reducers()} action={<ActionButton action={add} />} />,
+          rowActions: (r) => recordMenu(m, catalog, "reducer", r, () => setEditing({ reducer: r })),
+        }}
+      />
+      <ReducerDialog open={editing !== null} reducer={editing?.reducer ?? null} onClose={() => setEditing(null)} />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Rigs
+// ---------------------------------------------------------------------------
+
+/** No record chosen yet in a rig Select. */
+const NONE = ""
+/** The rig has no reducer. */
+const NO_REDUCER = "none"
+
+interface RigForm {
+  name: string
+  /** The user typed the name; until then it follows the camera and telescope. */
+  named: boolean
+  cameraId: string
+  telescopeId: string
+  reducerId: string
+  filterIds: string[]
+}
+
+/** "Ha, OIII, SII"; "No filters · OSC" for an OSC camera without one. */
+export function rigFiltersLine(m: Messages, catalog: Catalog, rig: OpticalTrain): string {
+  const filters = rigFilters(catalog, rig)
+  if (filters.length > 0) return filters.map((f) => f.name).join(", ")
+  const camera = rig.cameraId ? catalog.cameras[rig.cameraId] : undefined
+  return camera?.kind === "osc" ? m.equipment_no_filters_osc() : m.tonight_no_filters()
+}
+
+/** "Ha + OIII": the bands a filter passes. */
+export function bandsLine(filter: Pick<Filter, "bands">): string {
+  return filter.bands.join(" + ") || "–"
+}
+
+/** A filter as a rig's checkbox reads it: its name and bands, plus its FILTER matches when another filter has the same name. */
+function filterChoiceLabel(filter: Filter, all: Filter[]): string {
+  const twin = all.some((f) => f.id !== filter.id && f.name.toLowerCase() === filter.name.toLowerCase())
+  return twin ? `${filter.name} · ${bandsLine(filter)} · ${filter.matches.join(", ")}` : `${filter.name} · ${bandsLine(filter)}`
+}
+
+/**
+ * Add rig… (`rig` null) or Edit a rig: Camera ▾ · Telescope ▾ · Reducer ▾ ·
+ * Filters (C E2). The focal length is the telescope's times the reducer's
+ * factor; an existing rig keeps the focal length its headers gave it while
+ * its telescope stays the same.
+ */
+function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: OpticalTrain | null; onClose: () => void; onSaved: (rigId: string) => void }) {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const byName = <T extends { name: string }>(records: Record<string, T>) => Object.values(records).sort((a, b) => a.name.localeCompare(b.name))
+  const cameras = byName(catalog.cameras)
+  const telescopes = byName(catalog.telescopes)
+  const reducers = byName(catalog.reducers)
+  const filters = byName(catalog.filters)
+  const { values, set, shown } = useDialogForm<RigForm>(open, () => ({
+    name: rig?.name ?? "",
+    named: rig !== null,
+    cameraId: rig?.cameraId ?? NONE,
+    telescopeId: rig?.telescopeId ?? NONE,
+    reducerId: rig?.reducerId ?? NO_REDUCER,
+    filterIds: rig?.filterIds ?? [],
+  }))
+  const camera = catalog.cameras[values.cameraId]
+  const telescope = catalog.telescopes[values.telescopeId]
+  const reducerId = values.reducerId === NO_REDUCER ? null : values.reducerId
+  const suggested = camera && telescope ? m.equipment_rig_suggested({ telescope: telescope.name, camera: camera.name }) : ""
+  const name = values.named ? values.name : suggested
+  const keepsFocal = rig !== null && rig.telescopeId === values.telescopeId
+  const baseFocal = keepsFocal ? rig.effectiveFocalLengthMm / rigReducerFactor(catalog, rig) : (telescope?.focalLengthMm ?? null)
+  const effective = baseFocal === null ? null : Math.round(baseFocal * rigReducerFactor(catalog, { reducerId }) * 10) / 10
+  const fov = camera && effective ? fieldOfView({ id: "draft", name, source: "manual", cameraId: camera.id, telescopeId: values.telescopeId, effectiveFocalLengthMm: effective, notes: "", filterIds: [] }, camera) : null
+  const trimmed = name.trim()
+  const taken = Object.values(catalog.opticalTrains).some((r) => r.id !== rig?.id && r.name.toLowerCase() === trimmed.toLowerCase())
+  const picked = values.filterIds.flatMap((id) => catalog.filters[id] ?? [])
+  const twin = picked.find((f, i) => picked.findIndex((g) => g.name.toLowerCase() === f.name.toLowerCase()) !== i)
+  const errors: FieldErrors<keyof RigForm> = {
+    name: !trimmed ? m.targets_name_empty({ label: m.equipment_rig_name() }) : taken ? m.targets_name_taken({ label: m.equipment_rig_name(), name: trimmed }) : undefined,
+    cameraId: camera ? undefined : m.equipment_error_choose(),
+    telescopeId: telescope ? undefined : m.equipment_error_choose(),
+    filterIds: twin ? m.equipment_filter_twin({ name: twin.name }) : undefined,
+  }
+  const label = rig ? m.settings_save() : m.project_add_rig()
+  const confirm: Action = {
+    id: "rig-save",
+    label,
+    kind: "primary",
+    unavailable: blockedBy(m, label, errors),
+    run: () => {
+      if (!camera || !telescope || baseFocal === null) return
+      const saved = saveRig(rig?.id ?? null, { name: trimmed, cameraId: camera.id, telescopeId: telescope.id, reducerId, focalLengthMm: baseFocal, filterIds: values.filterIds })
+      if (saved.result.ok) onSaved(saved.id)
+      return saved.result
+    },
+  }
+  const choose = { value: NONE, label: m.fields_choose_ellipsis(), disabled: true }
+  return (
+    <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={rig ? m.settings_edit_title({ name: rig.name }) : m.project_add_rig()} size="lg" confirm={confirm}>
+      <TextField label={m.equipment_rig_name()} value={name} onChange={(next) => set({ name: next, named: next.trim() !== "" })} error={shown(errors, "name")} autoFocus />
+      <FieldGroup label={m.equipment_rig_parts()}>
+        <SelectField label={m.equipment_camera()} value={camera ? values.cameraId : NONE} options={[choose, ...cameras.map((c) => ({ value: c.id, label: c.name }))]} onChange={(cameraId) => set({ cameraId })} error={shown(errors, "cameraId")} />
+        <SelectField label={m.equipment_telescope()} value={telescope ? values.telescopeId : NONE} options={[choose, ...telescopes.map((t) => ({ value: t.id, label: t.name }))]} onChange={(telescopeId) => set({ telescopeId })} error={shown(errors, "telescopeId")} />
+        <SelectField
+          label={m.equipment_reducer()}
+          value={reducerId && catalog.reducers[reducerId] ? reducerId : NO_REDUCER}
+          options={[{ value: NO_REDUCER, label: m.equipment_no_reducer() }, ...reducers.map((r) => ({ value: r.id, label: `${r.name} · ${formatFactor(r.factor)}` }))]}
+          onChange={(next) => set({ reducerId: next })}
+        />
+      </FieldGroup>
+      <KeyValueList
+        columns={2}
+        items={[
+          { label: m.run_field_focal_length(), value: formatMm(effective) },
+          { label: m.equipment_field_of_view(), value: formatFov(fov) },
+        ]}
+      />
+      <ChoiceListField
+        label={m.equipment_filters()}
+        value={values.filterIds}
+        options={filters.map((f) => ({ value: f.id, label: filterChoiceLabel(f, filters) }))}
+        onChange={(filterIds) => set({ filterIds })}
+        error={shown(errors, "filterIds")}
+        empty={m.tonight_no_filters()}
+      />
+    </FormDialog>
+  )
+}
+
+/** Every rig: what it is made of, its focal length, field of view and filters, and the Projects that use it. */
+export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | null; onSaved: (rigId: string) => void }) {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const [editing, setEditing] = useState<{ rig: OpticalTrain | null } | null>(null)
+  const projectsOf = (rig: OpticalTrain) =>
+    Object.values(catalog.projects)
+      .filter((p) => p.rigIds.includes(rig.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  const recordName = (record: { name: string } | undefined) => record?.name ?? "–"
+  const cameraName = (r: OpticalTrain) => recordName(r.cameraId ? catalog.cameras[r.cameraId] : undefined)
+  const telescopeName = (r: OpticalTrain) => recordName(r.telescopeId ? catalog.telescopes[r.telescopeId] : undefined)
+  const reducerName = (r: OpticalTrain) => recordName(r.reducerId ? catalog.reducers[r.reducerId] : undefined)
+  const add: Action = { id: "add-rig", label: m.project_add_rig(), opensDialog: true, run: () => setEditing({ rig: null }) }
+  const columns: Column<OpticalTrain>[] = [
+    { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
+    { id: "camera", header: m.equipment_camera(), truncate: true, sortValue: cameraName, cell: cameraName },
+    { id: "telescope", header: m.equipment_telescope(), truncate: true, sortValue: telescopeName, cell: telescopeName },
+    { id: "reducer", header: m.equipment_reducer(), truncate: true, sortValue: reducerName, cell: reducerName },
+    { id: "focal", header: m.run_field_focal_length(), align: "right", sortValue: (r) => r.effectiveFocalLengthMm, cell: (r) => formatMm(r.effectiveFocalLengthMm) },
+    { id: "fov", header: m.equipment_field_of_view(), sortValue: (r) => rigFieldOfView(catalog, r)?.widthDeg ?? null, cell: (r) => formatFov(rigFieldOfView(catalog, r)) },
+    { id: "filters", header: m.equipment_filters(), truncate: true, sortValue: (r) => r.filterIds.length, cell: (r) => rigFiltersLine(m, catalog, r) },
+    {
+      id: "projects",
+      header: m.calibration_used_by(),
+      sortValue: (r) => projectsOf(r).length,
+      cell: (r) => <UsedBy label={m.equipment_used_by_projects({ count: projectsOf(r).length })} items={projectsOf(r).map((p) => ({ label: p.name, link: { to: "/projects/$projectId", params: { projectId: p.id } } }))} />,
+    },
+    { id: "source", header: m.equipment_source(), sortValue: (r) => r.source, cell: (r) => <StatusBadge kind="source" value={r.source} /> },
+  ]
+  return (
+    <>
+      <ListSection<OpticalTrain>
+        title={m.project_rigs()}
+        add={add}
+        table={{
+          label: m.project_rigs(),
+          rows: Object.values(catalog.opticalTrains),
+          columns,
+          getRowId: (r) => r.id,
+          rowLabel: (r) => r.name,
+          activeRowId: activeRigId,
+          initialSort: { columnId: "name", direction: "asc" },
+          empty: <EmptyState icon={Waypoints} title={m.equipment_no_rigs()} action={<ActionButton action={add} />} />,
+          rowActions: (r) => recordMenu(m, catalog, "rig", r, () => setEditing({ rig: r })),
+        }}
+      />
+      <RigDialog open={editing !== null} rig={editing?.rig ?? null} onClose={() => setEditing(null)} onSaved={onSaved} />
     </>
   )
 }
