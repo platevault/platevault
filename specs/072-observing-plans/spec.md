@@ -69,9 +69,9 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 - **PLAN-TGT-AC-15**: Given no saved planning site, when the Targets page opens, then the planning columns show "-" and the page shows "Add an observing site in Settings". Search, Add to targets, ★ and Sessions still work. (D-W18)
 - **PLAN-TGT-AC-16**: Given M 31 marked ★ and the open Project "Summer nebulae" with subject IC 1396, which is not marked ★. When the Targets page opens on My targets, then it lists M 31 and IC 1396, and IC 1396 carries a "Summer nebulae" Project badge. (D-W60)
 
-### User Story 3 - Filters on optical trains (Priority: P2)
+### User Story 3 - Equipment: rigs compose a camera, a telescope and filters (Priority: P2)
 
-In Settings > Equipment the user lists the filters on each rig (optical train). The list drives the Targets band strip, the Targets narrowband presets and the Fit column's rig. A filter name in a FITS header that the rig does not list prompts the user to add it.
+In Settings > Equipment the user keeps cameras, telescopes and filters as their own records, and each rig (optical train) selects one camera, one telescope and the filters it uses. A rig's filters drive the Targets band strip, the Targets narrowband presets and the Fit column's rig. A filter name in a FITS header that matches no filter on the rig prompts the user to add a filter to it.
 
 **Why this priority**: Without the rig's filters, the Targets band strip and presets would offer bands the user cannot capture (D-W23, D-W31).
 
@@ -79,12 +79,13 @@ In Settings > Equipment the user lists the filters on each rig (optical train). 
 
 **Acceptance Scenarios**:
 
-- **PLAN-EQ-AC-01**: Given the rig "Esprit 100 + ASI2600MM" with a mono camera, when the user adds L, R, G, B, Ha, SII and OIII to its filter list, then the list is saved with each filter's band. The Targets Filters strip for that rig shows all seven bands. (D-W31)
-- **PLAN-EQ-AC-02**: Given a rig whose camera is OSC, then Settings > Equipment shows the rig as OSC, taken from the camera, with no Mono/OSC control on the filter list. With an empty filter list the rig captures R, G and B. (D-W31)
-- **PLAN-EQ-AC-03**: Given a session on the mono rig "Esprit 100 + ASI2600MM" with the FILTER header "Halpha", which no filter on the rig matches, then the session shows the filter as unknown. It offers "Add Halpha to Esprit 100 + ASI2600MM". When the user adds it with band Ha, the filter list includes it and the Targets Filters strip updates. The session's header bytes and observed evidence are unchanged. (D-W31)
-- **PLAN-EQ-AC-04**: Given the user declines the prompt, then the session keeps the observed value "Halpha" marked unknown and the rig's list is unchanged. The prompt stays available on the session and in Settings > Equipment. (D-W31)
-- **PLAN-EQ-AC-05**: Given two rigs with different filter lists, when Settings > Goal templates opens, then the same templates are listed whichever rig is selected anywhere in the app. (D-W30, D-W31)
-- **PLAN-EQ-AC-06**: Given saving a filter list fails, then the edit remains visibly unsaved with Retry and the previous list stays in effect. (D-W31)
+- **PLAN-EQ-AC-01**: Given filter records L, R, G, B, Ha, SII and OIII, each with its band, when the user selects all seven in the rig "Esprit 100 + ASI2600MM" with a mono camera, then the rig is saved with those filters. The Targets Filters strip for that rig shows all seven bands. (D-W31, D-W87)
+- **PLAN-EQ-AC-02**: Given a rig whose camera is OSC, then Settings > Equipment shows the rig as OSC, taken from the camera, with no Mono/OSC control on the rig. With no filters selected the rig captures R, G and B. (D-W31, D-W87)
+- **PLAN-EQ-AC-03**: Given a session on the mono rig "Esprit 100 + ASI2600MM" with the FILTER header "Halpha", which no filter on the rig matches, then the session shows the filter as unknown. It offers "Add Halpha to Esprit 100 + ASI2600MM". When the user adds it with band Ha, a filter record named Halpha that matches the header value "Halpha" and passes Ha is created and selected in the rig, and the Targets Filters strip updates. The session's header bytes and observed evidence are unchanged. (D-W31, D-W87)
+- **PLAN-EQ-AC-04**: Given the user declines the prompt, then the session keeps the observed value "Halpha" marked unknown and the rig's filters are unchanged. The prompt stays available on the session and in Settings > Equipment. (D-W31, D-W87)
+- **PLAN-EQ-AC-05**: Given two rigs with different filters, when Settings > Goal templates opens, then the same templates are listed whichever rig is selected anywhere in the app. (D-W30, D-W31)
+- **PLAN-EQ-AC-06**: Given saving a rig or a filter fails, then the edit remains visibly unsaved with Retry and the previous record stays in effect. (D-W31, D-W87)
+- **PLAN-EQ-AC-07**: Given camera ASI2600MM used by two rigs, when the user edits a rig, then the rig editor offers only the choice of camera, telescope and filters and no camera or telescope property. The camera's Used by shows a popover listing both rigs, each linking to it. (D-W87)
 
 ### Edge Cases
 
@@ -92,7 +93,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
 - No saved planning site: planning columns, windows and Tonight show "-" or no windows with "Add an observing site in Settings"; nothing is computed for an assumed location. (D-W18, D-W39)
 - A Target with no catalogued angular size: Fit shows "-" with "Size unknown". A rig with no known field of view: Fit shows "-" with "Field of view unknown"; Mosaic candidates and Fits nicely leave such Targets out. (D-W23)
-- A session whose rig is not yet confirmed: the unknown-filter prompt waits until the rig is confirmed, because the filter list belongs to a rig. (D-W31)
+- A session whose rig is not yet confirmed: the unknown-filter prompt waits until the rig is confirmed, because the prompt adds a filter to a rig. (D-W31, D-W87)
 - Trashed sessions and frames never count toward Sessions or Captured. (D-W43)
 
 ## Requirements
@@ -156,21 +157,21 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-TGT-FR-13**: Narrowband (Moon up), Emission nebulae Ha and Planetary nebulae OIII are hidden when a rig is selected and no filter on it passes Ha, SII or OIII. (D-W23, D-W31)
 - **PLAN-TGT-FR-14**: Selecting a row opens that Target's Plan area (PLAN-FR-02). (D-W16)
 
-#### Filters on optical trains
+#### Equipment: cameras, telescopes, filters and rigs
 
-- **PLAN-EQ-FR-01**: In Settings > Equipment each rig (optical train) holds a plain list of filters, with no limit on their number and the same form for mono and OSC cameras. Each filter has a name, the FITS FILTER values it matches, and the bands it passes (one or more of L, R, G, B, Ha, SII, OIII). (D-W31)
-- **PLAN-EQ-FR-02**: Mono or OSC comes from the rig's camera, not from the filter list. An OSC rig captures R, G and B without a filter; on any rig, each listed filter adds the bands it passes. (D-W31)
-- **PLAN-EQ-FR-03**: A rig's filter list drives the Targets Filters strip (PLAN-TGT-FR-06) and the visibility of the narrowband presets (PLAN-TGT-FR-13). The selected rig's field of view drives Fit (PLAN-TGT-FR-11). The filter list never filters Goal templates. (D-W30, D-W31)
-- **PLAN-EQ-FR-04**: When a session's FILTER header value matches no filter on its confirmed rig, the session shows the filter as unknown and offers "Add {value} to {rig}". Settings > Equipment lists the unknown values seen per rig. Adding asks for the bands the filter passes and changes only the rig's settings; header bytes and observed evidence stay unchanged. Declining leaves the value unknown and the prompt available. (D-W31)
-- **PLAN-EQ-FR-05**: A rig's field of view comes from its camera's sensor size and pixel size and the rig's focal length. When any of these is unknown, the field of view is unknown and Fit says so. (D-W23)
-- **PLAN-EQ-FR-06**: A failed filter-list save stays visibly unsaved with Retry, and the last saved list stays in effect. (D-W31)
+- **PLAN-EQ-FR-01**: Settings > Equipment has a section each for cameras, telescopes, filters and rigs. A filter is its own record, with a name, the FITS FILTER values it matches, and the bands it passes (one or more of L, R, G, B, Ha, SII, OIII). A rig selects one camera, one telescope and any number of filters, with the same form for mono and OSC cameras; it edits no camera, telescope or filter property, which are edited on their own records with Edit…. Each camera, telescope, filter and rig shows what uses it as a Used by popover that lists every user and links to it. (D-W31, D-W76, D-W87)
+- **PLAN-EQ-FR-02**: Mono or OSC comes from the rig's camera, not from its filters. An OSC rig captures R, G and B without a filter; on any rig, each selected filter adds the bands it passes. (D-W31, D-W87)
+- **PLAN-EQ-FR-03**: A rig's filters drive the Targets Filters strip (PLAN-TGT-FR-06) and the visibility of the narrowband presets (PLAN-TGT-FR-13). The selected rig's field of view drives Fit (PLAN-TGT-FR-11). Filters never filter Goal templates. (D-W30, D-W31, D-W87)
+- **PLAN-EQ-FR-04**: When a session's FILTER header value matches no filter on its confirmed rig, the session shows the filter as unknown and offers "Add {value} to {rig}". Settings > Equipment lists the unknown values seen per rig. Adding asks for the bands the filter passes, creates a filter record that matches the value and selects it in the rig; header bytes and observed evidence stay unchanged. Declining leaves the value unknown and the prompt available. (D-W31, D-W87)
+- **PLAN-EQ-FR-05**: A rig's field of view comes from its camera's sensor size and pixel size and its telescope's focal length. When any of these is unknown, the field of view is unknown and Fit says so. (D-W23, D-W87)
+- **PLAN-EQ-FR-06**: A failed save of a rig or an equipment record stays visibly unsaved with Retry, and the last saved record stays in effect. (D-W31, D-W87)
 
 ### Owned interaction steps
 
 - B3
 - K
 - Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)
-- Settings > Equipment filter lists and the unknown-filter prompt (D-W31)
+- Settings > Equipment: cameras, telescopes, filters and rigs, and the unknown-filter prompt (D-W31, D-W87)
 - Tonight data for Home (D-W39)
 
 ### Key Entities
@@ -179,8 +180,8 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 - **Processing run (View)**: the root View; this spec calls it a run. Planning never changes which sessions a run holds.
 - **My targets**: the Targets the user has marked ★, plus every subject of an open Project, shown with its Project badge. (D-W60)
-- **Rig**: an optical train from Settings > Equipment: telescope, camera, focal length, field of view and filter list.
-- **Rig filter**: one entry in a rig's filter list: name, matched FITS FILTER values and passed bands.
+- **Rig**: an optical train from Settings > Equipment that selects one camera, one telescope and its filters; its field of view follows from them.
+- **Filter**: an Equipment record with a name, matched FITS FILTER values and passed bands, which rigs select. (D-W87)
 - **Targets preset**: a named set of Targets list filters, either built in or saved by the user.
 - **Tonight**: tonight's best windows for Project subjects and My targets, the Moon and the darkness window at the default site.
 
@@ -207,3 +208,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Root decisions D07 and D18 define opt-in reminders, explicit site/criteria/lead time, repeat suppression, permission recovery, honest scheduler capability and shared scientific calculations. Scheduler delivery claims require real platform evidence.
 - Root decision D19 has no PLAN consumer: no planning path consumes a recorded file, and calendar export writes computed windows.
 - Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, D-W63 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W36, D-W43 and D-W46 are read here where they constrain this feature's outputs.
+- Workflow decision D-W87 (Round 9 user item astro-plan-ngm9g, 2026-10-12) supersedes D-W31's ownership: filters, cameras and telescopes are their own Equipment records, and a rig selects them. The rest of D-W31 still applies, and the unknown-filter prompt now adds a filter record to the rig.

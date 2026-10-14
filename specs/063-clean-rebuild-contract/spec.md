@@ -168,6 +168,7 @@ The visual system, tokens and component catalogue are documented as a DESIGN.md 
 - **FR-029**: An irreversible action MUST ask for confirmation in a dialog that lists the affected files in groups. A reversible action MUST run at once and offer Undo. (D-W91)
 - **FR-030**: Interface copy MUST be microcopy. Buttons MUST be a verb and an object in 1 to 3 words, in sentence case, ending in "…" only when more input or a confirmation follows. Headings MUST be 1 or 2 words and MUST NOT restate the content below. A refusal MUST read "{Action} blocked · {count} {reason} ▸" or "Can't {verb} · {reason} ▸". Each state MUST have one status word, used everywhere. An absent value MUST read "–", and an empty state MUST be one line plus one action. (D-W91)
 - **FR-031**: The `⋯` button and Shift+F10 MUST open the same menu, Escape MUST return focus to where it came from, and pointer targets MUST be at least 24 px (WCAG 2.5.8). (D-W91)
+- **FR-032**: The product MUST have no Issues hub. A problem MUST show on the row it affects, with its action, on each page that lists that row, and Home follows the same rule (FR-020). The status bar's severity counters MUST show counts only and open the owning page filtered to the affected rows, or, when there are several, a menu naming those pages with their counts; they MUST NOT list the issues themselves. Dismiss and Restore MUST act on the rows, and the counters MUST count only issues that are not dismissed. (D-W89, D-W92)
 
 ### Feature ownership
 
@@ -183,7 +184,7 @@ The stable feature keys identify contract owners. They are not a chronological i
 | PV-PREP | Profiles, modes, paths, preparation, verified external handoff | E3, E4, F1, F2, F3, F4, F5, F6 |
 | PV-RES | Result discovery, acceptance, provenance, reuse, Finish run, Move run to Trash, Restore and Empty Trash | H1, H2, H3, H3a, I1 |
 | PV-STO | Import (sources, preview, Copy or Move, naming templates), run Clean up, retained-original proof, verified archive, OS Trash custody for Import Move, emptied runs, trashed frames and duplicate copies | I2, I3, I4, I5, J, L (withdrawn), Import |
-| PV-PLAN | Planner on Targets, the Targets list (My targets, Browse catalogues, presets, rig selector), rig filter lists in Settings > Equipment, sites, windows, Tonight data for Home, reminders, calendar export | B3, K, Targets list |
+| PV-PLAN | Planner on Targets, the Targets list (My targets, Browse catalogues, presets, rig selector), Settings > Equipment (cameras, telescopes, filters and the rigs that select them), sites, windows, Tonight data for Home, reminders, calendar export | B3, K, Targets list |
 
 The journey step IDs come from the product flow. Home, the Project page with its Trash list, Wrap up, Import and the Targets list are surfaces added or redefined by the 2026-10-06 redesign; they have no product-flow step ID yet. Step L (reviewed filing) is withdrawn and Import replaces it. (D-W7, D-W11, D-W17, D-W39, D-W72)
 

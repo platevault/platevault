@@ -59,7 +59,7 @@
     },
     {
       "old": "J12",
-      "successor": "J38 (issues and refusals surfaced in the status bar and the Issues hub), J43 (acting on a refusal, Retry); distributed across the J19, J24, J27 and J28 failure branches",
+      "successor": "J38 (issues and refusals surfaced in the status bar and on their rows), J43 (acting on a refusal, Retry); distributed across the J19, J24, J27 and J28 failure branches",
       "recommendation": "Deprecate with pointers to J38 and J43 once intent is recorded."
     },
     {
