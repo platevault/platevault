@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { planningSite, type World } from "./derive"
 import { GRADE_RANK, goalHorizon, goalsTonight, type Horizon, nextGoodNight, nightOutlooks } from "./outlook"
 import { nightPlan } from "./planning"
@@ -13,9 +13,16 @@ let world: World
 let site: ObservingSite
 let horizon: Horizon
 beforeAll(() => {
+  // The seed plans tonight from the clock (`upcomingNight(site, Date.now())`): freeze Date at the same instant
+  // the horizon starts from, so the demo plan's night is TONIGHT whatever day the suite runs.
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(NOW)
   world = createSeed("demo")
   site = planningSite(world)!
   horizon = goalHorizon(world.catalog, site, NOW, TONIGHT, NIGHTS)
+})
+afterAll(() => {
+  vi.useRealTimers()
 })
 
 describe("goalHorizon (moved from the Home concepts)", () => {

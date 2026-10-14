@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { goalProgress, type GoalProgress, planningSite } from "@/domain/derive"
 import { upcomingNight } from "@/domain/planning"
 import { createSeed } from "@/domain/seed"
@@ -15,9 +15,17 @@ const M31 = "prj_m31"
 const CYGNUS = "prj_cygnus"
 const HOO_MOSAIC = "gtpl_user_hoo_mosaic"
 
+// A template's season starts on the first night its subject is visible from tonight, and the seed's Cygnus subjects
+// are autumn targets: freeze Date on the seed's own day, so "the season starts tonight" holds in any month.
+const SEED_DAY = Date.parse("2026-10-13T12:00:00Z")
 let demo: PrototypeState
 beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(SEED_DAY)
   demo = { ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() }
+})
+afterAll(() => {
+  vi.useRealTimers()
 })
 beforeEach(() => {
   store.replace(structuredClone(demo))
