@@ -7,7 +7,7 @@ The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific
 
 ## Workflow redesign 2026-10-06
 
-On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. On 2026-10-08 the user added D-W75, which narrows D-W72 for run groups: a trashed panel run stays listed in its group as Trashed (VSEL-FR-19). Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
 
 Stage model:
 
