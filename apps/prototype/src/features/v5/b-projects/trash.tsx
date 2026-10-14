@@ -133,7 +133,11 @@ export function ProjectTrashPage() {
 
   return (
     <ListPage
-      title={m.trash_of_project({ name: project.name })}
+      path={[
+        { label: m.nav_projects(), link: { to: "/projects" } },
+        { label: project.name, link: { to: "/projects/$projectId", params: { projectId } } },
+      ]}
+      title={m.trash_title()}
       summary={m.project_runs_count({ count: rows.length })}
       menu={{ label: m.trash_title(), items: rows.length > 0 ? [emptyAction(m, state, projectId, ids, false, m.trash_empty())] : [] }}
       table={{

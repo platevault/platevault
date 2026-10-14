@@ -46,7 +46,11 @@ describe("New Project: template conditions (C7, astro-plan-0qzxe)", () => {
     await user.click(within(dialog).getByRole("button", { name: m.newproject_create() }))
     const project = created()
     expect(project.subjects).toHaveLength(1)
-    expect(subjectConditions(project.subjects[0]!).panelBalancePct).toBe(template.conditions!.panelBalancePct)
+    // The template's panel balance and its window rule: a Season rule, pre-filled from the subject's visibility.
+    const conditions = subjectConditions(project.subjects[0]!)
+    expect(conditions.panelBalancePct).toBe(template.conditions!.panelBalancePct)
+    expect(template.conditions!.window).toEqual({ kind: "season" })
+    expect(conditions.window).toMatchObject({ kind: "season", from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })
     expect(project.goals.map((g) => g.channel).sort()).toEqual(["Ha", "OIII"])
   })
 

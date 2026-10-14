@@ -1,4 +1,6 @@
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { render, screen, within } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { Column } from "@/components/app/contracts"
 import { ListDetail, PageHeader } from "@/components/app/page"
@@ -83,5 +85,26 @@ describe("ListPage", () => {
     expect(document.title).toBe(`Design system reference · ${m.app_document_title()}`)
     unmount()
     expect(document.title).toBe(m.app_document_title())
+  })
+
+  it("renders `path` as the header breadcrumb before the title, and the tab still names the title alone", async () => {
+    const node: ReactNode = (
+      <ListPage
+        path={[
+          { label: "Projects", link: { to: "/projects" } },
+          { label: "Cygnus", link: { to: "/projects/$projectId", params: { projectId: "prj_cygnus" } } },
+        ]}
+        title="Trash"
+        table={TABLE}
+      />
+    )
+    // The path's links go through the router.
+    const router = createRouter({ routeTree: createRootRoute({ component: () => node }), history: createMemoryHistory({ initialEntries: ["/"] }) })
+    render(<RouterProvider router={router} />)
+    const header = (await screen.findByRole("heading", { level: 1, name: "Trash" })).closest("header")!
+    const crumbs = within(header).getByRole("navigation", { name: m.ui_breadcrumb() })
+    expect(within(crumbs).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects")
+    expect(within(crumbs).getByRole("link", { name: "Cygnus" })).toHaveAttribute("href", "/projects/prj_cygnus")
+    expect(document.title).toBe(`Trash · ${m.app_document_title()}`)
   })
 })

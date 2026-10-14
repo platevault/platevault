@@ -302,6 +302,14 @@ export interface RowView {
   opposition: string | null
   /** The subject's planning priority, when an open Project gives it a window (`planningPriorities`). */
   priority: SubjectPriority | null
+  /** Its place in `planningPriorities`' order, 0 the most urgent; null without a window. */
+  planningRank: number | null
+}
+
+/** A Target's most urgent window and its place in Planning's order. */
+export interface RankedPriority {
+  priority: SubjectPriority
+  rank: number
 }
 
 /** What every row of one render shares: the selection, the Moon curves and the night's priorities. */
@@ -309,7 +317,7 @@ export interface RowInputs {
   rigIds: OpticalTrainId[]
   sessionCounts: Map<string, number>
   curves: Record<Band, MoonAvoidance>
-  priorities: Map<TargetId, SubjectPriority>
+  priorities: Map<TargetId, RankedPriority>
 }
 
 function asTarget(row: TargetRow): Target {
@@ -333,24 +341,30 @@ export function rowView(catalog: Catalog, disk: Disk, ctx: SkyContext | null, ro
     capturedS: captured.reduce((sum, c) => sum + c.seconds, 0),
     sessions: row.target ? (inputs.sessionCounts.get(row.target.id) ?? 0) : 0,
     opposition: row.ra === null || !ctx ? null : nextOpposition(row.ra, ctx.nowMs),
-    priority: row.target && !row.panelOf ? (inputs.priorities.get(row.target.id) ?? null) : null,
+    ...ranked(row, inputs),
   }
 }
 
+function ranked(row: TargetRow, inputs: RowInputs): Pick<RowView, "priority" | "planningRank"> {
+  const found = row.target && !row.panelOf ? inputs.priorities.get(row.target.id) : undefined
+  return { priority: found?.priority ?? null, planningRank: found?.rank ?? null }
+}
+
 /**
- * Each Target's highest planning priority on a night (C7): a Target that is
- * the subject of several open Projects takes its most urgent window.
- * `planningPriorities` already orders them, so the first one per Target wins.
+ * Each Target's highest planning priority on a night (C7) and its rank: a
+ * Target that is the subject of several open Projects takes its most urgent
+ * window. `planningPriorities` already orders them, so the first one per
+ * Target wins and the ranks follow its order.
  */
-export function prioritiesByTarget(catalog: Catalog, night: NightDate): Map<TargetId, SubjectPriority> {
-  const out = new Map<TargetId, SubjectPriority>()
-  for (const p of planningPriorities(catalog, night)) if (!out.has(p.subject.targetId)) out.set(p.subject.targetId, p)
+export function prioritiesByTarget(catalog: Catalog, night: NightDate): Map<TargetId, RankedPriority> {
+  const out = new Map<TargetId, RankedPriority>()
+  for (const p of planningPriorities(catalog, night)) if (!out.has(p.subject.targetId)) out.set(p.subject.targetId, { priority: p, rank: out.size })
   return out
 }
 
-/** A row's place in Planning's order: higher priority first, then fewer nights left; rows without a window last. */
+/** A row's place in Planning's order (`planningPriorities`); rows without a window last. */
 function priorityRank(v: RowView): number {
-  return v.priority ? -v.priority.priority * 10_000 + v.priority.window.nightsLeft : Number.POSITIVE_INFINITY
+  return v.planningRank ?? Number.POSITIVE_INFINITY
 }
 
 /**
@@ -538,8 +552,8 @@ export function sortValue(view: RowView, column: SortColumn, band?: Band | null)
     case "source":
       return rowSource(view.row)
     case "priority":
-      // Higher priority first when descending; fewer nights left breaks a tie.
-      return view.priority ? view.priority.priority * 10_000 - view.priority.window.nightsLeft : null
+      // The most urgent first when descending: Planning's order (`planningPriorities`).
+      return view.planningRank === null ? null : -view.planningRank
   }
 }
 

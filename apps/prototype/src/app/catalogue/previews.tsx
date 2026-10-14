@@ -2,17 +2,21 @@
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3): P9 HoverCard previews.
  * Each card opens on hover and on keyboard focus of its trigger and closes on
  * Escape; nothing moves when it opens. Captions are reviewer labels; the
- * blocker and user names are sample data.
+ * blocker and user names and the masters are sample data.
  */
 import { Archive } from "lucide-react"
 import { useMessages } from "@/app/preferences"
-import { BlockersPreview, Preview, UsedByPreview } from "@/components/app/previews"
+import { BlockersPreview, MasterPreview, Preview, UsedByPreview } from "@/components/app/previews"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { ComponentSection, Specimen } from "./specimen"
 
 // eslint-disable-next-line alm/no-user-string -- sample runs: target and filter names with a night
 const RUNS = [{ label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" } }, { label: "NGC 7000 · OIII · 2026-09-02", link: { to: "/projects" } }, { label: "IC 1396 · SII · 2026-08-28" }]
+
+// A master dark as the Calibration library records it, and its file name.
+const DARK = { kind: "dark", cameraName: "ZWO ASI2600MM Pro", gain: 100, offset: 50, ccdTempC: -10, exposureS: 300, frameCount: 30 } as const
+const DARK_FILE = "masterDark_BIN-1_EXPOSURE-300.00s.xisf"
 
 export function PreviewsCatalogue() {
   const m = useMessages()
@@ -53,6 +57,17 @@ export function PreviewsCatalogue() {
           </Specimen>
           <Specimen caption={m.catalogue_previews_empty_link()}>
             <UsedByPreview label={m.calibration_used_by_runs({ count: 0 })} link={{ to: "/projects" }} items={[]} />
+          </Specimen>
+        </div>
+      </ComponentSection>
+
+      <ComponentSection components={["MasterPreview"]} description={m.catalogue_previews_master_desc()}>
+        <div className="space-y-3">
+          <Specimen caption={m.catalogue_previews_master_young()}>
+            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-09-14" age={null} usedBy={2} />
+          </Specimen>
+          <Specimen caption={m.catalogue_previews_master_old()}>
+            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-05-02" age={m.flow_master_old({ n: 165 })} usedBy={0} />
           </Specimen>
         </div>
       </ComponentSection>

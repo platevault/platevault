@@ -36,6 +36,7 @@ import {
   panelRef,
   runFlowState,
   type RunFlowState,
+  runResults,
   runStepLink,
   SESSION_INTAKE_NAME,
   SESSION_INTAKE_STEPS,
@@ -110,12 +111,21 @@ function runViewRows(world: World, run: Run): FileRow[] {
   })
 }
 
+/** The run's Products Finish run keeps (§5.4): each accepted Result, staying in its folder. */
+function productRows(world: World, run: Run): FileRow[] {
+  return runResults(world.catalog, run.id)
+    .products.filter((result) => result.acceptance === "accepted")
+    .map((result): FileRow => ({ file: fileName(result.path), from: result.path.slice(0, result.path.lastIndexOf("/")), action: "keep", size: fileAt(world.disk, result.path)?.sizeBytes ?? 0 }))
+}
+
 /**
  * The run as a flow: Select → Calibrate → Prepare → Results (§5.4), not
  * ordered (each step derives from the run's data, so an edit makes its step
  * current again). Proceed saves the selection, records the calibration,
  * starts Prepare, and on Results is Finish run, which freezes the
- * calibration (D5) and removes the run view (F6).
+ * calibration (D5) and removes the run view (F6). Its confirm lists the
+ * Products it keeps, an empty group when none was accepted, then the run
+ * view it removes, when there is one.
  */
 export function runFlow(world: World, run: Run, m: Messages, host: RunFlowHost): StepFlow {
   const state = runFlowState(world, run)
@@ -141,7 +151,7 @@ function runProceed(world: World, run: Run, m: Messages, host: RunFlowHost, stat
       const confirm: ConfirmSpec = {
         title: m.stepflow_finish_run_title({ name: run.name }),
         summary: say(m, summary),
-        groups: rows.length > 0 ? [{ label: m.run_check_mode(), rows }] : undefined,
+        groups: [{ label: m.run_results_products(), rows: productRows(world, run) }, ...(rows.length > 0 ? [{ label: m.run_check_mode(), rows }] : [])],
         confirm: { label: m.stepflow_finish_run() },
       }
       return { proceed: { id: "run-finish", label: m.stepflow_finish_run(), run: () => finishRun(run.id, { keepView: false }).result, confirm }, next: null }

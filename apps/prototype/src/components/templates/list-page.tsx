@@ -3,7 +3,8 @@
  * bar, optional view tabs, one DataTable with its toolbar, and the open
  * row's DetailPanel docked beside it (spec 054).
  *
- * - Header: the title, a summary (the count), the page's context controls
+ * - Header: the path (breadcrumb) for a list that belongs to an object
+ *   (a Project's Trash), the title, a summary (the count), the page's context controls
  *   (`context`: the night and site pickers on Targets) beside the title, at
  *   most one primary and three standard actions, and the object menu
  *   ("Calibration ▾") for the rest. The bar wraps when it runs out of room.
@@ -20,7 +21,7 @@ import type { ReactNode } from "react"
 import type { Action } from "@/components/app/contracts"
 import { DataTable, type DataTableProps, type DataTableToolbar } from "@/components/app/data-table"
 import type { PageNotice } from "@/components/app/feedback"
-import { PageHeader } from "@/components/app/page"
+import { PageHeader, type PathItem } from "@/components/app/page"
 import { DetailDock, type PageDetail } from "./detail-panel"
 import { headerActions, headerBar, type ObjectMenu, type PageViews, ViewTabs } from "./parts"
 
@@ -28,6 +29,8 @@ import { headerActions, headerBar, type ObjectMenu, type PageViews, ViewTabs } f
 export type ListPageTable<T> = DataTableProps<T> & { toolbar: DataTableToolbar; className?: never; scroll?: never }
 
 export interface ListPageProps<T> {
+  /** The breadcrumb for a list inside an object (Projects › {Project}); omit for a top-level list. */
+  path?: PathItem[]
   title: string
   /** 1 for a route's page; 2 for a child area of a layout route (Settings) or a catalogue specimen. */
   level?: 1 | 2
@@ -44,10 +47,10 @@ export interface ListPageProps<T> {
   detail?: PageDetail | null
 }
 
-export function ListPage<T>({ title, level = 1, summary, context, actions, menu, views, notice, table, detail }: ListPageProps<T>) {
+export function ListPage<T>({ path, title, level = 1, summary, context, actions, menu, views, notice, table, detail }: ListPageProps<T>) {
   return (
     <div data-template="list" className="flex min-h-0 flex-1 flex-col">
-      <PageHeader level={level} title={title} summary={summary} meta={context} actions={headerActions(actions, menu)} notice={notice} className={headerBar(level)} />
+      <PageHeader level={level} path={path} title={title} summary={summary} meta={context} actions={headerActions(actions, menu)} notice={notice} className={headerBar(level)} />
       <ViewTabs views={views}>
         <DetailDock detail={detail} level={level}>
           <div className="flex min-h-0 flex-1 flex-col px-5 pt-3 pb-4">
