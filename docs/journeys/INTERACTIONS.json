@@ -459,7 +459,7 @@
       "journeyStep": "J19/S9a, J19/S10, J14/S7, J34/S8, J34/S10",
       "spec": "064-library-inventory LIB-FR-17, LIB-FR-18, LIB-AC-18, LIB-AC-19; 065-project-goals PRJ-FR-16, PRJ-FR-19, PRJ-AC-09, PRJ-AC-20; D-W33, D-W35, D-W37, D-W43, D-W59",
       "action": "Choose Needs a Target and Not in any Project before and after confirming associations, add the other-camera session to a Project from Not in any Project, and later choose the Trashed filter and put one trashed frame back.",
-      "expect": "Each filter lists exactly the sessions its rule names and Home's top line matches the counts. Not in any Project offers Create Project and Add to Project, with a visible note when the rig is added. Trashed lists exactly the trashed frames with their last-observed metadata and the operation that trashed them, and a frame put back leaves it.",
+      "expect": "Each filter lists exactly the sessions its rule names and Home's Pending work matches the counts. Not in any Project offers Create Project and Add to Project, with a visible note when the rig is added. Trashed lists exactly the trashed frames with their last-observed metadata and the operation that trashed them, and a frame put back leaves it.",
       "negative": "Neither filter assigns a session to a Project or a run, and no other list shows a Trashed frame."
     },
     {

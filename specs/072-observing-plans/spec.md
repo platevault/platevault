@@ -16,7 +16,7 @@
 
 ### User Story 1 - Observing plans, reminders, calendar export (Priority: P1)
 
-Astronomical windows for a Target from a chosen planning site, opt-in reminders limited to the default site, a one-time ICS snapshot, and the Tonight data that Home shows. Planning works on Targets. A Project page shows planning for its own subjects and links to the Planner.
+Astronomical windows for a Target from a chosen planning site, opt-in reminders limited to the default site, a one-time ICS snapshot, and the Tonight and calendar data that Home shows. Planning works on Targets. A Project page shows planning for its own subjects and links to the Planner.
 
 **Why this priority**: This feature owns the workflow steps listed below without imposing unrelated product features.
 
@@ -34,14 +34,11 @@ Astronomical windows for a Target from a chosen planning site, opt-in reminders 
 - **PLAN-AC-08**: Given OS notification permission is denied, when activation is requested, then denial remains visible with Settings and Retry, and no delivery success is claimed.
 - **PLAN-AC-09**: Given M 101 is a subject of no Project, when its Plan area opens, then windows compute, and Mark Planned, Enable notifications and Export calendar are available without creating or choosing a Project. (D-W16)
 - **PLAN-AC-10**: Given the Project "Summer nebulae" with subjects NGC 7000 and IC 1396, when the Project page opens, then its planning lists windows for those two subjects only. "Open in Planner" opens the Targets page limited to those subjects, with the rig selector set to "this Project's rigs". (D-W16, D-W37)
-- **PLAN-AC-11**: Given a default site, M 31 in My targets, and an open Project with subject NGC 7000, when Home requests Tonight, then it receives:
-  - the best window tonight for M 31 and for NGC 7000, each with start, end and peak altitude, leaving out a Target with no window tonight;
-  - the Moon's illumination, phase, rise and set;
-  - tonight's darkness window.
-
-  Each value names the site and time zone. (D-W39)
-- **PLAN-AC-12**: Given no saved planning site, when Home requests Tonight, then it receives no windows and the reason "Add an observing site in Settings". (D-W39)
-- **PLAN-AC-13**: Given the user enables a reminder, then the lead time is a number with a unit (minutes, hours or days) that the user can type, plus presets, and every preset and the default are longer than 30 minutes. (D-W88)
+- **PLAN-AC-11**: Given a default site and an open Project with unfinished Ha and OIII goals on subject NGC 7000, when Home requests Tonight, then it receives each of those goals graded good, marginal or poor for tonight under the channel's Moon-avoidance curve, with the best window's start, end and peak altitude, and the Moon's illumination, phase, rise and set and tonight's darkness window. Each value names the site and time zone. When no goal suits tonight, it receives the next good night's date instead. (D-W88, D-W89)
+- **PLAN-AC-12**: Given no saved planning site, when Home requests Tonight or the calendar, then it receives no windows and the reason "Add a site to see tonight's darkness and Moon." (D-W89)
+- **PLAN-AC-13**: Given the user enables a reminder, then the lead time is a number with a unit (minutes, hours or days) that the user can type, plus presets, prefilled from the default lead time setting, which reads 12 hours until the user changes it. Typing 30 minutes or less, in the reminder or in the setting, shows an inline error and cannot be saved. (D-W88)
+- **PLAN-AC-14**: Given a default site and one Target marked Planned for Friday, when Home requests the calendar, then it receives five weeks of nights starting this week, each with its Moon phase, hours of darkness, number of goals it suits and number of planned Targets, and Friday counts one planned Target. The card for a night lists its dark window, the Moon's illumination, rise and set, the goals it suits best first, the goals the Moon rules out, and the planned Targets. (D-W89)
+- **PLAN-AC-15**: Given reminders enabled for five Targets and PlateVault closed for two nights, where two windows ended while it was closed and three are open at start-up (one has started, two are inside their lead time), when PlateVault starts, then Activity records the two ended windows as "Missed while PlateVault was closed" with no notification. One notice names three Targets, or two and "1 more" when a fourth is open, and opens Targets for tonight. None of the three open windows notifies again, and the next window that enters its lead time notifies on its own. (D-W88)
 
 ### User Story 2 - Targets list (Priority: P1)
 
@@ -70,7 +67,7 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 - **PLAN-TGT-AC-15**: Given no saved planning site, when the Targets page opens, then the planning columns show "-" and the page shows "Add an observing site in Settings". Search, Add to targets, ★ and Sessions still work. (D-W18)
 - **PLAN-TGT-AC-16**: Given M 31 marked ★ and the open Project "Summer nebulae" with subject IC 1396, which is not marked ★. When the Targets page opens on My targets, then it lists M 31 and IC 1396, and IC 1396 carries a "Summer nebulae" Project badge. (D-W60)
 - **PLAN-TGT-AC-17**: Given the Targets page on tonight, when the user chooses next week twice, then every column shows values for the night two weeks ahead and the night picker names it. Today returns the page to tonight. When Home's calendar opens Targets for a night, the page opens set to that night. (D-W88)
-- **PLAN-TGT-AC-18**: Given a night with a 60 % lit Moon, when the user chooses Ha and OIII in Suitable filters, then the table lists Targets by the clear time of those bands, and each band's grade comes from its Moon-avoidance curve, so Img time and the Filters strip agree. A poor band shows in the danger tone and a marginal band in the warning tone. (D-W88)
+- **PLAN-TGT-AC-18**: Given a night with a 60 % lit Moon, when the user chooses Ha and OIII in Suitable filters, then the table lists every Target for which Ha or OIII is good or marginal, sorted by the longer of the two bands' clear times, and each band's grade comes from its Moon-avoidance curve, so Img time and the Filters strip agree. A poor band shows in the danger tone and a marginal band in the warning tone. (D-W88)
 
 ### User Story 3 - Equipment: rigs compose a camera, a telescope and filters (Priority: P2)
 
@@ -108,17 +105,18 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-FR-03**: Mark Planned and Enable notifications are explicit opt-ins. Reminders use the displayed default site, and every reminder names it. Planning elsewhere never enables reminders there. Enabling reminders starts no indexing or image processing.
 - **PLAN-FR-04**: Export calendar confirms site, date range, time zone, and selected windows, then saves an .ics file through the native save dialog as a one-time snapshot.
 - **PLAN-FR-05**: Suitability is astronomical only: no weather, equipment, or processing-readiness claims, and no provider account or authorization.
-- **PLAN-FR-06**: Notifications require explicit criteria and lead time plus the default site, all named before activation. The lead time is typed as a number with a unit (minutes, hours or days) or picked from presets; every preset and the default are longer than 30 minutes. Each delivered reminder's target/site/window identity is recorded durably. Resume and restart recompute upcoming windows and suppress repeats of recorded identities. App-closed delivery needs an installed, tested scheduler; otherwise that capability is explicitly unavailable. (D-W88)
+- **PLAN-FR-06**: Notifications require explicit criteria and lead time plus the default site, all named before activation. The lead time is typed as a number with a unit (minutes, hours or days) or picked from presets. The default lead time is a user setting in Settings, 12 hours until the user changes it, and a new reminder starts from it. Every preset, the setting and any typed value are longer than 30 minutes. Each delivered reminder's target/site/window identity is recorded durably. Resume and restart recompute upcoming windows and suppress repeats of recorded identities. At start-up and on resume, a window that ended while PlateVault was closed is recorded in Activity as "Missed while PlateVault was closed" and notifies nothing. Every window whose lead time has begun and that has not ended, including a window that has started, is gathered into one notice. The notice names at most 3 Targets, then "{n} more", and opens Targets for tonight. Every identity it covers is recorded as delivered, and normal delivery resumes after it. App-closed delivery needs an installed, tested scheduler; otherwise that capability is explicitly unavailable. (D-W88)
 - **PLAN-FR-07**: Permission denial remains visible and offers Settings and Retry. No scheduler acknowledgment is represented as actual notification delivery.
 - **PLAN-FR-08**: Rust computes astronomical planning windows, Targets list values, Fit and Tonight through qualified shared skymath contracts. The frontend presents them and their controls without reimplementing scientific calculations. (D-W18, D-W23, D-W39)
 - **PLAN-FR-09**: Planning is keyed by Target. A Target can be planned, marked Planned, given reminders and exported without belonging to any Project. A Project owns no windows. Its page shows the windows of its own subjects, from the same Target planning at the active planning site, and offers "Open in Planner". (D-W16)
 - **PLAN-FR-10**: "Open in Planner" opens the Targets page in the Project's context. The list is limited to the Project's subjects and the rig selector is set to "this Project's rigs". The Project context is shown and can be cleared, which returns the list to My targets. (D-W16, D-W37)
 - **PLAN-FR-11**: Tonight supplies Home's Tonight section for the default site. It holds:
-  - the best window tonight, with start, end and peak altitude, for each subject of a Project that is not Closed and each Target in My targets;
+  - every unfinished goal of an open Project, graded good, marginal or poor for tonight for its channel under the Moon-avoidance curve (PLAN-FR-02), with the best window's start, end and peak altitude;
   - the Moon's illumination, phase, rise and set;
   - tonight's darkness window.
 
-  Each value names its site and time zone. Targets without a window tonight are left out. A mosaic subject's window uses the mosaic's center. The same computation tells Home whether a subject has a window tonight. (D-W39, D-W35, D-W63)
+  Each value names its site and time zone. When no goal suits tonight, Tonight gives the date of the next good night. A mosaic subject's window uses the mosaic's center. The same computation tells Home whether a subject has a window tonight. The user changes the site on Targets. Home has no site control. (D-W35, D-W39, D-W63, D-W88, D-W89)
+- **PLAN-FR-12**: The calendar supplies Home's calendar for the default site: five weeks of nights starting this week. Each night has its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets marked Planned for it. Hovering over or focusing a night opens a card with its dark window, the Moon's illumination, rise and set, the goals it suits best first, the goals the Moon rules out, and the planned Targets. Choosing a night opens Targets set to that night (PLAN-TGT-FR-16). (D-W88, D-W89)
 
 #### Targets list
 
@@ -159,7 +157,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-TGT-FR-12**: Mosaic candidates (2 or more panels) and Fits nicely (coverage of 25% to 90%) are offered only with a rig selected. With two or more rigs, a Target matches when it matches on any of them. (D-W23, D-W37, D-W62)
 - **PLAN-TGT-FR-13**: Narrowband (Moon up), Emission nebulae Ha and Planetary nebulae OIII are hidden when a rig is selected and no filter on it passes Ha, SII or OIII. (D-W23, D-W31)
 - **PLAN-TGT-FR-14**: Selecting a row opens that Target's Plan area (PLAN-FR-02). (D-W16)
-- **PLAN-TGT-FR-15**: **Suitable filters**, which replaces "Good tonight for", is a toolbar filter that takes one or more bands. A chosen band admits a Target when that band is good or marginal for it on the selected night, and the list sorts by that band's clear time. (D-W88)
+- **PLAN-TGT-FR-15**: **Suitable filters**, which replaces "Good tonight for", is a toolbar filter that takes one or more bands. A Target qualifies when any chosen band is good or marginal for it on the selected night, and the list sorts by the longest clear time among the chosen bands, descending. (D-W88)
 - **PLAN-TGT-FR-16**: A night picker in the Targets toolbar sets the planning night, tonight by default, with previous week, next week and Today, which returns to tonight. Every value this section gives "for tonight" is given for the selected night. Opening Targets from a night on Home's calendar sets that night. (D-W88)
 
 #### Equipment: cameras, telescopes, filters and rigs
@@ -177,7 +175,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - K
 - Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)
 - Settings > Equipment: cameras, telescopes, filters and rigs, and the unknown-filter prompt (D-W31, D-W87)
-- Tonight data for Home (D-W39)
+- Tonight and calendar data for Home (D-W39, D-W89)
 
 ### Key Entities
 
@@ -188,7 +186,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - **Rig**: an optical train from Settings > Equipment that selects one camera, one telescope and its filters; its field of view follows from them.
 - **Filter**: an Equipment record with a name, matched FITS FILTER values and passed bands, which rigs select. (D-W87)
 - **Targets preset**: a named set of Targets list filters, either built in or saved by the user.
-- **Tonight**: tonight's best windows for Project subjects and My targets, the Moon and the darkness window at the default site.
+- **Tonight**: the default site's grades for tonight for every unfinished goal, with the Moon and the darkness window.
 
 ## Success Criteria
 
@@ -214,4 +212,5 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Root decision D19 has no PLAN consumer: no planning path consumes a recorded file, and calendar export writes computed windows.
 - Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, D-W63 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W36, D-W43 and D-W46 are read here where they constrain this feature's outputs.
 - Workflow decision D-W87 (Round 9 user item astro-plan-ngm9g, 2026-10-12) supersedes D-W31's ownership: filters, cameras and telescopes are their own Equipment records, and a rig selects them. The rest of D-W31 still applies, and the unknown-filter prompt now adds a filter record to the rig.
-- Workflow decision D-W88 (Round 9 C2 and C6, C8, user items, 2026-10-12 to 2026-10-13) sets one Moon-avoidance curve per filter for windows, Img time and grades, renames "Good tonight for" to Suitable filters with several bands, adds the night picker, moves saved presets into a Custom presets dropdown and makes the reminder lead time free entry with units, longer than 30 minutes.
+- Workflow decision D-W88 (Round 9 C2 and C6, C8, user items, 2026-10-12 to 2026-10-13) sets one Moon-avoidance curve per filter for windows, Img time and grades, renames "Good tonight for" to Suitable filters with several bands, adds the night picker, moves saved presets into a Custom presets dropdown and makes the reminder lead time free entry with units, longer than 30 minutes. The owner's answers of 2026-10-14 let a Target qualify when any chosen band suits, sort by the longest clear time, set the default lead time to a user setting of 12 hours, and gather reminders missed while the app was closed into Activity and one start-up notice.
+- Workflow decision D-W89 (Round 9 C8 and decision astro-plan-b66vy, 2026-10-13) supersedes section 4 of D-W39: Home's Tonight holds the unfinished goals graded for tonight, and PV-PLAN also supplies Home's five-week calendar.

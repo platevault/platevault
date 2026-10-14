@@ -94,16 +94,16 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 
 ### User Story 6 - Work Projects from the Home dashboard (Priority: P1)
 
-The user opens Home, sees every Project with its goal progress, stage and one Next action, and acts on new sessions that need a Target, belong to no Project, are unreviewed or are ready to add to a run (D-W35, D-W39).
+The user opens Home and sees, on one page, what needs them, what is running and when to capture next: pending ingestions, pending work, open work with each Project's next step, status, tonight's goals and a five-week calendar. Each row opens the page that owns it (D-W35, D-W89).
 
 **Why this priority**: Home is the control panel for capture and processing. It must show what to do next without hiding the library.
 
-**Independent Test**: Index sessions for two Projects plus one session with no confirmed Target, then read Home's sections, top line and Next actions.
+**Independent Test**: Index sessions for two Projects plus one session with no confirmed Target, then read Home's sections and Next actions.
 
 **Acceptance Scenarios**:
 
-1. **Given** indexed sessions, **When** Home opens, **Then** it shows the six Home sections of FR-020 in order. (D-W39)
-2. **Given** three sessions with no confirmed Target and two with a confirmed Target that no Project lists, **When** Home opens, **Then** the top line reads "3 sessions need a Target · 2 not in any Project". (D-W35)
+1. **Given** indexed sessions, **When** Home opens at 1280 px or wider, **Then** it shows Pending ingestions, Pending work and Open work in the left column and Status, Tonight and the calendar in the right column, each with at most 5 rows and then "All N ›". (D-W89)
+2. **Given** three sessions with no confirmed Target and two with a confirmed Target that no Project lists, **When** Home opens, **Then** Pending work lists the three under needs a Target and the two under not in a Project, and Home shows no summary line above its sections. (D-W35, D-W89)
 3. **Given** a Project whose subjects and rigs match sessions that still need review, and a blocked run, **When** Home computes its Next action, **Then** it shows "N sessions need review", which opens Sessions filtered to Needs review. (D-W27, D-W35, D-W78)
 4. **Given** a goal of Ha 10h with 6h10 in the Project's runs and 9h15 across all candidates and run members, **When** progress shows, **Then** it reads "Ha 6h10 in project · 9h15 captured · goal 10h", and the goal is unmet. (D-W36, D-W66)
 
@@ -143,15 +143,15 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
 - **FR-017**: Assigning, opening, preparing, reusing, cleaning, archiving or trashing a recorded file, or retiring it as a source after archive, MUST re-verify its recorded identity and SHA-256 immediately before the effect. A mismatch MUST name the drift and block that item. Counting a file toward a decision- or proof-bound total MUST use its last completed verification, from review, inspection, acceptance, readable rescan or reuse, and MUST label that verification time. Counts MUST exclude an item whose latest verification found drift or is pending, and showing a total MUST NOT start a rehash. Metadata-only captured totals of Unreviewed captures, and labelled last-observed counts of offline or unreadable inputs of locations that are not retired, MUST stay visible as D19 scopes them. Catalog-only Retire location reads no file bytes and is exempt from rehashing; it MUST still commit only against its review, expected revision and unchanged availability (D19). (D-W11, D-W43)
 - **FR-018**: A Project's candidates MUST be derived, never assigned: every Ready session (fully reviewed at intake) whose confirmed Target is one of the Project's subjects and whose rig is one of the Project's rigs. A run's session picker MUST offer only candidates of the run's subject on the run's rig. A session that still needs review MUST NOT be a candidate. (D-W33, D-W37, D-W78)
 - **FR-019**: Sessions MUST be assigned only to runs, as each run's revisioned membership. A Project's members MUST be inherited from its runs outside its Trash. Goal progress MUST show "in project" and "captured". "in project" counts the frames in the latest saved memberships of the Project's runs outside its Trash, minus each run's exclusions. "captured" counts the frames of all candidates plus the members of those runs. A member that stops being a candidate MUST stay in its run and still count "in project". The members of a run in the Project's Trash MUST stop counting in both, unless they are still candidates, and MUST count again after Restore. Goal met and Home's Next action MUST use "in project" only. (D-W34, D-W36, D-W44, D-W45, D-W66, D-W72, D-W79)
-- **FR-020**: Home MUST be a dashboard with these six sections, in order:
-  1. Actions: Import, New Project, Plan tonight.
-  2. Projects, each with goals, stage and one Next action.
-  3. New sessions needing work.
-  4. Tonight.
-  5. Target status.
-  6. Running work.
+- **FR-020**: Home MUST be one dashboard of what needs the user, what is running and when to capture next, with no tabs and no header buttons. Its sections, in this fixed order, MUST be:
+  1. Pending ingestions.
+  2. Pending work.
+  3. Open work, with each Project's next step.
+  4. Status.
+  5. Tonight.
+  6. A five-week calendar.
 
-  Its top line MUST read "N sessions need a Target · M not in any Project". Closed Projects MUST stay hidden behind a "Show done" filter. PV-PRJ owns the section contents and the Next rule. (D-W27, D-W35, D-W39, D-W48)
+  Each row MUST open the page that owns it, and each section MUST show at most 5 rows, then "All N ›". Problems MUST show on the row they affect; Home MUST have no alerts list. One-click buttons MUST be offered only for actions that need no further input and can be undone. Home MUST have no summary line above its sections. PV-PRJ owns the section contents and the Next rule. (D-W27, D-W35, D-W89)
 - **FR-021**: Moving rejected frames to the OS Trash MUST be offered only from the Trash step of a Project's Wrap up. It MUST cover only that Project's library-Unusable candidate frames, MUST list refused frames with their reason, and MUST NOT permanently delete. A Trashed record MUST stay for traceability. It MUST appear only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of a run that was Finished when the frame was trashed. The same step MUST also offer "Move N processing intermediates to Trash (size)" and "Move N duplicate copies to Trash (size)" under the same trash rules. It MUST keep final Results and adopted masters, and it MUST keep one copy of every frame. When the Project's Trash holds runs, Wrap up MUST also offer Empty Trash under FR-009. (D-W43, D-W52, D-W70, D-W72, D-W74, D-W79, D-W80)
 - **FR-022**: Each run's stage MUST be one of Select, Calibrate, Prepare, Results or Finished. Finish run MUST offer to remove the run's view, ticked for Copies and unticked for Symlinks, and a kept view MUST be offered again only in Wrap up's Clean up runs step; Clean up MUST NOT be required. At any stage the user MAY move the run to the Project's Trash under FR-009. A run in the Trash leaves the stage rail and is listed in the Project's Trash list with its stage. The Project page MUST show a stage rail with each run's stage. A Project MUST end with Wrap up: Clean up runs → Trash → Archive, in that order, each step optional, and Close project as Archive's Proceed. Archive MUST be offered and MUST NOT be required. (D-W3, D-W7, D-W26, D-W72, D-W78, D-W80, D-W81)
 - **FR-023**: The interface MUST call a View a "processing run". It MUST label goal progress "in project" and "captured", MUST NOT say "not in a run", and MUST never show an "in project" value above its "captured" value. A run ends with **Finish run** and is then **Finished**; a Project ends with **Close project** and is then **Closed**, or **Archived** once its Archive succeeds. A calibration master the user no longer wants offered is **Hidden**, with Show hidden and Restore. Editing an object's details MUST use one **Edit…** verb. Moving files to the OS Trash MUST use the destructive action style. (D-W3, D-W36, D-W66, D-W76)
@@ -184,7 +184,7 @@ The stable feature keys identify contract owners. They are not a chronological i
 | PV-PREP | Profiles, modes, paths, preparation, verified external handoff | E3, E4, F1, F2, F3, F4, F5, F6 |
 | PV-RES | Result discovery, acceptance, provenance, reuse, Finish run, Move run to Trash, Restore and Empty Trash | H1, H2, H3, H3a, I1 |
 | PV-STO | Import (sources, preview, Copy or Move, naming templates), run Clean up, retained-original proof, verified archive, OS Trash custody for Import Move, emptied runs, trashed frames and duplicate copies | I2, I3, I4, I5, J, L (withdrawn), Import |
-| PV-PLAN | Planner on Targets, the Targets list (My targets, Browse catalogues, presets, rig selector), Settings > Equipment (cameras, telescopes, filters and the rigs that select them), sites, windows, Tonight data for Home, reminders, calendar export | B3, K, Targets list |
+| PV-PLAN | Planner on Targets, the Targets list (My targets, Browse catalogues, presets, rig selector), Settings > Equipment (cameras, telescopes, filters and the rigs that select them), sites, windows, Tonight and calendar data for Home, reminders, calendar export | B3, K, Targets list |
 
 The journey step IDs come from the product flow. Home, the Project page with its Trash list, Wrap up, Import and the Targets list are surfaces added or redefined by the 2026-10-06 redesign; they have no product-flow step ID yet. Step L (reviewed filing) is withdrawn and Import replaces it. (D-W7, D-W11, D-W17, D-W39, D-W72)
 
