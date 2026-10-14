@@ -54,7 +54,10 @@ export interface FieldProps {
   /** The control's id; generated when omitted. A SettingsRow supplies its own. */
   id?: string
   className?: string
-  /** Shown after the description and error, inside the field: a preview or a reference table. */
+  /**
+   * Shown after the description and error, inside the field: a preview or a reference table.
+   * In cell mode it sits on the control's line, at the end, so the row keeps its height.
+   */
   after?: ReactNode
   /**
    * Cell mode, for a control inside a DataTable row: the label stays the
@@ -125,12 +128,20 @@ export function Field({ label, description, error, required, id, className, afte
   const errorId = `${base}-error`
   if (hideLabel) {
     // The in-row control height stands in for the input height inside the cell.
+    const field = children(control(base, labelId, undefined, undefined))
     return (
       <div className={cn("grid min-w-0 [--control-h-md:var(--control-h-sm)]", className)} data-invalid={errors.length > 0 ? true : undefined}>
         <Label id={labelId} htmlFor={base} className="sr-only">
           {label}
         </Label>
-        {children(control(base, labelId, undefined, undefined))}
+        {after ? (
+          <div className="flex min-w-0 items-center gap-1">
+            <div className="min-w-0 flex-1">{field}</div>
+            {after}
+          </div>
+        ) : (
+          field
+        )}
       </div>
     )
   }
@@ -320,7 +331,7 @@ export interface ComboboxGroupOptions<V extends string> {
   items: readonly FieldOption<V>[]
 }
 
-export interface ComboboxFieldProps<V extends string> extends FieldChrome {
+export interface ComboboxFieldProps<V extends string> extends FieldChrome, Pick<FieldProps, "after"> {
   value: V | null
   onChange: (value: V | null) => void
   groups: readonly ComboboxGroupOptions<V>[]

@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router"
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it } from "vitest"
 import { Toaster } from "@/components/ui/toast"
@@ -104,6 +104,45 @@ describe("Run page: Inputs changed (C10)", () => {
     expect(await within(await footer()).findByText(m.flow_inputs_changed())).toBeDefined()
     await router.navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { ...OSC_RUN, step: "prepare" } })
     expect(await within(await footer()).findByText(m.flow_inputs_changed())).toBeDefined()
+  })
+})
+
+describe("Run page: Calibrate's Master cell previews the master (c6gh1)", () => {
+  const card = () => document.querySelector<HTMLElement>("[data-preview]")
+  const openedCard = () =>
+    waitFor(() => {
+      const element = card()
+      if (!element) throw new Error("no card yet")
+      return element
+    })
+  const openMaster = new RegExp(`^${m.calibration_open_master()}: `)
+
+  it("editable: beside the picker, an Open master link opens the card on focus, and Escape closes it", async () => {
+    const user = userEvent.setup()
+    renderRun(OSC_RUN, "calibrate")
+    const triggers = await screen.findAllByRole("link", { name: openMaster })
+    const trigger = triggers[0]!
+    // The picker stays: the icon sits in the same cell as the combobox.
+    expect(within(trigger.closest("td")!).getByRole("combobox")).toBeDefined()
+    expect(trigger.getAttribute("href")).toMatch(/^\/calibration\?master=/)
+
+    act(() => trigger.focus())
+    const opened = await openedCard()
+    // The trigger shows no name, so the card's title names the master.
+    expect(opened.textContent).toContain(trigger.getAttribute("aria-label")!.replace(openMaster, ""))
+    expect(opened.textContent).toContain(m.calibration_used_by())
+
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(card()).toBeNull())
+    expect(trigger).toHaveFocus()
+  })
+
+  it("read-only: the master's name is the link, with no picker and no Open master icon", async () => {
+    renderRun(FINISHED_RUN, "calibrate")
+    const links = await screen.findAllByRole("link", { name: /\S/ })
+    expect(links.some((link) => link.getAttribute("href")?.startsWith("/calibration?master="))).toBe(true)
+    expect(screen.queryAllByRole("link", { name: openMaster })).toHaveLength(0)
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0)
   })
 })
 

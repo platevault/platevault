@@ -6611,6 +6611,7 @@
   "catalogue_previews_master_desc": "O nome de um master é um link para ele na biblioteca de Calibração; cursor ou foco mostra uma prévia do tipo, câmera, ganho · offset, temperatura, exposição, quadros, noite, idade e de quantas execuções o usam. O cartão não tem controles, então não recebe foco.",
   "catalogue_previews_master_young": "mais novo que o limite de idade, usado por 2 execuções",
   "catalogue_previews_master_old": "além do limite de idade, sem uso",
+  "catalogue_previews_master_compact": "compacto: um link com ícone ao lado de um seletor que já mostra o nome; o cartão usa o nome como título",
   "catalogue_previews_preview_desc": "Preview é o host L2 que as prévias compartilham; HoverCard é a primitiva L1 sobre o preview-card do Base UI.",
   "catalogue_previews_with_title": "Preview com título",
   "catalogue_fields_text_caption": "Preenchido com ajuda · vazio com erro (aria-invalid, descrito pela mensagem) · somente leitura · desativado · com uma ação ao lado do campo.",

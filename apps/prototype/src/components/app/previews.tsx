@@ -16,12 +16,14 @@
  * - MasterPreview: a calibration master's name, a link to it in the
  *   Calibration library, previewing its facts (kind, camera, gain · offset,
  *   temperature, exposure, frames, night), its age badge and how many runs
- *   use it. The card holds no controls, so it takes no focus.
+ *   use it. The card holds no controls, so it takes no focus. Compact, the
+ *   trigger is an icon link beside a control that already shows the name
+ *   (a master picker), and the card takes the name as its title.
  *
  * The card opens over the page, so nothing moves when it opens (C-8).
  */
 import { Link } from "@tanstack/react-router"
-import { ChevronRight } from "lucide-react"
+import { ArrowUpRight, ChevronRight } from "lucide-react"
 import { type ComponentProps, type ReactElement, type ReactNode, cloneElement, useEffect, useId, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
@@ -90,10 +92,15 @@ export function Preview({ trigger, title, children, focusOnPress = false }: Prev
   )
 }
 
+/** The router link a Button renders as, for a trigger that goes to a place. */
+function routerLink(link: StepLink) {
+  return <Link to={link.to as never} params={link.params as never} search={link.search as never} />
+}
+
 /** A link to a place. It forwards the props a HoverCard trigger merges into it (handlers, ref). */
 function PlaceLink({ link, children, ...props }: Omit<ComponentProps<typeof Button>, "render" | "variant" | "size"> & { link: StepLink }) {
   return (
-    <Button {...props} variant="link" size="xs" className="min-h-0 px-0 text-sm" render={<Link to={link.to as never} params={link.params as never} search={link.search as never} />}>
+    <Button {...props} variant="link" size="xs" className="min-h-0 px-0 text-sm" render={routerLink(link)}>
       {children}
       <ChevronRight aria-hidden="true" data-icon="inline-end" />
     </Button>
@@ -184,7 +191,7 @@ export function UsedByPreview({ label, link, items }: UsedByPreviewProps) {
 }
 
 export interface MasterPreviewProps {
-  /** The master's name as the page lists it: the trigger's text. */
+  /** The master's name as the page lists it: the trigger's text, or the card's title when compact. */
   label: string
   /** The master in the Calibration library: `{ to: "/calibration", search: { master: id } }`. */
   link: StepLink
@@ -195,9 +202,14 @@ export interface MasterPreviewProps {
   age: string | null
   /** How many runs hand the master off (`masterUsage`). */
   usedBy: number
+  /**
+   * An icon trigger ("Open master: <name>") for a place that already shows the
+   * name, such as the master picker in an editable run's Calibrate step.
+   */
+  compact?: boolean
 }
 
-export function MasterPreview({ label, link, master, night, age, usedBy }: MasterPreviewProps) {
+export function MasterPreview({ label, link, master, night, age, usedBy, compact = false }: MasterPreviewProps) {
   const m = useMessages()
   const none = "–"
   const items = [
@@ -210,8 +222,15 @@ export function MasterPreview({ label, link, master, night, age, usedBy }: Maste
     { label: m.tonight_night(), value: formatNight(night, true) },
     { label: m.calibration_used_by(), value: m.project_runs_count({ count: usedBy }) },
   ]
+  const trigger = compact ? (
+    <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${m.calibration_open_master()}: ${label}`} render={routerLink(link)} data-master-preview="">
+      <ArrowUpRight aria-hidden="true" />
+    </Button>
+  ) : (
+    <PlaceLink link={link}>{label}</PlaceLink>
+  )
   return (
-    <Preview trigger={<PlaceLink link={link}>{label}</PlaceLink>}>
+    <Preview trigger={trigger} title={compact ? label : undefined}>
       {age ? (
         <span className="flex">
           <Pill tone="warning">{age}</Pill>

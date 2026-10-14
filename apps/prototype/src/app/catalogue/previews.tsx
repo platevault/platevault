@@ -69,6 +69,9 @@ export function PreviewsCatalogue() {
           <Specimen caption={m.catalogue_previews_master_old()}>
             <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-05-02" age={m.flow_master_old({ n: 165 })} usedBy={0} />
           </Specimen>
+          <Specimen caption={m.catalogue_previews_master_compact()}>
+            <MasterPreview compact label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-09-14" age={null} usedBy={2} />
+          </Specimen>
         </div>
       </ComponentSection>
 
