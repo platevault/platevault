@@ -1,8 +1,10 @@
 /**
- * Goal editing (slice B): one channel's goal as C7 settles it, an amount of
+ * Goal fields (L2-domain): one channel's goal as C7 settles it, an amount of
  * time or of frames with an optional quality bar ("count only frames with
  * FWHM ≤ x″"; Usable frames always), the line that sums it up, and the
- * per-channel editor of template values that New Project uses. Channels come
+ * per-channel editor of template values. A Project's goals (Add goal…,
+ * Edit…), New Project and Settings › Goal templates all edit goals through
+ * these, so a template edits exactly like a Project's goals. Channels come
  * from the band set (`GOAL_CHANNELS`) through "Add goal ▾", never free text
  * (D-W29); "From template ▸" in the same menu prefills the values, which stay
  * editable (D-W30).

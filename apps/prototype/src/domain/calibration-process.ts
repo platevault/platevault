@@ -263,11 +263,11 @@ export function sessionMasterValues(catalog: Catalog, session: Session, kind: Ca
 
 /**
  * The structured-storage path of a master (P-CAL3): `<storage>/<template>/Master<Kind>_<night>.<ext>`,
- * the folder from the kind's master naming template, e.g.
+ * the folder from the kind's master naming template and the tokens Naming omits, e.g.
  * `Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C/MasterDark_2026-09-08.xisf`.
  */
-export function masterStoragePath(storage: Location, naming: AppSettings["naming"], kind: CalibrationKind, values: NamingValues, night: string, ext: string): string {
-  const { path } = resolveNamingTemplate(namingTemplate(naming, `master-${kind}` as NamingFrameType), values)
+export function masterStoragePath(storage: Location, settings: Pick<AppSettings, "naming" | "namingOmit">, kind: CalibrationKind, values: NamingValues, night: string, ext: string): string {
+  const { path } = resolveNamingTemplate(namingTemplate(settings.naming, `master-${kind}` as NamingFrameType), values, settings.namingOmit)
   const folder = path.endsWith("/") ? path.slice(0, -1) : path
   return `${storage.path}/${folder}/Master${MASTER_FILE_KIND[kind]}_${night}.${ext}`
 }

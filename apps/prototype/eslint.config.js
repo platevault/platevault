@@ -87,16 +87,28 @@ export const COMPOSITION_ENFORCED = [
     files: ["src/features/v5/e-targets-plan-settings/activity{,.test}.tsx"],
   },
   {
-    // t1/components also holds the deprecated form-field and row-menu, which only P10's files still import; only P9's rebuilt files are listed.
+    // t1/components holds P9's rebuilt files and P11's location-attention.tsx; the deprecated form-field and row-menu are deleted.
     unit: "P9 Settings A",
     area: { dir: "t1", depth: 1 },
-    files: ["src/features/t1/settings/**/*.{ts,tsx}", "src/features/t1/components/{add-location-flow,duplicates-review,location-actions,form-blockers}.{ts,tsx}"],
+    files: ["src/features/t1/settings/**/*.{ts,tsx}", "src/features/t1/components/{add-location-flow,duplicates-review,location-actions}.tsx"],
   },
   {
     // t4 is P9's alone.
     unit: "P9 Settings A",
     area: { dir: "t4", depth: 0 },
     files: ["src/features/t4/**/*.{ts,tsx}"],
+  },
+  {
+    // e-targets-plan-settings is shared with P7, P8 and P11, so P10's Settings files are listed.
+    unit: "P10 Settings B",
+    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
+    files: ["src/features/v5/e-targets-plan-settings/{settings-equipment,equipment-records,settings-goal-templates,settings-naming}.tsx", "src/features/v5/e-targets-plan-settings/settings-actions{,.test}.ts"],
+  },
+  {
+    // P10 moved the goal editor into components/domain: the syntax rules only, as for src/app.
+    unit: "P10 Settings B",
+    area: null,
+    files: ["src/components/domain/goal-fields.tsx"],
   },
 ]
 

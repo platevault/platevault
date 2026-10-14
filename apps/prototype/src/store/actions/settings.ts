@@ -1,14 +1,16 @@
 /**
- * Settings writes shared by every screen (foundation-owned): rigs and their
- * filter lists (D-W31, PLAN-EQ-FR-01 to PLAN-EQ-FR-06), goal templates
- * (D-W30, D-W47), naming templates (D-W20, STO-IMP-FR-07) and application
- * profiles (PREP-FR-01, PREP-FR-02). Failed writes stay unsaved with Retry;
- * the last saved value stays in effect.
+ * Settings writes shared by every screen (foundation-owned): goal templates
+ * (D-W30, D-W47), naming templates and the tokens they omit (D-W20,
+ * STO-IMP-FR-07) and application profiles (PREP-FR-01, PREP-FR-02). The
+ * Equipment records (cameras, telescopes, reducers, filters, rigs) write
+ * through Settings › Equipment's own actions
+ * (`e-targets-plan-settings/settings-actions.ts`). Failed writes stay unsaved
+ * with Retry; the last saved value stays in effect.
  */
 import { PROFILE_IDS } from "@/domain/seed"
 import { clampMoonAvoidance, type MoonAvoidance } from "@/domain/planning"
-import { validateNamingTemplate } from "@/domain/templates"
-import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, InputMode, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
+import { NAMING_TOKENS, validateNamingTemplate } from "@/domain/templates"
+import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, InputMode, LocationId, MoonConstraint, NamingFrameType, NamingToken, ProfileId, SimulatedApp } from "@/domain/types"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
@@ -50,36 +52,6 @@ export function setMoonAvoidance(band: Band, patch: Partial<MoonAvoidance>): Com
     const next = clampMoonAvoidance({ ...s.settings.moonAvoidance[band], ...patch })
     return { ...s, settings: { ...s.settings, moonAvoidance: { ...s.settings.moonAvoidance, [band]: next } } }
   }, { href: "/plan" })
-}
-
-// ---------------------------------------------------------------------------
-// Rigs and filters
-// ---------------------------------------------------------------------------
-
-/** Replace a rig's filter list; the list drives the band strip, presets and Fit (PLAN-EQ-FR-03). */
-export function setRigFilters(rigId: OpticalTrainId, filters: RigFilter[]): CommitResult {
-  const rig = store.getState().catalog.opticalTrains[rigId]
-  if (!rig) return MISSING
-  const href = "/settings/equipment"
-  const result = commit(msg("equipment_filters_of", { name: rig.name }), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, filters } } })), { href })
-  if (result.ok) recordSaved(msg("store_saved_filters", { name: rig.name }), filters.length > 0 ? verbatim(filters.map((f) => f.name).join(", ")) : msg("tonight_no_filters"), href)
-  return result
-}
-
-/** "Add {value} to {rig}" (PLAN-EQ-FR-04): only the rig's settings change; headers stay as read. */
-export function addFilterToRig(rigId: OpticalTrainId, value: string, bands: RigFilter["bands"]): CommitResult {
-  const rig = store.getState().catalog.opticalTrains[rigId]
-  if (!rig) return MISSING
-  return setRigFilters(rigId, [...rig.filters, { id: freshId("flt", `${rigId}|${value}`), name: value, matches: [value], bands }])
-}
-
-export function renameRig(rigId: OpticalTrainId, name: string): CommitResult {
-  const rig = store.getState().catalog.opticalTrains[rigId]
-  if (!rig) return MISSING
-  const href = "/settings/equipment"
-  const result = commit(msg("equipment_rename_title", { name: rig.name }), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, name: name.trim() } } })), { href })
-  if (result.ok) recordSaved(msg("store_saved_rig_renamed", { name: name.trim() }), null, href)
-  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +105,15 @@ export function setNamingTemplate(type: NamingFrameType, template: string | null
     return { ...s, settings: { ...s.settings, naming } }
   }, { href })
   if (result.ok) recordSaved(template === null ? msg("store_saved_naming_default", { type }) : msg("store_saved_naming_template", { type }), template === null ? null : verbatim(template), href)
+  return result
+}
+
+/** The tokens every template leaves out when their value is missing (wmbp9), in token order; the rest write their fallback. */
+export function setNamingOmit(tokens: readonly NamingToken[]): CommitResult {
+  const namingOmit = NAMING_TOKENS.map((t) => t.token).filter((token) => tokens.includes(token))
+  const href = "/settings/naming"
+  const result = commit(msg("store_label_naming_omit"), (s) => ({ ...s, settings: { ...s.settings, namingOmit } }), { href })
+  if (result.ok) recordSaved(msg("store_saved_naming_omit"), namingOmit.length > 0 ? verbatim(namingOmit.map((token) => `{${token}}`).join(" ")) : null, href)
   return result
 }
 

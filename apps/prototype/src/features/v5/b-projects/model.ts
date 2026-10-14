@@ -12,16 +12,16 @@
  *   template changes.
  * Pure: nothing here writes state.
  */
+import { kindsLine } from "@/components/domain/goal-fields"
 import { sessionsInTransfer, type OfferEntry, type OfferKind, type OfferRefusal, type TrashOffer, trashOffer, unusableFramesOffer } from "@/domain/archive"
 import { fileAt, trashRefusal } from "@/domain/disk"
-import { liveAssetIds, projectCandidates, projectGroups, projectMemberSessionIds, projectRuns, type ProjectWrapUp, rigCameraKind, type World, wrapUpFlowState } from "@/domain/derive"
+import { liveAssetIds, projectCandidates, projectGroups, projectMemberSessionIds, projectRuns, type ProjectWrapUp, rigCameraKind, rigFilters, type World, wrapUpFlowState } from "@/domain/derive"
 import { GOAL_CHANNELS, NARROW_BANDS, WRAP_UP_NAME } from "@/domain/labels"
 import { keptCopy, runViewLinks, type TrashBlock, trashBlock, type TrashItem } from "@/domain/storage"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { Catalog, GoalChannel, GoalTemplate, OpticalTrainId, Project, ResultId, Session, SessionId } from "@/domain/types"
 import { m, type Messages, msg } from "@/lib/i18n"
 import { goalsFromTemplate } from "@/store/actions/projects"
-import { kindsLine } from "./goals"
 
 // ---------------------------------------------------------------------------
 // Frames of a Project
@@ -180,7 +180,7 @@ export function rigChannels(catalog: Catalog, rigId: OpticalTrainId): GoalChanne
   if (!rig) return []
   const osc = rigCameraKind(catalog, rig) === "osc"
   const out = new Set<GoalChannel>(osc ? ["OSC"] : [])
-  for (const filter of rig.filters) {
+  for (const filter of rigFilters(catalog, rig)) {
     if (filter.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2) out.add("Dual-band")
     else if (!osc && filter.bands.length === 1) out.add(filter.bands[0]!)
   }

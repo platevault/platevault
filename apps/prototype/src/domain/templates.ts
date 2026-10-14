@@ -320,18 +320,27 @@ function sanitize(value: string): string {
 /**
  * Resolve a template against metadata. Returns the relative folder path and
  * every fallback token it used, so the preview can name them (STO-IMP-AC-08).
+ * A token in `omit` whose value is missing writes nothing instead of its
+ * fallback (Settings › Naming, wmbp9), and the folder it leaves empty
+ * collapses: no separator is doubled and none leads the path.
  */
-export function resolveNamingTemplate(template: string, values: NamingValues): { path: string; fallbacks: NamingToken[] } {
+export function resolveNamingTemplate(template: string, values: NamingValues, omit: readonly NamingToken[] = []): { path: string; fallbacks: NamingToken[] } {
   const fallbacks: NamingToken[] = []
-  const path = template.replace(/\{([^}]*)\}/g, (_, name: string) => {
+  let omitted = false
+  const resolved = template.replace(/\{([^}]*)\}/g, (_, name: string) => {
     const token = NAMING_TOKENS.find((t) => t.token === name)
     if (!token) return ""
     const value = values[token.token]
     if (value === null || value === undefined || value === "") {
+      if (omit.includes(token.token)) {
+        omitted = true
+        return ""
+      }
       fallbacks.push(token.token)
       return token.fallback
     }
     return sanitize(value).replace(/\//g, "-")
   })
+  const path = omitted ? resolved.replace(/\/{2,}/g, "/").replace(/^\//, "") : resolved
   return { path, fallbacks }
 }

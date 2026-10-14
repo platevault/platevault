@@ -10,6 +10,7 @@ import {
   goalMeasure,
   PANEL_BALANCE_LIMITS,
   qualityBarFor,
+  resolveNamingTemplate,
   subjectConditions,
   subjectConditionsFrom,
   templateConditions,
@@ -104,5 +105,25 @@ describe("goal templates carry the conditions (C7)", () => {
   it("names each window rule", () => {
     expect(say(m, windowRuleRef(null))).toBe(m.domain_window_none())
     expect(say(m, windowRuleRef({ kind: "season" }))).toBe(m.domain_window_rule_season())
+  })
+})
+
+describe("resolveNamingTemplate omit (Settings › Naming, wmbp9)", () => {
+  const values = { target: "M 31", filter: null, date: "2026-10-04" }
+
+  it("drops an omitted token with no value and collapses the folder it leaves empty", () => {
+    expect(resolveNamingTemplate("{target}/{filter}/{date}/light/", values, ["filter"])).toEqual({ path: "M 31/2026-10-04/light/", fallbacks: [] })
+  })
+
+  it("doubles no separator and leads with none when the first folder is omitted", () => {
+    expect(resolveNamingTemplate("{filter}/{target}//{date}", values, ["filter"]).path).toBe("M 31/2026-10-04")
+  })
+
+  it("keeps the fallback of a missing token that is not omitted", () => {
+    expect(resolveNamingTemplate("{target}/{filter}/{date}", values, ["camera"])).toEqual({ path: "M 31/nofilter/2026-10-04", fallbacks: ["filter"] })
+  })
+
+  it("writes an omitted token's value when it has one", () => {
+    expect(resolveNamingTemplate("{target}/{filter}", { ...values, filter: "Ha" }, ["filter"]).path).toBe("M 31/Ha")
   })
 })

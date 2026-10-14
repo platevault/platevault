@@ -11,6 +11,7 @@ import { DialogsCatalogue } from "./dialogs"
 import { DomainCatalogue } from "./domain"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
+import { GoalFieldsCatalogue } from "./goal-fields"
 import { GradeBadgesCatalogue } from "./grade-badges"
 import { PaletteCatalogue } from "./palette"
 import { PickersCatalogue } from "./pickers"
@@ -51,6 +52,7 @@ export const CATALOGUE: CatalogueEntry[] = [
     components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "NightCalendar", "MoonPhase", "MosaicField", "SiteMap", "CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"],
     Entry: DomainCatalogue,
   },
+  { id: "goal-fields", components: ["GoalKindsFields", "GoalValuesEditor"], Entry: GoalFieldsCatalogue },
   { id: "step-flow", components: ["StepStrip", "StepFooter"], Entry: StepFlowCatalogue },
   {
     id: "data-table",
@@ -83,8 +85,10 @@ export const CATALOGUE: CatalogueEntry[] = [
       "ComboboxField",
       "SegmentedField",
       "SwitchField",
+      "ChoiceListField",
       "PathField",
       "TokenTemplateField",
+      "TokenTable",
       "ArgumentsField",
       "SettingsSection",
       "SettingsRow",

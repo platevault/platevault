@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { m } from "@/lib/i18n"
 import type { Action } from "./contracts"
 import { TextField } from "./fields"
+import { ActionButton } from "./actions"
+import { RowActions } from "./row-actions"
 import { DialogFooter, FormDialog } from "./form-dialog"
 
 /** Fails unless each element comes after the one before it in document order. */
@@ -70,5 +72,59 @@ describe("FormDialog", () => {
     expect(run).not.toHaveBeenCalled()
     await user.click(screen.getByRole("button", { name: "Delete run" }))
     expect(run).toHaveBeenCalledOnce()
+  })
+})
+
+/** A ListSection-style opener: an ActionButton whose action opens a controlled FormDialog from state. */
+function OpenedFromState() {
+  const [open, setOpen] = useState(false)
+  const add: Action = { id: "add", label: "Add camera", opensDialog: true, run: () => setOpen(true) }
+  return (
+    <>
+      <ActionButton action={add} />
+      <FormDialog open={open} onOpenChange={setOpen} title="Add camera" confirm={{ id: "save", label: "Add camera", kind: "primary", run: () => undefined }}>
+        <TextField label="Name" value="" onChange={() => {}} autoFocus />
+      </FormDialog>
+    </>
+  )
+}
+
+describe("FormDialog focus return (WCAG 2.4.3)", () => {
+  it("Escape returns focus to the button that opened a dialog from state", async () => {
+    const user = userEvent.setup()
+    render(<OpenedFromState />)
+    await user.tab()
+    const opener = screen.getByRole("button", { name: "Add camera…" })
+    expect(opener).toHaveFocus()
+    await user.keyboard("{Enter}")
+    await screen.findByRole("dialog")
+    await user.keyboard("{Escape}")
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(opener).toHaveFocus()
+  })
+
+  it("Escape after a row menu's Edit… returns focus to the row's ⋯ button", async () => {
+    function RowEdit() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <RowActions name="ASI2600MM" items={[{ id: "edit", label: "Edit", opensDialog: true, run: () => setOpen(true) }]} />
+          <FormDialog open={open} onOpenChange={setOpen} title="Edit ASI2600MM" confirm={{ id: "save", label: "Save", kind: "primary", run: () => undefined }}>
+            <TextField label="Name" value="" onChange={() => {}} autoFocus />
+          </FormDialog>
+        </>
+      )
+    }
+    const user = userEvent.setup()
+    render(<RowEdit />)
+    await user.tab()
+    const trigger = screen.getByRole("button", { name: m.actions_for({ name: "ASI2600MM" }) })
+    expect(trigger).toHaveFocus()
+    await user.keyboard("{Enter}")
+    await user.click(await screen.findByRole("menuitem", { name: /^Edit/ }))
+    await screen.findByRole("dialog")
+    await user.keyboard("{Escape}")
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(trigger).toHaveFocus()
   })
 })

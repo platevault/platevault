@@ -61,6 +61,7 @@ import type {
   Catalog,
   Disk,
   DiskFile,
+  Filter,
   FrameHeader,
   Goal,
   GoalChannel,
@@ -480,6 +481,8 @@ export function emptyCatalog(): Catalog {
     targets: {},
     cameras: {},
     telescopes: {},
+    reducers: {},
+    filters: {},
     opticalTrains: {},
     sites: {},
     projects: {},
@@ -511,6 +514,7 @@ export function defaultSettings(): AppSettings {
     onboarding: { completedAt: null, deferredRoles: [] },
     lastOutputParent: null,
     naming: {},
+    namingOmit: [],
     keepRawCalibration: false,
     masterMaxAgeDays: DEFAULT_MASTER_MAX_AGE_DAYS,
     targetLookup: { enabled: true, provider: "cds-sesame" },
@@ -607,19 +611,46 @@ function equipment(catalog: Catalog) {
     tel_esprit: { id: "tel_esprit", name: "Esprit 100", aliases: ["SkyWatcher Esprit 100ED"], source: "manual", focalLengthMm: 550, apertureMm: 100 },
     tel_fra400: { id: "tel_fra400", name: "Askar FRA400", aliases: ["FRA400"], source: "manual", focalLengthMm: 400, apertureMm: 72 },
   }
-  const flt = (rig: string, name: string, bands: Array<"L" | "R" | "G" | "B" | "Ha" | "SII" | "OIII">, matches: string[] = [name]) => ({ id: `flt_${rig}_${name.toLowerCase().replace(/[^a-z0-9]/g, "")}`, name, matches, bands })
+  // Each rig's filters as it lists them. Filters are records the rigs select (ngm9g): a definition two rigs share (name, bands and FILTER matches) is one record.
+  const lists: Record<string, Array<Omit<Filter, "id">>> = {
+    [RIG.redcat]: [
+      { name: "Ha", bands: ["Ha"], matches: ["Ha", "H-alpha"] },
+      { name: "OIII", bands: ["OIII"], matches: ["OIII", "O3"] },
+      { name: "SII", bands: ["SII"], matches: ["SII", "S2"] },
+    ],
+    [RIG.esprit]: [{ name: "L-eXtreme", bands: ["Ha", "OIII"], matches: ["L-eXtreme", "LeXtreme"] }],
+    [RIG.fra]: [
+      { name: "L", bands: ["L"], matches: ["L", "Lum"] },
+      { name: "R", bands: ["R"], matches: ["R"] },
+      { name: "G", bands: ["G"], matches: ["G"] },
+      { name: "B", bands: ["B"], matches: ["B"] },
+      { name: "Ha", bands: ["Ha"], matches: ["Ha"] },
+    ],
+  }
+  const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i])
+  catalog.filters = {}
+  const filterIds: Record<string, string[]> = {}
+  for (const [rigId, list] of Object.entries(lists)) {
+    filterIds[rigId] = list.map((f) => {
+      const existing = Object.values(catalog.filters).find((x) => x.name === f.name && same(x.bands, f.bands) && same(x.matches, f.matches))
+      if (existing) return existing.id
+      const id = `flt_${rigId.replace(/^otr_/, "")}_${f.name.toLowerCase().replace(/[^a-z0-9]/g, "")}`
+      catalog.filters[id] = { id, ...f }
+      return id
+    })
+  }
   catalog.opticalTrains = {
     [RIG.redcat]: {
       id: RIG.redcat, name: "RedCat 51 / ASI2600MM", source: "manual", cameraId: "cam_2600", telescopeId: "tel_redcat", effectiveFocalLengthMm: 250, notes: "",
-      filters: [flt("redcat", "Ha", ["Ha"], ["Ha", "H-alpha"]), flt("redcat", "OIII", ["OIII"], ["OIII", "O3"]), flt("redcat", "SII", ["SII"], ["SII", "S2"])],
+      filterIds: filterIds[RIG.redcat]!,
     },
     [RIG.esprit]: {
       id: RIG.esprit, name: "Esprit 100 / ASI533MC", source: "manual", cameraId: "cam_533", telescopeId: "tel_esprit", effectiveFocalLengthMm: 550, notes: "",
-      filters: [flt("esprit", "L-eXtreme", ["Ha", "OIII"], ["L-eXtreme", "LeXtreme"])],
+      filterIds: filterIds[RIG.esprit]!,
     },
     [RIG.fra]: {
       id: RIG.fra, name: "Askar FRA400 / ASI2600MM", source: "manual", cameraId: "cam_2600", telescopeId: "tel_fra400", effectiveFocalLengthMm: 400, notes: "",
-      filters: [flt("fra", "L", ["L"], ["L", "Lum"]), flt("fra", "R", ["R"]), flt("fra", "G", ["G"]), flt("fra", "B", ["B"]), flt("fra", "Ha", ["Ha"])],
+      filterIds: filterIds[RIG.fra]!,
     },
   }
 }

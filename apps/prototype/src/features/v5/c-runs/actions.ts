@@ -187,7 +187,7 @@ export function adoptionPreview(state: PrototypeState, masterId: string): Adopti
     ccdTempC: master.ccdTempC,
     train: master.opticalTrainId ? (state.catalog.opticalTrains[master.opticalTrainId]?.name ?? null) : null,
   })
-  const destinationPath = masterStoragePath(location, state.settings.naming, master.kind, values, night, source.path.slice(source.path.lastIndexOf(".") + 1))
+  const destinationPath = masterStoragePath(location, state.settings, master.kind, values, night, source.path.slice(source.path.lastIndexOf(".") + 1))
   if (fileAt(state.disk, destinationPath)) return { ok: false, reasons: [msg("import_name_taken")] }
   return { ok: true, destinationPath, sha256: source.sha256 }
 }

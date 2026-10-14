@@ -13,7 +13,7 @@ import { FormDialog } from "@/components/app/form-dialog"
 import type { LocationId, LocationRole } from "@/domain/types"
 import { store, useStore } from "@/store/core"
 import { registerLocation, ROLE_COPY, ROLE_ORDER, suggestDisplayName, validateLocation } from "../lib/locations"
-import { blockedByErrors } from "./form-blockers"
+import { blockedByErrors } from "@/components/app/form-dialog"
 
 export interface AddLocationFlowProps {
   /** Role chosen by the button that opened the flow; `null` lets the user pick it. */

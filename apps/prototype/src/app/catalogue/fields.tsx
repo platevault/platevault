@@ -11,10 +11,11 @@ import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
 import type { Column } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
-import { ArgumentsField, ComboboxField, FieldGroup, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTemplateField } from "@/components/app/fields"
+import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { Button } from "@/components/ui/button"
+import { BANDS } from "@/domain/labels"
 import { NAMING_TOKENS } from "@/domain/templates"
 import { say } from "@/lib/i18n"
 import { ComponentSection } from "./specimen"
@@ -153,6 +154,25 @@ function GroupFields() {
   )
 }
 
+function ChoiceListFields() {
+  const m = useMessages()
+  const bands = BANDS.map((band) => ({ value: band, label: band }))
+  const [picked, setPicked] = useState<string[]>(["Ha", "OIII"])
+  const [none, setNone] = useState<string[]>([])
+  return (
+    <ComponentSection components={["ChoiceListField"]} level={3}>
+      <Caption>{m.catalogue_fields_choice_list_caption()}</Caption>
+      <div className="grid max-w-3xl gap-4">
+        <ChoiceListField label={m.equipment_bands()} value={picked} options={bands} onChange={setPicked} description={m.catalogue_fields_choice_list_help()} />
+        <ChoiceListField label={m.equipment_bands()} value={none} options={bands} onChange={setNone} error={none.length > 0 ? undefined : m.equipment_pick_band()} />
+        <ChoiceListField label={m.equipment_bands()} value={["L"]} options={bands.map((b) => ({ ...b, disabled: b.value !== "L" }))} onChange={() => {}} />
+        <ChoiceListField label={m.equipment_bands()} value={picked} options={bands} onChange={() => {}} disabled />
+        <ChoiceListField label={m.equipment_filters()} value={[]} options={[]} onChange={() => {}} empty={m.tonight_no_filters()} />
+      </div>
+    </ComponentSection>
+  )
+}
+
 function CellFields() {
   const m = useMessages()
   const [rows, setRows] = useState([{ id: "1", file: "masterLight_Ha.xisf", kind: "light" }, { id: "2", file: "masterFlat_Ha.xisf", kind: "flat" }])
@@ -211,7 +231,7 @@ function TemplateFields() {
   const [args, setArgs] = useState('-script="{file}" --dir {folder}')
   const [badArgs, setBadArgs] = useState("--open {project}")
   return (
-    <ComponentSection components={["TokenTemplateField", "ArgumentsField"]} level={3}>
+    <ComponentSection components={["TokenTemplateField", "TokenTable", "ArgumentsField"]} level={3}>
       <Caption>{m.catalogue_fields_template_caption()}</Caption>
       <div className="grid max-w-3xl gap-6">
         <TokenTemplateField label={m.naming_as_text()} value={template} onChange={setTemplate} tokens={tokens} omitWhenMissing={omit} onOmitWhenMissingChange={setOmit} prefix="/Volumes/Astro/Captures" description={m.settings_default_named({ name: "{target}/{filter}/{date}/light/" })} />
@@ -220,6 +240,11 @@ function TemplateFields() {
           <ArgumentsField label={m.apps_launch_arguments()} value={args} onChange={setArgs} tokens={["folder", "file"]} />
           <ArgumentsField label={m.apps_launch_arguments()} value={badArgs} onChange={setBadArgs} tokens={["folder", "file"]} />
         </div>
+      </div>
+      <Caption>{m.catalogue_fields_token_table_caption()}</Caption>
+      <div className="grid max-w-3xl gap-6">
+        <TokenTemplateField label={m.naming_type_lights()} value={template} onChange={setTemplate} tokens={tokens} omitWhenMissing={omit} showTokens={false} />
+        <TokenTable tokens={tokens} omitWhenMissing={omit} onOmitWhenMissingChange={setOmit} />
       </div>
     </ComponentSection>
   )
@@ -262,6 +287,7 @@ export function FieldsCatalogue() {
       <NumberAndChoiceFields />
       <GroupFields />
       <CellFields />
+      <ChoiceListFields />
       <SwitchAndPathFields />
       <TemplateFields />
       <ComponentSection components={["SettingsSection", "SettingsRow"]} level={3}>
