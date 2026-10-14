@@ -207,7 +207,7 @@
       "journeyStep": "J23/S8, J23/S9",
       "spec": "069-application-handoff PREP-FR-01, PREP-FR-02, PREP-FR-04, PREP-AC-07, PREP-AC-11; D04",
       "action": "Choose the Siril profile and locate its executable; in a second run, choose Open in... instead.",
-      "expect": "The profile shows its capability evidence for input, layout, configuration, product-input kinds and input-write behavior, and names unsupported configuration. Open in... asks for an executable and arguments, reads as not a verified profile, blocks Linked View and Direct source, and offers isolated Copy or supported Clone.",
+      "expect": "The profile shows its capability evidence for input, layout, configuration, product-input kinds and input-write behavior, and names unsupported configuration. Open in... asks for an executable and arguments, reads as not a verified profile, blocks Symlinks, and offers Copies.",
       "negative": "No capability is claimed as verified without evidence, no profile claims that renaming files overrides headers, and nothing is launched."
     },
     {
@@ -223,10 +223,10 @@
       "flowStep": "F1",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S1, J24/S1a",
-      "spec": "069-application-handoff PREP-FR-04, PREP-FR-05, PREP-AC-04, PREP-AC-08; D04",
-      "action": "Read the input modes, try Direct source, then return to Linked View and confirm a hardlink choice.",
-      "expect": "Each mode states its semantics and storage, and Linked View is suggested. Direct source passes exact paths, or refuses a whole-folder handoff that holds excluded frames and offers supported alternatives. The hardlink confirmation names its volume, permission and filesystem limits.",
-      "negative": "No overinclusive handoff is accepted, and the link type does not change without explicit confirmation."
+      "spec": "069-application-handoff PREP-FR-04, PREP-AC-08; D04",
+      "action": "Read the input modes, then choose Symlinks.",
+      "expect": "Symlinks and Copies each state their semantics and storage, Symlinks is the default, and Copies says when it clones.",
+      "negative": "No other mode is offered, and the mode does not change without explicit confirmation."
     },
     {
       "flowStep": "F2",
@@ -252,7 +252,7 @@
       "journeyStep": "J24/S8, J24/S13",
       "spec": "069-application-handoff PREP-FR-04, PREP-FR-08, PREP-AC-01, PREP-AC-03, PREP-AC-13; 068-calibration-inputs CAL-FR-08; D02, D-W5, D-W9",
       "action": "Open Review preparation and confirm the exact membership, then in the check run meet a destination that cannot link.",
-      "expect": "The review shows the Project, subject, selection, profile, source references, calibration assignments and exception, excluded count, paths, mode, operation count, footprint and free space, with each check read. Where linking is unavailable, Clone, Copy and Direct source are offered with their footprints.",
+      "expect": "The review shows the Project, subject, selection, profile, source references, calibration assignments and exception, excluded count, paths, mode, operation count, footprint and free space, with each check read. Where linking is unavailable, Copies is offered with its footprint.",
       "negative": "Nothing is written before Prepare, no unknown or omitted input counts as prepared, and no Suggested or Needs review calibration is handed off. A link plan never becomes a copy silently."
     },
     {
@@ -648,17 +648,17 @@
       "journeyStep": "J23/S9, J24/S13",
       "spec": "069-application-handoff PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-AC-03, PREP-AC-11; D04",
       "action": "Choose a profile with unknown input-write behavior, then keep Linked View for a destination that cannot link.",
-      "expect": "The input-write risk or the missing link support is named, and supported Clone, Copy or Direct source alternatives are offered with their footprints.",
+      "expect": "The input-write risk or the missing link support is named, and Copies is offered with its footprint.",
       "negative": "The mode never changes automatically, and nothing is written until the user chooses a mode."
     },
     {
       "flowStep": "Cross-flow: Direct-source exclusion unsupported by tool",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S1",
-      "spec": "069-application-handoff PREP-FR-05, PREP-AC-04; D04",
-      "action": "Choose Direct source for a run whose 30 Sep folder also holds excluded frames.",
-      "expect": "Exact original paths pass through a file list or configuration when the profile supports it. A profile that can hand off only whole folders is refused for this membership, and supported alternatives are offered.",
-      "negative": "No overinclusive folder handoff is accepted."
+      "spec": "069-application-handoff PREP-FR-04; D-W81",
+      "action": "Withdrawn with Direct source (D-W81). Prepare a run whose 30 Sep folder also holds excluded frames.",
+      "expect": "The run folder holds Symlinks or Copies of the members only.",
+      "negative": "No excluded frame reaches the application."
     },
     {
       "flowStep": "Cross-flow: Partial preparation",
@@ -684,8 +684,8 @@
       "journeyStep": "J24/S9, J24/S17, J27/S4, J27/S8, J27/S10, J27/S11",
       "spec": "069-application-handoff PREP-FR-09, PREP-FR-11, PREP-FR-14, PREP-AC-19, PREP-AC-21; 071-storage-custody STO-FR-01, STO-FR-05, STO-AC-01; D-W26, D-W43, D-W67",
       "action": "Prepare a run and a second revision, mark the runs Complete, and open Clean up on a hardlink run, a two-revision copy run and a symlink run, then send entries to the Trash.",
-      "expect": "Each preparation revision records the links, clones and copies it created. Clean up lists exactly those entries, one group per type and revision, and after removal the run records which prepared entries were removed and which remain.",
-      "negative": "Original sources, Direct-source paths, library frames, the Results folder and files the preparation did not create are never listed."
+      "expect": "Each preparation revision records the links and copies it created. Clean up lists exactly those entries, one group per type and revision, and after removal the run records which prepared entries were removed and which remain.",
+      "negative": "Original sources, library frames, the Results folder and files the preparation did not create are never listed."
     },
     {
       "flowStep": "Cross-flow: Completion with no Result",

@@ -57,7 +57,7 @@ Owners: PREP, RES.
 - PixInsight/WBPP, Siril and SETI Astro Suite Pro are required profile targets.
 - Their installed/documented capability evidence must precede verified-profile claims.
 - Generic Open in does not claim a verified profile.
-- Input-write behavior that is unknown or write-prone blocks Linked and Direct-source use; isolated Copy or supported Clone is offered.
+- Input-write behavior that is unknown or write-prone blocks Linked use; isolated Copy is offered. (Direct source and a separate Clone mode were removed by D-W81; Copies clone where the volume supports it.)
 - A profile incapable of exact membership cannot receive an overinclusive folder.
 - Unsupported configuration or product-input kinds remain explicitly blocked.
 - One preparation may mix input modes per item. Items that cannot use the chosen mode are listed with paths and footprint, and each per-item change needs explicit approval (PREP-FR-08); no item changes mode silently.
@@ -169,7 +169,7 @@ Owners: LIB, VSEL, PREP.
 
 - Catalog corrections can cover grouping metadata such as filter, exposure and equipment, with original evidence retained.
 - A correction creates a new grouping revision; old session identities and fixed run asset membership remain traceable and unchanged.
-- Header corrections are delivered only through verified isolated patched Copy/Clone or supported tool configuration.
+- Header corrections are delivered only through verified isolated patched Copies (cloned or not) or supported tool configuration.
 
 ### D16
 
