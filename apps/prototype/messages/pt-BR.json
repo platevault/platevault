@@ -7567,6 +7567,8 @@
   "calibration_offer_dismissed": "Oferta dispensada",
   "calibration_hidden_on": "Oculto em",
   "catalogue_templates_fill_toggle": "Etapa em altura total",
+  "catalogue_templates_list_path_desc": "Uma página de lista dentro de um objeto: o caminho mostra os pais, como a Lixeira de um Projeto mostra Projetos › o Projeto › Lixeira. Só o título dá nome à aba da janela.",
+  "catalogue_templates_search_runs": "Buscar execuções",
   "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
   "catalogue_datatable_destination_nas": "NAS de arquivo",
   "catalogue_datatable_destination_cold": "Armazenamento frio",

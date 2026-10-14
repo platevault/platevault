@@ -7553,6 +7553,8 @@
   "calibration_offer_dismissed": "Offer dismissed",
   "calibration_hidden_on": "Hidden on",
   "catalogue_templates_fill_toggle": "Full-height step",
+  "catalogue_templates_list_path_desc": "A list page inside an object: the path names its parents, the way a Project's Trash reads Projects › the Project › Trash. Only the title names the window tab.",
+  "catalogue_templates_search_runs": "Search runs",
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
   "catalogue_datatable_destination_cold": "Cold storage",

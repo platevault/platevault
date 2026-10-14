@@ -335,6 +335,44 @@ function ListDemo() {
   )
 }
 
+/** ListPage inside an object: a Project's runs under the path Projects › {Project}, the way the Project's Trash reads. */
+function ListPathDemo() {
+  const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
+  const project = Object.values(catalog.projects)[0]
+  const [query, setQuery] = useState("")
+  if (!project) return <NoSeed />
+  const runs = Object.values(catalog.runs).filter((r) => r.projectId === project.id && r.trashedAt === null)
+  const shown = runs.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()))
+  const columns: Column<Run>[] = [
+    { id: "run", header: m.project_run_noun_capital(), cell: (r) => r.name, sortValue: (r) => r.name, rowHeader: true, truncate: true },
+    { id: "state", header: m.run_col_state(), cell: (r) => <StatusBadge kind="run" value={r.completion} />, sortValue: (r) => r.completion },
+  ]
+  return (
+    <ComponentSection components={["ListPage"]} description={m.catalogue_templates_list_path_desc()}>
+      <Frame>
+        <ListPage
+          level={2}
+          path={[
+            { label: m.nav_projects(), link: { to: "/projects" } },
+            { label: project.name, link: { to: "/projects/$projectId", params: { projectId: project.id } } },
+          ]}
+          title={m.common_runs()}
+          summary={m.project_runs_count({ count: runs.length })}
+          table={{
+            label: m.common_runs(),
+            rows: shown,
+            columns,
+            getRowId: (r) => r.id,
+            rowLabel: (r) => r.name,
+            toolbar: { search: { label: m.catalogue_templates_search_runs(), value: query, onChange: setQuery }, matchCount: shown.length },
+          }}
+        />
+      </Frame>
+    </ComponentSection>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // DetailPage: a Project with views, sections (Box, BoxTable) and the dock
 // ---------------------------------------------------------------------------
@@ -714,6 +752,7 @@ export function TemplatesCatalogue() {
   return (
     <div className="space-y-8">
       <ListDemo />
+      <ListPathDemo />
       <DetailDemo />
       <DetailAsideDemo />
       <StepDemo />
