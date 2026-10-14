@@ -1130,6 +1130,22 @@ impl Catalog {
         location_assets(&mut conn, location_id).await
     }
 
+    /// The relative path of every asset the catalog records in `location_id`,
+    /// whatever its availability (Missing, Trashed and Retired included): the
+    /// files it already holds there, without reading their records.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn location_asset_paths(&self, location_id: Uuid) -> Result<Vec<NativePath>> {
+        let mut conn = self.reader().await?;
+        let keys: Vec<Vec<u8>> =
+            sqlx::query_scalar("SELECT path_key FROM assets WHERE location_id = ?1")
+                .bind(location_id.to_string())
+                .fetch_all(&mut *conn)
+                .await?;
+        keys.iter().map(|key| path_from_key(key)).collect()
+    }
+
     /// Sessions in list order (see [`SessionQuery`]): without a filter each
     /// summary covers the session's live frames, under [`SessionFilter::Trashed`]
     /// its Trashed frames alone.

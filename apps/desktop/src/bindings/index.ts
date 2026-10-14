@@ -7124,6 +7124,26 @@ export type NativeMenuLabels = {
 	closeWindow: string,
 };
 
+/**  The new files of one online Captures location. */
+export type NewCaptureCount = {
+	locationId: string,
+	/**
+	 *  Supported frames below the location that the library does not hold
+	 *  yet: arrived since its last index, until indexing adds them.
+	 */
+	newFiles: number,
+	/**
+	 *  Whether a live folder watcher keeps the count current. `false` while
+	 *  the count comes from the last walk only and the watcher is retried.
+	 */
+	live: boolean,
+};
+
+/**  The new files of every counted Captures location, by location id. */
+export type NewCaptures = {
+	locations: NewCaptureCount[],
+};
+
 /**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */
 export type NonBlockingSummary = {
 	normalCount: number,

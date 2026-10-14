@@ -175,6 +175,119 @@ pub(crate) fn probe_fingerprint_in(
     Ok(fingerprint(file_id, &meta, &volume, modified_ns))
 }
 
+/// A location root's same-session continuity [`Stamp`], taken when new-capture
+/// discovery starts watching it: the same folder on the same mounted volume
+/// keeps it, while an unmounted, remounted or replaced root does not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RootStamp(Stamp);
+
+/// The stamp of the real folder at `root`, or `None` when it is absent,
+/// unreadable, a link, a junction or not a folder. One no-follow `stat`.
+pub(crate) fn root_stamp(root: &Path) -> Option<RootStamp> {
+    let meta = fs::symlink_metadata(root).ok()?;
+    (meta.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&meta))
+        .then(|| RootStamp(identity::stamp(&meta)))
+}
+
+/// What an entry below a location root is to the walker, decided from its
+/// no-follow metadata alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Entry {
+    /// A supported frame: the next scan reads its header.
+    Frame,
+    /// A real folder on the root's volume: the walker enters it.
+    Folder,
+    /// Absent, or nothing the walker reads: a link, a junction, an unsupported
+    /// file, a nested foreign volume, or anything below one of those.
+    Other,
+}
+
+/// What `relative` (a path below `root`, whose stamp is `stamp`) is by the
+/// walker's rules: every folder from the root down must be a real folder on
+/// the root's volume.
+pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry {
+    let mut path = root.to_path_buf();
+    let mut components = relative.components().peekable();
+    while let Some(component) = components.next() {
+        let Component::Normal(name) = component else {
+            return Entry::Other;
+        };
+        path.push(name);
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            return Entry::Other;
+        };
+        let last = components.peek().is_none();
+        if fs_pathsafe::is_link_or_junction_metadata(&meta) {
+            return Entry::Other;
+        }
+        if meta.is_dir() && identity::stamp(&meta).same_device(&stamp.0) {
+            if last {
+                return Entry::Folder;
+            }
+        } else if last && meta.is_file() && format_of(relative) != ImageFormat::Unsupported {
+            return Entry::Frame;
+        } else {
+            return Entry::Other;
+        }
+    }
+    Entry::Other
+}
+
+/// Every supported frame below `root`, as relative paths, listed by the
+/// walker's rules (no link, junction or nested foreign volume is entered)
+/// without reading a header: the files the next scan of the location reads.
+/// A folder below the root that cannot be listed is skipped, as a scan would
+/// name it incomplete. Cancellation ends the listing with what it found.
+///
+/// # Errors
+/// `SourceUnavailable` when `root` no longer carries `stamp`, and the I/O
+/// error kind when the root itself cannot be listed.
+pub(crate) fn frame_paths(
+    root: &Path,
+    stamp: RootStamp,
+    canceled: &AtomicBool,
+) -> Result<Vec<NativePath>, LibraryError> {
+    if root_stamp(root) != Some(stamp) {
+        return Err(identity::scoped(
+            LibraryError::SourceUnavailable(
+                "the location root is no longer the watched folder".into(),
+            ),
+            root,
+        ));
+    }
+    let mut frames = Vec::new();
+    let mut folders = vec![PathBuf::new()];
+    while let Some(folder) = folders.pop() {
+        if canceled.load(Ordering::Acquire) {
+            break;
+        }
+        let listing = match fs::read_dir(root.join(&folder)) {
+            Ok(listing) => listing,
+            Err(error) if folder.as_os_str().is_empty() => {
+                return Err(LibraryError::from_io(root, &error));
+            }
+            Err(_) => continue,
+        };
+        for entry in listing.flatten() {
+            let relative = folder.join(entry.file_name());
+            let Ok(meta) = fs::symlink_metadata(root.join(&relative)) else {
+                continue;
+            };
+            if fs_pathsafe::is_link_or_junction_metadata(&meta) {
+                continue;
+            }
+            if meta.is_dir() {
+                if identity::stamp(&meta).same_device(&stamp.0) {
+                    folders.push(relative);
+                }
+            } else if meta.is_file() && format_of(&relative) != ImageFormat::Unsupported {
+                frames.push(NativePath::from_path(&relative));
+            }
+        }
+    }
+    Ok(frames)
+}
+
 /// Walk a registered location and report its observations progressively.
 ///
 /// `progress` receives each batch of files and issues with cumulative

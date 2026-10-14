@@ -13,6 +13,10 @@ metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
 metadata_xisf = { path = "../metadata/xisf" }
 fs_pathsafe = { path = "../fs/pathsafe" }
+# Live folder watching for new captures (bead astro-plan-ef440).
+fs_inventory = { path = "../fs/inventory" }
+camino.workspace = true
+tracing.workspace = true
 patterns = { path = "../patterns" }
 safe-filename = { path = "../safe-filename" }
 serde.workspace = true

@@ -18,6 +18,7 @@ pub mod layout;
 pub mod library;
 pub mod model;
 pub mod naming;
+pub mod new_captures;
 pub mod notifier;
 pub mod observing_plans;
 pub mod planning;

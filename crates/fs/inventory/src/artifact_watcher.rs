@@ -20,12 +20,19 @@
 //! applied by the consumer (`apps/desktop/src-tauri/src/watcher.rs`'s
 //! per-project forward task) against a `HashMap<PathBuf, FileSnapshot>` it
 //! owns.
+//!
+//! [`start_tree_watcher`] is the same event source for a tree whose new
+//! folders must be watched too (the library's Captures locations): it never
+//! follows links and reports a folder that appears below a watched path as
+//! `NeedsRescan`. Both report an OS watcher error, an OS lost-events notice
+//! and a full channel (through the overflow flag) for a rescan.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use notify::{Event, RecommendedWatcher};
+use notify::event::ModifyKind;
+use notify::{Event, EventKind, RecommendedWatcher};
 use tokio::sync::mpsc;
 
 use crate::notify_bridge::SimpleEventKind;
@@ -98,6 +105,104 @@ pub fn start_artifact_watcher(
     channel_capacity: usize,
     follow_symlinks: bool,
 ) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
+    start(paths, channel_capacity, follow_symlinks, NewFolders::Skip)
+}
+
+/// Start a watcher over every real folder below `paths`, never following a
+/// link or junction, that also covers folders appearing later.
+///
+/// Each real folder is watched on its own (as [`start_artifact_watcher`] with
+/// `follow_symlinks` off), so a folder created or moved in below `paths` is
+/// not watched yet: it is reported as [`ArtifactEventKind::NeedsRescan`], and
+/// the consumer restarts the watcher over the new folder set and walks the
+/// tree for the files the new folder already holds.
+///
+/// # Errors
+///
+/// As [`start_artifact_watcher`].
+pub fn start_tree_watcher(
+    paths: &[Utf8PathBuf],
+    channel_capacity: usize,
+) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
+    start(paths, channel_capacity, false, NewFolders::Rescan)
+}
+
+/// What a folder created or moved in below a watched path signals.
+#[derive(Clone, Copy)]
+enum NewFolders {
+    /// Nothing: folder events are not forwarded.
+    Skip,
+    /// [`ArtifactEventKind::NeedsRescan`], because the folder is not watched.
+    Rescan,
+}
+
+/// Whether `kind` brings a folder into the watched tree: created there, or
+/// renamed to (or, where the platform cannot pair renames, from) its name.
+const fn brings_folder(kind: EventKind) -> bool {
+    matches!(kind, EventKind::Create(_) | EventKind::Modify(ModifyKind::Name(_)))
+}
+
+fn needs_rescan() -> ArtifactFileEvent {
+    ArtifactFileEvent { path: Utf8PathBuf::new(), kind: ArtifactEventKind::NeedsRescan }
+}
+
+/// Hand what one `notify` callback reports to `send`, which returns whether
+/// the channel took it; the rest of a batch is dropped once it did not.
+///
+/// Item (a): an OS watcher error, and an event carrying `notify`'s rescan
+/// flag (an OS queue overflow or dropped-events notice, e.g. inotify
+/// `IN_Q_OVERFLOW` or `FSEvents` `MustScanSubDirs`), become `NeedsRescan`:
+/// the events received so far can no longer be relied on.
+fn forward(
+    res: Result<Event, notify::Error>,
+    new_folders: NewFolders,
+    mut send: impl FnMut(ArtifactFileEvent) -> bool,
+) {
+    let event = match res {
+        Err(e) => {
+            tracing::error!(error = %e, "artifact watcher error");
+            send(needs_rescan());
+            return;
+        }
+        Ok(event) if event.need_rescan() => {
+            tracing::warn!("artifact watcher: the OS reported lost events");
+            send(needs_rescan());
+            return;
+        }
+        Ok(event) => event,
+    };
+    let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
+        return;
+    };
+    let kind = ArtifactEventKind::from(simple_kind);
+    for path in &event.paths {
+        let Some(utf8) =
+            crate::notify_bridge::utf8_path_or_skip(path, "fs_inventory::artifact_watcher")
+        else {
+            continue;
+        };
+        if utf8.is_dir() {
+            if matches!(new_folders, NewFolders::Rescan)
+                && brings_folder(event.kind)
+                && !fs_pathsafe::is_link_or_junction(path)
+                && !send(needs_rescan())
+            {
+                return;
+            }
+            continue;
+        }
+        if !send(ArtifactFileEvent { path: utf8, kind }) {
+            return;
+        }
+    }
+}
+
+fn start(
+    paths: &[Utf8PathBuf],
+    channel_capacity: usize,
+    follow_symlinks: bool,
+    new_folders: NewFolders,
+) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
     let (tx, rx) = mpsc::channel::<ArtifactFileEvent>(channel_capacity);
     let tx = Arc::new(tx);
     let handler_tx = Arc::clone(&tx);
@@ -108,44 +213,16 @@ pub fn start_artifact_watcher(
     let callback_overflow = Arc::clone(&overflow_flag);
 
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-        match res {
-            Err(e) => {
-                // Item (a): forward OS watcher errors as NeedsRescan so the
-                // consumer triggers a reconciliation pass.
-                tracing::error!(error = %e, "artifact watcher error");
-                let _ = handler_tx.try_send(ArtifactFileEvent {
-                    path: Utf8PathBuf::new(),
-                    kind: ArtifactEventKind::NeedsRescan,
-                });
+        forward(res, new_folders, |event| match handler_tx.try_send(event) {
+            // Store beats try_send: an AtomicBool::store cannot be dropped
+            // if the channel is full.
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                tracing::warn!("artifact watcher: channel full, events dropped");
+                callback_overflow.store(true, Ordering::Release);
+                false
             }
-            Ok(event) => {
-                let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
-                    return;
-                };
-                let kind = ArtifactEventKind::from(simple_kind);
-
-                for path in &event.paths {
-                    let Some(utf8) = crate::notify_bridge::utf8_path_or_skip(
-                        path,
-                        "fs_inventory::artifact_watcher",
-                    ) else {
-                        continue;
-                    };
-                    if utf8.is_dir() {
-                        continue;
-                    }
-                    if let Err(mpsc::error::TrySendError::Full(_)) =
-                        handler_tx.try_send(ArtifactFileEvent { path: utf8, kind })
-                    {
-                        // Store beats try_send: an AtomicBool::store cannot be
-                        // dropped if the channel is full.
-                        tracing::warn!("artifact watcher: channel full, events dropped");
-                        callback_overflow.store(true, Ordering::Release);
-                        return;
-                    }
-                }
-            }
-        }
+            Ok(()) | Err(mpsc::error::TrySendError::Closed(_)) => true,
+        });
     })
     .map_err(|e| format!("failed to create artifact watcher: {e}"))?;
 
@@ -176,6 +253,83 @@ mod tests {
             false,
         );
         assert!(result.is_err(), "expected error for nonexistent path");
+    }
+
+    /// The first event within `wait` that `wanted` accepts.
+    async fn first_event(
+        rx: &mut mpsc::Receiver<ArtifactFileEvent>,
+        wait: std::time::Duration,
+        wanted: impl Fn(&ArtifactFileEvent) -> bool,
+    ) -> Option<ArtifactFileEvent> {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some(evt)) if wanted(&evt) => return Some(evt),
+                Ok(Some(_)) => {}
+                _ => return None,
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn tree_watcher_reports_a_new_folder_for_a_rescan() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        let (mut rx, _guard) = start_tree_watcher(std::slice::from_ref(&root), 64).unwrap();
+
+        std::fs::create_dir(root.join("2026-10-14")).unwrap();
+
+        let rescan = first_event(&mut rx, std::time::Duration::from_secs(3), |evt| {
+            evt.kind == ArtifactEventKind::NeedsRescan
+        })
+        .await;
+        assert!(rescan.is_some(), "a new folder below the root must ask for a rescan");
+    }
+
+    #[tokio::test]
+    async fn artifact_watcher_does_not_report_new_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        let (mut rx, _guard) =
+            start_artifact_watcher(std::slice::from_ref(&root), 64, false).unwrap();
+
+        std::fs::create_dir(root.join("2026-10-14")).unwrap();
+
+        let any = first_event(&mut rx, std::time::Duration::from_millis(700), |_| true).await;
+        assert!(any.is_none(), "folder events stay unforwarded: {any:?}");
+    }
+
+    fn forwarded(res: Result<Event, notify::Error>) -> Vec<ArtifactEventKind> {
+        let mut kinds = Vec::new();
+        forward(res, NewFolders::Skip, |event| {
+            kinds.push(event.kind);
+            true
+        });
+        kinds
+    }
+
+    #[test]
+    fn an_os_watcher_error_asks_for_a_rescan() {
+        let kinds = forwarded(Err(notify::Error::generic("inotify watch limit reached")));
+        assert_eq!(kinds, [ArtifactEventKind::NeedsRescan]);
+    }
+
+    #[test]
+    fn an_os_lost_events_notice_asks_for_a_rescan() {
+        let notice = Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan);
+        assert_eq!(forwarded(Ok(notice)), [ArtifactEventKind::NeedsRescan]);
+        let created = Event::new(EventKind::Create(notify::event::CreateKind::File))
+            .add_path("/no/such/folder/Ha_001.fits".into());
+        assert_eq!(forwarded(Ok(created)), [ArtifactEventKind::Created]);
+    }
+
+    #[test]
+    fn only_creations_and_renames_bring_a_folder() {
+        use notify::event::{CreateKind, MetadataKind, RenameMode};
+        assert!(brings_folder(EventKind::Create(CreateKind::Folder)));
+        assert!(brings_folder(EventKind::Modify(ModifyKind::Name(RenameMode::To))));
+        assert!(!brings_folder(EventKind::Modify(ModifyKind::Metadata(MetadataKind::WriteTime))));
+        assert!(!brings_folder(EventKind::Remove(notify::event::RemoveKind::Folder)));
     }
 
     #[tokio::test]

@@ -99,6 +99,30 @@ fn unqualified_volume_and_unknown_path_behavior_never_guess_identity() {
 }
 
 #[test]
+fn path_identity_folds_exactly_where_same_on_does() {
+    let mut volume = fingerprint().identity.volume;
+    let composed = NativePath::from_path(std::path::Path::new("M\u{e9}ridien/Ha.fits"));
+    let decomposed = NativePath::from_path(std::path::Path::new("Me\u{301}ridien/ha.FITS"));
+    let unrelated = NativePath::from_path(std::path::Path::new("Meridien/ha.fits"));
+    let cases = [
+        (PathSensitivity::Unknown, PathSensitivity::Insensitive, false),
+        (PathSensitivity::Insensitive, PathSensitivity::Unknown, false),
+        (PathSensitivity::Sensitive, PathSensitivity::Sensitive, false),
+        (PathSensitivity::Insensitive, PathSensitivity::Sensitive, false),
+        (PathSensitivity::Sensitive, PathSensitivity::Insensitive, false),
+        (PathSensitivity::Insensitive, PathSensitivity::Insensitive, true),
+    ];
+    for (case, normalization, same) in cases {
+        volume.case = case;
+        volume.normalization = normalization;
+        let (left, right) = (composed.identity_on(&volume), decomposed.identity_on(&volume));
+        assert_eq!(left == right, same, "{case:?}/{normalization:?}");
+        assert_eq!(composed.same_on(&decomposed, &volume), same, "{case:?}/{normalization:?}");
+        assert_ne!(left, unrelated.identity_on(&volume), "{case:?}/{normalization:?}");
+    }
+}
+
+#[test]
 fn windows_utf16_wire_keeps_unpaired_surrogate_payload() {
     let payload = vec![0x43, 0x3a, 0x5c, 0xd800, 0x2e, 0x66, 0x69, 0x74, 0x73];
     let native = NativePath::WindowsUtf16(payload.clone());
