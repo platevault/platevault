@@ -485,10 +485,8 @@ impl RootProbe for Hanging {
     fn stamp(&self, root: &Path) -> Option<RootStamp> {
         if self.0.hang.load(Ordering::SeqCst) {
             self.0.hanging.store(true, Ordering::SeqCst);
-            let mut open = self.0.open.lock().unwrap();
-            while !*open {
-                open = self.0.opened.wait(open).unwrap();
-            }
+            let open = self.0.open.lock().unwrap();
+            drop(self.0.opened.wait_while(open, |open| !*open).unwrap());
         }
         OsProbe.stamp(root)
     }
