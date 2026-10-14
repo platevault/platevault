@@ -14,7 +14,7 @@
 
 ### User Story 1 - Frame pixel review and measurements (Priority: P1)
 
-Native measurement and full-resolution linear preview during the Review step of a processing run (View), star/PSF diagnostics, provenance-preserving measurement import, and Lightroom-style culling. The user reviews one list of frames as a table, a filmstrip or a grid, moves through it with hotkeys, and marks frames Picked, Rejected or Unreviewed. Measurement records can be written automatically; none changes source data, membership, or quality decisions. Quality changes only when the user marks frames (D-W3, D-W14, D-W42).
+Native measurement and full-resolution linear preview during the Review step of a session's intake (LIB-FR-20), star/PSF diagnostics, provenance-preserving measurement import, and Lightroom-style culling. The user reviews one list of frames as a table, a filmstrip or a grid, moves through it with hotkeys, and marks frames Picked or Rejected until none is Unreviewed. Measurement records can be written automatically; none changes source data, membership, or quality decisions. Quality changes only when the user marks frames (D-W3, D-W14, D-W78, D-W79).
 
 **Why this priority**: This feature owns the workflow steps listed below without imposing unrelated product features.
 
@@ -34,13 +34,14 @@ Native measurement and full-resolution linear preview during the Review step of 
 - **PIX-AC-10**: Given a frame with cached and imported measurements replaced in place with its size and mtime preserved, when Review frames opens, then its cached values never read valid. Its imported values read as history, the frame is measured again from its current bytes, and the earlier cached values remain only as history for the earlier content.
 - **PIX-AC-11**: Given a CSV naming a measured frame that was replaced in place before import, with its size and mtime preserved, when the mapping is reviewed, then that row is listed for review against the frame's recorded digest. After confirmation no imported value attaches to it. Every attached imported value reads content unverified.
 - **PIX-AC-12**: Given an Unreviewed frame with auto-advance on, when the user presses X, then the frame's library quality becomes Unusable and it reads Rejected with scope Library. The next frame in the current list order becomes current. The frame also reads Rejected in every other Project and run that shows it. Pressing U on it returns it to Unreviewed (D-W14, D-W42).
-- **PIX-AC-13**: Given a library-Usable frame in a run of Project A that is also a candidate of Project B, when the user chooses Reject for this Project only, then its library quality stays Usable. Library usable totals are unchanged. The frame reads Rejected with scope This Project in Project A and Picked in Project B (D-W42).
+- **PIX-AC-13**: Withdrawn (D-W79). "Reject for this Project only" is removed; PIX-AC-12 covers the library-wide reject.
 - **PIX-AC-14**: Given 120 frames of which 100 have a built-in FWHM, when the user selects frames with FWHM above 3.5″, then exactly the measured frames above 3.5″ are selected. The 20 frames without a value are named Not measured and stay unselected. No quality state changes until the user marks the selection (D-W13).
 - **PIX-AC-15**: Given the frame table at about 8 rows, when the user presses T three times, then the table shows the one-line strip, then full height, then 8 rows at the last dragged height. After the user presses ⌥3, the list holds only Rejected frames and the filter reads Rejected (D-W22).
 - **PIX-AC-16**: Given the grid view (G) with 12 thumbnails multi-selected, when the user presses X, then those 12 frames read Rejected. Switching to the table or filmstrip keeps the same selection, current frame, filter and sort. Reopening the review shows the cached thumbnails without decoding the frames again. A frame whose bytes changed since its thumbnail was cached gets a new thumbnail (D-W40).
 - **PIX-AC-17**: Given the frame name display template is switched to another preset, then the Name column re-renders for every frame and no file is renamed. Hovering a name, or opening the inspector, shows the full path. Hiding a column removes it from the table, and sorting a column orders frames by its value (D-W15).
-- **PIX-AC-18**: Given a mosaic run group with four panel runs, when Review all opens, then frames from all four panels list together with a Panel column. Filtering to Panel 2 lists only Panel 2 frames. Marking a frame changes only that frame's quality, and every frame stays in its own panel run's membership (D-W41).
-- **PIX-AC-19**: Given a run whose session holds a Trashed frame record, when Review frames opens, then that frame is not listed, counted, measured or thumbnailed in any view or filter (D-W43).
+- **PIX-AC-18**: Withdrawn (D-W78). A run group has no Review all; each session is reviewed in its own intake.
+- **PIX-AC-19**: Given a session that holds a Trashed frame record, when its Review step opens, then that frame is not listed, counted, measured or thumbnailed in any view or filter (D-W43, D-W78).
+- **PIX-AC-20**: Given a session's Review step with 60 frames, of which 6 are marked Rejected and 54 are Unreviewed, when the user chooses "Mark rest usable", then the 54 read Picked, no frame is Unreviewed, and Finish review is enabled. Before that, Finish review is disabled and names the Unreviewed count. (D-W78)
 
 ### Edge Cases
 
@@ -78,11 +79,11 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - ⌥1, ⌥2, ⌥3 and ⌥4 filter the list to All, Picked, Rejected and Unreviewed.
   - Auto-advance is on by default. After a mark, the next frame in the current list order becomes current.
   - When more than one frame is selected, a mark applies to every selected frame.
-- **PIX-FR-14**: Quality has two levels. P, X and U set the frame's library quality to Usable, Unusable or Unreviewed, recorded under LIB-FR-09. Library quality is global: it shows in every Project, run, Sessions list and Target total. A mark applies at once, and the frame's state names its scope. Picked, Rejected and Unreviewed are the review labels for Usable, Unusable and Unreviewed. "Reject for this Project only" is a secondary action in the frame menu and the inspector, with no single-key hotkey. It writes the Project-scoped rejection record (root D10) and leaves library quality unchanged; the frame reads Rejected with scope This Project in that Project only, and Clear Project reject removes it. The Rejected filter lists both scopes and labels each. In an open run's Review step, rejecting a frame with either scope also removes it from that run's draft with the reason "Rejected". Un-rejecting it restores it (VSEL-FR-15), and saved and prepared revisions stay as they were. Other membership changes follow VSEL-FR-14, and "in project" goal progress, which leaves out Project-rejected frames, follows PRJ (D-W42, D-W54).
+- **PIX-FR-14**: Quality has one level. P, X and U set the frame's library quality to Usable, Unusable or Unreviewed, recorded under LIB-FR-09. Library quality is global: it shows in every Project, run, Sessions list and Target total. A mark applies at once. Picked, Rejected and Unreviewed are the review labels for Usable, Unusable and Unreviewed. There is no Project-scoped reject. A session is fully reviewed when none of its frames is Unreviewed. "Mark rest usable" marks every Unreviewed frame of the session Usable, and "Select by threshold…" selects frames by a measured metric under PIX-FR-15 for one mark. Membership changes that follow a review change follow VSEL-FR-15 (D-W78, D-W79).
 - **PIX-FR-15**: Multi-select and threshold selection: frames can be selected one by one, as a range, with ⌘A, or by a threshold on a measured metric (above or below a value), set from a control or from a plot. A threshold uses only values for the metric and source shown; frames with no value are named Not measured and are not selected. The plots highlight the selected frames (D-W13).
 - **PIX-FR-16**: Frame names use a display template with presets, built from the naming tokens and fallbacks; the default preset is the file name. The template changes display only and never renames files. Columns can be shown, hidden and sorted by value. The full path shows on hover and in the inspector (D-W15).
-- **PIX-FR-17**: In a mosaic run group, Review all opens one list that spans every panel run, with a Panel column and a Panel filter. Each frame stays in its own panel run's membership. Measurement, views, hotkeys and marks behave as in a single run (D-W41).
-- **PIX-FR-18**: Review frames opens from a run's Review step, from a run group's Review all, and from a Project's new candidate sessions with the list filtered to Unreviewed. Home's "Review N new frames" opens that last entry point (PRJ-FR-18). A Trashed frame record never appears in frame review: it is not listed, counted, measured or thumbnailed (D-W35, D-W43).
+- **PIX-FR-17**: Withdrawn (D-W78). Frames are reviewed per session in intake, so a mosaic run group has no Review all; each frame's panel comes from its session's pointing (VSEL-FR-18).
+- **PIX-FR-18**: Review frames is the Review step of a session's intake (LIB-FR-20). Sessions' "Needs review" filter is the queue; Finish review opens the next session in it, and Import ends by opening the first. Reopening review on a session that a run that is not Finished uses in a prepared view is refused (LIB-FR-20). A Trashed frame record never appears in frame review: it is not listed, counted, measured or thumbnailed (D-W43, D-W78).
 
 ### Owned interaction steps
 
@@ -92,14 +93,14 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - D6
 - Cross-flow: Measurement pending/failed
 - Frame culling: views, hotkeys, threshold selection and quality marks (D-W13, D-W14, D-W40, D-W42)
-- Run-group review across panels (D-W41)
+- Session intake Review step and its "Needs review" queue (D-W78)
 
 ### Key Entities
 
 Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). Feature-specific evidence and decisions retain their input identity, scope, and revision.
 
-- **Processing run (View)**: the unit whose Review step opens frame review; it belongs to one Project and uses one rig (D-W1, D-W37). A mosaic subject's runs form a run group with one run per panel (D-W38).
-- **Quality mark**: a library quality decision (Usable, Unusable or Unreviewed, shown as Picked, Rejected or Unreviewed) or a Project-scoped rejection. Each names its scope (D-W42).
+- **Session intake**: the Target → Rig → Review flow of one session (LIB-FR-20), whose Review step opens frame review. Runs have no Review step (D-W78).
+- **Quality mark**: a library quality decision (Usable, Unusable or Unreviewed), shown as Picked, Rejected or Unreviewed (D-W79).
 - **Thumbnail**: a cached, display-only decode of a frame, bound to the SHA-256 of the bytes it was decoded from (D-W40).
 - **Display template**: a token template, chosen from presets, that sets how frame names read in review (D-W15).
 
@@ -111,7 +112,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - **PV-PIX-SC-02**: Every owned interaction step has a requirement and independently observable acceptance evidence.
 - **PV-PIX-SC-03**: Original inputs remain unchanged except through separately reviewed and approved filesystem operations.
 - **PV-PIX-SC-04**: Every hotkey in PIX-FR-13 gives the same result in the table, filmstrip and grid views (D-W40).
-- **PV-PIX-SC-05**: No quality record changes except through a user mark: P, X, U, Shift+P, Shift+X, Reject for this Project only, or Clear Project reject (D-W42).
+- **PV-PIX-SC-05**: No quality record changes except through a user mark: P, X, U, Shift+P, Shift+X or Mark rest usable (D-W78, D-W79).
 
 ## Assumptions
 
@@ -125,3 +126,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - Root decision D03 fixes read-only raw/CFA handling and the initial SubframeSelector CSV format. Metric set, units, masks, saturation, background, aperture and method-specific tolerances require explicit definitions and fixture qualification during PIX planning. No debayering is authorized.
 - Root decision D19 binds cached measurements to the bytes they describe. Imported values stay content unverified and become history when the frame differs from its import observation.
 - Workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W41, D-W42, D-W53 and D-W54 (2026-10-06) set the review layout, views, hotkeys including Shift+P and Shift+X, frame names and run-group review. They also set the quality scopes and the removal of a rejected frame from an open run's draft.
+- Workflow decisions D-W78 and D-W79 (Round 9, 2026-10-12) move review to session intake, supersede D-W41's run-group review and D-W54's draft removal, and remove the Project-scoped reject (D-W42).

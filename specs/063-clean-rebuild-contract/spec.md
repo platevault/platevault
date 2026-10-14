@@ -29,7 +29,7 @@ The user registers capture folders and inspects their sessions while indexing pr
 
 ### User Story 2 - Review a processing run's input selection (Priority: P1)
 
-The user creates a Project with a subject and a rig, starts a processing run in it, selects sessions from the run's candidates, saves the run, and prepares exact inputs for an external application. Selection and quality decisions have separate scopes (D-W1, D-W3, D-W37).
+The user creates a Project with a subject and a rig, starts a processing run in it, selects sessions from the run's candidates, saves the run, and prepares exact inputs for an external application. Every candidate session was fully reviewed when it came in, so the run reviews no frames (D-W1, D-W3, D-W37, D-W78).
 
 **Why this priority**: An exact handoff makes library inspection useful. The Project is a light container: a name, its subjects and its rigs are enough to start a run.
 
@@ -75,7 +75,7 @@ The user accepts reusable products, finishes a run, and chooses its Clean up ind
 3. **Given** a location without safe OS Trash support, **When** approved cleanup runs, **Then** affected files are retained and no permanent-delete fallback executes.
 4. **Given** an archive verification or reference-repair failure, **When** transfer settles, **Then** sources are retained and completed, pending, and uncertain phases remain visible.
 5. **Given** a Project the user closes, **When** its Done / Archive sheet opens, **Then** it offers Archive and "Move N rejected frames to Trash (size)". Archive keeps every session that is a member of a run in another Project that is not Closed. Nothing moves until the user approves. (D-W26, D-W43, D-W46)
-6. **Given** the trash offer, **When** its frames are listed, **Then** it covers only the Project's candidate frames that are library-Unusable, excludes every Project-only reject, and lists each refused frame with its reason. (D-W42, D-W43)
+6. **Given** the trash offer, **When** its frames are listed, **Then** it covers only the Project's candidate frames that are library-Unusable and lists each refused frame with its reason. (D-W43, D-W79)
 
 ### User Story 5 - Plan observing independently of processing (Priority: P2)
 
@@ -104,7 +104,7 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
 
 1. **Given** indexed sessions, **When** Home opens, **Then** it shows the six Home sections of FR-020 in order. (D-W39)
 2. **Given** three sessions with no confirmed Target and two with a confirmed Target that no Project lists, **When** Home opens, **Then** the top line reads "3 sessions need a Target · 2 not in any Project". (D-W35)
-3. **Given** a Project with new unreviewed candidate frames and a blocked run, **When** Home computes its Next action, **Then** it shows "Review N new frames", which opens frame review filtered to Unreviewed. (D-W27, D-W35)
+3. **Given** a Project whose subjects and rigs match sessions that still need review, and a blocked run, **When** Home computes its Next action, **Then** it shows "N sessions need review", which opens Sessions filtered to Needs review. (D-W27, D-W35, D-W78)
 4. **Given** a goal of Ha 10h with 6h10 in the Project's runs and 9h15 across all candidates and run members, **When** progress shows, **Then** it reads "Ha 6h10 in project · 9h15 captured · goal 10h", and the goal is unmet. (D-W36, D-W66)
 
 ### Edge Cases
@@ -129,7 +129,7 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
 - **FR-003**: A processing run (View) MUST belong to exactly one Project and use exactly one of its subjects and one of its rigs. A run MUST retain reviewed input identities independently of browsing filters. Refresh MUST present changes for approval. Reuse across Projects MUST go through Results as inputs, never through sharing a run. (D-W1, D-W8, D-W9, D-W37)
 - **FR-004**: Preparation MUST account for every selected input. Unsupported modes, missing inputs, and collisions MUST have explicit outcomes without silent omission or fallback.
 - **FR-005**: Direct-source handoff MUST pass exact reviewed membership without staging. Profiles that can write into inputs, or whose input-write behavior is unknown, MUST refuse Linked and Direct-source handoff and offer isolated Copy or supported Clone instead.
-- **FR-006**: Library quality (P/X/U, global), run exclusions, and "Reject for this Project only" MUST have explicit scopes. A Project-only reject MUST NOT change library quality, other Projects or run membership. Measurements MUST NOT make those decisions automatically. (D-W42)
+- **FR-006**: Library quality (P/X/U) MUST be global, and run exclusions MUST stay scoped to their run. There is no Project-scoped reject. Measurements MUST NOT make those decisions automatically. (D-W79)
 - **FR-007**: Pixel review MUST retain scientific input semantics and invalid-sample evidence. Measurement MUST use linear samples independently of display stretch.
 - **FR-008**: Measurements MUST identify method, units, source, and input basis. Failed fits MUST remain failures; imported values MUST NOT silently replace built-in values.
 - **FR-009**: Observed artifacts, accepted Results, reusable masters, and a run's Finished state MUST remain separate states. Finish run MUST require neither a Result nor Clean up. A run that is no longer wanted MAY be moved to its Project's Trash instead (soft delete). Move run to Trash MUST be refused while an operation affecting the run is Running, and while one of its accepted Results is an input to another run; the refusal MUST name each blocker. Moving a run to Trash MUST move no file. A run in the Project's Trash MUST be hidden everywhere except the Project's Trash list, and Restore MUST bring it back exactly as it was. Only Empty Trash, for one run or for all, MAY remove a run. Before it does, it MUST show what goes: the run record, its prepared folders and, only when the user ticks it, its Results folder. Those files MUST go to the OS Trash only. Library frames and quality decisions MUST NOT change, and after Empty Trash, Put back in the OS Trash restores files only. (D-W26, D-W72)
@@ -141,8 +141,8 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
 - **FR-015**: Core library use MUST remain local-first without an account. External applications own calibration, registration, integration, and final image production.
 - **FR-016**: The old application and existing uncommitted work MUST remain recoverable during rebuilding. Source-code reuse MUST NOT imply importing old catalog decisions.
 - **FR-017**: Assigning, opening, preparing, reusing, cleaning, archiving or trashing a recorded file, or retiring it as a source after archive, MUST re-verify its recorded identity and SHA-256 immediately before the effect. A mismatch MUST name the drift and block that item. Counting a file toward a decision- or proof-bound total MUST use its last completed verification, from review, inspection, acceptance, readable rescan or reuse, and MUST label that verification time. Counts MUST exclude an item whose latest verification found drift or is pending, and showing a total MUST NOT start a rehash. Metadata-only captured totals of Unreviewed captures, and labelled last-observed counts of offline or unreadable inputs of locations that are not retired, MUST stay visible as D19 scopes them. Catalog-only Retire location reads no file bytes and is exempt from rehashing; it MUST still commit only against its review, expected revision and unchanged availability (D19). (D-W11, D-W43)
-- **FR-018**: A Project's candidates MUST be derived, never assigned: every session whose confirmed Target is one of the Project's subjects and whose rig is one of the Project's rigs. A run's session picker MUST offer only candidates of the run's subject on the run's rig. (D-W33, D-W37)
-- **FR-019**: Sessions MUST be assigned only to runs, as each run's revisioned membership. A Project's members MUST be inherited from its runs outside its Trash. Goal progress MUST show "in project" and "captured". "in project" counts the frames in the latest saved memberships of the Project's runs outside its Trash, minus each run's exclusions and the frames rejected for the Project. "captured" counts the frames of all candidates plus the members of those runs. A member that stops being a candidate MUST stay in its run and still count "in project". The members of a run in the Project's Trash MUST stop counting in both, unless they are still candidates, and MUST count again after Restore. Goal met and Home's Next action MUST use "in project" only. (D-W34, D-W36, D-W42, D-W44, D-W45, D-W66, D-W72)
+- **FR-018**: A Project's candidates MUST be derived, never assigned: every Ready session (fully reviewed at intake) whose confirmed Target is one of the Project's subjects and whose rig is one of the Project's rigs. A run's session picker MUST offer only candidates of the run's subject on the run's rig. A session that still needs review MUST NOT be a candidate. (D-W33, D-W37, D-W78)
+- **FR-019**: Sessions MUST be assigned only to runs, as each run's revisioned membership. A Project's members MUST be inherited from its runs outside its Trash. Goal progress MUST show "in project" and "captured". "in project" counts the frames in the latest saved memberships of the Project's runs outside its Trash, minus each run's exclusions. "captured" counts the frames of all candidates plus the members of those runs. A member that stops being a candidate MUST stay in its run and still count "in project". The members of a run in the Project's Trash MUST stop counting in both, unless they are still candidates, and MUST count again after Restore. Goal met and Home's Next action MUST use "in project" only. (D-W34, D-W36, D-W44, D-W45, D-W66, D-W72, D-W79)
 - **FR-020**: Home MUST be a dashboard with these six sections, in order:
   1. Actions: Import, New Project, Plan tonight.
   2. Projects, each with goals, stage and one Next action.
@@ -152,8 +152,8 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
   6. Running work.
 
   Its top line MUST read "N sessions need a Target · M not in any Project". Closed Projects MUST stay hidden behind a "Show done" filter. PV-PRJ owns the section contents and the Next rule. (D-W27, D-W35, D-W39, D-W48)
-- **FR-021**: Moving rejected frames to the OS Trash MUST be offered only from a Closed Project's Done / Archive sheet. It MUST cover only that Project's library-Unusable candidate frames, MUST exclude Project-only rejects, MUST list refused frames with their reason, and MUST NOT permanently delete. A Trashed record MUST stay for traceability. It MUST appear only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of a run that was Finished when the frame was trashed. The same sheet MUST also offer "Move N processing intermediates to Trash (size)" and "Move N duplicate copies to Trash (size)" under the same trash rules. It MUST keep final Results and adopted masters, and it MUST keep one copy of every frame. When the Project's Trash holds runs, the sheet MUST also offer Empty Trash under FR-009. (D-W43, D-W52, D-W70, D-W72, D-W74)
-- **FR-022**: Each run's stage MUST be one of Select, Review, Calibrate, Prepare, Results, Finished or Clean up, and Clean up MUST be offered, never required. At any stage the user MAY move the run to the Project's Trash under FR-009. A run in the Trash leaves the stage rail and is listed in the Project's Trash list with its stage. The Project page MUST show a stage rail with each run's stage. A Project MUST end Closed; Archive MUST be offered and MUST NOT be required. (D-W3, D-W7, D-W26, D-W72)
+- **FR-021**: Moving rejected frames to the OS Trash MUST be offered only from a Closed Project's Done / Archive sheet. It MUST cover only that Project's library-Unusable candidate frames, MUST list refused frames with their reason, and MUST NOT permanently delete. A Trashed record MUST stay for traceability. It MUST appear only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of a run that was Finished when the frame was trashed. The same sheet MUST also offer "Move N processing intermediates to Trash (size)" and "Move N duplicate copies to Trash (size)" under the same trash rules. It MUST keep final Results and adopted masters, and it MUST keep one copy of every frame. When the Project's Trash holds runs, the sheet MUST also offer Empty Trash under FR-009. (D-W43, D-W52, D-W70, D-W72, D-W74, D-W79)
+- **FR-022**: Each run's stage MUST be one of Select, Calibrate, Prepare, Results, Finished or Clean up, and Clean up MUST be offered, never required. At any stage the user MAY move the run to the Project's Trash under FR-009. A run in the Trash leaves the stage rail and is listed in the Project's Trash list with its stage. The Project page MUST show a stage rail with each run's stage. A Project MUST end Closed; Archive MUST be offered and MUST NOT be required. (D-W3, D-W7, D-W26, D-W72, D-W78)
 - **FR-023**: The interface MUST call a View a "processing run". It MUST label goal progress "in project" and "captured", MUST NOT say "not in a run", and MUST never show an "in project" value above its "captured" value. A run ends with **Finish run** and is then **Finished**; a Project ends with **Close project** and is then **Closed**, or **Archived** once its Archive succeeds. A calibration master the user no longer wants offered is **Hidden**, with Show hidden and Restore. Editing an object's details MUST use one **Edit…** verb. Moving files to the OS Trash MUST use the destructive action style. (D-W3, D-W36, D-W66, D-W76)
 - **FR-024**: Every staged flow (a run, a run group, a Project's wrap-up, Import, a calibration process) MUST advance with one **Proceed** control per step, and the last step MUST name its action instead (for example Finish run… or Close project…). A step whose work is one operation MUST be recorded Finished only when that operation succeeds. An unmet gate MUST disable Proceed and name what is missing. A selection step MUST record Skipped when the user proceeds with nothing selected, and offers no separate Skip. In an ordered flow, later steps MUST stay read-only until the earlier ones are Finished or Skipped; an earlier step MAY be reopened until the flow finishes, and reopening MUST mark the steps after it Redo. A finished flow MUST be read-only, with Reopen in the object's menu. (D-W77)
 
@@ -176,9 +176,9 @@ The stable feature keys identify contract owners. They are not a chronological i
 | Feature key | Owned behavior | Primary journey steps |
 | --- | --- | --- |
 | PV-LIB | Locations, indexing (including what Import lands), homogeneous sessions (including the "Trashed" filter), the Target page, Target/equipment and rig evidence, coverage | A1, A2, A3, A4, B1 |
-| PV-PRJ | Projects (required for runs): subjects, rigs, derived candidates, inherited members, goals and goal templates, the effect of Project-only rejects on progress, Home dashboard, Project page with its stage rail and Trash list, Project Done / Archive sheet and its trash offers | B2, Home, Project page, Done / Archive sheet |
+| PV-PRJ | Projects (required for runs): subjects, rigs, derived candidates, inherited members, goals and goal templates, Home dashboard, Project page with its stage rail and Trash list, Project Done / Archive sheet and its trash offers | B2, Home, Project page, Done / Archive sheet |
 | PV-VSEL | Run creation inside a Project, session picker over candidates, mosaic run groups and panel assignment, run exclusions, saved membership, refresh | B4, C1, C2, C3, C4, C5, C6, D4, D5, G |
-| PV-PIX | Frame review, P/X/U marks and the "Reject for this Project only" action, measurements, star details, metric imports | D1, D2, D3, D6 |
+| PV-PIX | Frame review in a session's intake, P/X/U marks, measurements, star details, metric imports | D1, D2, D3, D6 |
 | PV-CAL | Automatic calibration matching, explanations, exceptions, master adoption | E1, E2, H4 |
 | PV-PREP | Profiles, modes, paths, preparation, verified external handoff | E3, E4, F1, F2, F3, F4, F5, F6 |
 | PV-RES | Result discovery, acceptance, provenance, reuse, Finish run, Move run to Trash, Restore and Empty Trash | H1, H2, H3, H3a, I1 |
@@ -194,13 +194,12 @@ The stage model of the 2026-10-06 redesign runs across the feature specs (D-W1, 
 1. Library: Import (PV-STO) or Add existing library folder, then indexing (PV-LIB); sessions appear in Sessions and on the Target page. The Planner works on the Targets list without a Project (PV-PLAN, D-W11, D-W16).
 2. Project: the user creates a Project with subjects, rigs and goals, optionally from a goal template. Candidates follow from confirmed Target and rig; Home and the Project page show progress and Next (PV-PRJ, D-W30, D-W33, D-W39).
 3. Each processing run, inside one Project with one subject and one rig fixed at creation, moves through these stages (D-W50):
-   1. Select: session picker over candidates and saved membership (PV-VSEL). A mosaic subject creates a run group with one run per panel (D-W38).
-   2. Review: frame review with library quality or Project-only reject; rejecting a frame removes it from the run's draft (PV-PIX, PV-VSEL, D-W42, D-W54).
-   3. Calibrate: automatic matching with a readiness line (PV-CAL, D-W5).
-   4. Prepare: verified handoff (PV-PREP).
-   5. Results: discovered from the run's sibling Results folder and accepted (PV-RES, D-W4, D-W51).
-   6. Finish run: the user finishes the run (PV-RES). At any stage the user can instead move a run that is no longer wanted to the Project's Trash, where it is hidden until the user restores it or empties the Trash. Moving it moves no file. Empty Trash sends its prepared folders to the OS Trash, and its Results folder only when the user ticks it (PV-RES, D-W72).
-   7. Clean up: run-scoped removal of prepared links, clones and copies, offered once the run is Finished (PV-STO).
+   1. Select: session picker over candidates, which are Ready sessions, and saved membership (PV-VSEL). A mosaic subject creates a run group with one run per panel (D-W38, D-W78).
+   2. Calibrate: automatic matching with a readiness line (PV-CAL, D-W5).
+   3. Prepare: verified handoff (PV-PREP).
+   4. Results: discovered from the run's sibling Results folder and accepted (PV-RES, D-W4, D-W51).
+   5. Finish run: the user finishes the run (PV-RES). At any stage the user can instead move a run that is no longer wanted to the Project's Trash, where it is hidden until the user restores it or empties the Trash. Moving it moves no file. Empty Trash sends its prepared folders to the OS Trash, and its Results folder only when the user ticks it (PV-RES, D-W72).
+   6. Clean up: run-scoped removal of prepared links, clones and copies, offered once the run is Finished (PV-STO).
 4. Project Done / Archive: the user finishes or moves to Trash each open run, then closes the Project. The sheet offers Archive, three moves to the OS Trash (rejected frames, processing intermediates and duplicate copies) and Empty Trash for the Project's Trash. PV-PRJ owns the offers, eligibility and refusals; PV-STO executes the custody steps. A Closed Project can be Reopened, even after Archive, and reopening moves no files (D-W26, D-W43, D-W46, D-W69, D-W70, D-W72, D-W74).
 
 ### Key Entities
@@ -210,7 +209,7 @@ The stage model of the 2026-10-06 redesign runs across the feature specs (D-W1, 
 - **Catalog**: The library database of locations, files, sessions and decisions. "Catalogue" names an astronomical catalogue, as in the Targets list's Browse catalogues (PV-PLAN).
 - **Target**: A sky subject or region with coverage, plans, Projects, and Results. Several objects in one field are one Target, with the others listed as aliases or "also in field". (D-W9)
 - **Rig**: An optical train. A Project lists the rigs taking part; each run uses one. (D-W37)
-- **Project**: The required container for processing runs. It holds one or more subjects (Targets or mosaics), its rigs, goals per subject and channel, Project-only rejects, and an Open, Closed or Archived state; a Closed Project can be Reopened, even after Archive. Its candidates are derived and its members are inherited from its runs. (D-W1, D-W9, D-W33, D-W34, D-W46, D-W69)
+- **Project**: The required container for processing runs. It holds one or more subjects (Targets or mosaics), its rigs, goals per subject and channel, and an Open, Closed or Archived state; a Closed Project can be Reopened, even after Archive. Its candidates are derived and its members are inherited from its runs. (D-W1, D-W9, D-W33, D-W34, D-W46, D-W69)
 - **Processing run (View)**: Named reviewed input membership with one Project, and one subject and one rig fixed at creation, plus a stage and preparation revisions. A run that is no longer wanted can be moved to its Project's Trash, restored from it unchanged, or removed by Empty Trash; none of these changes library frames or quality decisions. Runs of one mosaic subject form a run group, one run per panel. (D-W3, D-W8, D-W38, D-W50, D-W72)
 - **Result**: A manually accepted final or reusable product with actual lineage.
 - **Operation**: Reviewed intent and per-item outcomes for preparation, Clean up, archive, Import, or trashing. (D-W11, D-W43)
@@ -228,7 +227,7 @@ The stage model of the 2026-10-06 redesign runs across the feature specs (D-W1, 
 - **SC-007**: Archive failure fixtures retain source data until destination and reference verification succeed.
 - **SC-008**: Every displayed measurement has method, units, and source, or an explicit unavailable state.
 - **SC-009**: In the worked fixture, zero runs exist outside a Project and zero runs contain sessions from more than one rig. (D-W1, D-W37)
-- **SC-010**: In a Done / Archive trash fixture, zero Project-only rejects and zero refused frames reach the OS Trash, and zero files are permanently deleted. (D-W43)
+- **SC-010**: In a Done / Archive trash fixture, zero refused frames reach the OS Trash, and zero files are permanently deleted. (D-W43)
 - **SC-011**: Across Home fixtures covering each Next rule, Home shows the first applicable action every time, and no goal reads met while its "in project" value is below the goal. (D-W35, D-W36)
 
 ## Assumptions
@@ -254,9 +253,10 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Reminder defaults and app-closed behavior | PV-PLAN |
 | Draft persistence and concurrent edits | PV-VSEL |
 | Run revisions, retries, reopening, and completion blockers | PV-VSEL, PV-PREP, PV-RES, PV-STO |
-| Quality precedence and Project progress (D10 as amended by D-W36, D-W42, D-W44, D-W66, D-W72) | PV-LIB, PV-PRJ, PV-VSEL |
+| Quality precedence and Project progress (D10 as amended by D-W36, D-W42, D-W44, D-W66, D-W72, D-W79) | PV-LIB, PV-PRJ, PV-VSEL |
 | Content-bound consumption of recorded files | All feature owners |
 | Workflow redesign 2026-10-06 (D-W1 through D-W74) | All feature owners |
+| Harness v5 round 9, 2026-10-12 to 2026-10-13 (D-W76 onward) | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 
