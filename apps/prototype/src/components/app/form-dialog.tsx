@@ -32,6 +32,7 @@ import {
   DialogFooter as FooterLayout,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { m } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
 import type { Action, StepFlow } from "./contracts"
 import { ActionError } from "./feedback"
@@ -359,4 +360,49 @@ function DialogFrame({ trigger, title, size = "md", confirm, cancel, strip, skip
       </DialogContent>
     </Dialog>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Form checks: the action stays unavailable while a field fails; a field shows its message once changed
+// ---------------------------------------------------------------------------
+
+/** A form's checks: each field's message, or undefined when it passes. */
+export type FieldErrors<K extends string> = Partial<Record<K, string>>
+
+/** The unavailable state of a dialog action labelled `label` while any of `errors` is set: it stays focusable, and its preview names every field still to fix. Undefined when the fields pass. */
+export function blockedByErrors(label: string, errors: FieldErrors<string>): Action["unavailable"] {
+  const messages = [...new Set(Object.values(errors).filter((message): message is string => Boolean(message)))]
+  if (messages.length === 0) return undefined
+  return { action: m.actions_blocked({ action: label }), reason: m.refusal_blockers({ count: messages.length }), blockers: messages.map((message) => ({ label: message })) }
+}
+
+/** The errors of the fields the user has changed, so a fresh form opens without messages. */
+export function shownErrors<K extends string>(errors: FieldErrors<K>, touched: ReadonlySet<K>): FieldErrors<K> {
+  return Object.fromEntries(Object.entries(errors).filter(([key]) => touched.has(key as K))) as FieldErrors<K>
+}
+
+/**
+ * A controlled dialog's form: it starts from `initial` each time the dialog
+ * opens; `set` records which fields the user changed, and `shown` gives a
+ * field's message only once it has.
+ */
+export function useDialogForm<T extends object>(open: boolean, initial: () => T) {
+  const [values, setValues] = useState<T>(initial)
+  const [touched, setTouched] = useState<ReadonlySet<keyof T & string>>(new Set())
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setValues(initial())
+      setTouched(new Set())
+    }
+  }
+  function set(patch: Partial<T>) {
+    setValues((current) => ({ ...current, ...patch }))
+    setTouched((current) => new Set([...current, ...(Object.keys(patch) as (keyof T & string)[])]))
+  }
+  function shown<K extends keyof T & string>(errors: FieldErrors<K>, key: K): string | undefined {
+    return shownErrors(errors, touched as ReadonlySet<K>)[key]
+  }
+  return { values, set, shown }
 }

@@ -16,7 +16,7 @@ import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState } from "@/components/app/feedback"
 import { ChoiceListField, FieldGroup, NumberField, SegmentedField, SelectField, TextField } from "@/components/app/fields"
-import { FormDialog } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection } from "@/components/templates/settings-page"
@@ -48,42 +48,6 @@ function formatFactor(factor: number): string {
 }
 
 const positive = (v: number | null, whole = false): v is number => v !== null && !Number.isNaN(v) && v > 0 && (!whole || Number.isInteger(v))
-
-/** A field's check: its message, or undefined when it passes. */
-export type FieldErrors<K extends string> = Partial<Record<K, string>>
-
-/** The dialog action while a field fails its check: it stays focusable, and its preview names every field still to fix. */
-export function blockedBy(m: Messages, label: string, errors: FieldErrors<string>): Action["unavailable"] {
-  const messages = [...new Set(Object.values(errors).filter((message): message is string => Boolean(message)))]
-  if (messages.length === 0) return undefined
-  return { action: m.actions_blocked({ action: label }), reason: m.refusal_blockers({ count: messages.length }), blockers: messages.map((message) => ({ label: message })) }
-}
-
-/**
- * A controlled dialog's form: it starts from `initial` each time the dialog
- * opens, and a field shows its check only once the user changed it, so a
- * fresh form opens without errors.
- */
-export function useDialogForm<T extends object>(open: boolean, initial: () => T) {
-  const [values, setValues] = useState<T>(initial)
-  const [touched, setTouched] = useState<ReadonlySet<keyof T>>(new Set())
-  const [wasOpen, setWasOpen] = useState(open)
-  if (open !== wasOpen) {
-    setWasOpen(open)
-    if (open) {
-      setValues(initial())
-      setTouched(new Set())
-    }
-  }
-  function set(patch: Partial<T>) {
-    setValues((current) => ({ ...current, ...patch }))
-    setTouched((current) => new Set([...current, ...(Object.keys(patch) as (keyof T)[])]))
-  }
-  function shown<K extends keyof T & string>(errors: FieldErrors<K>, key: K): string | undefined {
-    return touched.has(key) ? errors[key] : undefined
-  }
-  return { values, set, shown }
-}
 
 /** "Used by 2 rigs ▸": the users, each linked to its place; "–" without one. */
 function UsedBy({ label, items }: { label: string; items: { label: string; link: StepLink }[] }) {
@@ -158,7 +122,7 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
     id: "camera-save",
     label,
     kind: "primary",
-    unavailable: blockedBy(m, label, errors),
+    unavailable: blockedByErrors(label, errors),
     run: () => saveCamera(camera?.id ?? null, { name: values.name.trim(), kind: values.kind, widthPx: values.width ?? 0, heightPx: values.height ?? 0, pixelSizeUm: values.pixel ?? 0 }),
   }
   return (
@@ -242,7 +206,7 @@ function TelescopeDialog({ open, telescope, onClose }: { open: boolean; telescop
     id: "telescope-save",
     label,
     kind: "primary",
-    unavailable: blockedBy(m, label, errors),
+    unavailable: blockedByErrors(label, errors),
     run: () => saveTelescope(telescope?.id ?? null, { name: values.name.trim(), focalLengthMm: values.focal ?? 0, apertureMm: values.aperture }),
   }
   return (
@@ -309,7 +273,7 @@ function ReducerDialog({ open, reducer, onClose }: { open: boolean; reducer: Red
     factor: values.factor !== null && values.factor >= REDUCER_LIMITS.min && values.factor <= REDUCER_LIMITS.max ? undefined : m.equipment_error_reducer(),
   }
   const label = reducer ? m.settings_save() : m.equipment_add_reducer()
-  const confirm: Action = { id: "reducer-save", label, kind: "primary", unavailable: blockedBy(m, label, errors), run: () => saveReducer(reducer?.id ?? null, { name: values.name.trim(), factor: values.factor ?? 1 }) }
+  const confirm: Action = { id: "reducer-save", label, kind: "primary", unavailable: blockedByErrors(label, errors), run: () => saveReducer(reducer?.id ?? null, { name: values.name.trim(), factor: values.factor ?? 1 }) }
   return (
     <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={reducer ? m.settings_edit_title({ name: reducer.name }) : m.equipment_add_reducer()} size="sm" confirm={confirm}>
       <TextField label={m.equipment_name()} value={values.name} onChange={(name) => set({ name })} error={shown(errors, "name")} autoFocus />
@@ -434,7 +398,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
     id: "rig-save",
     label,
     kind: "primary",
-    unavailable: blockedBy(m, label, errors),
+    unavailable: blockedByErrors(label, errors),
     run: () => {
       if (!camera || !telescope || baseFocal === null) return
       const saved = saveRig(rig?.id ?? null, { name: trimmed, cameraId: camera.id, telescopeId: telescope.id, reducerId, focalLengthMm: baseFocal, filterIds: values.filterIds })

@@ -21,7 +21,7 @@ import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
 import { ChoiceListField, TextField } from "@/components/app/fields"
-import { FormDialog } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { liveLightSessions, sessionRigId, unknownFilterValues } from "@/domain/derive"
 import { BANDS } from "@/domain/labels"
@@ -29,7 +29,7 @@ import type { Band, Filter, OpticalTrain } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
-import { bandsLine, blockedBy, CamerasSection, type FieldErrors, RigsSection, RigsUsing, recordMenu, ReducersSection, TelescopesSection, useDialogForm } from "./equipment-records"
+import { bandsLine, CamerasSection, RigsSection, RigsUsing, recordMenu, ReducersSection, TelescopesSection } from "./equipment-records"
 import { addFilterToRig, saveFilter } from "./settings-actions"
 
 /** Bands a header value most likely passes, to prefill "Add filter" from it. The user confirms them. */
@@ -92,7 +92,7 @@ function FilterDialog({ draft, onClose }: { draft: FilterDraft | null; onClose: 
     id: "filter-save",
     label,
     kind: "primary",
-    unavailable: blockedBy(m, label, errors),
+    unavailable: blockedByErrors(label, errors),
     run: () => {
       const matches = parseMatches(values.matches)
       return saveFilter(filter?.id ?? null, { name, bands: values.bands, matches: matches.length > 0 ? matches : [name] }, draft?.onRig?.id ?? null).result

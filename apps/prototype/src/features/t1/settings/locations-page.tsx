@@ -34,7 +34,7 @@ import { store, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { AddLocationFlow } from "../components/add-location-flow"
 import { DuplicatesReview } from "../components/duplicates-review"
-import { blockedByErrors } from "../components/form-blockers"
+import { blockedByErrors } from "@/components/app/form-dialog"
 import { useLocationActions } from "../components/location-actions"
 import { framesInLocation, removeLocation, retireLocation, reviewRetire, ROLE_COPY, ROLE_ORDER, sessionsInLocation, updateLocation, validateLocation } from "../lib/locations"
 

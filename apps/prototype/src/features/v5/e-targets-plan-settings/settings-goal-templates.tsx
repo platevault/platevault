@@ -20,7 +20,7 @@ import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { ActionError, EmptyState } from "@/components/app/feedback"
 import { NumberField, SelectField, TextField } from "@/components/app/fields"
-import { FormDialog } from "@/components/app/form-dialog"
+import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { NightPicker } from "@/components/app/pickers"
 import { goalKindsError, GoalValuesEditor, kindsLine } from "@/components/domain/goal-fields"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
@@ -31,7 +31,6 @@ import type { GoalTemplate, GoalTemplateValue, WindowRule } from "@/domain/types
 import { type Messages, say } from "@/lib/i18n"
 import { deleteGoalTemplate, saveGoalTemplate } from "@/store/actions/settings"
 import { nowIso, useStore } from "@/store/core"
-import { blockedBy, type FieldErrors, useDialogForm } from "./equipment-records"
 
 /** "Ha 10h · FWHM ≤ 2.5″, OIII 120 frames": every goal of a template on one line. */
 function goalsLine(m: Messages, values: GoalTemplateValue[]): string {
@@ -87,7 +86,7 @@ function TemplateDialog({ draft, onClose, taken }: { draft: Draft | null; onClos
     id: "template-save",
     label,
     kind: "primary",
-    unavailable: blockedBy(m, label, errors),
+    unavailable: blockedByErrors(label, errors),
     run: () => saveGoalTemplate({ id: draft?.id ?? null, name, values: values.values, conditions: { panelBalancePct: balance ?? DEFAULT_TEMPLATE_CONDITIONS.panelBalancePct, window } }).result,
   }
   return (

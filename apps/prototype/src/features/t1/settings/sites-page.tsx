@@ -21,7 +21,7 @@ import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import type { ObservingSite } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { store, useStore } from "@/store/core"
-import { blockedByErrors, shownErrors } from "../components/form-blockers"
+import { blockedByErrors, shownErrors } from "@/components/app/form-dialog"
 import { deleteSite, formatCoordinates, remindersMoveWith, saveSite, setDefaultSite, type SiteValues, siteValues, TIME_ZONES, unmatchedCaptureSites, validateSite } from "../lib/sites"
 
 type Editing = { site: ObservingSite | null; prefill?: Partial<SiteValues> }
