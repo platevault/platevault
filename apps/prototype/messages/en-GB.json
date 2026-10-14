@@ -1546,6 +1546,7 @@
   "trash_restore_to_group": "{name} → its run group",
   "trash_restore_to_runs": "{name} → the Project's runs",
   "trash_restore_run": "Restore run",
+  "trash_run_restored": "{name} restored",
   "trash_empty_runs_title": [
     {
       "declarations": [
@@ -2162,6 +2163,7 @@
   "run_restore": "Restore",
   "run_reopen_run": "Reopen run",
   "run_reopen_summary": "Its steps become editable again; no file moves",
+  "run_reopened": "{name} reopened",
   "run_clean_up": "Clean up",
   "run_move_to_trash": "Move to Trash",
   "run_trash_blocked": "Move to Trash blocked",
@@ -6894,6 +6896,11 @@
   "simulation_run_writes_outputs": "The application writes outputs",
   "simulation_this_run_title": "This run: {name}",
   "simulation_this_run_description": "Changes the simulated application and disk for the run on screen.",
+  "simulation_actions_title": "Actions",
+  "simulation_quick_actions": "Quick actions",
+  "simulation_quick_actions_detail": "One-click runs Restore run, Reopen run, marks on more than 20 frames, Pick the rest, and Home's Add to run, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
+  "simulation_quick_one_click": "One-click",
+  "simulation_quick_open_page": "Open page",
   "simulation_run_finish_writing": "Files finish writing",
   "simulation_run_better_master": "A newer compatible master arrives",
   "simulation_run_object_correction": "Record an OBJECT correction",

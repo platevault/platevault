@@ -26,7 +26,7 @@ import type { Run, RunFlowStepId } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { runFlow } from "@/store/actions/flows"
-import { renameRun, reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
+import { finishRun, renameRun, reopenRun, restoreRun, trashRun } from "@/store/actions/runs"
 import { store, useStore } from "@/store/core"
 import { openPreparation, startPrepare } from "./actions"
 import { CalibrateStep } from "./calibrate-step"
@@ -121,6 +121,8 @@ function useRunMenu(ctx: RunContext, edit: () => void): MenuItem[] {
       id: "reopen",
       label: m.run_reopen_run(),
       confirm: { title: m.project_reopen_title({ name: run.name }), summary: m.run_reopen_summary(), confirm: { label: m.run_reopen_run() } },
+      // Owner tick A2: Undo is Finish run, keeping the run view, so nothing on disk moves either way.
+      quick: { oneClick: { undo: () => ({ message: m.run_reopened({ name: run.name }), run: () => finishRun(run.id, { keepView: true }).result }) }, openPage: "keep" },
       run: () => {
         const { result } = reopenRun(run.id)
         if (result.ok) void navigate(runStepLink(run, runFlowState(store.getState(), store.getState().catalog.runs[run.id]!).current) as never)

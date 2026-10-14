@@ -8,7 +8,9 @@
  *
  * - `useAction()`: one runner per host. It runs an action, opens its
  *   ConfirmDialog first when it has `confirm`, and keeps a refusal or a
- *   failure as `feedback` for the host to place beside the trigger (P7).
+ *   failure as `feedback` for the host to place beside the trigger (P7). It
+ *   applies the prototype's Quick actions switch to an action with `quick`
+ *   (`inQuickMode`), so every surface below shows and runs the same form.
  * - `ActionButton`: one action as a Button. `size="xs"` is for DataTable
  *   cells, where a primary action stays outline (one primary per view). An
  *   unavailable action stays focusable and opens its BlockersPreview on
@@ -44,12 +46,17 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import type { StepLink } from "@/domain/derive"
+import type { QuickActionMode } from "@/domain/types"
+import type { Messages } from "@/lib/i18n"
 import type { CommitResult } from "@/store/core"
+import { useQuickActionMode } from "@/store/simulation"
 import { ConfirmDialog } from "./confirm-dialog"
-import type { Action, ActionKind, MenuItem } from "./contracts"
-import { ActionError } from "./feedback"
+import type { Action, ActionKind, MenuItem, QuickUndo } from "./contracts"
+import { ActionError, toast } from "./feedback"
 import { BlockersPreview } from "./previews"
 import { Refusal, refusalFrom } from "./refusal"
+import { useFollowLink } from "./run-step"
 
 // ---------------------------------------------------------------------------
 // Descriptor helpers
@@ -115,6 +122,68 @@ function headsItems(next: MenuItem | undefined): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The Quick actions switch
+// ---------------------------------------------------------------------------
+
+type Outcome = ReturnType<Action["run"]>
+
+function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
+  return value instanceof Promise
+}
+
+/** Calls `then` once a run succeeded (a void or ok result, sync or async) and passes the result on. */
+export function onSuccess(outcome: Outcome, then: () => void): Outcome {
+  const done = (result: CommitResult | void) => {
+    if (!result || result.ok) then()
+    return result
+  }
+  return isPromise(outcome) ? outcome.then(done) : done(outcome)
+}
+
+interface QuickEffects {
+  follow: (link: StepLink) => void
+  offerUndo: (undo: QuickUndo) => void
+}
+
+/**
+ * The action as the Quick actions switch has it run (contracts.ts
+ * `QuickAction`), without its `quick`. One-click drops the confirm and
+ * offers the Undo notice once `run` succeeds. Open page keeps the action as
+ * declared, or follows its link instead of running here, or after `run`
+ * when the link shows a commit. An action without `quick` comes back
+ * unchanged.
+ */
+function inQuickMode(action: Action, mode: QuickActionMode, effects: QuickEffects): Action {
+  const { quick, ...declared } = action
+  if (!quick) return action
+  if (mode === "one-click") {
+    const form = quick.oneClick
+    if ("refresh" in form) return { ...declared, confirm: undefined }
+    return {
+      ...declared,
+      confirm: undefined,
+      run: () => {
+        const undo = form.undo()
+        return onSuccess(action.run(), () => effects.offerUndo(undo))
+      },
+    }
+  }
+  const page = quick.openPage
+  if (page === "keep") return declared
+  if (page.commit) return { ...declared, confirm: undefined, run: () => onSuccess(action.run(), () => effects.follow(page.link)) }
+  return { ...declared, confirm: undefined, unavailable: undefined, run: () => effects.follow(page.link) }
+}
+
+/** The Undo notice: a toast with the outcome and Undo. An Undo that is refused or fails says why in a toast of its own. */
+function offerUndo(m: Messages, undo: QuickUndo): void {
+  const revert = () => {
+    const result = undo.run()
+    if (result && !result.ok) toast({ message: result.message })
+  }
+  toast({ message: undo.message, action: { id: "undo", label: m.wrapup_undo(), run: revert } })
+}
+
+// ---------------------------------------------------------------------------
 // Running an action
 // ---------------------------------------------------------------------------
 
@@ -122,11 +191,13 @@ type Failure = Exclude<CommitResult, { ok: true }>
 
 export interface ActionRunner {
   /**
-   * Runs the action: nothing while it is unavailable or already running; its ConfirmDialog first when it has `confirm`.
+   * Runs the action in the Quick actions mode: nothing while it is unavailable or already running; its ConfirmDialog first when it has `confirm`.
    * `opener` is the button that ran it: Cancel and Escape return focus there (WCAG 2.4.3), also where a click does not
    * focus the button it lands on (WebKit).
    */
   run: (action: Action, opener?: HTMLElement) => void
+  /** The action as this runner runs it (`inQuickMode`): what a trigger shows, its "…" and availability included. */
+  resolve: (action: Action) => Action
   /** The id of the action whose `run` promise has not settled yet. */
   pending: string | null
   /** The last run's refusal (Refusal) or failure (ActionError), else null. Place it beside the trigger, never above a list. */
@@ -134,10 +205,6 @@ export interface ActionRunner {
   /** The ConfirmDialog of an action with `confirm`. Mount it once in the host; it renders nothing while closed. */
   dialog: ReactNode
   clear: () => void
-}
-
-function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
-  return value instanceof Promise
 }
 
 export interface UseActionOptions {
@@ -156,9 +223,13 @@ export interface UseActionOptions {
 /** One runner per host (a header, a menu, a table): the dialog and the feedback of every action the host shows. */
 export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOptions = {}): ActionRunner {
   const m = useMessages()
+  const mode = useQuickActionMode()
+  const follow = useFollowLink()
   const [failure, setFailure] = useState<{ action: Action; result: Failure } | null>(null)
   const [pending, setPending] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<{ action: Action; open: boolean; opener?: HTMLElement } | null>(null)
+
+  const resolve = (action: Action) => inQuickMode(action, mode, { follow, offerUndo: (undo) => offerUndo(m, undo) })
 
   function settle(action: Action, result: CommitResult | void) {
     setFailure(result && !result.ok ? { action, result } : null)
@@ -177,7 +248,8 @@ export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOpti
       .finally(() => setPending((current) => (current === action.id ? null : current)))
   }
 
-  function run(action: Action, opener?: HTMLElement) {
+  function run(declared: Action, opener?: HTMLElement) {
+    const action = resolve(declared)
     if (action.unavailable || pending === action.id) return
     setFailure(null)
     if (action.confirm) {
@@ -216,7 +288,7 @@ export function useAction({ focusAfterConfirm, focusAfterCancel }: UseActionOpti
       />
     ) : null
 
-  return { run, pending, feedback, dialog, clear: () => setFailure(null) }
+  return { run, resolve, pending, feedback, dialog, clear: () => setFailure(null) }
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +318,8 @@ function OwnActionButton(props: Omit<ActionButtonProps, "runner">) {
   )
 }
 
-function ActionTrigger({ action, size = "sm", runner }: Omit<ActionButtonProps, "runner"> & { runner: ActionRunner }) {
+function ActionTrigger({ action: declared, size = "sm", runner }: Omit<ActionButtonProps, "runner"> & { runner: ActionRunner }) {
+  const action = runner.resolve(declared)
   const Icon = action.icon
   const busy = runner.pending === action.id
   const unavailable = action.unavailable
@@ -414,7 +487,8 @@ function OrderedItems({ items, runner }: { items: MenuItem[]; runner: ActionRunn
  * (a disabled menu item keeps focus) and shows its reason under the label,
  * at full strength: the reason is what the item says.
  */
-function ActionItem({ action, runner }: { action: Action; runner: ActionRunner }) {
+function ActionItem({ action: declared, runner }: { action: Action; runner: ActionRunner }) {
+  const action = runner.resolve(declared)
   const reasonId = useId()
   const Icon = action.icon
   const label = actionLabel(action)
@@ -476,7 +550,8 @@ export function IconButton({ label, icon: Icon, shortcut, ...props }: IconButton
 // ---------------------------------------------------------------------------
 
 /** The palette command of an action: the same label, shortcut and unavailable reason, run through the host's runner. */
-export function actionCommand(action: Action, group: string, runner: ActionRunner, keywords?: string): PaletteCommand {
+export function actionCommand(declared: Action, group: string, runner: ActionRunner, keywords?: string): PaletteCommand {
+  const action = runner.resolve(declared)
   return {
     id: `action:${action.id}`,
     label: actionLabel(action),

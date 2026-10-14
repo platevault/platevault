@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { masterAge } from "@/domain/calibration"
 import { masterUsage } from "@/domain/calibration-library"
 import { masterReplacementRuns } from "@/domain/derive"
@@ -11,9 +11,17 @@ import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 
 // The Calibration library on the demo seed (C9): the age badge, and Replace… re-pointing only unfinished runs.
+// The seed dates one dark from the clock (91 days back) and the other masters on fixed nights, so the age
+// badges hold only near the seed's own day: freeze Date there, or every master turns Old after mid-December.
+const SEED_DAY = Date.parse("2026-10-13T12:00:00Z")
 let demo: PrototypeState
 beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(SEED_DAY)
   demo = { ...createSeed("demo"), schemaVersion: SCHEMA_VERSION, sliceVersions: sliceVersions(), slices: initialSliceStates() }
+})
+afterAll(() => {
+  vi.useRealTimers()
 })
 beforeEach(() => {
   store.replace(structuredClone(demo))

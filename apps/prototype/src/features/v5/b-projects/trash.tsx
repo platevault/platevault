@@ -25,7 +25,7 @@ import { matchesQuery } from "@/domain/sky"
 import type { ProjectId, Run, RunId } from "@/domain/types"
 import { fileName, formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { emptyTrash, restoreRun } from "@/store/actions/runs"
+import { emptyTrash, restoreRun, trashRun } from "@/store/actions/runs"
 import { preparedEntryItems, resultItems } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
 
@@ -119,6 +119,8 @@ export function ProjectTrashPage() {
       summary: run.groupId ? m.trash_restore_to_group({ name: run.name }) : m.trash_restore_to_runs({ name: run.name }),
       confirm: { label: m.trash_restore_run() },
     },
+    // Owner tick A1: One-click restores at once, and Undo moves the run back to Trash.
+    quick: { oneClick: { undo: () => ({ message: m.trash_run_restored({ name: run.name }), run: () => trashRun(run.id) }) }, openPage: "keep" },
     run: () => restoreRun(run.id),
   })
   const rowActions = (r: Row): MenuItem[] => [

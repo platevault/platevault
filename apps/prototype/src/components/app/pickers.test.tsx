@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { useEffect, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { m } from "@/lib/i18n"
-import { type SiteLocation, SiteLocationField } from "./pickers"
+import { type SiteLocation, SiteLocationField, SitePicker } from "./pickers"
 
 // Tiles that fail to load (an outage, a blocked provider) are hard to produce in jsdom, and Leaflet needs a
 // layout engine: the map stands in as one that reports itself unavailable as soon as it mounts.
@@ -60,5 +60,47 @@ describe("SiteLocationField", () => {
     expect(await screen.findByText(m.picker_map_unavailable())).toBeInTheDocument()
     expect(screen.getByRole("button", { name: m.verb_retry() })).toBeEnabled()
     await expectFieldsKeepTheRecord(onChange)
+  })
+})
+
+describe("SitePicker", () => {
+  const SITES = [
+    { id: "site_backyard", name: "Backyard" },
+    { id: "site_lapalma", name: "La Palma" },
+  ]
+
+  function Picker({ onChange }: { onChange: (siteId: string) => void }) {
+    const [value, setValue] = useState("site_backyard")
+    return (
+      <SitePicker
+        value={value}
+        sites={SITES}
+        defaultSiteId="site_backyard"
+        onManage={() => {}}
+        onChange={(next) => {
+          setValue(next)
+          onChange(next)
+        }}
+      />
+    )
+  }
+
+  it("exposes only its named trigger: the form input holding the site id is hidden from assistive technology", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const { container } = render(<Picker onChange={onChange} />)
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    expect(container.querySelector("input[aria-hidden='true']")).toHaveValue("site_backyard")
+
+    const trigger = screen.getByRole("combobox", { name: m.plan_site() })
+    expect(trigger).toHaveTextContent("Backyard")
+
+    trigger.focus()
+    await user.keyboard("{ArrowDown}")
+    expect(await screen.findByRole("listbox")).toBeInTheDocument()
+    await user.keyboard("{ArrowDown}{Enter}")
+    expect(onChange).toHaveBeenLastCalledWith("site_lapalma")
+    expect(screen.getByRole("combobox", { name: m.plan_site() })).toHaveTextContent("La Palma")
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
   })
 })

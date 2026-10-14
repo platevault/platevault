@@ -530,6 +530,7 @@ export function defaultFaults(): SimulationFaults {
     clockOffsetMs: 0,
     noSite: false,
     developerMode: "not-windows",
+    quickActions: "one-click",
   }
 }
 
