@@ -143,7 +143,10 @@ use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
 };
-use crate::update_exit_gate::update_install_on_quit_begin;
+use crate::commands::update::{
+    update_check, update_check_on_startup, update_install_now, update_install_on_quit,
+    update_status,
+};
 
 /// Shared base for specta builder — chain common config and all production
 /// commands.  Returns the builder before any feature-gated commands are added.
@@ -304,8 +307,12 @@ macro_rules! app_commands {
             plans_confirm_destructive,
             // unclean-shutdown recovery (astro-plan-kyo7.48)
             recovery_status,
-            // install-on-quit exit gate (astro-plan-mkkgi)
-            update_install_on_quit_begin,
+            // signed updater (astro-plan-5wcib)
+            update_status,
+            update_check_on_startup,
+            update_check,
+            update_install_now,
+            update_install_on_quit,
             // audit
             audit_list,
             audit_export,

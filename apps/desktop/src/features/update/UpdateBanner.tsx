@@ -30,7 +30,6 @@ const SHOWN: ReadonlySet<UpdatePhase> = new Set([
   'installing',
   'install-failed',
   'install-on-quit',
-  'restart-failed',
 ]);
 
 export function UpdateBanner() {

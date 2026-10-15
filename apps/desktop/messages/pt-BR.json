@@ -1572,8 +1572,6 @@
   "settings_advanced_updates_installing": "Instalando a atualização {version}…",
   "settings_advanced_updates_installfailed": "Não foi possível instalar a atualização: {message}",
   "settings_advanced_updates_queued": "A atualização {version} será instalada quando você sair do PlateVault.",
-  "settings_advanced_updates_restart": "Reiniciar agora",
-  "settings_advanced_updates_restartfailed": "Atualização instalada — reinicie a aplicação manualmente para concluir.",
   "update_banner_notes": "Notas da versão",
   "update_banner_later": "Mais tarde",
   "menu_about": "Sobre o PlateVault",

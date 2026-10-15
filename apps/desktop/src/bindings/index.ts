@@ -851,16 +851,49 @@ export const commands = {
 	 */
 	recoveryStatus: () => typedError<RecoveryStatus, ContractError_Serialize>(__TAURI_INVOKE("recovery_status")),
 	/**
-	 *  `update_install_on_quit_begin` — the main window, answering
-	 *  [`INSTALL_EVENT`], asks to start installing. `true` when the gate now holds
-	 *  the quit, so the install may run; `false` when the quit was already
-	 *  released (a second quit or the watchdog), so the frontend must not install.
+	 *  `update.status` — the update status to show now; later changes arrive as
+	 *  `update:status` events.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Never fails; the `Result` keeps the command surface's envelope uniform.
+	 *  `InternalError` when the build has no usable updater configuration.
 	 */
-	updateInstallOnQuitBegin: () => typedError<boolean, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit_begin")),
+	updateStatus: () => typedError<UpdateStatus, ContractError_Serialize>(__TAURI_INVOKE("update_status")),
+	/**
+	 *  `update.check_on_startup` — the check at app start, run once per process
+	 *  and only when `automatic` ("Check for updates automatically") is on.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateCheckOnStartup: (automatic: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check_on_startup", { automatic })),
+	/**
+	 *  `update.check` — a manual check. Never downloads.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateCheck: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_check")),
+	/**
+	 *  `update.install_now` — download and verify, install, then relaunch (on
+	 *  Windows the app exits for the installer).
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateInstallNow: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_now")),
+	/**
+	 *  `update.install_on_quit` — download and verify now, install when the app
+	 *  quits.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateInstallOnQuit: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit")),
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
@@ -10651,6 +10684,18 @@ export type UpdateOpticalTrain = {
 	focalLengthMm: number,
 };
 
+/**  Where the update flow stands. */
+export type UpdatePhase = 
+/**  No check has run in this session. */
+"idle" | "checking" | "up-to-date" | "check-failed" | 
+/**
+ *  A newer release exists. Nothing is installed until the user chooses
+ *  Install now or Install on quit.
+ */
+"available" | "downloading" | "download-failed" | "installing" | "install-failed" | 
+/**  Downloaded and signature-verified; installs when the app quits. */
+"install-on-quit";
+
 export type UpdateProcessingTool = {
 	id: string,
 	path: string | null,
@@ -10661,6 +10706,17 @@ export type UpdateProcessingTool = {
 	 *  start with `.` (e.g. `.xisf`).
 	 */
 	watchExtensions?: string[] | null,
+};
+
+/**  The update state the UI shows. */
+export type UpdateStatus = {
+	phase: UpdatePhase,
+	/**  The release version, from the phase a check found it in onwards. */
+	version: string | null,
+	/**  The release notes, when the release has any. */
+	body: string | null,
+	/**  Why the last step failed, in the `*-failed` phases. */
+	error: string | null,
 };
 
 export type UpdateTelescope = {

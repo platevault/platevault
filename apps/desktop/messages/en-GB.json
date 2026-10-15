@@ -1632,8 +1632,6 @@
   "settings_advanced_updates_installing": "Installing update {version}…",
   "settings_advanced_updates_installfailed": "Could not install update: {message}",
   "settings_advanced_updates_queued": "Update {version} will install when you quit PlateVault.",
-  "settings_advanced_updates_restart": "Restart now",
-  "settings_advanced_updates_restartfailed": "Update installed — restart the app manually to finish.",
   "update_banner_notes": "Release notes",
   "update_banner_later": "Later",
   "menu_about": "About PlateVault",

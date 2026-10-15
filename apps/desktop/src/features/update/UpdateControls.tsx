@@ -15,7 +15,6 @@ import {
   checkForUpdate,
   installUpdateNow,
   installUpdateOnQuit,
-  restartPendingUpdate,
   type UpdateState,
 } from '@/data/updateSubscription';
 
@@ -44,8 +43,6 @@ export function updateStatusMessage(state: UpdateState): string {
       return m.settings_advanced_updates_installfailed({ message });
     case 'install-on-quit':
       return m.settings_advanced_updates_queued({ version });
-    case 'restart-failed':
-      return m.settings_advanced_updates_restartfailed();
   }
 }
 
@@ -89,16 +86,6 @@ export function UpdateActions({ state, testIdPrefix }: UpdateActionsProps) {
           data-testid={`${testIdPrefix}-install-on-quit-btn`}
         >
           {m.settings_advanced_updates_install_on_quit()}
-        </Btn>
-      )}
-      {state.phase === 'restart-failed' && (
-        <Btn
-          size="sm"
-          onClick={() => void run(restartPendingUpdate)}
-          disabled={busy}
-          data-testid={`${testIdPrefix}-restart-btn`}
-        >
-          {busy ? m.common_restarting() : m.settings_advanced_updates_restart()}
         </Btn>
       )}
       {state.phase === 'check-failed' && (

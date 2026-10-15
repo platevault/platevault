@@ -5,13 +5,13 @@
  * Journey 17 — Software update check (mock-mode validation, spec 051).
  *
  * Uses window.__PV_TEST__.updateState to seed specific update phases without
- * a real Tauri updater host. `startUpdateSubscription()` reads the hook before
- * the IS_MOCK guard, so it fires for every phase even in a VITE_USE_MOCKS env.
+ * the backend updater. `startUpdateSubscription()` reads the hook before the
+ * IS_MOCK guard, so it fires for every phase even in a VITE_USE_MOCKS env.
  *
  * Validates the Settings → Advanced Software Update section and the shell
  * update notice against the externally-observable phases: up-to-date,
- * available, and check-failed. The download/install phases require a real
- * Tauri updater and are covered by the vitest suite for updateSubscription.
+ * available, and check-failed. The download/install phases run in the
+ * backend services crate and are covered by its `update` tests.
  */
 import type { Page } from '@playwright/test';
 import {
@@ -53,9 +53,8 @@ test.describe('Journey 17 · Software update check (mock-mode, spec 051)', () =>
       "You're running the latest version.",
     );
 
-    // No restart or retry action in the up-to-date state; only the manual
-    // "Check for updates" button (astro-plan-bzzbp) is offered.
-    await expect(page.getByTestId('update-restart-btn')).toHaveCount(0);
+    // No retry action in the up-to-date state; only the manual "Check for
+    // updates" button (astro-plan-bzzbp) is offered.
     await expect(page.getByTestId('update-retry-btn')).toHaveCount(0);
   });
 
@@ -108,9 +107,8 @@ test.describe('Journey 17 · Software update check (mock-mode, spec 051)', () =>
     await expect(page.getByTestId('update-retry-btn')).toBeVisible();
     await expect(page.getByTestId('update-retry-btn')).toBeEnabled();
 
-    // No install or restart choice while nothing is available.
+    // No install choice while nothing is available.
     await expect(page.getByTestId('update-install-now-btn')).toHaveCount(0);
-    await expect(page.getByTestId('update-restart-btn')).toHaveCount(0);
     await expect(page.getByTestId('update-banner')).toHaveCount(0);
   });
 });
