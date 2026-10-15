@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8Path;
@@ -15,7 +15,7 @@ use fs_inventory::artifact_watcher::TreeWatch;
 use uuid::Uuid;
 
 use super::{
-    CaptureWatch, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE,
+    CaptureWatch, Gate, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE,
 };
 use crate::inventory::{Listing, RootStamp};
 use crate::library::{fixtures, Library};
@@ -144,37 +144,18 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
     .expect("scan must publish its terminal state")
 }
 
-/// A gate a probe's blocking call waits at while it is closed, as a call on
-/// a network mount whose server went away waits.
-#[derive(Default)]
-struct Gate {
-    closed: Mutex<bool>,
-    changed: Condvar,
-    held: AtomicBool,
+/// Wait until a call waits at `gate`.
+async fn holding(gate: &Gate) {
+    eventually("a call waits at the gate", || gate.held()).await;
 }
 
-impl Gate {
-    fn close(&self) {
-        *self.closed.lock().unwrap() = true;
-    }
+/// Opens a gate when dropped, so a failing test never leaves a thread
+/// waiting at it.
+struct Opens<'a>(&'a Gate);
 
-    fn open(&self) {
-        *self.closed.lock().unwrap() = false;
-        self.changed.notify_all();
-    }
-
-    /// Wait while the gate is closed.
-    fn pass(&self) {
-        let closed = self.closed.lock().unwrap();
-        if *closed {
-            self.held.store(true, Ordering::SeqCst);
-        }
-        drop(self.changed.wait_while(closed, |closed| *closed).unwrap());
-    }
-
-    /// Wait until a call waits at the gate.
-    async fn holding(&self) {
-        eventually("a call waits at the gate", || self.held.load(Ordering::SeqCst)).await;
+impl Drop for Opens<'_> {
+    fn drop(&mut self) {
+        self.0.open();
     }
 }
 
@@ -453,7 +434,7 @@ async fn a_scan_that_ends_while_a_walk_lists_is_counted_after_it() {
     let watch = probed(&fx.library, &probe);
 
     // The start-up walk read the catalog, empty then, and now lists.
-    probe.list_gate.holding().await;
+    holding(&probe.list_gate).await;
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
     probe.list_gate.open();
 
@@ -515,7 +496,7 @@ async fn a_watcher_that_did_not_start_is_retried_at_the_next_sweep() {
     assert_eq!(watchers(&watch), 0);
     // A sweep starts the watcher again, and it waits at the gate: what
     // arrives meanwhile is not counted live, but by the walk that follows.
-    probe.watch_gate.holding().await;
+    holding(&probe.watch_gate).await;
     frame(&root.join("Ha_001.fits"));
     probe.watch_gate.open();
     let counts = count_is(&watch, location.id, 1).await;
@@ -543,7 +524,7 @@ async fn a_watcher_that_left_a_folder_unwatched_is_not_live_and_is_retried() {
     let counts = until(&watch, |counts| !counts.is_empty()).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: false }]);
     // A sweep starts it again over every folder.
-    probe.watch_gate.holding().await;
+    holding(&probe.watch_gate).await;
     assert!(watch.counts().iter().all(|count| !count.live));
     probe.watch_gate.open();
     let counts = until(&watch, |counts| counts.iter().all(|count| count.live)).await;
@@ -726,6 +707,27 @@ async fn an_offline_root_releases_its_watch_and_is_only_checked_each_sweep() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watcher_slow_to_stop_holds_up_no_discovery() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 0).await;
+
+    // The drive goes away, and stopping its watcher hangs.
+    let releases = &watch.observed().releases;
+    let _opens = Opens(releases);
+    releases.close();
+    fs::rename(&root, fx.base.join("unplugged")).unwrap();
+    // Discovery goes on meanwhile: the location leaves the counts at once.
+    until(&watch, <[NewCaptureCount]>::is_empty).await;
+    holding(releases).await;
+    assert_eq!(watchers(&watch), 1, "still stopping");
+    releases.open();
+    watchers_are(&watch, 0).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_refused_root_is_not_queried_again_until_it_changes() {
     let fx = fixture().await;
     let root = fx.base.join("Captures");
@@ -792,7 +794,7 @@ async fn shutdown_returns_while_a_root_check_hangs() {
 
     // A sweep checks the root, and the check hangs.
     probe.stat_gate.close();
-    probe.stat_gate.holding().await;
+    holding(&probe.stat_gate).await;
     // App exit waits on this: a hung check must not hold it.
     let stopped = tokio::time::timeout(Duration::from_secs(5), watch.shutdown()).await;
     // Canceled, discovery releases every watcher while the check still hangs.

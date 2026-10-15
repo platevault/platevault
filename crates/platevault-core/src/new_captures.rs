@@ -50,9 +50,11 @@
 //! watcher. Shutdown waits a short grace at most. A `stat` of a network mount
 //! whose server went away can block, so discovery makes every file-system
 //! call on a blocking thread, never on a runtime worker: a worker it held
-//! would stall the runtime's timers, the grace's among them. A discovery
-//! still waiting on such a call when the grace runs out is canceled, which
-//! releases its watchers at once; app exit is never held.
+//! would stall the runtime's timers, the grace's among them. A watcher it
+//! releases while it runs is stopped there too, since stopping one can wait
+//! on such a `stat`. A discovery still waiting on such a call when the grace
+//! runs out is canceled, which releases its watchers at once; app exit is
+//! never held.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -282,12 +284,51 @@ pub(crate) struct Observed {
     pub(crate) drains: std::sync::atomic::AtomicUsize,
     /// Sweeps started so far, the reconciliation at start included.
     pub(crate) sweeps: std::sync::atomic::AtomicUsize,
+    /// Releasing a watcher waits here while it is closed, as stopping an
+    /// `FSEvents` watcher waits on its callback's `stat` of a dead share.
+    pub(crate) releases: Gate,
 }
 
 #[cfg(test)]
 impl CaptureWatch {
     pub(crate) fn observed(&self) -> &Observed {
         &self.observed
+    }
+}
+
+/// A gate a blocking call waits at while it is closed, as a call on a
+/// network mount whose server went away waits.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct Gate {
+    closed: Mutex<bool>,
+    changed: std::sync::Condvar,
+    held: AtomicBool,
+}
+
+#[cfg(test)]
+impl Gate {
+    pub(crate) fn close(&self) {
+        *self.closed.lock().unwrap_or_else(PoisonError::into_inner) = true;
+    }
+
+    pub(crate) fn open(&self) {
+        *self.closed.lock().unwrap_or_else(PoisonError::into_inner) = false;
+        self.changed.notify_all();
+    }
+
+    /// Wait while the gate is closed.
+    pub(crate) fn pass(&self) {
+        let closed = self.closed.lock().unwrap_or_else(PoisonError::into_inner);
+        if *closed {
+            self.held.store(true, Ordering::SeqCst);
+        }
+        drop(self.changed.wait_while(closed, |closed| *closed));
+    }
+
+    /// Whether a call waited at the gate.
+    pub(crate) fn held(&self) -> bool {
+        self.held.load(Ordering::SeqCst)
     }
 }
 
@@ -313,6 +354,7 @@ struct Held(Arc<Observed>);
 #[cfg(test)]
 impl Drop for Held {
     fn drop(&mut self) {
+        self.0.releases.pass();
         self.0.watchers.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -521,6 +563,15 @@ fn same_root(a: &Location, b: &Location) -> bool {
     a.path == b.path && a.identity == b.identity
 }
 
+/// Stop an OS watcher on a blocking thread, never on a runtime worker:
+/// stopping one can wait on the file system. `FSEvents` joins its thread,
+/// whose callback `stat`s the paths it reports, on a share that may be gone.
+fn unwatch(live: Option<Live>) {
+    if let Some(live) = live {
+        drop(tokio::task::spawn_blocking(move || drop(live)));
+    }
+}
+
 /// Resolves once a stop was requested or the handle was dropped.
 async fn stopped(stop: &mut watch::Receiver<bool>) {
     // An error means the sender is gone, which is a stop as well.
@@ -602,9 +653,12 @@ impl Run {
         };
         // Removed, retired and re-roled locations stop; reselected and
         // remapped ones start again at their new root.
-        self.locations.retain(|id, watched| {
-            wanted.get(id).is_some_and(|location| same_root(location, &watched.location))
+        let stopped = self.locations.extract_if(|id, watched| {
+            !wanted.get(id).is_some_and(|location| same_root(location, &watched.location))
         });
+        for (_, mut watched) in stopped {
+            unwatch(watched.live.take());
+        }
         self.offline.retain(|id, offline| {
             wanted.get(id).is_some_and(|location| same_root(location, &offline.location))
         });
@@ -698,7 +752,8 @@ impl Run {
 
     /// Stop counting a location whose root went away, releasing its watch.
     fn go_offline(&mut self, id: Uuid) {
-        if let Some(watched) = self.locations.remove(&id) {
+        if let Some(mut watched) = self.locations.remove(&id) {
+            unwatch(watched.live.take());
             tracing::info!(location = %id, "new captures: root went away; watch released");
             self.offline.insert(id, Offline { location: watched.location, refused: None });
         }
@@ -909,7 +964,7 @@ impl Run {
             return;
         };
         // The old OS watch is released before the new folder set registers.
-        watched.live = None;
+        unwatch(watched.live.take());
         let root = watched.root.clone();
         let live = self.attach(&root).await;
         if let Some(watched) = self.locations.get_mut(&id) {
