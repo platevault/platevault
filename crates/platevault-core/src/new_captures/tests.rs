@@ -10,9 +10,13 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use camino::Utf8Path;
+use fs_inventory::artifact_watcher::TreeWatch;
 use uuid::Uuid;
 
-use super::{CaptureWatch, NewCaptureCount, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE};
+use super::{
+    CaptureWatch, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE,
+};
 use crate::inventory::RootStamp;
 use crate::library::{fixtures, Library};
 use crate::{LibraryError, Location, LocationRole, NativePath, ScanOperation, ScanState};
@@ -86,9 +90,43 @@ async fn count_is(watch: &CaptureWatch, id: Uuid, expected: u64) -> Vec<NewCaptu
     until(watch, |counts| new_files(counts, id) == Some(expected)).await
 }
 
-/// Wait `ticks` sweeps, letting late events arrive.
-async fn settle(ticks: u32) {
-    tokio::time::sleep(FAST.sweep * ticks).await;
+/// Wait until `holds`, checking every few milliseconds.
+async fn eventually(what: &str, holds: impl Fn() -> bool) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !holds() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("never: {what}"));
+}
+
+fn walks(watch: &CaptureWatch) -> usize {
+    watch.observed().walks.load(Ordering::SeqCst)
+}
+
+fn watchers(watch: &CaptureWatch) -> usize {
+    watch.observed().watchers.load(Ordering::SeqCst)
+}
+
+/// Wait until discovery holds `held` OS watchers.
+async fn watchers_are(watch: &CaptureWatch, held: usize) {
+    eventually(&format!("{held} watchers held"), || watchers(watch) == held).await;
+}
+
+fn sweeps(observed: &Observed) -> &AtomicUsize {
+    &observed.sweeps
+}
+
+/// Wait until `ticks` more ticks of the kind `counter` counts started and
+/// ended after this call, their counts published. Ticks of every kind run
+/// one after another, so a tick has ended, and its counts are published,
+/// once the next one started.
+async fn after(watch: &CaptureWatch, counter: fn(&Observed) -> &AtomicUsize, ticks: usize) {
+    let counter = counter(watch.observed());
+    let mark = counter.load(Ordering::SeqCst);
+    eventually(&format!("{ticks} more ticks"), || counter.load(Ordering::SeqCst) > mark + ticks)
+        .await;
 }
 
 async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
@@ -104,6 +142,82 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
     })
     .await
     .expect("scan must publish its terminal state")
+}
+
+/// A gate a probe's blocking call waits at while it is closed, as a call on
+/// a network mount whose server went away waits.
+#[derive(Default)]
+struct Gate {
+    closed: Mutex<bool>,
+    changed: Condvar,
+    held: AtomicBool,
+}
+
+impl Gate {
+    fn close(&self) {
+        *self.closed.lock().unwrap() = true;
+    }
+
+    fn open(&self) {
+        *self.closed.lock().unwrap() = false;
+        self.changed.notify_all();
+    }
+
+    /// Wait while the gate is closed.
+    fn pass(&self) {
+        let closed = self.closed.lock().unwrap();
+        if *closed {
+            self.held.store(true, Ordering::SeqCst);
+        }
+        drop(self.changed.wait_while(closed, |closed| *closed).unwrap());
+    }
+
+    /// Wait until a call waits at the gate.
+    async fn holding(&self) {
+        eventually("a call waits at the gate", || self.held.load(Ordering::SeqCst)).await;
+    }
+}
+
+/// The OS probe, counting how often discovery touches the root; its root
+/// `stat`s and its listings wait at their gates.
+#[derive(Default)]
+struct Probe {
+    stats: AtomicUsize,
+    validations: AtomicUsize,
+    stat_gate: Gate,
+    list_gate: Gate,
+}
+
+/// Discovery of `library` through `probe`.
+fn probed(library: &Arc<Library>, probe: &Arc<Probe>) -> CaptureWatch {
+    CaptureWatch::start_with(library, FAST, Arc::clone(probe) as Arc<dyn RootProbe>)
+}
+
+impl RootProbe for Probe {
+    fn stamp(&self, root: &Path) -> Option<RootStamp> {
+        self.stats.fetch_add(1, Ordering::SeqCst);
+        self.stat_gate.pass();
+        OsProbe.stamp(root)
+    }
+
+    fn validate(&self, location: &Location) -> Result<(), LibraryError> {
+        self.validations.fetch_add(1, Ordering::SeqCst);
+        OsProbe.validate(location)
+    }
+
+    fn watch(&self, root: &Utf8Path, capacity: usize) -> Result<TreeWatch, String> {
+        OsProbe.watch(root, capacity)
+    }
+
+    fn list(
+        &self,
+        root: &Path,
+        stamp: RootStamp,
+        canceled: &AtomicBool,
+    ) -> Result<Vec<NativePath>, LibraryError> {
+        self.list_gate.pass();
+        OsProbe.list(root, stamp, canceled)
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -125,7 +239,7 @@ async fn files_copied_into_an_online_location_are_counted_without_a_rescan() {
 
     let counts = count_is(&watch, location.id, 3).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 3, live: true }]);
-    assert_eq!(watch.observed().walks.load(Ordering::SeqCst), 1, "live events, no rescan");
+    assert_eq!(walks(&watch), 1, "live events, no rescan");
     let indexed = fx.library.catalog().location_asset_paths(location.id).await.unwrap();
     assert_eq!(indexed, Vec::<NativePath>::new(), "discovery writes nothing to the catalog");
 }
@@ -160,22 +274,28 @@ async fn a_file_seen_by_the_walk_and_the_watcher_counts_once() {
     frame(&root.join("Ha_001.fits"));
     count_is(&watch, location.id, 2).await;
 
-    // Written again, and renamed in case only, after the walk.
+    // Written again, and renamed in case only, after the walk. The frame
+    // written after them counts once their events were applied, and the
+    // new spelling is the one counted.
     frame(&root.join("Ha_001.fits"));
     fs::rename(root.join("Ha_001.fits"), root.join("ha_001.fits")).unwrap();
-    settle(2).await;
-    assert_eq!(new_files(&watch.counts(), location.id), Some(2));
+    frame(&root.join("Ha_002.fits"));
+    count_is(&watch, location.id, 3).await;
+    fs::remove_file(root.join("ha_001.fits")).unwrap();
+    count_is(&watch, location.id, 2).await;
 
     // The decomposed spelling is the same file exactly where the indexer's
-    // name comparison says so.
+    // name comparison says so: there, removing the composed spelling removes
+    // the only file both name.
     let volume = &location.identity.volume;
     let composed = NativePath::from_path(Path::new("M\u{e9}ridien.fits"));
     let decomposed = NativePath::from_path(Path::new("Me\u{301}ridien.fits"));
     let expected = if composed.same_on(&decomposed, volume) { 2 } else { 3 };
     frame(&root.join("Me\u{301}ridien.fits"));
-    settle(2).await;
     count_is(&watch, location.id, expected).await;
-    assert_eq!(watch.observed().walks.load(Ordering::SeqCst), 1);
+    fs::remove_file(root.join("M\u{e9}ridien.fits")).unwrap();
+    count_is(&watch, location.id, expected - 1).await;
+    assert_eq!(walks(&watch), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -192,24 +312,34 @@ async fn a_new_file_removed_or_renamed_before_import_leaves_the_count() {
 
     fs::remove_file(root.join("a.fits")).unwrap();
     count_is(&watch, location.id, 2).await;
+    // A rename is a removal plus an addition. The frame written after it
+    // counts once both were applied, and the new name is the one counted.
     fs::rename(root.join("b.fits"), root.join("b-renamed.fits")).unwrap();
-    settle(2).await;
+    frame(&root.join("d.fits"));
+    count_is(&watch, location.id, 3).await;
+    fs::remove_file(root.join("b-renamed.fits")).unwrap();
     count_is(&watch, location.id, 2).await;
     fs::rename(root.join("c.fits"), root.join("c.fits.bak")).unwrap();
     count_is(&watch, location.id, 1).await;
 
+    // A frame moved in from outside the root is a live event, not a rescan.
+    let walked = walks(&watch);
+    frame(&fx.base.join("outside/e.fits"));
+    fs::rename(fx.base.join("outside/e.fits"), root.join("e.fits")).unwrap();
+    count_is(&watch, location.id, 2).await;
+    assert_eq!(walks(&watch), walked, "a file moved in is counted live");
+
     // A night folder moved in brings frames no live event names: the watcher
     // asks for a rescan (as for an OS watcher error), which walks again.
-    let walks = watch.observed().walks.load(Ordering::SeqCst);
     let staged = fx.base.join("staged night");
-    frame(&staged.join("d.fits"));
-    frame(&staged.join("e.fits"));
+    frame(&staged.join("f.fits"));
+    frame(&staged.join("g.fits"));
     fs::rename(&staged, root.join("2026-10-14")).unwrap();
-    count_is(&watch, location.id, 3).await;
-    assert!(watch.observed().walks.load(Ordering::SeqCst) > walks, "the new folder walked again");
+    count_is(&watch, location.id, 4).await;
+    assert!(walks(&watch) > walked, "the new folder walked again");
     // Removing the folder removes what it held.
     fs::remove_dir_all(root.join("2026-10-14")).unwrap();
-    count_is(&watch, location.id, 1).await;
+    count_is(&watch, location.id, 2).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -229,6 +359,27 @@ async fn indexed_files_leave_the_count() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_scan_that_ends_while_a_walk_lists_is_counted_after_it() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    frame(&root.join("Ha_002.fits"));
+    let probe = Arc::new(Probe::default());
+    probe.list_gate.close();
+    let watch = probed(&fx.library, &probe);
+
+    // The start-up walk read the catalog, empty then, and now lists.
+    probe.list_gate.holding().await;
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    probe.list_gate.open();
+
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    assert_eq!(walks(&watch), 1, "the catalog is read again, not the folder");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_overflowing_event_channel_triggers_a_rescan() {
     let fx = fixture().await;
     let root = fx.base.join("Captures");
@@ -242,14 +393,14 @@ async fn an_overflowing_event_channel_triggers_a_rescan() {
     }
 
     count_is(&watch, location.id, 40).await;
-    assert!(watch.observed().walks.load(Ordering::SeqCst) >= 2, "the overflow walked again");
+    assert!(walks(&watch) >= 2, "the overflow walked again");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn watching_starts_when_a_location_is_added() {
     let fx = fixture().await;
     let watch = watch(&fx.library);
-    settle(1).await;
+    after(&watch, sweeps, 1).await;
     assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new());
 
     let root = fx.base.join("Captures");
@@ -257,17 +408,18 @@ async fn watching_starts_when_a_location_is_added() {
     let location = captures(&fx.library, &root).await;
 
     count_is(&watch, location.id, 1).await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 1);
-    // Calibration locations are not Captures.
+    assert_eq!(watchers(&watch), 1);
+    // Calibration locations are not Captures: a sweep after the
+    // registration leaves them unwatched.
     let darks = fx.base.join("Darks");
     fs::create_dir_all(&darks).unwrap();
     fx.library
         .register_location(NativePath::from_path(&darks), "Darks".into(), LocationRole::Calibration)
         .await
         .unwrap();
-    settle(2).await;
+    after(&watch, sweeps, 1).await;
     assert_eq!(watch.counts().len(), 1);
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 1);
+    assert_eq!(watchers(&watch), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -282,10 +434,12 @@ async fn watching_stops_when_a_location_is_retired() {
     fx.library.retire_location(review.id, location.id, review.expected_revision).await.unwrap();
 
     until(&watch, <[NewCaptureCount]>::is_empty).await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 0);
+    watchers_are(&watch, 0).await;
+    // No sweep starts it again.
     frame(&root.join("Ha_001.fits"));
-    settle(2).await;
+    after(&watch, sweeps, 2).await;
     assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new());
+    assert_eq!(watchers(&watch), 0);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -310,7 +464,7 @@ async fn watching_stops_when_a_location_leaves_the_catalog() {
     connection.close().await.unwrap();
 
     until(&watch, <[NewCaptureCount]>::is_empty).await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 0);
+    watchers_are(&watch, 0).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -322,6 +476,9 @@ async fn watching_follows_a_remapped_location_to_its_new_root() {
     assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
     let watch = watch(&fx.library);
     count_is(&watch, location.id, 0).await;
+    // A frame only the old root holds.
+    frame(&old.join("Ha_old.fits"));
+    count_is(&watch, location.id, 1).await;
 
     let copy = fx.base.join("Captures copy");
     fs::create_dir_all(&copy).unwrap();
@@ -336,36 +493,43 @@ async fn watching_follows_a_remapped_location_to_its_new_root() {
     fx.library.apply_remap(review.id, current.decision_revision).await.unwrap();
 
     // The walk of the new root starts it again from what the catalog holds.
-    until(&watch, |_| watch.observed().walks.load(Ordering::SeqCst) >= 2).await;
+    eventually("the new root walked", || walks(&watch) >= 2).await;
     count_is(&watch, location.id, 0).await;
-    frame(&old.join("Ha_002.fits"));
     frame(&copy.join("Ha_002.fits"));
     frame(&copy.join("Ha_003.fits"));
     count_is(&watch, location.id, 2).await;
-    settle(2).await;
-    assert_eq!(new_files(&watch.counts(), location.id), Some(2), "the old root is not watched");
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 1);
+    watchers_are(&watch, 1).await;
 }
 
-#[derive(Default)]
-struct Calls {
-    stats: AtomicUsize,
-    validations: AtomicUsize,
-}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn watching_follows_a_reselected_location_to_its_new_path() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    // No sweep runs after the start: the reselection itself moves the watch.
+    let slow = Settings { sweep: Duration::from_secs(3600), ..FAST };
+    let watch = CaptureWatch::start_with(&fx.library, slow, Arc::new(OsProbe));
+    count_is(&watch, location.id, 1).await;
 
-/// The OS probe, counting how often discovery touches the root.
-struct Counting(Arc<Calls>);
+    // The folder moved; reselecting it there follows it.
+    let moved = fx.base.join("Archive/Captures");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(&root, &moved).unwrap();
+    let current = fx.library.catalog().location(location.id).await.unwrap();
+    fx.library
+        .reselect_location(location.id, current.decision_revision, NativePath::from_path(&moved))
+        .await
+        .unwrap();
 
-impl RootProbe for Counting {
-    fn stamp(&self, root: &Path) -> Option<RootStamp> {
-        self.0.stats.fetch_add(1, Ordering::SeqCst);
-        OsProbe.stamp(root)
-    }
-
-    fn validate(&self, location: &Location) -> Result<(), LibraryError> {
-        self.0.validations.fetch_add(1, Ordering::SeqCst);
-        OsProbe.validate(location)
-    }
+    eventually("the new path walked", || walks(&watch) >= 2).await;
+    count_is(&watch, location.id, 1).await;
+    let walked = walks(&watch);
+    frame(&moved.join("Ha_002.fits"));
+    let counts = count_is(&watch, location.id, 2).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 2, live: true }]);
+    assert_eq!(walks(&watch), walked, "counted live at the new path");
+    watchers_are(&watch, 1).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -374,24 +538,26 @@ async fn an_offline_root_releases_its_watch_and_is_only_checked_each_sweep() {
     let root = fx.base.join("Captures");
     let location = captures(&fx.library, &root).await;
     frame(&root.join("Ha_001.fits"));
-    let calls = Arc::new(Calls::default());
-    let watch = CaptureWatch::start_with(&fx.library, FAST, Arc::new(Counting(Arc::clone(&calls))));
+    let probe = Arc::new(Probe::default());
+    let watch = probed(&fx.library, &probe);
     count_is(&watch, location.id, 1).await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 1);
+    assert_eq!(watchers(&watch), 1);
 
     // The drive goes away: its mount point is gone.
     let unplugged = fx.base.join("unplugged");
     fs::rename(&root, &unplugged).unwrap();
     until(&watch, <[NewCaptureCount]>::is_empty).await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 0, "no handle on the dead mount");
+    watchers_are(&watch, 0).await;
 
     let (stats, validations) =
-        (calls.stats.load(Ordering::SeqCst), calls.validations.load(Ordering::SeqCst));
-    settle(10).await;
-    let stats = calls.stats.load(Ordering::SeqCst) - stats;
+        (probe.stats.load(Ordering::SeqCst), probe.validations.load(Ordering::SeqCst));
+    after(&watch, sweeps, 10).await;
+    // Ten sweeps, plus the one under way when counting started and the one
+    // whose start ended the wait.
+    let stats = probe.stats.load(Ordering::SeqCst) - stats;
     assert!(stats <= 12, "one stat per sweep at most, not a loop: {stats} in 10 sweeps");
     assert_eq!(
-        calls.validations.load(Ordering::SeqCst),
+        probe.validations.load(Ordering::SeqCst),
         validations,
         "an absent root is not queried"
     );
@@ -400,7 +566,7 @@ async fn an_offline_root_releases_its_watch_and_is_only_checked_each_sweep() {
     frame(&unplugged.join("Ha_002.fits"));
     fs::rename(&unplugged, &root).unwrap();
     count_is(&watch, location.id, 2).await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 1);
+    watchers_are(&watch, 1).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -408,27 +574,24 @@ async fn a_refused_root_is_not_queried_again_until_it_changes() {
     let fx = fixture().await;
     let root = fx.base.join("Captures");
     let location = captures(&fx.library, &root).await;
-    let calls = Arc::new(Calls::default());
-    let watch = CaptureWatch::start_with(&fx.library, FAST, Arc::new(Counting(Arc::clone(&calls))));
+    let probe = Arc::new(Probe::default());
+    let watch = probed(&fx.library, &probe);
     count_is(&watch, location.id, 0).await;
 
     // Another folder now sits at the registered path.
     fs::rename(&root, fx.base.join("moved")).unwrap();
     until(&watch, <[NewCaptureCount]>::is_empty).await;
-    let before = calls.validations.load(Ordering::SeqCst);
+    let before = probe.validations.load(Ordering::SeqCst);
     fs::create_dir_all(&root).unwrap();
     frame(&root.join("Ha_001.fits"));
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while calls.validations.load(Ordering::SeqCst) == before {
-            settle(1).await;
-        }
+    eventually("the new folder is checked", || {
+        probe.validations.load(Ordering::SeqCst) > before
     })
-    .await
-    .expect("the new folder is checked");
-    settle(10).await;
-    assert_eq!(calls.validations.load(Ordering::SeqCst), before + 1, "refused once, not again");
+    .await;
+    after(&watch, sweeps, 10).await;
+    assert_eq!(probe.validations.load(Ordering::SeqCst), before + 1, "refused once, not again");
     assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new());
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 0);
+    assert_eq!(watchers(&watch), 0);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -442,58 +605,21 @@ async fn no_watcher_outlives_shutdown_or_the_handle() {
         new_files(counts, first.id).is_some() && new_files(counts, second.id).is_some()
     })
     .await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 2);
+    assert_eq!(watchers(&watch), 2);
     let mut counts = watch.subscribe();
     counts.borrow_and_update();
     watch.shutdown().await;
-    assert_eq!(watch.observed().watchers.load(Ordering::SeqCst), 0);
+    assert_eq!(watchers(&watch), 0);
     assert!(counts.changed().await.is_err(), "the counts end with discovery");
 
     let dropped = super::CaptureWatch::start_with(&fx.library, FAST, Arc::new(OsProbe));
     until(&dropped, |counts| counts.len() == 2).await;
     let observed = Arc::clone(&dropped.observed);
     drop(dropped);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while observed.watchers.load(Ordering::SeqCst) != 0 {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+    eventually("dropping the handle releases every watcher", || {
+        observed.watchers.load(Ordering::SeqCst) == 0
     })
-    .await
-    .expect("dropping the handle releases every watcher");
-}
-
-/// The OS probe, whose `stat` of the root hangs once `hang` is set, as one of
-/// a network mount whose server went away can, until the gate opens.
-#[derive(Default)]
-struct Gate {
-    hang: AtomicBool,
-    hanging: AtomicBool,
-    open: Mutex<bool>,
-    opened: Condvar,
-}
-
-impl Gate {
-    fn open(&self) {
-        *self.open.lock().unwrap() = true;
-        self.opened.notify_all();
-    }
-}
-
-struct Hanging(Arc<Gate>);
-
-impl RootProbe for Hanging {
-    fn stamp(&self, root: &Path) -> Option<RootStamp> {
-        if self.0.hang.load(Ordering::SeqCst) {
-            self.0.hanging.store(true, Ordering::SeqCst);
-            let open = self.0.open.lock().unwrap();
-            drop(self.0.opened.wait_while(open, |open| !*open).unwrap());
-        }
-        OsProbe.stamp(root)
-    }
-
-    fn validate(&self, location: &Location) -> Result<(), LibraryError> {
-        OsProbe.validate(location)
-    }
+    .await;
 }
 
 // One worker: a root check that held a runtime worker would leave nothing to
@@ -504,28 +630,23 @@ impl RootProbe for Hanging {
 async fn shutdown_returns_while_a_root_check_hangs() {
     let fx = fixture().await;
     let location = captures(&fx.library, &fx.base.join("Captures")).await;
-    let gate = Arc::new(Gate::default());
-    let watch = CaptureWatch::start_with(&fx.library, FAST, Arc::new(Hanging(Arc::clone(&gate))));
+    let probe = Arc::new(Probe::default());
+    let watch = probed(&fx.library, &probe);
     count_is(&watch, location.id, 0).await;
 
-    gate.hang.store(true, Ordering::SeqCst);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while !gate.hanging.load(Ordering::SeqCst) {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .expect("a sweep checks the root");
+    // A sweep checks the root, and the check hangs.
+    probe.stat_gate.close();
+    probe.stat_gate.holding().await;
     // App exit waits on this: a hung check must not hold it.
     let stopped = tokio::time::timeout(Duration::from_secs(5), watch.shutdown()).await;
     // Canceled, discovery releases every watcher while the check still hangs.
     let released = tokio::time::timeout(Duration::from_secs(5), async {
-        while watch.observed().watchers.load(Ordering::SeqCst) != 0 {
+        while watchers(&watch) != 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await;
-    gate.open();
+    probe.stat_gate.open();
     assert!(stopped.is_ok(), "shutdown waited out a hung root check");
     assert!(released.is_ok(), "a watcher outlived shutdown while a root check hung");
 }

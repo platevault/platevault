@@ -57,7 +57,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fs_inventory::artifact_watcher::{
     start_tree_watcher, ArtifactEventKind, ArtifactFileEvent, TreeWatch, WatcherGuard,
 };
@@ -208,18 +208,36 @@ impl Default for Settings {
     }
 }
 
-/// How discovery observes a location root.
+/// How discovery observes a location root. Every method is blocking.
 pub(crate) trait RootProbe: Send + Sync + 'static {
     /// One no-follow `stat`: the root's continuity stamp, or `None` when it
-    /// is absent or not a real folder. Blocking.
+    /// is absent or not a real folder.
     fn stamp(&self, root: &Path) -> Option<RootStamp>;
 
-    /// Whether the root is the registered folder on the registered volume.
-    /// Blocking: the volume is qualified through a bounded OS query.
+    /// Whether the root is the registered folder on the registered volume,
+    /// which is qualified through a bounded OS query.
     ///
     /// # Errors
     /// The identity check's error, as for a scan.
     fn validate(&self, location: &Location) -> Result<(), LibraryError>;
+
+    /// Start an OS watcher over every real folder below the root.
+    ///
+    /// # Errors
+    /// Why the watcher did not start.
+    fn watch(&self, root: &Utf8Path, capacity: usize) -> Result<TreeWatch, String>;
+
+    /// List the frames below the root by the indexer's rules
+    /// ([`inventory::frame_paths`]).
+    ///
+    /// # Errors
+    /// As [`inventory::frame_paths`].
+    fn list(
+        &self,
+        root: &Path,
+        stamp: RootStamp,
+        canceled: &AtomicBool,
+    ) -> Result<Vec<NativePath>, LibraryError>;
 }
 
 struct OsProbe;
@@ -232,6 +250,19 @@ impl RootProbe for OsProbe {
     fn validate(&self, location: &Location) -> Result<(), LibraryError> {
         inventory::validate_location_root(location).map(drop)
     }
+
+    fn watch(&self, root: &Utf8Path, capacity: usize) -> Result<TreeWatch, String> {
+        start_tree_watcher(&[root.to_path_buf()], capacity)
+    }
+
+    fn list(
+        &self,
+        root: &Path,
+        stamp: RootStamp,
+        canceled: &AtomicBool,
+    ) -> Result<Vec<NativePath>, LibraryError> {
+        inventory::frame_paths(root, stamp, canceled)
+    }
 }
 
 /// What tests read about the running discovery.
@@ -242,6 +273,10 @@ pub(crate) struct Observed {
     pub(crate) watchers: std::sync::atomic::AtomicUsize,
     /// Walks started so far.
     pub(crate) walks: std::sync::atomic::AtomicUsize,
+    /// Debounce ticks whose events started draining so far.
+    pub(crate) drains: std::sync::atomic::AtomicUsize,
+    /// Sweeps started so far, the reconciliation at start included.
+    pub(crate) sweeps: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(test)]
@@ -503,6 +538,10 @@ impl Run {
     /// listed, retired or moved, and start what is online. A sweep also
     /// checks every root's reachability.
     async fn reconcile(&mut self, sweep: bool) {
+        #[cfg(test)]
+        if sweep {
+            self.observed.sweeps.fetch_add(1, Ordering::SeqCst);
+        }
         let wanted: HashMap<Uuid, Location> = match self.library.catalog().list_locations().await {
             Ok(listed) => listed
                 .into_iter()
@@ -640,11 +679,10 @@ impl Run {
             return None;
         };
         let capacity = self.settings.capacity;
-        let started = tokio::task::spawn_blocking(move || {
-            start_tree_watcher(std::slice::from_ref(&watched), capacity)
-        })
-        .await
-        .unwrap_or_else(|interrupted| Err(interrupted.to_string()));
+        let probe = Arc::clone(&self.probe);
+        let started = tokio::task::spawn_blocking(move || probe.watch(&watched, capacity))
+            .await
+            .unwrap_or_else(|interrupted| Err(interrupted.to_string()));
         let TreeWatch { events, guard, .. } = started
             .inspect_err(|error| {
                 tracing::warn!(root = %root.display(), %error, "new captures: watcher did not start");
@@ -660,8 +698,10 @@ impl Run {
         })
     }
 
-    /// Walk a location for its frames, then read which paths the catalog
-    /// holds there; the outcome arrives as [`Walked`].
+    /// Read which paths the catalog holds in a location, then walk it for its
+    /// frames; the outcome arrives as [`Walked`]. The catalog is read first,
+    /// so a scan that ends while the listing runs is caught by
+    /// [`Watched::recount`].
     fn walk(&mut self, id: Uuid) {
         let Some(watched) = self.locations.get_mut(&id) else {
             return;
@@ -677,13 +717,13 @@ impl Run {
         self.observed.walks.fetch_add(1, Ordering::SeqCst);
         let (root, stamp) = (watched.root.clone(), watched.stamp);
         let library = Arc::clone(&self.library);
+        let probe = Arc::clone(&self.probe);
         let sender = self.walked.clone();
         tokio::spawn(async move {
-            let frames = blocking(move || inventory::frame_paths(&root, stamp, &canceled)).await;
-            let outcome = match frames {
-                Ok(frames) => {
-                    library.catalog().location_asset_paths(id).await.map(|known| (frames, known))
-                }
+            let outcome = match library.catalog().location_asset_paths(id).await {
+                Ok(known) => blocking(move || probe.list(&root, stamp, &canceled))
+                    .await
+                    .map(|frames| (frames, known)),
                 Err(error) => Err(error),
             };
             let _ = sender.send(Walked { location: id, walk, outcome });
@@ -726,6 +766,8 @@ impl Run {
 
     /// Apply the events every live watcher queued since the last tick.
     async fn drain(&mut self) {
+        #[cfg(test)]
+        self.observed.drains.fetch_add(1, Ordering::SeqCst);
         let mut queued = Vec::new();
         for (id, watched) in &mut self.locations {
             let (root_touched, touched) = watched.take_events();
