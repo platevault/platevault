@@ -268,11 +268,20 @@ pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry 
     Entry::Other
 }
 
-/// Every supported frame below `root`, as relative paths, listed by the
-/// walker's rules (no link, junction or nested foreign volume is entered)
-/// without reading a header: the files the next scan of the location reads.
-/// A folder below the root that cannot be listed is skipped, as a scan would
-/// name it incomplete. Cancellation ends the listing with what it found.
+/// What [`frame_paths`] found below a location root, as relative paths.
+#[derive(Debug, Default)]
+pub(crate) struct Listing {
+    /// Every supported frame.
+    pub(crate) frames: Vec<NativePath>,
+    /// Every folder entered below the root, listed or not.
+    pub(crate) folders: Vec<PathBuf>,
+}
+
+/// Every supported frame below `root`, listed by the walker's rules (no
+/// link, junction or nested foreign volume is entered) without reading a
+/// header: the files the next scan of the location reads. A folder below
+/// the root that cannot be listed is skipped, as a scan would name it
+/// incomplete. Cancellation ends the listing with what it found.
 ///
 /// # Errors
 /// `SourceUnavailable` when `root` no longer carries `stamp`, and the I/O
@@ -281,7 +290,7 @@ pub(crate) fn frame_paths(
     root: &Path,
     stamp: RootStamp,
     canceled: &AtomicBool,
-) -> Result<Vec<NativePath>, LibraryError> {
+) -> Result<Listing, LibraryError> {
     if root_stamp(root) != Some(stamp) {
         return Err(identity::scoped(
             LibraryError::SourceUnavailable(
@@ -290,9 +299,9 @@ pub(crate) fn frame_paths(
             root,
         ));
     }
-    let mut frames = Vec::new();
-    let mut folders = vec![PathBuf::new()];
-    while let Some(folder) = folders.pop() {
+    let mut listed = Listing::default();
+    let mut pending = vec![PathBuf::new()];
+    while let Some(folder) = pending.pop() {
         if canceled.load(Ordering::Acquire) {
             break;
         }
@@ -309,13 +318,16 @@ pub(crate) fn frame_paths(
                 continue;
             };
             match classify(&meta, &relative, &stamp.0) {
-                Entry::Folder => folders.push(relative),
-                Entry::Frame => frames.push(NativePath::from_path(&relative)),
+                Entry::Folder => {
+                    listed.folders.push(relative.clone());
+                    pending.push(relative);
+                }
+                Entry::Frame => listed.frames.push(NativePath::from_path(&relative)),
                 Entry::Other => {}
             }
         }
     }
-    Ok(frames)
+    Ok(listed)
 }
 
 /// Walk a registered location and report its observations progressively.

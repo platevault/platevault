@@ -39,8 +39,10 @@
 //!   root refused once is checked again only after its `stat` changes.
 //! - An OS watcher error or lost-events notice, a full event channel, or a new
 //!   folder (which the watcher does not cover yet) restarts that location's
-//!   watcher and walks it again. So does every sweep while the watcher did not
-//!   start or the OS refused some of the folders.
+//!   watcher and walks it again. So does a walk that enters a folder the
+//!   watcher did not find as it started (created between its listing and its
+//!   registration), and every sweep while the watcher did not start or the OS
+//!   refused some of the folders.
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
 //!
@@ -68,7 +70,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval, interval_at, Instant, MissedTickBehavior};
 use uuid::Uuid;
 
-use crate::inventory::{self, Entry, RootStamp};
+use crate::inventory::{self, Entry, Listing, RootStamp};
 use crate::library::{blocking, Library};
 use crate::{
     LibraryError, Location, LocationLifecycle, LocationRole, NativePath, PathIdentity,
@@ -229,7 +231,7 @@ pub(crate) trait RootProbe: Send + Sync + 'static {
     /// Why the watcher did not start.
     fn watch(&self, root: &Utf8Path, capacity: usize) -> Result<TreeWatch, String>;
 
-    /// List the frames below the root by the indexer's rules
+    /// List the frames and folders below the root by the indexer's rules
     /// ([`inventory::frame_paths`]).
     ///
     /// # Errors
@@ -239,7 +241,7 @@ pub(crate) trait RootProbe: Send + Sync + 'static {
         root: &Path,
         stamp: RootStamp,
         canceled: &AtomicBool,
-    ) -> Result<Vec<NativePath>, LibraryError>;
+    ) -> Result<Listing, LibraryError>;
 }
 
 struct OsProbe;
@@ -262,7 +264,7 @@ impl RootProbe for OsProbe {
         root: &Path,
         stamp: RootStamp,
         canceled: &AtomicBool,
-    ) -> Result<Vec<NativePath>, LibraryError> {
+    ) -> Result<Listing, LibraryError> {
         inventory::frame_paths(root, stamp, canceled)
     }
 }
@@ -292,6 +294,10 @@ impl CaptureWatch {
 struct Live {
     events: mpsc::Receiver<ArtifactFileEvent>,
     guard: WatcherGuard,
+    /// The folders it found below the root as it started, relative to the
+    /// root. It lists them before it registers them, so a folder created in
+    /// between is missing and unwatched.
+    folders: HashSet<PathBuf>,
     /// Whether it watches every folder it found; the folders the OS refused
     /// deliver no event.
     complete: bool,
@@ -324,11 +330,11 @@ impl Drop for Walk {
     }
 }
 
-/// What a walk found: the frames on disk and the paths the catalog holds.
+/// What a walk found: what it listed on disk and the paths the catalog holds.
 struct Walked {
     location: Uuid,
     walk: u64,
-    outcome: Result<(Vec<NativePath>, Vec<NativePath>), LibraryError>,
+    outcome: Result<(Listing, Vec<NativePath>), LibraryError>,
 }
 
 /// An online Captures location being counted.
@@ -380,11 +386,22 @@ impl Watched {
     }
 
     /// Replace the count with a finished walk's.
-    fn counted_from(&mut self, frames: Vec<NativePath>, known: &[NativePath]) {
+    ///
+    /// A folder the walk entered that the watcher did not find as it
+    /// started was created while it registered, and nothing watches it: the
+    /// watcher is restarted. Every walk starts once its watcher is
+    /// registered, so this misses no folder. One created before its parent's
+    /// watch was registered is already there when the walk lists the parent,
+    /// and the parent's watch reports one created after it.
+    fn counted_from(&mut self, listing: Listing, known: &[NativePath]) {
+        if let Some(live) = &self.live {
+            self.rescan |= listing.folders.iter().any(|folder| !live.folders.contains(folder));
+        }
         self.know(known);
         let volume = &self.location.identity.volume;
         let known = &self.known;
-        self.new = frames
+        self.new = listing
+            .frames
             .into_iter()
             .filter_map(|frame| {
                 let key = frame.identity_on(volume);
@@ -699,10 +716,19 @@ impl Run {
         };
         let capacity = self.settings.capacity;
         let probe = Arc::clone(&self.probe);
-        let started = tokio::task::spawn_blocking(move || probe.watch(&watched, capacity))
-            .await
-            .unwrap_or_else(|interrupted| Err(interrupted.to_string()));
-        let TreeWatch { events, guard, unwatched, .. } = started
+        let started = tokio::task::spawn_blocking(move || {
+            let TreeWatch { events, guard, folders, unwatched } =
+                probe.watch(&watched, capacity)?;
+            let folders = folders
+                .iter()
+                .filter_map(|folder| folder.strip_prefix(&watched).ok())
+                .map(Path::to_path_buf)
+                .collect();
+            Ok((events, guard, folders, unwatched == 0))
+        })
+        .await
+        .unwrap_or_else(|interrupted| Err(interrupted.to_string()));
+        let (events, guard, folders, complete) = started
             .inspect_err(|error| {
                 tracing::warn!(root = %root.display(), %error, "new captures: watcher did not start");
             })
@@ -712,7 +738,8 @@ impl Run {
         Some(Live {
             events,
             guard,
-            complete: unwatched == 0,
+            folders,
+            complete,
             #[cfg(test)]
             _held: Held(Arc::clone(&self.observed)),
         })
@@ -743,7 +770,7 @@ impl Run {
             let outcome = match library.catalog().location_asset_paths(id).await {
                 Ok(known) => blocking(move || probe.list(&root, stamp, &canceled))
                     .await
-                    .map(|frames| (frames, known)),
+                    .map(|listing| (listing, known)),
                 Err(error) => Err(error),
             };
             let _ = sender.send(Walked { location: id, walk, outcome });
@@ -762,7 +789,7 @@ impl Run {
             return;
         };
         match walked.outcome {
-            Ok((frames, known)) => watched.counted_from(frames, &known),
+            Ok((listing, known)) => watched.counted_from(listing, &known),
             Err(error) => {
                 // The root went away or cannot be read: offline until a sweep
                 // finds it again, never retried in a loop.

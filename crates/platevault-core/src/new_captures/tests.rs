@@ -17,7 +17,7 @@ use uuid::Uuid;
 use super::{
     CaptureWatch, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE,
 };
-use crate::inventory::RootStamp;
+use crate::inventory::{Listing, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{LibraryError, Location, LocationRole, NativePath, ScanOperation, ScanState};
 
@@ -196,6 +196,10 @@ struct Probe {
     failing: AtomicUsize,
     /// How many of the next watchers start with one folder unwatched.
     partial: AtomicUsize,
+    /// A folder, with a frame, that the next watcher start creates after it
+    /// listed the tree and before it registered it: neither listed nor
+    /// reported, as one created in that window on a slow tree is.
+    late: Mutex<Option<PathBuf>>,
 }
 
 /// Take one from `counter` unless it is zero.
@@ -231,7 +235,13 @@ impl RootProbe for Probe {
             return Ok(started);
         }
         self.watch_gate.pass();
-        OsProbe.watch(root, capacity)
+        let Some(late) = self.late.lock().unwrap().take() else {
+            return OsProbe.watch(root, capacity);
+        };
+        frame(&late.join("Ha_late.fits"));
+        let mut started = OsProbe.watch(root, capacity)?;
+        started.folders.retain(|listed| *listed != late);
+        Ok(started)
     }
 
     fn list(
@@ -239,7 +249,7 @@ impl RootProbe for Probe {
         root: &Path,
         stamp: RootStamp,
         canceled: &AtomicBool,
-    ) -> Result<Vec<NativePath>, LibraryError> {
+    ) -> Result<Listing, LibraryError> {
         self.list_gate.pass();
         OsProbe.list(root, stamp, canceled)
     }
@@ -419,6 +429,27 @@ async fn an_overflowing_event_channel_triggers_a_rescan() {
 
     count_is(&watch, location.id, 40).await;
     assert!(walks(&watch) >= 2, "the overflow walked again");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_created_while_the_watcher_starts_is_watched_after_the_walk() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    *probe.late.lock().unwrap() = Some(root.join("2026-10-15"));
+    let watch = probed(&fx.library, &probe);
+
+    // The start-up walk enters a folder the watcher did not list, so the
+    // watcher starts again over it and the walk is redone.
+    eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) == 2).await;
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    assert_eq!(walks(&watch), 2);
+    frame(&root.join("2026-10-15/Ha_002.fits"));
+    count_is(&watch, location.id, 2).await;
+    after(&watch, sweeps, 1).await;
+    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), (2, 2), "settled");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
