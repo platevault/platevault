@@ -496,7 +496,11 @@ impl RootProbe for Hanging {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+// One worker: a root check that held a runtime worker would leave nothing to
+// drive the runtime's timers, the shutdown grace's among them, so the test
+// hangs on such a regression on every run, not only when the scheduler leaves
+// no spare worker parked on the driver.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn shutdown_returns_while_a_root_check_hangs() {
     let fx = fixture().await;
     let location = captures(&fx.library, &fx.base.join("Captures")).await;
@@ -514,15 +518,14 @@ async fn shutdown_returns_while_a_root_check_hangs() {
     .expect("a sweep checks the root");
     // App exit waits on this: a hung check must not hold it.
     let stopped = tokio::time::timeout(Duration::from_secs(5), watch.shutdown()).await;
-    gate.open();
-    assert!(stopped.is_ok(), "shutdown waited out a hung root check");
-
-    // The watcher goes as soon as the check returns.
-    tokio::time::timeout(Duration::from_secs(5), async {
+    // Canceled, discovery releases every watcher while the check still hangs.
+    let released = tokio::time::timeout(Duration::from_secs(5), async {
         while watch.observed().watchers.load(Ordering::SeqCst) != 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
-    .await
-    .expect("every watcher is released once the check returns");
+    .await;
+    gate.open();
+    assert!(stopped.is_ok(), "shutdown waited out a hung root check");
+    assert!(released.is_ok(), "a watcher outlived shutdown while a root check hung");
 }

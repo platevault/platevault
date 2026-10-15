@@ -44,10 +44,12 @@
 //!   so the files it indexed leave the count.
 //!
 //! [`CaptureWatch::shutdown`], or dropping the [`CaptureWatch`], stops every
-//! watcher. Shutdown waits a short grace at most: discovery `stat`s on its own
-//! task, and a `stat` of a network mount whose server went away can block, so
-//! a blocked discovery is canceled and releases its watchers when that call
-//! returns, never holding app exit.
+//! watcher. Shutdown waits a short grace at most. A `stat` of a network mount
+//! whose server went away can block, so discovery makes every file-system
+//! call on a blocking thread, never on a runtime worker: a worker it held
+//! would stall the runtime's timers, the grace's among them. A discovery
+//! still waiting on such a call when the grace runs out is canceled, which
+//! releases its watchers at once; app exit is never held.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -166,8 +168,8 @@ impl CaptureWatch {
     }
 
     /// Stop discovery and return once every watcher is released, or once the
-    /// shutdown grace ran out while a file-system call held discovery: it is
-    /// then canceled and releases its watchers when that call returns.
+    /// shutdown grace ran out while discovery waited on a file-system call:
+    /// it is then canceled, which releases its watchers at once.
     pub async fn shutdown(&self) {
         let _ = self.stop.send(true);
         let task = self.task.lock().unwrap_or_else(PoisonError::into_inner).take();
@@ -209,7 +211,7 @@ impl Default for Settings {
 /// How discovery observes a location root.
 pub(crate) trait RootProbe: Send + Sync + 'static {
     /// One no-follow `stat`: the root's continuity stamp, or `None` when it
-    /// is absent or not a real folder.
+    /// is absent or not a real folder. Blocking.
     fn stamp(&self, root: &Path) -> Option<RootStamp>;
 
     /// Whether the root is the registered folder on the registered volume.
@@ -327,10 +329,8 @@ impl Watched {
         self.new.retain(|key, _| !known.contains(key));
     }
 
-    /// Replace the count with a finished walk's, then re-check the paths live
-    /// events named while it ran: the walk may have listed them before they
-    /// changed.
-    fn counted_from(&mut self, frames: Vec<NativePath>, known: &[NativePath], walk: &Walk) {
+    /// Replace the count with a finished walk's.
+    fn counted_from(&mut self, frames: Vec<NativePath>, known: &[NativePath]) {
         self.know(known);
         let volume = &self.location.identity.volume;
         let known = &self.known;
@@ -345,30 +345,30 @@ impl Watched {
             })
             .collect();
         self.counted = true;
-        for path in &walk.touched {
-            self.recheck(path);
-        }
     }
 
-    /// Apply the events the live watcher queued: re-check each path once, and
-    /// mark a rescan for an OS watcher error, a lost-events notice, a new
-    /// folder or a full channel. Returns whether an event named the root.
-    fn apply_events(&mut self) -> bool {
+    /// Take the events the live watcher queued, marking a rescan for an OS
+    /// watcher error, a lost-events notice, a new folder or a full channel.
+    /// Returns whether an event named the root, and the paths below it that
+    /// events named, once each; a walk in flight also keeps those to check
+    /// again after it. Touches no file system.
+    fn take_events(&mut self) -> (bool, HashSet<PathBuf>) {
+        let mut root_touched = false;
+        let mut touched = HashSet::new();
         let Some(live) = self.live.as_mut() else {
-            return false;
+            return (root_touched, touched);
         };
         let mut rescan = live.guard.overflow_flag.swap(false, Ordering::AcqRel);
-        let mut paths = HashSet::new();
+        let mut named = HashSet::new();
         while let Ok(event) = live.events.try_recv() {
             if event.kind == ArtifactEventKind::NeedsRescan {
                 rescan = true;
             } else {
-                paths.insert(event.path.into_std_path_buf());
+                named.insert(event.path.into_std_path_buf());
             }
         }
         self.rescan |= rescan;
-        let mut root_touched = false;
-        for path in paths {
+        for path in named {
             let Some(relative) = self.relative(&path).map(Path::to_path_buf) else {
                 continue;
             };
@@ -379,15 +379,16 @@ impl Watched {
             if let Some(walk) = self.walk.as_mut() {
                 walk.touched.insert(relative.clone());
             }
-            self.recheck(&relative);
+            touched.insert(relative);
         }
-        root_touched
+        (root_touched, touched)
     }
 
-    /// Bring the count up to date for one path a live event named.
-    fn recheck(&mut self, relative: &Path) {
+    /// Bring the count up to date for one path a live event named, from the
+    /// entry found there now.
+    fn recheck(&mut self, relative: &Path, entry: Entry) {
         let key = self.identity(relative);
-        match inventory::entry_at(&self.root, self.stamp, relative) {
+        match entry {
             Entry::Frame => {
                 if !self.known.contains(&key) {
                     self.new.insert(key, relative.to_path_buf());
@@ -533,9 +534,11 @@ impl Run {
     /// only locations not seen before are checked.
     async fn follow(&mut self, location: Location, sweep: bool) {
         let id = location.id;
-        let refused = if let Some(watched) = self.locations.get_mut(&id) {
-            if !sweep || self.probe.stamp(&watched.root) == Some(watched.stamp) {
-                watched.location = location;
+        let refused = if self.locations.contains_key(&id) {
+            if !sweep || self.unchanged(id).await {
+                if let Some(watched) = self.locations.get_mut(&id) {
+                    watched.location = location;
+                }
                 return;
             }
             self.go_offline(id);
@@ -558,7 +561,7 @@ impl Run {
             self.offline.insert(id, Offline { location, refused: None });
             return;
         };
-        let Some(stamp) = self.probe.stamp(&root) else {
+        let Some(stamp) = self.stamp(root.clone()).await else {
             self.offline.insert(id, Offline { location, refused: None });
             return;
         };
@@ -568,13 +571,21 @@ impl Run {
         }
         let probe = Arc::clone(&self.probe);
         let checked = location.clone();
-        if let Err(error) = blocking(move || probe.validate(&checked)).await {
-            tracing::info!(location = %id, %error, "new captures: root is not the registered folder");
-            self.offline.insert(id, Offline { location, refused: Some(stamp) });
-            return;
-        }
+        let resolved = root.clone();
+        let canonical = match blocking(move || {
+            probe.validate(&checked)?;
+            Ok(std::fs::canonicalize(&resolved).ok().filter(|canonical| *canonical != resolved))
+        })
+        .await
+        {
+            Ok(canonical) => canonical,
+            Err(error) => {
+                tracing::info!(location = %id, %error, "new captures: root is not the registered folder");
+                self.offline.insert(id, Offline { location, refused: Some(stamp) });
+                return;
+            }
+        };
         self.offline.remove(&id);
-        let canonical = std::fs::canonicalize(&root).ok().filter(|canonical| *canonical != root);
         let mut prefixes = vec![root.clone()];
         prefixes.extend(canonical);
         let live = self.attach(&root).await;
@@ -603,6 +614,23 @@ impl Run {
             tracing::info!(location = %id, "new captures: root went away; watch released");
             self.offline.insert(id, Offline { location: watched.location, refused: None });
         }
+    }
+
+    /// The root's continuity stamp, from a `stat` on a blocking thread; `None`
+    /// as well when that check was interrupted.
+    async fn stamp(&self, root: PathBuf) -> Option<RootStamp> {
+        let probe = Arc::clone(&self.probe);
+        tokio::task::spawn_blocking(move || probe.stamp(&root)).await.ok().flatten()
+    }
+
+    /// Whether a watched location's root is still the folder its watch
+    /// started on.
+    async fn unchanged(&self, id: Uuid) -> bool {
+        let Some(watched) = self.locations.get(&id) else {
+            return false;
+        };
+        let stamp = watched.stamp;
+        self.stamp(watched.root.clone()).await == Some(stamp)
     }
 
     /// Watch every real folder below `root`.
@@ -670,11 +698,11 @@ impl Run {
         if watched.walk.as_ref().is_none_or(|walk| walk.id != walked.walk) {
             return;
         }
-        let Some(walk) = watched.walk.take() else {
+        let Some(mut walk) = watched.walk.take() else {
             return;
         };
         match walked.outcome {
-            Ok((frames, known)) => watched.counted_from(frames, &known, &walk),
+            Ok((frames, known)) => watched.counted_from(frames, &known),
             Err(error) => {
                 // The root went away or cannot be read: offline until a sweep
                 // finds it again, never retried in a loop.
@@ -683,6 +711,12 @@ impl Run {
                 return;
             }
         }
+        // The walk may have listed the paths live events named while it ran
+        // before they changed.
+        self.recheck(id, std::mem::take(&mut walk.touched)).await;
+        let Some(watched) = self.locations.get(&id) else {
+            return;
+        };
         if watched.rescan {
             self.rescan(id).await;
         } else if watched.recount {
@@ -692,32 +726,70 @@ impl Run {
 
     /// Apply the events every live watcher queued since the last tick.
     async fn drain(&mut self) {
-        let mut lost = Vec::new();
-        let mut rescans = Vec::new();
+        let mut queued = Vec::new();
         for (id, watched) in &mut self.locations {
-            if watched.apply_events() && self.probe.stamp(&watched.root) != Some(watched.stamp) {
-                lost.push(*id);
-            } else if watched.rescan && watched.walk.is_none() {
-                rescans.push(*id);
+            let (root_touched, touched) = watched.take_events();
+            if root_touched || !touched.is_empty() || watched.rescan {
+                queued.push((*id, root_touched, touched));
             }
         }
-        for id in lost {
-            self.go_offline(id);
+        for (id, root_touched, touched) in queued {
+            self.recheck(id, touched).await;
+            if root_touched && !self.unchanged(id).await {
+                self.go_offline(id);
+            } else if self
+                .locations
+                .get(&id)
+                .is_some_and(|watched| watched.rescan && watched.walk.is_none())
+            {
+                self.rescan(id).await;
+            }
         }
-        for id in rescans {
-            self.rescan(id).await;
+    }
+
+    /// Bring a location's count up to date for paths live events named, each
+    /// read on a blocking thread. Checks that were interrupted are redone by a
+    /// walk, as events the OS lost are.
+    async fn recheck(&mut self, id: Uuid, touched: HashSet<PathBuf>) {
+        if touched.is_empty() {
+            return;
+        }
+        let Some(watched) = self.locations.get(&id) else {
+            return;
+        };
+        let (root, stamp) = (watched.root.clone(), watched.stamp);
+        let entries = tokio::task::spawn_blocking(move || {
+            touched
+                .into_iter()
+                .map(|relative| {
+                    let entry = inventory::entry_at(&root, stamp, &relative);
+                    (relative, entry)
+                })
+                .collect::<Vec<_>>()
+        })
+        .await;
+        let Some(watched) = self.locations.get_mut(&id) else {
+            return;
+        };
+        match entries {
+            Ok(entries) => {
+                for (relative, entry) in &entries {
+                    watched.recheck(relative, *entry);
+                }
+            }
+            Err(_) => watched.rescan = true,
         }
     }
 
     /// Restart a location's watcher over its current folders and walk it.
     async fn rescan(&mut self, id: Uuid) {
-        let Some(watched) = self.locations.get_mut(&id) else {
-            return;
-        };
-        if self.probe.stamp(&watched.root) != Some(watched.stamp) {
+        if !self.unchanged(id).await {
             self.go_offline(id);
             return;
         }
+        let Some(watched) = self.locations.get_mut(&id) else {
+            return;
+        };
         // The old OS watch is released before the new folder set registers.
         watched.live = None;
         let root = watched.root.clone();
@@ -774,5 +846,4 @@ impl Run {
 }
 
 #[cfg(test)]
-#[path = "new_captures/tests.rs"]
 mod tests;
