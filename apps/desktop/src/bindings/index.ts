@@ -7134,7 +7134,9 @@ export type NewCaptureCount = {
 	newFiles: number,
 	/**
 	 *  Whether a live folder watcher keeps the count current. `false` while
-	 *  the count comes from the last walk only and the watcher is retried.
+	 *  the count may lag: the watcher did not start or misses some folders,
+	 *  and every sweep retries it, or the location's removable drive is being
+	 *  ejected.
 	 */
 	live: boolean,
 };

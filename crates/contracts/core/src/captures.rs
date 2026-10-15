@@ -35,7 +35,9 @@ pub struct NewCaptureCount {
     /// yet: arrived since its last index, until indexing adds them.
     pub new_files: u32,
     /// Whether a live folder watcher keeps the count current. `false` while
-    /// the count comes from the last walk only and the watcher is retried.
+    /// the count may lag: the watcher did not start or misses some folders,
+    /// and every sweep retries it, or the location's removable drive is being
+    /// ejected.
     pub live: bool,
 }
 

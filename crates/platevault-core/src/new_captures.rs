@@ -45,6 +45,16 @@
 //!   refused some of the folders.
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
+//! - Windows ejects a removable volume only once no process holds a handle
+//!   on it, and discovery's watcher holds one per folder. The desktop shell
+//!   forwards the eject notices for the volume of each watched root:
+//!   [`CaptureWatch::release`] when the removal is requested (the watcher is
+//!   released, a walk in flight canceled and awaited, and nothing touches the
+//!   root until the next notice), [`CaptureWatch::reattach`] when the removal
+//!   was refused, and [`CaptureWatch::gone`] once the volume is removed, which
+//!   takes the location offline without waiting for a sweep. Fixed and
+//!   network volumes, and macOS and Linux, keep their watchers throughout. A
+//!   manual eject check on a Windows machine is still pending.
 //!
 //! [`CaptureWatch::shutdown`], or dropping the [`CaptureWatch`], stops every
 //! watcher. Shutdown waits a short grace at most. A `stat` of a network mount
@@ -67,7 +77,7 @@ use fs_inventory::artifact_watcher::{
     start_tree_watcher, ArtifactEventKind, ArtifactFileEvent, TreeWatch, WatcherGuard,
 };
 use tokio::sync::broadcast::{self, error::RecvError};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, interval_at, Instant, MissedTickBehavior};
 use uuid::Uuid;
@@ -98,8 +108,10 @@ pub struct NewCaptureCount {
     pub new_files: u64,
     /// Whether a live folder watcher covers every folder and keeps the count
     /// current. `false` while it did not start or the OS refused some of the
-    /// folders: the count rests on the last walk (and on the events of the
-    /// folders that are watched), and every sweep starts the watcher again.
+    /// folders, and every sweep starts it again, or while the location's
+    /// removable volume is being removed ([`CaptureWatch::release`]). The
+    /// count then rests on the last walk (and on the events of the folders
+    /// that are watched).
     pub live: bool,
 }
 
@@ -108,6 +120,7 @@ pub struct NewCaptureCount {
 pub struct CaptureWatch {
     stop: watch::Sender<bool>,
     counts: watch::Receiver<Vec<NewCaptureCount>>,
+    notices: mpsc::UnboundedSender<Notice>,
     task: Mutex<Option<JoinHandle<()>>>,
     grace: Duration,
     #[cfg(test)]
@@ -130,6 +143,7 @@ impl CaptureWatch {
         let (stop, stopped) = watch::channel(false);
         let (publish, counts) = watch::channel(Vec::new());
         let (walked, walks) = mpsc::unbounded_channel();
+        let (notices, noticed) = mpsc::unbounded_channel();
         #[cfg(test)]
         let observed = Arc::new(Observed::default());
         // Subscribed before the first reconciliation, so no change between
@@ -148,10 +162,11 @@ impl CaptureWatch {
             #[cfg(test)]
             observed: Arc::clone(&observed),
         };
-        let task = tokio::spawn(run.until_stopped(stopped, walks, scans, changes));
+        let task = tokio::spawn(run.until_stopped(stopped, walks, scans, changes, noticed));
         Self {
             stop,
             counts,
+            notices,
             task: Mutex::new(Some(task)),
             grace: settings.grace,
             #[cfg(test)]
@@ -172,6 +187,37 @@ impl CaptureWatch {
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<Vec<NewCaptureCount>> {
         self.counts.clone()
+    }
+
+    /// The removable volume holding `location` is about to be removed (the
+    /// desktop shell forwards Windows' query to remove it): release its
+    /// watcher and cancel its walk, and return once discovery holds no handle
+    /// on the volume, so the removal can go ahead.
+    ///
+    /// Until [`reattach`](Self::reattach) or [`gone`](Self::gone), the
+    /// location keeps the count it had, with `live: false`, and nothing
+    /// touches its root, a sweep included. Returns at once for a location that
+    /// is not watched, and once discovery stopped. Discovery handles one thing
+    /// at a time, so this also waits out a file-system call it is making.
+    pub async fn release(&self, location: Uuid) {
+        let (released, done) = oneshot::channel();
+        if self.notices.send(Notice::Release { location, released }).is_ok() {
+            // Closed: discovery stopped, which released everything.
+            let _ = done.await;
+        }
+    }
+
+    /// The removal [`release`](Self::release) made way for did not happen:
+    /// watch `location` again and walk it for what arrived meanwhile.
+    pub fn reattach(&self, location: Uuid) {
+        let _ = self.notices.send(Notice::Reattach(location));
+    }
+
+    /// The volume holding `location` was removed: stop counting it now
+    /// rather than at the next sweep, which starts it again once its root is
+    /// back.
+    pub fn gone(&self, location: Uuid) {
+        let _ = self.notices.send(Notice::Gone(location));
     }
 
     /// Stop discovery and return once every watcher is released, or once the
@@ -365,6 +411,8 @@ struct Walk {
     canceled: Arc<AtomicBool>,
     /// Paths live events named while it ran, checked again after it.
     touched: HashSet<PathBuf>,
+    /// Resolves, closed, once its listing made its last file-system call.
+    listed: Option<oneshot::Receiver<()>>,
 }
 
 impl Drop for Walk {
@@ -380,6 +428,18 @@ struct Walked {
     walk: u64,
     known: Result<Vec<NativePath>, LibraryError>,
     listing: Result<Listing, LibraryError>,
+}
+
+/// What the desktop shell reports about the removable volume holding a
+/// location; see [`CaptureWatch::release`].
+enum Notice {
+    /// The volume is about to be removed: once nothing holds a handle on it,
+    /// `released` is sent.
+    Release { location: Uuid, released: oneshot::Sender<()> },
+    /// The removal did not happen.
+    Reattach(Uuid),
+    /// The volume was removed.
+    Gone(Uuid),
 }
 
 /// An online Captures location being counted.
@@ -405,6 +465,9 @@ struct Watched {
     listed: bool,
     /// The catalog's paths were read: with `listed`, the count is known.
     cataloged: bool,
+    /// Its volume is being removed ([`CaptureWatch::release`]): it holds no
+    /// watcher or walk, and nothing touches its root.
+    released: bool,
 }
 
 impl Watched {
@@ -599,6 +662,7 @@ impl Run {
         mut walks: mpsc::UnboundedReceiver<Walked>,
         mut scans: broadcast::Receiver<ScanOperation>,
         mut changes: broadcast::Receiver<Uuid>,
+        mut notices: mpsc::UnboundedReceiver<Notice>,
     ) {
         self.reconcile(true).await;
         self.publish();
@@ -610,6 +674,7 @@ impl Run {
             tokio::select! {
                 () = stopped(&mut stop) => break,
                 Some(walked) = walks.recv() => self.walked(walked).await,
+                Some(notice) = notices.recv() => self.noticed(notice).await,
                 change = changes.recv() => match change {
                     Ok(_) | Err(RecvError::Lagged(_)) => self.reconcile(false).await,
                     Err(RecvError::Closed) => break,
@@ -669,14 +734,15 @@ impl Run {
 
     /// Keep, release or start one Active Captures location. Outside a sweep
     /// only locations not seen before are checked; a sweep also restarts a
-    /// watcher that did not fully start.
+    /// watcher that did not fully start. A released location's root is not
+    /// touched.
     async fn follow(&mut self, location: Location, sweep: bool) {
         let id = location.id;
-        let refused = if self.locations.contains_key(&id) {
-            if !sweep || self.unchanged(id).await {
+        let refused = if let Some(released) = self.locations.get(&id).map(|w| w.released) {
+            if !sweep || released || self.unchanged(id).await {
                 if let Some(watched) = self.locations.get_mut(&id) {
                     watched.location = location;
-                    if sweep {
+                    if sweep && !released {
                         watched.retry_watcher();
                     }
                 }
@@ -745,6 +811,7 @@ impl Run {
                 recount: false,
                 listed: false,
                 cataloged: false,
+                released: false,
             },
         );
         self.walk(id);
@@ -757,6 +824,51 @@ impl Run {
             tracing::info!(location = %id, "new captures: root went away; watch released");
             self.offline.insert(id, Offline { location: watched.location, refused: None });
         }
+    }
+
+    /// Apply what the desktop shell reported about a location's volume.
+    async fn noticed(&mut self, notice: Notice) {
+        match notice {
+            Notice::Release { location, released } => self.release(location, released),
+            Notice::Reattach(location) => self.reattach(location).await,
+            Notice::Gone(location) => self.go_offline(location),
+        }
+    }
+
+    /// Release every handle discovery holds on `id`'s volume, its watcher and
+    /// its walk in flight, then send `released`. Discovery's other file-system
+    /// calls are awaited where they are made, so none is in flight here.
+    fn release(&mut self, id: Uuid, released: oneshot::Sender<()>) {
+        let Some(watched) = self.locations.get_mut(&id) else {
+            let _ = released.send(());
+            return;
+        };
+        tracing::info!(location = %id, "new captures: volume to be removed; watch released");
+        watched.released = true;
+        watched.rescan = false;
+        let live = watched.live.take();
+        // Dropping the walk cancels it: its listing stops at the next folder.
+        let listed = watched.walk.take().and_then(|mut walk| walk.listed.take());
+        tokio::spawn(async move {
+            if let Some(listed) = listed {
+                let _ = listed.await;
+            }
+            if let Some(live) = live {
+                let _ = tokio::task::spawn_blocking(move || drop(live)).await;
+            }
+            let _ = released.send(());
+        });
+    }
+
+    /// The removal a release made way for did not happen: watch the location
+    /// again and walk it.
+    async fn reattach(&mut self, id: Uuid) {
+        let Some(watched) = self.locations.get_mut(&id).filter(|watched| watched.released) else {
+            return;
+        };
+        watched.released = false;
+        tracing::info!(location = %id, "new captures: volume stays; watched again");
+        self.rescan(id).await;
     }
 
     /// The root's continuity stamp, from a `stat` on a blocking thread; `None`
@@ -824,8 +936,13 @@ impl Run {
         self.next_walk += 1;
         let walk = self.next_walk;
         let canceled = Arc::new(AtomicBool::new(false));
-        watched.walk =
-            Some(Walk { id: walk, canceled: Arc::clone(&canceled), touched: HashSet::new() });
+        let (ends, listed) = oneshot::channel::<()>();
+        watched.walk = Some(Walk {
+            id: walk,
+            canceled: Arc::clone(&canceled),
+            touched: HashSet::new(),
+            listed: Some(listed),
+        });
         watched.rescan = false;
         watched.recount = false;
         #[cfg(test)]
@@ -836,7 +953,12 @@ impl Run {
         let sender = self.walked.clone();
         tokio::spawn(async move {
             let known = library.catalog().location_asset_paths(id).await;
-            let listing = blocking(move || probe.list(&root, stamp, &canceled)).await;
+            let listing = blocking(move || {
+                // Dropped once the listing returned, which closes `listed`.
+                let _ends = ends;
+                probe.list(&root, stamp, &canceled)
+            })
+            .await;
             let _ = sender.send(Walked { location: id, walk, known, listing });
         });
     }
@@ -954,8 +1076,12 @@ impl Run {
         }
     }
 
-    /// Restart a location's watcher over its current folders and walk it.
+    /// Restart a location's watcher over its current folders and walk it; a
+    /// released location waits for its reattachment.
     async fn rescan(&mut self, id: Uuid) {
+        if self.locations.get(&id).is_none_or(|watched| watched.released) {
+            return;
+        }
         if !self.unchanged(id).await {
             self.go_offline(id);
             return;

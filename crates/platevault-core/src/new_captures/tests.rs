@@ -753,6 +753,82 @@ async fn a_refused_root_is_not_queried_again_until_it_changes() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_released_location_touches_its_volume_no_more_until_reattached() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    let probe = Arc::new(Probe::default());
+    let watch = probed(&fx.library, &probe);
+    count_is(&watch, location.id, 1).await;
+
+    // Its drive is about to be ejected: released before this returns.
+    watch.release(location.id).await;
+    assert_eq!(watchers(&watch), 0, "no watcher holds the volume");
+    let counts = until(&watch, |counts| counts.iter().all(|count| !count.live)).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: false }]);
+    // No sweep or event touches the root meanwhile.
+    let touched = |probe: &Probe| {
+        (probe.stats.load(Ordering::SeqCst), probe.watches.load(Ordering::SeqCst))
+    };
+    let (before, walked) = (touched(&probe), walks(&watch));
+    frame(&root.join("Ha_002.fits"));
+    after(&watch, sweeps, 2).await;
+    assert_eq!((touched(&probe), walks(&watch)), (before, walked));
+    assert_eq!(new_files(&watch.counts(), location.id), Some(1));
+
+    // The eject was refused: watched again, with what arrived meanwhile.
+    watch.reattach(location.id);
+    let counts = count_is(&watch, location.id, 2).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 2, live: true }]);
+    watchers_are(&watch, 1).await;
+    frame(&root.join("Ha_003.fits"));
+    count_is(&watch, location.id, 3).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_returns_once_the_walk_in_flight_ended() {
+    let fx = fixture().await;
+    let location = captures(&fx.library, &fx.base.join("Captures")).await;
+    let probe = Arc::new(Probe::default());
+    let _opens = Opens(&probe.list_gate);
+    probe.list_gate.close();
+    let watch = probed(&fx.library, &probe);
+    holding(&probe.list_gate).await;
+
+    // The start-up walk still lists the volume: the release waits for it.
+    let release = watch.release(location.id);
+    tokio::pin!(release);
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while a walk still listed the volume");
+    probe.list_gate.open();
+    tokio::time::timeout(Duration::from_secs(5), release).await.expect("released after the walk");
+    assert_eq!(watchers(&watch), 0);
+    after(&watch, sweeps, 1).await;
+    assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new(), "its walk never counted");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_removed_volume_goes_offline_at_once_and_returns_at_a_sweep() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 0).await;
+
+    // Ejected: gone without waiting for a sweep to find the root missing,
+    // even though the root is still there.
+    watch.release(location.id).await;
+    watch.gone(location.id);
+    until(&watch, <[NewCaptureCount]>::is_empty).await;
+    assert_eq!(watchers(&watch), 0);
+    // Plugged back in: the next sweep starts it again.
+    frame(&root.join("Ha_001.fits"));
+    count_is(&watch, location.id, 1).await;
+    watchers_are(&watch, 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn no_watcher_outlives_shutdown_or_the_handle() {
     let fx = fixture().await;
     let first = captures(&fx.library, &fx.base.join("Captures A")).await;

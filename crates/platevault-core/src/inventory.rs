@@ -281,7 +281,8 @@ pub(crate) struct Listing {
 /// link, junction or nested foreign volume is entered) without reading a
 /// header: the files the next scan of the location reads. A folder below
 /// the root that cannot be listed is skipped, as a scan would name it
-/// incomplete. Cancellation ends the listing with what it found.
+/// incomplete. Cancellation ends the listing with what it found; a listing
+/// canceled before it starts touches nothing.
 ///
 /// The root's stamp is checked before and after the listing, as a scan
 /// checks it before its final batch: a drive pulled mid-walk leaves its
@@ -295,6 +296,9 @@ pub(crate) fn frame_paths(
     stamp: RootStamp,
     canceled: &AtomicBool,
 ) -> Result<Listing, LibraryError> {
+    if canceled.load(Ordering::Acquire) {
+        return Ok(Listing::default());
+    }
     still_root(root, stamp)?;
     let mut listed = Listing::default();
     let mut pending = vec![PathBuf::new()];
