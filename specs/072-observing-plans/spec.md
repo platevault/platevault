@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W63 settled by the user that day. Tags such as (D-W16) name the decision a requirement follows.
+**Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W63 settled by the user that day, on 2026-10-12 to 2026-10-14 to the Round 9 decisions D-W87 to D-W89, and on 2026-10-14 to the F4 Project model, D-W93 to D-W106. Tags such as (D-W16) name the decision a requirement follows.
 
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
@@ -24,7 +24,7 @@ Astronomical windows for a Target from a chosen planning site, opt-in reminders 
 
 **Acceptance Scenarios**:
 
-- **PLAN-AC-01**: Given Backyard as default and a second saved site, when the planning site is switched, then windows recalculate for that site and time zone. Project subjects, the sessions in each processing run (View), and session capture sites are unchanged. (D-W16)
+- **PLAN-AC-01**: Given Backyard as default and a second saved site, when the planning site is switched, then windows recalculate for that site and time zone. Project subjects, the sessions each Project holds and session capture sites are unchanged. (D-W16, D-W94)
 - **PLAN-AC-02**: Given reminders enabled at Backyard, when the user plans at another site, then no reminder is scheduled for that site and every reminder names Backyard.
 - **PLAN-AC-03**: Given selected windows, when the calendar is exported, then the .ics holds exactly the confirmed windows with the displayed site and time zone; later criteria changes leave the saved file unchanged.
 - **PLAN-AC-04**: Given no default site, when Enable notifications is chosen, then the user is directed to set one and no reminder is scheduled without a named site.
@@ -71,11 +71,11 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 
 ### User Story 3 - Equipment: rigs compose a camera, a telescope and filters (Priority: P2)
 
-In Settings > Equipment the user keeps cameras, telescopes and filters as their own records, and each rig (optical train) selects one camera, one telescope and the filters it uses. A rig's filters drive the Targets band strip, the Targets narrowband presets and the Fit column's rig. A filter name in a FITS header that matches no filter on the rig prompts the user to add a filter to it.
+In Settings > Equipment the user keeps cameras, telescopes and filters as their own records, and each rig (optical train) selects one camera, one telescope and the filters it uses. A rig's filters drive the Targets band strip, the Targets narrowband presets and the Fit column's rig. A filter name in a FITS header that matches no filter on the rig prompts the user to add a filter to it. Editing a rig creates a dated rig version, and each session keeps the version it was captured with. Cameras of the same model are told apart by alias, and a camera can be set to "Don't use darks" or "Don't use bias".
 
 **Why this priority**: Without the rig's filters, the Targets band strip and presets would offer bands the user cannot capture (D-W23, D-W31).
 
-**Independent Test**: Configure fixture rigs with mono and OSC cameras, index sessions with known and unknown FILTER values, and check the Equipment page, the prompt and the Targets page.
+**Independent Test**: Configure fixture rigs with mono and OSC cameras, index sessions with known and unknown FILTER values, and check the Equipment page, the prompt and the Targets page. Edit a rig between two capture nights, add a second camera of one model, and set a camera to "Don't use darks", then check the sessions' rig versions and calibration states.
 
 **Acceptance Scenarios**:
 
@@ -86,6 +86,10 @@ In Settings > Equipment the user keeps cameras, telescopes and filters as their 
 - **PLAN-EQ-AC-05**: Given two rigs with different filters, when Settings > Goal templates opens, then the same templates are listed whichever rig is selected anywhere in the app. (D-W30, D-W31)
 - **PLAN-EQ-AC-06**: Given saving a rig or a filter fails, then the edit remains visibly unsaved with Retry and the previous record stays in effect. (D-W31, D-W87)
 - **PLAN-EQ-AC-07**: Given camera ASI2600MM used by two rigs, when the user edits a rig, then the rig editor offers only the choice of camera, telescope and filters and no camera or telescope property. The camera's Used by shows a popover listing both rigs, each linking to it. (D-W87)
+- **PLAN-EQ-AC-08**: Given rig RedCat at version 1, with light sessions of 1 Oct and 5 Oct pinned to the flats of 1 Oct, when the user edits the rig and the new version starts on 8 Oct, then RedCat lists both versions with their start dates. The 1 Oct and 5 Oct sessions still record version 1 and keep their flats. A session captured on 9 Oct records version 2: the 1 Oct flats are not offered for it, and its darks and bias still match by camera. (D-W102, D-W104)
+- **PLAN-EQ-AC-09**: Given the same rig, when the user edits it and dates the new version 3 Oct, then the 5 Oct session still records version 1 and keeps its flats, and no Project that holds it gets a pending change. This is provisional. (D-W104)
+- **PLAN-EQ-AC-10**: Given one camera of model ASI2600MM, when darks of that model are imported, then they match its sessions with no question. When the user adds a second ASI2600MM, Settings > Equipment asks for an alias for each of the two and refuses to save while an alias is missing or another camera uses it. With aliases `ASI2600 A` and `ASI2600 B`, Import asks which camera took the next ASI2600MM darks, and a session from a rig with `ASI2600 A` is matched only to darks and bias linked to `ASI2600 A`. (D-W104)
+- **PLAN-EQ-AC-11**: Given camera ASI533MC set to "Don't use darks", when a session from a rig with that camera is ingested, then its darks read No darks with no warning, no dark is matched or suggested, and the session counts as settled for darks. When the user pins a dark on that session, it keeps the dark, and the camera's other sessions stay No darks. (D-W104, D-W105)
 
 ### Edge Cases
 
@@ -100,8 +104,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
 ### Functional Requirements
 
-- **PLAN-FR-01**: Saved sites and a default site are set in Settings. The planning-site selector is independent of Projects and capture sites; changing it never alters Project subjects, run sessions or session sites. (D-W16)
-- **PLAN-FR-02**: A Target's Plan area sets altitude, darkness, Moon and minimum-duration criteria. The Moon criterion is one Moon-avoidance curve per filter: the separation it requires from the Moon is greatest at full Moon and shrinks as the Moon dims (the Lorentzian curve of ACP and Target Scheduler; R10-MOON-MODEL.md on `ui-harness-v5`). A sample counts when the Moon is below the horizon or at least that far away. Windows, Img time and band grades all use the same curve. Windows show their site and time-zone basis, and the active planning site is shown. Each open Project that has the Target as a subject shows its per-channel goal gap beside coverage. The gap names its "in project" and "captured" amounts with those labels. For a mosaic subject, the Plan area lists each of its panels. (D-W16, D-W36, D-W63, D-W88)
+- **PLAN-FR-01**: Saved sites and a default site are set in Settings. The planning-site selector is independent of Projects and capture sites; changing it never alters Project subjects, the sessions a Project holds or session sites. (D-W16, D-W94)
+- **PLAN-FR-02**: A Target's Plan area sets altitude, darkness, Moon and minimum-duration criteria. The Moon criterion is one Moon-avoidance curve per filter: the separation it requires from the Moon is greatest at full Moon and shrinks as the Moon dims (the Lorentzian curve of ACP and Target Scheduler; R10-MOON-MODEL.md on `ui-harness-v5`). A sample counts when the Moon is below the horizon or at least that far away. Windows, Img time and band grades all use the same curve. Windows show their site and time-zone basis, and the active planning site is shown. Each open Project that has the Target as a subject shows its per-channel goal gap beside coverage. The gap names its "in project" and "captured" amounts with those labels. In a mosaic Project the gap shows per panel group, because each panel keeps its own goals (PRJ-FR-03, PRJ-FR-29). (D-W16, D-W88, D-W95, D-W96)
 - **PLAN-FR-03**: Mark Planned and Enable notifications are explicit opt-ins. Reminders use the displayed default site, and every reminder names it. Planning elsewhere never enables reminders there. Enabling reminders starts no indexing or image processing.
 - **PLAN-FR-04**: Export calendar confirms site, date range, time zone, and selected windows, then saves an .ics file through the native save dialog as a one-time snapshot.
 - **PLAN-FR-05**: Suitability is astronomical only: no weather, equipment, or processing-readiness claims, and no provider account or authorization.
@@ -115,7 +119,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - the Moon's illumination, phase, rise and set;
   - tonight's darkness window.
 
-  Each value names its site and time zone. When no goal suits tonight, Tonight gives the date of the next good night. A mosaic subject's window uses the mosaic's center. The same computation tells Home whether a subject has a window tonight. The user changes the site on Targets. Home has no site control. (D-W35, D-W39, D-W63, D-W88, D-W89)
+  Each value names its site and time zone. When no goal suits tonight, Tonight gives the date of the next good night. Provisional: a panel group's goals are graded from the subject's window, like any other goal. The same computation tells Home whether a subject has a window tonight. The user changes the site on Targets. Home has no site control. (D-W35, D-W39, D-W88, D-W89, D-W95)
 - **PLAN-FR-12**: The calendar supplies Home's calendar for the default site: five weeks of nights starting this week. Each night has its Moon phase, its hours of darkness, the number of unfinished goals it suits and the number of Targets marked Planned for it. Hovering over or focusing a night opens a card with its dark window, the Moon's illumination, rise and set, the goals it suits best first, the goals the Moon rules out, and the planned Targets. Choosing a night opens Targets set to that night (PLAN-TGT-FR-16). (D-W88, D-W89)
 
 #### Targets list
@@ -168,22 +172,24 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-EQ-FR-04**: When a session's FILTER header value matches no filter on its confirmed rig, the session shows the filter as unknown and offers "Add {value} to {rig}". Settings > Equipment lists the unknown values seen per rig. Adding asks for the bands the filter passes, creates a filter record that matches the value and selects it in the rig; header bytes and observed evidence stay unchanged. Declining leaves the value unknown and the prompt available. (D-W31, D-W87)
 - **PLAN-EQ-FR-05**: A rig's field of view comes from its camera's sensor size and pixel size and its telescope's focal length. When any of these is unknown, the field of view is unknown and Fit says so. (D-W23, D-W87)
 - **PLAN-EQ-FR-06**: A failed save of a rig or an equipment record stays visibly unsaved with Retry, and the last saved record stays in effect. (D-W31, D-W87)
+- **PLAN-EQ-FR-07**: Editing a rig creates a new rig version that starts on a date, and the rig lists its versions with their start dates. Each session records the version it was captured with (LIB-FR-26). Versions never invalidate anything retroactively: a new version never changes a session's recorded version, its pinned calibration or its group. Provisional: a version dated before an existing session leaves that session's version unchanged as well. A version change affects flats only: flats of an earlier version never match a session of a later one (CAL-FR-19), darks and bias follow the camera (PLAN-EQ-FR-08), and a new version starts a new group only when the optics change (PRJ-FR-10). (D-W102, D-W104)
+- **PLAN-EQ-FR-08**: Darks and bias match a session by its camera (CAL-FR-21). When the rigs hold only one camera of a model, darks and bias of that model match it automatically. With two or more cameras of one model, each needs an alias that no other camera uses, and Settings > Equipment refuses to save one without it. Import then links darks and bias of that model to one of those cameras, and a camera the user confirms at import counts as the explicit match (LIB-FR-26). A camera can be set to "Don't use darks" or "Don't use bias": its sessions are then settled as No darks or No bias automatically, with no warning, and the user can override that per session (CAL-FR-22). (D-W104, D-W105)
 
 ### Owned interaction steps
 
 - B3
 - K
 - Targets list: Show mode, search with Add to targets, columns, presets and rig selector (D-W17, D-W18, D-W19, D-W23, D-W37)
-- Settings > Equipment: cameras, telescopes, filters and rigs, and the unknown-filter prompt (D-W31, D-W87)
+- Settings > Equipment: cameras, telescopes, filters and rigs, rig versions, camera aliases and defaults, and the unknown-filter prompt (D-W31, D-W87, D-W104)
 - Tonight and calendar data for Home (D-W39, D-W89)
 
 ### Key Entities
 
 Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). Feature-specific evidence and decisions retain their input identity, scope, and revision.
 
-- **Processing run (View)**: the root View; this spec calls it a run. Planning never changes which sessions a run holds.
+- **Rig version**: a dated version of a rig. Each session records the one it was captured with, and only flats depend on it. (D-W102, D-W104)
 - **My targets**: the Targets the user has marked ★, plus every subject of an open Project, shown with its Project badge. (D-W60)
-- **Rig**: an optical train from Settings > Equipment that selects one camera, one telescope and its filters; its field of view follows from them.
+- **Rig**: an optical train from Settings > Equipment that selects one camera, one telescope and its filters; its field of view follows from them. Editing it creates a rig version.
 - **Filter**: an Equipment record with a name, matched FITS FILTER values and passed bands, which rigs select. (D-W87)
 - **Targets preset**: a named set of Targets list filters, either built in or saved by the user.
 - **Tonight**: the default site's grades for tonight for every unfinished goal, with the Moon and the darkness window.
@@ -204,13 +210,14 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - [Product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the confirmed interactions and illustrative worked example.
 - This feature is independently specified; dependencies on other feature contracts are resolved in planning.
 - Conservative defaults and all human-approval gate waivers follow the root autonomous objective and decision register. Tests, requirements analysis, independent review and delivery evidence remain mandatory.
-- A Project's rigs (D-W37), Project subjects and goals (D-W9, D-W29, D-W36) and the Project Closed state (D-W26, D-W46) are defined by the Project feature; this feature reads them.
+- A Project's subjects and rig list, which only find its suggestions (D-W94, D-W96), its goals (D-W29, D-W90, D-W96) and its Closed state (D-W97) are defined by the Project feature; this feature reads them.
 
 ## Decisions before feature approval
 
 - Root decisions D07 and D18 define opt-in reminders, explicit site/criteria/lead time, repeat suppression, permission recovery, honest scheduler capability and shared scientific calculations. Scheduler delivery claims require real platform evidence.
 - Root decision D19 has no PLAN consumer: no planning path consumes a recorded file, and calendar export writes computed windows.
-- Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, D-W63 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W36, D-W43 and D-W46 are read here where they constrain this feature's outputs.
+- Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W43, D-W96 and D-W97 are read here where they constrain this feature's outputs.
 - Workflow decision D-W87 (Round 9 user item astro-plan-ngm9g, 2026-10-12) supersedes D-W31's ownership: filters, cameras and telescopes are their own Equipment records, and a rig selects them. The rest of D-W31 still applies, and the unknown-filter prompt now adds a filter record to the rig.
 - Workflow decision D-W88 (Round 9 C2 and C6, C8, user items, 2026-10-12 to 2026-10-13) sets one Moon-avoidance curve per filter for windows, Img time and grades, renames "Good tonight for" to Suitable filters with several bands, adds the night picker, moves saved presets into a Custom presets dropdown and makes the reminder lead time free entry with units, longer than 30 minutes. The owner's answers of 2026-10-14 let a Target qualify when any chosen band suits, sort by the longest clear time, set the default lead time to a user setting of 12 hours, and gather reminders missed while the app was closed into Activity and one start-up notice.
 - Workflow decision D-W89 (Round 9 C8 and decision astro-plan-b66vy, 2026-10-13) supersedes section 4 of D-W39: Home's Tonight holds the unfinished goals graded for tonight, and PV-PLAN also supplies Home's five-week calendar.
+- Workflow decisions D-W94, D-W95 and D-W104 (the F4 Project model, owner, 2026-10-14) replace runs with Projects, replace mosaic subjects and D-W63's mosaic centre with panel groups, and add rig versions, camera aliases and the per-camera "Don't use darks" and "Don't use bias" defaults (PLAN-EQ-FR-07, PLAN-EQ-FR-08). Provisional: a version dated before an existing session leaves it unchanged, and a panel group's goals are graded from the subject's window.
