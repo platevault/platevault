@@ -27,6 +27,7 @@
 //! `NeedsRescan`. Both report an OS watcher error, an OS lost-events notice
 //! and a full channel (through the overflow flag) for a rescan.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -35,7 +36,7 @@ use notify::event::ModifyKind;
 use notify::{Event, EventKind, RecommendedWatcher};
 use tokio::sync::mpsc;
 
-use crate::notify_bridge::SimpleEventKind;
+use crate::notify_bridge::{SimpleEventKind, WatchRegistrationReport};
 
 /// A filesystem event forwarded to the async consumer.
 #[derive(Clone, Debug)]
@@ -106,6 +107,22 @@ pub fn start_artifact_watcher(
     follow_symlinks: bool,
 ) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
     start(paths, channel_capacity, follow_symlinks, NewFolders::Skip)
+        .map(|(events, guard, _)| (events, guard))
+}
+
+/// A watcher [`start_tree_watcher`] started.
+pub struct TreeWatch {
+    pub events: mpsc::Receiver<ArtifactFileEvent>,
+    /// Drop it to stop watching.
+    pub guard: WatcherGuard,
+    /// Every real folder found below the watched paths as the watcher
+    /// started, watched or not. A folder created after its parent was listed
+    /// is missing, and nothing reports it: a walk that starts once the watcher
+    /// started finds it, and the consumer then restarts the watcher.
+    pub folders: Vec<PathBuf>,
+    /// How many of `folders` the OS refused to watch: no event arrives from
+    /// them.
+    pub unwatched: usize,
 }
 
 /// Start a watcher over every real folder below `paths`, never following a
@@ -115,7 +132,9 @@ pub fn start_artifact_watcher(
 /// `follow_symlinks` off), so a folder created or moved in below `paths` is
 /// not watched yet: it is reported as [`ArtifactEventKind::NeedsRescan`], and
 /// the consumer restarts the watcher over the new folder set and walks the
-/// tree for the files the new folder already holds.
+/// tree for the files the new folder already holds. The folders are listed
+/// before they are registered, in one batch; one created in between is
+/// missing from [`TreeWatch::folders`].
 ///
 /// # Errors
 ///
@@ -123,8 +142,12 @@ pub fn start_artifact_watcher(
 pub fn start_tree_watcher(
     paths: &[Utf8PathBuf],
     channel_capacity: usize,
-) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
-    start(paths, channel_capacity, false, NewFolders::Rescan)
+) -> Result<TreeWatch, String> {
+    let (events, guard, report) = start(paths, channel_capacity, false, NewFolders::Rescan)?;
+    let unwatched = report.skipped.len();
+    let mut folders = report.watched;
+    folders.extend(report.skipped.into_iter().map(|(folder, _)| folder));
+    Ok(TreeWatch { events, guard, folders, unwatched })
 }
 
 /// What a folder created or moved in below a watched path signals.
@@ -202,7 +225,7 @@ fn start(
     channel_capacity: usize,
     follow_symlinks: bool,
     new_folders: NewFolders,
-) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
+) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard, WatchRegistrationReport), String> {
     let (tx, rx) = mpsc::channel::<ArtifactFileEvent>(channel_capacity);
     let tx = Arc::new(tx);
     let handler_tx = Arc::clone(&tx);
@@ -238,7 +261,7 @@ fn start(
     }
 
     let guard = WatcherGuard { _watcher: watcher, _tx: tx, overflow_flag };
-    Ok((rx, guard))
+    Ok((rx, guard, report))
 }
 
 #[cfg(test)]
@@ -275,7 +298,8 @@ mod tests {
     async fn tree_watcher_reports_a_new_folder_for_a_rescan() {
         let dir = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
-        let (mut rx, _guard) = start_tree_watcher(std::slice::from_ref(&root), 64).unwrap();
+        let TreeWatch { events: mut rx, guard: _guard, .. } =
+            start_tree_watcher(std::slice::from_ref(&root), 64).unwrap();
 
         std::fs::create_dir(root.join("2026-10-14")).unwrap();
 
@@ -284,6 +308,31 @@ mod tests {
         })
         .await;
         assert!(rescan.is_some(), "a new folder below the root must ask for a rescan");
+    }
+
+    /// One batch registers every folder of a tree (one `FSEvents` restart on
+    /// macOS): the watcher names each folder it listed, and the deepest one
+    /// delivers events.
+    #[tokio::test]
+    async fn tree_watcher_lists_and_watches_every_folder_of_a_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        let deepest = (0..20).fold(root.clone(), |folder, depth| folder.join(format!("d{depth}")));
+        std::fs::create_dir_all(&deepest).unwrap();
+        for night in 0..40 {
+            std::fs::create_dir(root.join(format!("night-{night:02}"))).unwrap();
+        }
+
+        let TreeWatch { events: mut rx, guard: _guard, folders, unwatched } =
+            start_tree_watcher(std::slice::from_ref(&root), 64).unwrap();
+        assert_eq!((folders.len(), unwatched), (1 + 20 + 40, 0));
+        assert!(folders.contains(&deepest.clone().into_std_path_buf()));
+
+        let frame = deepest.join("Ha_001.fits");
+        std::fs::write(&frame, b"data").unwrap();
+        let created =
+            first_event(&mut rx, std::time::Duration::from_secs(3), |evt| evt.path == frame).await;
+        assert!(created.is_some(), "the deepest folder of the batch is watched");
     }
 
     #[tokio::test]

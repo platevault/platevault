@@ -68,6 +68,11 @@ pub struct WatchRegistrationReport {
 /// [`fs_pathsafe::real_dirs_under`] and every real (non-link) subdirectory is
 /// watched individually with `RecursiveMode::NonRecursive`.
 ///
+/// Every path is registered in one batch ([`Watcher::paths_mut`]): `FSEvents`
+/// (macOS) stops its stream once and restarts it once with every path, where
+/// one `watch` call per folder restarted it once per folder. The other
+/// backends register each path as it is added.
+///
 /// When `fail_fast` is `true`, the first per-directory error aborts the entire
 /// registration (backwards-compatible with root-path failures). When `false`,
 /// per-subdirectory failures are collected in `WatchRegistrationReport::skipped`
@@ -75,8 +80,9 @@ pub struct WatchRegistrationReport {
 ///
 /// # Errors
 ///
-/// Returns an error string if a root path cannot be watched (always fatal) or
-/// if any subdirectory fails when `fail_fast` is `true`.
+/// Returns an error string if a root path cannot be watched (always fatal), if
+/// any subdirectory fails when `fail_fast` is `true`, or if the batch cannot
+/// be applied. The watcher is then left unspecified: drop it.
 pub fn register_watch_paths(
     watcher: &mut RecommendedWatcher,
     paths: &[Utf8PathBuf],
@@ -84,11 +90,12 @@ pub fn register_watch_paths(
     fail_fast: bool,
 ) -> Result<WatchRegistrationReport, String> {
     let mut report = WatchRegistrationReport::default();
+    let mut batch = watcher.paths_mut();
 
     for path in paths {
         if follow_symlinks {
-            watcher
-                .watch(path.as_std_path(), RecursiveMode::Recursive)
+            batch
+                .add(path.as_std_path(), RecursiveMode::Recursive)
                 .map_err(|e| format!("failed to watch {path}: {e}"))?;
             report.watched.push(path.as_std_path().to_path_buf());
             continue;
@@ -119,7 +126,7 @@ pub fn register_watch_paths(
         // root itself, there is nothing useful the watcher can do.
         let mut is_root = true;
         for dir in dirs {
-            match watcher.watch(&dir, RecursiveMode::NonRecursive) {
+            match batch.add(&dir, RecursiveMode::NonRecursive) {
                 Ok(()) => {
                     report.watched.push(dir);
                 }
@@ -135,6 +142,7 @@ pub fn register_watch_paths(
         }
     }
 
+    batch.commit().map_err(|e| format!("failed to start watching: {e}"))?;
     Ok(report)
 }
 

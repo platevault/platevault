@@ -59,7 +59,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fs_inventory::artifact_watcher::{
-    start_tree_watcher, ArtifactEventKind, ArtifactFileEvent, WatcherGuard,
+    start_tree_watcher, ArtifactEventKind, ArtifactFileEvent, TreeWatch, WatcherGuard,
 };
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::{mpsc, watch};
@@ -645,7 +645,7 @@ impl Run {
         })
         .await
         .unwrap_or_else(|interrupted| Err(interrupted.to_string()));
-        let (events, guard) = started
+        let TreeWatch { events, guard, .. } = started
             .inspect_err(|error| {
                 tracing::warn!(root = %root.display(), %error, "new captures: watcher did not start");
             })
