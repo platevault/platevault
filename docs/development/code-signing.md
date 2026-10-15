@@ -2,7 +2,7 @@
 
 PlateVault's Windows and macOS release artifacts are unsigned by their
 platform's native code-signing mechanism. Both already carry a minisign
-signature consumed by `tauri-plugin-updater`
+signature consumed by the in-app updater (`crates/desktop/services/src/update`)
 (`TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]`), but that signature is invisible to
 the OS itself — Windows SmartScreen/UAC and macOS Gatekeeper still flag the
 app as untrusted because there is no Authenticode or Developer ID signature.
@@ -94,7 +94,7 @@ The two signatures do different jobs, but on Windows they cover the **same
 file**, so the order matters:
 
 - **minisign** (`TAURI_SIGNING_PRIVATE_KEY`) signs the updater payload that
-  `tauri-plugin-updater` verifies against the embedded public key in
+  the in-app updater verifies against the embedded public key in
   `tauri.conf.json`, gating in-app auto-update installs. Already active.
 - **Authenticode** (SignPath) signs the `.exe`/`.msi` binary itself so Windows
   SmartScreen and the OS installer UI show a trusted publisher instead of
@@ -125,8 +125,11 @@ The `updater-manifest` job writes that file once per release, after every
   later write a `version:` field) was made for the manifest's `version`,
   ignoring a leading `v`. A signature without the field is accepted.
 
-Together these are the checks tauri-plugin-updater 2.13 runs before it
-installs an update with `requireSignedVersion` off, PlateVault's setting. A
+Together these are the checks the in-app updater runs before it installs an
+update (`crates/desktop/services/src/update/signature.rs`; tauri-plugin-updater
+2.13 in 0.6.x installs runs the same ones) with `requireSignedVersion` off,
+PlateVault's setting. The in-app updater accepts prehashed `ED` signatures
+only, which `tauri build` writes, so the gate rejects the legacy `Ed` form. A
 signed version that differs from the manifest is rejected whatever that
 setting says; it only decides whether a signature without one is rejected.
 

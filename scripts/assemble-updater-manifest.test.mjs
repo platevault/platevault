@@ -239,6 +239,23 @@ function assemble(edit = () => {}) {
   assertProblem(problems, /^linux-x86_64-rpm: .* is not a minisign signature$/, 'a garbled signature is named');
 }
 
+// ── a legacy unhashed signature ─────────────────────────────────────────────
+// The services-crate client streams the payload and only verifies prehashed
+// `ED` signatures, so a legacy `Ed` one must not reach latest.json.
+{
+  const { manifest, problems } = assemble((files, key) => {
+    const name = 'PlateVault_0.7.0_amd64.AppImage';
+    const sig = sign(null, files[name], key.privateKey);
+    const trusted = `timestamp:1791820000\tfile:${name}`;
+    const globalSig = sign(null, Buffer.concat([sig, Buffer.from(trusted)]), key.privateKey);
+    const sigLine = Buffer.concat([Buffer.from('Ed', 'latin1'), key.keyId, sig]).toString('base64');
+    const box = `untrusted comment: legacy signature\n${sigLine}\ntrusted comment: ${trusted}\n${globalSig.toString('base64')}\n`;
+    files[`${name}.sig`] = Buffer.from(box).toString('base64');
+  });
+  assertEqual(manifest, null, 'no manifest with a legacy signature');
+  assertProblem(problems, /^linux-x86_64-appimage: .* uses the legacy unhashed minisign format/, 'the legacy signature is named');
+}
+
 // ── a bundle without its signature ──────────────────────────────────────────
 {
   const { problems } = assemble((files) => {

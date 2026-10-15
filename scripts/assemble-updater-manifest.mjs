@@ -16,12 +16,20 @@
  *   - Authenticode signing (`sign-windows`) rewrites the `.exe` and `.msi`, and
  *     those files are the Windows updater payloads. A minisign signature made
  *     before that no longer matches the bytes clients download, so every
- *     Windows update would fail. Now each signature is verified, as
- *     `tauri-plugin-updater` does, against the asset that is really on the
- *     release, using the public key the app embeds.
+ *     Windows update would fail. Now each signature is verified, as the
+ *     clients do, against the asset that is really on the release, using the
+ *     public key the app embeds.
  *
  * Each problem found is listed, and nothing is written unless the manifest is
  * complete and every signature verifies.
+ *
+ * One manifest serves every client (astro-plan-5wcib). The services-crate
+ * updater (crates/desktop/services/src/update), which replaces
+ * tauri-plugin-updater after 0.6.x, reads this same file, its keys and its
+ * signatures, with the same minisign key as the plugin in 0.5.x and 0.6.x
+ * installs. Every release keeps every UPDATER_BUNDLES key, so those installs
+ * reach the first release with the new client, or any later one, through this
+ * file, and there is no second manifest to retire.
  *
  * The output matches what tauri-action wrote for v0.5.0 (same keys, order and
  * download URLs), so installed clients see no change apart from the timing.
@@ -50,7 +58,8 @@ import { parseArgs } from 'node:util';
  * `PlateVault_aarch64.app.tar.gz` (v0) and `PlateVault_0.7.0_aarch64.app.tar.gz`
  * (v1). `primary` marks the bundle that also fills the bare `{os}-{arch}` key,
  * which clients fall back to after `{os}-{arch}-{bundle}`
- * (tauri-plugin-updater `get_urls`). tauri-action uses the AppImage on Linux
+ * (tauri-plugin-updater `get_urls`, and `Platform::manifest_keys` in the
+ * services crate). tauri-action uses the AppImage on Linux
  * and, with `updaterJsonPreferNsis`, the NSIS installer on Windows.
  */
 export const UPDATER_BUNDLES = [
@@ -105,11 +114,18 @@ function keyIdHex(keyId) {
 
 /**
  * Verify a `.sig` file's contents over `data` for the release `version`, with
- * the checks tauri-plugin-updater 2.13 (`verify_signature`) runs before it
- * installs anything: minisign-verify's `PublicKey::verify(data, signature,
- * allow_legacy = true)`, then the signed-version check with
- * `requireSignedVersion` off, which is PlateVault's setting.
- * Returns null when the signature holds, or the reason it does not.
+ * the checks every client runs before it installs anything, so a manifest
+ * this gate writes is one they all accept:
+ *   - the services-crate client (crates/desktop/services/src/update/signature.rs)
+ *     streams the payload through minisign-verify's `verify_stream`, which
+ *     takes prehashed `ED` signatures only;
+ *   - tauri-plugin-updater 2.10 and 2.13 in 0.5.x and 0.6.x installs
+ *     (`verify_signature`) also accept the legacy `Ed` form.
+ * Both then run the signed-version check, the plugin with
+ * `requireSignedVersion` off, which is PlateVault's setting. `tauri build`
+ * only writes `ED` signatures, so requiring `ED` here rejects nothing the
+ * release pipeline makes. Returns null when the signature holds, or the
+ * reason it does not.
  */
 export function verifySignature(data, base64Signature, publicKey, version) {
   let lines;
@@ -127,15 +143,18 @@ export function verifySignature(data, base64Signature, publicKey, version) {
     return 'is not a minisign signature';
   }
   const algorithm = sig.toString('latin1', 0, 2);
-  if (algorithm !== 'ED' && algorithm !== 'Ed') {
+  if (algorithm === 'Ed') {
+    return 'uses the legacy unhashed minisign format, which the in-app updater rejects (sign with `tauri signer sign`)';
+  }
+  if (algorithm !== 'ED') {
     return `uses unsupported algorithm "${algorithm}"`;
   }
   const keyId = sig.subarray(2, 10);
   if (!keyId.equals(publicKey.keyId)) {
     return `was made with key ${keyIdHex(keyId)}, but the app trusts key ${keyIdHex(publicKey.keyId)}`;
   }
-  // `ED` signs the BLAKE2b-512 digest of the file. Legacy `Ed` signs the file.
-  const message = algorithm === 'ED' ? createHash('blake2b512').update(data).digest() : data;
+  // `ED` signs the BLAKE2b-512 digest of the file.
+  const message = createHash('blake2b512').update(data).digest();
   if (!verify(null, message, publicKey.key, sig.subarray(10, 74))) {
     return 'does not verify over the asset on the release (was the file changed after it was signed?)';
   }
