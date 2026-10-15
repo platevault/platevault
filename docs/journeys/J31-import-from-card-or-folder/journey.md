@@ -1,13 +1,13 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [home, import, settings, naming, sessions, calibration, calibration-process, locations, activity, status-bar, issues, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 071-storage-custody, D19, D-W7, D-W11, D-W12, D-W20, D-W24, D-W33, D-W39, D-W58, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S13, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-CAL3, P-SB3, P-IMP2, apps/prototype/src/domain/devices.ts, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/a-home/import-model.ts, apps/prototype/src/features/v5/a-home/import-run.ts]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 068-calibration-inputs, 071-storage-custody, D19, D-W7, D-W11, D-W12, D-W20, D-W24, D-W33, D-W39, D-W58, D-W93, D-W94, D-W101, D-W102, D-W103, D-W104, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/068-calibration-inputs/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S13, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-CAL3, P-SB3, P-IMP2, apps/prototype/src/domain/devices.ts, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/a-home/import-model.ts, apps/prototype/src/features/v5/a-home/import-run.ts]
 ---
 
 ## Goal
@@ -16,14 +16,17 @@ The user brings new captures into the library the way Lightroom imports
 photos. They connect a capture device, whose capture layout PlateVault
 recognises, or pick a saved source, a folder or an OS-mounted network path.
 The preview lists each incoming light session with its Target, prefilled
-from its pointing, with OBJECT shown only as a hint. The user confirms the
-Target there, changes it, or picks Unclassified. They check the templated
+from its pointing, with OBJECT shown only as a hint, and each session's darks, flats and bias
+as pinned automatically, suggested (confirm it) or not found. The user
+confirms the Target there, changes it, or picks Unclassified. They check the templated
 destinations and choose Copy or Move. The import runs as an operation and
 then lists what it filled. Lights land in a Captures location as sessions,
 already filed under their Target or under the Unclassified folder. Raw
 calibration frames wait in the Calibration location as calibration processes
 awaiting Stack, and a master goes straight to structured calibration
-storage. Frames with no frame type and files still being written are held.
+storage. Import never waits for calibration: a light session whose
+calibration isn't settled waits in Needs calibration. Frames with no frame
+type and files still being written are held.
 SHA-256 duplicates and destinations already taken by other bytes are
 skipped. A source that vanishes mid-import pauses the import as Interrupted
 until Retry. A saved source supports Import new, and an already organized
@@ -128,7 +131,7 @@ folder is added in place. Done means:
 
 ### S7 — See where the files landed {#S7}
 
-- **Do:** Click **Show in Sessions**. Read the new sessions, then choose the **Needs a Target** filter. Open the Calibration library and then the 28 Sep session. Read the status bar and the toolbar's Issues hub after the duplicate scan settles.
+- **Do:** Click **Show in Sessions**. Read the new sessions, then choose the **Needs a Target** filter. Open the Calibration library and then the 28 Sep session. Read the status bar after the duplicate scan settles.
 - **Expect:**
   - Sessions opens with the import highlighted (`?import=<operation>`). A notice names the import and `2 sessions`.
   - The 2 Oct Ha session, 30 frames, and the 2 Oct OIII session, 6 frames, are listed first, each marked `New`, and each reads Target NGC 7000 Confirmed. Their frames sit under `NGC 7000/Ha/2026-10-02/light/` and `NGC 7000/OIII/2026-10-02/light/` in `Astro-T7 captures`.
@@ -137,8 +140,8 @@ folder is added in place. Done means:
   - Under Darks, the Calibration library lists the master dark with camera ASI2600MM, 300 s, gain 100, offset 50 and −10 °C.
   - 28 Sep still reads 56 frames, each with one copy.
   - A duplicate scan runs after the import, and no duplicate-copies issue appears, although `Card-1`, still connected, holds a byte-identical source for every imported file and the 5 copies of 28 Sep frames.
-- **Expect (negative):** No Inbox and no later Target confirmation or filing step appears, and no imported file moves after the import: every one is still at the path its preview listed. No duplicates warning counts or names a `Card-1` file. No flat, dark or master appears in Sessions. The held frames, the duplicates and the name-taken dark are absent from the catalog. No calibration process starts Stack by itself, and no raw frame goes to the OS Trash.
-- **Trace:** Import landing · LIB-FR-16, LIB-FR-17, LIB-FR-09 · LIB-AC-17 · STO-IMP-FR-08 · STO-IMP-AC-10 · D-W24, D-W33 · HARNESS-V5-IA.md §Screens S12 (`?import=`), S14 · HARNESS-V5-FEEDBACK-R1.md §Round 1b (P-CAL3), §Round 5 (Duplicates are scanned automatically), §Round 6 (P-IMP2: no Inbox and no later move; the duplicate scan covers registered library locations only)
+- **Expect (negative):** No Inbox and no later Target confirmation or filing step appears, and no imported file moves after the import: every one is still at the path its preview listed. No duplicates warning counts or names a `Card-1` file. No flat, dark or master appears in Sessions. The held frames, the duplicates and the name-taken dark are absent from the catalog. No calibration process starts Stack by itself, Import never waits for calibration matching, and no raw frame goes to the OS Trash.
+- **Trace:** Import landing · LIB-FR-09, LIB-FR-16, LIB-FR-17, LIB-FR-23, LIB-FR-24 · LIB-AC-17 · STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-08 · STO-IMP-AC-10, STO-IMP-AC-11 · CAL-FR-02 · D-W24, D-W101 to D-W105 · HARNESS-V5-IA.md §Screens S12 (`?import=`), S14 · HARNESS-V5-FEEDBACK-R1.md §Round 1b (P-CAL3), §Round 5 (Duplicates are scanned automatically), §Round 6 (P-IMP2: no Inbox and no later move; the duplicate scan covers registered library locations only)
 
 ### S8 — Import new from the saved source {#S8}
 
@@ -208,6 +211,7 @@ folder is added in place. Done means:
 - G6: (dissolved 2026-10-12): answered by Round 6 "P-IMP2: confirm Targets in the Import preview"; S3, S5a, S8, S9 and S10 now assert that a session's Target is prefilled only from its pointing, with OBJECT shown as a hint, and that the user keeps it, changes it or picks Unclassified there; S7, S9 and S12 assert that the import files frames under that `{target}` or under `unclassified/` at once, with no later move and no OBJECT-named folder.
 - G7: (dissolved 2026-10-12): answered by Round 6 "Import source vanishes mid-import"; S10 now asserts that the import pauses as `Interrupted`, fails no item, and resumes on Retry. Unmounting the share at a known point still needs the fixture tooling that G2 records.
 - G8: Unresolved product question: P-IMP2 prefills a session's Target from its pointing, but Round 6 does not say what the preview shows for a session whose pointing is missing or that no Target's footprint contains (`2 Oct OIII`, `4 Oct Ha`), or whether Import waits for a choice. Options: (a, recommended) Unclassified is preselected, so the import is always available and the user chooses a Target only to file it under that Target; (b) the Target is empty and Import is unavailable until the user chooses a Target or Unclassified, which forces a decision but blocks a quick card dump. S3 and S9 assert only that no Target is prefilled and that no light is listed under a Target's folder; S5a and S9 choose explicitly. Blocks readiness.
+- G9: Unresolved implementation qualification: the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11). Blocks readiness until a fixture fixes them.
 
 ## Delta log
 
@@ -219,3 +223,6 @@ folder is added in place. Done means:
   The Import preview lists each incoming session with its Target, prefilled from pointing, with OBJECT shown only as a hint. The user changes `2 Oct OIII` to NGC 7000 (S5a) and picks Unclassified for `4 Oct Ha` (S9). The import files frames under `{target}/…` or `unclassified/…` at once and moves nothing later.
   A share that drops mid-import pauses the import as Interrupted until Retry (S10), and capture-card files raise no duplicates warning (S7, S8). P5 gives the share's lights OBJECT and pointing. Dissolves G6 and G7, and adds G8.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "P-IMP2: confirm Targets in the Import preview", "Import source vanishes mid-import", "The duplicate scan covers registered library locations only" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6A (intent-gated)
+- **Δ4** 2026-10-15 · S7 · behavior-change
+  Import review shows each new light session's darks, flats and bias as pinned automatically, suggested or not found, and Import never waits for calibration: an unsettled session waits in Needs calibration. The toolbar has no Issues hub.
+  Evidence: D-W92, D-W101 to D-W105 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-23, LIB-FR-24, 071 STO-IMP-FR-02, STO-IMP-AC-11 · by: SpecF4Writer2 (intent-gated)

@@ -192,7 +192,7 @@ The stable feature keys identify contract owners. They are not a chronological i
 | PV-PIX | Frame review in a session's intake, P/X/U marks, measurements, star details, metric imports | D1, D2, D3, D6 |
 | PV-CAL | Matching rules for flats, darks and bias, the Calibrate check and its diagram, the calibration library, master adoption | E1, E2, H4 |
 | PV-PREP | Profiles, input modes, the View and tool layouts, building and swapping the View, verified external handoff | E3, E4, F1, F2, F3, F4, F5, F6 |
-| PV-RES | The Output step: Results in `Output/`, Copy to Output and the master offer from `Processing/` | H1, H2, H3, H3a, I1 |
+| PV-RES | The Output step: Results in `Output/`, Copy to Output and the master offer from `Processing/` | H1, H2, H3, H3a (withdrawn), I1 |
 | PV-STO | Import (sources, preview, Copy or Move, naming templates), removing old View copies and links, `View (previous)/`, retained-original proof, verified archive, OS Trash custody for Import Move, the View at Close, `Processing/` files, trashed frames and duplicate copies | I2, I3, I4, I5, J, L (withdrawn), Import |
 | PV-PLAN | Planner on Targets, the Targets list (My targets, Browse catalogues, presets, rig selector), Settings > Equipment (cameras, telescopes, filters and the rigs that select them, with rig versions and camera aliases), sites, windows, Tonight and calendar data for Home, reminders, calendar export | B3, K, Targets list |
 

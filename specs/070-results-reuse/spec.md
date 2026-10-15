@@ -80,7 +80,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - H1
 - H2
 - H3
-- H3a
+- H3a: Withdrawn (D-W93). Results are never inputs to a Project.
 - I1
 - Cross-flow: Closing with no Result
 - Output step: Results, Copy to Output and the master offer

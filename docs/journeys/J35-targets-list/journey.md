@@ -1,7 +1,7 @@
 ---
 id: J35
 title: Find, favourite and narrow Targets on the Targets page's All view with search, presets, a rig selector and Fit
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -28,8 +28,8 @@ data except ★ and adding a Target from a catalogue result.
 
 ## Preconditions
 
-- P1: Fresh replay of J15, J19 and J20, with J21 to J34 not run. The rigs `RedCat` and `Esprit` exist as J15 left them. `RedCat` is mono with the filters Ha, OIII and Halpha and a field of about 5.4° × 3.6°. `Esprit` is OSC with an empty filter list and a field of about 1.2° × 1.2°. Settings holds Backyard and `Remote site`. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, and the run `NGC7000-HOO-Siril` at Select with no saved membership. Seven sessions, six on `RedCat` and one on `Esprit`, have confirmed Target NGC 7000. No Target is marked ★.
-- P2: A second open Project `Summer nebulae`, created with New Project as in J20, has the single subject IC 1396 and the rigs `RedCat` and `Esprit`, and no run. IC 1396 is not marked ★.
+- P1: Fresh replay of J15, J19 and J20, with J21 to J34 not run. The rigs `RedCat` and `Esprit` exist as J15 left them. `RedCat` is mono with the filters Ha, OIII and Halpha and a field of about 5.4° × 3.6°. `Esprit` is OSC with an empty filter list and a field of about 1.2° × 1.2°. Settings holds Backyard and `Remote site`. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000 and rigs `RedCat` and `Esprit`. Seven sessions, six on `RedCat` and one on `Esprit`, have confirmed Target NGC 7000; none has been added to the Project. No Target is marked ★.
+- P2: A second open Project `Summer nebulae`, created with New Project as in J20, has the single subject IC 1396 and the rigs `RedCat` and `Esprit`, and no sessions. IC 1396 is not marked ★.
 - P3: The bundled catalogues (Messier, NGC, IC, Sharpless, LBN, LDN, Caldwell, Barnard) are installed. SIMBAD is reachable until S6, and a network control can then block it (G2).
 - P4: The planning site picker reads Backyard and the header date picker reads tonight, its default. A development-build clock control (D17) fixes tonight to one date, so the S1 and S3 values can be compared.
 - P5: Backyard lies north of 43° N, so NGC 5139 (declination about −47°) never rises above its horizon there.
@@ -180,3 +180,6 @@ data except ★ and adding a Target from a catalogue result.
   Targets and Plan are one Targets page: the All view opens with a header date picker on tonight and a compact altitude sparkline column; a row opens its Target detail. Clicking a search result adds the Target, with no Add button on result rows.
   Best tonight lists only Targets with a usable window, best first, for the selected rig. Fit reads "fits (N%)", the Project scope reads "This Project's rigs (2)", and filters are added with **Add filter**.
   Evidence: HARNESS-V5-IA.md §Screens S10, S3, S16; HARNESS-V5-FEEDBACK-R1.md §Round 5 P-PLAN2, "Best tonight shows nothing", "Click a result to act" (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); messages/en-GB.json fit_fits, targets_project_rigs, equipment_add_filter @ b5e813a5; user instruction 2026-10-12 · by: JourneysV5.U6Targets (intent-gated)
+- **Δ4** 2026-10-15 · P1, P2 · behavior-change
+  The fixture Projects hold no processing run: `NGC 7000 HOO` and `Summer nebulae` name their subjects and rigs, and no session has been added to either.
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-02, PRJ-FR-08 · by: SpecF4Writer2 (intent-gated)
