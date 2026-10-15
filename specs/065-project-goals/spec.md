@@ -108,7 +108,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PRJ-FR-17**: Home is one page of what needs the user, what is running and when to capture next, built from the shared components, with no tabs and no header buttons. From 1280 px wide it has two columns: Pending ingestions, Pending work and Open work on the left, and Status, Tonight and the calendar on the right. Narrower, it is one column in that order. The order is fixed. Each section shows at most 5 rows, then "All N ›", which opens the owning page filtered to those items, and each row opens the page that owns it. The sections are:
   1. Pending ingestions, per Captures location: new files since its last scan ("142 new files · Import"), a location never scanned or whose last scan did not finish, and stopped or failed imports with Retry. A running import changes its own row ("Importing 142 files · 40%").
   2. Pending work: sessions that need a Target, are not in a Project, need review, or are ready to add to a run, and Finished runs whose view awaits clean-up, with the space each frees.
-  3. Open work: open Projects and their runs, plus calibration runs. Each row shows where it stands and its next step (PRJ-FR-18). Rows sort by deadline or season window and carry "N nights left" (PRJ-FR-03).
+  3. Open work: open Projects and their runs, plus calibration runs. Each row shows where it stands and its next step (PRJ-FR-18). Rows sort by deadline or season window and carry "N nights left" (PRJ-FR-23).
   4. Status: locations, each online or offline with its free space and a low-space flag, and background jobs; imports show in Pending ingestions instead.
   5. Tonight: the unfinished goals graded for tonight at the default site (PLAN-FR-11). Home names the site; the user changes it on Targets.
   6. Calendar: five weeks starting this week (PLAN-FR-12).
@@ -127,7 +127,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - Pending work: "Nothing to sort or review."; on first run, "Import captures to start sorting them." with Import….
   - Open work: "No Projects in progress." with New Project….
   - Tonight, when no goal suits the night: "No goals suit tonight. Next good night: {date}."; on first run, "Add a site to see tonight's darkness and Moon." with Add site.
-  - Tonight, when there are no goals at all: "No unfinished goals." with Add a Goal, which opens a menu of open Projects and then that Project's add-goal dialog.
+  - Tonight, when there are no goals at all: "No unfinished goals." with Add a Goal (the owner's exact label, astro-plan-b66vy), which opens a menu of open Projects and then that Project's add-goal dialog.
   - Status, background jobs: "Nothing running." (D-W89)
 - **PRJ-FR-23**: Each subject may carry an optional deadline: a "Finish by" date or a season window, pre-filled from the Target's visibility. A Target visible all year has no season window. Progress then shows the nights left, and Home's Open work and Tonight rank the subject higher as the date nears. Conditions are set in Settings > Goal templates and edited per subject. (D-W89, D-W90)
 - **PRJ-FR-24**: For a mosaic subject, panel balance keeps each channel's counted integration of every panel within ±N % of the panels' mean, counting Usable frames inside the quality bar, or frames when the goal counts frames. N defaults to 10 and the user can change it. A panel outside the band shows a warning; balance never blocks completion. (D-W90)

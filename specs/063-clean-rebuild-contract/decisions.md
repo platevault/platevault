@@ -7,7 +7,7 @@ The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific
 
 ## Workflow redesign 2026-10-06
 
-On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. On 2026-10-08 the user added D-W75, which narrows D-W72 for run groups: a trashed panel run stays listed in its group as Trashed (VSEL-FR-19). Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. On 2026-10-08 the user added D-W75, which narrows D-W72 for run groups: a trashed panel run stays listed in its group as Trashed (VSEL-FR-19). From 2026-10-12 to 2026-10-14 the owner's harness v5 feedback added D-W76 through D-W92: the renames and the one-Proceed step flow, session intake and the library-wide reject, Wrap up, the Symlinks and Copies modes, the calibration library, applications, naming, Results, Settings and Equipment, Targets and Home, goals, the UI conventions and rows instead of an Issues hub. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
 
 Stage model:
 
@@ -57,7 +57,7 @@ Owners: PREP, RES.
 - PixInsight/WBPP, Siril and SETI Astro Suite Pro are required profile targets.
 - Their installed/documented capability evidence must precede verified-profile claims.
 - Generic Open in does not claim a verified profile.
-- Input-write behavior that is unknown or write-prone blocks Linked use; isolated Copy is offered. (Direct source and a separate Clone mode were removed by D-W81; Copies clone where the volume supports it.)
+- Input-write behavior that is unknown or write-prone blocks Linked and Direct-source use; isolated Copy or supported Clone is offered. Amended by D-W81: it blocks Symlinks, and Copies is offered; Direct source and a separate Clone mode are removed, and Copies clone where the volume supports it.
 - A profile incapable of exact membership cannot receive an overinclusive folder.
 - Unsupported configuration or product-input kinds remain explicitly blocked.
 - One preparation may mix input modes per item. Items that cannot use the chosen mode are listed with paths and footprint, and each per-item change needs explicit approval (PREP-FR-08); no item changes mode silently.
@@ -169,7 +169,7 @@ Owners: LIB, VSEL, PREP.
 
 - Catalog corrections can cover grouping metadata such as filter, exposure and equipment, with original evidence retained.
 - A correction creates a new grouping revision; old session identities and fixed run asset membership remain traceable and unchanged.
-- Header corrections are delivered only through verified isolated patched Copies (cloned or not) or supported tool configuration.
+- Header corrections are delivered only through verified isolated patched Copy/Clone or supported tool configuration. Amended by D-W81: patched Copies, cloned or not.
 
 ### D16
 

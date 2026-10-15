@@ -256,7 +256,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Quality precedence and Project progress (D10 as amended by D-W36, D-W42, D-W44, D-W66, D-W72, D-W79) | PV-LIB, PV-PRJ, PV-VSEL |
 | Content-bound consumption of recorded files | All feature owners |
 | Workflow redesign 2026-10-06 (D-W1 through D-W74) | All feature owners |
-| Harness v5 round 9, 2026-10-12 to 2026-10-13 (D-W76 onward) | All feature owners |
+| Harness v5 round 9, 2026-10-12 to 2026-10-14 (D-W76 to D-W92) | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 

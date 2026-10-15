@@ -589,7 +589,7 @@
       "negative": "No score is shown for a pending, unmeasured or failed value, and Cancel discards no selection or exclusion."
     },
     {
-      "flowStep": "Frame culling: views, hotkeys, threshold selection and quality marks (D-W13, D-W14, D-W40, D-W42)",
+      "flowStep": "Frame culling: views, hotkeys, threshold selection and quality marks (D-W13, D-W14, D-W40, D-W79)",
       "owner": "067-frame-review",
       "journeyStep": "J22/S5, J22/S5a, J22/S5b, J22/S7a, J22/S11a, J22/S11b, J22/S13, J32/S4",
       "spec": "067-frame-review PIX-FR-11, PIX-FR-13, PIX-FR-14, PIX-FR-15, PIX-FR-16, PIX-FR-18, PIX-AC-12, PIX-AC-14, PIX-AC-15, PIX-AC-16, PIX-AC-17; 066-view-selection VSEL-FR-15, VSEL-AC-23; 065-project-goals PRJ-AC-08; D10, D-W13, D-W14, D-W40, D-W42, D-W54",
@@ -647,18 +647,9 @@
       "owner": "069-application-handoff",
       "journeyStep": "J23/S9, J24/S13",
       "spec": "069-application-handoff PREP-FR-04, PREP-FR-06, PREP-FR-08, PREP-AC-03, PREP-AC-11; D04",
-      "action": "Choose a profile with unknown input-write behavior, then keep Linked View for a destination that cannot link.",
+      "action": "Choose a profile with unknown input-write behavior, then keep Symlinks for a destination that cannot link.",
       "expect": "The input-write risk or the missing link support is named, and Copies is offered with its footprint.",
       "negative": "The mode never changes automatically, and nothing is written until the user chooses a mode."
-    },
-    {
-      "flowStep": "Cross-flow: Direct-source exclusion unsupported by tool",
-      "owner": "069-application-handoff",
-      "journeyStep": "J24/S1",
-      "spec": "069-application-handoff PREP-FR-04; D-W81",
-      "action": "Withdrawn with Direct source (D-W81). Prepare a run whose 30 Sep folder also holds excluded frames.",
-      "expect": "The run folder holds Symlinks or Copies of the members only.",
-      "negative": "No excluded frame reaches the application."
     },
     {
       "flowStep": "Cross-flow: Partial preparation",
@@ -740,15 +731,6 @@
       "action": "Unplug the archive volume while items are being copied, open Storage, then reconnect and Retry.",
       "expect": "The transfer and Storage show destination-verified, source-retained, reference-updated and pending work per item. Retry revalidates the volume and item identities and resumes the recorded work.",
       "negative": "No item with an unverified destination or reference has its source retired, and a partially written file is not treated as verified because its name exists."
-    },
-    {
-      "flowStep": "Storage: locations, availability, run footprints, duplicate candidates and archive transfers",
-      "owner": "071-storage-custody",
-      "journeyStep": "J28/S6",
-      "spec": "071-storage-custody STO-FR-11, STO-AC-12; D-W3",
-      "action": "Open Storage while an archive transfer is interrupted.",
-      "expect": "Storage lists the transfer with its per-item phases, separately from location availability.",
-      "negative": "Showing a transfer or a duplicate candidate never authorizes removal."
     },
     {
       "flowStep": "Done / Archive custody: the verified archive transfer, the OS Trash moves of rejected frames, processing intermediates and duplicate copies, and the reviewed restore of archived sessions, executing the offers of the PV-PRJ Done / Archive sheet",

@@ -14,7 +14,7 @@ trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-n
 
 The user keeps an eye on what needs attention without leaving their work. Each
 issue shows on the row it affects, with one action that leads to where it can be
-fixed, and the status bar's severity counters show the same issues. There is no
+fixed, and the status bar's severity counters count the same issues. There is no
 Issues hub (D-W92). The bottom bar
 also shows which locations are online, how many rows are selected, what work is
 running, and the notifications history. Done means:
@@ -141,7 +141,7 @@ running, and the notifications history. Done means:
 
 ### S8 — Retry interrupted work {#S8}
 
-- **Do:** Once at least 4 items have been copied and verified, quit PlateVault and read the confirmation. Cancel it, then quit again and confirm. Launch PlateVault again. Choose the ⚠ counter, which opens Activity filtered to the interrupted import, and choose Retry.
+- **Do:** Once at least 4 items have been copied and verified, quit PlateVault and read the confirmation. Cancel it, then quit again and confirm. Launch PlateVault again. Choose the ⚠ counter and open `Activity · 1` from its menu, which opens Activity filtered to the interrupted import, and choose Retry.
 - **Expect:** While the import runs, quitting first asks for confirmation. Cancelling it leaves PlateVault open with the import still shown as running work; confirming quits. After relaunch, ⚠ reads 4, and the import's row in Activity reads interrupted. Activity shows the import as Interrupted with "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
   - After Retry, the import runs from its recorded progress, shows again as running work, and finishes with 12 lights imported.
   - ⚠ returns to 3, and no row shows the interrupted issue.
@@ -165,10 +165,10 @@ running, and the notifications history. Done means:
 
 ### S11 — Raise and follow the duplicates issue {#S11}
 
-- **Do:** Register `Spare/Captures` as a Captures location (Add existing library folder) and let it index. Read the status bar, then choose the ⚠ counter's `Sessions · 1` entry, which opens the Duplicates filter.
+- **Do:** Register `Spare/Captures` as a Captures location (Add existing library folder) and let it index. Read the status bar, then choose the ⚠ counter's `Sessions · 3` entry, which opens Sessions filtered to the affected rows, and choose the Duplicates badge on `4 Oct M 33`.
 - **Expect:** The left of the bar reads `4 of 4 online`. After the index, a duplicate scan runs on its own. Then:
   - ⚠ reads 4.
-  - Sessions, filtered to Duplicates, lists `4 Oct M 33` with the badge `2 copies · 104 MB` (LIB-FR-22).
+  - Sessions, filtered to the affected rows, lists `4 Oct M 33` with the badge `2 copies · 104 MB` (LIB-FR-22).
   - Following it opens the Duplicates review with 2 groups, M-1 and M-2. Each group has two copies, and the `Astro-T7 captures` copy, in the earlier-registered location, is preselected as the keeper.
 
   J39 continues the clean-up from here.
@@ -206,7 +206,7 @@ running, and the notifications history. Done means:
 - SC2: Each issue's action opens its owner in one step: the run at Prepare (S3), the Calibration library, the run's Calibrate step and the Sessions filter (S4), Settings › Locations (S5), Activity with Retry (S8) and the Duplicates review (S11).
 - SC3: The offline issue appears within one status-bar update of the eject and clears on remount with 0 user actions (S5). The interrupted issue clears when Retry finishes, and the import ends with exactly 12 lights imported and 0 copied twice (S8).
 - SC4: Running work shows instead of "Idle" while an operation runs (S7, S9, S10). Cancel is visible on hover and on focus only, and after Cancel focus lands on the bell (S10).
-- SC5: The duplicates issue reads exactly `2 duplicate copies · 104 MB`, and its review lists 2 groups (S11).
+- SC5: The duplicates badge reads exactly `2 copies · 104 MB`, and its review lists 2 groups (S11).
 - SC6: 0 files are moved, trashed or deleted, and the only new files are the 12 imported lights (S13).
 - SC7: Exactly 5 of the 7 issues have an × (S5a). Dismissing 2 lowers the counters' total from 7 to 5, and Restore on each row returns it to 7, with 0 runs, master offers, calibration processes or files changed (S5a). The dismissed offline issue returns on the next eject with 0 user actions on the dismissed entry (S5b).
 
@@ -217,7 +217,6 @@ running, and the notifications history. Done means:
 - G3: Unresolved implementation qualification: S8 needs the import interrupted at a known point, and S10 needs a rescan that runs long enough to focus. No pacing or fault fixture exists. Blocks readiness.
 - G4: Out of scope for this journey: failed work (`… failed`, ⛔, from an operation that fails) and an unreadable location (`… unreadable`, ⛔, Fix). Both need fault injection. A failed calibration process belongs to the calibration process journey, and an adopted master that changed belongs to J26. Blocks readiness until covered by a step or a journey.
 - G5: Out of scope for this journey: the bar at narrow widths, when running work overflows into `+N more running`, and in other languages.
-- G6: Not asserted: the row that shows the duplicates issue. D-W92 puts issues on their rows, but where duplicate candidates show is an open owner question, so S11 asserts only the issue's text, its severity and its action.
 
 ## Delta log
 

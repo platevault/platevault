@@ -87,7 +87,6 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - F5
 - F6
 - Cross-flow: Unsupported input mode
-- Cross-flow: Direct-source exclusion unsupported by tool (withdrawn with Direct source, D-W81)
 - Cross-flow: Partial preparation
 - Run group: Prepare all and the panel folder layout
 - The prepared-entry record that a Finished run's Clean up lists (PV-STO runs Clean up, steps I2 to I5)
