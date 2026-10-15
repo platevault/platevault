@@ -1,36 +1,34 @@
 ---
 id: J15
 title: Register rigs with their filter lists and observing sites in Settings
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-07-14
 actors: [primary-user]
 surfaces: [equipment, observing-sites, sessions, settings, locations, indexing]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 072-observing-plans, D11, D17, D-W23, D-W30, D-W31, D-W37, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/product/journeys/J15-equipment-observing-site-setup/journey.md @42c596d6, HARNESS-V5-IA.md#S16, "HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation Sites", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/settings-equipment.tsx @b5e813a5, apps/prototype/src/features/t1/settings/sites-page.tsx @b5e813a5, apps/prototype/src/features/t1/lib/sites.ts @b5e813a5, apps/prototype/src/domain/sites.ts @b5e813a5, apps/prototype/src/domain/indexing.ts @4f470775, apps/prototype/messages/en-GB.json @b5e813a5]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 068-calibration-inputs, 072-observing-plans, D11, D17, D-W23, D-W30, D-W31, D-W87, D-W94, D-W95, D-W98, D-W100, D-W101, D-W102, D-W104, D-W105, D-W106, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/068-calibration-inputs/spec.md, specs/072-observing-plans/spec.md, docs/product/journeys/J15-equipment-observing-site-setup/journey.md @42c596d6, HARNESS-V5-IA.md#S16, "HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation Sites", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/settings-equipment.tsx @b5e813a5, apps/prototype/src/features/t1/settings/sites-page.tsx @b5e813a5, apps/prototype/src/features/t1/lib/sites.ts @b5e813a5, apps/prototype/src/domain/sites.ts @b5e813a5, apps/prototype/src/domain/indexing.ts @4f470775, apps/prototype/messages/en-GB.json @b5e813a5]
 ---
 
 ## Goal
 
-The user records the cameras and telescopes they own by hand, before imaging
-with them, composes them into rigs (optical trains) with the list of filters
-each rig carries, and saves the sites they observe from, all in Settings. A
-session later indexed with that gear associates the hand-made rig, and no
-detected duplicate appears. A FITS FILTER value that a session's rig
-does not list prompts the user to add it to that rig. Sites carry at most one
-Default pill, set only by **Make default**, and removing the default site hands
-the pill to the first remaining site by name. Done means: the rigs `RedCat`
-(mono) and `Esprit` (OSC) exist with their fields of view, `Halpha-test`
-associates `RedCat` with no detected camera, telescope or rig, and `RedCat`
-lists Ha, OIII and the prompted `Halpha` filter. The Halpha session reads band
-Ha without any change to its header bytes. Goal templates are the same whichever
-rig is selected. Three test sites were added and removed with the Default pill
-moving as stated, and Backyard and `Remote site` are saved with no default site
-designated.
+The user records cameras, telescopes, filters and observing sites in Settings,
+then composes cameras and telescopes into rigs. Two cameras of the same model
+need distinct aliases, and a camera can be set to **Don't use darks** or
+**Don't use bias**. A later session associates with the hand-made rig and
+records the rig version it was captured with. A FITS FILTER value that a session's rig does not list prompts
+the user to add a filter to that rig. Sites carry at most one Default pill, set
+only by **Make default**, and removing the default site hands the pill to the
+first remaining site by name. Done means: `RedCat` (mono) and `Esprit` (OSC)
+exist with their fields of view, `Halpha-test` associates `RedCat` with no
+detected duplicate, and its Ha band is added without changing header bytes.
+Goal templates are the same whichever rig is selected. Three test sites were
+added and removed with the Default pill moving as stated, and Backyard and
+`Remote site` are saved with no default site designated.
 
 ## Preconditions
 
-- P1: A clean development build of the rebuilt PlateVault (D17). Onboarding is complete with one disposable Captures location `Filter-test/Captures`, registered and indexed while empty. Outside it, the folder `Filter-test/Incoming/Halpha-test` holds one session `Halpha-test` of 10 mono 300 s lights with OBJECT `NGC 7000`, INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51`, FOCALLEN `250` and FILTER `Halpha`; S3b copies it into the location. No camera, telescope, rig or observing site is saved or detected yet.
+- P1: A clean development build of the rebuilt PlateVault (D17). Onboarding is complete with one disposable Captures location `Filter-test/Captures`, registered and indexed while empty. Outside it, the folder `Filter-test/Incoming/Halpha-test` holds one session `Halpha-test` of 10 mono 300 s lights captured on 2026-10-02 with OBJECT `NGC 7000`, INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51`, FOCALLEN `250` and FILTER `Halpha`; S3b copies it into the location. No camera, telescope, rig or observing site is saved or detected yet.
 - P2: The equipment datasheet values: ASI2600MM is mono with 6248 × 4176 pixels of 3.76 µm; ASI533MC is OSC with 3008 × 3008 pixels of 3.76 µm; RedCat 51 has a 250 mm focal length; Esprit 100 has a 550 mm focal length.
 - P3: Backyard's coordinates and IANA time zone are the ones the J19/P2 fixture headers carry. `Remote site` uses the J19/P3 coordinates, at least 15° of longitude and one time zone away from Backyard (J20/P2).
 - P4: A fault control that makes the next save of a rig's filter list fail until it is disarmed (G5).
@@ -50,14 +48,21 @@ designated.
 - **Do:** Add the camera ASI2600MM with the alias `ZWO ASI2600MM Pro`, mono, and its P2 pixel count and pixel size. Add ASI533MC as OSC the same way. Add the telescopes RedCat 51 and Esprit 100 with their P2 focal lengths.
 - **Expect:** Each entry appears in its table immediately, although no indexed session uses it yet. Each camera shows Mono or OSC and its sensor size, and aliases render as the comma-joined list. No entry reads Detected.
 - **Expect (negative):** Saving with the name field blank is rejected inline before any request is sent, and no row is added.
-- **Trace:** baseline J15 v1/S2 · PLAN-EQ-FR-02, PLAN-EQ-FR-05 · D11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" (gear not yet imaged with)
+- **Trace:** PLAN-EQ-FR-02, PLAN-EQ-FR-05, PLAN-EQ-FR-08 · D-W87, D-W104 · D11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" (gear not yet imaged with)
+
+### S2a — Tell two cameras of one model apart, then remove the spare {#S2a}
+
+- **Do:** Add a second ASI2600MM camera with the P2 pixel count and pixel size and no alias, and save it. Then give it the alias `ASI2600MM B` and save. On `ASI2600MM B`, set **Don't use darks** and **Don't use bias**. Then remove `ASI2600MM B`.
+- **Expect:** While two ASI2600MM cameras exist, the save without an alias is refused inline, because each camera of that model needs an alias that no other camera uses; the first camera keeps `ZWO ASI2600MM Pro`. `ASI2600MM B` then saves with its alias and shows **Don't use darks** and **Don't use bias** set. No rig uses it, so its removal succeeds, and Settings → Equipment again lists the cameras ASI2600MM and ASI533MC.
+- **Expect (negative):** Setting the defaults on `ASI2600MM B` changes no session, because no session was captured with it, and nothing on ASI2600MM or ASI533MC changes.
+- **Trace:** PLAN-EQ-FR-08 · PLAN-EQ-AC-10 · CAL-FR-22 · D-W104
 
 ### S3 — Compose the mono rig `RedCat` {#S3}
 
-- **Do:** Add an optical train named `RedCat` with telescope RedCat 51, camera ASI2600MM and focal length 250 mm. Then try to remove the camera ASI2600MM.
-- **Expect:** `RedCat` appears in the Optical trains table as Mono, taken from its camera, with a field of view of about 5.4° × 3.6° (a 23.5 × 15.7 mm sensor at 250 mm). Its filter list is empty. Removing ASI2600MM is refused with a message naming `RedCat`.
+- **Do:** Add an optical train named `RedCat` with telescope RedCat 51, the camera matched by alias `ZWO ASI2600MM Pro`, and focal length 250 mm. Then try to remove that camera.
+- **Expect:** `RedCat` appears in the Optical trains table as Mono, taken from its camera, with a field of view of about 5.4° × 3.6° (a 23.5 × 15.7 mm sensor at 250 mm). Its filter list is empty. The rig starts at version 1. Removing the camera is refused with a message naming `RedCat`.
 - **Expect (negative):** The filter list offers no Mono/OSC control. Saving a train without a numeric focal length is rejected inline. The refused removal deletes no camera and leaves `RedCat` unchanged.
-- **Trace:** baseline J15 v1/S3, S5 · PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-05 · D-W23, D-W31, D-W37
+- **Trace:** PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-05, PLAN-EQ-FR-07 · D-W23, D-W87, D-W104
 
 ### S3a — Compose the OSC rig `Esprit` {#S3a}
 
@@ -69,9 +74,9 @@ designated.
 ### S3b — Index a session shot with the registered gear {#S3b}
 
 - **Do:** Outside PlateVault, copy `Filter-test/Incoming/Halpha-test` into `Filter-test/Captures`. In Settings › Locations, click **Rescan** on the `Filter-test/Captures` row. Open `Halpha-test` in Sessions, then open Settings → Equipment.
-- **Expect:** Sessions lists `Halpha-test` with 10 lights. Its rig evidence lists INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51` and FOCALLEN `250 mm`, and associates the rig `RedCat` without confirming it. Settings → Equipment still lists exactly the cameras ASI2600MM and ASI533MC, the telescopes RedCat 51 and Esprit 100, and the rigs `RedCat` and `Esprit`.
+- **Expect:** Sessions lists `Halpha-test` with 10 lights. Its rig evidence lists INSTRUME `ZWO ASI2600MM Pro`, TELESCOP `RedCat 51` and FOCALLEN `250 mm`, and associates the rig `RedCat` without confirming it. The camera alias `ZWO ASI2600MM Pro` identifies camera ASI2600MM, and the session records `RedCat` version 1. Settings → Equipment lists exactly the cameras ASI2600MM and ASI533MC, the telescopes RedCat 51 and Esprit 100, and the rigs `RedCat` and `Esprit`.
 - **Expect (negative):** Indexing detects no camera, telescope or rig: no entry reads Detected, and no rig named from the header values appears beside `RedCat`. Indexing changes none of `RedCat`'s fields and leaves its filter list empty. Every `Halpha-test` file still matches its P5 SHA-256.
-- **Trace:** LIB-FR-05 · D11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" · apps/prototype src/domain/indexing.ts findOrDetectCamera, associateEquipment (a header matching a camera's name or alias, or a telescope's name, reuses that record) @ 4f470775 · G11
+- **Trace:** LIB-FR-05, LIB-FR-23, LIB-FR-26 · PLAN-EQ-FR-07, PLAN-EQ-FR-08 · D11, D-W104, D-W105 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add"
 
 ### S4 — Add filters to `RedCat` {#S4}
 
@@ -166,7 +171,8 @@ designated.
 - SC5: Settings → Goal templates lists the same 5 built-in templates with `RedCat` and with `Esprit` selected (S4e).
 - SC6: 2 sites are saved and 0 are marked default (S6, S7).
 - SC7: Across S5a to S5d at most 1 Default pill shows at any time; 0 sites become default on save; removing the default `Test Zeta` makes `Test Alpha` default; after S5d 0 sites and 0 defaults remain.
-- SC8: After S3b, Settings → Equipment lists exactly 2 cameras, 2 telescopes and 2 rigs, 0 of them Detected, and `Halpha-test` associates `RedCat` (S2, S3b).
+- SC8: After S3b, Settings → Equipment lists exactly 2 cameras, 2 telescopes and 2 rigs, 0 of them Detected, and `Halpha-test` associates `RedCat` version 1 (S2, S2a, S3b).
+- SC9: In S2a, saving a second ASI2600MM without an alias that no other camera uses is refused once, and removing it leaves exactly 2 cameras (S2a).
 
 ## Known gaps
 
@@ -181,6 +187,7 @@ designated.
 - G9: (dissolved 2026-10-12): answered by Round 6 "Rigs: detection plus manual add"; S1 to S3a now assert adding cameras, telescopes and rigs by hand before any session uses them, and S3b asserts that indexing a session shot with that gear associates the hand-made rig and detects no duplicate. J19/S9b covers renaming and editing detected rigs.
 - G10: Unresolved product question (carried from G9, not answered by Round 6): the v5 prototype's session detail offers no "Add {value} to {rig}", and the v5 design (HARNESS-V5-IA.md S16) does not say either way, so S4b and S4c keep the contract text (PLAN-EQ-FR-04). Blocks readiness.
 - G11: Unresolved implementation qualification: the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs). S3b assumes the prototype's: INSTRUME equal to a camera's name or one of its aliases, and TELESCOP equal to a telescope's name. Blocks readiness.
+- G12: Out of scope for this journey: rig versions (PLAN-EQ-FR-07) are not walked. S4 to S4d edit `RedCat`'s filters after `Halpha-test` records version 1, but no step asserts the versions those edits create or their start dates, because the fixture fixes no date for them. A camera's Don't use darks and Don't use bias defaults on a session (PLAN-EQ-AC-11) are not exercised either. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 
@@ -194,3 +201,6 @@ designated.
 - **Δ4** 2026-10-12 · S1, S2, S4b, +S3b · behavior-change
   Cameras, telescopes and rigs are added by hand in Settings → Equipment for gear not yet imaged with. `Halpha-test` is now indexed at S3b, after the gear exists, and associates the hand-made `RedCat` with no detected duplicate.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Rigs: detection plus manual add" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6F (intent-gated)
+- **Δ5** 2026-10-15 · S2a, S3, S3b · behavior-change
+  Two cameras of one model need distinct aliases, a camera can be set to Don't use darks or Don't use bias, and a session records the rig version it was captured with.
+  Evidence: D-W104 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 072 PLAN-EQ-FR-07, PLAN-EQ-FR-08, PLAN-EQ-AC-10, 064 LIB-FR-26 · by: SpecF4Writer2 (intent-gated)
