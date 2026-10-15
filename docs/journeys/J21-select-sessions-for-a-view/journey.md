@@ -1,125 +1,113 @@
 ---
 id: J21
-title: Pick the candidate sessions for a processing run
-version: 4
+title: Select sessions for a Project View
+version: 5
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [view-review, sessions, projects, status-bar]
+surfaces: [projects, sessions, view]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, D01, D02, D08, D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W66, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-c-select-sessions-for-a-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6]
+trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, D01, D02, D08, D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W66, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-c-select-sessions-for-a-view, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#round-5, P-SB3, HARNESS-V5-FEEDBACK-R1.md#round-6, 064-library-inventory, 068-calibration-inputs, 069-application-handoff, 070-results-reuse, D-W93, D-W94, D-W95, D-W96, D-W97, D-W98, D-W99, D-W100, D-W101, D-W102, D-W103, D-W104, D-W105, D-W106, FR-033, FR-034, FR-035, LIB-FR-17, LIB-FR-20, LIB-FR-23, CAL-FR-09, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-27, PRJ-FR-31, VSEL-FR-02, VSEL-FR-03, VSEL-FR-04, VSEL-FR-05, VSEL-FR-06, VSEL-FR-07, VSEL-FR-08, VSEL-FR-09, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16]
 ---
 
 ## Goal
 
-In the Select step of processing run `NGC7000-HOO-Siril`, the user reads the
-candidates that PlateVault derived from the subject's Target and the run's rig.
-The user checks the evidence and ordering, filters and sorts without losing
-the selection, deals explicitly with an offline candidate, and saves the run.
-Done means the run's first saved membership revision holds exactly the five
-available RedCat sessions, each with the reason
-`Target NGC 7000 on RedCat`, with 214 lights / 17h 50m and no
-unresolved member. Project `NGC 7000 HOO` then counts those five sessions
-"in project", below the "captured" value of its seven candidates. The offline
-12 Sep session and the Esprit session are not part of the run.
+On the Sessions step of Project `NGC 7000 HOO`, the user reviews suggestions,
+checks geometry and ordering, filters and sorts without losing a selection, and
+adds the five available RedCat sessions. The offline 12 Sep session and the
+Esprit session are not added. The user reviews the Apply sheet and builds the
+Project's View from originals. Done means the Project holds the five sessions,
+with 214 lights / 17h 50m in its View and no unresolved input. The Project
+counts those sessions "in project" and its matching suggestions as "captured".
 
 ## Preconditions
 
-- P1: J20 completed through S9. Project `NGC 7000 HOO` has subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, and 7 candidates. Ha reads `0h00 in project · 12h35 captured · goal 10h` and OIII reads `0h00 in project · 10h35 captured · goal 12h`. Its processing run `NGC7000-HOO-Siril` (subject NGC 7000, rig `RedCat`) is open at its Select step, and no membership revision is saved yet.
-- P2: The J19 catalog holds the six RedCat sessions 12, 18, 24, 26, 28 and 30 Sep with confirmed Target NGC 7000 and confirmed rig `RedCat`. `Cold-1` is offline, so 12 Sep reads Offline with 24 last-observed OIII frames. The other-camera session holds 40 Ha 300 s lights with confirmed Target NGC 7000 and rig `Esprit`.
-- P3: No measurement has run for any fixture frame.
+- P1: J20 completed through S9. Project `NGC 7000 HOO` has subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, and no held sessions. It suggests the six RedCat sessions and the other-camera Esprit session. Ha reads `0h00 in project · 12h35 captured · goal 10h` and OIII reads `0h00 in project · 10h35 captured · goal 12h`. No View exists yet.
+- P2: The J19 catalog holds the six Ready, fully reviewed RedCat sessions 12, 18, 24, 26, 28 and 30 Sep with settled calibration, confirmed Target NGC 7000 and confirmed rig `RedCat`. `Cold-1` is offline, so 12 Sep reads Offline with 24 last-observed OIII frames. The Ready, reviewed and calibrated other-camera session holds 40 Ha 300 s lights with confirmed Target NGC 7000 and rig `Esprit`.
+- P3: No frame measurement has been computed for any fixture frame.
 
 ## Steps
 
-### S1 — Orient in the run workspace {#S1}
+### S1 — Orient on the Project page {#S1}
 
-- **Do:** Move along the run's step bar through Select, Review, Calibrate and Prepare, then return to Select. Toggle **Sky coverage** on and off.
-- **Expect:** The step bar lists Select, Review, Calibrate, Prepare, Results and Done for this run, each with its state, and Select reads Unsaved. Each later step opens and names what it still needs: Prepare's checks read "Save the run first." for the saved membership and "Choose a profile in Prepare." for the application profile. Every step shows the same selection. Exactly one Next shows: on Select it reads **Save run** and moves focus to the Save button; on Review, Calibrate and Prepare it also reads **Save run** and leads back to Select's Save button, never to the step being shown. **Sky coverage** shows and hides a linked spatial view. On each of these four steps the run header offers **Rename**, **Complete** and **Move to Trash**, which this journey does not use.
-- **Expect (negative):** Neither the step bar nor Next gates movement: every step opens from the bar. Moving between steps saves no revision, creates no folder on disk and starts no measurement.
-- **Trace:** flow C1 · VSEL-FR-02, VSEL-FR-07 · RES-FR-10 · D-W3, D-W72 · HARNESS-V5-IA.md S5, Fix pass "Next never points at the screen it is on" · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Select keeps the selection tools from spec 066" (sky coverage), "Rename runs and Projects"
+- **Do:** Open Project `NGC 7000 HOO`. Read the steps Sessions, Calibrate, View, Output and Wrap up. On Sessions, toggle **Sky coverage** on and off; open Calibrate and read its diagram, then return to Sessions.
+- **Expect:** The Project page lists Sessions, Calibrate, View, Output and Wrap up. Calibrate is a read-only check with a WBPP-style diagram of the groups, nights and pinned calibration or No choices. **Sky coverage** shows and hides the linked spatial view. View holds the application, the input mode and **Apply…**; Symlinks is the default mode.
+- **Expect (negative):** Reading Project steps or the calibration diagram makes no calibration assignment, changes no source file and builds no View. Moving between steps creates no membership revision and computes no measurement.
+- **Trace:** PRJ-FR-07, PRJ-FR-27, PRJ-FR-31 · CAL-FR-09 · VSEL-FR-02, VSEL-FR-07 · FR-033, FR-035 · D-W94, D-W95, D-W101
 
-### S2 — Read the run's fixed identity {#S2}
+### S2 — Read the Project identity {#S2}
 
-- **Do:** Read the run header.
-- **Expect:** It reads name `NGC7000-HOO-Siril`, a link to Project `NGC 7000 HOO`, status Open, subject NGC 7000 and rig `RedCat`. The subject and rig show as fixed values ("Subject (fixed)", "Rig (fixed)") with no edit control. The header shows no profile; the profile is chosen in Prepare.
-- **Expect (negative):** No control changes the subject or rig, or moves or shares the run with another Project.
-- **Trace:** flow C1 · VSEL-FR-01 · D-W8, D-W50 · HARNESS-V5-IA.md S5 header
+- **Do:** Read the Project name, subjects, rigs and goals.
+- **Expect:** The Project is named `NGC 7000 HOO`, has subject NGC 7000, rigs `RedCat` and `Esprit`, and goals Ha 10h and OIII 12h. Sessions, groups and suggestions belong to the Project; neither a per-session Project membership revision nor a separate per-rig processing workspace exists.
+- **Expect (negative):** Adding or removing a subject or rig changes suggestions only. Sessions already held by the Project remain in their groups.
+- **Trace:** PRJ-FR-01, PRJ-FR-02, PRJ-FR-08, PRJ-FR-27 · VSEL-FR-01 · D-W94, D-W96
 
-### S3 — Read the candidates {#S3}
+### S3 — Read the suggestions {#S3}
 
-- **Do:** Read the candidate list.
-- **Expect:** The list holds exactly the six RedCat sessions. 18, 24, 26, 28 and 30 Sep start selected, each with reason `Target NGC 7000 on RedCat`. 26 Sep is selected although its OBJECT reads `Cygnus field`. 12 Sep is listed as Offline and not selected. Each row shows session, date/time, channel, exposure, frame count, integration, availability, distance and footprint evidence. Sessions with a footprint come first, ordered by overlap and then angular separation. 18 Sep (pointing only) follows them, and 24 Sep (Position unknown) comes last. The summary reads 214 lights / 17h 50m.
-- **Expect (negative):** The Esprit other-camera session is not listed. Listing candidates merges no session, rewrites no header and changes no Target. The `Cygnus field` label removes no candidate.
-- **Trace:** flow C2 · VSEL-FR-03 · VSEL-AC-01, VSEL-AC-08 · D-W33, D-W37, D-W49 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Select keeps the selection tools from spec 066" (distance from the Target, geometry ordering)
+- **Do:** On Sessions, open **Add sessions…** and read the suggestions.
+- **Expect:** The suggestions list has six RedCat sessions and the Esprit session, each with its match reason. It does not select or add them automatically. 12 Sep is Offline with 24 last-observed OIII frames. Each row shows session, date/time, channel, exposure, frame count, integration, availability, distance and footprint evidence. Sessions with a footprint sort by overlap and angular separation; 18 Sep (pointing only) follows them, and 24 Sep (Position unknown) comes last. The available RedCat sessions total 214 lights / 17h 50m.
+- **Expect (negative):** No suggestion joins the Project until the user adds it. The `Cygnus field` OBJECT label neither changes its Target nor removes the session from suggestions.
+- **Trace:** PRJ-FR-08, PRJ-FR-09, PRJ-FR-27, PRJ-FR-31 · VSEL-FR-03, VSEL-FR-04, VSEL-FR-08 · LIB-FR-20, LIB-FR-23 · D-W94, D-W95, D-W96, D-W105
 
-### S4 — Inspect missing geometry {#S4}
+### S4 — Inspect geometry evidence {#S4}
 
-- **Do:** Open the geometry evidence of 28 Sep, 18 Sep and 24 Sep. Clear the 24 Sep checkbox, then check it again.
-- **Expect:** 28 Sep shows **FOV from confirmed equipment** with its inputs (image dimensions, effective focal length, pixel scale, binning). 18 Sep shows a distance from its pointing and no footprint. 24 Sep reads **Position unknown** and has no distance value. Its checkbox clears and checks like any other, and the summary returns to 214 lights / 17h 50m.
-- **Expect (negative):** Neither 18 Sep nor 24 Sep shows a distance of 0 or a footprint derived from its Target or an OBJECT label. Unknown geometry removes no candidate.
-- **Trace:** flow C3, cross-flow "Missing geometry", "Missing OBJECT" · VSEL-FR-04 · VSEL-AC-02 · D01, D-W33 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Select keeps the selection tools from spec 066" (distance from the Target, geometry ordering)
+- **Do:** Open the geometry evidence of 28 Sep, 18 Sep and 24 Sep in **Add sessions…**.
+- **Expect:** 28 Sep shows **FOV from confirmed equipment** with its inputs (image dimensions, effective focal length, pixel scale, binning). 18 Sep shows a distance from its pointing and no footprint. 24 Sep reads **Position unknown** and has no distance value. Missing geometry does not prevent adding a suggestion to the Project.
+- **Expect (negative):** Neither 18 Sep nor 24 Sep shows a distance of 0 or a footprint derived from its Target or an OBJECT label. Geometry never removes a suggestion.
+- **Trace:** VSEL-FR-03, VSEL-FR-04 · VSEL-AC-02 · PRJ-FR-31 · D-W95, D-W96
 
 ### S5 — Filter and sort {#S5}
 
-- **Do:** Open **Filters** and set channel Ha. Then replace it with **Missing OBJECT**, then with quality state Unreviewed. Open the expanded filter controls. Sort by sky distance. Clear all filters and search for `other camera`.
-- **Expect:** With Ha, an active filter chip and a matching-session count appear, and **Selected outside current filters: 3** shows. **Missing OBJECT** matches only 24 Sep. Unreviewed shows rows with per-state frame counts, and measurement columns read **Not measured**. The expanded controls offer gain, offset, binning and temperature. Sorting by sky distance orders sessions with evidence; 24 Sep has no distance value. The search matches no row.
-- **Expect (negative):** No filter changes the selected session IDs or session definitions. The filters offer no camera or equipment control. No filter or search shows the Esprit session. No filter starts measurement or marks a frame Usable.
-- **Trace:** flow C4, cross-flow "Selection hidden by filters" · VSEL-FR-05, VSEL-FR-06 · VSEL-AC-03, VSEL-AC-18 · PIX-AC-06 · D-W37 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Select keeps the selection tools from spec 066" (filters, hidden-selection count)
+- **Do:** In **Add sessions…**, set channel Ha. Replace it with **Missing OBJECT**, then with availability Offline. Open the expanded filter controls, sort by sky distance, clear all filters and search for `other camera`.
+- **Expect:** With Ha, an active filter chip and matching-session count appear. **Missing OBJECT** matches only 24 Sep. Offline matches 12 Sep, whose measurement columns read **Not measured**. The expanded controls offer gain, offset, binning, temperature, rig and group. Sorting by sky distance orders sessions with evidence; 24 Sep has no distance value. Searching `other camera` finds the Esprit suggestion.
+- **Expect (negative):** Filters change the suggestion list, not session definitions. No filter starts a measurement or changes a frame's library quality.
+- **Trace:** VSEL-FR-05, VSEL-FR-06 · VSEL-AC-03 · D-W95, D-W96
 
 ### S6 — Review, clear and restore the selection {#S6}
 
-- **Do:** Clear filters and click **Show selected**. Click **Clear selection**. Set the availability filter to Available and click **Select matching**, then clear filters.
-- **Expect:** **Show selected** lists exactly the five sessions with their reasons. The summary reports included frames and integration by channel from each session's available frames: Ha 111 / 9h 15m, OIII 103 / 8h 35m, total 214 / 17h 50m, with no unresolved member. Unreviewed and library-Unusable counts stay visible. While five sessions are selected, the status bar's selection count reads `5 selected`. **Clear selection** leaves zero selected, the summary at 0 lights, and no selection count in the status bar. **Select matching** selects the same five sessions again, the summary reads 214 / 17h 50m, and the status bar reads `5 selected` again.
-- **Expect (negative):** Including a session's frames applies no quality action; every frame still reads Unreviewed. **Select matching** with Available does not select 12 Sep.
-- **Trace:** flow C5 · VSEL-FR-06, VSEL-FR-08 · D02 · HARNESS-V5-FEEDBACK-R1.md Round 5 P-SB3 (selection count), §Round 6 "Select keeps the selection tools from spec 066"
+- **Do:** Clear filters, set rig `RedCat` and availability Available, then select the five matching sessions. Clear that selection and use **Select matching** with the same filters.
+- **Expect:** The selection contains exactly the five available RedCat sessions. The summary reports their available frames and integration by channel: Ha 111 / 9h 15m, OIII 103 / 8h 35m, total 214 / 17h 50m, with no unresolved input. Unusable and Unreviewed counts remain visible. Clearing selection leaves zero selected and a summary of 0 lights; **Select matching** restores the same five sessions and 214 / 17h 50m.
+- **Expect (negative):** Selecting sessions changes no library quality. **Select matching** with Available does not select 12 Sep.
+- **Trace:** VSEL-FR-06, VSEL-FR-08 · D-W95, D-W96
 
 ### S7 — Keep the selection while browsing {#S7}
 
-- **Do:** Sort by two different columns, change page if the table pages, toggle **Sky coverage**, click a footprint, then click a row.
-- **Expect:** The selection stays five sessions throughout. Clicking a footprint highlights its session row, and clicking a row highlights its footprint.
-- **Trace:** flow C5 · VSEL-FR-06, VSEL-FR-07 · VSEL-AC-03 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Select keeps the selection tools from spec 066" (sky coverage)
+- **Do:** Sort by two different columns, change page if the table pages, toggle **Sky coverage**, click a footprint, then click a suggestion row.
+- **Expect:** The selected set stays the same five sessions throughout. Clicking a footprint highlights its suggestion row, and clicking a row highlights its footprint.
+- **Trace:** VSEL-FR-06, VSEL-FR-07 · VSEL-AC-03 · D-W95, D-W96
 
-### S8 — Handle an offline candidate {#S8}
+### S8 — Handle an offline suggestion {#S8}
 
-- **Do:** Check the 12 Sep session and read its state. Then clear its checkbox.
-- **Expect:** While selected it reads Offline, its 24 last-observed frames are marked unverified, and the summary names them as unresolved members with reconnect, locate and remove offered. After it is cleared the selection is five sessions, the summary reads 214 / 17h 50m with no unresolved member, and the list still shows 12 Sep as an Offline candidate.
-- **Expect (negative):** The offline session is never dropped silently or counted as verified.
-- **Trace:** flow C6, cross-flow "Location offline" · VSEL-FR-09 · VSEL-AC-09 · D02
+- **Do:** Select the 12 Sep suggestion and read its state. Then clear its checkbox.
+- **Expect:** While selected, 12 Sep reads Offline and its 24 last-observed frames are marked unverified. The summary names them as unresolved inputs and offers reconnect, locate and remove. After it is cleared, five sessions remain selected and the summary reads 214 / 17h 50m with no unresolved input; 12 Sep remains an Offline suggestion.
+- **Expect (negative):** The offline session is never dropped silently or counted as verified. It is not added to the Project.
+- **Trace:** VSEL-FR-09 · VSEL-AC-09 · D-W100
 
-### S9 — Save the run {#S9}
+### S9 — Add sessions and apply the View {#S9}
 
-- **Do:** Click the Save button, which reads **Save revision 1**. Read the step bar. Open Project `NGC 7000 HOO` and read its members and goals.
-- **Expect:** A notice reads "Saved revision 1". The Select footer reads Revision 1 with its save time, and the run holds the five sessions with their reasons. In the step bar Select reads `Saved r1`, and Next no longer reads Save run. The Project lists those five sessions as members through `NGC7000-HOO-Siril`. Ha reads `9h15 in project · 12h35 captured · goal 10h` and OIII reads `8h35 in project · 10h35 captured · goal 12h`. "captured" is unchanged from P1, because every member was already a candidate. Both goals stay unmet.
-- **Expect (negative):** The run never reads saved before its write succeeds. Saving changes no quality state and creates no folder on disk. 12 Sep and the Esprit session are not Project members, and no label calls them "not in a run". No goal reads "in project" above "captured". The Project offers no action that assigns a session to itself.
-- **Trace:** flow C5 · VSEL-FR-12, VSEL-FR-13, VSEL-FR-16 · PRJ-FR-04, PRJ-FR-21 · PRJ-AC-03, PRJ-AC-10 · root FR-023 · D08, D-W34, D-W36, D-W66 · HARNESS-V5-IA.md Fix pass "Review drafts" (Select keeps "Saved r1")
+- **Do:** Confirm adding the five selected sessions to Project `NGC 7000 HOO`. On View, choose **Apply…**, review the change list and folder tree, then apply. Read the Project's sessions, groups and goals.
+- **Expect:** The Project's Sessions step lists the five added RedCat sessions in groups by rig and framing. The Apply sheet lists the additions and the resulting View tree; after Apply, `NGC 7000 HOO/View/` holds the five sessions. Ha reads `9h15 in project · 12h35 captured · goal 10h` and OIII reads `8h35 in project · 10h35 captured · goal 12h`. "captured" is unchanged from P1 because these sessions were already suggestions. Both goals stay unmet.
+- **Expect (negative):** Apply makes no change if any original it needs is Offline; this Apply needs only the five online originals. It changes no library quality state and creates no folder beside or from the original captures. 12 Sep and the Esprit session are not held by the Project. No goal reads "in project" above "captured".
+- **Trace:** PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-27, PRJ-FR-31 · VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · FR-033, FR-034 · D-W94, D-W95, D-W96, D-W100
 
 ## Success criteria
 
-- SC1: At S3 the list holds exactly 6 sessions, the selected set is exactly {18, 24, 26, 28, 30 Sep}, and 0 Esprit sessions appear at S3 or S5.
+- SC1: At S3 the suggestion list holds 6 RedCat and 1 Esprit session; the selection at S6 and S9 is exactly {18, 24, 26, 28, 30 Sep}.
 - SC2: 24 Sep shows no numeric distance at S3 or S4, and 0 sessions show a distance of 0.
-- SC3: The selected set stays exactly five sessions through S5 and S7; under the Ha filter the hidden-selected count is 3.
-- SC4: S5 starts 0 measurement jobs and changes 0 quality states.
-- SC5: The summary reads 214 / 17h 50m at S6 and after S8; 12 Sep is named unresolved while selected and leaves only by explicit clearing.
-- SC6: After S9 the run holds saved membership revision 1 with five sessions. The Project reads Ha 9h15 in project and 12h35 captured, and OIII 8h35 in project and 10h35 captured.
+- SC3: The selected set stays exactly five sessions through S5 and S7; under the Ha filter the matching-session count is observable and selection is unchanged.
+- SC4: S5 computes 0 frame measurements and changes 0 library quality states.
+- SC5: The summary reads 214 / 17h 50m at S6 and after S8; 12 Sep is named unresolved while selected and leaves the selection only by explicit clearing.
+- SC6: After S9 the Project holds exactly five RedCat sessions and its View contains them. The Project reads Ha 9h15 in project and 12h35 captured, and OIII 8h35 in project and 10h35 captured.
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design (`apps/prototype/design/HARNESS-V5-IA.md` S5 and Fix pass, `HARNESS-V5-FEEDBACK-R1.md` Round 5, on `ui-harness-v5` @ b5e813a5, and Round 6 @ 4f470775), the specs at d45a22ad, the defaults set in decisions D01, D02 and D08 and workflow decisions D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W66 and D-W72. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Expected behavior follows specs 063 to 072 at head and workflow decisions D-W93 to D-W106. No implementation has been validated against the F4 Project model.
 - G2: Unresolved implementation qualification: the footprint overlap used for ordering (D01) has no fixed value. The S3 fixture geometry must order the footprint sessions by an unambiguous margin once the value is chosen. Blocks readiness.
 - G3: Out of scope for this journey: D08 stale-overwrite refusal with reload/review needs a second concurrent writer and is not exercised. Blocks readiness until covered by a step or a journey.
-- G4: Covered elsewhere: choosing one subject among several (VSEL-AC-17) is exercised by J14/S2b, where the Start run sheet offers two subjects. Starting a run from a Target in no Project (VSEL-AC-16) no longer exists in the v5 design: a Target page offers Add to Plan, Add to Project or New Project, and runs start only inside a Project (HARNESS-V5-IA.md §Screens S10; J14 v3). VSEL-AC-16 needs a contract amendment.
+- G4: The former single-subject processing chooser does not apply: a Project may hold multiple Target subjects (PRJ-FR-01). This journey adds sessions to the Project and builds its View.
 - G5: (dissolved 2026-10-12): answered by Round 6 "Select keeps the selection tools from spec 066"; S1 and S7 now assert the linked Sky coverage view, S3 and S4 the distance from the Target, footprint evidence and geometry ordering, S5 the quality, Missing OBJECT and expanded filters, search and the hidden-selection count (`Selected outside current filters: 3`), and S6 Show selected and Select matching (VSEL-FR-03 to VSEL-FR-07, D-W37).
 
 ## Delta log
-
-- **Δ2** 2026-10-06 · S1 to S9 · behavior-change
-  The View becomes processing run `NGC7000-HOO-Siril` in Project `NGC 7000 HOO`, with a fixed subject and rig. Every available Target-and-rig candidate starts selected, replacing geometric preselection and manual inclusion; the standalone View is gone, and Save run feeds "in project".
-  Evidence: specs/066-view-selection VSEL-FR-01 to VSEL-FR-03, VSEL-FR-16, VSEL-AC-01, VSEL-AC-18, specs/065-project-goals PRJ-AC-10 and workflow decisions D-W3, D-W33, D-W37, D-W49, D-W50. D-W66 and D-W72 with VSEL-FR-02, RES-FR-10, PRJ-FR-04, PRJ-FR-21 and root FR-023. Rig names `RedCat` and `Esprit` from J15, OIII goal 12h from J20/S4 · by: journey-scribe (intent-gated)
-- **Δ3** 2026-10-12 · S1, S2, S6, S9 · behavior-change
-  The run header shows status Open with subject and rig as fixed values and Complete and Move to Trash, with no profile. The step bar has exactly one Next, Save run, which focuses Select's Save button and never points at the step being shown.
-  The status bar shows the selection count. Save reads "Save revision 1", and Select then reads `Saved r1`.
-  Evidence: HARNESS-V5-IA.md §Screens S5 and §Fix pass ("Next never points at the screen it is on", "Review drafts"); HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3; prototype src/features/v5/c-runs/run.tsx, select-step.tsx and messages/en-GB.json (apps/prototype/ on ui-harness-v5 @ b5e813a5); user instruction 2026-10-12 · by: JourneysV5.U3Runs (intent-gated)
-- **Δ4** 2026-10-12 · S1, S3, S4, S5, S6, S7 · behavior-change
-  The Select step keeps spec 066's selection tools in harness v5: Sky coverage, distance from the Target, footprint evidence and geometry ordering, the filters and search, Show selected, Select matching and the hidden-selection count.
-  The run header also offers Rename.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Select keeps the selection tools from spec 066", "Rename runs and Projects" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6B (intent-gated)
+- **Δ5** 2026-10-15 · S1, S2, S3, S4, S5, S6, S7, S8, S9 · behavior-change
+  The Project's Sessions step holds user-added sessions in groups by rig and framing, with matching suggestions kept separate. Selecting and adding sessions updates the Project's desired inputs; Apply builds its View from originals, without membership revisions.
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, FR-033 to FR-035, CAL-FR-09, LIB-FR-17, LIB-FR-20, LIB-FR-23, PRJ-FR-04, PRJ-FR-07 to PRJ-FR-09, PRJ-FR-27, PRJ-FR-31, VSEL-FR-02 to VSEL-FR-09, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · by: SpecF4Writer2 (intent-gated)

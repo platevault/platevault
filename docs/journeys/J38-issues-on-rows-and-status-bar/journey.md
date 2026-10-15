@@ -1,13 +1,13 @@
 ---
 id: J38
 title: Handle issues from the status bar and on their rows
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
-surfaces: [issues, status-bar, shell, home, sessions, projects, preparation, calibration, calibration-process, locations, import, indexing, activity, duplicates]
+surfaces: [issues, status-bar, shell, home, sessions, projects, view, output, calibration, calibration-process, locations, import, indexing, activity, duplicates]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-ISS1, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, D-W92, specs/063-clean-rebuild-contract/spec.md#FR-032]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#shell-and-navigation-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-2c-user-2026-10-10, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, P-SB3, P-ISS1, P-STO2, P-CAL2, P-CAL3, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S17, apps/prototype/src/domain/issues.ts, apps/prototype/src/app/issues-hub.tsx, apps/prototype/src/app/status-bar.tsx, apps/prototype/src/store/issues.ts, apps/prototype/src/store/notifications.ts, apps/prototype/src/store/operations.ts, apps/prototype/messages/en-GB.json, D-W11, D-W24, D-W74, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, D-W92, specs/063-clean-rebuild-contract/spec.md#FR-032, specs/064-library-inventory/spec.md#LIB-FR-17, specs/064-library-inventory/spec.md#LIB-FR-23, specs/065-project-goals/spec.md#PRJ-FR-17, specs/065-project-goals/spec.md#PRJ-FR-18, specs/068-calibration-inputs/spec.md#CAL-FR-06, specs/070-results-reuse/spec.md#RES-FR-11, D-W94, D-W98, D-W100, D-W101, D-W105]
 ---
 
 ## Goal
@@ -20,18 +20,18 @@ also shows which locations are online, how many rows are selected, what work is
 running, and the notifications history. Done means:
 
 - At every step the ⛔, ⚠ and ℹ counters add up to the issues shown on their rows and not dismissed. A counter shows a count only: it opens the owning page filtered to the affected rows, or a menu of those pages when there are several.
-- Following an issue's action opens the place that owns it: the location, the run at its blocker, the Calibration library, the session, or Activity with Retry.
+- Following an issue's action opens the place that owns it: the location, the Project's View step after a failed Apply, the Calibration library, a session or the Project's Output step.
 - An offline drive, interrupted work and a duplicates result raise their issue. Reconnecting the drive and retrying the work clear it without any other action.
 - Running work shows with its progress, and "Idle" shows when nothing runs. Cancel appears on hover or keyboard focus.
 - With no issues the bar shows only a muted ✓. A counter never reads 0.
-- Dismissing an issue (×) on its row hides it from the counts until it changes, and leaves the state behind it unchanged. Show dismissed on the owning page lists it with Restore. The two issues that are a run's next step have no ×.
-- Choosing a counter or opening the notification history changes no file, catalog record or run.
+- Dismissing an issue (×) on its row hides it from the counts until it changes, and leaves the state behind it unchanged. Show dismissed on the owning page lists it with Restore. Every issue has a row-level Dismiss action.
+- Choosing a counter or opening the notification history changes no file, catalog record or Project.
 
 ## Preconditions
 
-- P1: A development catalog seeded to the J32/P1 to J32/P4 state. `NGC7000-HOO-Siril` of `NGC 7000 HOO` waits at Calibrate, and `M31-OSC-Siril` of `M 31 OSC` is at Prepare with a failed preparation. Sessions `3 Oct` and `5 Oct` have no confirmed Target, and `4 Oct M 33` is a candidate of no Project. The seed adds the following (G2):
-  - `NGC7000-HOO-Siril` has exactly 2 calibration matches that need review.
-  - `M31-OSC-Siril` has exactly 1 pending master offer.
+- P1: A development catalog seeded to the J32/P1 to J32/P4 state. `M 31 OSC` has a failed Apply shown on its Project's View step. Sessions `3 Oct` and `5 Oct` have no confirmed Target, `4 Oct M 33` is Ready with settled calibration and is not in a Project, and `1 Oct Ha` waits in Needs calibration. The seed adds the following (G2):
+  - `1 Oct Ha` is a Ready session whose calibration is unsettled; it appears in Home's Needs calibration queue and as a suggestion to `IC 1396 Ha`.
+  - The `M 31 OSC` Project's Output step has exactly 1 pending master offer from `Processing/`, with Add to calibration library and Hide actions.
   - One raw calibration session, 10 Ha flats of 2 Oct on rig `RedCat`, awaits Stack in the Calibration library. No calibration process has failed.
   - One Usable `1 Oct Ha` frame, F-drift, had its bytes replaced in place by a same-size file with different pixel bytes after review, as in J22/P5. PlateVault has read the change, and F-drift reads Changed content.
   - Nothing else needs attention. No operation is running, failed or interrupted, no adopted master has changed, and no frame has a byte-identical second copy.
@@ -39,7 +39,7 @@ running, and the notifications history. Done means:
 - P3: The notification history was opened once before S1, so no notification is unread.
 - P4: Removable volume `Card-2` is as in J31/P4: 12 NGC 7000 Ha 300 s `RedCat` lights from the night of 2026-10-04, with OBJECT `NGC7000` and no pointing. It has not been imported, and none of its files is byte-identical to a library file.
 - P5: Volume `Spare` is mounted, has an OS Trash and is not registered. `Spare/Captures/` holds byte-identical copies of two `4 Oct M 33` lights, M-1 and M-2. Each file is 52,191,360 bytes.
-- P6: A second development catalog, catalog B, holds only the Done Project `Pleiades 2025` with its Complete run. Every session of the catalog has a confirmed Target and is a member of that run. Its one registered location, `Astro-T7 captures`, is online, and nothing else needs attention (G2).
+- P6: A second development catalog, catalog B, holds only the Closed Project `Pleiades 2025`. Its sessions have confirmed Targets and remain held by that Project. Its one registered location, `Astro-T7 captures`, is online, and nothing else needs attention (G2).
 - P7: Manifests (relative path, size, SHA-256) of every file on `Astro-T7`, `Cold-1`, `Card-2` and `Spare`, recorded outside PlateVault before S1.
 
 ## Steps
@@ -54,37 +54,38 @@ running, and the notifications history. Done means:
 
   The 7 issues show on the rows they affect, each with its action:
   - Sessions: `2 need a Target` (Assign) on Home's Pending work and the Needs a Target rows, and `1 not in a Project` (Add) on the `4 Oct M 33` row.
-  - Runs: `M31-OSC-Siril blocked` (Open) on its run row in `M 31 OSC` and in Home's Open work.
-  - Calibration: `NGC7000-HOO-Siril: 2 to review` (Review) and `M31-OSC-Siril`'s `1 master offered` (Review) on their run rows, and `1 to stack` (Stack) on the 2 Oct Ha flat process row in the Calibration library.
+  - Projects: `M 31 OSC` Apply failed (Open View) on its Project row and in Home's Open work.
+  - Sessions and calibration: `1 needs calibration` (Choose flats) on `1 Oct Ha` in Sessions' Needs calibration queue and Home's Pending work; `1 to stack` (Stack) on the 2 Oct Ha flat process row in the Calibration library.
+  - Output: `M 31 OSC`'s `1 master offered` (Add to calibration library) on its Project's Output step and Open work.
   - Drift: `1 changed` (Review) on the `1 Oct Ha` session row, and Changed content on the F-drift frame row.
-- **Expect (negative):** The toolbar has no Issues button and the app has no Issues hub. Home shows no issues strip and no alerts list. The status bar shows no pills and no inline notification. Opening these pages changes no catalog record, run or file.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 1, §Round 5 P-SB3, "Home has no issues strip" · HARNESS-V5-IA.md §Round 2b status bar · D-W92, 063 FR-032 · src/domain/issues.ts deriveIssues
+- **Expect (negative):** The toolbar has no Issues button and the app has no Issues hub. Home has no alerts list. The status bar shows no pills and no inline notification. Opening these pages changes no catalog or Project record and no file.
+- **Trace:** PRJ-FR-17 · D-W89, D-W92, D-W94, D-W105 · 063 FR-032 · 064 LIB-FR-17, LIB-FR-23 · 065 PRJ-FR-17, PRJ-FR-18 · 070 RES-FR-11
 
 ### S2 — Open each severity counter {#S2}
 
 - **Do:** Choose the ⛔ counter, then the ⚠ counter, then the ℹ counter, going back after each.
 - **Expect:** No counter opens a list of issues. A counter whose issues all have one owning page opens it filtered to the affected rows; a counter whose issues have several owners opens a menu naming each page with its count, and each entry opens that page filtered:
-  - ⛔ opens `M 31 OSC` with its runs filtered to `M31-OSC-Siril`, whose row reads `blocked`.
-  - ⚠ offers `Sessions · 2` (the two sessions that need a Target, and the `1 Oct Ha` session whose drift reads `1 changed`) and `NGC 7000 HOO · 1` (`NGC7000-HOO-Siril: 2 to review`).
+  - ⛔ opens `M 31 OSC` filtered to its Project row; its View step shows the failed Apply.
+  - ⚠ offers `Sessions · 3` (the two sessions that need a Target, `1 Oct Ha` needing calibration and its drift issue).
   - ℹ offers `Sessions · 1` (`4 Oct M 33`, not in a Project), `M 31 OSC · 1` (`1 master offered`) and `Calibration · 1` (`1 to stack`).
 
-  Together the filtered pages show the 7 issues of S1, each exactly once. Following the drift row's Review opens the `1 Oct Ha` session, where F-drift reads Changed content.
+  Together the filtered pages show the 7 issues of S1, each exactly once. The `1 Oct Ha` row carries separate Needs calibration and drift issues; following the drift row's Review opens the session, where F-drift reads Changed content.
 - **Expect (negative):** No counter or menu lists an issue's text, and no filtered page shows a row with no issue. Choosing a counter changes nothing.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 · D-W92 (counts only, each opening the owning page filtered; owner's answer of 2026-10-14, F7) · src/domain/issues.ts severities
 
-### S3 — Follow the blocked run {#S3}
+### S3 — Follow the failed Apply issue {#S3}
 
-- **Do:** From the ⛔ counter's filtered `M 31 OSC` page, follow `M31-OSC-Siril blocked` (Open) on its row.
-- **Expect:** `M31-OSC-Siril` opens at its Prepare step. The failed preparation is shown as the blocker, as a terse refusal with its reason. The ⛔ 1 counter is still shown.
-- **Expect (negative):** Opening the run starts no preparation and changes no run state. The issue stays until the blocker is resolved.
-- **Trace:** HARNESS-V5-IA.md §Screens S5 · src/domain/issues.ts run-blocked (danger for a failed preparation, link to the blocking step)
+- **Do:** From the ⛔ counter's filtered `M 31 OSC` page, follow the failed Apply issue (Open View) on the Project row.
+- **Expect:** `M 31 OSC` opens at its View step. The failed Apply and its refusal reason are shown on the Project. The ⛔ 1 counter is still shown.
+- **Expect (negative):** Opening the Project does not retry Apply or change Project state. The issue stays until Apply succeeds.
+- **Trace:** PRJ-FR-17, PRJ-FR-18 · D-W92, D-W94, D-W100 · 063 FR-032
 
 ### S4 — Follow the informational issues {#S4}
 
-- **Do:** From the ℹ counter's menu, open `Calibration · 1` and follow `1 to stack` (Stack) on its row. From the menu again, open `M 31 OSC · 1` and follow `1 master offered` (Review). Finally open `Sessions · 1` and follow `1 not in a Project` (Add).
+- **Do:** From the ℹ counter's menu, open `Calibration · 1` and follow `1 to stack` (Stack) on its row. From the menu again, open `M 31 OSC · 1` and follow `1 master offered` on the Project's Output step. Finally open `Sessions · 1` and follow `1 not in a Project` (Add) on `4 Oct M 33`.
 - **Expect:**
   - Stack opens the 2 Oct Ha flat process, listed as awaiting Stack.
-  - The offer's Review opens `M31-OSC-Siril` at Calibrate, with the one pending master offer and its Hide action.
+  - The offer opens `M 31 OSC` at its Output step, with the one pending master offer, Add to calibration library and Hide actions.
   - `Sessions · 1` opens Sessions filtered to `4 Oct M 33`, and Add offers Create Project and Add to Project.
 
   ℹ still reads 3.
@@ -105,14 +106,14 @@ running, and the notifications history. Done means:
 
 ### S5a — Dismiss two issues on their rows and restore them {#S5a}
 
-- **Do:** On the affected rows, read which issues have an ×. Dismiss `1 to stack` on the 2 Oct Ha flat process row and `1 master offered` on the `M31-OSC-Siril` row. Read the counters. Then turn on **Show dismissed** on the Calibration library, choose Restore on the flat process row, and do the same on `M 31 OSC`.
+- **Do:** On the affected rows, read which issues have an ×. Dismiss `1 to stack` on the 2 Oct Ha flat process row and `1 master offered` on `M 31 OSC`'s Output row. Read the counters. Then turn on **Show dismissed** on the Calibration library, choose Restore on the flat process row, and do the same on the Project's Output step.
 - **Expect:**
-  - Every issue has an × with the tooltip "Dismiss", except `M31-OSC-Siril blocked` and `NGC7000-HOO-Siril: 2 to review`, which are a run's next step.
+  - Every issue has an × with the tooltip "Dismiss".
   - After both dismissals, ℹ reads 1, while ⛔ 1 and ⚠ 3 are unchanged, and the ℹ counter opens Sessions filtered to `4 Oct M 33` directly.
-  - The rows keep their state: the 2 Oct Ha flat process still awaits Stack, and `M31-OSC-Siril`'s Calibrate step still shows its pending master offer with its Hide action.
+  - The rows keep their state: the 2 Oct Ha flat process still awaits Stack, and `M 31 OSC`'s Output step still shows its pending master offer with Add to calibration library and Hide actions.
   - With Show dismissed on, each page lists its dismissed issue on its row with **Restore**. After the first Restore ℹ reads 2, and after the second it reads 3.
-- **Expect (negative):** Dismissing or restoring an issue starts no stack, hides no master offer, and changes no run, calibration process or file. No counter counts a dismissed issue, and no counter reads 0.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 8 P-ISS1 ("The counters and badges count only issues that are not dismissed", "Dismiss hides the issue only", "No × on issues that are a run's next step (`run-blocked`, `calibration-review`)") and its superseding note of 2026-10-14 · D-W92 (Dismiss and Restore live on the rows)
+- **Expect (negative):** Dismissing or restoring an issue starts no stack, hides no master offer, and changes no Project, calibration process or file. No counter counts a dismissed issue, and no counter reads 0.
+- **Trace:** D-W92 · 063 FR-032 · PRJ-FR-17 · CAL-FR-06 · RES-FR-11 (Dismiss and Restore act on rows; counters count undismissed issues).
 
 ### S5b — A dismissed issue returns when it changes {#S5b}
 
@@ -127,12 +128,12 @@ running, and the notifications history. Done means:
 
 ### S6 — Read the selection count {#S6}
 
-- **Do:** Open Project `NGC 7000 HOO` and, in its Candidates, select the `12 Sep` and `24 Sep` sessions. Then clear the selection.
+- **Do:** Open Project `NGC 7000 HOO` and, in **Add sessions…** on its Sessions step, select the `12 Sep` and `24 Sep` sessions. Then clear the selection.
 - **Expect:** While the two sessions are selected, the left of the status bar reads `2 selected` after the locations. After clearing, the selection count is gone.
-- **Expect (negative):** Selecting starts no run and changes no counter.
+- **Expect (negative):** Selecting starts no operation and changes no counter.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 P-SB3 "then the selection count when a list has a selection" · src/app/status-selection.ts
 
-### S7 — Watch an import run {#S7}
+### S7 — Watch an import {#S7}
 
 - **Do:** Open Import on `Card-2`. In the preview, choose NGC 7000 as the `4 Oct` Ha session's Target (its lights carry no pointing, so none is prefilled; `OBJECT NGC7000` is only a hint), then import into `Astro-T7 captures` with Copy. While it runs, hover the running work in the status bar, move the pointer away, then move keyboard focus onto it.
 - **Expect:** The middle of the bar shows the import as plain text with a mini progress bar, in place of "Idle". Cancel appears while the pointer hovers the item, disappears when the pointer leaves, and appears again when the item has keyboard focus.
@@ -143,18 +144,18 @@ running, and the notifications history. Done means:
 
 - **Do:** Once at least 4 items have been copied and verified, quit PlateVault and read the confirmation. Cancel it, then quit again and confirm. Launch PlateVault again. Choose the ⚠ counter and open `Activity · 1` from its menu, which opens Activity filtered to the interrupted import, and choose Retry.
 - **Expect:** While the import runs, quitting first asks for confirmation. Cancelling it leaves PlateVault open with the import still shown as running work; confirming quits. After relaunch, ⚠ reads 4, and the import's row in Activity reads interrupted. Activity shows the import as Interrupted with "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
-  - After Retry, the import runs from its recorded progress, shows again as running work, and finishes with 12 lights imported.
+  - After Retry, the import resumes from its recorded progress, shows again as running work, and finishes with 12 lights imported.
   - ⚠ returns to 3, and no row shows the interrupted issue.
   - Sessions lists a new `4 Oct` Ha session of 12 frames with its Target NGC 7000 confirmed. Home's Pending work still reads `2 need a Target`, equal to the number of sessions under the Sessions filter Needs a Target.
 - **Expect (negative):** PlateVault does not quit while the import runs without that confirmation. No verified item is copied a second time, and every `Card-2` file still matches P7. The imported session is not listed under Needs a Target.
-- **Trace:** src/store/operations.ts interruptRunningOperations, resumeOperation · messages op_interrupted_summary · src/domain/issues.ts work-interrupted · D-W11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Quit asks while an import, index or prepare runs", P-IMP2 · J31/S10
+- **Trace:** src/store/operations.ts interruptRunningOperations, resumeOperation · messages op_interrupted_summary · src/domain/issues.ts work-interrupted · D-W11 · HARNESS-V5-FEEDBACK-R1.md §Round 6 P-IMP2 · J31/S10
 
 ### S9 — See the automatic duplicate scan {#S9}
 
 - **Do:** After the import finishes, read the status bar, then open Activity.
-- **Expect:** A duplicate scan runs as background work in the middle of the bar after the import. Activity records that scan after the import with an outcome of no duplicates. The bar then reads "Idle".
+- **Expect:** A duplicate scan starts as background work in the middle of the bar after the import. Activity records that scan after the import with an outcome of no duplicates. The bar then reads "Idle".
 - **Expect (negative):** The scan raises no duplicates issue and moves, renames or writes no file. `Card-2`, still connected and now holding 12 sources byte-identical to the imported lights, is not part of the scan: no duplicate copy is counted and no `Card-2` path is listed.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates "Duplicates are scanned automatically after each index and import, as a background operation" · src/store/actions/storage.ts duplicate-scan · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Capture cards never raise the duplicates warning"
+- **Trace:** src/store/actions/storage.ts duplicate-scan · HARNESS-V5-FEEDBACK-R1.md §Round 5 Storage and duplicates · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Capture cards never raise the duplicates warning"
 
 ### S10 — Cancel running work by keyboard {#S10}
 
@@ -203,17 +204,17 @@ running, and the notifications history. Done means:
 ## Success criteria
 
 - SC1: At S1, S5, S8, S11 and S14 the counters add up to the number of issues shown on rows: 1 + 3 + 3 = 7, then 1 + 4 + 3 = 8, then 7, 8 and 0. In S2 every one of the 7 issues appears on exactly one filtered page. In S5a and S5b the counters add up to the issues not dismissed at every reading: 5, 6, 7, then 7, 7, 8 and 7.
-- SC2: Each issue's action opens its owner in one step: the run at Prepare (S3), the Calibration library, the run's Calibrate step and the Sessions filter (S4), Settings › Locations (S5), Activity with Retry (S8) and the Duplicates review (S11).
+- SC2: Each issue's action opens its owner in one step: the Project's View step at the failed Apply (S3), the Calibration library, the Project's Output step and the Sessions filter (S4), Settings › Locations (S5), Activity with Retry (S8) and the Duplicates review (S11).
 - SC3: The offline issue appears within one status-bar update of the eject and clears on remount with 0 user actions (S5). The interrupted issue clears when Retry finishes, and the import ends with exactly 12 lights imported and 0 copied twice (S8).
 - SC4: Running work shows instead of "Idle" while an operation runs (S7, S9, S10). Cancel is visible on hover and on focus only, and after Cancel focus lands on the bell (S10).
 - SC5: The duplicates badge reads exactly `2 copies · 104 MB`, and its review lists 2 groups (S11).
 - SC6: 0 files are moved, trashed or deleted, and the only new files are the 12 imported lights (S13).
-- SC7: Exactly 5 of the 7 issues have an × (S5a). Dismissing 2 lowers the counters' total from 7 to 5, and Restore on each row returns it to 7, with 0 runs, master offers, calibration processes or files changed (S5a). The dismissed offline issue returns on the next eject with 0 user actions on the dismissed entry (S5b).
+- SC7: All 7 of the 7 issues have an × (S5a). Dismissing 2 lowers the counters' total from 7 to 5, and Restore on each row returns it to 7, with no Project, master offer, calibration process or file changed (S5a). The dismissed offline issue returns on the next eject with 0 user actions on the dismissed entry (S5b).
 
 ## Known gaps
 
 - G1: Not validated. Behavior follows the harness v5 design: HARNESS-V5-FEEDBACK-R1.md §Shell and navigation 1, §Round 1b, §Round 2c and §Round 5 P-SB3, and HARNESS-V5-IA.md §Round 2b (apps/prototype/design/ on ui-harness-v5 @ b5e813a5). The prototype at b5e813a5 still shows P-SB2 pills and inline notifications, and P-SB3 and the duplicates issue are Round 5 work in progress. The Round 6 decisions S7 to S13 assert (HARNESS-V5-FEEDBACK-R1.md §Round 6 at ui-harness-v5 @ 4f470775: Targets confirmed in the Import preview, Quit asks, library-only duplicate scan) are not yet in the prototype, nor is the Round 8 P-ISS1 dismissal that S5a and S5b assert. No implementation has been validated against this journey.
-- G2: Unresolved implementation qualification: P1 and P6 need seeded catalogs in a known state, including a pending master offer, a raw flat session awaiting Stack and a drifted frame. No fixture builder exists. Blocks readiness.
+- G2: Unresolved implementation qualification: P1 and P6 need seeded catalogs in a known state, including a Project Output master offer, a raw flat session awaiting Stack, a Ready session in Needs calibration and a drifted frame. No fixture builder exists. Blocks readiness.
 - G3: Unresolved implementation qualification: S8 needs the import interrupted at a known point, and S10 needs a rescan that runs long enough to focus. No pacing or fault fixture exists. Blocks readiness.
 - G4: Out of scope for this journey: failed work (`… failed`, ⛔, from an operation that fails) and an unreadable location (`… unreadable`, ⛔, Fix). Both need fault injection. A failed calibration process belongs to the calibration process journey, and an adopted master that changed belongs to J26. Blocks readiness until covered by a step or a journey.
 - G5: Out of scope for this journey: the bar at narrow widths, when running work overflows into `+N more running`, and in other languages.
@@ -230,3 +231,6 @@ running, and the notifications history. Done means:
 - **Δ4** 2026-10-14 · S1, S2, S3, S4, S5, S5a, S5b, S8, S11, S14 · behavior-change
   No Issues hub and no toolbar Issues button: each issue shows on the row it affects. The ⛔ ⚠ ℹ counters show counts only and open the owning page filtered to the affected rows, or a menu of those pages, with no list of issues. Dismiss and Restore live on the rows, with Show dismissed on the owning page.
   Evidence: owner's answers of 2026-10-14 (Q12, F7), D-W92 and 063 FR-032 in PR #1804 · by: SpecAmendmentsR9 (intent-gated)
+- **Δ5** 2026-10-15 · S1, S2, S3, S4, S5a, S6, S7, S8, S9, S11, S14 · behavior-change
+  Issues now sit on F4 Project, session and Output rows: a failed Apply, a session in Needs calibration and a master offer on the Project's Output step replace run-row examples. The counter arithmetic remains 1 + 3 + 3 = 7 at S1; dismissal counts reflect row-level actions.
+  Evidence: D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-23, 065 PRJ-FR-17/PRJ-FR-18, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)
