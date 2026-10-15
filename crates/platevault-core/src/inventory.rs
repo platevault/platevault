@@ -202,21 +202,44 @@ pub(crate) enum Entry {
     Other,
 }
 
-/// What one entry is by the walker's rules, from its no-follow metadata: a
-/// link or junction is never entered, and a folder only on the root's volume.
-fn classify(meta: &Metadata, relative: &Path, root: &Stamp) -> Entry {
+/// One entry by the walker's rules, from its no-follow metadata. The scan
+/// ([`Walk::visit`]) and new-capture discovery ([`classify`]) both decide by
+/// it, so discovery counts exactly the files the next scan reads.
+enum Kind {
+    /// A link or junction: never followed.
+    Link,
+    /// A real folder on the root's volume, entered; its stamp.
+    Folder(Stamp),
+    /// A real folder on another volume: never entered.
+    ForeignVolume,
+    /// Anything else, with its format: `Unsupported` unless it is a regular
+    /// file with a supported extension.
+    File(ImageFormat),
+}
+
+fn kind(meta: &Metadata, relative: &Path, root: &Stamp) -> Kind {
     if fs_pathsafe::is_link_or_junction_metadata(meta) {
-        Entry::Other
+        Kind::Link
     } else if meta.is_dir() {
-        if identity::stamp(meta).same_device(root) {
-            Entry::Folder
+        let stamp = identity::stamp(meta);
+        if stamp.same_device(root) {
+            Kind::Folder(stamp)
         } else {
-            Entry::Other
+            Kind::ForeignVolume
         }
-    } else if meta.is_file() && format_of(relative) != ImageFormat::Unsupported {
-        Entry::Frame
+    } else if meta.is_file() {
+        Kind::File(format_of(relative))
     } else {
-        Entry::Other
+        Kind::File(ImageFormat::Unsupported)
+    }
+}
+
+/// What one entry is to discovery, by the walker's rules ([`Kind`]).
+fn classify(meta: &Metadata, relative: &Path, root: &Stamp) -> Entry {
+    match kind(meta, relative, root) {
+        Kind::Folder(_) => Entry::Folder,
+        Kind::File(ImageFormat::Fits | ImageFormat::Xisf) => Entry::Frame,
+        Kind::Link | Kind::ForeignVolume | Kind::File(ImageFormat::Unsupported) => Entry::Other,
     }
 }
 
@@ -595,45 +618,37 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                     io_availability(&error),
                 );
             }
-            Ok(meta) if fs_pathsafe::is_link_or_junction_metadata(&meta) => {
-                self.exclude(
+            Ok(meta) => match kind(&meta, &relative, &self.root_stamp) {
+                Kind::Link => self.exclude(
                     &relative,
                     "link or junction not followed".into(),
                     Availability::Unreadable,
-                );
-            }
-            Ok(meta) if meta.is_dir() => {
-                let stamp = identity::stamp(&meta);
-                if stamp.same_device(&self.root_stamp) {
-                    children.push(Rc::new(Folder {
-                        relative,
-                        path,
-                        stamp,
-                        parent: Some(Rc::clone(parent)),
-                        excluded: Cell::new(false),
-                    }));
-                } else {
-                    self.exclude(
-                        &relative,
-                        "a different volume is mounted here; not traversed".into(),
-                        Availability::IdentityConflict,
-                    );
-                }
-            }
-            Ok(meta) => {
-                self.totals.discovered += 1;
-                let format =
-                    if meta.is_file() { format_of(&relative) } else { ImageFormat::Unsupported };
-                match format {
-                    ImageFormat::Fits => {
-                        self.read(parent, &relative, &path, &meta, format, &FitsExtractor);
+                ),
+                Kind::Folder(stamp) => children.push(Rc::new(Folder {
+                    relative,
+                    path,
+                    stamp,
+                    parent: Some(Rc::clone(parent)),
+                    excluded: Cell::new(false),
+                })),
+                Kind::ForeignVolume => self.exclude(
+                    &relative,
+                    "a different volume is mounted here; not traversed".into(),
+                    Availability::IdentityConflict,
+                ),
+                Kind::File(format) => {
+                    self.totals.discovered += 1;
+                    match format {
+                        ImageFormat::Fits => {
+                            self.read(parent, &relative, &path, &meta, format, &FitsExtractor);
+                        }
+                        ImageFormat::Xisf => {
+                            self.read(parent, &relative, &path, &meta, format, &XisfExtractor);
+                        }
+                        ImageFormat::Unsupported => self.totals.unsupported += 1,
                     }
-                    ImageFormat::Xisf => {
-                        self.read(parent, &relative, &path, &meta, format, &XisfExtractor);
-                    }
-                    ImageFormat::Unsupported => self.totals.unsupported += 1,
                 }
-            }
+            },
         }
         if self.pending.files.len() + self.pending.issues.len() >= self.batch_size {
             self.flush()?;
