@@ -49,9 +49,10 @@ The user adds Ready sessions whose calibration is settled to a Project, excludes
 - **VSEL-AC-23**: Withdrawn (D-W78). Projects have no Review step; frames are reviewed in session intake (LIB-FR-20).
 - **VSEL-AC-24**: Given a session the Project holds whose Target is later re-confirmed as another Target, when the Sessions step opens, then the session is still in the Project with its new Target shown, and nothing is removed without the user. (D-W94)
 - **VSEL-AC-25**: Given a frame of a Closed Project's session later goes to the OS Trash from another Project's Wrap up, when the Closed Project opens, then its sessions still list that frame, marked "Trashed". The frame appears in no suggestion list or open Project total. (D-W52, D-W97)
-- **VSEL-AC-26**: Given an open Apply sheet, when a Library rejection reaches the Project, then choosing Apply is refused and the sheet refreshes with the new removal listed. This refusal is provisional. (D-W100)
+- **VSEL-AC-26**: Withdrawn (D-W72).
 - **VSEL-AC-27**: Given a View that holds a DSS `.Info.txt` beside each light and a note the user saved there, when the Apply sheet opens, then each file is listed with a tick box. After Apply only the ticked files are in the new View, and the unticked ones stay in `View (previous)/`. (D-W100)
 - **VSEL-AC-28**: Given a Copies View in which a tool rewrote one copy's header, when the Apply sheet opens, then it lists that copy as differing from what PlateVault placed. The new View gets a fresh copy from the original, and the changed one stays in `View (previous)/`. (D-W100)
+- **VSEL-AC-29**: Given an open Apply sheet, when a Library rejection reaches the Project, then choosing Apply is refused and the sheet refreshes with the new removal listed. This refusal is provisional. (D-W100)
 
 ### Edge Cases
 
