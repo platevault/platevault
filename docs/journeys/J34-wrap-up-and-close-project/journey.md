@@ -7,224 +7,220 @@ last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [projects, wrap-up, archive, sessions, targets, home, view-review, locations, activity, status-bar, issues]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W35, D-W42, D-W43, D-W46, D-W48, D-W52, D-W54, D-W57, D-W66, D-W69, D-W70, D-W72, D-W74, P-WRAP1, P-ARC1, P-PREP3, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-7-user-2026-10-12-run-views-research-designrun-views-optionsmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, D-W93, D-W94, D-W97, D-W100, PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-25, PRJ-FR-30, STO-FR-01, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W42, D-W43, D-W46, D-W52, D-W54, D-W57, D-W66, D-W70, D-W74, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, D-W93, D-W94, D-W96, D-W97, D-W98, D-W100, PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32, STO-FR-01, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, VSEL-FR-12, LIB-FR-18]
 ---
 
 ## Goal
 
-The user wraps up Project `NGC 7000 HOO` after its View changes have been applied. Wrap up opens only when no Project change is pending and offers Clean up → Trash → Archive in order. The user skips Clean up, reviews the rejected-frame, `Processing/` file and duplicate-copy offers, then chooses **Close project…** as Archive's Proceed. The review transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`; 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it. Sources retire only after the destination and affected references verify. The symlinked View entries follow the archived sessions. `Output/` is kept, and the Project reads Archived after the transfer succeeds. Closed and Archived Projects stay locked for good: there is no Reopen, no restore of archived sessions and no library or calibration change to them. **Duplicate…** is the way to continue one.
+The user wraps up Project `NGC 7000 HOO` after its View changes have been applied. Wrap up opens only when no Project change is pending and offers Clean up → Trash → Archive in order. The user skips Clean up, so the Project's Symlinks View stays in place. In Trash the user moves the rejected frames, the `Processing/` files and the duplicate copies to the OS Trash, then chooses **Close project…** as Archive's Proceed. Archive transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it. Sources retire only after the destination and affected references verify, and the View's symlinks follow the archived sessions. `Output/` is kept, and the Project reads Archived after the transfer succeeds. Closed and Archived Projects are locked for good: there is no Reopen, no restore of archived sessions, and no library or calibration change reaches them. **Duplicate…** is the way to continue one.
 
 ## Preconditions
 
-- P1: The existing NGC 7000 capture sessions, frame-quality fixture and disposable Trash inventory from the earlier journey fixtures are established. The open Project's View contains the established symlink entries for the selected NGC 7000 frames, and `Processing/` contains the fixture files used below. The Project has no pending changes, `Output/` holds the two established Results, and another open Project holds session 28 Sep and has a symlinked View entry for F-prep. Project `NGC 7000 SHO` is also open and has 18, 28 and 30 Sep only as suggestions.
-- P2: The frame-quality fixture has six rejected 30 Sep frames, five with library quality Unusable and one with quality Unreviewed; 28 Sep has no Project-scoped rejection. Library quality is the only quality scope.
-- P3: After J27/S2, two included 18 Sep frames of `NGC7000-HOO-Siril` were marked Unusable in the library. Their symlink entries remain in `NGC7000-HOO-Siril/`.
-- P4: Open Project `NGC 7000 Ha deep` holds session 28 Sep. Its View contains the symlink to F-prep. F-res and F-ab are Unusable library frames. No Result lineage is recorded or used to decide whether a frame may be trashed.
-- P5: The open Project `NGC 7000 SHO` from J26/P7 has 18, 28 and 30 Sep as candidates, and none of its runs includes them.
-- P6: `Scratch/Captures` is registered and indexed as a Captures location after `Astro-T7/Captures`. It holds a byte copy of one of the five Unusable 30 Sep frames, F-dup. `Scratch` has no OS Trash.
-- P7: The J27/P7 helper is available. F-drift, one of the other Unusable 30 Sep frames, is its target in S6. One registered intermediate is its target in S9.
-- P8: `Processing/WBPP/` holds 416 tool files and the generated source of the master flat adopted into `Astro-T7/Calibration`. `Output/` holds two Results, which are not offered for Trash.
+- P1: Project `NGC 7000 HOO` is open and holds the sessions 18, 24, 26, 28 and 30 Sep. It has no pending changes and no PlateVault operation is running on it. Its View was built by its last Apply in Symlinks mode and holds a symlink to each frame its sessions include, among them 35 symlinks to the 35 frames of 26 Sep. No `View (previous)/` remains. `Output/` holds two Results.
+- P2: Library quality is the only quality scope. Five 30 Sep frames have library quality Unusable, among them F-drift and F-dup, and one 30 Sep frame is Unreviewed. The fixture records each Unusable frame's channel and exposure.
+- P3: Two 18 Sep frames were marked Unusable in the library while the View held them. The Project applied the resulting Library removals (VSEL-FR-12, VSEL-FR-15), so its View holds no entry for any of its library-Unusable frames.
+- P4: The 28 Sep frames F-res, F-prep and F-ab have library quality Unusable. Open Project `NGC 7000 Ha deep` holds 28 Sep. Its View still holds a symlink to F-prep, because its Library removal of F-prep is pending and not yet Applied; it holds no entry for F-res or F-ab. No Result lineage is recorded or used to decide whether a frame may be trashed.
+- P5: Open Project `NGC 7000 SHO` has 18, 28 and 30 Sep only as suggestions and holds none of them.
+- P6: `Scratch/Captures` is registered and indexed as a Captures location after `Astro-T7/Captures`. It holds a byte copy of F-dup. `Scratch` has no OS Trash.
+- P7: A helper outside PlateVault saves a named file's bytes and nanosecond mtime, overwrites the file in place with a same-size variant whose bytes differ, restores the saved mtime, and can later restore the saved bytes and mtime. Its targets are F-drift in S6 and one `Processing/WBPP/` file in S9.
+- P8: `Processing/WBPP/` holds 416 tool files and the generated source of the master flat adopted into `Astro-T7/Calibration`.
 - P9: A disposable writable volume `Archive` has free space for the Project's sessions. Settings › Locations lists two archive locations on it, registered before S1: `Archive/NGC7000`, marked Default, and `Archive/Long-term`.
-- P10: The isolated account's OS Trash inventory is recorded. So are manifests of the Project's captures, `Processing/`, `Output/` and the adopted master, plus directory listings of `Astro-T7`, `Backup` and `Archive`.
+- P10: The isolated account's OS Trash inventory is recorded. So are manifests of the Project's captures, `Processing/`, `Output/` and the adopted master, plus directory listings of `Astro-T7`, `Backup`, `Archive` and the Views of `NGC 7000 HOO` and `NGC 7000 Ha deep`.
 - P11: Volume `Backup`, which has an OS Trash, holds `Backup/Captures`, registered and indexed as a Captures location after `Astro-T7/Captures`. It holds byte copies of two 24 Sep frames, D-1 and D-2, and no other file.
 
 ## Steps
 
 ### S1 — Open Wrap up with no pending changes {#S1}
 
-- **Do:** On the Project page of `NGC 7000 HOO`, read the stage strip, then switch the page to Wrap up.
-- **Expect:** Wrap up opens at Clean up because no Project change is pending. It lists Clean up → Trash → Archive in order; later steps are read-only until earlier steps are Finished or Skipped. Archive's Proceed is **Close project…**. No Project Trash or run-level Trash action is present.
-- **Expect (negative):** No file moves, and no Wrap up step records Done or Skipped.
-- **Trace:** HARNESS-V5-IA.md S3, S9 · HARNESS-V5-FEEDBACK-R1.md Copy rules · P-WRAP1 · PRJ-FR-14 · PRJ-AC-21 · D-W46, D-W72
+- **Do:** On the Project page of `NGC 7000 HOO`, read its steps and pending count, then open Wrap up.
+- **Expect:** The page shows the steps Sessions, Calibrate, View, Output and Wrap up, and 0 changes pending. Wrap up opens at Clean up because no change is pending and no operation runs on the Project. It lists Clean up → Trash → Archive in order, and Trash and Archive stay read-only until the steps before them are Finished or Skipped. Archive's Proceed is **Close project…**.
+- **Expect (negative):** No file moves, and no Wrap up step records Finished or Skipped. The page has no stage rail, no run list and no Project Trash list.
+- **Trace:** HARNESS-V5-IA.md S3, S9 · P-WRAP1 · PRJ-FR-07, PRJ-FR-14, PRJ-FR-32 · PRJ-AC-21 · D-W80, D-W97
 
 ### S2 — Inspect the Wrap up Trash step {#S2}
 
-- **Do:** Open the Trash step and inspect its three groups: rejected frames, `Processing/` files and duplicate copies.
-- **Expect:** The three groups list their selectable offers, item counts and sizes. Refused frames name their reason. No run Trash or Project Trash page is available.
-- **Expect (negative):** Opening the Trash step moves no file and changes no frame's library quality, Project sessions or goals.
-- **Trace:** HARNESS-V5-IA.md S3, S5, S8 · PRJ-FR-04, PRJ-FR-14, PRJ-FR-20 · RES-FR-10 · RES-AC-19 · root FR-009, FR-022 · D-W46, D-W66, D-W72
+- **Do:** Read the Trash step's three groups: rejected frames, `Processing/` files and duplicate copies.
+- **Expect:** Each group shows its offer with an item count and a size, and lists every item it refuses with the reason. Trash is the only step that offers moving capture frames, `Processing/` files or duplicate copies to the OS Trash.
+- **Expect (negative):** Reading the Trash step moves no file and changes no frame's library quality, and no Project's sessions or goals.
+- **Trace:** HARNESS-V5-IA.md S3, S8 · PRJ-FR-14, PRJ-FR-15 · PRJ-AC-15 · STO-FR-14, STO-FR-16 · root FR-009, FR-022 · D-W43, D-W80
 
 ### S3 — Review Wrap up offers and order {#S3}
 
-- **Do:** Read the Project's Wrap up step table, its session counts and sizes, and its row on Home.
+- **Do:** Read the Wrap up step table, each step's counts and sizes, and the Project's row in Home's Open work.
 - **Expect:**
-  - The stage strip has Wrap up current, and the Project still reads open. Wrap up lists four steps in order, each with its state and, except Done, its size: 1 Clean up, marked Next; 2 Trash; 3 Archive.
-  - Clean up lists the Project View, with the Copies option selected and Symlinks not selected by default, plus any entries still held in `View (previous)/`. It offers **Proceed** and lists the exact entries and sizes.
-  - Trash lists three rows, each with its item count, its size and its own **Trash…** approval: Rejects with 7 items, Intermediates with 417 and Duplicates with 2. The 417 are the 416 P8 intermediates and the adopted master's generated source. The 2 are the P11 copies of D-1 and D-2.
+  - Wrap up lists three steps in order, each with its state and its size: 1 Clean up, current; 2 Trash; 3 Archive.
+  - Clean up offers removing the Project's View. Because the View is in Symlinks mode, that row starts unticked, and it lists the links PlateVault placed with their count. It lists no `View (previous)/` entry.
+  - Trash reads "Move 8 rejected frames to Trash (size)", "Move 417 processing files to Trash (size)" and "Move 2 duplicate copies to Trash (size)". The 417 are the 416 P8 tool files and the adopted master's generated source. The 2 are the P11 copies of D-1 and D-2.
   - Archive reads 4 sessions to move, and its Destination preselects `Archive/NGC7000`, marked Default.
-  - Done offers **Mark Done**.
-  - Home and the Projects list show the Project's stage as Wrap up. Its Next does not read Wrap up while frame review's Unreviewed filter lists any of the Project's candidate frames: it reads `Review N new frames`, with N the number of frames that filter lists, because D-W35 puts that rule before Wrap up.
-- **Expect (negative):** No file moves until the user approves a step. No run Trash, Project Trash page, Empty Trash or Empty Trash group exists.
-- **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1, P-ARC1 · PRJ-FR-14, PRJ-FR-15, PRJ-FR-20 · PRJ-AC-15 · STO-FR-13, STO-FR-14, STO-FR-16 · root FR-021, FR-022 · D-W26, D-W35, D-W46, D-W48, D-W70, D-W72, D-W74 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Linked · 0 B"; Wrap up offers intermediates cleanup) · G6
+  - Home's Open work lists the Project with its next step and 0 changes pending. Its next step never reads Wrap up.
+- **Expect (negative):** No file moves until the user proceeds and confirms a step. No Project Trash, Empty Trash or Empty Trash group exists.
+- **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1, P-ARC1 · PRJ-FR-14, PRJ-FR-15, PRJ-FR-18, PRJ-FR-32 · PRJ-AC-15, PRJ-AC-28, PRJ-AC-30 · STO-FR-01, STO-FR-13, STO-FR-14, STO-FR-16 · STO-AC-01 · root FR-021, FR-022 · D-W26, D-W46, D-W70, D-W74, D-W80, D-W97
 
 ### S3a — Confirm there is no Project Trash {#S3a}
 
-- **Do:** Return to the Project page and inspect its navigation and Wrap up Trash step for Project Trash or Empty Trash actions.
-- **Expect:** No Project Trash page, run Trash list or Empty Trash action is offered. Wrap up's Trash step remains the only offer for rejected frames, `Processing/` files and duplicate copies.
-- **Expect (negative):** No file moves, and the Trash inventory gains no entry. No frame's library quality or any other run changes, and every Wrap up step keeps its state, size and counts.
-- **Trace:** HARNESS-V5-IA.md S8 · PRJ-FR-14, PRJ-FR-20 · PRJ-AC-15 · RES-FR-10 · RES-AC-22 · STO-FR-17 · root FR-009 · D-W72
+- **Do:** Return to the Project page and look through its steps, menu and Wrap up for a Project Trash page or an Empty Trash action.
+- **Expect:** No Project Trash page, Trash list or Empty Trash action is offered. Wrap up's Trash step remains the only offer for rejected frames, `Processing/` files and duplicate copies.
+- **Expect (negative):** No file moves, and the OS Trash inventory gains no entry. No frame's library quality changes, and every Wrap up step keeps its state, size and counts.
+- **Trace:** HARNESS-V5-IA.md S8 · PRJ-FR-15, PRJ-FR-32 · STO-FR-14, STO-FR-17 · root FR-009 · D-W94, D-W97
 
-### S3b — Skip View Clean up, undo, and skip again {#S3b}
+### S3b — Skip Clean up, reopen it and skip again {#S3b}
 
-- **Do:** In Wrap up, choose **Proceed** with nothing selected on Clean up, reopen the step, then choose **Undo** and **Proceed** again. Inspect the Project's View.
+- **Do:** In Wrap up, choose **Proceed** on Clean up with nothing selected. Reopen Clean up from the step strip and choose **Proceed** with nothing selected again. Inspect the Project's View.
 - **Expect:**
-  - Proceeding with no selection records Clean up as Skipped and makes Trash current. Reopening the step allows Undo; proceeding again records Skipped.
-  - The Project's View remains unchanged; skipping and undoing Clean up remove no View entry.
-- **Expect (negative):** Skip and Undo move no file and start no Clean up operation.
-- **Trace:** HARNESS-V5-IA.md S9 · P-WRAP1 · PREP-FR-14 · STO-FR-01 · D-W26 · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 · G7
+  - Proceeding with nothing selected records Clean up as Skipped and makes Trash current. Reopened, Clean up shows the View row still unticked, and proceeding again records Skipped.
+  - The Project's View is unchanged: it still holds every symlink of P1.
+- **Expect (negative):** Neither Proceed moves or deletes a file or starts a Clean up operation.
+- **Trace:** HARNESS-V5-IA.md S9 · P-WRAP1 · PRJ-FR-14 · STO-FR-01 · STO-AC-01 · D-W77, D-W80, D-W97 · G7
 
 ### S4 — Read the rejected-frames offer {#S4}
 
-- **Do:** In the Trash step, read the Rejects row and open its refusal's disclosure. Then choose **Trash…** on Rejects, read the review, and cancel.
+- **Do:** In the Trash step, expand the rejected-frames row and read its files and the items it lists as not selectable.
 - **Expect:**
-  - The review lists the seven offered frames: the two P3 18 Sep frames, four 30 Sep frames and F-ab. F-ab is offered, because its place in a prepared revision of the Complete run `Ha deep v1` is no refusal reason.
-  - The size covers all seven frames, because a symlink entry holds none of a frame's bytes. The review's changes list reads `Also removes 4 links in kept run views`: the symlinks to the two P3 18 Sep frames and F-ab in `NGC7000-HOO-Siril/`, and to F-ab in `Ha deep v1/`.
-  - The row's terse refusal reads `Can't trash 3`, and its disclosure lists each refused frame with its reason:
-    - F-prep: `Can't trash 1 · linked by NGC 7000 Ha deep ▸`, leading to its Open Project View entry.
-    - F-res: no tool-output lineage is recorded or used to decide whether it may be trashed.
-    - F-dup: one of its copies sits on `Scratch`, which has no OS Trash.
-- **Expect (negative):** Neither Project-only reject of P2 is counted or listed. No library-Usable or Unreviewed frame is offered. Cancelling moves no file or link, and the Rejects row still reads 7 items.
-- **Trace:** HARNESS-V5-IA.md S9 · HARNESS-V5-FEEDBACK-R1.md Copy rules, §Round 6 ("Reject is library-wide by default"), §Round 7 P-PREP3 ("Linked · 0 B"), §Round 8 P-TRASH2 ("Can't trash · linked by {run} ▸", "Also removes N links in kept run views") · PRJ-FR-15 · PRJ-AC-16 · STO-FR-14, STO-FR-15 · STO-AC-18 · root FR-021 · D-W42, D-W43, D-W54, D-W57 · J44/S6
+  - The row lists the eight offered frames: the two P3 18 Sep frames, the four 30 Sep frames other than F-dup, and F-res and F-ab. F-res is offered because PlateVault records no Result lineage, and an `Output/` file is no custody reason. F-ab is offered because no other Project's View links it.
+  - The size covers the bytes of all eight frames.
+  - Two frames are listed as not selectable, each with its reason:
+    - F-prep: "Linked by NGC 7000 Ha deep ▸", which leads to that Project's pending change.
+    - F-dup: its `Scratch` copy sits on a location with no OS Trash, so the whole frame is refused.
+- **Expect (negative):** The Unreviewed 30 Sep frame and every library-Usable frame are neither counted nor listed. Expanding the row moves no file and changes no View, and the row still reads 8 frames.
+- **Trace:** HARNESS-V5-IA.md S9 · HARNESS-V5-FEEDBACK-R1.md Copy rules, §Round 6 ("Reject is library-wide by default"), §Round 8 P-TRASH2 · PRJ-FR-14, PRJ-FR-15 · PRJ-AC-16 · STO-FR-14, STO-FR-15 · STO-AC-18 · root FR-021 · D-W42, D-W43, D-W57, D-W79, D-W93 · J44/S1
 
 ### S5 — Read the Archive step {#S5}
 
-- **Do:** In the Archive step, read its Destination and its counts, and open the disclosure of its kept session. Then choose **Archive…**, read the review, and cancel without approving.
+- **Do:** Read the Archive step while Trash is still current: its Destination, its counts and the disclosure of its kept session. Expand the 30 Sep row.
 - **Expect:**
   - Destination lists the two P9 archive locations, with `Archive/NGC7000` preselected and marked Default.
-  - The step reads 4 sessions to move and `1 session kept · used by another Project`, whose disclosure names 28 Sep and Project `NGC 7000 Ha deep`.
-  - The review lists the Project's sessions: 18, 24, 26, 28 and 30 Sep. 28 Sep is not selectable because open Project `NGC 7000 Ha deep` holds it.
-  - 18, 24, 26 and 30 Sep are proposed for transfer to `Archive/NGC7000`. Their destination paths are laid out by the naming templates, with bytes, source identities, affected Projects and View reference updates. Each symlinked Project View entry for a selected session is proposed to follow its frame to its `Archive/NGC7000` path.
-  - 30 Sep is proposed for transfer even though it is a candidate of the open Project `NGC 7000 SHO`.
-- **Expect (negative):** Nothing transfers, Trash and Archive still read To do, and Project sessions and totals do not change.
-- **Trace:** HARNESS-V5-IA.md S9, S16 · P-ARC1 · STO-FR-06, STO-FR-13 · STO-AC-17 · PRJ-FR-14 · root FR-011 · D-W26, D-W46 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("a symlinked entry is repointed when its session moves")
+  - The step lists the Project's sessions 18, 24, 26, 28 and 30 Sep. 18, 24, 26 and 30 Sep are selected. 28 Sep is not selectable, and its status names open Project `NGC 7000 Ha deep`, which holds it.
+  - The expanded 30 Sep row lists each file with its from path under `Astro-T7/Captures` and its to path under `Archive/NGC7000`, laid out by the naming templates. The step also shows bytes, source identities, affected Projects and the View references to repoint: each View symlink to a selected session's frame is proposed to follow that frame to its `Archive/NGC7000` path.
+  - 30 Sep is selected even though open Project `NGC 7000 SHO` suggests it.
+- **Expect (negative):** **Close project…** is not available while Trash is neither Finished nor Skipped. Nothing transfers, and no Project's sessions or totals change.
+- **Trace:** HARNESS-V5-IA.md S9, S16 · P-ARC1 · PRJ-FR-14 · STO-FR-06, STO-FR-13 · STO-AC-17 · root FR-011 · D-W26, D-W46, D-W77, D-W80 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("a symlinked entry is repointed when its session moves")
 
 ### S6 — Move the rejected frames to Trash {#S6}
 
-- **Do:** On the Rejects row, choose **Trash…** and read the review. With the P7 helper, overwrite F-drift in place. Then confirm **Move to Trash**. Afterwards, restore F-drift's saved bytes and mtime with the helper.
+- **Do:** In the Trash step, leave only the rejected-frames row selected and choose **Proceed**. Before confirming, overwrite F-drift in place with the P7 helper. Confirm the move. Afterwards, restore F-drift's saved bytes and mtime with the helper.
 - **Expect:**
-  - Progress shows per-frame outcomes. The summary names 6 frames moved, and F-drift refused with drift named and left in place.
-  - The six moved files are newly in the OS Trash, and the library marks them Trashed. The 4 links that S4's review counted went with them: `NGC7000-HOO-Siril/` has lost its links to the two 18 Sep frames and F-ab, and `Ha deep v1/` its link to F-ab.
+  - Progress shows per-frame outcomes. The summary names 7 frames moved, and F-drift refused with drift named and left in place.
+  - The seven moved files are newly in the OS Trash, and the library marks them Trashed.
 - **Expect (negative):**
   - Nothing is permanently deleted.
-  - No other prepared entry of `NGC7000-HOO-Siril`, `26 Sep symlink check`, `Ha deep` or `Ha deep v1` is moved.
-  - F-prep, F-res, F-dup (both copies) and both Project-only rejects remain at their paths, and `Ha deep`'s view still links F-prep.
-- **Trace:** HARNESS-V5-IA.md S9 · HARNESS-V5-FEEDBACK-R1.md §Round 8 P-TRASH2 ("the move takes those links with the frame") · STO-FR-15 · STO-AC-19 · PRJ-FR-15 · PRJ-AC-17 · LIB-FR-18 · root SC-010 · D19, D-W43, D-W57
+  - No View entry of `NGC 7000 HOO` or `NGC 7000 Ha deep` is moved or changed, and `NGC 7000 Ha deep`'s View still links F-prep.
+  - F-prep, F-dup (both copies) and the Unreviewed 30 Sep frame remain at their paths.
+- **Trace:** HARNESS-V5-IA.md S9 · PRJ-FR-15 · PRJ-AC-17 · STO-FR-14, STO-FR-15 · STO-AC-19 · LIB-FR-18 · root SC-010 · D19, D-W43, D-W57
 
 ### S7 — Confirm the Trashed frames are hidden {#S7}
 
-- **Do:** Read the 18, 28 and 30 Sep rows in Sessions and the Captured column of Target NGC 7000. Read the "captured" goal numbers of `NGC 7000 SHO` and its suggested sessions, inspect the Project's session list, and rescan `Astro-T7/Captures`.
+- **Do:** Read the 18, 28 and 30 Sep rows in Sessions and the Captured column of Target NGC 7000. Read the "captured" goal numbers of `NGC 7000 SHO` and its suggestions, the session list of `NGC 7000 HOO`, and the Review step of the 30 Sep session. Rescan `Astro-T7/Captures`.
 - **Expect:**
-  - Sessions shows 2 fewer frames for 18 Sep, 1 fewer for 28 Sep and 3 fewer for 30 Sep.
-  - Target NGC 7000's Captured falls by Ha 0h 15m and OIII 0h 15m.
-  - In `NGC 7000 SHO`, Ha and OIII "captured" each fall by 0h 15m. The picker leaves the six Trashed frames out, and frame review leaves the three Trashed 30 Sep frames out.
-  - The Project that held the Trashed frames when they were trashed still shows them marked "Trashed"; no other Project shows them.
-  - The rescan reports none of the six frames Missing.
-- **Expect (negative):** No Trashed frame is offered by any picker, counted in any goal or total, measured or thumbnailed in frame review, or shown on Home. The Open Project `NGC 7000 Ha deep` lists no Trashed frame outside the exception for a Project that held it when it was trashed.
-- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-09, PRJ-FR-16 · VSEL-AC-25 · PIX-AC-19 · PLAN-TGT-FR-08 · root FR-021 · D-W43, D-W52, D-W66
+  - Sessions shows 2 fewer frames for 18 Sep, 2 fewer for 28 Sep and 3 fewer for 30 Sep.
+  - Target NGC 7000's Captured falls, per channel, by exactly the exposure P2 records for the seven moved frames, and so do the "captured" numbers of `NGC 7000 SHO`'s goals.
+  - The sessions of `NGC 7000 HOO` and the suggestions of `NGC 7000 SHO` leave the seven Trashed frames out. The 30 Sep Review step lists none of the three Trashed 30 Sep frames.
+  - The rescan reports none of the seven frames Missing.
+- **Expect (negative):** No Trashed frame is offered in a suggestion, counted in any goal or total, measured or thumbnailed in a Review step, or shown on Home. `NGC 7000 Ha deep` lists no Trashed frame.
+- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-09, PRJ-FR-16 · PRJ-AC-17 · PIX-AC-19 · PLAN-TGT-FR-08 · root FR-021 · D-W43, D-W52, D-W66
 
 ### S8 — Find the frames under the Trashed filter {#S8}
 
 - **Do:** In Sessions, choose the **Trashed** filter.
-- **Expect:** Exactly the six frames are listed, each with its last-observed metadata and the operation that trashed it.
-- **Expect (negative):** F-drift, F-prep, F-res, F-dup and both Project-only rejects are not listed.
+- **Expect:** Exactly the seven frames are listed, each with its last-observed metadata and the operation that trashed it.
+- **Expect (negative):** F-drift, F-prep, F-dup and the Unreviewed 30 Sep frame are not listed.
 - **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-16 · D-W43
 
-### S9 — Move Project Processing files to Trash {#S9}
+### S9 — Move the Project's Processing files to Trash {#S9}
 
-- **Do:** On the `Processing/` row, choose **Trash…** and read the review. With the P7 helper, overwrite one listed file in place. Then choose **Proceed** and confirm.
+- **Do:** Reopen the Trash step from the step strip. Select only the `Processing/` row, expand it and read its files. With the P7 helper, overwrite one listed `Processing/WBPP/` file in place. Then choose **Proceed** and confirm.
 - **Expect:**
-  - The review lists the 416 files in `Processing/WBPP/` and the adopted master's generated source as a verified duplicate naming the kept library copy in `Astro-T7/Calibration`.
-  - It keeps all Results in `Output/` and the adopted library master. Logs and files outside `Processing/` are not offered.
-  - The summary names 416 items moved to the OS Trash under that one approval, 415 intermediates and the generated source, and the overwritten intermediate refused with drift named and left in place.
+  - The row lists the 416 files in `Processing/WBPP/` and the adopted master's generated source, listed as a verified duplicate that names the kept library copy in `Astro-T7/Calibration`.
+  - It keeps the two Results in `Output/` and the adopted library master. No file outside `Processing/` is offered.
+  - The summary names 416 items moved to the OS Trash under that one confirmation: 415 tool files and the generated source. The overwritten file is refused with drift named and left in place.
 - **Expect (negative):**
-  - No Result in `Output/`, adopted library master, log or file outside the reviewed `Processing/` offer reaches the Trash. Each still matches P10.
+  - No Result in `Output/`, adopted library master or file outside the reviewed `Processing/` offer reaches the Trash. Each still matches P10.
   - Nothing is permanently deleted.
-- **Trace:** HARNESS-V5-IA.md S9 · PRJ-FR-15 · PRJ-AC-28 · STO-FR-04, STO-FR-15, STO-FR-16 · STO-AC-21 · CAL-FR-06, CAL-FR-07 · RES-FR-01, RES-FR-04 · root FR-021 · D19, D-W43, D-W70
+- **Trace:** HARNESS-V5-IA.md S9 · PRJ-FR-14, PRJ-FR-15 · PRJ-AC-28, PRJ-AC-31 · STO-FR-15, STO-FR-16 · STO-AC-21 · CAL-FR-06, CAL-FR-07 · RES-FR-01, RES-FR-06 · root FR-021 · D19, D-W43, D-W70, D-W98
 
 ### S9a — Move the duplicate copies to Trash {#S9a}
 
-- **Do:** On the Duplicates row, choose **Trash…** and read the review. Then confirm **Move to Trash**, and read the Trash step, the 24 and 30 Sep rows in Sessions and the copies listed for D-1, D-2 and F-dup.
+- **Do:** Reopen the Trash step, select only the duplicate-copies row, expand it and read its copies. Choose **Proceed** and confirm. Then read the Trash step, the 24 and 30 Sep rows in Sessions and the copies listed for D-1, D-2 and F-dup.
 - **Expect:**
-  - The review lists the `Backup/Captures` copies of D-1 and D-2. Each names its kept copy in `Astro-T7/Captures`, which is a Captures location registered earlier.
-  - It lists the `Scratch/Captures` copy of F-dup as refused, because `Scratch` has no OS Trash.
+  - The row lists the `Backup/Captures` copies of D-1 and D-2. Each names its kept copy in `Astro-T7/Captures`, the Captures location registered first.
+  - It lists the `Scratch/Captures` copy of F-dup as not selectable, because `Scratch` has no OS Trash.
   - After confirming, both `Backup` copies are newly in the OS Trash. D-1 and D-2 each list one copy, in `Astro-T7/Captures`, and F-dup still lists two.
   - Sessions shows the same 24 Sep and 30 Sep frame counts as at S7, and Target NGC 7000's Captured is unchanged.
-  - With all three rows moved, the Trash step reads Done, and Archive is marked Next.
-- **Expect (negative):** No kept copy, prepared entry, Trashed frame or F-dup copy moves. The Trashed filter still lists exactly the six frames, and nothing is permanently deleted. The adopted master's generated source, which S9 moved, is not listed.
-- **Trace:** HARNESS-V5-IA.md S9 · PRJ-FR-15 · PRJ-AC-30 · STO-FR-15, STO-FR-16 · STO-AC-23 · root FR-021 · D19, D-W43, D-W74
+  - Trash reads Finished, and Archive is current.
+- **Expect (negative):** No kept copy, View entry, Trashed frame or F-dup copy moves. The Trashed filter still lists exactly the seven frames, and nothing is permanently deleted. The adopted master's generated source, which S9 moved, is not listed.
+- **Trace:** HARNESS-V5-IA.md S9 · PRJ-FR-14, PRJ-FR-15 · PRJ-AC-30 · STO-FR-15, STO-FR-16 · STO-AC-23 · root FR-021 · D19, D-W43, D-W74
 
 ### S10 — Put one frame back {#S10}
 
 - **Do:** In the OS Trash, put back one of the three trashed 30 Sep frames. Rescan `Astro-T7/Captures`.
-- **Expect:** The frame returns as Unusable and leaves the Trashed filter, which now lists five frames. Target NGC 7000's OIII Captured rises by 0h 05m. The frame's history still shows its Trashed episode.
+- **Expect:** The frame returns as Unusable and leaves the Trashed filter, which now lists six frames. Target NGC 7000's Captured rises, in that frame's channel, by exactly the exposure P2 records for it. The frame's history still shows its Trashed episode.
 - **Expect (negative):** PlateVault offers no restore of its own, and the frame does not read Missing or ChangedContent.
 - **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-16 · PRJ-AC-17 · STO-FR-15 · D-W43
 
 ### S11 — Close the Project through Archive {#S11}
 
-- **Do:** In the Archive step, review the selected sessions, source and destination paths, and reference changes. Choose **Close project…** as Proceed and confirm.
+- **Do:** In the Archive step, review the selected sessions, their from and to paths and the reference changes. Choose **Close project…**, read its confirmation and confirm.
 - **Expect:**
+  - The confirmation lists the four archive moves and the outcomes of Clean up (Skipped) and Trash (Finished).
   - 18, 24, 26 and 30 Sep transfer to `Archive/NGC7000`. Every destination verifies before any source is retired, and the four sessions read Archived. The 30 Sep transfer includes the frame put back in S10.
-  - Each of the 35 symlinks in `26 Sep symlink check/` now points at its 26 Sep frame's `Archive/NGC7000` path, and the run still reads Complete.
-  - Each symlink in `NGC7000-HOO-Siril/` to a transferred frame now points at that frame's `Archive/NGC7000` path, and its 28 Sep symlinks still point under `Astro-T7/Captures`.
-  - 28 Sep stays at its path.
-  - The memberships and totals of `Ha deep` and `Ha deep v1` are unchanged.
-  - The Project reads Closing while the transfer runs and Archived after every selected item succeeds. The Wrap up record is then read-only.
-- **Expect (negative):** Trashed frames are not transferred, and Project session membership does not change. No View symlink changes kind or reference mode. Archive's Proceed closes the Project; it does not offer Reopen.
-- **Trace:** HARNESS-V5-IA.md S9 · P-WRAP1, P-ARC1 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · root FR-011 · D-W26, D-W46 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("a symlinked entry is repointed when its session moves"), §Round 7 P-PREP3 · G3
+  - Each View symlink to a transferred frame now points at that frame's `Archive/NGC7000` path, among them all 35 symlinks to the 26 Sep frames. The View's 28 Sep symlinks still point under `Astro-T7/Captures`.
+  - 28 Sep stays at its path, and the sessions and totals of `NGC 7000 Ha deep` are unchanged.
+  - The Project reads Closing while the transfer runs and Archived after every selected item succeeds. Its Wrap up is then read-only.
+- **Expect (negative):** Trashed frames are not transferred, and the Project's sessions do not change. No View symlink changes kind, and no reference-mode choice is offered. Close offers no Reopen.
+- **Trace:** HARNESS-V5-IA.md S9 · P-WRAP1, P-ARC1 · PRJ-FR-14 · PRJ-AC-31 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · root FR-011 · D-W26, D-W46, D-W80, D-W97 · HARNESS-V5-FEEDBACK-R1.md §Input modes ("a symlinked entry is repointed when its session moves") · G3
 
 ### S11a — Inspect the Archived Project record {#S11a}
 
-- **Do:** After Close succeeds, inspect the Project header, menu, Wrap up record, View, `Output/`, Home and Projects list.
+- **Do:** After Close succeeds, inspect the Project header, menu, Wrap up tab, View, `Output/`, Home and the Projects list.
 - **Expect:**
-  - The Project reads Archived, keeps `Output/`, and its menu offers Duplicate… but no Reopen.
-  - Wrap up offers no approval, **Skip** or **Undo**.
-  - Home's Open work no longer lists the Project; its Archived state remains visible on the Project record.
-- **Expect (negative):** Close keeps `Output/` and does not change Project session membership or goals.
-- **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1 · PRJ-FR-14 · PRJ-AC-21 · D-W26, D-W46, D-W48
+  - The header reads Archived, `Output/` keeps its two Results, and the menu offers only Duplicate….
+  - The Wrap up tab is a read-only record of each step's outcome: Clean up Skipped, Trash Finished and Archive Finished. It offers no **Proceed**, and no step can be reopened.
+  - Home's Open work no longer lists the Project, and the Projects list shows it Archived.
+- **Expect (negative):** Close moves no file in `Output/` and does not change the Project's sessions or goals. No Reopen is offered.
+- **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1 · PRJ-FR-14, PRJ-FR-25 · PRJ-AC-21, PRJ-AC-22, PRJ-AC-34 · RES-FR-06 · D-W80, D-W97
 
 ### S12 — Confirm the Closed Project is locked {#S12}
 
-- **Do:** On the Archived Project page, inspect its menu, Edit… control, Wrap up, goals and View. Try to change a library quality mark and a session's calibration from their owning pages, then return to the Project.
+- **Do:** On the Archived Project page, inspect its menu, Edit… control, Wrap up, goals, sessions and View. In Sessions, change the library quality of one 24 Sep frame, and on the 24 Sep session's calibration choose No darks. Return to the Project.
 - **Expect:**
-  - The Archived Project offers no Reopen or restore action. Edit… is disabled with "Project closed · Duplicate ▸".
-  - The Project remains Archived and its Wrap up record is read-only. Its View and `Output/` remain available for inspection; Library and calibration changes do not create pending changes.
-  - Its session membership and goals remain frozen at Close; its `Output/` Results remain in place.
+  - Edit… is disabled with "Project closed · Duplicate ▸", and the menu offers no Reopen or restore action.
+  - The Project still reads Archived, and its Wrap up record is read-only. Its View and `Output/` remain available for inspection, and **Open in {app}** still opens the kept View.
+  - Its sessions and goals show the figures frozen at Close, and the calibration it shows for 24 Sep is the one recorded at Close.
+  - Its sessions list the six frames still Trashed, marked "Trashed".
   - The Project page lists 18, 24, 26 and 30 Sep as Archived at their `Archive/NGC7000` paths, with no Restore action.
-- **Expect (negative):** No Reopen or restore action is available, and no library or calibration change updates the Archived Project.
-- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-14, PRJ-FR-20 · PRJ-AC-21, PRJ-AC-27 · STO-FR-13 · STO-AC-22 · D-W46, D-W69
+- **Expect (negative):** The quality change and the No darks choice add no pending change to the Archived Project and change none of its figures. No Reopen or restore action is available.
+- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-16, PRJ-FR-25 · PRJ-AC-27, PRJ-AC-34 · LIB-AC-30 · CAL-FR-05 · VSEL-FR-12 · STO-FR-13 · D-W69, D-W97, D-W106
 
 ### S12a — Duplicate the Archived Project to continue {#S12a}
 
-- **Do:** On the Archived Project, choose **Duplicate…** and keep its sessions, groups and overrides, goals, notes and settings selected.
-- **Expect:** The duplicate is a new Open Project with the selected sessions and settings, no copied files, no View until its first Apply, and no "Duplicated from" note or link to the original.
-- **Expect (negative):** No file is copied, and the original remains Archived and locked. The duplicate can continue independently.
-- **Trace:** HARNESS-V5-IA.md S3, S9 · STO-FR-06, STO-FR-13 · STO-AC-22 · PRJ-FR-14 · PRJ-AC-27 · D-W69 · G5
+- **Do:** On the Archived Project, choose **Duplicate…**, keep its sessions, groups and overrides, goals, notes and settings ticked, and confirm. Open the new Project's View step.
+- **Expect:** The duplicate is a new open Project that holds 18, 24, 26, 28 and 30 Sep in the same groups, with the same overrides, goals, notes and settings. Its archived sessions are at their `Archive/NGC7000` paths. It has no View until its first Apply, which needs `Archive` online.
+- **Expect (negative):** No file is copied, and the duplicate shows no "Duplicated from" note or link to the original. The original remains Archived and locked, and editing the duplicate never changes it.
+- **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-25, PRJ-FR-30 · PRJ-AC-27, PRJ-AC-43 · STO-AC-07 · D-W93, D-W96, D-W97 · G5
 
 ## Success criteria
 
-- SC1: Wrap up opens with no pending Project changes and lists Clean up → Trash → Archive in order; Archive's Proceed is Close project… (S1, S3, S11). There is no run Trash, Empty Trash page or Empty Trash group (S2, S3a).
-- SC2: The rejected-frames offer counts exactly 7 frames, including 1 in a Complete run's prepared revision, and its review counts exactly 4 links in kept run views. It lists exactly 3 refusals with reasons, F-prep's naming `Ha deep`, and includes 0 of the 2 Project-only rejects (S4).
-- SC3: Exactly 6 frames and the 4 links to them in kept run views reach the OS Trash. 0 refused or drifted frames and 0 other prepared entries move, and 0 files are permanently deleted (S6).
-- SC4: The Trashed frames appear in 0 pickers, candidate lists, frame reviews, goals or totals. They show only under the Trashed filter (6 frames) and, marked "Trashed", in the fixed memberships of `NGC7000-HOO-Siril` (3 frames) and `Ha deep v1` (1 frame) (S7, S8).
-- SC5: Exactly 415 intermediates and 1 generated source, listed as a verified duplicate of the kept library copy, reach the OS Trash. 0 accepted Results and 0 adopted library masters do (S9).
-- SC6: Put back plus rescan returns 1 frame as Unusable, and the Trashed filter then lists 5 (S10).
-- SC7: Archive goes to `Archive/NGC7000`, the Default archive location, keeps 28 Sep and transfers 4 sessions, including 30 Sep, which is only another Project's candidate (S5, S11).
-- SC8: Close transfers selected sessions only after destination and reference verification, retains `Output/`, and leaves the Project Archived and locked. Duplicate… creates an independent Open Project without copying files (S11, S11a, S12, S12a).
+- SC1: Wrap up opens with no pending Project changes and lists Clean up → Trash → Archive in order; Archive's Proceed is Close project… (S1, S3, S11). There is no Project Trash page, Empty Trash action or Empty Trash group (S2, S3a).
+- SC2: The rejected-frames offer counts exactly 8 frames and lists exactly 2 refusals with reasons, F-prep's naming `NGC 7000 Ha deep`. It includes 0 Unreviewed or Usable frames (S4).
+- SC3: Exactly 7 frames reach the OS Trash. 0 refused or drifted frames and 0 View entries move, and 0 files are permanently deleted (S6).
+- SC4: The Trashed frames appear in 0 suggestions, Review steps, goals or totals of an open Project. They show only under the Trashed filter (7 frames) (S7, S8) and, marked "Trashed", in the Archived Project that held them (S12).
+- SC5: Exactly 415 tool files and 1 generated source, listed as a verified duplicate of the kept library copy, reach the OS Trash. 0 Results in `Output/` and 0 adopted library masters do (S9).
+- SC6: Put back plus rescan returns 1 frame as Unusable, and the Trashed filter then lists 6 (S10).
+- SC7: Archive goes to `Archive/NGC7000`, the Default archive location, keeps 28 Sep and transfers 4 sessions, including 30 Sep, which is only another Project's suggestion (S5, S11).
+- SC8: Close transfers the selected sessions only after destination and reference verification, keeps `Output/`, and leaves the Project Archived and locked. Duplicate… creates an independent open Project without copying files (S11, S11a, S12, S12a).
 - SC9: The duplicate-copies offer counts exactly 2 copies and lists 1 refusal. Exactly 2 copies reach the OS Trash, and every frame keeps at least 1 copy (S3, S9a).
-- SC10: Skip and Undo on Clean up move 0 files, and the Project View's selected symlink entries remain unchanged (S3b).
-- SC11: The Project reads Closing during Archive's transfer and Archived after it succeeds; Closed and Archived Projects offer no Reopen and no Restore, and Duplicate… is available (S11, S11a, S12, S12a).
-- SC12: After Archive, 35 of 35 symlinks of `26 Sep symlink check` and every symlink of `NGC7000-HOO-Siril` to a transferred frame point at `Archive/NGC7000` paths, 0 prepared entries change kind, and 0 reference-mode choices are offered (S11).
+- SC10: Skipping Clean up twice moves 0 files, and the Project's View keeps every symlink (S3b).
+- SC11: The Project reads Closing during Archive's transfer and Archived after it succeeds. The Archived Project offers 0 Reopen or Restore actions, takes 0 pending changes from the library or calibration, and offers Duplicate… (S11, S11a, S12, S12a).
+- SC12: After Archive, every View symlink to a transferred frame, including 35 of 35 to the 26 Sep frames, points at its `Archive/NGC7000` path. 0 View entries change kind, and 0 reference-mode choices are offered (S11).
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design: HARNESS-V5-IA.md S1, S2, S3, S8, S9 and S16, and HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1, Screens B and Round 5 (ui-harness-v5 @ b5e813a5), Round 6 (@ 4f470775), Round 7 P-PREP3 (@ 12638a7c) and Round 8 P-TRASH2. It also follows the specs, decision D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design: HARNESS-V5-IA.md S1, S2, S3, S8, S9 and S16, and HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1, Screens B and Round 5 (ui-harness-v5 @ b5e813a5), Round 6 (@ 4f470775) and Round 8 P-TRASH2. It also follows the specs, decision D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
 - G3: Out of scope for this journey: archive transfer failures, interruption and a symlink that cannot be repointed are J28's. J28 forks from S5. Blocks readiness until J28 covers them.
 - G4: Dissolved by D-W93: Result lineage and provenance are out of scope and no input-to-Result relationship is recorded.
 - G5: There is no restore of an archived session after Close; sessions stay at their archive paths (PRJ-FR-25, STO-FR-13).
-- G6: Out of scope for this journey: Next reading Wrap up (D-W35, HARNESS-V5-IA.md S1) is not observed, because the Project's candidates keep library-Unreviewed frames (P2), so Review N new frames comes first. Blocks readiness until covered by a step or a journey.
-- G7: Clean up of the Project View is exercised in S3b; no per-run Clean up flow exists.
-- G8: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S4 refuses F-prep while the view of the unfinished run `Ha deep` links it (J44/S6 prepares that run again and then moves it), and its review counts the 4 links of the kept views of `NGC7000-HOO-Siril` and `Ha deep v1`, which S6 moves with their frames. S11 has no link to a Trashed frame left to repoint.
+- G6: (dissolved 2026-10-15): PRJ-FR-18 gives a Project's next step no Wrap up rule, so S3 asserts that Next never reads Wrap up.
+- G7: Out of scope for this journey: approving Clean up's View removal is not exercised, because S3b skips it so that the View's symlinks remain for Archive to repoint. J27 covers View removal.
+- G8: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S4 refuses F-prep while the View of open Project `NGC 7000 Ha deep` links it. The Project's own View holds no link to its library-Unusable frames once their Library removals are applied (P3), so S6 moves no View entry.
 
 ## Delta log
 
@@ -242,6 +238,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Δ5** 2026-10-12 · S4, S6, S11 · behavior-change
   P-TRASH2: an Unusable frame linked by another unfinished Project's View is refused; the review names links removed with moved frames.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-TRASH2 · by: R8JourneysDocs (intent-gated)
-- **Δ6** 2026-10-15 · S1, S2, S3, S3a, S3b, S4, S5, S6, S7, S9, S9a, S10, S11, S11a, S12, S12a · behavior-change
-  Wrap up now opens only with no pending changes and proceeds Clean up → Trash → Archive; Close project… is Archive's Proceed. Closed and Archived Projects are locked for good with no Reopen or session restore; Duplicate… continues them.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-14 to PRJ-FR-16, PRJ-FR-25, PRJ-FR-30; 071 STO-FR-01 to STO-FR-08, STO-FR-13 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-15 · S1, S2, S3, S3a, S3b, S4, S5, S6, S7, S8, S9, S9a, S10, S11, S11a, S12, S12a · behavior-change
+  Wrap up opens only with no pending changes and proceeds Clean up → Trash → Archive, each step confirmed with Proceed; Close project… is Archive's Proceed. The Project's single Symlinks View replaces the run views, so the Trash offer refuses only frames another open Project's View links, and Archive repoints that View.
+  Closed and Archived Projects are locked for good with no Reopen or session restore, and library or calibration changes never reach them; Duplicate… continues them.
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-14 to PRJ-FR-16, PRJ-FR-18, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32; 066 VSEL-FR-12; 071 STO-FR-01, STO-FR-06 to STO-FR-08, STO-FR-13 to STO-FR-16 · by: SpecF4Writer2, SpecF4Writer3 (intent-gated)

@@ -78,6 +78,3 @@ The user moves library-Unusable frames belonging to Project `NGC 7000 HOO` to th
 - **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S6 · behavior-change
   Library-Unusable frames are trashed only through an owning Project's Wrap up. The offer is limited to that Project's sessions and current custody rules; no Result lineage or Project-only rejection governs eligibility.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-14 to PRJ-FR-16, LIB-FR-18, VSEL-FR-12, VSEL-FR-15, STO-FR-14, STO-FR-15 · by: SpecF4Writer2 (intent-gated)
-- **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S6 · behavior-change
-  Library-Unusable frames are trashed only through an owning Project's Wrap up. The offer is limited to that Project's sessions and current custody rules; no Result lineage or Project-only rejection governs eligibility.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-14 to PRJ-FR-16, LIB-FR-18, VSEL-FR-12, VSEL-FR-15, STO-FR-14, STO-FR-15 · by: SpecF4Writer2 (intent-gated)

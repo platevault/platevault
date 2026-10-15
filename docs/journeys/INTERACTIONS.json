@@ -483,7 +483,7 @@
     {
       "flowStep": "Projects surface (Project page with its steps and planning)",
       "owner": "065-project-goals",
-      "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J29/S12, J34/S2",
+      "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J29/S12, J34/S1",
       "spec": "065-project-goals PRJ-FR-02, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-31, PRJ-FR-32, PRJ-FR-25; 072-observing-plans PLAN-FR-09, PLAN-FR-10; D-W89, D-W94, D-W95, D-W96, D-W97",
       "action": "Open the Project page, review its subjects, rigs, goals, sessions, suggestions, steps and planning, and open the Planner.",
       "expect": "The page shows Project-level sessions and groups, suggestions, goals, and Sessions, Calibrate, View, Output and Wrap up steps. Planning lists windows for the Project's subjects, and Open in Planner opens Targets with the Project context. A rig or subject removal changes suggestions only; held sessions remain until the user removes them.",
@@ -501,7 +501,7 @@
     {
       "flowStep": "Duplicate (D-W96)",
       "owner": "065-project-goals",
-      "journeyStep": "J20/S3, J20/S4, J34/S12",
+      "journeyStep": "J20/S3, J20/S4, J34/S12a",
       "spec": "065-project-goals PRJ-FR-30, PRJ-FR-25; 066-view-selection VSEL-FR-16; D-W93, D-W96, D-W97, D-W100",
       "action": "Choose Duplicate… on an open Project and on a Closed Project, select what to copy, and inspect the new Project before its first Apply.",
       "expect": "The duplicate copies the selected sessions, groups and overrides, goals, notes and settings, but no files. It is open and builds its own View through its first Apply.",
@@ -744,7 +744,7 @@
     {
       "flowStep": "Wrap up custody: removing the View and what `View (previous)/` still holds in Clean up, the OS Trash moves of rejected frames, `Processing/` files and duplicate copies in Trash, and the verified archive transfer of Archive, executing the steps of the PV-PRJ Wrap up",
       "owner": "071-storage-custody",
-      "journeyStep": "J34/S3, J34/S4, J34/S5, J34/S6, J34/S9, J34/S9a, J34/S11, J28/S1, J28/S5, J28/S11",
+      "journeyStep": "J34/S3, J34/S4, J34/S5, J34/S6, J34/S9, J34/S9a, J34/S11, J28/S1, J28/S5, J28/S9a",
       "spec": "071-storage-custody STO-FR-01, STO-FR-04, STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-19, STO-AC-21, STO-AC-23; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-25; 064-library-inventory LIB-FR-18; D19, D-W74, D-W80, D-W97, D-W98, D-W100",
       "action": "Review the Project's Clean up, Trash and Archive offers, move eligible rejected frames, Processing/ files and duplicate copies to OS Trash, approve Archive, then close the Project.",
       "expect": "Each custody offer is reviewed and reports per-item outcomes and an exact summary. Archive keeps sessions held by another Project that is not Closed and verifies transfers before retiring sources; Close follows successful Archive and preserves Output/.",
