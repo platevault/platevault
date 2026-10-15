@@ -179,13 +179,28 @@ impl Gate {
 }
 
 /// The OS probe, counting how often discovery touches the root; its root
-/// `stat`s and its listings wait at their gates.
+/// `stat`s and its listings wait at their gates. The next watchers it starts
+/// can fail or leave a folder unwatched, at once; the healthy ones after
+/// them wait at their gate.
 #[derive(Default)]
 struct Probe {
     stats: AtomicUsize,
     validations: AtomicUsize,
     stat_gate: Gate,
     list_gate: Gate,
+    watch_gate: Gate,
+    /// Watchers started, or failed to.
+    watches: AtomicUsize,
+    /// How many of the next watchers fail to start, as when Linux has no
+    /// inotify instance left.
+    failing: AtomicUsize,
+    /// How many of the next watchers start with one folder unwatched.
+    partial: AtomicUsize,
+}
+
+/// Take one from `counter` unless it is zero.
+fn take_one(counter: &AtomicUsize) -> bool {
+    counter.try_update(Ordering::SeqCst, Ordering::SeqCst, |left| left.checked_sub(1)).is_ok()
 }
 
 /// Discovery of `library` through `probe`.
@@ -206,6 +221,16 @@ impl RootProbe for Probe {
     }
 
     fn watch(&self, root: &Utf8Path, capacity: usize) -> Result<TreeWatch, String> {
+        self.watches.fetch_add(1, Ordering::SeqCst);
+        if take_one(&self.failing) {
+            return Err("inotify_init: too many open files".into());
+        }
+        if take_one(&self.partial) {
+            let mut started = OsProbe.watch(root, capacity)?;
+            started.unwatched += 1;
+            return Ok(started);
+        }
+        self.watch_gate.pass();
         OsProbe.watch(root, capacity)
     }
 
@@ -394,6 +419,58 @@ async fn an_overflowing_event_channel_triggers_a_rescan() {
 
     count_is(&watch, location.id, 40).await;
     assert!(walks(&watch) >= 2, "the overflow walked again");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watcher_that_did_not_start_is_retried_at_the_next_sweep() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    probe.failing.store(1, Ordering::SeqCst);
+    probe.watch_gate.close();
+    let watch = probed(&fx.library, &probe);
+
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: false }]);
+    assert_eq!(watchers(&watch), 0);
+    // A sweep starts the watcher again, and it waits at the gate: what
+    // arrives meanwhile is not counted live, but by the walk that follows.
+    probe.watch_gate.holding().await;
+    frame(&root.join("Ha_001.fits"));
+    probe.watch_gate.open();
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), (2, 2));
+
+    // Live now, and started once only.
+    frame(&root.join("Ha_002.fits"));
+    count_is(&watch, location.id, 2).await;
+    after(&watch, sweeps, 2).await;
+    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), (2, 2));
+    assert_eq!(watchers(&watch), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watcher_that_left_a_folder_unwatched_is_not_live_and_is_retried() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    probe.partial.store(1, Ordering::SeqCst);
+    probe.watch_gate.close();
+    let watch = probed(&fx.library, &probe);
+
+    let counts = until(&watch, |counts| !counts.is_empty()).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: false }]);
+    // A sweep starts it again over every folder.
+    probe.watch_gate.holding().await;
+    assert!(watch.counts().iter().all(|count| !count.live));
+    probe.watch_gate.open();
+    let counts = until(&watch, |counts| counts.iter().all(|count| count.live)).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    assert_eq!(probe.watches.load(Ordering::SeqCst), 2);
+    watchers_are(&watch, 1).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

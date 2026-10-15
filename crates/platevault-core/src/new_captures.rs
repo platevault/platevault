@@ -39,7 +39,8 @@
 //!   root refused once is checked again only after its `stat` changes.
 //! - An OS watcher error or lost-events notice, a full event channel, or a new
 //!   folder (which the watcher does not cover yet) restarts that location's
-//!   watcher and walks it again.
+//!   watcher and walks it again. So does every sweep while the watcher did not
+//!   start or the OS refused some of the folders.
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
 //!
@@ -91,9 +92,10 @@ pub struct NewCaptureCount {
     pub location_id: Uuid,
     /// Supported frames below the location that the catalog does not hold.
     pub new_files: u64,
-    /// Whether a live folder watcher keeps the count current. `false` when it
-    /// could not start: the count is the last walk's, and the next rescan or
-    /// sweep that restarts the location tries again.
+    /// Whether a live folder watcher covers every folder and keeps the count
+    /// current. `false` while it did not start or the OS refused some of the
+    /// folders: the count rests on the last walk (and on the events of the
+    /// folders that are watched), and every sweep starts the watcher again.
     pub live: bool,
 }
 
@@ -290,6 +292,9 @@ impl CaptureWatch {
 struct Live {
     events: mpsc::Receiver<ArtifactFileEvent>,
     guard: WatcherGuard,
+    /// Whether it watches every folder it found; the folders the OS refused
+    /// deliver no event.
+    complete: bool,
     #[cfg(test)]
     _held: Held,
 }
@@ -351,6 +356,16 @@ struct Watched {
 impl Watched {
     fn identity(&self, relative: &Path) -> PathIdentity {
         NativePath::from_path(relative).identity_on(&self.location.identity.volume)
+    }
+
+    /// At a sweep, restart a watcher that did not start or watches only some
+    /// folders, through a rescan, once no walk runs. A non-UTF-8 root is
+    /// never watched, so it is not retried.
+    fn retry_watcher(&mut self) {
+        let partial = self.live.as_ref().is_none_or(|live| !live.complete);
+        if partial && self.walk.is_none() && self.root.to_str().is_some() {
+            self.rescan = true;
+        }
     }
 
     fn relative<'a>(&self, path: &'a Path) -> Option<&'a Path> {
@@ -459,7 +474,7 @@ impl Watched {
         NewCaptureCount {
             location_id: self.location.id,
             new_files: u64::try_from(self.new.len()).unwrap_or(u64::MAX),
-            live: self.live.is_some(),
+            live: self.live.as_ref().is_some_and(|live| live.complete),
         }
     }
 }
@@ -570,13 +585,17 @@ impl Run {
     }
 
     /// Keep, release or start one Active Captures location. Outside a sweep
-    /// only locations not seen before are checked.
+    /// only locations not seen before are checked; a sweep also restarts a
+    /// watcher that did not fully start.
     async fn follow(&mut self, location: Location, sweep: bool) {
         let id = location.id;
         let refused = if self.locations.contains_key(&id) {
             if !sweep || self.unchanged(id).await {
                 if let Some(watched) = self.locations.get_mut(&id) {
                     watched.location = location;
+                    if sweep {
+                        watched.retry_watcher();
+                    }
                 }
                 return;
             }
@@ -683,7 +702,7 @@ impl Run {
         let started = tokio::task::spawn_blocking(move || probe.watch(&watched, capacity))
             .await
             .unwrap_or_else(|interrupted| Err(interrupted.to_string()));
-        let TreeWatch { events, guard, .. } = started
+        let TreeWatch { events, guard, unwatched, .. } = started
             .inspect_err(|error| {
                 tracing::warn!(root = %root.display(), %error, "new captures: watcher did not start");
             })
@@ -693,6 +712,7 @@ impl Run {
         Some(Live {
             events,
             guard,
+            complete: unwatched == 0,
             #[cfg(test)]
             _held: Held(Arc::clone(&self.observed)),
         })
