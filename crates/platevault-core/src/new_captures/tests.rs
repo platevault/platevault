@@ -393,6 +393,54 @@ async fn indexed_files_leave_the_count() {
     count_is(&watch, location.id, 1).await;
 }
 
+/// A raw connection to the fixture's catalog, for failures no library
+/// command causes.
+async fn raw_catalog(fx: &Fixture) -> sqlx::SqliteConnection {
+    use sqlx::Connection as _;
+    let url = format!("sqlite://{}", fx.base.join("catalog.sqlite").display());
+    sqlx::SqliteConnection::connect(&url).await.unwrap()
+}
+
+/// Make the catalog's indexed paths unreadable, or readable again.
+async fn hide_assets(connection: &mut sqlx::SqliteConnection, hidden: bool) {
+    let rename = if hidden {
+        "ALTER TABLE assets RENAME TO assets_hidden"
+    } else {
+        "ALTER TABLE assets_hidden RENAME TO assets"
+    };
+    sqlx::query(rename).execute(connection).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unreadable_catalog_keeps_the_location_online_and_is_read_again() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    assert_eq!(scan_to_end(&fx.library, location.id).await.state, ScanState::Completed);
+    let mut catalog = raw_catalog(&fx).await;
+
+    // The start-up walk lists the root, but what the catalog holds there is
+    // unknown: the location keeps its watcher and is not walked again.
+    hide_assets(&mut catalog, true).await;
+    let watch = watch(&fx.library);
+    eventually("the start-up walk ran", || walks(&watch) == 1).await;
+    after(&watch, sweeps, 2).await;
+    assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new(), "not counted before the catalog");
+    assert_eq!((watchers(&watch), walks(&watch)), (1, 1));
+    // Read again at the next tick once it answers: the frame is indexed.
+    hide_assets(&mut catalog, false).await;
+    count_is(&watch, location.id, 0).await;
+
+    // A later walk keeps counting from what the catalog held before.
+    hide_assets(&mut catalog, true).await;
+    frame(&root.join("2026-10-15/Ha_002.fits"));
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    assert_eq!((watchers(&watch), walks(&watch)), (1, 2));
+    hide_assets(&mut catalog, false).await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_scan_that_ends_while_a_walk_lists_is_counted_after_it() {
     let fx = fixture().await;

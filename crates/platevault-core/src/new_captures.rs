@@ -158,7 +158,8 @@ impl CaptureWatch {
     }
 
     /// Every counted location's new files, by location id. A location appears
-    /// once its first walk finished and leaves when it stops being watched.
+    /// once its first walk finished and the catalog's paths there were read,
+    /// and leaves when it stops being watched.
     #[must_use]
     pub fn counts(&self) -> Vec<NewCaptureCount> {
         self.counts.borrow().clone()
@@ -330,11 +331,13 @@ impl Drop for Walk {
     }
 }
 
-/// What a walk found: what it listed on disk and the paths the catalog holds.
+/// What a walk found: the paths the catalog holds in the location, and what
+/// it listed on disk. Either can fail on its own.
 struct Walked {
     location: Uuid,
     walk: u64,
-    outcome: Result<(Listing, Vec<NativePath>), LibraryError>,
+    known: Result<Vec<NativePath>, LibraryError>,
+    listing: Result<Listing, LibraryError>,
 }
 
 /// An online Captures location being counted.
@@ -353,10 +356,13 @@ struct Watched {
     walk: Option<Walk>,
     /// Restart the watcher and walk again once the walk in flight ends.
     rescan: bool,
-    /// Re-read the catalog's paths once the walk in flight ends.
+    /// Read the catalog's paths again: once the walk in flight ends, and at
+    /// every debounce tick while the catalog cannot be read.
     recount: bool,
-    /// A walk finished, so the count is known.
-    counted: bool,
+    /// A walk finished.
+    listed: bool,
+    /// The catalog's paths were read: with `listed`, the count is known.
+    cataloged: bool,
 }
 
 impl Watched {
@@ -383,9 +389,11 @@ impl Watched {
         self.known = known.iter().map(|path| path.identity_on(volume)).collect();
         let known = &self.known;
         self.new.retain(|key, _| !known.contains(key));
+        self.cataloged = true;
     }
 
-    /// Replace the count with a finished walk's.
+    /// Replace the count with a finished walk's, against the catalog's paths
+    /// as last read.
     ///
     /// A folder the walk entered that the watcher did not find as it
     /// started was created while it registered, and nothing watches it: the
@@ -393,11 +401,10 @@ impl Watched {
     /// registered, so this misses no folder. One created before its parent's
     /// watch was registered is already there when the walk lists the parent,
     /// and the parent's watch reports one created after it.
-    fn counted_from(&mut self, listing: Listing, known: &[NativePath]) {
+    fn counted_from(&mut self, listing: Listing) {
         if let Some(live) = &self.live {
             self.rescan |= listing.folders.iter().any(|folder| !live.folders.contains(folder));
         }
-        self.know(known);
         let volume = &self.location.identity.volume;
         let known = &self.known;
         self.new = listing
@@ -411,7 +418,7 @@ impl Watched {
                 frame.to_path_buf().ok().map(|path| (key, path))
             })
             .collect();
-        self.counted = true;
+        self.listed = true;
     }
 
     /// Take the events the live watcher queued, marking a rescan for an OS
@@ -485,6 +492,11 @@ impl Watched {
                     .identity_on(volume)
                     != key
         });
+    }
+
+    /// Whether the count is known: a walk finished and the catalog was read.
+    const fn counted(&self) -> bool {
+        self.listed && self.cataloged
     }
 
     fn count(&self) -> NewCaptureCount {
@@ -677,7 +689,8 @@ impl Run {
                 walk: None,
                 rescan: false,
                 recount: false,
-                counted: false,
+                listed: false,
+                cataloged: false,
             },
         );
         self.walk(id);
@@ -767,13 +780,9 @@ impl Run {
         let probe = Arc::clone(&self.probe);
         let sender = self.walked.clone();
         tokio::spawn(async move {
-            let outcome = match library.catalog().location_asset_paths(id).await {
-                Ok(known) => blocking(move || probe.list(&root, stamp, &canceled))
-                    .await
-                    .map(|listing| (listing, known)),
-                Err(error) => Err(error),
-            };
-            let _ = sender.send(Walked { location: id, walk, outcome });
+            let known = library.catalog().location_asset_paths(id).await;
+            let listing = blocking(move || probe.list(&root, stamp, &canceled)).await;
+            let _ = sender.send(Walked { location: id, walk, known, listing });
         });
     }
 
@@ -788,8 +797,8 @@ impl Run {
         let Some(mut walk) = watched.walk.take() else {
             return;
         };
-        match walked.outcome {
-            Ok((listing, known)) => watched.counted_from(listing, &known),
+        let listing = match walked.listing {
+            Ok(listing) => listing,
             Err(error) => {
                 // The root went away or cannot be read: offline until a sweep
                 // finds it again, never retried in a loop.
@@ -797,7 +806,18 @@ impl Run {
                 self.go_offline(id);
                 return;
             }
+        };
+        match walked.known {
+            Ok(known) => watched.know(&known),
+            Err(error) => {
+                // Only the catalog failed: the location stays online, counted
+                // against the paths the catalog held when last read, and the
+                // catalog is read again.
+                tracing::warn!(location = %id, %error, "new captures: indexed paths unreadable; read again at the next tick");
+                watched.recount = true;
+            }
         }
+        watched.counted_from(listing);
         // The walk may have listed the paths live events named while it ran
         // before they changed.
         self.recheck(id, std::mem::take(&mut walk.touched)).await;
@@ -811,14 +831,17 @@ impl Run {
         }
     }
 
-    /// Apply the events every live watcher queued since the last tick.
+    /// Apply the events every live watcher queued since the last tick, then
+    /// restart the watchers or read again the catalog paths that wait for no
+    /// walk.
     async fn drain(&mut self) {
         #[cfg(test)]
         self.observed.drains.fetch_add(1, Ordering::SeqCst);
         let mut queued = Vec::new();
         for (id, watched) in &mut self.locations {
             let (root_touched, touched) = watched.take_events();
-            if root_touched || !touched.is_empty() || watched.rescan {
+            let pending = watched.walk.is_none() && (watched.rescan || watched.recount);
+            if root_touched || !touched.is_empty() || pending {
                 queued.push((*id, root_touched, touched));
             }
         }
@@ -826,12 +849,18 @@ impl Run {
             self.recheck(id, touched).await;
             if root_touched && !self.unchanged(id).await {
                 self.go_offline(id);
-            } else if self
-                .locations
-                .get(&id)
-                .is_some_and(|watched| watched.rescan && watched.walk.is_none())
-            {
+                continue;
+            }
+            let Some(watched) = self.locations.get(&id) else {
+                continue;
+            };
+            if watched.walk.is_some() {
+                continue;
+            }
+            if watched.rescan {
                 self.rescan(id).await;
+            } else if watched.recount {
+                self.recount(id).await;
             }
         }
     }
@@ -898,15 +927,23 @@ impl Run {
         }
     }
 
+    /// Read the catalog's paths in `id` again; while the catalog cannot be
+    /// read, every debounce tick tries again.
     async fn recount(&mut self, id: Uuid) {
-        match self.library.catalog().location_asset_paths(id).await {
+        let read = self.library.catalog().location_asset_paths(id).await;
+        let Some(watched) = self.locations.get_mut(&id) else {
+            return;
+        };
+        match read {
             Ok(known) => {
-                if let Some(watched) = self.locations.get_mut(&id) {
-                    watched.know(&known);
-                }
+                watched.know(&known);
+                watched.recount = false;
             }
             Err(error) => {
-                tracing::warn!(location = %id, %error, "new captures: indexed paths unreadable");
+                if !watched.recount {
+                    tracing::warn!(location = %id, %error, "new captures: indexed paths unreadable; read again at the next tick");
+                }
+                watched.recount = true;
             }
         }
     }
@@ -921,7 +958,7 @@ impl Run {
 
     fn publish(&self) {
         let mut counts: Vec<NewCaptureCount> =
-            self.locations.values().filter(|watched| watched.counted).map(Watched::count).collect();
+            self.locations.values().filter(|watched| watched.counted()).map(Watched::count).collect();
         counts.sort_by_key(|count| count.location_id);
         self.publish.send_if_modified(|current| {
             if *current == counts {
