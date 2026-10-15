@@ -123,14 +123,14 @@ first Apply builds the Project's View from the original sessions.
 - **Do:** After S9b, open Home. Then quit and relaunch the app, and open Home again.
 - **Expect:** Home still shows the same six sections in the same order. `First light` remains in Open work with its View applied.
 - **Expect (negative):** The orientation walk does not open again (S4). Home shows no Getting started checklist.
-- **Trace:** PRJ-FR-17, PRJ-FR-20 · D-W89, D-W94, D-W100
+- **Trace:** PRJ-FR-17, PRJ-FR-32 · D-W89, D-W94, D-W100
 
 ### S17 — Restore from Settings re-seeds from real state {#S17}
 
 - **Do:** Open Settings and then Home after the restart in S9c.
 - **Expect:** The Project remains in Open work with its View applied. Home's Status, Tonight and calendar sections remain present, and no setup checklist is restored.
 - **Expect (negative):** Returning to Settings or Home creates no demo or sample data and does not replay the walk.
-- **Trace:** PRJ-FR-17, PRJ-FR-20 · D-W89, D-W94
+- **Trace:** PRJ-FR-17, PRJ-FR-32 · D-W89, D-W94
 
 ### S18 — The checklist never blocks ordinary workflow {#S18}
 

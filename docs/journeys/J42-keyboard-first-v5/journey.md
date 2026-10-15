@@ -120,7 +120,7 @@ Done means:
   - The Project page offers Sessions, Calibrate, View, Output and Wrap up. Its first step is Sessions.
   - No step creates or names a processing run; frame Review remains in session intake.
 - **Expect (negative):** Typing in the palette's field triggers no shortcut.
-- **Trace:** PRJ-FR-07 · PRJ-FR-20 · D-W94
+- **Trace:** PRJ-FR-07 · PRJ-FR-32 · D-W94
 
 ### S10 — Open the Sessions step {#S10}
 
@@ -157,7 +157,7 @@ Done means:
   - Wrap up lists Clean up, Trash and Archive in that order.
   - The Project remains open. Its sessions, View and Output are unchanged.
 - **Expect (negative):** Reading Wrap up proceeds through no custody step and closes no Project.
-- **Trace:** PRJ-FR-14 · PRJ-FR-15 · PRJ-FR-20 · D-W80 · D-W97
+- **Trace:** PRJ-FR-14 · PRJ-FR-15 · PRJ-FR-32 · D-W80 · D-W97
 
 ### S15 — Verify custody {#S15}
 

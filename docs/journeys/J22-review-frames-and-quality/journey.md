@@ -156,7 +156,7 @@ moves or trashes no source file.
 - **Do:** On F2 open the frame menu and inspect the available quality actions. Open Project `NGC 7000 HOO` and inspect its Sessions step.
 - **Expect:** The frame menu offers only the library-wide P, X and U quality actions and no Project-scoped reject or clear action. The Project Sessions step lists changes to its inputs with their source; the View remains unchanged until Apply.
 - **Expect (negative):** No Project-only quality state or quality control changes the Project's totals. No file moves or goes to the OS Trash.
-- **Trace:** PIX-FR-14 · LIB-FR-20 · VSEL-FR-11, VSEL-FR-12 · PRJ-FR-08 · D-W78, D-W79, D-W94, D-W100
+- **Trace:** PIX-FR-14 · LIB-FR-20 · VSEL-FR-12 · PRJ-FR-08 · D-W78, D-W79, D-W94, D-W100
 
 ### S12 — Meet a goal without closing the Project {#S12}
 

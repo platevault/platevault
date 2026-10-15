@@ -186,4 +186,4 @@ Done means:
 ## Delta log
 - **Δ6** 2026-10-15 · S1, S1a, S4, S5, S6, S7, S8, +S8a, S9, S10, S10a, S11, S12, S13, S14, S15, S15a, S16, S17 · behavior-change
   The Project's first Apply builds its View from originals; later group and mode changes stay pending until Apply. The sheet, folder tree, safe swap, Windows file-use wait and verified Open describe the Project View rather than a processing run.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-18, PREP-FR-01 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-21, PREP-FR-01 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)

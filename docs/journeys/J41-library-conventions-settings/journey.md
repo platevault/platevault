@@ -7,7 +7,7 @@ last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [settings, naming, goal-templates, grouping, locations, applications, import, projects, wrap-up, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#e2, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7, P-ARC1, P-STO2, P-CAL3, P-PREP3, D-W20, D-W29, D-W30, D-W47, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/e-targets-plan-settings/settings-naming.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/t4/applications.tsx, apps/prototype/src/store/actions/settings.ts, apps/prototype/src/store/actions/projects.ts, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, specs/063-clean-rebuild-contract/workflow-decisions.md, LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-07, PRJ-FR-10, PRJ-FR-12, PRJ-FR-27, PRJ-FR-28, PREP-FR-04, PREP-FR-06, PREP-FR-15, PREP-FR-16, RES-FR-01, STO-IMP-FR-03, STO-IMP-FR-05, STO-IMP-FR-07, D-W84, D-W86, D-W93 to D-W106]
+trace: [HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#e2, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-7, P-ARC1, P-STO2, P-CAL3, P-PREP3, D-W20, D-W29, D-W30, D-W47, apps/prototype/src/domain/templates.ts, apps/prototype/src/features/v5/e-targets-plan-settings/settings-naming.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-goal-templates.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/t4/applications.tsx, apps/prototype/src/store/actions/settings.ts, apps/prototype/src/store/actions/projects.ts, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, specs/063-clean-rebuild-contract/workflow-decisions.md, LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-07, PRJ-FR-31, PRJ-FR-12, PRJ-FR-27, PRJ-FR-28, PREP-FR-04, PREP-FR-06, PREP-FR-15, PREP-FR-16, RES-FR-01, STO-IMP-FR-03, STO-IMP-FR-05, STO-IMP-FR-07, D-W84, D-W86, D-W93 to D-W106]
 ---
 
 ## Goal
@@ -159,7 +159,7 @@ The user sets how imported files are named, which goals a new Project starts wit
 - **Do:** In Settings, open the global Project grouping preferences. Read the framing and mosaic-panel thresholds and the GROUP and PANEL keyword names.
 - **Expect:** The provisional same-framing defaults are coverage of at least 90 %, centres within 5 % of the field and rotation within 5°. The provisional mosaic-panel overlap is 5 % to 40 %. GROUP is the default folder keyword and PANEL is used for a mosaic-panel group; both keyword names are configurable globally and per Project. The group folder level appears only when a Project has several groups.
 - **Expect (negative):** Reading these defaults changes no existing Project group or View.
-- **Trace:** PRJ-FR-10 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · D-W95 · D-W100
+- **Trace:** PRJ-FR-31 · PRJ-FR-28 · PRJ-FR-29 · PREP-FR-16 · D-W95 · D-W100
 
 ### S17 — Confirm nothing changed on disk {#S17}
 
@@ -183,7 +183,7 @@ The user sets how imported files are named, which goals a new Project starts wit
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet. The expected behavior follows LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-10, PRJ-FR-28, PREP-FR-04, PREP-FR-15, STO-IMP-FR-07 and D-W84 to D-W106.
+- G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet. The expected behavior follows LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-31, PRJ-FR-28, PREP-FR-04, PREP-FR-15, STO-IMP-FR-07 and D-W84 to D-W106.
 - G2: Unresolved implementation qualification: P1 needs a seeded catalog (J32's fixture world plus P3's three Archive locations and the Project's Wrap up destination). No fixture builder exists. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Disk use per location"; S13 now asserts each row's catalogued bytes plus its volume's free space, with the `Cold-1` figures of P7 and an uncatalogued file that must not be counted.
 - G4: Out of scope: equipment, sites and Target lookup (J15); Settings › Calibration "Keep raw calibration frames" (J36); appearance and language (J40); adding, rescanning, retiring and remapping locations (J19, J28); choosing the destination inside Wrap up and approving Archive (J34); a profile's launch failure when opening a Project's View (J24).
@@ -200,4 +200,4 @@ The user sets how imported files are named, which goals a new Project starts wit
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c); D-W98 and PREP-FR-04, PREP-FR-15 · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ4** 2026-10-15 · S1, S2, S3, S4, S5, S6, S13, S16a, +S16b · behavior-change
   Naming uses plain text templates and a token table; the Project input mode replaces the run view. Global Settings cover Project framing and GROUP/PANEL folder keywords.
-  Evidence: D-W84 to D-W106, STO-IMP-FR-07, PRJ-FR-10, PRJ-FR-28 and PREP-FR-04 · by: SpecF4Writer2 (intent-gated)
+  Evidence: D-W84 to D-W106, STO-IMP-FR-07, PRJ-FR-31, PRJ-FR-28 and PREP-FR-04 · by: SpecF4Writer2 (intent-gated)

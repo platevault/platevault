@@ -53,13 +53,13 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 ### S1b — Mark the framing groups as mosaic panels {#S1b}
 - **Do:** In the Project's Sessions step, mark the four groups formed by the panel framings as mosaic panels.
 - **Expect:** The Project becomes a mosaic. The groups are named `Panel 1` through `Panel 4`, using a NINA or capture name where present and otherwise numbering them. Their folder keyword will be PANEL only.
-- **Trace:** PRJ-FR-10, PRJ-FR-27 to PRJ-FR-29 · D-W95
+- **Trace:** PRJ-FR-31, PRJ-FR-27 to PRJ-FR-29 · D-W95
 
 ### S1c — Place the ambiguous and unknown framings {#S1c}
 - **Do:** Move 15 Aug to Panel 2 and move 17 Aug from Framing unknown to Panel 3. Do not add 16 Aug.
 - **Expect:** The seven sessions are grouped as P3 specifies: 10 and 11 Aug in Panel 1, 12 and 15 Aug in Panel 2, 13 and 17 Aug in Panel 3, and 14 Aug in Panel 4. Unknown pointing is not treated as zero distance.
 - **Expect (negative):** Moving sessions between groups changes no capture metadata or library quality.
-- **Trace:** PRJ-FR-10, PRJ-FR-27, VSEL-FR-04, VSEL-FR-12 · D-W95
+- **Trace:** PRJ-FR-31, PRJ-FR-27, VSEL-FR-04, VSEL-FR-12 · D-W95
 
 ### S2 — Check panel goals and progress {#S2}
 - **Do:** Read each panel's Ha and OIII goals and progress on the Project page.
@@ -159,4 +159,4 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 ## Delta log
 - **Δ5** 2026-10-15 · S1, S1a, S1b, S1c, S2, S2a, S3, S5, S5a, S6, S7, S8, S9, S10, S11, S12, S13, S14, S15 · behavior-change
   Mosaic panels are Project groups, calibration is pinned on sessions, Apply builds their View, and panel and assembled Results live in `Output/`. Wrap up keeps Output and is the only route for rejected captures to the OS Trash.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-03, PRJ-FR-10, PRJ-FR-27 to PRJ-FR-29, VSEL-FR-07, PREP-FR-06, PREP-FR-16, RES-FR-01, RES-FR-08, STO-FR-14 · by: SpecF4Writer2 (intent-gated)
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-03, PRJ-FR-31, PRJ-FR-27 to PRJ-FR-29, VSEL-FR-07, PREP-FR-06, PREP-FR-16, RES-FR-01, RES-FR-08, STO-FR-14 · by: SpecF4Writer2 (intent-gated)

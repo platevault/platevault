@@ -39,7 +39,7 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 - **Do:** With one group move pending, open Wrap up and read the gate. Choose its link to View, discard the pending change, then open Wrap up again.
 - **Expect:** Before the change is cleared, Wrap up reads "Apply or discard 1 changes first ▸" and leads to View. Once no change or Project operation is pending, Wrap up opens at Clean up and shows the ordered steps Clean up → Trash → Archive.
 - **Expect (negative):** Trash and Archive are not available for editing before Clean up is Finished or Skipped.
-- **Trace:** PRJ-FR-14, PRJ-FR-20 · VSEL-FR-12 · D-W80, D-W97
+- **Trace:** PRJ-FR-14, PRJ-FR-32 · VSEL-FR-12 · D-W80, D-W97
 
 ### S2 — Review Copy-mode cleanup offers {#S2}
 

@@ -58,28 +58,28 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Do:** Record the copy in `Output/`, rerun Siril so it overwrites the source file in `Processing/Siril/`, and reopen Output.
 - **Expect:** The copy in `Output/` retains its recorded SHA-256 and remains listed as a Result; the file in `Processing/Siril/` reflects the tool's new bytes.
 - **Expect (negative):** The tool does not write into `Output/`, and no Result asks to be accepted again.
-- **Trace:** RES-FR-02, RES-AC-03, RES-FR-04 · D-W93, D-W98
+- **Trace:** RES-FR-02, RES-AC-28 · D-W93, D-W98
 
 ### S3a — Confirm Results need no acceptance {#S3a}
 
 - **Do:** Open the rows for the two stacks and the copied TIFF in Output.
 - **Expect:** Each file in `Output/` is a Result and has its Kind and Channel fields; no inspection or acceptance action is required to make it a Result.
 - **Expect (negative):** No file has an acceptance digest, recorded lineage, or an acceptance state.
-- **Trace:** RES-FR-01, RES-FR-03, RES-FR-04, RES-AC-09, RES-AC-10 · D-W93, D-W98
+- **Trace:** RES-FR-01 · D-W93, D-W98
 
 ### S4 — Keep Output separate from the View {#S4}
 
 - **Do:** Open Project `NGC 7000 HOO`'s View and inspect its input folder tree after Apply.
 - **Expect:** The View contains the inputs PlateVault places for the Project; the Project's Results remain in the sibling `Output/` folder.
 - **Expect (negative):** `Output/` files are not placed into the View and cannot be selected as Project inputs.
-- **Trace:** RES-FR-05 · PREP-FR-16 · D-W93, D-W98
+- **Trace:** VSEL-FR-01 · PREP-FR-16 · D-W93, D-W98
 
 ### S4a — Keep another Project's Output separate {#S4a}
 
 - **Do:** Open the Output step of another Project, then open the Sessions step of `NGC 7000 HOO`.
 - **Expect:** Results remain listed only in their owning Project's Output table; the Sessions step lists sessions and Project suggestions.
 - **Expect (negative):** The other Project's Results do not appear as sessions or as selectable inputs, and PlateVault records no lineage between Projects' Results.
-- **Trace:** RES-FR-03, RES-FR-05, RES-AC-13, RES-AC-14 · D-W93
+- **Trace:** VSEL-FR-01 · D-W93
 
 ### S5 — Change a Result's displayed kind {#S5}
 
@@ -93,7 +93,7 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Do:** Open the Project's Apply sheet and inspect the proposed View tree.
 - **Expect:** The tree previews the folders and files PlateVault will place from the Project's sessions and their pinned calibration.
 - **Expect (negative):** No file in `Output/` appears in the View tree or is available as a Project input.
-- **Trace:** RES-FR-05 · VSEL-FR-12, VSEL-FR-17 · D-W93, D-W100
+- **Trace:** VSEL-FR-01, VSEL-FR-12, VSEL-FR-20 · D-W93, D-W100
 
 ### S7 — List a file while it is being written {#S7}
 

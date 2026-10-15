@@ -74,14 +74,14 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Do:** Re-confirm NGC 7000 for 26 Sep, then open **Apply…** and inspect the changes and folder tree.
 - **Expect:** The sheet lists the 10 Ha frames added, the group move with its from and to names, the calibration reassignment and its source, and the changed group layout with "re-add View in your tool". Its tree shows `GROUP_` levels only because the Project has several groups, hyphenated `NIGHT_` dates, `Lights/<filter>/` and assigned `Flats/<filter>/`. It lists copies that differ from what PlateVault placed, the space needed for two Views in Copies mode, and files PlateVault did not place, each with a tick box.
 - **Expect (negative):** Nothing moves or changes before Apply succeeds. The new View is planned from originals, not reused from the current View.
-- **Trace:** VSEL-FR-14, VSEL-FR-15, VSEL-FR-17 · PREP-FR-08, PREP-FR-16 · D-W99, D-W100
+- **Trace:** VSEL-FR-14, VSEL-FR-15, VSEL-FR-20 · PREP-FR-08, PREP-FR-16 · D-W99, D-W100
 
 ### S5a — Choose files PlateVault did not place {#S5a}
 
 - **Do:** In the Apply sheet, tick the named DSS `.Info.txt` file and leave the user note unticked.
 - **Expect:** Each file has its own visible tick box. The selection is recorded in the sheet: the ticked file will move into the new View after the swap, and the unticked note will stay in `View (previous)/`.
 - **Expect (negative):** PlateVault does not delete either file or move one before the swap.
-- **Trace:** VSEL-FR-17 · STO-FR-10 · D-W100
+- **Trace:** VSEL-FR-20 · STO-FR-10 · D-W100
 
 ### S6 — Block Apply for an offline original {#S6}
 
@@ -102,7 +102,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Do:** Release the file handle, reopen **Apply…**, confirm Apply and wait for the swap.
 - **Expect:** Apply builds a complete fresh View from the originals and swaps it in. The changed copy remains in `View (previous)/`; the new View contains fresh bytes from the original. The ticked `.Info.txt` moves into the new View after the swap, and the unticked note remains in `View (previous)/`. PlateVault never deletes either user/tool file. The Project has the added Ha frames once, the new group tree and reassigned calibration.
 - **Expect (negative):** No entry from the old View is reused, and originals and unselected files remain unchanged.
-- **Trace:** VSEL-FR-14, VSEL-FR-17 · PREP-FR-06, PREP-FR-09, PREP-FR-16, PREP-FR-19 · STO-FR-10 · D-W100
+- **Trace:** VSEL-FR-14, VSEL-FR-20 · PREP-FR-06, PREP-FR-09, PREP-FR-16, PREP-FR-19 · STO-FR-10 · D-W100
 
 ### S7b — Change one duplicate capture copy {#S7b}
 
@@ -129,4 +129,4 @@ Done means: the Project shows the addition, group and calibration changes as pen
 ## Delta log
 - **Δ6** 2026-10-15 · S1, S2, S2a, S2b, S3, S4, S5, S5a, S6, S7, +S7a, +S7b · behavior-change
   New sessions are suggestions on the Project, and additions, group moves and calibration reassignments stay pending until Apply. The Apply sheet names exact changes, shows the rebuilt folder tree and preserves files PlateVault did not place or copies that differ from its recorded contents.
-  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-18, PREP-FR-06, PREP-FR-08, PREP-FR-16 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)
+  Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, VSEL-FR-12 to VSEL-FR-21, PREP-FR-06, PREP-FR-08, PREP-FR-16 to PREP-FR-19, STO-FR-10 · by: SpecF4Writer2 (intent-gated)

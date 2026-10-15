@@ -64,7 +64,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   - `M 31 OSC` reads `3h00 in project / 4h30 captured · goal 10h`. Its Project row shows that Apply failed; Next opens its View step.
   - `IC 1396 Ha` reads Ha `5h20 in project / 6h40 captured · goal 5h`, met. Its Next reads **Choose its flats first** for the suggested `1 Oct Ha` session.
 - **Expect (negative):** `Pleiades 2025` is not listed because it is Closed. `NGC 7000 HOO` shows the session-review action before its calibration suggestion. No Project row offers Wrap up or a processing-run action as Next. No goal shows "in project" above "captured", and no goal reads met from its "captured" value.
-- **Trace:** PRJ-FR-17, PRJ-FR-18, PRJ-FR-20, PRJ-FR-21 · PRJ-AC-19, PRJ-AC-22, PRJ-AC-23 · D-W89, D-W94, D-W96, D-W97, D-W105
+- **Trace:** PRJ-FR-17, PRJ-FR-18, PRJ-FR-32, PRJ-FR-21 · PRJ-AC-19, PRJ-AC-22, PRJ-AC-23 · D-W89, D-W94, D-W96, D-W97, D-W105
 
 ### S2a — Open a Project from its row {#S2a}
 
@@ -133,7 +133,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Do:** Read Home's Open work and compare it with the Closed `Pleiades 2025` Project.
 - **Expect:** Open work lists the five open Projects and does not list `Pleiades 2025`, which is Closed.
 - **Expect (negative):** Home offers no Show done control, and reading Open work changes no Project state.
-- **Trace:** PRJ-FR-17, PRJ-FR-20 · PRJ-AC-22 · D-W89, D-W97
+- **Trace:** PRJ-FR-17, PRJ-FR-32 · PRJ-AC-22 · D-W89, D-W97
 
 ### S10 — Watch running work {#S10}
 
