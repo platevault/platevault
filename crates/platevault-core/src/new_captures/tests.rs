@@ -742,10 +742,8 @@ async fn a_refused_root_is_not_queried_again_until_it_changes() {
     let before = probe.validations.load(Ordering::SeqCst);
     fs::create_dir_all(&root).unwrap();
     frame(&root.join("Ha_001.fits"));
-    eventually("the new folder is checked", || {
-        probe.validations.load(Ordering::SeqCst) > before
-    })
-    .await;
+    eventually("the new folder is checked", || probe.validations.load(Ordering::SeqCst) > before)
+        .await;
     after(&watch, sweeps, 10).await;
     assert_eq!(probe.validations.load(Ordering::SeqCst), before + 1, "refused once, not again");
     assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new());
@@ -768,9 +766,8 @@ async fn a_released_location_touches_its_volume_no_more_until_reattached() {
     let counts = until(&watch, |counts| counts.iter().all(|count| !count.live)).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: false }]);
     // No sweep or event touches the root meanwhile.
-    let touched = |probe: &Probe| {
-        (probe.stats.load(Ordering::SeqCst), probe.watches.load(Ordering::SeqCst))
-    };
+    let touched =
+        |probe: &Probe| (probe.stats.load(Ordering::SeqCst), probe.watches.load(Ordering::SeqCst));
     let (before, walked) = (touched(&probe), walks(&watch));
     frame(&root.join("Ha_002.fits"));
     after(&watch, sweeps, 2).await;

@@ -143,7 +143,7 @@ impl CaptureWatch {
         let (stop, stopped) = watch::channel(false);
         let (publish, counts) = watch::channel(Vec::new());
         let (walked, walks) = mpsc::unbounded_channel();
-        let (notices, noticed) = mpsc::unbounded_channel();
+        let (notices, inbox) = mpsc::unbounded_channel();
         #[cfg(test)]
         let observed = Arc::new(Observed::default());
         // Subscribed before the first reconciliation, so no change between
@@ -162,7 +162,7 @@ impl CaptureWatch {
             #[cfg(test)]
             observed: Arc::clone(&observed),
         };
-        let task = tokio::spawn(run.until_stopped(stopped, walks, scans, changes, noticed));
+        let task = tokio::spawn(run.until_stopped(stopped, walks, scans, changes, inbox));
         Self {
             stop,
             counts,
@@ -366,10 +366,13 @@ impl Gate {
     /// Wait while the gate is closed.
     pub(crate) fn pass(&self) {
         let closed = self.closed.lock().unwrap_or_else(PoisonError::into_inner);
-        if *closed {
-            self.held.store(true, Ordering::SeqCst);
-        }
-        drop(self.changed.wait_while(closed, |closed| *closed));
+        let waits = |closed: &mut bool| {
+            if *closed {
+                self.held.store(true, Ordering::SeqCst);
+            }
+            *closed
+        };
+        drop(self.changed.wait_while(closed, waits).unwrap_or_else(PoisonError::into_inner));
     }
 
     /// Whether a call waited at the gate.
@@ -443,6 +446,10 @@ enum Notice {
 }
 
 /// An online Captures location being counted.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent flags: two kinds of pending work, the two halves of a known count, and a released volume"
+)]
 struct Watched {
     location: Location,
     root: PathBuf,
@@ -487,6 +494,19 @@ impl Watched {
 
     fn relative<'a>(&self, path: &'a Path) -> Option<&'a Path> {
         self.prefixes.iter().find_map(|prefix| path.strip_prefix(prefix).ok())
+    }
+
+    /// Take the catalog's paths a walk read. When only the catalog failed, the
+    /// location stays online, counted against the paths the catalog held when
+    /// last read, and the catalog is read again.
+    fn known_from(&mut self, known: Result<Vec<NativePath>, LibraryError>) {
+        match known {
+            Ok(known) => self.know(&known),
+            Err(error) => {
+                tracing::warn!(location = %self.location.id, %error, "new captures: indexed paths unreadable; read again at the next tick");
+                self.recount = true;
+            }
+        }
     }
 
     fn know(&mut self, known: &[NativePath]) {
@@ -679,19 +699,27 @@ impl Run {
                     Ok(_) | Err(RecvError::Lagged(_)) => self.reconcile(false).await,
                     Err(RecvError::Closed) => break,
                 },
-                scan = scans.recv() => match scan {
-                    Ok(operation) if operation.state != ScanState::Running => {
-                        self.indexed(operation.location_id).await;
-                    }
-                    Ok(_) => {}
-                    Err(RecvError::Lagged(_)) => self.recount_all().await,
-                    Err(RecvError::Closed) => break,
+                scan = scans.recv() => if !self.scanned(scan).await {
+                    break;
                 },
                 _ = debounce.tick() => self.drain().await,
                 _ = sweep.tick() => self.reconcile(true).await,
             }
             self.publish();
         }
+    }
+
+    /// Apply a scan's progress; `false` once scans can no longer be followed.
+    async fn scanned(&mut self, scan: Result<ScanOperation, RecvError>) -> bool {
+        match scan {
+            Ok(operation) if operation.state != ScanState::Running => {
+                self.indexed(operation.location_id).await;
+            }
+            Ok(_) => {}
+            Err(RecvError::Lagged(_)) => self.recount_all().await,
+            Err(RecvError::Closed) => return false,
+        }
+        true
     }
 
     /// Follow the catalog's Active Captures locations: stop what is no longer
@@ -984,16 +1012,7 @@ impl Run {
                 return;
             }
         };
-        match walked.known {
-            Ok(known) => watched.know(&known),
-            Err(error) => {
-                // Only the catalog failed: the location stays online, counted
-                // against the paths the catalog held when last read, and the
-                // catalog is read again.
-                tracing::warn!(location = %id, %error, "new captures: indexed paths unreadable; read again at the next tick");
-                watched.recount = true;
-            }
-        }
+        watched.known_from(walked.known);
         watched.counted_from(listing);
         // The walk may have listed the paths live events named while it ran
         // before they changed.
@@ -1138,8 +1157,12 @@ impl Run {
     }
 
     fn publish(&self) {
-        let mut counts: Vec<NewCaptureCount> =
-            self.locations.values().filter(|watched| watched.counted()).map(Watched::count).collect();
+        let mut counts: Vec<NewCaptureCount> = self
+            .locations
+            .values()
+            .filter(|watched| watched.counted())
+            .map(Watched::count)
+            .collect();
         counts.sort_by_key(|count| count.location_id);
         self.publish.send_if_modified(|current| {
             if *current == counts {
