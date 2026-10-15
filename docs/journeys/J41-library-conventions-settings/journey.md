@@ -1,6 +1,6 @@
 ---
 id: J41
-title: Set library and Project conventions in Settings: naming, goals, grouping, locations and applications
+title: Set library and Project conventions in Settings for naming, goals, grouping, locations and applications
 version: 4
 status: draft
 last_reviewed: 2026-10-12

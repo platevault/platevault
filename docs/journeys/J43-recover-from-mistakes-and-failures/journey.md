@@ -1,6 +1,6 @@
 ---
 id: J43
-title: Recover from routine mistakes and failures: retry interrupted work, change a wrong Target, act on a refusal, undo marks and discard a draft
+title: Recover from routine mistakes and failures by retrying interrupted work, changing a wrong Target, acting on a refusal, undoing marks and discarding a draft
 version: 3
 status: draft
 last_reviewed: 2026-10-12
