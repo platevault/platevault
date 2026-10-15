@@ -12,7 +12,14 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 06
 
 ## Goal
 
-The user wraps up Project `NGC 7000 HOO` after its View changes have been applied. Wrap up opens only when no Project change is pending and offers Clean up → Trash → Archive in order. The user skips Clean up, so the Project's Symlinks View stays in place. In Trash the user moves the rejected frames, the `Processing/` files and the duplicate copies to the OS Trash, then chooses **Close project…** as Archive's Proceed. Archive transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it. Sources retire only after the destination and affected references verify, and the View's symlinks follow the archived sessions. `Output/` is kept, and the Project reads Archived after the transfer succeeds. Closed and Archived Projects are locked for good: there is no Reopen, no restore of archived sessions, and no library or calibration change reaches them. **Duplicate…** is the way to continue one.
+The user wraps up Project `NGC 7000 HOO` after its View changes have been applied, and closes it. Done means:
+- Wrap up opens only when no Project change is pending and offers Clean up → Trash → Archive in order.
+- The user skips Clean up, so the Project's Symlinks View stays in place.
+- Trash moves the rejected frames, the `Processing/` files and the duplicate copies to the OS Trash.
+- **Close project…**, Archive's Proceed, transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it.
+- Sources retire only after the destination and affected references verify, and the View's symlinks follow the archived sessions.
+- `Output/` is kept, and the Project reads Archived after the transfer succeeds.
+- The Closed Project is locked for good: no Reopen, no restore of archived sessions, and no library or calibration change reaches it. **Duplicate…** is the way to continue it.
 
 ## Preconditions
 
@@ -22,7 +29,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - P4: The 28 Sep frames F-res, F-prep and F-ab have library quality Unusable. Open Project `NGC 7000 Ha deep` holds 28 Sep. Its View still holds a symlink to F-prep, because its Library removal of F-prep is pending and not yet Applied; it holds no entry for F-res or F-ab. No Result lineage is recorded or used to decide whether a frame may be trashed.
 - P5: Open Project `NGC 7000 SHO` has 18, 28 and 30 Sep only as suggestions and holds none of them.
 - P6: `Scratch/Captures` is registered and indexed as a Captures location after `Astro-T7/Captures`. It holds a byte copy of F-dup. `Scratch` has no OS Trash.
-- P7: A helper outside PlateVault saves a named file's bytes and nanosecond mtime, overwrites the file in place with a same-size variant whose bytes differ, restores the saved mtime, and can later restore the saved bytes and mtime. Its targets are F-drift in S6 and one `Processing/WBPP/` file in S9.
+- P7: A helper outside PlateVault saves a named file's bytes and nanosecond mtime. It overwrites the file in place with a same-size variant whose bytes differ and restores the saved mtime, and it can later restore the saved bytes and mtime. Its targets are F-drift in S6 and one `Processing/WBPP/` file in S9.
 - P8: `Processing/WBPP/` holds 416 tool files and the generated source of the master flat adopted into `Astro-T7/Calibration`.
 - P9: A disposable writable volume `Archive` has free space for the Project's sessions. Settings › Locations lists two archive locations on it, registered before S1: `Archive/NGC7000`, marked Default, and `Archive/Long-term`.
 - P10: The isolated account's OS Trash inventory is recorded. So are manifests of the Project's captures, `Processing/`, `Output/` and the adopted master, plus directory listings of `Astro-T7`, `Backup`, `Archive` and the Views of `NGC 7000 HOO` and `NGC 7000 Ha deep`.
@@ -174,7 +181,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Expect:**
   - The header reads Archived, `Output/` keeps its two Results, and the menu offers only Duplicate….
   - The Wrap up tab is a read-only record of each step's outcome: Clean up Skipped, Trash Finished and Archive Finished. It offers no **Proceed**, and no step can be reopened.
-  - Home's Open work no longer lists the Project, and the Projects list shows it Archived.
+  - Home's Open work does not list the Project, and the Projects list shows it Archived.
 - **Expect (negative):** Close moves no file in `Output/` and does not change the Project's sessions or goals. No Reopen is offered.
 - **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1 · PRJ-FR-14, PRJ-FR-25 · PRJ-AC-21, PRJ-AC-22, PRJ-AC-34 · RES-FR-06 · D-W80, D-W97
 
@@ -199,7 +206,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 
 ## Success criteria
 
-- SC1: Wrap up opens with no pending Project changes and lists Clean up → Trash → Archive in order; Archive's Proceed is Close project… (S1, S3, S11). There is no Project Trash page, Empty Trash action or Empty Trash group (S2, S3a).
+- SC1: Wrap up opens with no pending Project changes and lists Clean up → Trash → Archive in order; Archive's Proceed is Close project… (S1, S3, S11). No Project Trash page, Empty Trash action or Empty Trash group exists (S2, S3a).
 - SC2: The rejected-frames offer counts exactly 8 frames and lists exactly 2 refusals with reasons, F-prep's naming `NGC 7000 Ha deep`. It includes 0 Unreviewed or Usable frames (S4).
 - SC3: Exactly 7 frames reach the OS Trash. 0 refused or drifted frames and 0 View entries move, and 0 files are permanently deleted (S6).
 - SC4: The Trashed frames appear in 0 suggestions, Review steps, goals or totals of an open Project. They show only under the Trashed filter (7 frames) (S7, S8) and, marked "Trashed", in the Archived Project that held them (S12).

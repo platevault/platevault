@@ -36,7 +36,14 @@ The user sets how imported files are named, which goals a new Project starts wit
 ### S1 — Open Settings › Naming {#S1}
 
 - **Do:** Open Settings and choose Naming.
-- **Expect:** The seven frame types are listed in this order with their default templates: Lights `{target}/{filter}/{date}/light/`; Flats `flats/{filter}/{date}/`; Darks `darks/{exposure}/`; Bias `bias/`; Master flats `masters/flats/{filter}/`; Master darks `masters/darks/{exposure}/`; Master bias `masters/bias/`. Lights is selected.
+- **Expect:** The seven frame types are listed in this order with their default templates, and Lights is selected:
+  - Lights `{target}/{filter}/{date}/light/`
+  - Flats `flats/{filter}/{date}/`
+  - Darks `darks/{exposure}/`
+  - Bias `bias/`
+  - Master flats `masters/flats/{filter}/`
+  - Master darks `masters/darks/{exposure}/`
+  - Master bias `masters/bias/`
 - **Trace:** STO-IMP-FR-07 · D-W84 · D-W93
 - **Trace:** STO-IMP-FR-07 · D-W84 · D-W93
 
@@ -186,7 +193,13 @@ The user sets how imported files are named, which goals a new Project starts wit
 - G1: Not validated. The rebuilt application does not implement these Settings sections in this form yet. The expected behavior follows LIB-FR-21, PLAN-EQ-FR-07, PLAN-EQ-FR-08, PRJ-FR-31, PRJ-FR-28, PREP-FR-04, PREP-FR-15, STO-IMP-FR-07 and D-W84 to D-W106.
 - G2: Unresolved implementation qualification: P1 needs a seeded catalog (J32's fixture world plus P3's three Archive locations and the Project's Wrap up destination). No fixture builder exists. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Disk use per location"; S13 now asserts each row's catalogued bytes plus its volume's free space, with the `Cold-1` figures of P7 and an uncatalogued file that must not be counted.
-- G4: Out of scope: equipment, sites and Target lookup (J15); Settings › Calibration "Keep raw calibration frames" (J36); appearance and language (J40); adding, rescanning, retiring and remapping locations (J19, J28); choosing the destination inside Wrap up and approving Archive (J34); a profile's launch failure when opening a Project's View (J24).
+- G4: Out of scope:
+  - equipment, sites and Target lookup (J15);
+  - Settings › Calibration "Keep raw calibration frames" (J36);
+  - appearance and language (J40);
+  - adding, rescanning, retiring and remapping locations (J19, J28);
+  - choosing the destination inside Wrap up and approving Archive (J34);
+  - a profile's launch failure when opening a Project's View (J24).
 - G5: The validation lane must be able to rename the PixInsight bundle (P5) without affecting the user's own install; on a machine with PixInsight in use, a stand-in bundle is required.
 
 ## Delta log

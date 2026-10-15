@@ -71,7 +71,14 @@ The user chooses how PlateVault looks and reads: they set its appearance mode, c
 ### S7 — Switch to Português (Brasil) {#S7}
 
 - **Do:** Choose Português (Brasil). Without restarting, visit Home, Projects, the `NGC 7000 HOO` Project page, Sessions, a session detail, Targets, Calibration, Activity and each Settings section.
-- **Expect:** The switch takes effect on the open screen at once. The source list reads Início, Projetos, Alvos, Sessões, Calibração and Atividade; the Settings section list reads Aparência, Locais, Nomenclatura, Modelos de metas and Aplicativos; Appearance has one density across screens and no density setting, and its button Restaurar padrões; the machine-generated pill reads "Tradução automática"; the idle status bar reads "Ocioso". Observing nights use pt-BR month names ("18 set", "30 set"), and decimal numbers and sizes use a decimal comma ("12,4 GB"). Activity's earlier entry reads `Projeto criado: NGC 7000 HOO`. Every button, heading, column header, status word, tooltip, empty state and refusal on the visited screens is in Portuguese. Proper names stay as written: PlateVault, theme names, Target, rig, Project and file names, paths, header values, filter names and palette names (HOO, SHO, LRGB).
+- **Expect:**
+  - The switch takes effect on the open screen at once.
+  - The source list reads Início, Projetos, Alvos, Sessões, Calibração and Atividade.
+  - The Settings section list reads Aparência, Locais, Nomenclatura, Modelos de metas and Aplicativos.
+  - Appearance has one density across screens and no density setting, and its button reads Restaurar padrões.
+  - The machine-generated pill reads "Tradução automática", and the idle status bar reads "Ocioso".
+  - Observing nights use pt-BR month names ("18 set", "30 set"), and decimal numbers and sizes use a decimal comma ("12,4 GB"). Activity's earlier entry reads `Projeto criado: NGC 7000 HOO`.
+  - Every button, heading, column header, status word, tooltip, empty state and refusal on the visited screens is in Portuguese. Proper names stay as written: PlateVault, theme names, Target, rig, Project and file names, paths, header values, filter names and palette names (HOO, SHO, LRGB).
 - **Expect (negative):** No English UI word remains on any visited screen. No reload, re-index or rescan starts. Session names, Project names and file paths are not translated or changed.
 - **Trace:** Feedback §Shell 6 · §Round 1b i18n gate · I18N.md §Using a message (MessageRef worded at render) · format.ts (MONTHS, Intl locale) · ui-harness-v5@d9255cff, @277fc2ac
 

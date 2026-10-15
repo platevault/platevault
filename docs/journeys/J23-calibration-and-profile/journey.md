@@ -61,7 +61,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 ### S4a — Review the calibration inputs {#S4a}
 
 - **Do:** In the session details, inspect the calibration kinds and the files pinned for the 18 Sep Ha session.
-- **Expect:** Session details distinguish pinned raw calibration from a pinned master version. When both raw flats and a matching master flat are present, the Project's View uses the master flat unless the session is switched to its raw flats. The 50 raw bias frames remain raw files, not master records.
+- **Expect:** Session details distinguish pinned raw calibration from a pinned master version. When both raw flats and a matching master flat are present, the Project's View uses the master flat unless the session is switched to its raw flats. The 50 raw bias frames remain raw files and create no master record.
 - **Expect (negative):** The Project's Calibrate diagram does not offer a row menu for selecting a master or a raw set.
 - **Trace:** CAL-FR-04, CAL-FR-08, CAL-FR-09 · LIB-FR-23 · D-W101, D-W102
 

@@ -30,7 +30,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
   | 16 Aug | OIII | 10 | inside the Veil Nebula framing, outside every panel |
   | 17 Aug | Ha | 10 | none (Position unknown) |
 
-- P3: The four panel framings are recorded by the captures' pointing and rotation evidence, with a 20% overlap between adjacent framings. This is within the provisional 5–40% overlap at which PlateVault offers groups as mosaic panels. The P2 pointings place the 10 and 11 Aug sessions in Panel 1, 12 Aug in Panel 2, 13 Aug in Panel 3, and 14 Aug in Panel 4. The 15 Aug session is ambiguous between Panels 1 and 2; the 17 Aug session has no pointing and starts as Framing unknown.
+- P3: The four panel framings are recorded by the captures' pointing and rotation evidence, with a 20% overlap between adjacent framings. This is within the provisional 5 to 40% overlap at which PlateVault offers groups as mosaic panels. The P2 pointings place the 10 and 11 Aug sessions in Panel 1, 12 Aug in Panel 2, 13 Aug in Panel 3, and 14 Aug in Panel 4. The 15 Aug session is ambiguous between Panels 1 and 2; the 17 Aug session has no pointing and starts as Framing unknown.
 - P4: The Calibration library contains the master darks and flats for the seven sessions. Calibration was matched at ingestion and pinned on each session; any suggested match was confirmed during import review, and the 17 Aug session is explicitly set to No flats. No raw calibration frame is assigned in the Project.
 - P5: PixInsight is installed. Its WBPP profile is configured in PlateVault with recorded evidence that it reads input folders and never writes into its input files (D04).
 - P6: `Work/Processing` exists on `Astro-T7`, writable, on the same volume as `Astro-T7/Captures`. `Astro-T7` supports symbolic links. The Project's View mode is Symlinks. On the `desktop-ui` (Windows) lane, Windows Developer Mode is on.
@@ -73,7 +73,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S3 — Read Project-level progress {#S3}
 - **Do:** Read the Project's panel progress and group list.
-- **Expect:** Progress is shown per panel and per panel goal. The panels are groups of one Project, not separately prepared work units; there is no whole-mosaic processing state.
+- **Expect:** Progress is shown per panel and per panel goal. The panels are groups of one Project, and no whole-mosaic processing state exists.
 - **Trace:** PRJ-FR-03, PRJ-FR-07, PRJ-FR-27, PRJ-FR-29 · D-W94, D-W95
 
 ### S5 — Choose the application and View mode {#S5}
@@ -153,7 +153,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 - G1: The rebuilt application has not been validated. Product behavior follows the current specs and D-W93 to D-W106; no implementation has been validated against them.
 - G2: The WBPP profile's capability probe and folder input remain unqualified (D04). Blocks readiness.
-- G3: The provisional 5–40% overlap rule and framing tolerances have not been validated against the panel fixture. The P3 geometry and the session movements in S1c are explicit fixture data, not claims about automatic assignment outside those conditions. Blocks readiness.
+- G3: The provisional 5 to 40% overlap rule and framing tolerances have not been validated against the panel fixture. The P3 geometry and the session movements in S1c are explicit fixture data, not claims about automatic assignment outside those conditions. Blocks readiness.
 - G4: Canceling Apply and a Project mixing cameras are outside this journey.
 
 ## Delta log

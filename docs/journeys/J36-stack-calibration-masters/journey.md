@@ -154,7 +154,7 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 
 - **Do:** Open the details of the master dark `MasterDark_2026-09-20.xisf`, then those of the imported OIII flat `MasterFlat_2026-09-26.xisf`.
 - **Expect:**
-  - The dark's details read: kind Dark, camera ASI2600MM, optical train –, filter –, exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the file it was imported from in the application's output folder, its storage path and the SHA-256 recorded in S5. Used by counts no session (J23 reads it with sessions), and the panel offers **Hide**.
+  - The dark's details read: kind Dark, camera ASI2600MM, optical train and filter absent (each an en dash), exposure 300 s, gain 100 / offset 50, temperature −10 °C, binning 1x1 and frame count 20. They also show its created date, the file it was imported from in the application's output folder, its storage path and the SHA-256 recorded in S5. Used by counts no session (J23 reads it with sessions), and the panel offers **Hide**.
   - The OIII flat's details read optical train –, filter OIII and frame count 25, with the source imported from `Astro-T7/Stacked elsewhere/MasterFlat_OIII_2026-09-26.xisf`.
 - **Expect (negative):** Opening details changes no master and no file, and Used by never expands the master row.
 - **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 Calibration (master details panel; Used by is a popover)
@@ -183,7 +183,13 @@ Light sessions are later matched to these masters at ingestion (J23). Done means
 - G1: Not validated: the rebuilt application does not exist. Behavior follows the harness v5 design, which the user instructed on 2026-10-12 that journeys describe. Its sources are `HARNESS-V5-IA.md` §Screens S14 and S16 and §Round 2b foundation, and `HARNESS-V5-FEEDBACK-R1.md` §Round 1b P-CAL3, §Domain and seed P-CAL2 and §Round 5 Calibration (apps/prototype/design/ on ui-harness-v5 @ b5e813a5), §Round 6 (@ 4f470775, not yet implemented in the prototype), plus the prototype's calibration process. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the P5 stand-in does not exist. The design also does not say how PlateVault hands raw frames to a profile (a script, launch arguments or a watched folder), so S3 asserts only the output folder and the running watch. A real PixInsight or Siril stack is not exercised. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Dismiss is refused while a run uses the master", now Hide (D-W76); S12 asserts that a master no session uses hides, leaves the master list (6 masters) and returns with Restore (7). Hide and Move to Trash are refused while an open or Closed Project uses the master through its sessions (CAL-FR-17, provisional); no Project exists in this journey, so no step exercises that refusal.
-- G4: Out of scope for this journey: dark flats; Import routing raw calibration frames into a process awaiting Stack (J31); Import failures for offline storage, `Copy did not verify` and `Write permission removed`; a Raws failure that keeps refused frames; **Trash raws** on kept raws; and a profile that cannot stack. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey, and blocks readiness until covered by a step or a journey:
+  - dark flats;
+  - Import routing raw calibration frames into a process awaiting Stack (J31);
+  - Import failures for offline storage, `Copy did not verify` and `Write permission removed`;
+  - a Raws failure that keeps refused frames;
+  - **Trash raws** on kept raws;
+  - a profile that cannot stack.
 
 ## Delta log
 

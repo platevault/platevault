@@ -16,7 +16,11 @@ The user moves library-Unusable frames belonging to Project `NGC 7000 HOO` to th
 
 ## Preconditions
 
-- P1: Project `NGC 7000 HOO` is open, has no pending changes, and its sessions include the listed Unusable frames: two from 18 Sep; five from 30 Sep, including F-drift and F-dup; F-res, F-prep and F-ab from 28 Sep; and MX-1 and MX-2 from `4 Oct M 33`. The `4 Oct M 33` session is part of this Project. F-prep is also in the View of the separate open Project `NGC 7000 Ha deep`; that Project has a pending Library removal and has not yet Applied it. The HOO Project has a Symlinks View and a populated `Output/` folder.
+- P1: Project `NGC 7000 HOO` is open and has no pending changes. It has a Symlinks View and a populated `Output/` folder. F-prep is also in the View of the separate open Project `NGC 7000 Ha deep`, which has a pending Library removal of it and has not yet Applied it. The HOO Project's sessions, which include `4 Oct M 33`, hold these Unusable frames:
+  - two from 18 Sep;
+  - five from 30 Sep, including F-drift and F-dup;
+  - F-res, F-prep and F-ab from 28 Sep;
+  - MX-1 and MX-2 from `4 Oct M 33`.
 - P2: `Astro-T7/Captures/M33/2026-10-04/` holds the indexed `4 Oct M 33` session: 16 Ha 300 s `RedCat` lights with confirmed Target M 33, confirmed rig and settled calibration. The session belongs to `NGC 7000 HOO`, which also names M 33 as a subject. MX-1 and MX-2 are Unusable; the other 14 frames are Usable.
 - P3: Besides the J34/P11 files, `Backup/Captures/M33/2026-10-04/` holds a byte copy of MX-1, indexed with `Backup/Captures`. `Backup` has an OS Trash.
 - P4: While `Cold-1` was online, one 12 Sep frame, C-x, was marked Unusable in the library. `Cold-1` is offline again, as in J19/P3, so `Cold-1 captures` reads Offline.
@@ -37,7 +41,7 @@ The user moves library-Unusable frames belonging to Project `NGC 7000 HOO` to th
 - **Expect (negative):** Nothing outside registered Captures locations moves. Both copies of F-dup, F-prep and C-x remain at their original paths. No other file changes.
 - **Trace:** STO-FR-14, STO-FR-15 · STO-AC-18, STO-AC-19 · PRJ-FR-15 · D19, D-W43
 
-### S3 — Confirm the Trashed records are excluded {#S3}
+### S3 — Confirm the Trashed records are hidden {#S3}
 - **Do:** Read Sessions, Targets, the affected Project's totals and frame review for `4 Oct M 33`; rescan `Astro-T7/Captures` and `Backup/Captures`.
 - **Expect:** Sessions shows two fewer 18 Sep frames, two fewer 28 Sep frames, three fewer 30 Sep frames and 14 frames in `4 Oct M 33`. The nine moved frames count nowhere in totals, goals or review and are absent from Project suggestions. Rescans report none of them Missing.
 - **Expect (negative):** No session view or Project View includes a Trashed frame. A Result file does not retain input lineage or prevent a capture from being trashed.

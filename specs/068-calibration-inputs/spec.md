@@ -27,7 +27,7 @@ Calibration is matched when sessions come in. At ingestion, flats, darks and bia
 - **CAL-AC-03**: Given a confirmed flat suggestion with an unknown optical-train criterion on one session, then the flats' evidence is unchanged, and another session still shows the criterion as unknown. (D-W102)
 - **CAL-AC-04**: Given a detected generated master that has not been adopted, then no session ever pins it or is suggested it. (D-W5)
 - **CAL-AC-05**: Given explicit adoption, then the master appears in Calibration with its origin and provenance and can be pinned automatically where every criterion is compatible. (D-W5)
-- **CAL-AC-06**: Given a session whose best flat has an unknown rotation on a rig with a rotator, when it is ingested, then the flat is not pinned automatically, and the session waits in "Needs calibration" until the user confirms it or chooses another. (D-W102, D-W105)
+- **CAL-AC-06**: Given a session whose best flat has an unknown rotation on a rig with a rotator, when it is ingested, then the flat is offered as a suggestion, and the session waits in "Needs calibration" until the user confirms it or chooses another. (D-W102, D-W105)
 - **CAL-AC-07**: Given a generated master in a processing folder, when adoption is confirmed, then its copy is durably written and re-read/hash verified at the chosen calibration-library destination before reuse is registered. Failed verification retains the candidate and no reusable record is claimed.
 - **CAL-AC-08**: Given adoption is reviewed and an unrelated file then appears at the master's destination path, when adoption is confirmed, then it is refused for that path and names the existing file. That file stays byte-identical, no copy is written, nothing is registered and the generated source remains. A free path then adopts under CAL-AC-07.
 - **CAL-AC-09**: Given an adoption review recorded the candidate's identity and SHA-256, when the source bytes change before confirmation, or after the copy verifies but before registration, then adoption is blocked with source drift named. Nothing is registered or suggested, and no copy is offered for reuse; any copy already written is named and stays unregistered. A new review of the current bytes is required before adoption.
@@ -55,7 +55,7 @@ Calibration is matched when sessions come in. At ingestion, flats, darks and bia
 
 The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody, uncertainty, exact membership, failed writes, and independent lifecycle decisions. Each acceptance scenario tests observable outcomes; no mock acknowledgment counts as terminal success.
 
-- When more than one input is fully compatible, the top-ranked one is pinned automatically and the others are listed as alternatives. A ranking tie that leaves no single top input is not pinned automatically and is suggested. (D-W5, D-W102)
+- When more than one input is fully compatible, the top-ranked one is pinned automatically and the others are listed as alternatives. A ranking tie that leaves no single top input is offered as a suggestion. (D-W5, D-W102)
 - A pinned assignment the user reassigns stays as the user chose: later matching never overrides it. (D-W106)
 - A generated master in `Processing/` that is hidden and later changes content is a new candidate and is offered once again. (D-W5, D-W98)
 

@@ -12,7 +12,15 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 06
 
 ## Goal
 
-The user archives sessions from the Archive step of Project `NGC 7000 HOO`'s Wrap up, choosing `Archive/NGC7000` and reviewing every source and destination path. When the user chooses **Close project…**, each session transfers only after its destination hash and affected View references verify; the Project reads Closing until the operation succeeds, then Archived. The symlinks of its View follow the transferred sessions. 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it; being another Project's suggestion does not keep 30 Sep. An interrupted, failing or drifted item retains its source and recorded phase in Activity. Separately, the user archives `4 Oct M 33`, which belongs to no Project, from Sessions to the Default `Archive/Long-term` through a reviewed transfer. Retiring an offline archive location changes no files; its copies read Retired and are not available inputs. Closed and Archived Projects cannot be reopened or have archived sessions restored; Duplicate… is the way to continue one.
+The user archives the sessions of Project `NGC 7000 HOO` from the Archive step of its Wrap up, and separately archives a session in no Project from Sessions. Done means:
+- The user chooses `Archive/NGC7000` and reviews every source and destination path.
+- After **Close project…**, each session transfers only after its destination hash and affected View references verify. The Project reads Closing until the operation succeeds, then Archived.
+- The symlinks of its View follow the transferred sessions.
+- 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it. Being another Project's suggestion does not keep 30 Sep.
+- An interrupted, failing or drifted item retains its source and recorded phase in Activity.
+- `4 Oct M 33`, which belongs to no Project, goes from Sessions to the Default `Archive/Long-term` through a reviewed transfer.
+- Retiring an offline archive location changes no files. Its copies read Retired and are not available inputs.
+- The Closed Project cannot be reopened or have archived sessions restored. **Duplicate…** is the way to continue it.
 
 ## Preconditions
 
@@ -175,7 +183,7 @@ The user archives sessions from the Archive step of Project `NGC 7000 HOO`'s Wra
 
 - **Do:** Plug `Archive` back in. In Settings › Locations, try to reselect the retired location. Then add `Archive/NGC7000` as a Captures location with **Add capture location** and index it.
 - **Expect:** Reselect is not offered for the retired location. The new location registers without an overlap conflict, and the 158 archived lights appear as its Unreviewed assets in new sessions beside the retired copies. 18, 26 and 30 Sep read Target NGC 7000 Associated from their pointing within its footprint, as in J19/S9, and each shows its OBJECT only as a label. 24 Sep, which has no pointing, reads an unresolved Target and is the only new session under **Needs a Target**. NGC 7000 captured integration rises by exactly 11h 30m.
-- **Expect (negative):** No retired copy is counted again. No session lists OBJECT as Target evidence, and 26 Sep's `Cygnus field` label is no conflict. No retired quality decision, Target or equipment confirmation, or correction transfers, so the new sessions add nothing to usable integration, and 24 Sep counts toward no NGC 7000 total until its Target is confirmed again. No Project suggests the new sessions until their rig is confirmed again. The Archived Project still names the frames of its archived sessions unresolved and Retired. The archived files match P3.
+- **Expect (negative):** No retired copy is counted again. No session lists OBJECT as Target evidence, and 26 Sep's `Cygnus field` label is no conflict. No retired quality decision, Target or equipment confirmation, or correction transfers. The new sessions add nothing to usable integration, and 24 Sep counts toward no NGC 7000 total until its Target is confirmed again. No Project suggests the new sessions until their rig is confirmed again. The Archived Project still names the frames of its archived sessions unresolved and Retired. The archived files match P3.
 - **Trace:** flow A4 · HARNESS-V5-IA.md S16 · HARNESS-V5-FEEDBACK-R1.md Round 5 (Sessions: OBJECT is a label, P-STO2) · HIGH-LEVEL-DESIGN.md §10 glossary (OBJECT) · LIB-FR-02, LIB-FR-05, LIB-FR-15, PRJ-FR-09, PRJ-FR-25 · LIB-AC-16, STO-IMP-AC-05 · D01, D11
 
 ## Success criteria
@@ -195,7 +203,7 @@ The user archives sessions from the Archive step of Project `NGC 7000 HOO`'s Wra
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S9, S12, S16 and S17; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1 and Round 5 P-STO2, P-SB3 and Sessions, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775), the specs and the defaults that the authorized autonomous run set in decisions D06, D09, D11 and D19, and the workflow decisions D-W3, D-W20, D-W26 and D-W46. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S9, S12, S16 and S17; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1 and Round 5 P-STO2, P-SB3 and Sessions, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775). It also follows the specs, the defaults that the authorized autonomous run set in decisions D06, D09, D11 and D19, and the workflow decisions D-W3, D-W20, D-W26 and D-W46. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised. Blocks readiness.
 - G3: Unresolved implementation qualification: no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification. Blocks readiness.
 - G4: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: there is no file-list mode, so the Project's inputs are links or copies in its View.
@@ -203,7 +211,7 @@ The user archives sessions from the Archive step of Project `NGC 7000 HOO`'s Wra
 - G6: (dissolved 2026-10-12): answered by Round 6 "Archive… from Sessions"; S9b and S9c now assert that a session in no Project is archived from Sessions through the same reviewed transfer as Wrap up, to the Default `Archive/Long-term`, with nothing moved before approval. Archiving part of a Project from Sessions stays open as G9.
 - G7: (dissolved 2026-10-12): answered by §Input modes "Archiving with links" (Q-ARCHIVE-LINKS) and §Round 7 P-PREP3 (no hard links); S4, S8, S9 and SC4 assert that the View's symlinks are repointed and that no reference-mode choice is offered.
 - G8: Library-wide duplicate copies are J39's. Closed and Archived Projects have no Reopen or restore action (PRJ-FR-25, STO-FR-13).
-- G9: Unresolved product question: Round 6 lets Sessions archive sessions that are in no Project, but the F4 specs start Archive from the Archive step of a Project's Wrap up (STO-FR-06, STO-FR-13) and name no Sessions entry point. Round 6 also says nothing about a Sessions selection that holds a session of a Project or a session a Project suggests. S9b and S9c follow Round 6 and select only a session in no Project. Blocks readiness until a human decides.
+- G9: Unresolved product question: Round 6 lets Sessions archive sessions that are in no Project. The F4 specs start Archive from the Archive step of a Project's Wrap up (STO-FR-06, STO-FR-13) and name no Sessions entry point. Round 6 also says nothing about a Sessions selection that holds a session of a Project or a session a Project suggests. S9b and S9c follow Round 6 and select only a session in no Project. Blocks readiness until a human decides.
 - G10: (dissolved 2026-10-12): answered by §Round 7 P-PREP3. The Project View entries are symlinks, so with `Archive` unplugged or retired its View holds no readable inputs. PREP-FR-10, STO-FR-08 and VSEL-FR-09 refuse Open on the unavailable View, and S10 and S12 assert the refusal.
 
 ## Delta log
@@ -223,5 +231,6 @@ The user archives sessions from the Archive step of Project `NGC 7000 HOO`'s Wra
   P-PREP3: `NGC7000-HOO-Siril` holds symlinks, so Archive repoints the symlinks of its 152 moved members as well as those of `26 Sep symlink check`, and Open on either run is refused while the archive is Offline or Retired (G10 dissolved).
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ6** 2026-10-15 · S1, S1a, S2, S3, S4, S5, S6, S8, S9, S9a, S9b, S9c, S10, S12, S13 · behavior-change
-  Archive is the last step of Wrap up and its Proceed is Close project…, which stays disabled while a gate such as an impostor volume is unmet. The Project reads Closing until the transfer succeeds, then Archived, and stays locked with no Reopen or session restore. The Project's single Symlinks View replaces the run views: Archive repoints its symlinks, and Open in {app} re-verifies their targets and is refused while the archive is Offline or Retired.
+  Archive is the last step of Wrap up, and its Proceed is Close project…, which an unmet gate such as an impostor volume disables. The Project reads Closing until the transfer succeeds, then Archived, and stays locked with no Reopen or session restore.
+  The Project's single Symlinks View replaces the run views. Archive repoints its symlinks, and Open in {app} re-verifies their targets and is refused while the archive is Offline or Retired.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 065 PRJ-FR-14, PRJ-FR-25, PRJ-FR-30; 069 PREP-FR-10; 071 STO-FR-06 to STO-FR-08, STO-FR-13, STO-AC-07 · by: SpecF4Writer2, SpecF4Writer3 (intent-gated)

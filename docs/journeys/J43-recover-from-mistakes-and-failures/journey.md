@@ -46,56 +46,56 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 - **Do:** Launch PlateVault. Read the status bar, open the severity counter for interrupted work, then open Home and Activity.
 - **Expect:** The status bar shows a count only; activating it opens the owning page filtered to affected rows, not a list of issues. Home's Status section and Activity show `Indexing Astro-T7 captures` as interrupted with **Retry** and the message "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it."
 - **Expect (negative):** The rescan does not restart by itself.
-- **Trace:** FR-032; LIB-FR-03; D-W89; P-SB3
+- **Trace:** root FR-032 · LIB-FR-03 · D-W89 · P-SB3
 
 ### S3 — Retry and read the outcome {#S3}
 
 - **Do:** Click **Retry** in Home's Work box and wait until it finishes. Open Sessions.
 - **Expect:** The rescan resumes from its recorded progress and settles once, with one outcome in Activity. Sessions lists one new session, `6 Oct` (Ha, 10 frames, `RedCat`), in Needs a Target. It is not suggested to a Project until its Target, rig, frame review and calibration are settled. The Duplicates filter shows no duplicate badge for it.
 - **Expect (negative):** No session is listed twice and no frame is counted twice: every other session's frame count equals P4, and the 10 new frames appear once. No file is written or moved.
-- **Trace:** D09; LIB-FR-20; LIB-FR-22; PRJ-FR-09
+- **Trace:** D09 · LIB-FR-20, LIB-FR-22 · PRJ-FR-09
 
 ### S4 — Confirm the wrong Target {#S4}
 
 - **Do:** Open the `6 Oct` session. Read its Target box, then choose IC 1396 (as its OBJECT says) and click **Confirm Target**.
 - **Expect:** Before confirming, the Target picker preselects NGC 7000, the Target evidence lists the pointing, and OBJECT `IC 1396` appears only as a label of the session. Confirming IC 1396 is allowed: after confirming, the Target pill reads IC 1396 as confirmed, and the session's Target box shows a mismatch warning that the session's pointing disagrees with IC 1396. After the user confirms its RedCat rig, reviews all its frames and finishes review, the session becomes Ready and `IC 1396 Ha` lists it as a suggestion (1 session, 10 frames). Activity records `Target confirmed` with "IC 1396. Catalog only; source headers unchanged."
 - **Expect (negative):** OBJECT is never listed as Target evidence and never preselects IC 1396. The mismatch warning does not block or undo the confirmation. No FITS header changes and no file moves.
-- **Trace:** LIB-FR-05; PRJ-FR-09; D-W96
+- **Trace:** LIB-FR-05 · PRJ-FR-09 · D-W96
 
 ### S5 — Change the Target and watch suggestions follow {#S5}
 
 - **Do:** In the same Target box, choose NGC 7000 and click **Confirm Target**. Open `IC 1396 Ha` and `NGC 7000 HOO`.
 - **Expect:** The Target pill reads NGC 7000 as confirmed, and the mismatch warning is gone from the Target box. Activity records a second `Target confirmed` with "NGC 7000. Catalog only; source headers unchanged." `IC 1396 Ha` has no suggestions again. `NGC 7000 HOO` lists `6 Oct` among its suggestions.
 - **Expect (negative):** Changing a Target changes suggestions only; it does not add or remove a session held by either Project. No FITS header changes and no file moves, because `6 Oct` was indexed in place.
-- **Trace:** LIB-FR-05; PRJ-FR-08; PRJ-FR-09; D-W94; D-W96
+- **Trace:** LIB-FR-05 · PRJ-FR-08, PRJ-FR-09 · D-W94, D-W96
 
 ### S6 — Recover from a failed Apply {#S6}
 
 - **Do:** Add the Ready `6 Oct` session to `NGC 7000 HOO`. Choose Apply. With the test helper, change one included original after Apply records its source snapshot, then let the operation settle. Restore the original bytes from P4 and retry Apply.
 - **Expect:** The first Apply reads Failed and names the source drift. The current `View/` remains byte-identical to its pre-Apply state, `View (building)/` is not swapped in, and the session addition remains pending. After the original bytes are restored and reverified, Retry builds the new View from the originals and swaps it in; the former View becomes `View (previous)/`.
 - **Expect (negative):** No source file is written or moved. A failed Apply never presents the old View as the newly applied View.
-- **Trace:** PREP-AC-14; PREP-FR-06; PREP-FR-09; PV-PREP-SC-05; D-W100
+- **Trace:** PREP-FR-06, PREP-FR-09 · PREP-AC-14 · PV-PREP-SC-05 · D-W100
 
 ### S7 — Continue a Closed Project by duplicating it {#S7}
 
 - **Do:** Open `NGC 7000 Closed` and inspect its Project menu. Choose **Duplicate…** and keep its sessions, groups, overrides, goals, notes and settings selected.
 - **Expect:** The Closed Project offers Duplicate… and no Reopen. The new Project is open, keeps the selected Project records, has no files copied and has no View until its first Apply. Editing the duplicate does not change the Closed Project.
 - **Expect (negative):** The Closed Project cannot be edited or applied, and no restore action reopens it.
-- **Trace:** PRJ-FR-25; PRJ-FR-30; D-W96; D-W97
+- **Trace:** PRJ-FR-25, PRJ-FR-30 · D-W96, D-W97
 
 ### S8 — Undo mistaken Unusable marks {#S8}
 
 - **Do:** In the session's frame review, select F-a and F-b and press **X**. Use the offered **Undo** action.
 - **Expect:** X marks both frames Unusable immediately. Undo restores their previous Usable quality and removes the resulting pending changes from open Projects that hold the session.
 - **Expect (negative):** No review draft or revision is created, and no file moves or reaches the OS Trash.
-- **Trace:** FR-029; PIX-FR-13; PIX-FR-14; PIX-FR-18; VSEL-FR-12
+- **Trace:** root FR-029 · PIX-FR-13, PIX-FR-14, PIX-FR-18 · VSEL-FR-12
 
 ### S9 — Undo a mistaken Usable mark {#S9}
 
 - **Do:** Select F-c, F-d and F-e in frame review and press **P**. Use the offered **Undo** action.
 - **Expect:** P marks the three frames Usable immediately. Undo restores their previous Usable quality; no unsaved Review draft appears.
 - **Expect (negative):** Undo saves no revision and moves no file.
-- **Trace:** FR-029; PIX-FR-13; PIX-FR-14
+- **Trace:** root FR-029 · PIX-FR-13, PIX-FR-14
 
 ### S10 — Confirm nothing changed on disk {#S10}
 
@@ -119,7 +119,14 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 - G2: Unresolved implementation qualification: S1 needs a rescan long enough to quit PlateVault mid-way, cancel the quit prompt and quit again; S6 needs a controlled source change after Apply snapshots it. No throttle or source-drift fixture exists. Blocks readiness.
 - G3: (dissolved 2026-10-12): answered by Round 6 "Confirming a Target the pointing disagrees with"; S4 now asserts that confirming IC 1396 is allowed and that the session's Target box shows a mismatch warning, and S5 asserts that the warning clears after changing the Target to NGC 7000.
 - G4: (dissolved 2026-10-12): answered by Round 6 "Quit asks"; S1 now asserts that quitting during the rescan opens a confirmation naming it, that canceling the prompt keeps the rescan running, and that confirming quits, after which S2 and S3 relaunch and Retry as before.
-- G5: Out of scope here, owned end to end elsewhere: retrying failed imports and calibration processes (J31, J36); skipping or undoing a Wrap up step before approval (J34); restoring a hidden calibration master offer (J36); Put back from the OS Trash after a trash move (J27, J34, J39); restarting during an unsaved session review (J22); status-bar mechanics (J38); an offline location during indexing (J19). Apply failure and recovery are covered in S6.
+- G5: Out of scope here, owned end to end elsewhere, with Apply failure and recovery covered in S6:
+  - retrying failed imports and calibration processes (J31, J36);
+  - skipping a Wrap up step or reopening it before Close (J34);
+  - restoring a hidden calibration master offer (J36);
+  - Put back from the OS Trash after a trash move (J27, J34, J39);
+  - restarting during an unsaved session review (J22);
+  - status-bar mechanics (J38);
+  - an offline location during indexing (J19).
 - G6: Not validated. A live-product replay must verify that a Closed Project offers Duplicate… without Reopen and that the duplicated Project is independent (PRJ-FR-25, PRJ-FR-30). Blocks readiness.
 
 ## Delta log

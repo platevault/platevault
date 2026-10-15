@@ -44,7 +44,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 ### S2a — Re-confirm a held session's Target {#S2a}
 
 - **Do:** In Sessions, confirm IC 5070 as the Target for 26 Sep, then inspect the Project's Sessions step.
-- **Expect:** The Project still holds 26 Sep in its group and shows the newly confirmed Target and its evidence. The OBJECT header remains a label, not a Target assignment.
+- **Expect:** The Project still holds 26 Sep in its group and shows the newly confirmed Target and its evidence. The OBJECT header remains only a label and assigns no Target.
 - **Expect (negative):** A Target change does not remove the held session or alter source bytes.
 - **Trace:** VSEL-FR-12 · VSEL-AC-24 · D-W94, D-W96
 
@@ -73,7 +73,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 
 - **Do:** Re-confirm NGC 7000 for 26 Sep, then open **Apply…** and inspect the changes and folder tree.
 - **Expect:** The sheet lists the 10 Ha frames added, the group move with its from and to names, the calibration reassignment and its source, and the changed group layout with "re-add View in your tool". Its tree shows `GROUP_` levels only because the Project has several groups, hyphenated `NIGHT_` dates, `Lights/<filter>/` and assigned `Flats/<filter>/`. It lists copies that differ from what PlateVault placed, the space needed for two Views in Copies mode, and files PlateVault did not place, each with a tick box.
-- **Expect (negative):** Nothing moves or changes before Apply succeeds. The new View is planned from originals, not reused from the current View.
+- **Expect (negative):** Nothing moves or changes before Apply succeeds. The new View is planned from the originals and reuses no entry of the current View.
 - **Trace:** VSEL-FR-14, VSEL-FR-15, VSEL-FR-20 · PREP-FR-08, PREP-FR-16 · D-W99, D-W100
 
 ### S5a — Choose files PlateVault did not place {#S5a}
