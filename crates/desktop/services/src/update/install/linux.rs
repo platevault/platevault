@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The Linux installs (decision D6: the AppImage, deb and rpm channels stay as
+//! The Linux installs (decision D6: the `AppImage`, deb and rpm channels stay as
 //! they are). Both run only once the user chose Install, so the deb/rpm
 //! polkit prompt never appears before a click.
 
@@ -13,9 +13,9 @@ use super::Installed;
 use crate::update::signature::Staged;
 use crate::update::{Package, UpdateError};
 
-/// Replace the running AppImage, which the AppImage runtime names in
-/// `$APPIMAGE`. The new file is written next to it and renamed over it, so
-/// the path always holds a complete AppImage; the running copy keeps its open
+/// Replace the running `AppImage`, which its runtime names in `$APPIMAGE`.
+/// The new file is written next to it and renamed over it, so the path
+/// always holds a complete image; the running copy keeps its open
 /// inode.
 pub(super) fn replace_appimage(staged: &Staged) -> Result<Installed, UpdateError> {
     let target = std::env::var_os("APPIMAGE").map(PathBuf::from).ok_or_else(|| {

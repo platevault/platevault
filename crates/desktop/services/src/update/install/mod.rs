@@ -36,6 +36,7 @@ pub enum InstallMode {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Installed {
     /// The new version is in place; restart into it.
+    #[cfg_attr(windows, allow(dead_code))]
     Relaunch,
     /// An installer process took over and needs the app to exit.
     #[cfg_attr(not(windows), allow(dead_code))]
