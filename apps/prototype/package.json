@@ -7,11 +7,11 @@
   "packageManager": "pnpm@11.17.0",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5180 --strictPort",
-    "build": "pnpm i18n:compile && vite build",
+    "build": "node scripts/check-copy.mjs && node scripts/check-catalogue.mjs && pnpm i18n:compile && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5180 --strictPort",
     "typecheck": "pnpm i18n:compile && tsc -p tsconfig.json --noEmit --incremental false && tsc -p tsconfig.node.json --noEmit",
     "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy custom-preferences baseLocale --emit-ts-declarations",
-    "lint": "pnpm lint:eslint && pnpm lint:i18n",
+    "lint": "pnpm lint:eslint && pnpm lint:i18n && pnpm lint:catalogue",
     "lint:eslint": "eslint --max-warnings 0 src/",
     "lint:i18n": "node scripts/check-i18n-catalog.mjs && node scripts/check-i18n-locale-drift.mjs && node scripts/check-copy.mjs",
     "lint:composition": "node scripts/report-composition-lint.mjs",

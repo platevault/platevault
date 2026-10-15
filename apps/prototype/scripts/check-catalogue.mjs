@@ -5,20 +5,19 @@
 /**
  * Catalogue completeness (design/R9-COMPOSITION-PLAN.md §8.3): every
  * component exported from components/{ui,app,domain,templates} has an entry
- * in the design-system catalogue. Report mode until W4: it prints the count
- * and exits 0; `--enforce` (W4, inside `pnpm lint`) fails on a missing entry.
+ * in the design-system catalogue. It fails on a missing entry (W4), inside
+ * `pnpm lint` and `pnpm build`.
  *
  * Exports are PascalCase names from `export function|const|class X` and
  * `export { X, … }` lists (the shadcn files export that way); types are not
- * components. The catalogue is app/catalogue/registry.ts once it exists, and
- * until then the page it replaces, app/design-system-page.tsx. A name the
- * catalogue mentions as a word counts as an entry.
+ * components. The catalogue is app/catalogue/registry.ts plus the reference
+ * page that renders it, app/design-system-page.tsx. A name the catalogue
+ * mentions as a word counts as an entry.
  *
  * Usage:
- *   node scripts/check-catalogue.mjs            # counts
+ *   node scripts/check-catalogue.mjs            # exit 1 on a missing entry
  *   node scripts/check-catalogue.mjs --list     # the missing exports, by file
  *   node scripts/check-catalogue.mjs --json     # counts as JSON
- *   node scripts/check-catalogue.mjs --enforce  # exit 1 on a missing entry (W4)
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs"
@@ -45,7 +44,7 @@ function exportsOf(source) {
 }
 
 function main() {
-  // Until W4 deletes the old reference page, both the registry and the page count as the catalogue.
+  // The registry lists the entries; the reference page around them demonstrates the tokens and older samples.
   const catalogues = CATALOGUES.filter((file) => existsSync(path.join(SRC, file)))
   if (catalogues.length === 0) throw new Error(`no catalogue: expected one of ${CATALOGUES.map((f) => `src/${f}`).join(", ")}`)
   const catalogue = catalogues.join(" + src/")
@@ -70,9 +69,8 @@ function main() {
     console.log(JSON.stringify({ catalogue: `src/${catalogue}`, exported, catalogued: exported - missing, missing }, null, 2))
     return
   }
-  const enforce = process.argv.includes("--enforce")
-  console.log(`catalogue check (${enforce ? "enforced" : "report mode"}): ${exported - missing} of ${exported} component exports catalogued in src/${catalogue}; ${missing} missing.`)
-  if (enforce && missing > 0) {
+  console.log(`catalogue check: ${exported - missing} of ${exported} component exports catalogued in src/${catalogue}; ${missing} missing.`)
+  if (missing > 0) {
     console.error("Run with --list for the missing exports.")
     process.exitCode = 1
   }

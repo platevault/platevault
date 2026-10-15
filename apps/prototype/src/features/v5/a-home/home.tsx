@@ -413,7 +413,7 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
  */
 function addToRunAction(m: Messages, catalog: Catalog, w: Extract<PendingWork, { kind: "ready-to-add" }>): Action {
   const run = runToJoin(catalog, w.projectId, w.session.id)
-  if (!run) return { id: "start-run", label: m.startrun_open(), opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: w.projectId }) }
+  if (!run) return { id: "start-run", label: m.startrun_open_ellipsis(), opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: w.projectId }) }
   return {
     id: "add-to-run",
     label: m.target_add_to_named({ name: run.name }),
@@ -490,7 +490,7 @@ function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
         if (step) void step.run()
         else follow(page(r))
       }}
-      empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />} />}
+      empty={<EmptyState icon={FolderPlus} title={m.home_no_projects_in_progress()} action={<ActionButton action={{ id: "new-project", label: m.newproject_open_ellipsis(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />} />}
     />
   )
 }
@@ -630,7 +630,7 @@ function NoGoals() {
   const items: MenuItem[] = [...projects]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => ({ id: `add-goal-${p.id}`, label: p.name, opensDialog: true, run: () => follow(projectLink(p.id, { add: "goal" })) }))
-  const action = items.length > 0 ? <ActionMenu label={m.home_add_a_goal()} items={items} /> : <ActionButton action={{ id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />
+  const action = items.length > 0 ? <ActionMenu label={m.home_add_a_goal()} items={items} /> : <ActionButton action={{ id: "new-project", label: m.newproject_open_ellipsis(), opensDialog: true, run: () => openSheet({ kind: "new-project" }) }} />
   return <EmptyState icon={FolderPlus} title={m.home_no_unfinished_goals()} action={action} />
 }
 

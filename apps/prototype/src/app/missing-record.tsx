@@ -8,11 +8,9 @@ import { FileQuestion } from "lucide-react"
 import { EmptyState } from "@/components/app/feedback"
 import { PageBody, useDocumentTitle } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
-import { useMessages } from "./preferences"
 
 /** `title` names what is missing as one complete message ("This Project is not in the catalog"), so its noun agrees in every language; `backLabel` is the way back. */
 export function MissingRecord({ title, backTo, backLabel }: { title: string; backTo: string; backLabel: string }) {
-  const m = useMessages()
   useDocumentTitle(title)
   return (
     <PageBody className="mx-auto w-full max-w-lg">
@@ -20,7 +18,6 @@ export function MissingRecord({ title, backTo, backLabel }: { title: string; bac
         icon={FileQuestion}
         titleAs="h1"
         title={title}
-        description={m.record_missing_description()}
         action={
           <Button size="sm" render={<Link to={backTo} />}>
             {backLabel}

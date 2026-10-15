@@ -89,7 +89,7 @@ export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destinati
     items: [{ to: "/settings/applications", get label() { return m.settings_applications() }, keywords: "pixinsight siril seti profile executable" }],
   },
   {
-    get group() { return m.common_prototype() },
+    get group() { return m.prototype_label() },
     items: [{ to: "/settings/about", get label() { return m.settings_about() }, keywords: "reset demo seed prototype version" }],
   },
 ]

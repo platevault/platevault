@@ -42,7 +42,7 @@ export function AboutPage() {
                 m.about_count_runs({ count: runs, n: formatCount(runs) }),
               ].join(" · "),
             },
-            { label: m.about_clock(), value: clockOffset ? m.about_clock_simulated({ date: formatDateTime(nowIso()) }) : m.about_clock_system() },
+            { label: m.about_clock(), value: clockOffset ? m.prototype_about_clock({ date: formatDateTime(nowIso()) }) : m.about_clock_system() },
           ]}
         />
       </Section>

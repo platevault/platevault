@@ -485,7 +485,7 @@ function DetailDemo() {
             title={project.name}
             status={<StatusBadge kind="project" value={project.state} />}
             actions={[
-              { id: "start-run", label: m.startrun_open(), kind: "primary", run: ran(m.startrun_open()) },
+              { id: "start-run", label: m.startrun_open_ellipsis(), kind: "primary", run: ran(m.startrun_open_ellipsis()) },
               { id: "export", label: m.catalogue_templates_export(), opensDialog: true, run: ran(m.catalogue_templates_export()) },
             ]}
             menu={{

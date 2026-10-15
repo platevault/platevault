@@ -82,9 +82,9 @@ describe("ListPage", () => {
         <PageHeader level={2} title="Library" />
       </>,
     )
-    expect(document.title).toBe(`Design system reference · ${m.app_document_title()}`)
+    expect(document.title).toBe(`Design system reference · ${m.prototype_document_title()}`)
     unmount()
-    expect(document.title).toBe(m.app_document_title())
+    expect(document.title).toBe(m.prototype_document_title())
   })
 
   it("renders `path` as the header breadcrumb before the title, and the tab still names the title alone", async () => {
@@ -105,6 +105,6 @@ describe("ListPage", () => {
     const crumbs = within(header).getByRole("navigation", { name: m.ui_breadcrumb() })
     expect(within(crumbs).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects")
     expect(within(crumbs).getByRole("link", { name: "Cygnus" })).toHaveAttribute("href", "/projects/prj_cygnus")
-    expect(document.title).toBe(`Trash · ${m.app_document_title()}`)
+    expect(document.title).toBe(`Trash · ${m.prototype_document_title()}`)
   })
 })

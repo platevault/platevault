@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "app_name": "PlateVault",
-  "app_document_title": "PlateVault prototype",
+  "prototype_document_title": "PlateVault prototype",
   "verb_add": "Add",
   "verb_assign": "Assign",
   "verb_cancel": "Cancel",
@@ -22,7 +22,7 @@
   "common_locations": "Locations",
   "common_runs": "Runs",
   "common_loading": "Loading",
-  "common_prototype": "Prototype",
+  "prototype_label": "Prototype",
   "key_escape": "Esc",
   "key_space": "Space",
   "nav_home": "Home",
@@ -87,9 +87,9 @@
   ],
   "shell_next": "Next: {label}",
   "shell_import": "Import",
-  "shell_search_or_jump": "Search or jump to…",
+  "shell_search_or_jump_ellipsis": "Search or jump to…",
   "shell_with_shortcut": "{label} ({shortcut})",
-  "shell_prototype_controls": "Prototype controls…",
+  "prototype_controls_ellipsis": "Prototype controls…",
   "shell_theme": "Theme",
   "shell_theme_named": "Theme: {name}",
   "shell_theme_match_system": "Match system",
@@ -97,7 +97,6 @@
   "shell_language_named": "Language: {name}",
   "shell_not_found_doc_title": "Page not found",
   "shell_not_found_title": "This page does not exist",
-  "shell_not_found_description": "The link may come from an older prototype build.",
   "shell_not_found_home": "Go to Home",
   "locale_machine_generated": "Machine-generated",
   "history_back": "Back",
@@ -249,8 +248,6 @@
   "step_calibrate": "Calibrate",
   "step_prepare": "Prepare",
   "step_results": "Results",
-  "step_done": "Done",
-  "record_missing_description": "The link may come from an older prototype build, or the record was removed by Empty Trash. Your library is unchanged.",
   "status_online": "Online",
   "status_offline": "Offline",
   "status_unreadable": "Unreadable",
@@ -615,7 +612,6 @@
   "dialog_to_move": "Moved",
   "dialog_to_copy": "Copied",
   "dialog_to_keep": "Stays",
-  "confirm_unchanged": "Unchanged",
   "operation_progress_label": "{title} progress",
   "operation_progress_value": "{done} of {total} {unit}, {percent}",
   "operation_progress_count": "{done} of {total} {unit}",
@@ -640,7 +636,6 @@
   ],
   "tips_help": "Help",
   "tips_note": "Note {number}",
-  "page_step_done": "(done)",
   "ui_breadcrumb": "Breadcrumb",
   "import_open": "Import",
   "home_blocked_at": "Blocked at {step}",
@@ -1134,9 +1129,9 @@
       }
     }
   ],
-  "newproject_open": "New Project…",
-  "startrun_in_project": "Start run in {name}…",
-  "mosaic_new_in_project": "New mosaic in {name}…",
+  "newproject_open_ellipsis": "New Project…",
+  "startrun_in_project_ellipsis": "Start run in {name}…",
+  "mosaic_new_in_project_ellipsis": "New mosaic in {name}…",
   "wrapup_project": "Wrap up {name}",
   "project_noun": "Project",
   "wrapup_its_volume": "Its volume",
@@ -1265,8 +1260,8 @@
   "projects_col_goals": "Goals",
   "projects_col_open_runs": "Open runs",
   "projects_next_for": "for {name}",
-  "startrun_open": "Start run…",
-  "mosaic_new": "New mosaic…",
+  "startrun_open_ellipsis": "Start run…",
+  "mosaic_new_ellipsis": "New mosaic…",
   "wrapup_action": "Wrap up",
   "trash_title": "Trash",
   "trash_with_count": "Trash ({count})",
@@ -1335,7 +1330,6 @@
   ],
   "project_run_noun_capital": "Run",
   "project_run_complete_title": "Complete {name}?",
-  "project_run_complete": "Complete run",
   "project_run_trash_title": "Move {name} to Trash?",
   "project_run_trash_description": "Restore brings it back as it was.",
   "project_placement_ambiguous": "Ambiguous",
@@ -1613,8 +1607,6 @@
       }
     }
   ],
-  "wrapup_mark_done": "Mark Done",
-  "wrapup_cleaning_up": "Cleaning up",
   "wrapup_items": [
     {
       "declarations": [
@@ -1972,7 +1964,7 @@
   "targets_moon_limits_for": "Moon limits for {band}",
   "targets_catalogues": "Catalogues",
   "targets_preset_unavailable": "{name} · unavailable",
-  "targets_simbad_searching": "Searching SIMBAD…",
+  "targets_simbad_searching": "Searching SIMBAD",
   "targets_simbad_off": "SIMBAD off",
   "targets_simbad_unreachable": "SIMBAD unreachable",
   "targets_caption_search": "Search results for {query}",
@@ -2254,7 +2246,6 @@
   "run_select_revision": "Revision {revision}",
   "run_save_revision": "Save revision {revision}",
   "run_save_blocked": "Save blocked",
-  "run_complete": "Complete",
   "run_completed": "{name} Complete",
   "run_clean_up_blocked": "Clean up blocked",
   "run_col_size": "Size",
@@ -2589,7 +2580,6 @@
     }
   ],
   "rungroup_result": "Group Result",
-  "rungroup_review_all": "Review all",
   "rungroup_every_panel_complete": "Every panel Complete",
   "rungroup_prepare_all_title": [
     {
@@ -2966,12 +2956,10 @@
   "settings_back_to_calibration": "Back to Calibration",
   "settings_back_to_project": "Back to Project",
   "settings_go_back": "Go back",
-  "about_simulated_data": "Simulated data",
   "about_no_files_touched": "No files touched",
   "about_no_network": "No network",
   "about_this_build": "This build",
   "about_version": "Version",
-  "about_version_value": "{version} · prototype build",
   "about_data": "Data",
   "about_data_demo": "Demo library",
   "about_data_empty": "Empty (first run)",
@@ -3042,7 +3030,7 @@
     }
   ],
   "about_clock": "PlateVault clock",
-  "about_clock_simulated": "{date} (simulated)",
+  "prototype_about_clock": "{date} (simulated)",
   "about_clock_system": "This computer",
   "about_onboarding": "Onboarding",
   "about_first_run_setup": "First-run setup",
@@ -3249,9 +3237,8 @@
   "settings_lookup_online_help": "Sends Target names to the provider. A failed lookup never blocks indexing.",
   "settings_lookup_provider": "Provider",
   "settings_lookup_test": "Test",
-  "settings_lookup_fixture": "Fixture",
   "settings_lookup_query": "Name to look up",
-  "settings_lookup_running": "Looking up…",
+  "settings_lookup_running": "Looking up",
   "settings_lookup_running_named": "Looking up {name}",
   "settings_lookup_name": "Name",
   "settings_lookup_coordinates": "Coordinates",
@@ -3297,8 +3284,6 @@
   "setup_demo_body": "M 31 · NGC 7000 · mosaic Project · offline drive",
   "setup_demo_confirm_title": "Load the demo library?",
   "setup_demo_summary": "Replaces locations, sessions, Projects and Views · ends setup",
-  "setup_demo_unchanged_appearance": "Theme, language and shortcuts",
-  "setup_demo_unchanged_files": "No real files exist; nothing on your computer is touched",
   "setup_locations_title": "Choose locations",
   "setup_required": "Required",
   "setup_add_another": "Add another location",
@@ -3388,7 +3373,6 @@
   "apps_badge_write_prone": "Writes into inputs",
   "apps_unsupported_corrected": "reading corrected values through configuration",
   "apps_evidence": "Evidence",
-  "apps_prototype_fixture": "Prototype fixture",
   "apps_input_writes": "Input writes",
   "apps_none_recorded": "None recorded",
   "apps_corrected_values": "Corrected values",
@@ -3397,13 +3381,9 @@
   "apps_rename_note": "Renaming files never overrides header values.",
   "apps_not_located": "No application located",
   "apps_locate_any": "Locate an application",
-  "apps_locate_description": "Prototype: simulated application chooser. It lists application bundles on the simulated computer and records the path only; nothing is launched.",
-  "apps_none_present": "No application bundle is present. Restore one in this step's prototype controls.",
   "apps_use_this": "Use this application",
   "apps_generic_description": "Launches any application with your arguments. It is not a verified preparation profile.",
   "apps_check_again": "Check again",
-  "apps_change": "Change…",
-  "apps_locate": "Locate…",
   "apps_launch_arguments": "Launch arguments",
   "apps_launch_placeholder": "e.g. --input \"{token}\"",
   "apps_save_arguments": "Save arguments",
@@ -3471,8 +3451,6 @@
   "review_filter_all": "All",
   "review_picked": "Picked",
   "review_rejected": "Rejected",
-  "review_run_in_trash": "run in Trash",
-  "review_run_complete": "Run complete",
   "review_run_complete_help": "Membership stays. Marks change library quality and Project rejects.",
   "review_panel_complete": "Panel complete",
   "review_panel_complete_help": "A Complete panel run keeps its membership. Marks change library quality only.",
@@ -3633,7 +3611,6 @@
     }
   ],
   "review_clear_project_reject": "Clear Project reject",
-  "review_reject_for_project": "Reject for this Project only…",
   "review_mark_scope_help": "Mark scope",
   "review_mark_scope_tip": "P, X and U mark the library, in every Project. A Project reject stays in this Project.",
   "review_no_pixels": "No pixels",
@@ -3914,11 +3891,10 @@
   "review_height_rows": "About 8 rows",
   "review_height_strip": "One-line strip",
   "review_height_full": "Full height",
-  "review_table_height_title": "Table height: {current}. {key} switches to {next}.",
   "review_table_height_sr": ", table height",
   "review_select": "Select",
   "review_select_all_shown_count": "Select all shown ({count})",
-  "review_select_by_threshold_menu": "Select by threshold…",
+  "review_select_by_threshold_ellipsis": "Select by threshold…",
   "review_select_by_threshold": "Select by threshold",
   "review_display": "Display",
   "review_frame_names": "Frame names",
@@ -4363,7 +4339,6 @@
   ],
   "domain_gate_membership_saved": "Membership saved",
   "domain_gate_revision_saved": "Revision {revision} saved.",
-  "domain_gate_review_unsaved": "Review has unsaved changes: save them in Review.",
   "domain_gate_unsaved_on_revision": "Unsaved changes on revision {revision}.",
   "domain_gate_not_saved_yet": "Not saved yet.",
   "domain_gate_new_candidates": "New candidates",
@@ -4419,42 +4394,6 @@
   "domain_next_resolve_inputs": "Resolve inputs",
   "domain_next_save_run": "Save run",
   "domain_next_edit_selection": "Edit selection",
-  "domain_review_rejected": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} rejected",
-        "countPlural=*": "{count} rejected"
-      }
-    }
-  ],
-  "domain_review_restored": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} restored",
-        "countPlural=*": "{count} restored"
-      }
-    }
-  ],
-  "domain_review_unsaved": "{changes}, unsaved",
-  "domain_gate_review_saved": "Review changes saved",
-  "domain_gate_review_save_detail": "{note}: Save run keeps them as the next revision.",
-  "domain_gate_frames_reviewed": "Frames reviewed",
-  "domain_gate_no_frames": "No frames yet.",
-  "domain_gate_frames_decided": "{done} of {total} have a quality decision.",
   "domain_gate_calibration_matched": "Calibration matched",
   "domain_gate_policy_off": "Calibration policy is off.",
   "domain_gate_select_first": "Select sessions first.",
@@ -4579,14 +4518,6 @@
   "domain_gate_no_outputs": "No outputs found yet.",
   "domain_next_accept_results": "Accept results",
   "domain_next_look_for_results": "Look for results",
-  "domain_status_cleaned_up": "Cleaned up",
-  "domain_status_cleanup_available": "Cleanup available",
-  "domain_gate_cleanup_reviewable": "Complete: Clean up can be reviewed.",
-  "domain_gate_complete_when_done": "Complete when processing is done; it removes nothing.",
-  "domain_gate_cleanup_reviewed": "Clean up reviewed",
-  "domain_gate_finished": "Finished.",
-  "domain_gate_cleanup_lists": "Clean up lists prepared entries only.",
-  "domain_next_clean_up_run": "Clean up run",
   "blocker_unreadable_inputs": [
     {
       "declarations": [
@@ -4678,7 +4609,6 @@
   "domain_reason_window_tonight": "{line}; {subject} has a window tonight.",
   "domain_next_start_run": "Start a processing run",
   "domain_reason_choose_subject_rig": "Choose a subject and a rig.",
-  "domain_stage_held_at": "{gate} at {step}",
   "fit_fits": "fits ({percent}%)",
   "fit_tiny": "tiny",
   "op_unit_files": "files",
@@ -4862,7 +4792,7 @@
   "store_stale_message": "{label} was refused: this record was changed elsewhere since you opened it. Review the current version before saving again.",
   "store_not_saved_title": "{label} not saved",
   "store_not_saved_message": "{label} was not saved: the catalog write failed. Your change is kept on screen; choose Retry.",
-  "store_persist_failed_title": "Prototype data not saved in this browser",
+  "prototype_persist_failed_title": "Prototype data not saved in this browser",
   "store_persist_failed_detail": "Browser storage refused the write. Changes stay in this tab until it closes.",
   "store_refusal_message": "{title}: {reasons}.",
   "store_record_missing": "This record no longer exists in the catalog. Reload the page to see the current library.",
@@ -4964,7 +4894,6 @@
     }
   ],
   "store_reason_in_trash": "{name} is in the Project's Trash",
-  "store_label_complete_named": "Complete {name}",
   "store_label_move_to_trash_named": "Move {name} to Trash",
   "store_reason_no_trashed_run": "no trashed run was chosen",
   "store_runs_count": [
@@ -5194,15 +5123,12 @@
   "store_label_apply_named": "Apply {name}",
   "store_label_archive_destination": "Archive destination",
   "store_reason_not_archive_location": "not an archive location",
-  "store_reason_not_complete": "{name} is not Complete",
   "store_label_step_done": "{step} done",
   "store_label_step_skipped": "{step} skipped",
   "store_label_step_reset": "{step} reset",
   "store_reason_no_confirmed_target": "the session has no confirmed Target",
   "store_reason_no_confirmed_rig": "the session has no confirmed rig",
   "store_note_adds_rig": "Also adds the rig {rig} to {project}.",
-  "store_label_mark_named_done": "Mark {name} Done",
-  "store_reason_not_complete_fix": "{name} is not Complete: complete it or move it to Trash",
   "store_label_reject_for_project_only": [
     {
       "declarations": [
@@ -5452,22 +5378,22 @@
   "store_label_reject_result": "Reject Result",
   "store_saved_accepted": "Accepted {name}",
   "store_saved_rejected": "Rejected {name}",
-  "store_sha_short": "SHA-256 {hash}…",
+  "store_sha_short": "SHA-256 {hash}",
   "store_label_result_kind": "Result kind",
   "store_label_clean_up_named": "Clean up {name}",
-  "store_label_simulated_output": "Simulated output",
+  "simulation_label_output": "Simulated output",
   "store_reason_prepare_first": "Prepare the run first: the application writes into the recorded Results folder",
-  "store_label_proto_app_output": "Prototype: application output",
-  "store_saved_proto_outputs": "Prototype: the application wrote outputs",
+  "simulation_label_app_output": "Prototype: application output",
+  "simulation_saved_outputs": "Prototype: the application wrote outputs",
   "store_proto_outputs_detail": "{files} in {folder}.",
-  "store_label_proto_finished_writing": "Prototype: file finished writing",
-  "store_label_simulated_correction": "Simulated correction",
+  "simulation_label_finished_writing": "Prototype: file finished writing",
+  "simulation_label_correction": "Simulated correction",
   "store_reason_no_saved_member": "The run has no saved member session",
   "store_reason_already_corrected": "This session already carries that correction",
-  "store_label_proto_catalog_correction": "Prototype: catalog correction",
-  "store_label_simulated_change": "Simulated change",
+  "simulation_label_catalog_correction": "Prototype: catalog correction",
+  "simulation_label_change": "Simulated change",
   "store_reason_no_prepared_source": "No readable prepared source frame",
-  "store_label_proto_source_changed": "Prototype: source frame changed",
+  "simulation_label_source_changed": "Prototype: source frame changed",
   "op_prep_unavailable": "{reason}. Nothing was written for it.",
   "op_prep_denied": "Unreadable: read access to {path} is denied. Nothing was written for it.",
   "op_prep_not_reachable": "Not readable now: nothing is reachable at {path}. Nothing was written for it.",
@@ -5569,7 +5495,7 @@
       }
     }
   ],
-  "op_archive_hash_failed": "SHA-256 verification failed (simulated): nothing of this session moved",
+  "op_archive_hash_failed": "SHA-256 verification failed: nothing of this session moved",
   "op_archived_to": "Archived to {folder} · {frames}",
   "op_restored_to": "Restored to {folder} · {frames}",
   "op_import_group_failed": "{done} of {total} verified · {failed} failed: {reason}",
@@ -5923,8 +5849,8 @@
     }
   ],
   "measure_value_stars": "{value} stars",
-  "seed_apps_evidence_pixinsight": "Fixture evidence: WBPP 2.8 reads the run folder and does not write to input files.",
-  "seed_apps_evidence_siril": "Fixture evidence: Siril 1.4 reads the run folder and opens inputs read-only.",
+  "seed_apps_evidence_pixinsight": "WBPP 2.8 reads the run folder and does not write to input files.",
+  "seed_apps_evidence_siril": "Siril 1.4 reads the run folder and opens inputs read-only.",
   "seed_apps_evidence_seti": "No capability evidence recorded. Input-write behaviour is unknown and it consumes whole folders.",
   "seed_apps_evidence_generic": "Generic launcher. It does not claim a verified profile.",
   "domain_device_evidence_sharpcap": "SharpCap Captures folder",
@@ -6442,8 +6368,8 @@
   "store_reason_name_empty": "Name is empty",
   "store_reason_run_name_taken": "{name} is already a run in this Project",
   "store_saved_run_renamed": "Renamed {from} to {to}",
-  "store_reason_sha_now": "SHA-256 now {hash}…",
-  "store_label_proto_better_master": "Prototype: newer compatible master",
+  "store_reason_sha_now": "SHA-256 now {hash}",
+  "simulation_label_better_master": "Prototype: newer compatible master",
   "store_reason_no_master_assigned": "No master assigned yet",
   "domain_mode_symlink": "Symlinks",
   "run_mode_semantics_symlink": "Links to the catalogue originals. Their drive stays connected during the run.",
@@ -6661,8 +6587,6 @@
   "ds_no_folder": "No folder chosen yet.",
   "ds_chip_channel": "Channel: {channel}",
   "ds_chip_quality": "Quality: {quality}",
-  "ds_description": "Tokens and shared components in their states. Foundation-owned; tracks compose these instead of styling ad hoc.",
-  "prototype_ds_eyebrow": "Foundation · prototype reference",
   "ds_colour_title": "Colour roles",
   "ds_colour_description": "Neutral base, one accent. Switch the theme from the header to check both.",
   "ds_type_title": "Type, spacing, radius and rows",
@@ -6684,7 +6608,6 @@
   "ds_use_column": "Use",
   "ds_buttons_title": "Buttons",
   "ds_buttons_description": "Default, focus-visible (Tab to a button), active (press), disabled with a reason, loading, and toggles (pressed shows a fill and an accent bar).",
-  "ds_inspect_session": "Inspect session",
   "ds_send_files_to_trash": [
     {
       "declarations": [
@@ -6770,10 +6693,6 @@
       }
     }
   ],
-  "ds_cleanup_steps": "Cleanup steps",
-  "ds_cleanup_choose": "Choose files",
-  "ds_cleanup_review": "Review cleanup",
-  "ds_cleanup_trash": "Send to Trash",
   "ds_table_title": "Data table",
   "ds_table_description": "Sort, select, ↑/↓ between rows. Selection is controlled by the caller and survives filtering. Groups are header rows in one table, so columns line up across groups.",
   "ds_table_loading": "Loading state",
@@ -6799,26 +6718,7 @@
       }
     }
   ],
-  "ds_confirm_dialog_description": "This is a library-scope quality decision.",
-  "ds_confirm_change_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} frame becomes Usable in the library",
-        "countPlural=*": "{count} frames become Usable in the library"
-      }
-    }
-  ],
   "ds_confirm_change_integration": "{target} usable integration rises by {duration}",
-  "ds_confirm_unchanged_files": "Source files and headers",
-  "ds_confirm_unchanged_views": "Other Views and their membership",
-  "ds_confirm_unchanged_rejections": "Project rejections",
   "ds_confirm_label": [
     {
       "declarations": [
@@ -6947,10 +6847,8 @@
   "simulation_data_empty": "Current seed: empty library (first run). Theme, language and shortcuts are kept.",
   "simulation_reset_empty": "Reset to empty library",
   "simulation_confirm_empty_title": "Reset to an empty library?",
-  "simulation_confirm_description": "This replaces all prototype data in this browser. It cannot be undone.",
   "simulation_confirm_demo_change": "Replace the catalog with the demo library ({projects})",
   "simulation_confirm_empty_change": "Remove every location, session, Project and run; onboarding starts again",
-  "simulation_confirm_discard": "Discard running operations and Activity",
   "simulation_sheet_description": "Prototype controls. They change the simulated disk outside PlateVault; PlateVault notices on its next read.",
   "prototype_controls_title": "Prototype: {title}",
   "prototype_controls_note": "Simulates changes outside PlateVault for review. Not part of the product.",
@@ -7195,7 +7093,6 @@
   "flow_reason_step_first": "Finish or skip {step} first",
   "flow_reason_step_settled": "{step} is finished or skipped",
   "flow_reason_step_open": "{step} is not finished or skipped",
-  "flow_reason_reject_is_library_wide": "Reject marks the frame Unusable in the library",
   "flow_reason_session_needs_review": "{name} needs review",
   "flow_label_record_calibration": "Record calibration",
   "flow_nothing_to_clean_up": "Nothing to clean up",

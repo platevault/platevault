@@ -14,7 +14,7 @@ import { NoticeSlot, type PageNotice } from "./feedback"
 const mountedTitles = new Map<symbol, string>()
 
 function applyDocumentTitle() {
-  document.title = [...mountedTitles.values(), m.app_document_title()].join(" · ")
+  document.title = [...mountedTitles.values(), m.prototype_document_title()].join(" · ")
 }
 
 /**

@@ -65,7 +65,7 @@ export function CommandPalette({ open, onOpenChange, groups, onRun }: CommandPal
             showTrigger={false}
             data-palette-input=""
             aria-label={m.palette_search_label()}
-            placeholder={m.shell_search_or_jump()}
+            placeholder={m.shell_search_or_jump_ellipsis()}
             className="h-11 w-full rounded-none border-0 border-b shadow-none has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_-2px_0_var(--ring)]"
           >
             <InputGroupAddon align="inline-start">

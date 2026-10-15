@@ -110,7 +110,7 @@ export function ProjectsPage() {
         ? [
             { id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setEditing(r.project) },
             { id: "start-run", label: m.startrun_title(), icon: Play, opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: r.project.id }) },
-            { id: "new-mosaic", label: m.mosaic_new(), icon: Grid2x2Plus, run: () => open(r, { mosaic: "new" }) },
+            { id: "new-mosaic", label: m.mosaic_new_ellipsis(), icon: Grid2x2Plus, run: () => open(r, { mosaic: "new" }) },
           ]
         : []),
       ...(r.wrapUp ? [{ id: "wrap-up", label: m.wrapup_action(), icon: PackageCheck, run: () => open(r, { stage: "wrap-up" }) }] : []),

@@ -30,13 +30,13 @@ function useCommands(): PaletteCommand[] {
   const project = useStore((s) => (active.projectId ? s.catalog.projects[active.projectId] : undefined))
   const wrapUp = useStore((s) => (project ? wrapUpFlowState(s, project).available || project.state === "done" : false))
   const commands: PaletteCommand[] = [
-    { id: "b:new-project", label: m.newproject_open(), group: "Actions", keywords: "create project campaign subjects rigs goals", run: () => openSheet({ kind: "new-project" }) },
+    { id: "b:new-project", label: m.newproject_open_ellipsis(), group: "Actions", keywords: "create project campaign subjects rigs goals", run: () => openSheet({ kind: "new-project" }) },
   ]
   if (project?.state === "open") {
-    commands.push({ id: "b:start-run", label: m.startrun_in_project({ name: project.name }), group: "Actions", keywords: "new processing run subject rig profile", run: () => openSheet({ kind: "start-run", projectId: project.id }) })
+    commands.push({ id: "b:start-run", label: m.startrun_in_project_ellipsis({ name: project.name }), group: "Actions", keywords: "new processing run subject rig profile", run: () => openSheet({ kind: "start-run", projectId: project.id }) })
     commands.push({
       id: "b:new-mosaic",
-      label: m.mosaic_new_in_project({ name: project.name }),
+      label: m.mosaic_new_in_project_ellipsis({ name: project.name }),
       group: "Actions",
       keywords: "mosaic panels field run group",
       run: () => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: "new" } }),

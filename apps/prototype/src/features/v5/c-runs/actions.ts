@@ -231,7 +231,7 @@ export function adoptMasterOffer(runId: string, masterId: string, confirmedSha25
     store.setState((s) => ({ ...s, faults: { ...s.faults, failNextHashVerification: false } }))
     return refuse(title, [msg("run_cal_master_changed"), msg("store_cal_copy_not_verified")], offer.href)
   }
-  if (preview.sha256 !== confirmedSha256) return refuse(title, [msg("run_cal_master_changed"), msg("store_reason_sha_now", { hash: preview.sha256.slice(0, 12) })], offer.href)
+  if (preview.sha256 !== confirmedSha256) return refuse(title, [msg("run_cal_master_changed"), msg("store_reason_sha_now", { hash: `${preview.sha256.slice(0, 12)}…` })], offer.href)
   const source = fileAt(state.disk, state.catalog.masters[masterId]!.origin.sourcePath)!
   const { destinationPath } = preview
   const at = nowIso()
@@ -628,7 +628,7 @@ export function acceptResult(resultId: string): CommitResult {
   if (record.kind === null) return refuse(title, [msg("store_reason_no_kind")], href)
   const at = nowIso()
   const result = editResult(resultId, msg("store_label_accept_result"), (r) => ({ ...r, acceptance: "accepted", acceptedAt: at, processingState: "written" }), href)
-  if (result.ok) recordSaved(msg("store_saved_accepted", { name: fileName(record.path) }), msg("store_sha_short", { hash: file.sha256.slice(0, 12) }), href)
+  if (result.ok) recordSaved(msg("store_saved_accepted", { name: fileName(record.path) }), msg("store_sha_short", { hash: `${file.sha256.slice(0, 12)}…` }), href)
   return result
 }
 
@@ -672,7 +672,7 @@ function simulateApplicationOutput(target: { runId?: string; groupId?: string })
   const group = target.groupId ? state.catalog.runGroups[target.groupId] : undefined
   const folder = run ? resultsFolders(state, run)[0] : group ? groupAssembledPath(state, group) : null
   const href = run ? runHref(run, "results") : group ? groupHref(group, "results") : null
-  const refused = msg("store_refused", { label: msg("store_label_simulated_output") })
+  const refused = msg("store_refused", { label: msg("simulation_label_output") })
   if (!folder || (run && runPreparations(state.catalog, run.id).length === 0)) return refuse(refused, [msg("store_reason_prepare_first")], href)
   const volumeId = volumeForPath(state.disk, folder)
   if (!volumeId || !state.disk.volumes[volumeId]?.mounted) return refuse(refused, [msg("run_cleanup_volume_offline", { name: folder })], href)
@@ -692,8 +692,8 @@ function simulateApplicationOutput(target: { runId?: string; groupId?: string })
   } else if (group) {
     files.push(makeFile({ path: uniquePath(state, `${folder}/${group.name} assembled.xisf`), volumeId, sizeBytes: 620_000_000, kind: "xisf", modifiedAt: at }))
   }
-  const result = commit(msg("store_label_proto_app_output"), (s) => ({ ...s, disk: createFolder(writeFiles(s.disk, files), { volumeId, path: folder }) }), { href: href ?? undefined })
-  if (result.ok) recordSaved(msg("store_saved_proto_outputs"), msg("store_proto_outputs_detail", { files: unitCount("files", files.length), folder }), href)
+  const result = commit(msg("simulation_label_app_output"), (s) => ({ ...s, disk: createFolder(writeFiles(s.disk, files), { volumeId, path: folder }) }), { href: href ?? undefined })
+  if (result.ok) recordSaved(msg("simulation_saved_outputs"), msg("store_proto_outputs_detail", { files: unitCount("files", files.length), folder }), href)
   return result
 }
 
@@ -707,7 +707,7 @@ function simulateBetterMaster(runId: string): CommitResult {
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
   const href = runHref(run, "calibrate")
-  const refused = msg("store_refused", { label: msg("store_label_proto_better_master") })
+  const refused = msg("store_refused", { label: msg("simulation_label_better_master") })
   const plan = calibrationPlan(state.catalog, state.disk, run, runSetup(state.catalog, run).calibrationPolicy, workingContent(run))
   const row = plan.rows.find((r) => r.input && (r.state === "automatic" || r.state === "accepted" || r.state === "exception") && !r.better)
   const current = row?.input ? state.catalog.masters[row.input.masterId] : undefined
@@ -730,7 +730,7 @@ function simulateBetterMaster(runId: string): CommitResult {
     adoption: { destinationPath: path, verifiedSha256: sha256, adoptedAt: at },
   }
   const copy = makeFile({ path, volumeId: file.volumeId, sizeBytes: file.sizeBytes, kind: file.kind, header: file.header, sha256, modifiedAt: at })
-  const result = commit(msg("store_label_proto_better_master"), (s) => ({ ...withCatalog(pinAutomaticChoices(s), (c) => ({ ...c, masters: { ...c.masters, [master.id]: master } })), disk: writeFiles(s.disk, [copy]) }), { href })
+  const result = commit(msg("simulation_label_better_master"), (s) => ({ ...withCatalog(pinAutomaticChoices(s), (c) => ({ ...c, masters: { ...c.masters, [master.id]: master } })), disk: writeFiles(s.disk, [copy]) }), { href })
   if (result.ok) recordSaved(msg("store_saved_added_to_library", { name: fileName(path) }), verbatim(path), "/calibration")
   return result
 }
@@ -745,7 +745,7 @@ function finishWriting(resultId: string): CommitResult {
   const sha256 = fakeSha256(record.path, 2)
   const done = { ...file, growing: false, sha256, sizeBytes: file.sizeBytes * 4, modifiedAt: nowIso() }
   return commit(
-    msg("store_label_proto_finished_writing"),
+    msg("simulation_label_finished_writing"),
     (s) => ({ ...withCatalog(s, (c) => ({ ...c, results: { ...c.results, [resultId]: { ...c.results[resultId]!, processingState: "written", sha256 } } })), disk: writeFiles(s.disk, [done]) }),
     { href: resultHref(state, record) },
   )
@@ -759,7 +759,7 @@ function simulateObjectCorrection(runId: string): CommitResult {
   const content = latestRevision(run)
   const member = content ? memberSessions(state.catalog, content)[0] : undefined
   const href = runHref(run, "prepare")
-  const refused = msg("store_refused", { label: msg("store_label_simulated_correction") })
+  const refused = msg("store_refused", { label: msg("simulation_label_correction") })
   if (!member) return refuse(refused, [msg("store_reason_no_saved_member")], href)
   const session = member.session
   const target = session.target.value ? state.catalog.targets[session.target.value] : undefined
@@ -768,7 +768,7 @@ function simulateObjectCorrection(runId: string): CommitResult {
   const observed = header && header !== corrected ? header : corrected.replace(/\s+/g, "")
   if (session.corrections.some((c) => c.field === "target" && c.correctedValue === corrected)) return refuse(refused, [msg("store_reason_already_corrected")], href)
   return commit(
-    msg("store_label_proto_catalog_correction"),
+    msg("simulation_label_catalog_correction"),
     (s) => withCatalog(s, (c) => ({ ...c, sessions: { ...c.sessions, [session.id]: { ...c.sessions[session.id]!, corrections: [...c.sessions[session.id]!.corrections, { id: freshId("cor", session.id), field: "target", observedValue: observed, correctedValue: corrected, at: nowIso(), revision: session.revision }] } } })),
     { href },
   )
@@ -785,9 +785,9 @@ function simulateSourceDrift(runId: string): CommitResult {
   const asset = assetId ? state.catalog.assets[assetId] : undefined
   const path = asset?.copies.find((c) => fileAt(state.disk, c.path))?.path
   const file = path ? fileAt(state.disk, path) : undefined
-  if (!file || !path) return refuse(msg("store_refused", { label: msg("store_label_simulated_change") }), [msg("store_reason_no_prepared_source")], href)
+  if (!file || !path) return refuse(msg("store_refused", { label: msg("simulation_label_change") }), [msg("store_reason_no_prepared_source")], href)
   const changed = { ...file, previousSha256: file.sha256, sha256: fakeSha256(path, 9), modifiedAt: nowIso() }
-  return commit(msg("store_label_proto_source_changed"), (s) => ({ ...s, disk: writeFiles(s.disk, [changed]) }), { href })
+  return commit(msg("simulation_label_source_changed"), (s) => ({ ...s, disk: writeFiles(s.disk, [changed]) }), { href })
 }
 
 /** Prototype: every file of the run still being written finishes. */

@@ -18,17 +18,17 @@ export function PaletteCatalogue() {
       label: m.palette_group_actions(),
       items: [
         { id: "act:shortcuts", label: m.shortcuts_show(), group: m.palette_group_actions(), shortcut: "?", run: () => undefined },
-        { id: "act:blocked", label: m.startrun_open(), group: m.palette_group_actions(), unavailable: m.onboarding_check_project() },
+        { id: "act:blocked", label: m.startrun_open_ellipsis(), group: m.palette_group_actions(), unavailable: m.onboarding_check_project() },
       ],
     },
   ]
   return (
     <ComponentSection components={["CommandPalette", "PaletteTrigger"]} description={m.catalogue_palette_desc()}>
       <Specimen caption={m.catalogue_frame_wide()}>
-        <PaletteTrigger label={m.shell_search_or_jump()} shortcut={PALETTE_SHORTCUT} onOpen={() => setOpen(true)} />
+        <PaletteTrigger label={m.shell_search_or_jump_ellipsis()} shortcut={PALETTE_SHORTCUT} onOpen={() => setOpen(true)} />
       </Specimen>
       <Specimen caption={m.catalogue_frame_narrow()}>
-        <PaletteTrigger compact label={m.shell_search_or_jump()} shortcut={PALETTE_SHORTCUT} onOpen={() => setOpen(true)} />
+        <PaletteTrigger compact label={m.shell_search_or_jump_ellipsis()} shortcut={PALETTE_SHORTCUT} onOpen={() => setOpen(true)} />
       </Specimen>
       <CommandPalette open={open} onOpenChange={setOpen} groups={groups} onRun={() => setOpen(false)} />
     </ComponentSection>

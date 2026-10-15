@@ -99,14 +99,14 @@ export function GettingStartedRing({ collapsed }: { collapsed: boolean }) {
     locations: { label: m.setup_set_up_locations(), action: { id: "open-locations", label: m.verb_open(), run: () => void navigate({ to: "/settings/locations" }) } },
     import: { label: m.onboarding_check_import(), action: { id: "import", label: m.import_open(), run: () => void navigate({ to: "/import" as never }) } },
     targets: { label: m.onboarding_check_targets(), action: { id: "review-targets", label: m.verb_review(), run: () => void navigate({ to: "/sessions", search: { filter: "needs-target" } as never }) } },
-    project: { label: m.onboarding_check_project(), action: { id: "new-project", label: m.newproject_open(), run: () => openSheet({ kind: "new-project" }) } },
+    project: { label: m.onboarding_check_project(), action: { id: "new-project", label: m.newproject_open_ellipsis(), run: () => openSheet({ kind: "new-project" }) } },
     run: {
       label: m.onboarding_check_run(),
       action: {
         id: "start-run",
-        label: m.startrun_open(),
+        label: m.startrun_open_ellipsis(),
         run: () => (firstProjectId ? openSheet({ kind: "start-run", projectId: firstProjectId }) : undefined),
-        unavailable: firstProjectId ? undefined : { action: m.startrun_open(), reason: m.onboarding_check_project(), blockers: [] },
+        unavailable: firstProjectId ? undefined : { action: m.startrun_open_ellipsis(), reason: m.onboarding_check_project(), blockers: [] },
       },
     },
     "developer-mode": { label: m.onboarding_check_developer_mode(), action: { id: "developer-mode", label: m.settings_open_windows_settings(), run: () => openWindowsDeveloperSettings() } },

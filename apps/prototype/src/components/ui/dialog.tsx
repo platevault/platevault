@@ -114,19 +114,9 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 /**
  * The footer's layout: sticky, flush and filled. It decides no button order.
  * Dialogs render the L2 `DialogFooter` (components/app/form-dialog.tsx),
- * which puts Cancel first and the action last on every OS (C1); W3 moves the
- * feature footers to it, after which only the L2 footer renders this one.
+ * which puts Cancel first and the action last on every OS (C1).
  */
-function DialogFooter({
-  className,
-  showCloseButton = false,
-  children,
-  ...props
-}: React.ComponentProps<"div"> & {
-  /** @deprecated Close would come after the action (C1). Render the L2 `DialogFooter`, whose Cancel comes first. W4 removes this prop. */
-  showCloseButton?: boolean
-}) {
-  const m = useMessages()
+function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-footer"
@@ -138,14 +128,7 @@ function DialogFooter({
         className
       )}
       {...props}
-    >
-      {children}
-      {showCloseButton && (
-        <DialogPrimitive.Close render={<Button variant="outline" />}>
-          {m.verb_close()}
-        </DialogPrimitive.Close>
-      )}
-    </div>
+    />
   )
 }
 
@@ -187,8 +170,6 @@ export {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
   DialogTrigger,
 }

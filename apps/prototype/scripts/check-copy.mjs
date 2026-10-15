@@ -4,8 +4,8 @@
 
 /**
  * Copy lint (design/R9-COMPOSITION-PLAN.md §6.1, §6.4) over the base
- * catalogue. Report mode until W4: it prints the count per check and exits 0;
- * `--enforce` (W4) fails on any finding.
+ * catalogue. It fails on any finding (W4), inside `pnpm lint:i18n` and
+ * `pnpm build`.
  *
  *   1. slop-word: a W10 word ("we", "please", "simply", "just", "easily",
  *      "seamlessly", "powerful", "leverage", "Note that", "This will").
@@ -23,10 +23,9 @@
  * Plural variant messages are checked through each variant's text.
  *
  * Usage:
- *   node scripts/check-copy.mjs                    # counts per check
+ *   node scripts/check-copy.mjs                    # exit 1 on any finding
  *   node scripts/check-copy.mjs --list title-case  # the keys of one check
  *   node scripts/check-copy.mjs --json             # counts as JSON
- *   node scripts/check-copy.mjs --enforce          # exit 1 on any finding (W4)
  */
 
 import { inlangProject, readJson } from "./i18n-project.mjs"
@@ -99,9 +98,8 @@ function main() {
     return
   }
   const total = Object.values(counts).reduce((sum, n) => sum + n, 0)
-  const enforce = process.argv.includes("--enforce")
-  console.log(`copy lint (${enforce ? "enforced" : "report mode"}): ${total} finding(s) over ${entries.length} messages: ${Object.entries(counts).map(([name, n]) => `${name} ${n}`).join(", ")}.`)
-  if (enforce && total > 0) {
+  console.log(`copy lint: ${total} finding(s) over ${entries.length} messages: ${Object.entries(counts).map(([name, n]) => `${name} ${n}`).join(", ")}.`)
+  if (total > 0) {
     console.error("Run with --list <check> for the keys; design/R9-COMPOSITION-PLAN.md §6.1 has the rules.")
     process.exitCode = 1
   }

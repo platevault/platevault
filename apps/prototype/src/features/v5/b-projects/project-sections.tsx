@@ -553,7 +553,7 @@ export function useSubjectsSection(project: Project): DetailSection {
   const actions: Action[] = open
     ? [
         { id: "add-subject", label: m.store_label_add_subject(), icon: Plus, opensDialog: true, run: () => setAdding(true) },
-        { id: "new-mosaic", label: m.mosaic_new(), icon: Grid2x2Plus, run: () => mosaicLink("new") },
+        { id: "new-mosaic", label: m.mosaic_new_ellipsis(), icon: Grid2x2Plus, run: () => mosaicLink("new") },
       ]
     : []
 

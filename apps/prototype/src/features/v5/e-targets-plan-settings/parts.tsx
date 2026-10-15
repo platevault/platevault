@@ -115,7 +115,7 @@ export function myTargetsAction(m: Messages, row: TargetRow): Action {
 }
 
 export function newProjectAction(m: Messages, targetId: string): Action {
-  return { id: "new-project", label: m.newproject_open(), opensDialog: true, run: () => openSheet({ kind: "new-project", targetId }) }
+  return { id: "new-project", label: m.newproject_open_ellipsis(), opensDialog: true, run: () => openSheet({ kind: "new-project", targetId }) }
 }
 
 /**

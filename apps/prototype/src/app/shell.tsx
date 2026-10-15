@@ -184,7 +184,7 @@ function MoreItems() {
           <ChevronDown aria-hidden="true" data-icon="inline-end" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <MenuItems items={[{ heading: m.common_prototype() }, app.prototypeControls, quit]} runner={runner} />
+          <MenuItems items={[{ heading: m.prototype_label() }, app.prototypeControls, quit]} runner={runner} />
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
@@ -322,7 +322,7 @@ function AppWindow({ children }: { children: ReactNode }) {
       }}
       toolbar={{
         leading: <HistoryControl />,
-        center: <PaletteTrigger label={m.shell_search_or_jump()} shortcut={PALETTE_SHORTCUT} compact={!wideSearch} onOpen={() => openPanel("palette")} />,
+        center: <PaletteTrigger label={m.shell_search_or_jump_ellipsis()} shortcut={PALETTE_SHORTCUT} compact={!wideSearch} onOpen={() => openPanel("palette")} />,
         trailing: (
           <>
             <IssuesHub />
@@ -368,7 +368,7 @@ export function NotFoundPage() {
 /** First-run setup: no source list, one task at a time; the Prototype controls and the theme in the header. */
 export function SetupShell() {
   const m = useMessages()
-  const prototype: Action = { id: "prototype-controls", label: m.common_prototype(), icon: FlaskConical, run: () => openPanel("simulation") }
+  const prototype: Action = { id: "prototype-controls", label: m.prototype_label(), icon: FlaskConical, run: () => openPanel("simulation") }
   return (
     <SetupFrame
       brand={{ name: m.app_name(), icon: Aperture }}

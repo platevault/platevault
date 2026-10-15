@@ -58,7 +58,7 @@ export function useAppActions(): AppActions {
   const { locale, singleKeyShortcuts } = usePreferences()
   return {
     toggleSidebar: { id: "toggle-sidebar", label: m.palette_toggle_sidebar(), icon: PanelLeft, shortcut: "[", run: () => toggleSidebar() },
-    prototypeControls: { id: "prototype-controls", label: m.shell_prototype_controls(), icon: FlaskConical, opensDialog: true, run: () => openPanel("simulation") },
+    prototypeControls: { id: "prototype-controls", label: m.prototype_controls_ellipsis(), icon: FlaskConical, opensDialog: true, run: () => openPanel("simulation") },
     shortcuts: { id: "shortcuts", label: m.shortcuts_show(), icon: Keyboard, shortcut: "?", run: () => openPanel("shortcuts") },
     singleKeys: singleKeyShortcuts
       ? { id: "single-keys", label: m.palette_single_key_off(), icon: Keyboard, run: () => setSingleKeyShortcuts(false) }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "app_name": "PlateVault",
-  "app_document_title": "Protótipo PlateVault",
+  "prototype_document_title": "Protótipo PlateVault",
   "verb_add": "Adicionar",
   "verb_assign": "Atribuir",
   "verb_cancel": "Cancelar",
@@ -22,7 +22,7 @@
   "common_locations": "Locais",
   "common_runs": "Execuções",
   "common_loading": "Carregando",
-  "common_prototype": "Protótipo",
+  "prototype_label": "Protótipo",
   "key_escape": "Esc",
   "key_space": "Espaço",
   "nav_home": "Início",
@@ -87,9 +87,9 @@
   ],
   "shell_next": "Próximo: {label}",
   "shell_import": "Importar",
-  "shell_search_or_jump": "Buscar ou ir para…",
+  "shell_search_or_jump_ellipsis": "Buscar ou ir para…",
   "shell_with_shortcut": "{label} ({shortcut})",
-  "shell_prototype_controls": "Controles do protótipo…",
+  "prototype_controls_ellipsis": "Controles do protótipo…",
   "shell_theme": "Tema",
   "shell_theme_named": "Tema: {name}",
   "shell_theme_match_system": "Seguir o sistema",
@@ -97,7 +97,6 @@
   "shell_language_named": "Idioma: {name}",
   "shell_not_found_doc_title": "Página não encontrada",
   "shell_not_found_title": "Esta página não existe",
-  "shell_not_found_description": "O link pode ser de uma versão anterior do protótipo.",
   "shell_not_found_home": "Ir para o Início",
   "locale_machine_generated": "Tradução automática",
   "history_back": "Voltar",
@@ -249,8 +248,6 @@
   "step_calibrate": "Calibrar",
   "step_prepare": "Preparar",
   "step_results": "Resultados",
-  "step_done": "Concluído",
-  "record_missing_description": "O link pode ser de uma versão anterior do protótipo, ou o registro foi removido ao esvaziar a Lixeira. Sua biblioteca não foi alterada.",
   "status_online": "Online",
   "status_offline": "Offline",
   "status_unreadable": "Ilegível",
@@ -615,7 +612,6 @@
   "dialog_to_move": "Movido",
   "dialog_to_copy": "Copiado",
   "dialog_to_keep": "Fica",
-  "confirm_unchanged": "Inalterado",
   "operation_progress_label": "Progresso de {title}",
   "operation_progress_value": "{done} de {total} {unit}, {percent}",
   "operation_progress_count": "{done} de {total} {unit}",
@@ -640,7 +636,6 @@
   ],
   "tips_help": "Ajuda",
   "tips_note": "Nota {number}",
-  "page_step_done": "(concluído)",
   "ui_breadcrumb": "Trilha de navegação",
   "import_open": "Importar",
   "home_blocked_at": "Bloqueado em {step}",
@@ -1148,9 +1143,9 @@
       }
     }
   ],
-  "newproject_open": "Novo Projeto…",
-  "startrun_in_project": "Iniciar execução em {name}…",
-  "mosaic_new_in_project": "Novo mosaico em {name}…",
+  "newproject_open_ellipsis": "Novo Projeto…",
+  "startrun_in_project_ellipsis": "Iniciar execução em {name}…",
+  "mosaic_new_in_project_ellipsis": "Novo mosaico em {name}…",
   "wrapup_project": "Encerrar {name}",
   "project_noun": "Projeto",
   "wrapup_its_volume": "O volume",
@@ -1279,8 +1274,8 @@
   "projects_col_goals": "Metas",
   "projects_col_open_runs": "Execuções abertas",
   "projects_next_for": "para {name}",
-  "startrun_open": "Iniciar execução…",
-  "mosaic_new": "Novo mosaico…",
+  "startrun_open_ellipsis": "Iniciar execução…",
+  "mosaic_new_ellipsis": "Novo mosaico…",
   "wrapup_action": "Encerrar",
   "trash_title": "Lixeira",
   "trash_with_count": "Lixeira ({count})",
@@ -1349,7 +1344,6 @@
   ],
   "project_run_noun_capital": "Execução",
   "project_run_complete_title": "Concluir {name}?",
-  "project_run_complete": "Concluir execução",
   "project_run_trash_title": "Mover {name} para a Lixeira?",
   "project_run_trash_description": "Restaurar a traz de volta como estava.",
   "project_placement_ambiguous": "Ambígua",
@@ -1627,8 +1621,6 @@
       }
     }
   ],
-  "wrapup_mark_done": "Marcar como Concluído",
-  "wrapup_cleaning_up": "Limpando",
   "wrapup_items": [
     {
       "declarations": [
@@ -1986,7 +1978,7 @@
   "targets_moon_limits_for": "Limites da Lua para {band}",
   "targets_catalogues": "Catálogos",
   "targets_preset_unavailable": "{name} · indisponível",
-  "targets_simbad_searching": "Pesquisando no SIMBAD…",
+  "targets_simbad_searching": "Pesquisando no SIMBAD",
   "targets_simbad_off": "SIMBAD desligado",
   "targets_simbad_unreachable": "SIMBAD inacessível",
   "targets_caption_search": "Resultados da pesquisa por {query}",
@@ -2268,7 +2260,6 @@
   "run_select_revision": "Revisão {revision}",
   "run_save_revision": "Salvar revisão {revision}",
   "run_save_blocked": "Salvamento bloqueado",
-  "run_complete": "Concluir",
   "run_completed": "{name} concluída",
   "run_clean_up_blocked": "Limpeza bloqueada",
   "run_col_size": "Tamanho",
@@ -2603,7 +2594,6 @@
     }
   ],
   "rungroup_result": "Resultado do grupo",
-  "rungroup_review_all": "Revisar todos",
   "rungroup_every_panel_complete": "Todos os painéis concluídos",
   "rungroup_prepare_all_title": [
     {
@@ -2980,12 +2970,10 @@
   "settings_back_to_calibration": "Voltar à Calibração",
   "settings_back_to_project": "Voltar ao Projeto",
   "settings_go_back": "Voltar",
-  "about_simulated_data": "Dados simulados",
   "about_no_files_touched": "Nenhum arquivo alterado",
   "about_no_network": "Sem rede",
   "about_this_build": "Esta versão",
   "about_version": "Versão",
-  "about_version_value": "{version} · versão de protótipo",
   "about_data": "Dados",
   "about_data_demo": "Biblioteca de demonstração",
   "about_data_empty": "Vazia (primeiro uso)",
@@ -3056,7 +3044,7 @@
     }
   ],
   "about_clock": "Relógio do PlateVault",
-  "about_clock_simulated": "{date} (simulado)",
+  "prototype_about_clock": "{date} (simulado)",
   "about_clock_system": "Este computador",
   "about_onboarding": "Primeiros passos",
   "about_first_run_setup": "Configuração inicial",
@@ -3263,9 +3251,8 @@
   "settings_lookup_online_help": "Envia nomes de Alvos ao provedor. Uma busca que falha nunca bloqueia a indexação.",
   "settings_lookup_provider": "Provedor",
   "settings_lookup_test": "Testar",
-  "settings_lookup_fixture": "Simulado",
   "settings_lookup_query": "Nome a buscar",
-  "settings_lookup_running": "Buscando…",
+  "settings_lookup_running": "Buscando",
   "settings_lookup_running_named": "Buscando {name}",
   "settings_lookup_name": "Nome",
   "settings_lookup_coordinates": "Coordenadas",
@@ -3311,8 +3298,6 @@
   "setup_demo_body": "M 31 · NGC 7000 · Projeto de mosaico · disco offline",
   "setup_demo_confirm_title": "Carregar a biblioteca de demonstração?",
   "setup_demo_summary": "Substitui locais, sessões, Projetos e Views · encerra a configuração",
-  "setup_demo_unchanged_appearance": "Tema, idioma e atalhos",
-  "setup_demo_unchanged_files": "Não há arquivos reais; nada no seu computador é alterado",
   "setup_locations_title": "Escolher locais",
   "setup_required": "Obrigatório",
   "setup_add_another": "Adicionar outro local",
@@ -3402,7 +3387,6 @@
   "apps_badge_write_prone": "Grava nas entradas",
   "apps_unsupported_corrected": "ler valores corrigidos pela configuração",
   "apps_evidence": "Evidência",
-  "apps_prototype_fixture": "Simulação do protótipo",
   "apps_input_writes": "Gravação nas entradas",
   "apps_none_recorded": "Nenhum registrado",
   "apps_corrected_values": "Valores corrigidos",
@@ -3411,13 +3395,9 @@
   "apps_rename_note": "Renomear arquivos nunca substitui valores do cabeçalho.",
   "apps_not_located": "Nenhum aplicativo localizado",
   "apps_locate_any": "Localizar um aplicativo",
-  "apps_locate_description": "Protótipo: seletor de aplicativos simulado. Lista os pacotes de aplicativos do computador simulado e registra só o caminho; nada é aberto.",
-  "apps_none_present": "Nenhum pacote de aplicativo presente. Restaure um nos controles de protótipo desta etapa.",
   "apps_use_this": "Usar este aplicativo",
   "apps_generic_description": "Abre qualquer aplicativo com seus argumentos. Não é um perfil de preparação verificado.",
   "apps_check_again": "Verificar de novo",
-  "apps_change": "Alterar…",
-  "apps_locate": "Localizar…",
   "apps_launch_arguments": "Argumentos de abertura",
   "apps_launch_placeholder": "ex.: --input \"{token}\"",
   "apps_save_arguments": "Salvar argumentos",
@@ -3485,8 +3465,6 @@
   "review_filter_all": "Todos",
   "review_picked": "Aprovado",
   "review_rejected": "Rejeitado",
-  "review_run_in_trash": "execução na Lixeira",
-  "review_run_complete": "Execução completa",
   "review_run_complete_help": "A participação se mantém. As marcações alteram a qualidade na biblioteca e as rejeições do Projeto.",
   "review_panel_complete": "Painel completo",
   "review_panel_complete_help": "Uma execução de painel completa mantém sua participação. As marcações alteram apenas a qualidade na biblioteca.",
@@ -3647,7 +3625,6 @@
     }
   ],
   "review_clear_project_reject": "Desfazer rejeição no Projeto",
-  "review_reject_for_project": "Rejeitar só neste Projeto…",
   "review_mark_scope_help": "Escopo da marcação",
   "review_mark_scope_tip": "P, X e U marcam a biblioteca, em todos os Projetos. Uma rejeição no Projeto vale só neste Projeto.",
   "review_no_pixels": "Sem pixels",
@@ -3928,11 +3905,10 @@
   "review_height_rows": "Cerca de 8 linhas",
   "review_height_strip": "Faixa de uma linha",
   "review_height_full": "Altura total",
-  "review_table_height_title": "Altura da tabela: {current}. {key} muda para {next}.",
   "review_table_height_sr": ", altura da tabela",
   "review_select": "Selecionar",
   "review_select_all_shown_count": "Selecionar todos os exibidos ({count})",
-  "review_select_by_threshold_menu": "Selecionar por limite…",
+  "review_select_by_threshold_ellipsis": "Selecionar por limite…",
   "review_select_by_threshold": "Selecionar por limite",
   "review_display": "Exibição",
   "review_frame_names": "Nomes dos frames",
@@ -4377,7 +4353,6 @@
   ],
   "domain_gate_membership_saved": "Composição salva",
   "domain_gate_revision_saved": "Revisão {revision} salva.",
-  "domain_gate_review_unsaved": "A Revisão tem alterações não salvas: salve-as na Revisão.",
   "domain_gate_unsaved_on_revision": "Alterações não salvas na revisão {revision}.",
   "domain_gate_not_saved_yet": "Ainda não salvo.",
   "domain_gate_new_candidates": "Novos candidatos",
@@ -4433,42 +4408,6 @@
   "domain_next_resolve_inputs": "Resolver entradas",
   "domain_next_save_run": "Salvar execução",
   "domain_next_edit_selection": "Editar seleção",
-  "domain_review_rejected": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} rejeitado",
-        "countPlural=*": "{count} rejeitados"
-      }
-    }
-  ],
-  "domain_review_restored": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} restaurado",
-        "countPlural=*": "{count} restaurados"
-      }
-    }
-  ],
-  "domain_review_unsaved": "{changes}, não salvo",
-  "domain_gate_review_saved": "Alterações da Revisão salvas",
-  "domain_gate_review_save_detail": "{note}: Salvar execução as guarda como a próxima revisão.",
-  "domain_gate_frames_reviewed": "Frames revisados",
-  "domain_gate_no_frames": "Nenhum frame ainda.",
-  "domain_gate_frames_decided": "{done} de {total} têm uma decisão de qualidade.",
   "domain_gate_calibration_matched": "Calibração correspondida",
   "domain_gate_policy_off": "A política de calibração está desligada.",
   "domain_gate_select_first": "Selecione as sessões primeiro.",
@@ -4593,14 +4532,6 @@
   "domain_gate_no_outputs": "Nenhuma saída encontrada ainda.",
   "domain_next_accept_results": "Aceitar resultados",
   "domain_next_look_for_results": "Procurar resultados",
-  "domain_status_cleaned_up": "Limpa",
-  "domain_status_cleanup_available": "Limpeza disponível",
-  "domain_gate_cleanup_reviewable": "Concluída: a Limpeza pode ser revisada.",
-  "domain_gate_complete_when_done": "Conclua quando o processamento terminar; isso não remove nada.",
-  "domain_gate_cleanup_reviewed": "Limpeza revisada",
-  "domain_gate_finished": "Concluída.",
-  "domain_gate_cleanup_lists": "A Limpeza lista apenas entradas preparadas.",
-  "domain_next_clean_up_run": "Limpar execução",
   "blocker_unreadable_inputs": [
     {
       "declarations": [
@@ -4692,7 +4623,6 @@
   "domain_reason_window_tonight": "{line}; {subject} tem uma janela esta noite.",
   "domain_next_start_run": "Iniciar uma execução de processamento",
   "domain_reason_choose_subject_rig": "Escolha um objeto e um equipamento.",
-  "domain_stage_held_at": "{gate} em {step}",
   "fit_fits": "cabe ({percent}%)",
   "fit_tiny": "minúsculo",
   "op_unit_files": "arquivos",
@@ -4876,7 +4806,7 @@
   "store_stale_message": "Recusado: {label}. Este registro foi alterado em outro lugar desde que você o abriu. Revise a versão atual antes de salvar de novo.",
   "store_not_saved_title": "Não salvo: {label}",
   "store_not_saved_message": "Não salvo: {label}. A gravação no catálogo falhou. Sua alteração continua na tela; escolha Tentar novamente.",
-  "store_persist_failed_title": "Dados do protótipo não salvos neste navegador",
+  "prototype_persist_failed_title": "Dados do protótipo não salvos neste navegador",
   "store_persist_failed_detail": "O armazenamento do navegador recusou a gravação. As alterações ficam nesta aba até ela ser fechada.",
   "store_refusal_message": "{title}: {reasons}.",
   "store_record_missing": "Este registro não existe mais no catálogo. Recarregue a página para ver a biblioteca atual.",
@@ -4978,7 +4908,6 @@
     }
   ],
   "store_reason_in_trash": "{name} está na Lixeira do Projeto",
-  "store_label_complete_named": "Concluir {name}",
   "store_label_move_to_trash_named": "Mover {name} para a Lixeira",
   "store_reason_no_trashed_run": "nenhuma execução da lixeira foi escolhida",
   "store_runs_count": [
@@ -5208,15 +5137,12 @@
   "store_label_apply_named": "Aplicar {name}",
   "store_label_archive_destination": "Destino do arquivo",
   "store_reason_not_archive_location": "não é um local de arquivo",
-  "store_reason_not_complete": "{name} não está Concluída",
   "store_label_step_done": "{step}: feito",
   "store_label_step_skipped": "{step}: ignorado",
   "store_label_step_reset": "{step}: redefinido",
   "store_reason_no_confirmed_target": "a sessão não tem Alvo confirmado",
   "store_reason_no_confirmed_rig": "a sessão não tem setup confirmado",
   "store_note_adds_rig": "Também adiciona o setup {rig} a {project}.",
-  "store_label_mark_named_done": "Marcar {name} como Concluído",
-  "store_reason_not_complete_fix": "{name} não está Concluída: conclua-a ou mova-a para a Lixeira",
   "store_label_reject_for_project_only": [
     {
       "declarations": [
@@ -5466,22 +5392,22 @@
   "store_label_reject_result": "Rejeitar Resultado",
   "store_saved_accepted": "{name} aceito",
   "store_saved_rejected": "{name} rejeitado",
-  "store_sha_short": "SHA-256 {hash}…",
+  "store_sha_short": "SHA-256 {hash}",
   "store_label_result_kind": "Tipo de Resultado",
   "store_label_clean_up_named": "Limpeza de {name}",
-  "store_label_simulated_output": "Saída simulada",
+  "simulation_label_output": "Saída simulada",
   "store_reason_prepare_first": "Prepare a execução primeiro: o aplicativo grava na pasta de Resultados registrada",
-  "store_label_proto_app_output": "Protótipo: saída do aplicativo",
-  "store_saved_proto_outputs": "Protótipo: o aplicativo gravou saídas",
+  "simulation_label_app_output": "Protótipo: saída do aplicativo",
+  "simulation_saved_outputs": "Protótipo: o aplicativo gravou saídas",
   "store_proto_outputs_detail": "{files} em {folder}.",
-  "store_label_proto_finished_writing": "Protótipo: arquivo terminou de ser gravado",
-  "store_label_simulated_correction": "Correção simulada",
+  "simulation_label_finished_writing": "Protótipo: arquivo terminou de ser gravado",
+  "simulation_label_correction": "Correção simulada",
   "store_reason_no_saved_member": "A execução não tem sessão membro salva",
   "store_reason_already_corrected": "Esta sessão já tem essa correção",
-  "store_label_proto_catalog_correction": "Protótipo: correção de catálogo",
-  "store_label_simulated_change": "Alteração simulada",
+  "simulation_label_catalog_correction": "Protótipo: correção de catálogo",
+  "simulation_label_change": "Alteração simulada",
   "store_reason_no_prepared_source": "Nenhum frame de origem preparado legível",
-  "store_label_proto_source_changed": "Protótipo: frame de origem alterado",
+  "simulation_label_source_changed": "Protótipo: frame de origem alterado",
   "op_prep_unavailable": "{reason}. Nada foi gravado para ela.",
   "op_prep_denied": "Ilegível: o acesso de leitura a {path} foi negado. Nada foi gravado para ela.",
   "op_prep_not_reachable": "Ilegível agora: nada está acessível em {path}. Nada foi gravado para ela.",
@@ -5583,7 +5509,7 @@
       }
     }
   ],
-  "op_archive_hash_failed": "A verificação SHA-256 falhou (simulada): nada desta sessão foi movido",
+  "op_archive_hash_failed": "A verificação SHA-256 falhou: nada desta sessão foi movido",
   "op_archived_to": "Arquivado em {folder} · {frames}",
   "op_restored_to": "Restaurado em {folder} · {frames}",
   "op_import_group_failed": "{done} de {total} verificados · {failed} com falha: {reason}",
@@ -5937,8 +5863,8 @@
     }
   ],
   "measure_value_stars": "{value} estrelas",
-  "seed_apps_evidence_pixinsight": "Evidência de fixture: o WBPP 2.8 lê a pasta da execução e não grava nos arquivos de entrada.",
-  "seed_apps_evidence_siril": "Evidência de fixture: o Siril 1.4 lê a pasta da execução e abre as entradas somente para leitura.",
+  "seed_apps_evidence_pixinsight": "O WBPP 2.8 lê a pasta da execução e não grava nos arquivos de entrada.",
+  "seed_apps_evidence_siril": "O Siril 1.4 lê a pasta da execução e abre as entradas somente para leitura.",
   "seed_apps_evidence_seti": "Nenhuma evidência de capacidade registrada. Não se sabe se grava nas entradas, e consome pastas inteiras.",
   "seed_apps_evidence_generic": "Iniciador genérico. Não alega um perfil verificado.",
   "domain_device_evidence_sharpcap": "Pasta SharpCap Captures",
@@ -6456,8 +6382,8 @@
   "store_reason_name_empty": "O nome está vazio",
   "store_reason_run_name_taken": "{name} já é uma execução neste projeto",
   "store_saved_run_renamed": "{from} renomeada para {to}",
-  "store_reason_sha_now": "SHA-256 agora {hash}…",
-  "store_label_proto_better_master": "Protótipo: master compatível mais novo",
+  "store_reason_sha_now": "SHA-256 agora {hash}",
+  "simulation_label_better_master": "Protótipo: master compatível mais novo",
   "store_reason_no_master_assigned": "Nenhum master atribuído ainda",
   "domain_mode_symlink": "Links simbólicos",
   "run_mode_semantics_symlink": "Links para os originais do catálogo. A unidade deles fica conectada durante a execução.",
@@ -6675,8 +6601,6 @@
   "ds_no_folder": "Nenhuma pasta escolhida ainda.",
   "ds_chip_channel": "Canal: {channel}",
   "ds_chip_quality": "Qualidade: {quality}",
-  "ds_description": "Tokens e componentes compartilhados nos seus estados. Mantido pela fundação; as trilhas compõem com eles em vez de estilizar caso a caso.",
-  "prototype_ds_eyebrow": "Fundação · referência do protótipo",
   "ds_colour_title": "Papéis de cor",
   "ds_colour_description": "Base neutra, um destaque. Troque o tema no cabeçalho para conferir os dois.",
   "ds_type_title": "Tipografia, espaçamento, raio e linhas",
@@ -6698,7 +6622,6 @@
   "ds_use_column": "Uso",
   "ds_buttons_title": "Botões",
   "ds_buttons_description": "Padrão, focus-visible (Tab até um botão), ativo (pressionar), desativado com motivo, carregando, e alternâncias (pressionada mostra preenchimento e barra de destaque).",
-  "ds_inspect_session": "Inspecionar sessão",
   "ds_send_files_to_trash": [
     {
       "declarations": [
@@ -6784,10 +6707,6 @@
       }
     }
   ],
-  "ds_cleanup_steps": "Etapas da limpeza",
-  "ds_cleanup_choose": "Escolher arquivos",
-  "ds_cleanup_review": "Revisar limpeza",
-  "ds_cleanup_trash": "Enviar para a Lixeira",
   "ds_table_title": "Tabela de dados",
   "ds_table_description": "Ordene, selecione, ↑/↓ entre linhas. A seleção é controlada por quem usa a tabela e sobrevive à filtragem. Grupos são linhas de cabeçalho numa só tabela, então as colunas se alinham entre os grupos.",
   "ds_table_loading": "Estado de carregamento",
@@ -6813,26 +6732,7 @@
       }
     }
   ],
-  "ds_confirm_dialog_description": "Esta é uma decisão de qualidade no escopo da biblioteca.",
-  "ds_confirm_change_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} frame passa a Utilizável na biblioteca",
-        "countPlural=*": "{count} frames passam a Utilizáveis na biblioteca"
-      }
-    }
-  ],
   "ds_confirm_change_integration": "A integração utilizável de {target} sobe {duration}",
-  "ds_confirm_unchanged_files": "Arquivos de origem e cabeçalhos",
-  "ds_confirm_unchanged_views": "Outras visualizações e seus membros",
-  "ds_confirm_unchanged_rejections": "Rejeições do projeto",
   "ds_confirm_label": [
     {
       "declarations": [
@@ -6961,10 +6861,8 @@
   "simulation_data_empty": "Semente atual: biblioteca vazia (primeira execução). Tema, idioma e atalhos são mantidos.",
   "simulation_reset_empty": "Redefinir para biblioteca vazia",
   "simulation_confirm_empty_title": "Redefinir para uma biblioteca vazia?",
-  "simulation_confirm_description": "Isto substitui todos os dados do protótipo neste navegador. Não pode ser desfeito.",
   "simulation_confirm_demo_change": "Substituir o catálogo pela biblioteca de demonstração ({projects})",
   "simulation_confirm_empty_change": "Remover todos os locais, sessões, projetos e execuções; a integração inicial recomeça",
-  "simulation_confirm_discard": "Descartar operações em andamento e a Atividade",
   "simulation_sheet_description": "Controles do protótipo. Eles alteram o disco simulado fora do PlateVault; o PlateVault percebe na próxima leitura.",
   "prototype_controls_title": "Protótipo: {title}",
   "prototype_controls_note": "Simula mudanças fora do PlateVault para revisão. Não faz parte do produto.",
@@ -7209,7 +7107,6 @@
   "flow_reason_step_first": "Conclua ou pule {step} primeiro",
   "flow_reason_step_settled": "{step} já foi concluída ou pulada",
   "flow_reason_step_open": "{step} não foi concluída nem pulada",
-  "flow_reason_reject_is_library_wide": "Rejeitar marca o frame como Inutilizável na biblioteca",
   "flow_reason_session_needs_review": "{name} precisa de revisão",
   "flow_label_record_calibration": "Registrar calibração",
   "flow_nothing_to_clean_up": "Nada para limpar",

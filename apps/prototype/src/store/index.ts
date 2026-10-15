@@ -56,7 +56,7 @@ function persistNow() {
   } catch {
     if (persistFailed) return
     persistFailed = true
-    recordActivity({ kind: "write-failed", title: msg("store_persist_failed_title"), detail: msg("store_persist_failed_detail"), operationId: null, href: null })
+    recordActivity({ kind: "write-failed", title: msg("prototype_persist_failed_title"), detail: msg("store_persist_failed_detail"), operationId: null, href: null })
   }
 }
 
