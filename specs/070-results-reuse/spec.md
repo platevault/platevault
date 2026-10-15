@@ -26,7 +26,7 @@ A Project's Results are the files in its `Output/` folder. The user saves finish
 
 - **RES-AC-01**: Given the Project's `Output/` holds a final image and a file still being written, when the Output step opens, then both are listed, the final image as a Result with no Accept action, and the growing file reads "Still being written". (D-W85, D-W98)
 - **RES-AC-02**: Given a WBPP master light in `Processing/WBPP/master/`, when the user chooses Copy to Output… and picks it, then a verified copy lands in `Output/` and joins the table, and the file in `Processing/` is unchanged. (D-W98)
-- **RES-AC-03**: Given the user reruns WBPP and it overwrites `Processing/WBPP/master/`, then the copy in `Output/` is unchanged and the Output step lists the same Results. (D-W93, D-W98)
+- **RES-AC-03**: Withdrawn (D-W93). There is no acceptance and no lineage to upgrade; RES-AC-28 covers a tool rerun that leaves `Output/` unchanged.
 - **RES-AC-04**: Withdrawn (D-W93). A Result is never a Project input.
 - **RES-AC-05**: Withdrawn (D-W93). There are no product inputs, so no profile needs product-input support.
 - **RES-AC-06**: Given an empty `Output/`, when the user closes the Project, then it closes; no Result is required and no file is removed from `Output/`. (D-W97, D-W98)
@@ -51,6 +51,7 @@ A Project's Results are the files in its `Output/` folder. The user saves finish
 - **RES-AC-25**: Given the user chooses Copy to Output…, then the native file dialog opens in `Processing/` with image-file filters, and a file with the same name already in `Output/` is never overwritten. (D-W98)
 - **RES-AC-26**: Withdrawn (D-W97). Wrap up's Trash step offers the files in `Processing/` (PRJ-FR-15).
 - **RES-AC-27**: Given the user keeps `final/` and `drafts/` subfolders inside `Output/`, then the table lists each file with its path relative to `Output/`, and PlateVault creates, renames and moves no folder inside it. (D-W85, D-W98)
+- **RES-AC-28**: Given the user reruns WBPP and it overwrites `Processing/WBPP/master/`, then the copy in `Output/` is unchanged and the Output step lists the same Results. (D-W93, D-W98)
 
 ### Edge Cases
 

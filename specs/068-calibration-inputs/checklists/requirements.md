@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Calibration matching, exceptions, and master adoption
+# Specification Quality Checklist: Calibration matching at ingestion, the calibration library, and master adoption
 
 Created: 2026-10-03
 Feature: [Specification](../spec.md)

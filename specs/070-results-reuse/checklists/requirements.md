@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Results, reuse, and completion
+# Specification Quality Checklist: Results in Output/, Copy to Output and the master offer
 
 Created: 2026-10-03
 Feature: [Specification](../spec.md)

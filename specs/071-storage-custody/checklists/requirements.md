@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Storage operations: run Clean up, verified archive, Project archive and Trash, Import
+# Specification Quality Checklist: Storage operations: View Clean up, verified archive, Wrap up Trash and Import
 
 Created: 2026-10-03
 Feature: [Specification](../spec.md)

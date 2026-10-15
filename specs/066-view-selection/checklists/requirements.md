@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Processing run workspace: candidate selection, frame membership, quality decisions, refresh, run groups
+# Specification Quality Checklist: Project inputs: adding sessions, exclusions, pending changes and the Apply sheet
 
 Created: 2026-10-03
 Amended: 2026-10-06
