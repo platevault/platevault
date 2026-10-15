@@ -9,7 +9,6 @@
  * (PIX-FR-08), so the operation names no View in its scope: Mark complete
  * does not wait for it (D09).
  */
-import { runHref } from "@/domain/derive"
 import { simulateMeasurement } from "@/domain/measurement"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, RunId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
@@ -233,13 +232,7 @@ export const measureHandler: OperationHandler = {
     if (remaining.size > 0) return next
     const parts = [msg("op_measure_measured", { count: payload.measured, n: formatCount(payload.measured) }), msg("op_measure_cached_valid", { count: payload.reused })]
     if (payload.skipped.length > 0) parts.push(msg("op_measure_not_measured", { count: payload.skipped.length }))
-    return settleOperation(
-      next,
-      op.id,
-      payload.skipped.length > 0 ? "partial" : "succeeded",
-      msg("op_measure_summary", { parts: joinRefs(parts, ", ") }),
-      state.catalog.runs[payload.runId] ? runHref(state.catalog.runs[payload.runId]!, "review") : null,
-    )
+    return settleOperation(next, op.id, payload.skipped.length > 0 ? "partial" : "succeeded", msg("op_measure_summary", { parts: joinRefs(parts, ", ") }), null)
   },
 }
 

@@ -19,7 +19,7 @@ import { KeyValueList, PathText } from "@/components/app/data"
 import { EmptyState, useSaveState } from "@/components/app/feedback"
 import { ArgumentsField, PathField, SegmentedField, SelectField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
-import { SettingsRow, SettingsSection } from "@/components/app/settings"
+import { SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { MODE_NAME } from "@/domain/labels"
@@ -168,7 +168,6 @@ export function SettingsApplicationsPage() {
   const m = useMessages()
   const profiles = useStore((s) => s.catalog.profiles)
   const view = useStore((s) => s.settings.defaultRunView)
-  const developerMode = useStore((s) => s.settings.developerModeCheck)
   const [locating, setLocating] = useState<ApplicationProfile | null>(null)
   const [editingArgs, setEditingArgs] = useState<ApplicationProfile | null>(null)
   const [adding, setAdding] = useState(false)
@@ -211,11 +210,7 @@ export function SettingsApplicationsPage() {
           options={RUN_VIEWS.map((mode) => ({ value: mode, label: say(m, MODE_NAME[mode]) }))}
           onChange={(mode) => save(() => setDefaultRunView(mode))}
         />
-        {developerMode === "not-windows" ? null : (
-          <SettingsRow label={m.settings_developer_mode()}>
-            <DeveloperModeStatus />
-          </SettingsRow>
-        )}
+        <DeveloperModeStatus />
       </SettingsSection>
 
       <ListSection<ApplicationProfile>

@@ -12,10 +12,8 @@
  *
  * State is never colour alone: a status reads through StatusBadge.
  */
-import { Link } from "@tanstack/react-router"
 import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
-import type { StepLink } from "@/domain/derive"
 import { cn } from "@/lib/utils"
 import type { Tone } from "./status"
 
@@ -30,17 +28,8 @@ const PILL_TONE: Record<Tone, string> = {
   danger: "bg-destructive/12 text-destructive ring-destructive/30",
 }
 
-const PILL_HOVER: Record<Tone, string> = {
-  neutral: "hover:bg-accent hover:text-accent-foreground",
-  muted: "hover:bg-accent hover:text-accent-foreground",
-  info: "hover:bg-info/16",
-  success: "hover:bg-success/16",
-  warning: "hover:bg-warning/16",
-  danger: "hover:bg-destructive/16",
-}
-
 /** The Pill API: an inert tag, no interactive props. */
-export interface TagProps {
+export interface PillProps {
   tone?: Tone
   icon?: LucideIcon
   children: ReactNode
@@ -49,55 +38,11 @@ export interface TagProps {
   className?: string
 }
 
-/** @deprecated The interactive Pill props, removed in W4 (R9-COMPOSITION-PLAN P10). */
-interface InteractivePillProps {
-  /** @deprecated A pill is a tag, not a link. Use a link Button, Tabs, or UsedByPreview. */
-  link?: StepLink
-  /** @deprecated A pill is a tag, not a button. Use a Button or an Action. */
-  onClick?: () => void
-}
-
-export type PillProps = TagProps & InteractivePillProps
-
-function classesOf(tone: Tone, interactive: boolean, className?: string): string {
-  return cn(PILL, PILL_TONE[tone], interactive && PILL_HOVER[tone], className)
-}
-
-/**
- * The pill's classes, for a control that renders its own element (a popover trigger).
- * @deprecated Removed in W4 with its `interactive` flag: a control is a Button, a preview is a HoverCard (previews.tsx).
- */
-export function pillClass(tone: Tone = "neutral", interactive = false, className?: string): string {
-  return classesOf(tone, interactive, className)
-}
-
-export function Pill({ tone = "neutral", icon: Icon, children, title, className, ...legacy }: PillProps) {
-  const { link, onClick } = legacy
-  const classes = classesOf(tone, Boolean(link || onClick), className)
-  const body = (
-    <>
+export function Pill({ tone = "neutral", icon: Icon, children, title, className }: PillProps) {
+  return (
+    <span className={cn(PILL, PILL_TONE[tone], className)} title={title} data-pill={tone}>
       {Icon ? <Icon aria-hidden="true" /> : null}
       <span className="truncate">{children}</span>
-    </>
-  )
-  // Legacy control forms, until W3 migrates their call sites.
-  if (link) {
-    return (
-      <Link to={link.to as never} params={link.params as never} search={link.search as never} className={classes} title={title} data-pill={tone}>
-        {body}
-      </Link>
-    )
-  }
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={classes} title={title} data-pill={tone}>
-        {body}
-      </button>
-    )
-  }
-  return (
-    <span className={classes} title={title} data-pill={tone}>
-      {body}
     </span>
   )
 }

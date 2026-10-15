@@ -9,7 +9,7 @@
  * `closedProject`, `reopenedProject`); applying a goal template copies its
  * conditions to each subject (`conditionsFromTemplate`).
  */
-import { freezeGoals, markDoneBlockers, planningSite, projectGoalSet, rigName, rigRef, sessionRigId, sessionTargetId, subjectCentre, subjectName, wrapUpFlowState } from "@/domain/derive"
+import { freezeGoals, planningSite, projectGoalSet, rigName, rigRef, sessionRigId, sessionTargetId, subjectCentre, subjectName, wrapUpFlowState } from "@/domain/derive"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
 import { defaultCriteria, seasonWindow, upcomingNight } from "@/domain/planning"
 import { BUILT_IN_GOAL_TEMPLATES, subjectConditionsFrom } from "@/domain/templates"
@@ -274,28 +274,6 @@ export function setProjectArchiveLocation(projectId: ProjectId, locationId: Loca
   return editProject(projectId, label, project.revision, (p) => ({ ...p, archiveLocationId: locationId }))
 }
 
-/**
- * Record a Wrap up step as done or skipped (P-WRAP1), or clear it back to
- * to do with null. Refused until every run is Complete.
- * @deprecated Settles on start and ignores the order (B 8b.8). Use
- * `recordWrapUpStep` (through `wrapUpFlow`) and `reopenWrapUpStep`; W3
- * migrates wrap-up.tsx and W4 removes this.
- */
-export function setWrapUpStep(projectId: ProjectId, step: WrapUpStepId, state: WrapUpStepRecord["state"] | null): CommitResult {
-  const { catalog } = store.getState()
-  const project = catalog.projects[projectId]
-  if (!project) return MISSING
-  const open = markDoneBlockers(catalog, project)
-  if (open.length > 0) return refuse(msg("store_refused", { label: WRAP_UP_NAME[step] }), open.map((r) => msg("store_reason_not_complete", { name: r.name })), projectHref(projectId))
-  const label = state === "done" ? msg("store_label_step_done", { step: WRAP_UP_NAME[step] }) : state === "skipped" ? msg("store_label_step_skipped", { step: WRAP_UP_NAME[step] }) : msg("store_label_step_reset", { step: WRAP_UP_NAME[step] })
-  return editProject(projectId, label, project.revision, (p) => {
-    const wrapUp = { ...p.wrapUp }
-    if (state) wrapUp[step] = { state, at: nowIso(), operationIds: [], redo: false }
-    else delete wrapUp[step]
-    return { ...p, wrapUp }
-  })
-}
-
 /** What Proceed did on a Wrap up step: nothing was left, nothing was selected (Skipped, F4), or it started these operations. */
 export type WrapUpOutcome = { kind: "nothing-left" } | { kind: "skipped" } | { kind: "started"; operationIds: OperationId[] }
 
@@ -427,38 +405,11 @@ export function addSessionToProject(sessionId: SessionId, projectId: ProjectId):
   return { result, note }
 }
 
-/**
- * Mark Done (D-W26, PRJ-FR-14): refused while a run outside the Trash is not
- * Complete; the refusal names each run so the user completes or trashes it.
- * @deprecated Closes without checking the Wrap up steps. Close project is
- * Archive's Proceed (`recordWrapUpStep(…, "archive", …)`, C2, C3); W3
- * migrates wrap-up.tsx and W4 removes this.
- */
-export function markProjectDone(projectId: ProjectId): CommitResult {
-  const { catalog } = store.getState()
-  const project = catalog.projects[projectId]
-  if (!project) return MISSING
-  const open = markDoneBlockers(catalog, project)
-  if (open.length > 0) return refuse(msg("store_refused", { label: msg("store_label_mark_named_done", { name: project.name }) }), open.map((r) => msg("store_reason_not_complete_fix", { name: r.name })), projectHref(projectId))
-  return editProject(projectId, msg("wrapup_mark_done"), project.revision, (p) => closedProject(catalog, p, nowIso()))
-}
-
 /** Reopen moves no files; archived sessions keep reading Archived until restored (D-W69). The goals read the live library again (C7). */
 export function reopenProject(projectId: ProjectId): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
   return writeProject(projectId, msg("project_reopen"), project.revision, reopenedProject)
-}
-
-/**
- * @deprecated P-REJ2 dropped Project-only rejects: Reject is library-wide
- * (`markFrames` with "unusable"). Refused, writing nothing; W3 removes the
- * caller (d-review/marks.ts) and W4 this function.
- */
-export function setProjectRejection(projectId: ProjectId, _assetIds: string[], _rejected: boolean): CommitResult {
-  const project = store.getState().catalog.projects[projectId]
-  if (!project) return MISSING
-  return refuse(msg("store_refused", { label: msg("review_reject_for_project") }), [msg("flow_reason_reject_is_library_wide")], projectHref(projectId))
 }
 
 /** "Target <subject> on <rig>" for a new Project prefilled from a session (Create Project, LIB-FR-17). */

@@ -51,7 +51,7 @@ function ToastList() {
         <ToastPrimitive.Title className="min-w-0 flex-1 text-pretty" />
         {toast.actionProps ? <ToastPrimitive.Action className={buttonVariants({ variant: "outline", size: "xs" })} /> : null}
       </ToastPrimitive.Content>
-      <ToastPrimitive.Close className={buttonVariants({ variant: "ghost", size: "icon-xs" })}>
+      <ToastPrimitive.Close className={buttonVariants({ variant: "ghost", size: "icon-sm" })}>
         <XIcon aria-hidden="true" />
         <span className="sr-only">{m.verb_dismiss()}</span>
       </ToastPrimitive.Close>

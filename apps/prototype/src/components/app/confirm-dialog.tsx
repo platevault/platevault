@@ -16,8 +16,8 @@
  * Takes a ConfirmSpec as it is: `<ConfirmDialog {...spec} onConfirm />`.
  */
 import { Link } from "@tanstack/react-router"
-import { ArrowRight, ChevronRight, Lock } from "lucide-react"
-import { type ReactElement, type ReactNode, useRef } from "react"
+import { ChevronRight } from "lucide-react"
+import { type ReactElement, useRef } from "react"
 import { useMessages } from "@/app/preferences"
 import {
   AlertDialog,
@@ -39,7 +39,7 @@ import { DIALOG_DEFAULT_ATTR, type DialogCommit, type DialogCommitOptions, Dialo
 /** One group of files that fold out: "Unusable frames · 12 files · 1.2 GB". */
 export type ConfirmGroup = NonNullable<ConfirmSpec["groups"]>[number]
 
-interface ConfirmDialogBaseProps extends DialogCommitOptions {
+export interface ConfirmDialogProps extends DialogCommitOptions {
   /** Element that opens the dialog; omit when controlling `open`. */
   trigger?: ReactElementLike
   /** Verb plus object: "Move 14 files to Trash?". */
@@ -48,78 +48,34 @@ interface ConfirmDialogBaseProps extends DialogCommitOptions {
   summary?: string
   /** The files the action touches, one fold-out per group. */
   groups?: ConfirmGroup[]
+  /** The action: its label repeats the verb ("Move to Trash"); `kind: "destructive"` makes it red and puts initial focus on Cancel. */
+  confirm: ConfirmSpec["confirm"]
   /** Runs the action. A failure keeps the dialog open with the error and Retry; a promise shows it busy until it settles. */
   onConfirm: DialogCommit
-  /** @deprecated Pass `summary`, or nothing: the title and the groups name the scope. W4 removes this prop. */
-  description?: ReactNode
-  /** @deprecated Pass `groups`, so the dialog lists the exact files. W4 removes this prop. */
-  changes?: string[]
-  /** @deprecated List what stays only when it is not obvious, inside `summary`. W4 removes this prop. */
-  unchanged?: string[]
 }
-
-export type ConfirmDialogProps = ConfirmDialogBaseProps &
-  (
-    | {
-        /** The action: its label repeats the verb ("Move to Trash"); `kind: "destructive"` makes it red and puts initial focus on Cancel. */
-        confirm: ConfirmSpec["confirm"]
-        confirmLabel?: undefined
-        tone?: undefined
-      }
-    | {
-        confirm?: undefined
-        /** @deprecated Pass `confirm={{ label }}`. W4 removes this prop. */
-        confirmLabel: string
-        /** @deprecated Pass `confirm={{ label, kind }}`. W4 removes this prop. */
-        tone?: "default" | "destructive"
-      }
-  )
 
 type ReactElementLike = ReactElement<Record<string, unknown>>
 
 interface Shown {
   title: string
-  summary: ReactNode
+  summary: string | undefined
   groups: ConfirmGroup[]
-  changes: string[]
-  unchanged: string[]
   label: string
   destructive: boolean
 }
 
-export function ConfirmDialog({
-  trigger,
-  title,
-  summary,
-  groups,
-  onConfirm,
-  description,
-  changes,
-  unchanged,
-  confirm,
-  confirmLabel,
-  tone,
-  ...options
-}: ConfirmDialogProps) {
+export function ConfirmDialog({ trigger, title, summary, groups, onConfirm, confirm, ...options }: ConfirmDialogProps) {
   const m = useMessages()
   const popup = useRef<HTMLDivElement>(null)
   const { isOpen, setOpen, commit, busy, error, finalFocus } = useDialogCommit(options)
   // Confirming usually changes the state the copy is derived from. Keep showing what was
   // confirmed while the dialog animates closed, never a re-derived empty scope.
-  const live: Shown = {
-    title,
-    summary: summary ?? description,
-    groups: groups ?? [],
-    changes: changes ?? [],
-    unchanged: unchanged ?? [],
-    label: confirm?.label ?? confirmLabel ?? "",
-    destructive: (confirm?.kind ?? tone) === "destructive",
-  }
+  const live: Shown = { title, summary, groups: groups ?? [], label: confirm.label, destructive: confirm.kind === "destructive" }
   const frozen = useRef(live)
   if (isOpen) frozen.current = live
   const shown = isOpen ? live : frozen.current
   const action: Action = { id: "confirm", label: shown.label, kind: shown.destructive ? "destructive" : "primary", run: onConfirm }
-  const hasScope = shown.groups.length > 0 || shown.changes.length > 0 || shown.unchanged.length > 0
+  const hasScope = shown.groups.length > 0
 
   return (
     <AlertDialog open={isOpen} onOpenChange={setOpen}>
@@ -138,22 +94,16 @@ export function ConfirmDialog({
           <div className="min-w-0 space-y-2 text-sm">
             {hasScope ? (
               <div className="divide-y divide-separator overflow-hidden rounded-[0.3125rem] border border-separator bg-background">
-                {shown.groups.length > 0 || shown.changes.length > 0 ? (
-                  <section aria-label={m.dialog_changes()} className="py-2">
-                    <h3 className="mb-1 px-3 text-xs font-medium text-muted-foreground">{m.dialog_changes()}</h3>
-                    {shown.groups.length > 0 ? (
-                      <ul className="divide-y divide-separator">
-                        {shown.groups.map((group) => (
-                          <li key={group.label}>
-                            <FileGroup group={group} onNavigate={() => setOpen(false)} />
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {shown.changes.length > 0 ? <ChangeList items={shown.changes} destructive={shown.destructive} /> : null}
-                  </section>
-                ) : null}
-                {shown.unchanged.length > 0 ? <UnchangedList items={shown.unchanged} /> : null}
+                <section aria-label={m.dialog_changes()} className="py-2">
+                  <h3 className="mb-1 px-3 text-xs font-medium text-muted-foreground">{m.dialog_changes()}</h3>
+                  <ul className="divide-y divide-separator">
+                    {shown.groups.map((group) => (
+                      <li key={group.label}>
+                        <FileGroup group={group} onNavigate={() => setOpen(false)} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               </div>
             ) : null}
             {error ? <ActionError message={error} /> : null}
@@ -245,37 +195,5 @@ function FileStatus({ status, onNavigate }: { status: NonNullable<FileRow["statu
       {status.label}
       <ChevronRight aria-hidden="true" data-icon="inline-end" />
     </Button>
-  )
-}
-
-/** The deprecated `changes` lines. */
-function ChangeList({ items, destructive }: { items: string[]; destructive: boolean }) {
-  return (
-    <ul className="space-y-0.5 px-3">
-      {items.map((change) => (
-        <li key={change} className="flex gap-2">
-          <ArrowRight aria-hidden="true" className={destructive ? "mt-0.5 size-3.5 shrink-0 text-destructive" : "mt-0.5 size-3.5 shrink-0 text-link"} />
-          <span>{change}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-/** The deprecated `unchanged` lines. */
-function UnchangedList({ items }: { items: string[] }) {
-  const m = useMessages()
-  return (
-    <section aria-label={m.confirm_unchanged()} className="bg-muted/40 px-3 py-2">
-      <h3 className="mb-1 text-xs font-medium text-muted-foreground">{m.confirm_unchanged()}</h3>
-      <ul className="space-y-0.5 text-muted-foreground">
-        {items.map((item) => (
-          <li key={item} className="flex gap-2">
-            <Lock aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }

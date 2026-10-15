@@ -1,14 +1,14 @@
 import { render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it } from "vitest"
 import { GATE_WORD, type GateState, runPipeline } from "@/domain/derive"
-import { STEP_NAME } from "@/domain/labels"
+import { RUN_STEPS, STEP_NAME } from "@/domain/labels"
 import { createSeed } from "@/domain/seed"
 import { m, say } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { RunStepCatalogue } from "./run-step"
 
-const STEPS = ["select", "review", "calibrate", "prepare", "results", "done"] as const
+const STEPS = RUN_STEPS
 const STATES: GateState[] = ["done", "ready", "review", "blocked", "running", "partial", "idle"]
 
 function load(seed: "demo" | "empty") {

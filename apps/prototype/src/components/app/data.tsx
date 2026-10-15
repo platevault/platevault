@@ -186,7 +186,7 @@ export function FilterChips({ chips, onRemove, onClear, matchLabel, active = chi
           {chip.label}
           <Button
             data-chip-remove
-            size="icon-xs"
+            size="icon-sm"
             variant="ghost"
             aria-label={m.filters_remove({ name: chip.label })}
             onClick={() => {

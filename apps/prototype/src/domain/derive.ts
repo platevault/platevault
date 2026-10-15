@@ -44,7 +44,6 @@ import type {
   MasterId,
   MetadataDecision,
   ProfileId,
-  RunFlowStepId,
   WrapUpStepRecord,
   Disk,
   FrozenGoal,
@@ -562,25 +561,19 @@ export function groupCandidates(catalog: Catalog, group: RunGroup): { byPanel: R
 }
 
 // ---------------------------------------------------------------------------
-// Two-level quality (D-W42)
+// Library quality (P-REJ2: one level, library-wide)
 // ---------------------------------------------------------------------------
 
 export interface FrameQuality {
-  /** First level: library P/X/U, as it applies to the current bytes. */
+  /** Library P/X/U, as it applies to the current bytes. */
   library: "unreviewed" | "usable" | "unusable" | "changed-content" | "verification-pending"
-  /** @deprecated P-REJ2 dropped Project-only rejects: always false. W3 removes the readers (d-review), W4 the field. */
-  projectRejected: false
   trashed: boolean
 }
 
-/** Library quality as it applies to the frame's current bytes. Reject is library-wide (P-REJ2); `project` is unused and goes in W4. */
-export function frameQuality(asset: Asset, _project?: Project | null): FrameQuality {
+/** Library quality as it applies to the frame's current bytes. */
+export function frameQuality(asset: Asset): FrameQuality {
   const applicability = qualityApplicability(asset)
-  return {
-    library: applicability === "applicable" ? asset.quality.value : applicability,
-    projectRejected: false,
-    trashed: asset.trashed !== null,
-  }
+  return { library: applicability === "applicable" ? asset.quality.value : applicability, trashed: asset.trashed !== null }
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,7 +1139,7 @@ export function runOperations(operations: Record<string, Operation>, runId: RunI
 const blocks = (items: GateItem[]) => items.some((i) => i.met === false)
 
 export function runPipeline(world: World, run: Run): RunPipeline {
-  const { catalog, disk, operations } = world
+  const { catalog, disk } = world
   const content = workingContent(run)
   const latest = latestRevision(run)
   const summary = content ? runSummary(disk, catalog, content) : null
@@ -1162,10 +1155,6 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const DASH = verbatim("–")
 
   // 1 Select: the subject's candidates on the run's rig, saved as a revision.
-  // A draft made in Review (frames rejected or restored there) belongs to Review: Select keeps its saved state,
-  // and Review reads "2 rejected, unsaved" with Save run in its footer.
-  const owner = draftOwner(run)
-  const selectSaved = saved || owner === "review"
   const addNew = msg("domain_next_add_new_sessions", { count: refresh.newCandidates.length })
   const selectItems: GateItem[] = [
     {
@@ -1180,14 +1169,8 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     },
     {
       label: msg("domain_gate_membership_saved"),
-      met: owner === "review" ? "advisory" : saved,
-      detail: saved
-        ? msg("domain_gate_revision_saved", { revision: latest!.revision })
-        : owner === "review"
-          ? msg("domain_gate_review_unsaved")
-          : latest
-            ? msg("domain_gate_unsaved_on_revision", { revision: latest.revision })
-            : msg("domain_gate_not_saved_yet"),
+      met: saved,
+      detail: saved ? msg("domain_gate_revision_saved", { revision: latest!.revision }) : latest ? msg("domain_gate_unsaved_on_revision", { revision: latest.revision }) : msg("domain_gate_not_saved_yet"),
     },
   ]
   if (refresh.newCandidates.length > 0) selectItems.push({ label: msg("domain_gate_new_candidates"), met: "advisory", detail: addNew })
@@ -1196,47 +1179,30 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   }
   const select: RunStepState = {
     ...STEP("select"),
-    state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !selectSaved ? "review" : "done",
+    state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !saved ? "review" : "done",
     status:
       selected === 0
         ? msg("run_cal_no_sessions")
         : unresolved > 0
           ? msg("domain_status_unresolved", { count: unresolved })
-          : selectSaved && latest
+          : saved && latest
             ? msg("domain_status_saved_revision", { revision: latest.revision })
             : msg("domain_status_unsaved"),
     items: selectItems,
-    link: link("select", selected > 0 && !selectSaved && !complete ? "save-run" : undefined),
+    link: link("select", selected > 0 && !saved && !complete ? "save-run" : undefined),
     nextLabel:
       selected === 0
         ? msg("domain_next_select_sessions")
         : unresolved > 0
           ? msg("domain_next_resolve_inputs")
-          : !selectSaved
+          : !saved
             ? msg("domain_next_save_run")
             : refresh.newCandidates.length > 0
               ? addNew
               : msg("domain_next_edit_selection"),
   }
 
-  // 2 Review: quality is advisory; measurements inform, never decide. Counts cover the frames Review lists
-  // (included, rejected, excluded and unresolved members), so they match its All / Picked / Rejected / Unreviewed filters.
-  const decision = runReviewCounts(catalog, run)
-  const draftNote = owner === "review" ? reviewDraftNote(run) : null
-  const decided = { done: decision.total - decision.unreviewed, total: decision.total }
-  const review: RunStepState = {
-    ...STEP("review"),
-    state: decision.total === 0 ? "idle" : draftNote ? "review" : decision.unreviewed === 0 ? "done" : "review",
-    status: decision.total === 0 ? DASH : (draftNote ?? msg("setup_stat_complete_value", decided)),
-    items: [
-      ...(draftNote ? [{ label: msg("domain_gate_review_saved"), met: false, detail: msg("domain_gate_review_save_detail", { note: draftNote }) } satisfies GateItem] : []),
-      { label: msg("domain_gate_frames_reviewed"), met: "advisory", detail: decision.total === 0 ? msg("domain_gate_no_frames") : msg("domain_gate_frames_decided", decided) },
-    ],
-    link: link("review", draftNote && !complete ? "review-save" : undefined),
-    nextLabel: draftNote ? msg("domain_next_save_run") : msg("session_review_frames"),
-  }
-
-  // 3 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55). With the
+  // 2 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55). With the
   // policy off compatible masters wait as Suggested and hold nothing back; a drifted accepted input still does.
   const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, savedContent(run) ?? content)
   const off = setup.calibrationPolicy === "off"
@@ -1274,7 +1240,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     nextLabel: msg("domain_next_review_matches"),
   }
 
-  // 4 Prepare: the latest preparation revision of the latest membership revision.
+  // 3 Prepare: the latest preparation revision of the latest membership revision.
   const preparations = runPreparations(catalog, run.id)
   const prep = preparations.at(-1) ?? null
   const prepCurrent = prep && latest && prep.membershipRevision === latest.revision ? prep : null
@@ -1340,7 +1306,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
               : msg("domain_next_review_preparation"),
   }
 
-  // 5 Results: discovered in the recorded Results folder, then accepted or rejected (D-W4).
+  // 4 Results: discovered in the recorded Results folder, then accepted or rejected (D-W4); Finish run is its Proceed.
   const { products } = runResults(catalog, run.id)
   const accepted = products.filter((r) => r.acceptance === "accepted").length
   const rejected = products.filter((r) => r.acceptance === "rejected").length
@@ -1364,32 +1330,13 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     nextLabel: candidates > 0 ? msg("domain_next_accept_results") : msg("domain_next_look_for_results"),
   }
 
-  // 6 Done: Complete, then Clean up (prepared entries only, D-W26).
-  const cleanups = Object.values(operations)
-    .filter((op) => op.kind === "cleanup" && op.scope.runIds?.includes(run.id))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const lastCleanup = cleanups[0]
-  const cleaning = lastCleanup ? unsettled(lastCleanup) : false
-  const cleanedUp = lastCleanup?.status === "succeeded"
-  const done: RunStepState = {
-    ...STEP("done"),
-    state: !complete ? (results.state === "done" ? "ready" : "idle") : cleaning ? "running" : cleanedUp ? "done" : "ready",
-    status: !complete ? msg("status_open") : cleaning ? msg("wrapup_cleaning_up") : cleanedUp ? msg("domain_status_cleaned_up") : msg("domain_status_cleanup_available"),
-    items: [
-      { label: msg("review_run_complete"), met: complete, detail: complete ? msg("domain_gate_cleanup_reviewable") : msg("domain_gate_complete_when_done") },
-      { label: msg("domain_gate_cleanup_reviewed"), met: "advisory", detail: cleanedUp ? (lastCleanup?.summary ?? msg("domain_gate_finished")) : msg("domain_gate_cleanup_lists") },
-    ],
-    link: link("done"),
-    nextLabel: !complete ? msg("project_run_complete") : msg("domain_next_clean_up_run"),
-  }
-
-  const steps = [select, review, calibrate, prepare, results, done]
+  const steps = [select, calibrate, prepare, results]
   const trashed = run.trashedAt !== null
   // A step that has not started (its prerequisites are missing) never captures Next ahead of an earlier open step.
-  // Once Complete, only the Done step (Clean up) can hold Next: earlier gates no longer wait on the user.
+  // Once Complete, no gate waits on the user.
   const blocking = complete ? undefined : steps.find((s) => s.state !== "done" && s.state !== "idle" && blocks(s.items))
-  const open = complete ? (done.state === "done" ? undefined : done) : (blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done"))
-  const current = open ?? done
+  const open = complete ? undefined : (blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done"))
+  const current = open ?? results
   const next: NextAction | null = trashed || !open ? null : stepAction(open)
   const blocker = trashed || complete ? null : runBlocker(prepare.state, needReview, unresolved, prepCurrent?.state === "partial" ? prepCurrent.blocked.length : 0)
   return { runId: run.id, status: trashed ? "trashed" : complete ? "complete" : "open", steps, current, next, blocker, calibration }
@@ -1407,7 +1354,7 @@ function stepAction(step: RunStepState): NextAction {
  * The toolbar's Next while the user is on `here`. A Next on another step stands. A Next on this step that
  * focuses a control (Save run, Prepare…) stands too. Otherwise Next never points at the screen it is on: a step
  * whose gate blocks, or whose own action is still to do (no advisory item to move past), is resolved here, so
- * Next is null (the caption names the gate); an advisory step (Review) moves on to the first later step that is
+ * Next is null (the caption names the gate); an advisory step (Results) moves on to the first later step that is
  * not done; null when nothing later waits.
  */
 export function nextFrom(steps: RunStepState[], next: NextAction | null, here: RunStep | null): NextAction | null {
@@ -1430,17 +1377,6 @@ function draftOwner(run: Run): "select" | "review" | null {
     latest.sessions.map((s) => s.sessionId),
   )
   return sessionsSame && same(d.excluded, latest.excluded) && same(d.unresolved, latest.unresolved) ? "review" : "select"
-}
-
-/** "2 rejected, unsaved": what a Review draft changed against the latest revision. */
-function reviewDraftNote(run: Run): MessageRef | null {
-  const latest = latestRevision(run)
-  if (!run.draft || !latest) return null
-  const rejected = run.draft.rejected.filter((id) => !latest.rejected.includes(id)).length
-  const restored = latest.rejected.filter((id) => !run.draft!.rejected.includes(id)).length
-  if (rejected === 0 && restored === 0) return null
-  const changes = [rejected > 0 ? msg("domain_review_rejected", { count: rejected }) : null, restored > 0 ? msg("domain_review_restored", { count: restored }) : null].filter((c) => c !== null)
-  return msg("domain_review_unsaved", { changes: joinRefs(changes, ", ") })
 }
 
 /** Frames a run's Review lists and how many still have no quality decision (Review's Unreviewed filter). */
@@ -1482,11 +1418,6 @@ export function trashRefusals(world: World, run: Run): MessageRef[] {
 /** Why Complete is refused (RES-FR-07): a running preparation or storage operation affecting the run. */
 export function completeRefusals(world: World, run: Run): MessageRef[] {
   return runOperations(world.operations, run.id).map(operationHolds)
-}
-
-/** Mark Done names each run outside the Trash that is not Complete (PRJ-FR-14). */
-export function markDoneBlockers(catalog: Catalog, project: Project): Run[] {
-  return projectRuns(catalog, project.id).filter((r) => r.completion !== "complete")
 }
 
 // ---------------------------------------------------------------------------
@@ -1566,10 +1497,10 @@ export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
       status: live.length === 0 ? verbatim("–") : msg("domain_panels_done", { done: doneCount, count: live.length }),
       items: states.flatMap((s, i) => s.items.map((item) => ({ ...item, label: joinRefs([panelRef(live[i]!.panel), item.label], ": ") }))),
       link: groupStepLink(group, id),
-      nextLabel: id === "review" ? msg("rungroup_review_all") : id === "prepare" ? msg("domain_next_prepare_all") : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_NAME[id]),
+      nextLabel: id === "prepare" ? msg("domain_next_prepare_all") : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_NAME[id]),
     }
   })
-  const allVerified = live.length > 0 && live.every((p) => p.pipeline.steps[3]!.state === "done")
+  const allVerified = live.length > 0 && live.every((p) => p.pipeline.steps.find((s) => s.id === "prepare")!.state === "done")
   const blocking = steps.find((s) => s.state === "blocked" || s.state === "partial")
   const open = blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done")
   // The reason names the first panel that holds the step back, e.g. "Panel 2: 30 inputs could not be prepared."
@@ -1740,23 +1671,6 @@ export function projectNext(world: World, project: Project, nowMs: number, wrapU
   return { label: msg("domain_next_start_run"), reason: msg("domain_reason_choose_subject_rig"), link: projectLink(project.id, { start: "run" }), step: null }
 }
 
-/**
- * Stage for Home and the Projects list: a held-up run first ("Partial at Prepare", the rail's gate word), else the least advanced open run.
- * @deprecated D10: the StatusBadge (`projectTabs`, `PROJECT_STATUS_NAME`) and Up next (`projectNext`) replace stages; W3 migrates Home and the Projects list, W4 removes this.
- */
-export function projectStage(world: World, project: Project): { label: MessageRef; step: RunStep | null; state: GateState } {
-  if (project.state === "done") return { label: project.archive ? msg("status_archived") : msg("status_done"), step: null, state: "done" }
-  const runs = projectRuns(world.catalog, project.id)
-  if (runs.length === 0) return { label: msg("project_no_runs"), step: null, state: "idle" }
-  const pipelines = runs.map((run) => runPipeline(world, run))
-  const blocked = pipelines.find((p) => p.blocker)
-  const held = blocked?.blocker ? blocked.steps.find((s) => s.id === blocked.blocker!.step) : undefined
-  if (held) return { label: msg("domain_stage_held_at", { gate: GATE_WORD[held.state], step: STEP_NAME[held.id] }), step: held.id, state: held.state }
-  const open = pipelines.filter((p) => p.status === "open").sort((a, b) => a.current.n - b.current.n)[0]
-  if (open) return { label: STEP_NAME[open.current.id], step: open.current.id, state: open.current.state }
-  return { label: msg("wrapup_action"), step: null, state: "ready" }
-}
-
 // ---------------------------------------------------------------------------
 // Wrap up and archive destinations (P-WRAP1, P-ARC1)
 // ---------------------------------------------------------------------------
@@ -1820,23 +1734,6 @@ export function projectWrapUp(catalog: Catalog, project: Project, derived: Parti
     steps,
     current: steps.find((s) => s.state === "todo")?.id ?? null,
   }
-}
-
-export type ProjectStageId = "open" | "runs" | "wrap-up" | "done" | "archived"
-
-/**
- * The Project header's stage strip: Open → Runs → Wrap up → Done (or
- * Archived). Earlier stages read done, the current one current.
- * @deprecated D10: tabs Runs · Wrap up and a StatusBadge (`projectTabs`) replace the strip; P5 migrates the Project page, W4 removes this.
- */
-export function projectStageStrip(catalog: Catalog, project: Project): { current: ProjectStageId; stages: Array<{ id: ProjectStageId; label: MessageRef; state: "done" | "current" | "todo" }> } {
-  const runs = projectRuns(catalog, project.id)
-  const current: ProjectStageId =
-    project.state === "done" ? (project.archive ? "archived" : "done") : runs.length === 0 ? "open" : projectWrapUp(catalog, project).available ? "wrap-up" : "runs"
-  const order: ProjectStageId[] = ["open", "runs", "wrap-up", current === "archived" ? "archived" : "done"]
-  const label: Record<ProjectStageId, MessageRef> = { open: msg("status_open"), runs: msg("common_runs"), "wrap-up": msg("wrapup_action"), done: msg("status_done"), archived: msg("status_archived") }
-  const at = order.indexOf(current)
-  return { current, stages: order.map((id, i) => ({ id, label: label[id], state: i < at ? "done" : i === at ? "current" : "todo" })) }
 }
 
 /** Home's Target status: unmet goals of open Projects and what each channel still needs in project. */
@@ -2066,12 +1963,10 @@ export function reviewLockGate(world: World, sessionId: SessionId): FlowGate | n
 
 // --- Run flow (D1, D5, C2, C10) ---------------------------------------------
 
-export const RUN_FLOW_STEPS: RunFlowStepId[] = ["select", "calibrate", "prepare", "results"]
-
 export interface RunFlowState {
-  steps: Array<DerivedStep<RunFlowStepId>>
+  steps: Array<DerivedStep<RunStep>>
   /** The first step that is not finished; Results once the run is Finished. */
-  current: RunFlowStepId
+  current: RunStep
   /** Set once the run is Finished (C2): every step is read-only and Run ▾ offers Reopen run. */
   finishedAt: IsoDateTime | null
   trashed: boolean
@@ -2100,8 +1995,8 @@ export function runFlowState(world: World, run: Run): RunFlowState {
   const working = workingContent(run)
   const inputsChanged = draftOwner(run) === "review"
   const finishedRun = run.completion === "complete"
-  const link = (step: RunFlowStepId) => runStepLink(run, step)
-  const stepLabel = (step: RunFlowStepId) => STEP_NAME[step]
+  const link = (step: RunStep) => runStepLink(run, step)
+  const stepLabel = (step: RunStep) => STEP_NAME[step]
   const running = runOperations(world.operations, run.id)
 
   // 1 Select
@@ -2179,14 +2074,14 @@ export function runFlowState(world: World, run: Run): RunFlowState {
       : runningGate(running)
   const resultsSummary = finishedRun && run.completedAt ? finishedOn(run.completedAt) : products.length === 0 ? msg("domain_status_awaiting_outputs") : msg("domain_status_accepted_of", { accepted, total: products.length })
 
-  const done: Record<RunFlowStepId, boolean> = finishedRun
+  const done: Record<RunStep, boolean> = finishedRun
     ? { select: true, calibrate: true, prepare: true, results: true }
     : { select: selectDone, calibrate: calibrateDone, prepare: prepareDone, results: false }
-  const settledBefore: Record<RunFlowStepId, boolean> = { select: latest !== null, calibrate: run.calibration.length > 0, prepare: prep !== null, results: false }
-  const gates: Record<RunFlowStepId, FlowGate | null> = { select: selectGate, calibrate: calibrateGate, prepare: prepareGate, results: resultsGate }
-  const summaries: Record<RunFlowStepId, MessageRef | null> = { select: selectSummary, calibrate: calibrateSummary, prepare: prepareSummary, results: resultsSummary }
-  const current = finishedRun ? "results" : RUN_FLOW_STEPS.find((id) => !done[id])!
-  const steps = RUN_FLOW_STEPS.map((id): DerivedStep<RunFlowStepId> => {
+  const settledBefore: Record<RunStep, boolean> = { select: latest !== null, calibrate: run.calibration.length > 0, prepare: prep !== null, results: false }
+  const gates: Record<RunStep, FlowGate | null> = { select: selectGate, calibrate: calibrateGate, prepare: prepareGate, results: resultsGate }
+  const summaries: Record<RunStep, MessageRef | null> = { select: selectSummary, calibrate: calibrateSummary, prepare: prepareSummary, results: resultsSummary }
+  const current = finishedRun ? "results" : RUN_STEPS.find((id) => !done[id])!
+  const steps = RUN_STEPS.map((id): DerivedStep<RunStep> => {
     if (done[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
     const gate = id === current && !run.trashedAt ? gates[id] : null
     return { id, state: openState(id === current, gate, settledBefore[id]), gate, summary: run.trashedAt && id === current ? msg("status_trashed") : summaries[id] }
@@ -2204,9 +2099,9 @@ export interface GroupFlowPanel {
 }
 
 export interface GroupFlowState {
-  steps: Array<DerivedStep<RunFlowStepId>>
+  steps: Array<DerivedStep<RunStep>>
   /** The first step some live panel has not finished; Results once every live panel is Finished. */
-  current: RunFlowStepId
+  current: RunStep
   /** Set once every live panel is Finished: the last panel's finish. Every step is then read-only. */
   finishedAt: IsoDateTime | null
   /** The panels outside the Trash, in panel order: the steps aggregate these and Proceed acts on them (D-W75). */
@@ -2242,10 +2137,10 @@ export function groupFlowState(world: World, group: RunGroup): GroupFlowState {
       return run && panel && !run.trashedAt ? [{ panel, run, flow: runFlowState(world, run) }] : []
     })
     .sort((a, b) => a.panel.n - b.panel.n)
-  const stateOf = (p: GroupFlowPanel, id: RunFlowStepId) => p.flow.steps.find((s) => s.id === id)!
+  const stateOf = (p: GroupFlowPanel, id: RunStep) => p.flow.steps.find((s) => s.id === id)!
   const finishedAt = panels.length > 0 && panels.every((p) => p.flow.finishedAt !== null) ? panels.map((p) => p.flow.finishedAt!).sort().at(-1)! : null
-  const current: RunFlowStepId = finishedAt ? "results" : (RUN_FLOW_STEPS.find((id) => panels.length === 0 || panels.some((p) => !settledState(stateOf(p, id).state))) ?? "results")
-  const summaryOf = (id: RunFlowStepId): MessageRef | null => {
+  const current: RunStep = finishedAt ? "results" : (RUN_STEPS.find((id) => panels.length === 0 || panels.some((p) => !settledState(stateOf(p, id).state))) ?? "results")
+  const summaryOf = (id: RunStep): MessageRef | null => {
     if (finishedAt && id === "results") return finishedOn(finishedAt)
     const parts = panels.flatMap((p) => {
       const summary = stateOf(p, id).summary
@@ -2253,7 +2148,7 @@ export function groupFlowState(world: World, group: RunGroup): GroupFlowState {
     })
     return parts.length > 0 ? joinRefs(parts, " · ") : null
   }
-  const gateOf = (id: RunFlowStepId): FlowGate | null => {
+  const gateOf = (id: RunStep): FlowGate | null => {
     if (panels.length === 0) return { reason: msg("flow_group_no_live_panels"), blockers: [] }
     const held = panels.flatMap((p) => {
       const gate = stateOf(p, id).gate
@@ -2265,7 +2160,7 @@ export function groupFlowState(world: World, group: RunGroup): GroupFlowState {
       blockers: held.map(({ p, gate }) => ({ label: panelNamed(p.panel, gate.reason), link: runStepLink(p.run, id) })),
     }
   }
-  const steps = RUN_FLOW_STEPS.map((id): DerivedStep<RunFlowStepId> => {
+  const steps = RUN_STEPS.map((id): DerivedStep<RunStep> => {
     const summary = summaryOf(id)
     if (finishedAt || (panels.length > 0 && panels.every((p) => settledState(stateOf(p, id).state)))) return { id, state: "finished", gate: null, summary }
     if (id === current) {

@@ -328,27 +328,6 @@ function finished(run: Run, state: PrototypeState, at: IsoDateTime, stage: RunSt
 }
 
 /**
- * Complete (RES-FR-06, RES-FR-07): records completion even with no accepted
- * Result and removes nothing. Refused only while an operation affecting the
- * run is Running. The current step is kept so Reopen returns there, and the
- * run's automatic calibration choices are recorded: a Complete run keeps what
- * it handed off whatever the library holds later.
- * @deprecated C2: Finish run (`finishRun`) is Results' Proceed and checks its
- * gate first. W3 migrates the run pages and W4 removes this.
- */
-export function completeRun(runId: RunId): CommitResult {
-  const state = store.getState()
-  const run = state.catalog.runs[runId]
-  if (!run) return MISSING
-  if (run.trashedAt) return refuse(msg("store_refused", { label: msg("run_complete") }), [msg("store_reason_in_trash", { name: run.name })], runHref(run))
-  const blockers = completeRefusals(state, run)
-  if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_complete_named", { name: run.name }) }), blockers, runHref(run, "done"))
-  const stage = runPipeline(state, run).current.id
-  const at = nowIso()
-  return editRun(runId, msg("run_complete"), (current, s) => finished(current, s, at, stage), { step: "done" })
-}
-
-/**
  * Calibrate's Proceed (§5.4): the automatic choices become the run's
  * recorded assignments, so its masters stay put when a better one appears.
  * Refused until the selection is saved and every row has a master or No

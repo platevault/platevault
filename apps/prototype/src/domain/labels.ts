@@ -9,7 +9,8 @@ import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
 import type { ApplicationProfile, Band, Catalog, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
-export const RUN_STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
+/** The run flow's steps, in order (D1, C2): Results' Proceed is Finish run. */
+export const RUN_STEPS: RunStep[] = ["select", "calibrate", "prepare", "results"]
 
 /**
  * The catalogue's object types (sky.ts) in the reader's language. A type a
@@ -35,14 +36,12 @@ export function objectTypeRef(objectType: string): MessageRef {
   return OBJECT_TYPE_NAME[objectType] ?? verbatim(objectType)
 }
 
-/** A run step's name: Select, Review, Calibrate, Prepare, Results, Done (`stepName` in app/run-ui words it). */
+/** A run step's name: Select, Calibrate, Prepare, Results (`stepName` in app/run-ui words it). */
 export const STEP_NAME: Record<RunStep, MessageRef> = {
   select: msg("step_select"),
-  review: msg("step_review"),
   calibrate: msg("step_calibrate"),
   prepare: msg("step_prepare"),
   results: msg("step_results"),
-  done: msg("step_done"),
 }
 
 /** Run views (P-PREP3): Symlinks, Copies. */

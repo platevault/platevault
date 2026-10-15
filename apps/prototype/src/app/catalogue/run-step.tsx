@@ -10,17 +10,15 @@
 import { useMessages } from "@/app/preferences"
 import { GateLabel, StepGlyph, StepRail, gateWord } from "@/components/app/run-step"
 import { type GateState, type RunStepState, runPipeline } from "@/domain/derive"
-import type { RunStep } from "@/domain/types"
+import { RUN_STEPS } from "@/domain/labels"
 import { msg } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { ComponentSection, Specimen } from "./specimen"
 
 const STATES: GateState[] = ["done", "ready", "review", "blocked", "running", "partial", "idle"]
 
-const STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
-
-/** One step in each gate state; Calibrate carries a status, the others the no-status word. */
-const SAMPLE: RunStepState[] = STEPS.map((id, index) => ({
+/** One step in each of the first gate states; Calibrate carries a status, the others the no-status word. */
+const SAMPLE: RunStepState[] = RUN_STEPS.map((id, index) => ({
   id,
   n: index + 1,
   state: STATES[index % STATES.length]!,

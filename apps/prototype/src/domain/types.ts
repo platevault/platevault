@@ -680,15 +680,8 @@ export interface GoalTemplate {
 // Processing runs (the domain's View: PV-VSEL, D-W3) and measurements (PV-PIX)
 // ---------------------------------------------------------------------------
 
-/**
- * The six steps of the v5 run pipeline (`runPipeline`). Deprecated with it:
- * "review" and "done" go under P-REV2 and C2; the run flow (`runFlow`) uses
- * `RunFlowStepId`. W4 narrows this type.
- */
-export type RunStep = "select" | "review" | "calibrate" | "prepare" | "results" | "done"
-
 /** The four steps of the run flow, in order (D1, C2): Results' Proceed is Finish run, and there is no Review or Done step. */
-export type RunFlowStepId = "select" | "calibrate" | "prepare" | "results"
+export type RunStep = "select" | "calibrate" | "prepare" | "results"
 
 export type SelectionReasonKind =
   /** "Target <subject> on <rig>": the candidate rule (D-W49). */

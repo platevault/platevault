@@ -3,114 +3,40 @@
 // rules): every user-visible string comes from messages/en-GB.json through
 // `m.<key>()` from '@/lib/i18n'. A hardcoded string is an error anywhere
 // under src/ (design/I18N.md). It also enforces the composition rules
-// (eslint-rules/composition.js) as errors on the files of units that
-// finished their migration (`COMPOSITION_ENFORCED`, the W3 ratchet); the
-// rest of src/ reports them through eslint.composition.config.js until W4.
+// (eslint-rules/composition.js; design/R9-COMPOSITION-PLAN.md §8.1-§8.2) as
+// errors over src/ since W4: the L1-L11 syntax rules on src/features and
+// src/app, the I1-I3 layer boundaries on src/components, and each feature
+// area's I4-I6 import boundary. `pnpm lint:composition`
+// (scripts/report-composition-lint.mjs) counts them per rule.
 // Type checking stays with `tsc`.
 import { defineConfig } from "eslint/config"
 import tseslint from "typescript-eslint"
-import { areaImportPatterns, COMPOSITION_SYNTAX } from "./eslint-rules/composition.js"
+import { AREAS, areaImportPatterns, COMPOSITION_SYNTAX } from "./eslint-rules/composition.js"
 import alm from "./eslint-rules/no-user-string.js"
 
 // Outside the gate: only tests and fixtures, which carry assertion and
 // sample literals (design/I18N.md "The gate"). Everything a user can see,
-// the component catalogue, the design-system page and the simulation and
-// Prototype controls included, goes through the catalogue. A genuinely
-// non-user string (proper name, code identifier) takes a per-line
+// the component catalogue, the design-system page and the simulation
+// controls included, goes through the catalogue. A genuinely non-user
+// string (proper name, code identifier) takes a per-line
 // `eslint-disable-next-line alm/no-user-string -- <reason>`.
 export const I18N_IGNORES = ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__fixtures__/**"]
 
 /**
- * Files held to the composition rules as errors, one unit at a time as it
- * lands (R9-COMPOSITION-PLAN.md §7.4): file lists, never a whole directory
- * another unit still shares. `area` gives a feature's I4-I6 import
- * boundary; app-shell files (src/app) take the syntax rules only, as in
- * eslint.composition.config.js.
- * @type {Array<{ unit: string, area: { dir: string, depth: number } | null, files: string[] }>}
+ * §8.1 Exempt from the composition rules: tests and fixtures, plus the review
+ * and dev surfaces (the reference page, the catalogue and the simulation
+ * panel), which show components out of their composed context.
  */
-export const COMPOSITION_ENFORCED = [
-  {
-    unit: "P8 Calibration",
-    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
-    files: ["src/features/v5/e-targets-plan-settings/{calibration,calibration-process,dialogs,calibration-model}.{ts,tsx}"],
-  },
-  {
-    unit: "P7 Targets",
-    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
-    files: ["src/features/v5/e-targets-plan-settings/{targets,target,planned-tools,moon-limits,targets-model,parts,targets-presets}.{ts,tsx}"],
-  },
-  {
-    unit: "P1 Shell",
-    area: null,
-    files: ["src/app/{shell,status-bar,issues-hub,command-palette,onboarding,shortcuts,history,appearance,run-ui}.tsx", "src/app/{navigation,ui-state}.ts"],
-  },
-  {
-    // d-review is P4's alone (R9-COMPOSITION-PLAN.md §7.4), so the whole area is enforced.
-    unit: "P4 Review",
-    area: { dir: "v5/d-review", depth: 0 },
-    files: ["src/features/v5/d-review/**/*.{ts,tsx}"],
-  },
-  {
-    // a-home is shared with P2 (Home), so P3's files are listed.
-    unit: "P3 Sessions",
-    area: { dir: "v5/a-home", depth: 0 },
-    files: ["src/features/v5/a-home/{sessions,session,session-intake,import,import-preview,import-model,import-run,parts,session-model,shell}.{ts,tsx}"],
-  },
-  {
-    // P2's Home in the shared a-home area; with P3's list above every a-home source file is enforced.
-    unit: "P2 Home",
-    area: { dir: "v5/a-home", depth: 0 },
-    files: ["src/features/v5/a-home/home.tsx"],
-  },
-  {
-    // b-projects is P5's alone.
-    unit: "P5 Projects",
-    area: { dir: "v5/b-projects", depth: 0 },
-    files: ["src/features/v5/b-projects/**/*.{ts,tsx}"],
-  },
-  {
-    // c-runs is P6's alone.
-    unit: "P6 Runs",
-    area: { dir: "v5/c-runs", depth: 0 },
-    files: ["src/features/v5/c-runs/**/*.{ts,tsx}"],
-  },
-  {
-    // P11 (with the Language step) owns t1/setup and t1/lib; location-attention.tsx is its shared Locations state badge.
-    unit: "P11 Setup",
-    area: { dir: "t1", depth: 1 },
-    files: ["src/features/t1/setup/**/*.{ts,tsx}", "src/features/t1/lib/**/*.{ts,tsx}", "src/features/t1/components/location-attention.tsx"],
-  },
-  {
-    // e-targets-plan-settings is shared with P7, P8 and P10, so P11's Activity files are listed.
-    unit: "P11 Activity",
-    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
-    files: ["src/features/v5/e-targets-plan-settings/activity{,.test}.tsx"],
-  },
-  {
-    // t1/components holds P9's rebuilt files and P11's location-attention.tsx; the deprecated form-field and row-menu are deleted.
-    unit: "P9 Settings A",
-    area: { dir: "t1", depth: 1 },
-    files: ["src/features/t1/settings/**/*.{ts,tsx}", "src/features/t1/components/{add-location-flow,duplicates-review,location-actions}.tsx"],
-  },
-  {
-    // t4 is P9's alone.
-    unit: "P9 Settings A",
-    area: { dir: "t4", depth: 0 },
-    files: ["src/features/t4/**/*.{ts,tsx}"],
-  },
-  {
-    // e-targets-plan-settings is shared with P7, P8 and P11, so P10's Settings files are listed.
-    unit: "P10 Settings B",
-    area: { dir: "v5/e-targets-plan-settings", depth: 0 },
-    files: ["src/features/v5/e-targets-plan-settings/{settings-equipment,equipment-records,settings-goal-templates,settings-naming}.tsx", "src/features/v5/e-targets-plan-settings/settings-actions{,.test}.ts"],
-  },
-  {
-    // P10 moved the goal editor into components/domain: the syntax rules only, as for src/app.
-    unit: "P10 Settings B",
-    area: null,
-    files: ["src/components/domain/goal-fields.tsx"],
-  },
-]
+export const COMPOSITION_EXEMPT = [...I18N_IGNORES, "src/app/design-system-page.tsx", "src/app/catalogue/**", "src/app/simulation-panel.tsx"]
+
+/**
+ * @param {string[]} files
+ * @param {string[]} group
+ * @param {string} message
+ */
+function layerImports(files, group, message) {
+  return { files, rules: { "no-restricted-imports": ["error", { patterns: [{ group, message }] }] } }
+}
 
 export default defineConfig(
   {
@@ -135,10 +61,25 @@ export default defineConfig(
       "alm/no-js-plural": "error",
     },
   },
-  ...COMPOSITION_ENFORCED.map(({ area, files }) => {
-    /** @type {import("eslint").Linter.RulesRecord} */
-    const rules = { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX] }
-    if (area) rules["no-restricted-imports"] = ["error", { patterns: areaImportPatterns(area) }]
-    return { files, ignores: I18N_IGNORES, rules }
-  }),
+  {
+    files: ["src/features/**/*.{ts,tsx}", "src/app/**/*.{ts,tsx}"],
+    ignores: COMPOSITION_EXEMPT,
+    rules: { "no-restricted-syntax": ["error", ...COMPOSITION_SYNTAX] },
+  },
+  layerImports(
+    ["src/components/ui/**/*.{ts,tsx}"],
+    ["@/components/app/**", "@/components/templates/**", "@/features/**", "@/store/**"],
+    "[I1] components/ui imports no patterns, templates, features or store.",
+  ),
+  layerImports(
+    ["src/components/app/**/*.{ts,tsx}", "src/components/domain/**/*.{ts,tsx}"],
+    ["@base-ui/**", "@/features/**", "@/components/templates/**"],
+    "[I2] Patterns import Base UI through components/ui, and never features or templates.",
+  ),
+  layerImports(["src/components/templates/**/*.{ts,tsx}"], ["@/features/**", "@/store/actions/**"], "[I3] Templates import no features and no store actions."),
+  ...AREAS.map((area) => ({
+    files: [`src/features/${area.dir}/**/*.{ts,tsx}`],
+    ignores: COMPOSITION_EXEMPT,
+    rules: { "no-restricted-imports": ["error", { patterns: areaImportPatterns(area) }] },
+  })),
 )

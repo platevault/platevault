@@ -9,11 +9,12 @@ import { useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { FolderPicker } from "@/components/app/folder-picker"
 import { ChannelCoverage, FilterChips, KeyValueList, PathText, Stat } from "@/components/app/data"
-import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
+import type { Column } from "@/components/app/contracts"
+import { DataTable } from "@/components/app/data-table"
 import { EvidenceList } from "@/components/app/evidence-list"
 import { ActionError, DetailSkeleton, EmptyState, Notice, SaveState, TableSkeleton, UnknownValue } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
-import { PageBody, PageHeader, Section, StepIndicator } from "@/components/app/page"
+import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { STATUS, type StatusKind, StatusBadge, type StatusValue } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -116,64 +117,64 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
     },
     // OBJECT is the FITS header keyword, never translated.
     { id: "object", header: "OBJECT", cell: (s) => s.objectLabel ?? <UnknownValue label={m.palette_session_missing_object()} />, sortValue: (s) => s.objectLabel },
-    { id: "target", header: m.sessions_column_target(), cell: (s) => <StatusBadge kind="association" value={s.target.status} /> },
+    { id: "target", header: m.sessions_column_target(), cell: (s) => <StatusBadge kind="association" value={s.target.status} />, sortValue: (s) => s.target.status },
     // Wide-table sample: the extra columns make the table scroll sideways at 1024px.
     ...(pinned
       ? ([
           { id: "camera", header: m.session_camera(), cell: (s) => s.cameraName ?? <UnknownValue label={m.status_not_set()} />, sortValue: (s) => s.cameraName },
           { id: "telescope", header: m.session_telescope(), cell: (s) => s.telescopeName ?? <UnknownValue label={m.status_not_set()} />, sortValue: (s) => s.telescopeName },
-          { id: "gain", header: m.ds_col_gain_offset(), cell: (s) => `${s.gain ?? "–"} / ${s.offset ?? "–"}`, align: "right" },
-          { id: "binning", header: m.domain_criterion_binning(), cell: (s) => `${s.binning}×${s.binning}`, align: "right" },
-          { id: "equipment", header: m.settings_equipment(), cell: (s) => <StatusBadge kind="association" value={s.equipment.status} /> },
+          { id: "gain", header: m.ds_col_gain_offset(), cell: (s) => `${s.gain ?? "–"} / ${s.offset ?? "–"}`, sortValue: (s) => s.gain, align: "right" },
+          { id: "binning", header: m.domain_criterion_binning(), cell: (s) => `${s.binning}×${s.binning}`, sortValue: (s) => s.binning, align: "right" },
+          { id: "equipment", header: m.settings_equipment(), cell: (s) => <StatusBadge kind="association" value={s.equipment.status} />, sortValue: (s) => s.equipment.status },
         ] satisfies Column<Session>[])
       : []),
   ]
   const [query, setQuery] = useState("")
   const shown = sessions.filter((s) => `${s.channel ?? ""} ${s.objectLabel ?? m.palette_session_missing_object()} ${formatNight(s.night)}`.toLowerCase().includes(query.toLowerCase()))
-  const hidden = selected.filter((id) => !shown.some((s) => s.id === id)).length
+  const toggle = (s: Session) => setSelected(selected.includes(s.id) ? selected.filter((id) => id !== s.id) : [...selected, s.id])
   return (
-    <div className="space-y-2">
-      <TableToolbar search={{ label: m.sessions_filter(), placeholder: m.ds_filter_placeholder(), value: query, onChange: setQuery }} />
-      <DataTable
-        label={m.ds_table_label()}
-        rows={empty ? [] : shown}
-        columns={columns}
-        getRowId={(s) => s.id}
-        loading={loading}
-        initialSort={{ columnId: "night", direction: "asc" }}
-        groups={grouped ? { key: (s) => s.channel ?? m.palette_session_no_filter(), label: (channel, rows) => `${channel} · ${rows.length}` } : undefined}
-        selection={{ selected, onChange: setSelected, rowLabel: (s) => m.ds_row_label({ night: formatNight(s.night), channel: s.channel ?? "" }) }}
-        activeRowId={shown[0]?.id ?? null}
-        empty={
-          <EmptyState
-            icon={Inbox}
-            title={m.ds_empty_title()}
-            description={m.ds_empty_description()}
-            action={
-              <Button size="sm" variant="outline">
-                {m.filters_clear()}
-              </Button>
-            }
-            className="border-0"
-          />
-        }
-        stickyFirstColumn={pinned}
-        contextMenu={(s) => [
-          { heading: selected.length > 1 ? m.status_bar_selected({ count: selected.length }) : `${formatNight(s.night)} ${s.channel ?? ""}` },
-          { label: selected.includes(s.id) ? m.ds_deselect() : m.review_select(), onSelect: () => setSelected(selected.includes(s.id) ? selected.filter((id) => id !== s.id) : [...selected, s.id]) },
-          { separator: true },
-          { label: m.selection_clear(), onSelect: () => setSelected([]), disabled: selected.length === 0 },
-        ]}
-      />
-      <SelectionBar
-        count={selected.length}
-        hiddenByFilters={hidden}
-        label={m.status_bar_selected({ count: selected.length })}
-        onShowSelected={() => setQuery("")}
-        onClear={() => setSelected([])}
-        clearDisabledReason={locked ? m.ds_selection_locked() : undefined}
-      />
-    </div>
+    <DataTable
+      label={m.ds_table_label()}
+      rows={empty ? [] : shown}
+      columns={columns}
+      getRowId={(s) => s.id}
+      loading={loading}
+      initialSort={{ columnId: "night", direction: "asc" }}
+      groups={grouped ? { key: (s) => s.channel ?? m.palette_session_no_filter(), label: (channel, rows) => `${channel} · ${rows.length}` } : undefined}
+      selection={{
+        selected,
+        onChange: setSelected,
+        rowLabel: (s) => m.ds_row_label({ night: formatNight(s.night), channel: s.channel ?? "" }),
+        countLabel: (count) => m.status_bar_selected({ count }),
+        onShowHidden: () => setQuery(""),
+      }}
+      activeRowId={shown[0]?.id ?? null}
+      empty={
+        <EmptyState
+          icon={Inbox}
+          title={m.ds_empty_title()}
+          description={m.ds_empty_description()}
+          action={
+            <Button size="sm" variant="outline">
+              {m.filters_clear()}
+            </Button>
+          }
+          className="border-0"
+        />
+      }
+      stickyFirstColumn={pinned}
+      toolbar={{ search: { label: m.sessions_filter(), placeholder: m.ds_filter_placeholder(), value: query, onChange: setQuery } }}
+      batchActions={() => [
+        {
+          id: "deselect",
+          label: m.ds_deselect(),
+          run: () => setSelected([]),
+          unavailable: locked ? { action: m.actions_blocked({ action: m.ds_deselect() }), reason: m.ds_selection_locked(), blockers: [] } : undefined,
+        },
+      ]}
+      rowLabel={(s) => m.ds_row_label({ night: formatNight(s.night), channel: s.channel ?? "" })}
+      rowActions={(s) => [{ id: "toggle", label: selected.includes(s.id) ? m.ds_deselect() : m.review_select(), run: () => toggle(s) }]}
+    />
   )
 }
 
@@ -258,7 +259,7 @@ export function DesignSystemPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title={m.nav_design_system()} description={m.ds_description()} eyebrow={m.prototype_ds_eyebrow()} />
+      <PageHeader title={m.nav_design_system()} />
       <PageBody className="space-y-6">
         <Section title={m.ds_colour_title()} description={m.ds_colour_description()}>
           <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
@@ -357,7 +358,6 @@ export function DesignSystemPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Button>{m.setup_start_indexing()}</Button>
               <Button variant="outline">{m.location_choose_folder_again()}</Button>
-              <Button variant="secondary">{m.ds_inspect_session()}</Button>
               <Button variant="ghost">{m.selection_show()}</Button>
               <Button variant="destructive">{m.ds_send_files_to_trash({ count: 14 })}</Button>
               <Button variant="link">{m.ds_reveal_location()}</Button>
@@ -494,16 +494,6 @@ export function DesignSystemPage() {
                 onClear={() => setChipIds([])}
                 matchLabel={`${m.ds_matching_sessions({ count: 1 })} · ${m.selection_outside_filters({ count: 3 })}`}
               />
-              <StepIndicator
-                label={m.ds_cleanup_steps()}
-                steps={[
-                  { id: "choose", label: m.ds_cleanup_choose() },
-                  { id: "review", label: m.ds_cleanup_review() },
-                  { id: "trash", label: m.ds_cleanup_trash() },
-                ]}
-                current="review"
-                completed={["choose"]}
-              />
             </div>
           </div>
         </Section>
@@ -538,10 +528,8 @@ export function DesignSystemPage() {
           <ConfirmDialog
             trigger={<Button variant="outline">{m.ds_confirm_trigger()}</Button>}
             title={m.ds_confirm_dialog_title({ count: 208 })}
-            description={m.ds_confirm_dialog_description()}
-            changes={[m.ds_confirm_change_frames({ count: 208 }), m.ds_confirm_change_integration({ target: "NGC 7000", duration: formatDuration(62_400) })]}
-            unchanged={[m.ds_confirm_unchanged_files(), m.ds_confirm_unchanged_views(), m.ds_confirm_unchanged_rejections()]}
-            confirmLabel={m.ds_confirm_label({ count: 208 })}
+            summary={m.ds_confirm_change_integration({ target: "NGC 7000", duration: formatDuration(62_400) })}
+            confirm={{ label: m.ds_confirm_label({ count: 208 }) }}
             onConfirm={() => undefined}
           />
         </Section>

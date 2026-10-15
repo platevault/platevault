@@ -21,8 +21,8 @@ const ROWS: Frame[] = [
 const COLUMNS: Column<Frame>[] = [
   { id: "name", header: "Name", cell: (row) => row.name, sortValue: (row) => row.name, rowHeader: true },
   { id: "size", header: "Size", cell: (row) => row.size, sortValue: (row) => row.size, align: "right" },
-  // `static` wins over a sort value: a thumbnail or an actions column has no order.
-  { id: "preview", header: "Preview", cell: () => null, sortValue: (row) => row.name, static: true },
+  // A thumbnail or an actions column has no order: `static`, never a sort value.
+  { id: "preview", header: "Preview", cell: () => null, static: true },
 ]
 
 const ITEMS: MenuItem[] = [

@@ -272,6 +272,7 @@ export function TargetsPage() {
         {
           id: "window",
           header: m.tonight_window(),
+          static: true,
           cell: (v) => skyCell(v, (sky, c) => (sky.windows.length > 0 ? sky.windows.map((w) => clockRange(w.start, w.end, c.site.timeZone)).join(", ") : noWindow(sky))),
         },
         img,
@@ -279,6 +280,7 @@ export function TargetsPage() {
         {
           id: "moon",
           header: m.tonight_moon(),
+          static: true,
           cell: (v) =>
             skyCell(v, (sky) => {
               const separation = Math.round(sky.lunarDeg)

@@ -20,9 +20,9 @@ import type { PathItem } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { stepEditable } from "@/components/app/step-flow"
 import { StepPage } from "@/components/templates/step-page"
-import { groupStepLink, projectLink, RUN_FLOW_STEPS, runFlowState, runPreparations, runStepLink, trashRefusals } from "@/domain/derive"
-import { profileRef } from "@/domain/labels"
-import type { Run, RunFlowStepId } from "@/domain/types"
+import { groupStepLink, projectLink, runFlowState, runPreparations, runStepLink, trashRefusals } from "@/domain/derive"
+import { profileRef, RUN_STEPS } from "@/domain/labels"
+import type { Run, RunStep } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { runFlow } from "@/store/actions/flows"
@@ -45,11 +45,11 @@ export function RunPage() {
   return <RunScreen ctx={ctx} step={step} />
 }
 
-export function isRunFlowStep(step: string | undefined): step is RunFlowStepId {
-  return RUN_FLOW_STEPS.includes(step as RunFlowStepId)
+export function isRunFlowStep(step: string | undefined): step is RunStep {
+  return RUN_STEPS.includes(step as RunStep)
 }
 
-function RunScreen({ ctx, step }: { ctx: RunContext; step: RunFlowStepId }) {
+function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const [editing, setEditing] = useState(false)

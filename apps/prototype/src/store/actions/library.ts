@@ -16,7 +16,6 @@ import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime
 import { formatCount } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
-import { setProjectRejection } from "./projects"
 import { updateRunDraft } from "./runs"
 import { freshId, MISSING, recordSaved, refuse, refuseWithGate } from "./shared"
 
@@ -78,17 +77,6 @@ function applyToDraft(runId: RunId, assetIds: AssetId[], reject: boolean): Commi
   const touches = reject ? ids.some((id) => memberState(content, id) !== null && memberState(content, id) !== "rejected") : ids.some((id) => content.rejected.includes(id))
   if (!touches) return { ok: true }
   return updateRunDraft(runId, reject ? msg("store_label_rejected_in_review") : msg("store_label_unrejected_in_review"), (c, s) => (reject ? rejectInContent(c, ids) : unrejectInContent(s.disk, s.catalog, c, ids)))
-}
-
-/**
- * @deprecated P-REJ2 dropped "Reject for this Project only": Reject is
- * library-wide (`markFrames` with "unusable"). Refused, writing nothing; W3
- * removes the caller (d-review/marks.ts) and W4 this function.
- */
-export function rejectForProjectOnly(runId: RunId, assetIds: AssetId[], rejected: boolean): CommitResult {
-  const run = store.getState().catalog.runs[runId]
-  if (!run) return MISSING
-  return setProjectRejection(run.projectId, assetIds, rejected)
 }
 
 function correction(session: Session, field: CatalogCorrection["field"], observed: string | null, corrected: string): CatalogCorrection[] {

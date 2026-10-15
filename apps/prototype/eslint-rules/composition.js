@@ -1,11 +1,9 @@
 // @ts-check
 // The composition rules (design/R9-COMPOSITION-PLAN.md §8.1-§8.2) as data:
 // core `no-restricted-syntax` selectors and `no-restricted-imports` patterns.
-// eslint.composition.config.js reports them as warnings over src/; the gate
-// (eslint.config.js) enforces them as errors on the feature files whose unit
-// finished its migration (`COMPOSITION_ENFORCED`), so the count can only fall.
+// The gate (eslint.config.js) enforces them as errors over src/ (W4).
 // Every message starts with its rule id ([L1]…[L11], [I1]…[I6]); the report
-// groups by that id.
+// (scripts/report-composition-lint.mjs) groups by that id.
 
 /** Truncated text is the one place a `title` may stay (§6.2 T2). */
 const TRUNCATES = "/(^|\\s)(truncate|line-clamp-\\d)(\\s|$)/"

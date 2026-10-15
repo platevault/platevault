@@ -1,11 +1,9 @@
 /**
  * Page-level layout primitives (foundation-owned): page header, sections,
- * list + detail, step indicator and the pre-created placeholder page. The
- * page templates (components/templates) build on PageHeader.
+ * list + detail and the pre-created placeholder page. The page templates
+ * (components/templates) build on PageHeader.
  */
-import { Check, ChevronRight } from "lucide-react"
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
-import { useMessages } from "@/app/preferences"
 import { CurrentLink } from "@/components/app/run-step"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import type { StepLink } from "@/domain/derive"
@@ -50,13 +48,6 @@ export interface PageHeaderProps {
   path?: PathItem[]
   /** One short fact beside the title, such as a list's count ("128 sessions"). Never a sentence. */
   summary?: string
-  /**
-   * @deprecated W4 removes it (plan §3.4, §6.1 W1): no description caption
-   * under the title. The title stands alone; a count goes in `summary`.
-   */
-  description?: ReactNode
-  /** @deprecated W4 removes it: pass the parents as `path`. */
-  eyebrow?: ReactNode
   /** Status badges shown beside the title. */
   meta?: ReactNode
   /** Page-level actions; the primary action goes last. Templates pass an ActionBar. */
@@ -80,7 +71,7 @@ export interface PageHeaderProps {
  * and actions never scroll away, and publishes its height as
  * --pane-header-h so focused controls scroll clear of it.
  */
-export function PageHeader({ title, path, summary, description, eyebrow, meta, actions, notice, className, level = 1 }: PageHeaderProps) {
+export function PageHeader({ title, path, summary, meta, actions, notice, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(level === 1 ? title : null)
   const ref = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
@@ -110,21 +101,10 @@ export function PageHeader({ title, path, summary, description, eyebrow, meta, a
       <div className="min-w-0 flex-[1_1_16rem]">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           {path && path.length > 0 ? <HeaderPath path={path} /> : null}
-          {eyebrow ? (
-            <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground [&_a]:hover:text-foreground">
-              {eyebrow}
-              <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
-            </span>
-          ) : null}
           <Heading className={cn("font-semibold text-balance", level === 1 ? "text-xl" : "text-lg")}>{title}</Heading>
           {summary ? <span className="ml-1 text-sm text-muted-foreground tabular-nums">{summary}</span> : null}
           {meta ? <span className="ml-1 flex flex-wrap items-center gap-2">{meta}</span> : null}
         </div>
-        {description ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={typeof description === "string" ? description : undefined}>
-            {description}
-          </p>
-        ) : null}
       </div>
       {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
       {notice ? (
@@ -225,46 +205,5 @@ export function ListDetail({ list, detail, listLabel, className }: ListDetailPro
       </nav>
       <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">{detail}</div>
     </div>
-  )
-}
-
-/** @deprecated Removed in W4 with `StepIndicator`: a flow's steps are `FlowStep`s (components/app/contracts.ts). */
-export interface Step {
-  id: string
-  label: string
-}
-
-/**
- * Progress through a short, ordered flow (onboarding, review → apply).
- * @deprecated Removed in W4: render `StepStrip` and `StepFooter` (components/app/step-flow.tsx) from a `StepFlow` (plan P11).
- */
-export function StepIndicator({ steps, current, completed = [], label }: { steps: Step[]; current: string; completed?: string[]; label: string }) {
-  const m = useMessages()
-  return (
-    <ol aria-label={label} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-      {steps.map((step, index) => {
-        const isCurrent = step.id === current
-        const isDone = completed.includes(step.id)
-        return (
-          <li key={step.id} aria-current={isCurrent ? "step" : undefined} className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex size-6 items-center justify-center rounded-full border text-xs tabular-nums",
-                isCurrent && "border-primary bg-primary text-primary-foreground",
-                isDone && !isCurrent && "border-success text-success",
-                !isCurrent && !isDone && "text-muted-foreground",
-              )}
-            >
-              {isDone && !isCurrent ? <Check aria-hidden="true" className="size-3.5" /> : index + 1}
-            </span>
-            <span className={cn(isCurrent ? "font-medium text-foreground" : "text-muted-foreground")}>
-              {step.label}
-              {isDone && !isCurrent ? <span className="sr-only"> {m.page_step_done()}</span> : null}
-            </span>
-            {index < steps.length - 1 ? <span aria-hidden="true" className="h-px w-6 bg-border" /> : null}
-          </li>
-        )
-      })}
-    </ol>
   )
 }

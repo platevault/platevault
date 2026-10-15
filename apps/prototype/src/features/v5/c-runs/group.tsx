@@ -25,7 +25,7 @@ import { StepPage } from "@/components/templates/step-page"
 import { calibrationPlan, KIND_NAME, KINDS } from "@/domain/calibration"
 import { type FlowStepState, groupCandidates, groupFlowState, groupPipeline, nearestPanel, panelLabel, panelRef, projectLink, type RunFlowState, runFlowState, runPreparations, runResults, runStepLink, workingContent } from "@/domain/derive"
 import { MODE_NAME, profileRef } from "@/domain/labels"
-import type { MosaicPanel, Run, RunFlowStepId, RunGroup } from "@/domain/types"
+import type { MosaicPanel, Run, RunStep, RunGroup } from "@/domain/types"
 import { fileName, formatNight } from "@/lib/format"
 import { joinRefs, type Messages, msg, say, verbatim } from "@/lib/i18n"
 import { groupFlow } from "@/store/actions/flows"
@@ -60,7 +60,7 @@ export function RunGroupPage() {
 }
 
 /** The step's state on a panel: its gate word, with the panel's own summary ("Saved r2", "Partial 24/54"). */
-function PanelStepState({ row, step }: { row: PanelRow; step: RunFlowStepId }) {
+function PanelStepState({ row, step }: { row: PanelRow; step: RunStep }) {
   const m = useMessages()
   if (row.trashed || !row.flow) return <StatusBadge kind="run" value="trashed" />
   const s = row.flow.steps.find((x) => x.id === step)!
@@ -68,7 +68,7 @@ function PanelStepState({ row, step }: { row: PanelRow; step: RunFlowStepId }) {
   return <StatusBadge kind="gate" value={value[s.state]} label={s.summary ? say(m, s.summary) : undefined} />
 }
 
-function panelColumns(m: Messages, step: RunFlowStepId, extra: Column<PanelRow>[]): Column<PanelRow>[] {
+function panelColumns(m: Messages, step: RunStep, extra: Column<PanelRow>[]): Column<PanelRow>[] {
   return [
     { id: "panel", header: m.rungroup_col_panel(), rowHeader: true, cell: (r) => panelLabel(m, r.panel), sortValue: (r) => r.panel.n },
     { id: "run", header: m.rungroup_col_panel_run(), truncate: true, cell: (r) => r.run.name, sortValue: (r) => r.run.name },
@@ -89,7 +89,7 @@ function prepareAllConfirm(m: Messages, group: RunGroup, plans: Array<{ run: Run
   }
 }
 
-function GroupScreen({ group, step }: { group: RunGroup; step: RunFlowStepId }) {
+function GroupScreen({ group, step }: { group: RunGroup; step: RunStep }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
@@ -101,7 +101,7 @@ function GroupScreen({ group, step }: { group: RunGroup; step: RunFlowStepId }) 
   const plans = flowState.panels.filter((p) => p.flow.finishedAt === null).map((p) => ({ run: p.run, panel: p.panel, plan: preparePlan(state, p.run, { groupRevision: revision }) }))
   const flow = groupFlow(state, group, m, { prepare: { confirm: prepareAllConfirm(m, group, plans), start: () => prepareAll(group.id).result } })
   const editable = stepEditable(flow, step)
-  const openPanel = (r: PanelRow, at: RunFlowStepId) => void navigate(r.trashed ? { to: "/projects/$projectId/trash", params: { projectId: group.projectId } } : (runStepLink(r.run, at) as never))
+  const openPanel = (r: PanelRow, at: RunStep) => void navigate(r.trashed ? { to: "/projects/$projectId/trash", params: { projectId: group.projectId } } : (runStepLink(r.run, at) as never))
   const openFolder: Action = { id: "open-folder", label: m.rungroup_open_folder(), icon: FolderOpen, run: () => openGroupFolder(group.id) }
   const path: PathItem[] = [
     { label: m.nav_projects(), link: { to: "/projects" } },

@@ -200,7 +200,7 @@ export function cancelOperation(id: OperationId) {
     // A canceled operation still links to its owning surface in Activity (seam 16).
     const runId = op.scope.runIds?.[0]
     const run = runId ? next.catalog.runs[runId] : undefined
-    const step: Partial<Record<OperationKind, RunStep>> = { measure: "review", "import-measurements": "review", prepare: "prepare", cleanup: "done" }
+    const step: Partial<Record<OperationKind, RunStep>> = { prepare: "prepare", cleanup: "results" }
     const href =
       handler?.href?.(op) ??
       (op.kind === "index"

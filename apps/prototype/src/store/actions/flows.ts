@@ -52,7 +52,7 @@ import {
 } from "@/domain/derive"
 import { fileAt } from "@/domain/disk"
 import { STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
-import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Run, RunFlowStepId, RunGroup, Session, TargetId, WrapUpStepId } from "@/domain/types"
+import type { CalibrationProcess, CalibrationStepId, OperationId, OpticalTrainId, ProfileId, Project, Run, RunStep, RunGroup, Session, TargetId, WrapUpStepId } from "@/domain/types"
 import { fileName } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, store } from "@/store/core"
@@ -130,7 +130,7 @@ function productRows(world: World, run: Run): FileRow[] {
 export function runFlow(world: World, run: Run, m: Messages, host: RunFlowHost): StepFlow {
   const state = runFlowState(world, run)
   const steps = state.steps.map((step) => flowStep(m, step, STEP_NAME[step.id]))
-  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => runStepLink(run, stepId as RunFlowStepId) }
+  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => runStepLink(run, stepId as RunStep) }
   if (state.finishedAt || state.trashed) return { ...base, proceed: null, next: null }
   return { ...base, ...runProceed(world, run, m, host, state) }
 }
@@ -146,7 +146,7 @@ function runProceed(world: World, run: Run, m: Messages, host: RunFlowHost, stat
       return { proceed: proceed(host.prepare.start, host.prepare.confirm ? { confirm: host.prepare.confirm } : {}), next: null }
     case "results": {
       const rows = runViewRows(world, run)
-      const summaryOf = (id: RunFlowStepId) => state.steps.find((s) => s.id === id)?.summary ?? null
+      const summaryOf = (id: RunStep) => state.steps.find((s) => s.id === id)?.summary ?? null
       const summary = joinRefs([summaryOf("results"), summaryOf("calibrate")].filter((s): s is MessageRef => s !== null), " · ")
       const confirm: ConfirmSpec = {
         title: m.stepflow_finish_run_title({ name: run.name }),
@@ -187,7 +187,7 @@ function allPanels(results: CommitResult[]): CommitResult {
 export function groupFlow(world: World, group: RunGroup, m: Messages, host: GroupFlowHost): StepFlow {
   const state = groupFlowState(world, group)
   const steps = state.steps.map((step) => flowStep(m, step, STEP_NAME[step.id]))
-  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => groupStepLink(group, stepId as RunFlowStepId) }
+  const base = { steps, current: state.current, ordered: false, linkFor: (stepId: string) => groupStepLink(group, stepId as RunStep) }
   if (state.finishedAt) return { ...base, proceed: null, next: null }
   return { ...base, ...groupProceed(world, group, m, host, state) }
 }

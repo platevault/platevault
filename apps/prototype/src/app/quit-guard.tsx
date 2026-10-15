@@ -11,7 +11,6 @@ import { useEffect } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import type { Operation, OperationKind } from "@/domain/types"
 import { formatCount } from "@/lib/format"
-import { say } from "@/lib/i18n"
 import { store, useStore } from "@/store/core"
 import { resumeOperation } from "@/store/operations"
 import { useMessages } from "./preferences"
@@ -72,18 +71,17 @@ export function useQuitGuard() {
   }, [running])
 }
 
-/** "Quit while 2 tasks run? They resume next launch." Lists the running work. */
+/** "Quit while 2 tasks run? They resume next launch." */
 export function QuitDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
-  const work = useStore((s) => guardedWork(s.operations))
+  const count = useStore((s) => guardedWork(s.operations).length)
   return (
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={m.shell_quit_title({ count: work.length, n: formatCount(work.length) })}
-      description={m.shell_quit_resume({ count: work.length })}
-      changes={work.map((op) => say(m, op.title))}
-      confirmLabel={m.shell_quit()}
+      title={m.shell_quit_title({ count, n: formatCount(count) })}
+      summary={m.shell_quit_resume({ count })}
+      confirm={{ label: m.shell_quit() }}
       onConfirm={quitPrototype}
     />
   )

@@ -59,7 +59,6 @@ import {
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
-  type RefObject,
   useId,
   useLayoutEffect,
   useMemo,
@@ -77,24 +76,16 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { ActionBar, ActionButton, type ActionRunner, MenuItems, useAction } from "./actions"
-import { ClearableInput } from "./clearable-input"
 import { isColumnHideable, isColumnShown, useColumnChoice } from "./column-choice"
-import type { Action, Column as ColumnContract, MenuItem } from "./contracts"
+import type { Action, Column, MenuItem } from "./contracts"
 import { FilterChips } from "./data"
 import { ActionError } from "./feedback"
 import { DisplayMenu } from "./display-menu"
 import { type FilterBarProps, FilterControls, TOOLBAR_ROW, useFacetChips } from "./filter-bar"
 import { type MenuRow, menuRowAt, openMenuFromKeyboard, RowActions } from "./row-actions"
-import { type MenuEntry, menuContent } from "./row-menu"
 
 /** Controls inside a row that keep their own click; a click on them never runs `onRowClick`. */
 const ROW_CONTROLS = "a[href], button, input, select, textarea, label, summary, [role=button], [role=link], [role=checkbox], [role=switch], [role=combobox], [role=menuitem], [role=option], [contenteditable=true]"
-
-/**
- * @deprecated Import `Column` from `@/components/app/contracts`; W3 moves the
- * imports and W4 removes this alias.
- */
-export type Column<T> = ColumnContract<T>
 
 export interface DataTableSelection<T> {
   selected: string[]
@@ -132,7 +123,7 @@ export interface TableSort {
  * The rows in the order a DataTable with this sort shows them (groups aside): by the column's
  * `sortValue`, nulls last in either direction; unchanged for no sort, a static column or one without a value.
  */
-export function sortRows<T>(rows: T[], columns: readonly ColumnContract<T>[], sort: TableSort | null): T[] {
+export function sortRows<T>(rows: T[], columns: readonly Column<T>[], sort: TableSort | null): T[] {
   const column = sort ? columns.find((c) => c.id === sort.columnId) : undefined
   if (!sort || !column?.sortValue || column.static) return rows
   const factor = sort.direction === "asc" ? 1 : -1
@@ -177,7 +168,7 @@ interface DataTableBaseProps<T> {
   /** Table caption (visually hidden); names the data set. */
   label: string
   rows: T[]
-  columns: ColumnContract<T>[]
+  columns: Column<T>[]
   getRowId: (row: T) => string
   selection?: DataTableSelection<T>
   /** The first sort of an uncontrolled table. */
@@ -213,11 +204,6 @@ interface DataTableBaseProps<T> {
    * backgrounds do not reach the pinned cells.
    */
   stickyFirstColumn?: boolean
-  /**
-   * @deprecated Pass `rowActions`: the row's ⋯ menu and its context menu then
-   * show the same items. W4 removes this prop.
-   */
-  contextMenu?: (row: T) => MenuEntry[] | ReactNode
   /** The row's primary action (open, select): a click outside the row's controls, or Enter on the focused row. */
   onRowClick?: (row: T) => void
   /** The toolbar slot above the table; the batch bar replaces it while rows are selected. */
@@ -292,7 +278,6 @@ export function DataTable<T>({
   scroll = "frame",
   groups,
   stickyFirstColumn = false,
-  contextMenu,
   onRowClick,
   toolbar,
   batchActions,
@@ -459,7 +444,7 @@ export function DataTable<T>({
       : undefined
   const columnPin = selection ? "last" : "only"
 
-  const menuEnabled = rowActions !== undefined || contextMenu !== undefined
+  const menuEnabled = rowActions !== undefined
   // The row under the pointer (or the focused row for Shift+F10) picks the
   // menu's items; outside a row, and in a nested table's rows, the browser's
   // own menu (or the nested table's) stays.
@@ -470,20 +455,19 @@ export function DataTable<T>({
     else setMenuTarget(found)
   }
   const menuRow = menuEnabled && menuTarget !== null ? rows.find((row) => getRowId(row) === menuTarget.key) : undefined
-  const menuItems = menuRow === undefined ? null : rowActions ? <MenuItems items={rowActions(menuRow)} runner={runner} /> : contextMenu ? menuContent(contextMenu(menuRow)) : null
+  const menuItems = menuRow === undefined || !rowActions ? null : <MenuItems items={rowActions(menuRow)} runner={runner} />
   const frameClass = cn(
     // The frame is the scroll container in both axes so the header row
     // stays pinned while long tables scroll inside it. Scroll padding the
     // height of that header keeps a focused row out from under it (WCAG 2.4.11).
     "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
     stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
-    // A shown (deprecated) SelectionBar's height is left free (`--selection-bar-h`), so the bar never covers a row.
-    scroll === "frame" && "max-h-[calc(100dvh-14rem-var(--selection-bar-h,0px))]",
+    scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
     scroll === "fill" && "min-h-0 flex-1",
     className,
   )
 
-  const sortHeader = (column: ColumnContract<T>, active: boolean, direction: "asc" | "desc") => {
+  const sortHeader = (column: Column<T>, active: boolean, direction: "asc" | "desc") => {
     const Arrow = active && direction === "desc" ? ArrowDown : ArrowUp
     return (
       <button
@@ -641,7 +625,7 @@ export function DataTable<T>({
                             <div className="flex min-w-0 items-center gap-1">
                               {canExpand ? (
                                 <Button
-                                  size="icon-xs"
+                                  size="icon-sm"
                                   variant="ghost"
                                   aria-expanded={isExpanded}
                                   aria-controls={isExpanded ? detailId : undefined}
@@ -695,7 +679,7 @@ export function DataTable<T>({
       <ContextMenuTrigger ref={frame} className={frameClass} aria-busy={busy}>
         {table}
       </ContextMenuTrigger>
-      <ContextMenuContent aria-label={menuRow === undefined ? undefined : rowActions ? nameOf(menuRow) : menuTarget?.name}>{menuItems}</ContextMenuContent>
+      <ContextMenuContent aria-label={menuRow === undefined ? undefined : nameOf(menuRow)}>{menuItems}</ContextMenuContent>
     </ContextMenu>
   )
   if (!hasSlot) {
@@ -855,146 +839,6 @@ function BatchBar({
         <X data-icon="inline-start" aria-hidden="true" />
         {m.selection_clear()}
       </Button>
-    </div>
-  )
-}
-
-/**
- * @deprecated Pass `toolbar` to DataTable: its FilterBar controls and actions
- * then sit in the toolbar slot the batch bar swaps with. W4 removes this.
- *
- * Table toolbar: page search (focused by `/`), filter controls and actions,
- * aligned on one row above a DataTable.
- */
-export function TableToolbar({
-  search,
-  filters,
-  actions,
-}: {
-  /** Search input props; the input gets `data-page-search` for the `/` shortcut. */
-  search?: { label: string; placeholder: string; value: string; onChange: (value: string) => void }
-  filters?: ReactNode
-  actions?: ReactNode
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {search ? (
-        <ClearableInput search wrapperClassName="w-64" aria-label={search.label} placeholder={search.placeholder} value={search.value} onValueChange={search.onChange} />
-      ) : null}
-      {filters}
-      <div className="flex-1" />
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-    </div>
-  )
-}
-
-/**
- * Room a shown SelectionBar takes at the bottom of the pane: its height
- * plus its 8 px float and the gap to its table. Table frames shorten by it
- * and the pane's scroll padding (shell `MainArea`) keeps it clear, so no row
- * hides behind the bar and a focused row scrolls into view above it.
- */
-const SELECTION_BAR_VAR = "--selection-bar-h"
-const SELECTION_BAR_CLEARANCE_PX = 16
-
-function useReservedBarHeight(bar: RefObject<HTMLElement | null>, shown: boolean) {
-  useLayoutEffect(() => {
-    const element = bar.current
-    if (!shown || !element) return
-    const root = document.documentElement
-    const apply = () => root.style.setProperty(SELECTION_BAR_VAR, `${element.offsetHeight + SELECTION_BAR_CLEARANCE_PX}px`)
-    apply()
-    const observer = new ResizeObserver(apply)
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty(SELECTION_BAR_VAR)
-    }
-  }, [bar, shown])
-}
-
-/**
- * @deprecated Pass `batchActions` (and `selection.onShowHidden`) to
- * DataTable: its batch bar then replaces the toolbar row in place, at the
- * same height. W4 removes this.
- *
- * Selection summary for multi-select tables (VSEL-FR-06): how many are
- * selected, how many of those are hidden by the current filters, and the
- * bulk actions that apply, with any standing refusal of those actions
- * (`children`) inside the same bar. Render it right after its table and
- * keep it mounted: it takes no room above the rows, so selecting never
- * moves them, and it sticks to the pane's bottom edge while the table runs
- * past it. With nothing selected only an empty live region stays mounted,
- * so the first count is announced too (WCAG 4.1.3).
- */
-export function SelectionBar({
-  count,
-  hiddenByFilters = 0,
-  label,
-  onShowSelected,
-  onClear,
-  clearDisabledReason,
-  actions,
-  children,
-}: {
-  count: number
-  hiddenByFilters?: number
-  /** The count line as one complete message, so the caller's noun agrees in gender and number: `m.project_sessions_selected({ count })`. */
-  label: string
-  onShowSelected?: () => void
-  onClear: () => void
-  /** When set, Clear selection stays focusable but disabled, with this reason beside it. */
-  clearDisabledReason?: string
-  actions?: ReactNode
-  /** Why an action is unavailable for this selection, e.g. a `Refusal`; shown under the actions. */
-  children?: ReactNode
-}) {
-  const m = useMessages()
-  const clearReasonId = useId()
-  const bar = useRef<HTMLDivElement>(null)
-  useReservedBarHeight(bar, count > 0)
-  const live = (
-    <span className={count === 0 ? undefined : "font-medium tabular-nums"} aria-live="polite">
-      {count === 0 ? null : (
-        <>
-          {label}
-          {hiddenByFilters > 0 ? <span className="font-normal text-muted-foreground"> · {m.selection_outside_filters({ count: hiddenByFilters })}</span> : null}
-        </>
-      )}
-    </span>
-  )
-  // Out of the layout flow, so an empty bar adds no gap between its siblings.
-  if (count === 0) return <div className="sr-only">{live}</div>
-  return (
-    <div ref={bar} role="region" aria-label={m.selection_region()} className="sticky bottom-2 z-10 rounded-lg bg-background">
-      <div className="space-y-1.5 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          {live}
-          {onShowSelected ? (
-            <Button size="sm" variant="ghost" onClick={onShowSelected}>
-              {m.selection_show()}
-            </Button>
-          ) : null}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onClear}
-            disabled={clearDisabledReason !== undefined}
-            focusableWhenDisabled
-            aria-describedby={clearDisabledReason !== undefined ? clearReasonId : undefined}
-          >
-            {m.selection_clear()}
-          </Button>
-          {clearDisabledReason !== undefined ? (
-            <span id={clearReasonId} className="text-xs text-muted-foreground">
-              {clearDisabledReason}
-            </span>
-          ) : null}
-          <div className="flex-1" />
-          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-        </div>
-        {children}
-      </div>
     </div>
   )
 }

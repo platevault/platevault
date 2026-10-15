@@ -21,10 +21,6 @@ import { isValidElement } from "react"
 //   inline navigation only.
 // - size: `sm` chrome (headers, toolbars, menus) · `default` dialog footers ·
 //   `xs` inside DataTable cells only · `icon-sm` icon-only (IconButton).
-// - Deprecated, removed in W4: variant `secondary` (a pressed pair becomes a
-//   ToggleGroup, any other use `outline`), sizes `lg` (`default`), `icon`,
-//   `icon-xs` and `icon-lg` (`icon-sm`). The composition lint (L4) reports
-//   each use.
 const buttonVariants = cva(
   "group/button inline-flex cursor-default items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium transition-[background-color,border-color,color,box-shadow,filter] duration-150 outline-none select-none active:not-aria-[haspopup]:brightness-90 disabled:pointer-events-none disabled:opacity-45 data-disabled:pointer-events-none data-disabled:opacity-45 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -34,9 +30,6 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground shadow-[inset_0_1px_0_oklch(1_0_0/0.18),0_1px_1px_oklch(0_0_0/0.18)] hover:bg-[color-mix(in_oklch,var(--primary),white_8%)]",
         outline:
           "border-input/45 bg-background shadow-[0_1px_1px_oklch(0_0_0/0.06)] hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-white/10 dark:bg-white/[0.07] dark:shadow-[inset_0_1px_0_oklch(1_0_0/0.06)] dark:hover:bg-white/[0.12]",
-        /** @deprecated Removed in W4: a pressed pair becomes a ToggleGroup; anything else is `outline`. */
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_6%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-foreground/[0.07] hover:text-foreground aria-expanded:bg-foreground/[0.09] aria-expanded:text-foreground",
         // The one destructive style: a tinted fill with --destructive-foreground text (4.6:1 or better over the fill on every surface).
@@ -47,19 +40,9 @@ const buttonVariants = cva(
       size: {
         default:
           "min-h-7 gap-1.5 px-2.5 py-0.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "min-h-6 gap-1 rounded-md px-2 py-0.5 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "min-h-6 gap-1 rounded-md px-2 py-0.5 text-sm in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        /** @deprecated Removed in W4: use `default`. */
-        lg: "min-h-8 gap-1.5 px-3 py-1 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        /** @deprecated Removed in W4: use `icon-sm` (IconButton). */
-        icon: "size-7 shrink-0",
-        /** @deprecated Removed in W4: use `icon-sm` (IconButton). */
-        "icon-xs":
-          "size-6 shrink-0 rounded-md in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-6 shrink-0 rounded-md in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
-        /** @deprecated Removed in W4: use `icon-sm` (IconButton). */
-        "icon-lg": "size-8 shrink-0",
+        xs: "min-h-6 gap-1 rounded-md px-2 py-0.5 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "min-h-6 gap-1 rounded-md px-2 py-0.5 text-sm has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-sm": "size-6 shrink-0 rounded-md [&_svg:not([class*='size-'])]:size-3.5",
       },
     },
     defaultVariants: {

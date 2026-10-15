@@ -145,15 +145,25 @@ export interface Preset {
   unavailable?: string
 }
 
-/** One DataTable column (P4). */
-export interface Column<T> {
+/** One DataTable column (P4): sortable through `sortValue`, or `static`. */
+export type Column<T> = ColumnBase<T> &
+  (
+    | {
+        /** The column's order: every data column sorts. */
+        sortValue: (row: T) => string | number | null
+        static?: false
+      }
+    | {
+        sortValue?: undefined
+        /** A column with no order (row actions, a thumbnail), so it has no sort button. */
+        static: true
+      }
+  )
+
+interface ColumnBase<T> {
   id: string
   header: string
   cell: (row: T) => ReactNode
-  /** Required unless `static`: a lint warning until W4, then a type error. */
-  sortValue?: (row: T) => string | number | null
-  /** A column with no order (row actions, a thumbnail), so it has no sort button. */
-  static?: boolean
   align?: "left" | "right"
   /** DataTable-internal; features pass none. */
   className?: string

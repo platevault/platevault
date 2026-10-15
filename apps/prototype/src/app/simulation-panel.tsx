@@ -488,14 +488,8 @@ export function SimulationControls() {
           open={confirmSeed !== null}
           onOpenChange={(open) => !open && setConfirmSeed(null)}
           title={confirmSeed === "demo" ? m.setup_demo_confirm_title() : m.simulation_confirm_empty_title()}
-          description={m.simulation_confirm_description()}
-          changes={[
-            confirmSeed === "demo" ? m.simulation_confirm_demo_change({ projects: "Cygnus HOO 2026, M 31 LRGB, Heart and Soul" }) : m.simulation_confirm_empty_change(),
-            m.simulation_confirm_discard(),
-          ]}
-          unchanged={[m.setup_demo_unchanged_appearance(), m.setup_demo_unchanged_files()]}
-          confirmLabel={confirmSeed === "demo" ? m.setup_demo_load() : m.simulation_reset_empty()}
-          tone="destructive"
+          summary={confirmSeed === "demo" ? m.simulation_confirm_demo_change({ projects: "Cygnus HOO 2026, M 31 LRGB, Heart and Soul" }) : m.simulation_confirm_empty_change()}
+          confirm={{ label: confirmSeed === "demo" ? m.setup_demo_load() : m.simulation_reset_empty(), kind: "destructive" }}
           onConfirm={() => {
             if (!confirmSeed) return
             resetPrototype(confirmSeed)
