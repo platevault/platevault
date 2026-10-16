@@ -629,10 +629,16 @@ impl Watched {
     /// watcher is restarted. Every walk starts once its watcher is
     /// registered, so this misses no folder. One created before its parent's
     /// watch was registered is already there when the walk lists the parent,
-    /// and the parent's watch reports one created after it.
+    /// and the parent's watch reports one created after it. So is the
+    /// watcher restarted for a folder the OS refused to watch and that did
+    /// not open as it started, once the walk lists it in full: it may be
+    /// watched now, and until then it holds files no event reports.
     fn counted_from(&mut self, listing: Listing) {
         if let Some(live) = &self.live {
-            self.rescan |= listing.folders.iter().any(|folder| !live.folders.contains(folder));
+            self.rescan |= listing.folders.iter().any(|folder| {
+                !live.folders.contains(folder)
+                    || (live.unlisted.contains(folder) && !listing.unlisted.contains(folder))
+            });
         }
         self.unlisted = listing.unlisted;
         let volume = &self.location.identity.volume;
@@ -692,7 +698,20 @@ impl Watched {
     /// entry found there now. An entry that could not be observed keeps what
     /// was counted at and below it, and the location is walked again, which
     /// finds what is there.
+    ///
+    /// A folder the watcher watches that is no longer a folder at its path
+    /// (removed, or renamed away, out of the location as well) restarts the
+    /// watcher ([`TreeWatch::folders`]): `ReadDirectoryChangesW` watches a
+    /// folder, not its path, so its handle would follow one moved out of the
+    /// location, and the watched folders would name one that is gone. Only a
+    /// watched folder's path does this; a file renamed or removed never
+    /// restarts the watcher.
     fn recheck(&mut self, relative: &Path, entry: Entry) {
+        if matches!(entry, Entry::Frame | Entry::Other)
+            && self.live.as_ref().is_some_and(|live| live.folders.contains(relative))
+        {
+            self.rescan = true;
+        }
         let key = self.identity(relative);
         match entry {
             Entry::Frame => {

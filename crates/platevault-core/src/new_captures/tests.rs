@@ -120,6 +120,10 @@ fn sweeps(observed: &Observed) -> &AtomicUsize {
     &observed.sweeps
 }
 
+fn drains(observed: &Observed) -> &AtomicUsize {
+    &observed.drains
+}
+
 /// Wait until `ticks` more ticks of the kind `counter` counts started and
 /// ended after this call, their counts published. Ticks of every kind run
 /// one after another, so a tick has ended, and its counts are published,
@@ -1364,6 +1368,81 @@ async fn a_root_replaced_by_a_link_is_never_read_through() {
 /// An event the OS watcher would send about `path`.
 fn named(path: PathBuf, kind: ArtifactEventKind) -> ArtifactFileEvent {
     ArtifactFileEvent { path: Utf8PathBuf::from_path_buf(path).unwrap(), kind }
+}
+
+/// Discovery of `library` through `probe`, with no sweep after the start:
+/// only events and walks change the watcher.
+fn probed_without_sweeps(library: &Arc<Library>, probe: &Arc<Probe>) -> CaptureWatch {
+    let settings = Settings { sweep: Duration::from_secs(3600), ..FAST };
+    CaptureWatch::start_with(library, settings, Arc::clone(probe) as Arc<dyn RootProbe>)
+}
+
+/// A watched folder renamed out of the location reaches discovery only as
+/// its old path, as inotify and Windows report it: the watcher starts again,
+/// so no watch follows the folder outside the location. A frame renamed in
+/// place, which reports its old path too, never restarts it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watched_folder_moved_out_of_the_location_restarts_the_watcher() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("night/Ha_001.fits"));
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    let watch = probed_without_sweeps(&fx.library, &probe);
+    count_is(&watch, location.id, 1).await;
+
+    let (old, new) = (root.join("night/Ha_001.fits"), root.join("night/Ha_002.fits"));
+    fs::rename(&old, &new).unwrap();
+    events.try_send(named(old, ArtifactEventKind::Modified)).unwrap();
+    events.try_send(named(new, ArtifactEventKind::Modified)).unwrap();
+    eventually("both paths looked up", || probe.entries.load(Ordering::SeqCst) == 2).await;
+    after(&watch, drains, 1).await;
+    let started = (probe.watches.load(Ordering::SeqCst), walks(&watch));
+    assert_eq!(started, (1, 1), "a frame renamed in place restarted the watcher");
+    assert_eq!(new_files(&watch.counts(), location.id), Some(1));
+
+    fs::rename(root.join("night"), fx.base.join("archive")).unwrap();
+    events.try_send(named(root.join("night"), ArtifactEventKind::Modified)).unwrap();
+    eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) == 2).await;
+    count_is(&watch, location.id, 0).await;
+    assert_eq!(walks(&watch), 2);
+}
+
+/// The OS refused to watch a folder that did not open as the watcher
+/// started, and it opens by the time the walk lists it: the watcher starts
+/// again at once, not at the next sweep, so the count is not published as
+/// live while a listable folder is unwatched. The watchers deliver no
+/// event, so only the walk can tell.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_refused_folder_the_walk_lists_in_full_restarts_the_watcher() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let night = root.join("night");
+    frame(&night.join("Ha_001.fits"));
+    let _unlock = Unlock(&night);
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(fs::read_dir(&night).is_err(), "needs a user file permissions bind, not root");
+    let probe = Arc::new(Probe::default());
+    *probe.refused.lock().unwrap() = Some(night.clone());
+    probe.deaf.store(true, Ordering::SeqCst);
+    let _opens = Opens(&probe.list_gate);
+    probe.list_gate.close();
+    let watch = probed_without_sweeps(&fx.library, &probe);
+
+    // The watcher started with the folder refused and unopened; the walk
+    // waits until it opens.
+    holding(&probe.list_gate).await;
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o755)).unwrap();
+    probe.list_gate.open();
+    eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) == 2).await;
+    // Refused again but listable: counted, not live, retried at each sweep.
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: false }]);
 }
 
 /// The metadata of a folder above a counted frame cannot be read once, as a

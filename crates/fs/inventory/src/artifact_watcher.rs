@@ -162,6 +162,16 @@ pub struct TreeWatch {
     /// started, watched or not. A folder created after its parent was listed
     /// is missing, and nothing reports it: a walk that starts once the watcher
     /// started finds it, and the consumer then restarts the watcher.
+    ///
+    /// A watched folder that is removed or renamed away, out of the watched
+    /// paths as well, is reported as its path only, since nothing is at that
+    /// path any more and no event says it was a folder (inotify and Windows
+    /// name a rename's old path without its kind). The consumer tells it from
+    /// a file by this list and restarts the watcher: `ReadDirectoryChangesW`
+    /// watches the folder itself, so its handle would follow it outside the
+    /// watched paths, and this list would name a folder that is gone. (notify
+    /// drops an inotify watch, with those below it, when the parent's watch
+    /// reports the move.)
     pub folders: Vec<PathBuf>,
     /// The folders of `folders` the OS refused to watch: no event arrives
     /// from them.
