@@ -6707,6 +6707,190 @@
   "catalogue_f4_tree_symlinks": "grupos, duas câmeras, Symlinks (Cygnus HOO 2026)",
   "catalogue_f4_tree_mixed": "hipótese, cópias: darks nas noites, NIGHT_…-2",
   "catalogue_f4_tree_panels": "painéis de mosaico (mosaico IC 5070)",
+  "calibrate_check_title": "Verificação da calibração",
+  "calibrate_mixed_settings_hint": "Provisório: a ordem das partes, a parte da exposição e o ganho dos flats seguem os lights que eles calibram.",
+  "calibrate_problems_of": "Sessões a corrigir em {name}",
+  "calibrate_problems_title": "Sessões a corrigir antes de aplicar",
+  "output_choose_file_first": "Escolha primeiro um arquivo em Processing",
+  "output_copied_from": "Copiado de",
+  "output_kind_channel": "Tipo e canal",
+  "output_kind_channel_title": "Tipo e canal de {name}",
+  "output_name_in_output": "Nome em Output",
+  "output_never_overwrites": "Um arquivo que já está em Output nunca é sobrescrito: escolha outro nome.",
+  "output_no_folder": "Ainda não há pasta do projeto. O primeiro Aplicar cria Output.",
+  "output_saved_at": "Salvo",
+  "output_settled": "Gravado",
+  "output_source_file": "Arquivo em Processing",
+  "output_source_hint": "O seletor abre em Processing e lista arquivos de imagem. A origem fica onde está; a cópia é verificada.",
+  "project_use_copies": "Usar cópias neste projeto",
+  "view_applied_at": "Aplicada em",
+  "view_applied_title": "View no disco",
+  "view_blocker_reassign": "Reatribuir {kind} em {name}",
+  "view_blocker_unsettled": "Resolver a calibração de {name}",
+  "view_changed_copies": "Cópias alteradas por uma ferramenta",
+  "view_changed_copies_hint": "A nova View recebe cópias novas dos originais; estas ficam em View (previous)/ para revisão.",
+  "view_col_corrected": "Corrigido",
+  "view_col_field": "Campo",
+  "view_col_recorded": "No cabeçalho",
+  "view_corrections_configuration": "{name} lê os valores corrigidos da sua configuração. Originais e links nunca são alterados.",
+  "view_corrections_patched": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} quadro recebe uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados.",
+        "countPlural=*": "{n} quadros recebem uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados."
+      }
+    }
+  ],
+  "view_entries": "Entradas",
+  "view_entries_split": "{lights} lights · {calibration} arquivos de calibração",
+  "view_entry_missing": "Ausente",
+  "view_folder_exists": "{path} (já contém arquivos)",
+  "view_folder_new": "{path} (nova)",
+  "view_footprint": "Ocupação",
+  "view_footprint_cloned": "(clonadas)",
+  "view_footprint_copied": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} quadro copiado",
+        "countPlural=*": "{n} quadros copiados"
+      }
+    }
+  ],
+  "view_footprint_linked": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} vinculado",
+        "countPlural=*": "{n} vinculados"
+      }
+    }
+  ],
+  "view_footprint_links_only": "Vinculado · 0 B",
+  "view_footprint_some_cloned": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "({n} clonada)",
+        "countPlural=*": "({n} clonadas)"
+      }
+    }
+  ],
+  "view_free_on": "{size} livres em {volume}",
+  "view_layout_output": "Resultados (Output/)",
+  "view_layout_tool": "Pasta de trabalho do {name}",
+  "view_layout_view": "Pasta View",
+  "view_mode_copy_hint": "Cópias independentes feitas a partir dos originais, clonadas onde o volume permite. Cada uma conta o seu tamanho total.",
+  "view_mode_symlink_hint": "Links para os originais, então a View ocupa 0 B. Nada é copiado.",
+  "view_new_view": "A nova View",
+  "view_no_applications": "Nenhum aplicativo localizado ainda: adicione um em Configurações › Aplicativos.",
+  "view_note_add_view": "Adicione View/ no {name}",
+  "view_note_saspro_two_passes": "O projeto mistura versões de darks com as mesmas configurações: processe em duas passagens no SASpro, uma por versão.",
+  "view_note_siril_links": "Os conjuntos são links simbólicos em qualquer modo de entrada.",
+  "view_note_siril_sets": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Processing/Siril/ contém {n} conjunto, com lights/, flats/, darks/ e biases/ vinculados à View.",
+        "countPlural=*": "Processing/Siril/ contém {n} conjuntos, cada um com lights/, flats/, darks/ e biases/ vinculados à View."
+      }
+    }
+  ],
+  "view_note_wbpp_group": "Use {keyword} como palavra-chave de Pre e Post",
+  "view_note_wbpp_output": "Defina o diretório de saída como {path}",
+  "view_note_wbpp_pre": "Use {keyword} como palavra-chave de Pre",
+  "view_note_wbpp_reference": "Defina a referência de registro como \"auto by {keyword}\"",
+  "view_notes_for": "Notas para {name}",
+  "view_offline": "O volume da pasta do projeto não está conectado",
+  "view_offline_footprint": "A ocupação e o espaço livre aparecem quando ele voltar.",
+  "view_offline_hint": "Nada em View ou View (previous)/ muda até cada original voltar a ficar online.",
+  "view_offline_original": "Original offline",
+  "view_open_entries_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entrada da View difere do seu registro do Aplicar: aplique de novo",
+        "countPlural=*": "{n} entradas da View diferem do seu registro do Aplicar: aplique de novo"
+      }
+    }
+  ],
+  "view_open_launch_fails": "{name} não iniciou: verifique em Configurações › Aplicativos",
+  "view_open_no_application": "Escolha primeiro um aplicativo",
+  "view_open_not_located": "{name} não foi localizado: localize-o em Configurações › Aplicativos",
+  "view_opened_in": "{path} aberta no {name}",
+  "view_phase_building": "Construindo View (building)/ a partir dos originais",
+  "view_phase_swapping": "Trocando pela nova View",
+  "view_phase_verifying": "Verificando cada entrada e o seu original",
+  "view_pin_drift_hint": "A escolha fixada permanece e nada mais é colocado sozinho. Reatribua na sessão ou restaure o arquivo.",
+  "view_previous_empty": "Nada restou em View (previous)",
+  "view_previous_trash_provisional": "Provisório: revisado antes de mover",
+  "view_project_folder": "Pasta do projeto",
+  "view_provisional_copy": "Texto provisório.",
+  "view_refused_developer_mode": "Não é possível aplicar · links simbólicos exigem o Modo de Desenvolvedor do Windows",
+  "view_reveal": "Mostrar a View",
+  "view_reveal_previous": "Mostrar View (previous)",
+  "view_review_previous_first": "Revise primeiro View (previous)",
+  "view_review_previous_hint": "Mantenha cada arquivo, mova-o para a View ou para a Lixeira. Aplicar espera até cada um ser revisado; um arquivo mantido não é perguntado de novo.",
+  "view_sheet_refresh": "Mostrar o mais recente",
+  "view_sheet_stale": "O projeto mudou desde que isto foi aberto",
+  "view_siril_needs_links": "Provisório: os conjuntos do Siril em Processing/Siril/ são links simbólicos em qualquer modo, então Cópias não resolve.",
+  "view_siril_set_counts": "{lights} lights · {flats} flats · {darks} darks · {biases} biases",
+  "view_tree_of": "Nova View de {name}",
+  "view_use_copies_provisional": "Provisório: Usar cópias neste projeto troca o modo como uma alteração pendente.",
+  "view_waiting_hint": "Aplicar continua sozinho quando o arquivo for liberado. Cancelar mantém a View atual.",
+  "view_your_tool": "sua ferramenta",
+  "wrapup_cleanup_hint": "As cópias vêm marcadas e vão para a Lixeira do sistema; os links ficam, a menos que você os marque. O que View (previous)/ ainda contém também vem marcado (provisório). Output nunca é oferecido.",
+  "wrapup_close_for_good": "Fechar o projeto é definitivo",
+  "wrapup_close_for_good_hint": "Um projeto fechado não pode ser reaberto, editado nem aplicado de novo. A View fica e ainda abre; Duplicar continua o trabalho.",
+  "wrapup_trash_hint": "Quadros inutilizáveis, arquivos em Processing e cópias duplicadas, cada um com os seus arquivos exatos. Output nunca é oferecido.",
+  "view_edit_settings": "Editar as configurações da View",
+  "calibrate_layout_title": "Nomes das pastas",
+  "calibrate_mixed_parts": "Configurações mistas nos nomes das pastas",
+  "apply_refused_no_symlinks": "{name} não aceita links simbólicos: escolha outro local de processamento",
+  "view_choose_location_provisional": "Provisório: escolha outro local de processamento em Editar as configurações da View. Nenhuma junção ou layout copiado é tentado no lugar.",
   "project_pending_with_source": "{change} ({source})",
   "project_pending_added": "Adicionada",
   "project_pending_moved": "Movida de {group}",

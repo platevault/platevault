@@ -745,12 +745,10 @@ function buildView(catalog: Catalog, disk: Disk, settings: AppSettings, built: P
   const plan = viewPlan(world, built)
   let next = createFolder(createFolder(disk, { volumeId: A, path: paths.processing }), { volumeId: A, path: paths.output })
   const entries: ViewEntry[] = []
-  const copies = new Map<string, DiskFile>()
   for (const planned of plan.entries) {
-    const placed = placeEntry(next, planned, paths.view, built.settings.mode, at, copies.get(planned.originalPath) ?? null)
+    const placed = placeEntry(next, planned, paths.view, built.settings.mode, at)
     if (!placed.ok) throw new Error(`Demo seed: ${built.name} cannot place ${planned.path}`)
     next = writeFiles(next, [placed.file])
-    if (placed.entry.copySha256 !== null && !copies.has(planned.originalPath)) copies.set(planned.originalPath, placed.file)
     entries.push(placed.entry)
   }
   return { disk: next, project: { ...built, folderPath: paths.root, view: appliedViewFor(world, built, paths.view, entries, plan.layout, at, `op_apply_${built.id}`) } }

@@ -161,7 +161,7 @@ export function deriveIssues(world: World, _nowMs: number = Date.now() + world.f
     }
     const waiting = project.view ? pendingChanges(world, project).length > 0 : project.inputs.length > 0
     if (waiting) {
-      const refused = applyPlan(world, project).refusals.filter((r) => r.kind === "pin-drift" || r.kind === "offline" || r.kind === "unsettled" || r.kind === "space" || r.kind === "developer-mode")
+      const refused = applyPlan(world, project).refusals.filter((r) => r.kind === "pin-drift" || r.kind === "offline" || r.kind === "unsettled" || r.kind === "space" || r.kind === "developer-mode" || r.kind === "no-symlinks")
       if (refused.length > 0) {
         out.push({ id: `project:apply:${project.id}`, group: "projects", kind: "apply-refused", severity: refused.some((r) => r.kind === "pin-drift") ? "danger" : "warning", count: refused.length, name: project.name, about: project.id, owner, link: projectTabLink(project.id, "view") })
       }

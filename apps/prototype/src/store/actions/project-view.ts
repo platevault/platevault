@@ -40,10 +40,13 @@ import {
   processingMasters,
   type ProjectPaths,
   projectPaths,
+  SIRIL_TOOL,
+  type SirilSet,
+  toolFolder,
   unreviewedLeftovers,
   viewDrift,
 } from "@/domain/project-view"
-import type { DiskFile, InputMode, Operation, OperationId, OutputKind, PreviousLeftover, Project, ProjectId, ViewEntry, ViewLayout } from "@/domain/types"
+import type { DiskFile, InputMode, Operation, OperationId, OutputKind, PreviousLeftover, Project, ProjectId, ViewEntry, ViewLayout, VolumeId } from "@/domain/types"
 import { fileName, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
@@ -84,8 +87,8 @@ interface ApplyPayload {
   /** How many planned entries were placed so far, in order. */
   next: number
   placed: ViewEntry[]
-  /** The first copy this build wrote of each original, for hard links (provisional). */
-  firstCopies: Record<string, string>
+  /** Siril's working sets to link into `Processing/Siril/` after the swap (PREP-FR-17, provisional); null for another application. */
+  siril: SirilSet[] | null
   ticked: string[]
 }
 
@@ -147,7 +150,7 @@ export function startApply(projectId: ProjectId, sheet: ApplySheet): { result: C
   const kept = previousKeptRefusal(state, project, sheet.tickedUnplaced)
   if (kept) reasons.push(kept)
   if (reasons.length > 0 || !plan.paths) return { result: refuse(title, reasons.length > 0 ? reasons : [msg("apply_refused_no_folder")], viewHref(projectId)), operationId: null }
-  const payload: ApplyPayload = { projectId, phase: "building", mode: plan.mode, paths: plan.paths, layout: plan.plan.layout, planned: plan.plan.entries, next: 0, placed: [], firstCopies: {}, ticked: [...sheet.tickedUnplaced] }
+  const payload: ApplyPayload = { projectId, phase: "building", mode: plan.mode, paths: plan.paths, layout: plan.plan.layout, planned: plan.plan.entries, next: 0, placed: [], siril: plan.siril, ticked: [...sheet.tickedUnplaced] }
   let operationId: OperationId | null = null
   const result = commit(
     label,
@@ -192,15 +195,12 @@ function build(state: PrototypeState, op: Operation, payload: ApplyPayload): Pro
   let disk = state.disk
   const at = nowIso()
   const placed = [...payload.placed]
-  const firstCopies = { ...payload.firstCopies }
   const done = new Map<string, MessageRef>()
   let next = payload.next
   for (const planned of payload.planned.slice(payload.next, payload.next + BUILD_BATCH)) {
-    const same = firstCopies[planned.originalPath] ? (fileAt(disk, firstCopies[planned.originalPath]!) ?? null) : null
-    const result = placeEntry(disk, planned, payload.paths.building, payload.mode, at, same)
-    if (!result.ok) return failApply({ ...state, disk }, op, { ...payload, placed, firstCopies, next }, result.reason, planned.path)
+    const result = placeEntry(disk, planned, payload.paths.building, payload.mode, at)
+    if (!result.ok) return failApply({ ...state, disk }, op, { ...payload, placed, next }, result.reason, planned.path)
     disk = writeFiles(disk, [result.file])
-    if (result.entry.copySha256 !== null && !firstCopies[planned.originalPath]) firstCopies[planned.originalPath] = result.file.path
     placed.push(result.entry)
     done.set(planned.path, result.entry.copySha256 === null ? msg("op_apply_linked") : msg("op_apply_copied"))
     next += 1
@@ -209,7 +209,7 @@ function build(state: PrototypeState, op: Operation, payload: ApplyPayload): Pro
   return patchOperation({ ...state, disk }, op.id, {
     items: op.items.map((item) => (done.has(item.id) ? { ...item, status: "done", phase: "written", detail: done.get(item.id)! } : item)),
     progress: { ...op.progress, done: next },
-    payload: { ...payload, phase, next, placed, firstCopies } as unknown as Record<string, unknown>,
+    payload: { ...payload, phase, next, placed } as unknown as Record<string, unknown>,
   })
 }
 
@@ -228,6 +228,25 @@ function verify(state: PrototypeState, op: Operation, payload: ApplyPayload): Pr
     payload: { ...payload, phase } as unknown as Record<string, unknown>,
   })
   return phase === "swapping" ? swap(next, next.operations[op.id]!, { ...payload, phase }) : next
+}
+
+/**
+ * Siril's working sets after the swap (PREP-FR-17, provisional): the links
+ * an earlier Apply placed in `Processing/Siril/` go, and each set's
+ * `lights/`, `flats/`, `darks/` and `biases/` link the new View's entries.
+ * Anything else there (Siril's own `process/`) stays.
+ */
+function linkSirilSets(disk: PrototypeState["disk"], volumeId: VolumeId, paths: ProjectPaths, sets: SirilSet[], at: string): PrototypeState["disk"] {
+  const root = toolFolder(paths, SIRIL_TOOL)
+  let next = disk
+  for (const file of filesUnder(next, root)) if (file.linkTarget && isUnder(file.linkTarget, paths.view)) next = removeFile(next, file.volumeId, file.path)
+  const links = sets.flatMap((set) =>
+    set.links.map((link) => {
+      const target = `${paths.view}/${link.target}`
+      return makeFile({ path: `${root}/${set.name}/${link.folder}/${link.name}`, volumeId, sizeBytes: 0, kind: fileAt(next, target)?.kind ?? "fits", linkTarget: target, modifiedAt: at })
+    }),
+  )
+  return writeFiles(next, links)
 }
 
 /** The swap (PREP-FR-06, D-W110): the new View in, the old one cleared into `View (previous)/`, the applied state recorded. */
@@ -264,6 +283,7 @@ function swap(state: PrototypeState, op: Operation, payload: ApplyPayload): Prot
   }
   const volumeId = volumeForPath(disk, paths.root)
   if (volumeId) for (const folder of [paths.view, paths.processing, paths.output]) disk = { ...disk, folders: disk.folders.some((f) => f.volumeId === volumeId && f.path === folder) ? disk.folders : [...disk.folders, { volumeId, path: folder }] }
+  if (volumeId && payload.siril) disk = linkSirilSets(disk, volumeId, paths, payload.siril, at)
   const kept = project.previous?.leftovers.filter((l) => l.kept) ?? []
   const leftovers: PreviousLeftover[] = [...kept, ...[...survivors, ...clashes].map((l) => ({ ...l, kept: false }))]
   const previous = leftovers.length > 0 ? { folderPath: paths.previous, at, leftovers } : null
