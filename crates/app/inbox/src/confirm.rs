@@ -164,6 +164,28 @@ pub async fn confirm(
         )
     })?;
 
+    // bd astro-plan-3pvvc: a master row an earlier scan stored under the old
+    // backslash text, whose path names a frame that is not a master, would
+    // plan that other frame. The scan retires such a row unless a plan links
+    // it, and the link can go away later (cancel, discard, a failed apply), so
+    // check again here, at the step that plans.
+    if item.is_master_item != 0
+        && crate::legacy_rows::retire_stale_master(pool, &item.id)
+            .await
+            .map_err(|e| db_internal_ctx(e, "retire stale old-text master"))?
+    {
+        return Err(ContractError::new(
+            ErrorCode::InboxItemNotFound,
+            format!(
+                "InboxItem {} was stored under an old path that names a different frame; \
+                 it has been removed",
+                req.inbox_item_id
+            ),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
     // Master metadata carry-to-apply (spec 041 US4/T031): the calibration
     // master fields (`is_master_item`, `master_frame_type`, `master_exposure_s`,
     // `master_filter`) already live on the `inbox_items` row. We deliberately do

@@ -20,6 +20,16 @@
 //! deleted: still `pending_classification` or `classified`, with no plan
 //! linking them; a folder is kept whole when any of its items is not.
 //!
+//! A master row with a plan link survives the scan, but the plan can still be
+//! discarded or fail later, which removes the link and returns the row to
+//! unconfirmed with no scan in between. [`retire_stale_master`] closes that
+//! gap: `confirm` calls it before planning, so such a row is deleted rather
+//! than confirmed again. Its verdict comes from the database alone: the scan
+//! stored the row's current text beside it, and classify found that the old
+//! path names a frame that is not a master. Checking at the one step that
+//! plans covers every way a link goes away (cancel, discard, a failed apply,
+//! the startup repair sweep) and does not race the plan listener.
+//!
 //! On Windows the wire text never contains `\`, so nothing is ever found.
 #![allow(clippy::doc_markdown)]
 
@@ -31,7 +41,7 @@ use fs_pathsafe::is_link_or_junction_metadata;
 
 use persistence_core::DbResult;
 use persistence_inbox::repositories::inbox as repo;
-use sqlx::SqliteConnection;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::scan::ScannedInboxItem;
 
@@ -99,6 +109,23 @@ pub async fn retire(conn: &mut SqliteConnection, root_id: &str, rows: &LegacyRow
         repo::delete_unconfirmed_folder_rows_conn(conn, root_id, folder).await?;
     }
     Ok(())
+}
+
+/// Delete the master item `inbox_item_id` when it is an unconfirmed old-text
+/// row whose path names a frame that is not a master, as
+/// `delete_stale_old_text_master_conn` decides. Returns whether it was
+/// deleted. Always `false` on Windows.
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on connection failure.
+pub async fn retire_stale_master(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<bool> {
+    if cfg!(windows) {
+        return Ok(false);
+    }
+    let mut tx = pool.begin().await?;
+    let retired = repo::delete_stale_old_text_master_conn(&mut tx, inbox_item_id).await?;
+    tx.commit().await?;
+    Ok(retired)
 }
 
 /// The text the old `wire_path` stored for `text`, when it differs.

@@ -302,6 +302,54 @@ pub async fn delete_unconfirmed_master_rows_conn(
     super::source_groups::delete_unreferenced_groups_at_conn(conn, root_id, relative_path).await
 }
 
+/// Delete the master item `inbox_item_id` when the database shows it is a row
+/// an earlier scan stored under the old backslash text, and that its path now
+/// names a frame that is not a master. Returns whether it was deleted.
+///
+/// All of these must hold:
+/// - it is an unconfirmed master item: `pending_classification` or
+///   `classified`, with no plan linking it;
+/// - another master row of the same root has this row's path with some `/`
+///   written as `\`: the row a later scan stored under the file's own text;
+/// - it has evidence, and none of that evidence is a master. Classify read the
+///   file at this row's path and found a frame that is not a master.
+///
+/// Its children and the source groups left at its path go as in
+/// [`delete_unconfirmed_master_rows_conn`].
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on connection failure.
+pub async fn delete_stale_old_text_master_conn(
+    conn: &mut SqliteConnection,
+    inbox_item_id: &str,
+) -> DbResult<bool> {
+    let deleted: Option<(String, String)> = sqlx::query_as(
+        "DELETE FROM inbox_items
+         WHERE id = ?1 AND is_master_item = 1
+           AND state IN ('pending_classification', 'classified')
+           AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)
+           AND EXISTS (
+               SELECT 1 FROM inbox_items newer
+               WHERE newer.root_id = inbox_items.root_id
+                 AND newer.is_master_item = 1
+                 AND newer.relative_path <> inbox_items.relative_path
+                 AND replace(newer.relative_path, '\\', '/') = inbox_items.relative_path)
+           AND EXISTS (
+               SELECT 1 FROM inbox_classification_evidence ev WHERE ev.inbox_item_id = ?1)
+           AND NOT EXISTS (
+               SELECT 1 FROM inbox_classification_evidence ev
+               WHERE ev.inbox_item_id = ?1 AND ev.is_master <> 0)
+         RETURNING root_id, relative_path",
+    )
+    .bind(inbox_item_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((root_id, relative_path)) = deleted else { return Ok(false) };
+    super::source_groups::delete_unreferenced_groups_at_conn(conn, &root_id, &relative_path)
+        .await?;
+    Ok(true)
+}
+
 /// List all single-type sub-items belonging to a source group, ordered by
 /// `group_key` for deterministic display (spec 041 T066).
 ///

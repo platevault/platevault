@@ -32,12 +32,12 @@ pub use classification::{
     UpsertClassification, UpsertClassificationRow,
 };
 pub use items::{
-    delete_sub_item_if_unlinked_conn, delete_unconfirmed_master_rows_conn, get_inbox_item,
-    get_source_group_id_for_item, insert_inbox_item, list_inbox_sub_items,
-    list_inbox_sub_items_conn, list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed,
-    update_inbox_item_scan_conn, update_inbox_item_state, update_inbox_item_state_conn,
-    upsert_inbox_sub_item, upsert_inbox_sub_item_conn, InboxItemRow, InsertInboxItem,
-    UpsertInboxSubItem,
+    delete_stale_old_text_master_conn, delete_sub_item_if_unlinked_conn,
+    delete_unconfirmed_master_rows_conn, get_inbox_item, get_source_group_id_for_item,
+    insert_inbox_item, list_inbox_sub_items, list_inbox_sub_items_conn,
+    list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed, update_inbox_item_scan_conn,
+    update_inbox_item_state, update_inbox_item_state_conn, upsert_inbox_sub_item,
+    upsert_inbox_sub_item_conn, InboxItemRow, InsertInboxItem, UpsertInboxSubItem,
 };
 pub use metadata::{
     delete_breakdown_for_item_conn, delete_breakdown_for_items, delete_file_metadata_for_item_conn,

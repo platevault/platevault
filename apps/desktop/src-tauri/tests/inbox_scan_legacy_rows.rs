@@ -14,6 +14,10 @@
 
 use std::path::Path;
 
+use app_core::inbox::confirm::{confirm, ConfirmRequest};
+use app_core::inbox_plan::cancel_inbox_plan;
+use audit::bus::EventBus;
+use contracts_core::error_code::ErrorCode;
 use contracts_core::inbox::InboxScanFolderRequest;
 use desktop_shell::commands::inbox::inbox_scan_folder;
 use persistence_core::Database;
@@ -246,4 +250,122 @@ async fn scan_retires_old_backslash_rows_with_their_children_and_keeps_linked_on
         .await
         .unwrap();
     assert_eq!(overrides, 1, "no override is orphaned");
+}
+
+/// Run `inbox.scan.folder` on `root` as `root-1`.
+async fn scan(pool: &SqlitePool, root: &Path) {
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("build mock app");
+    app.manage(pool.clone());
+    let req = InboxScanFolderRequest {
+        root_id: "root-1".to_owned(),
+        root_absolute_path: root.to_str().unwrap().to_owned(),
+    };
+    inbox_scan_folder(req, app.state::<SqlitePool>()).await.expect("scan succeeds");
+}
+
+/// A plan made before the update from the old master row `a/b.fits` keeps
+/// that row through the scan. Cancelling the plan removes the link and returns
+/// the row to unconfirmed with no scan in between. Confirming the row again
+/// must not plan the light frame at `a/b.fits` a second time: the row is
+/// removed instead.
+#[tokio::test]
+async fn an_old_master_kept_for_its_plan_is_not_planned_again_after_cancel() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(root, "a\\b.fits", "DARK", Some(30));
+    write_fits(&root.join("a"), "b.fits", "LIGHT", None);
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    // The inbox, a light-frames library to plan into, and patterns that need
+    // no header attributes.
+    for (id, kind) in [("root-1", "inbox"), ("dest-1", "light_frames")] {
+        sqlx::query(
+            "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+             VALUES (?, ?, ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+        )
+        .bind(id)
+        .bind(root.to_str().unwrap())
+        .bind(kind)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (key, value) in [
+        ("pattern", r#"[{"id":"p0","kind":"token","value":"frame_type"}]"#),
+        ("patternsByType", r#"{"light":"lights/"}"#),
+    ] {
+        sqlx::query(
+            "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, '2026-01-01T00:00:00Z')",
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    // The old master row, classified before the update on the light frame
+    // that sits at `a/b.fits`.
+    repo::insert_inbox_item(
+        &pool,
+        &repo::InsertInboxItem {
+            id: "old-master",
+            root_id: "root-1",
+            relative_path: "a/b.fits",
+            file_count: 1,
+            content_signature: Some("sig-old"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE inbox_items SET is_master_item = 1, frame_type = 'light' WHERE id = 'old-master'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_classified(&pool, "old-master", "a/b.fits").await;
+
+    let bus = EventBus::with_pool(pool.clone());
+    let confirm_old = || {
+        let req = ConfirmRequest {
+            inbox_item_id: "old-master".to_owned(),
+            content_signature: "sig-old".to_owned(),
+            destructive_destination: None,
+            root_absolute_path: root.to_path_buf(),
+            root_id: None,
+            chosen_attribution: None,
+        };
+        confirm(&pool, &bus, req)
+    };
+    confirm_old().await.expect("the plan made before the update");
+
+    scan(&pool, root).await;
+    let state: String = sqlx::query_scalar("SELECT state FROM inbox_items WHERE id = 'old-master'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(state, "plan_open", "the scan keeps the old row while its plan is open");
+
+    cancel_inbox_plan(&pool, &bus, "old-master").await.expect("cancel the old plan");
+    let err = confirm_old().await.expect_err("the old row must not be planned again");
+    assert_eq!(err.code, ErrorCode::InboxItemNotFound);
+
+    let strings = |sql: &'static str| {
+        let pool = pool.clone();
+        async move { sqlx::query_scalar::<_, String>(sql).fetch_all(&pool).await.unwrap() }
+    };
+    assert_eq!(
+        strings("SELECT relative_path FROM inbox_items ORDER BY relative_path").await,
+        ["a\\b.fits"],
+        "the old row is gone; the master's own row stays"
+    );
+    assert_eq!(strings("SELECT state FROM plans").await, ["discarded"], "no second plan was made");
+    let links: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM inbox_plan_links").fetch_one(&pool).await.unwrap();
+    assert_eq!(links, 0);
 }
