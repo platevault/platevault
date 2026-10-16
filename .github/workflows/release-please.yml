@@ -631,12 +631,12 @@ jobs:
           $nsisPlugin = 'NSIS plugin: third-party code extracted and loaded while setup runs; not installed'
           $wixAction = 'WiX custom action: third-party code msiexec runs while installing; not installed'
           $thirdParty = [ordered]@{
-            'nsis/$PLUGINSDIR/nsDialogs.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_NS_DIALOGS' }
-            'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_NSIS_TAURI_UTILS' }
-            'nsis/$PLUGINSDIR/NSISdl.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_NSISDL' }
-            'nsis/$PLUGINSDIR/StartMenu.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_STARTMENU' }
-            'nsis/$PLUGINSDIR/System.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_SYSTEM' }
-            'msi-streams/Binary.WixUIWixca' = @{ reason = $wixAction; signer = 'WiX Toolset (.NET Foundation)' }
+            'nsis/$PLUGINSDIR/nsDialogs.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2; NSIS 3.11; nsis_tauri_utils 0.5.3; rehearsal run 38963983864'; sha256 = 'B1350F487692057C8FFDE75DCC55287A52A3272240D4D4912F24464B27551FC0' }
+            'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2; NSIS 3.11; nsis_tauri_utils 0.5.3; rehearsal run 38963983864'; sha256 = '5BA143B5DB4A87D32D6E7802E033330AAE56CBCEABE0D1E3BA41948385AD4709' }
+            'nsis/$PLUGINSDIR/NSISdl.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2; NSIS 3.11; nsis_tauri_utils 0.5.3; rehearsal run 38963983864'; sha256 = 'DDF40229DD9D6B268902D8DEA88C8A04AACF1AF218DD29F6DCD35BABC54AC08D' }
+            'nsis/$PLUGINSDIR/StartMenu.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2; NSIS 3.11; nsis_tauri_utils 0.5.3; rehearsal run 38963983864'; sha256 = 'FE330320459637D8DD2B5D84D07925C38EC264152FFD3B1760A4D44D76536CAA' }
+            'nsis/$PLUGINSDIR/System.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2; NSIS 3.11; nsis_tauri_utils 0.5.3; rehearsal run 38963983864'; sha256 = '8B4C47C4CF5E76EC57DD5A050D5ACD832A0D532EE875D7B44F6CDAF68F90D37C' }
+            'msi-streams/Binary.WixUIWixca' = @{ reason = $wixAction; signer = 'WiX Toolset (.NET Foundation)'; issuer = '.NET Foundation Projects Code Signing CA2' }
           }
 
           function Test-PortableExecutable([string] $path) {
@@ -675,15 +675,16 @@ jobs:
                   if ($actualHash -cne $identity.sha256) {
                     $problems += "$relative SHA-256 $actualHash did not match the reviewed pin $($identity.sha256)"
                   } else {
-                    "third-party: $relative ($($identity.reason)); SHA-256 $actualHash matches pin"
+                    "third-party: $relative ($($identity.reason)); SHA-256 $actualHash matches pin; $($identity.source)"
                   }
                 } else {
                   $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
                   $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
-                  if ($signature.Status -ne 'Valid' -or $signer -cne $identity.signer) {
-                    $problems += "$relative must carry a valid Authenticode signature by $($identity.signer); found $($signature.Status), '$signer'"
+                  $issuer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $true) } else { 'nobody' }
+                  if ($signature.Status -ne 'Valid' -or $signer -cne $identity.signer -or $issuer -cne $identity.issuer) {
+                    $problems += "$relative must carry a valid Authenticode signature by $($identity.signer) issued by $($identity.issuer); found $($signature.Status), '$signer' issued by '$issuer'"
                   } else {
-                    "third-party: $relative ($($identity.reason)); Authenticode $($signature.Status), signed by $signer"
+                    "third-party: $relative ($($identity.reason)); Authenticode $($signature.Status), signed by $signer, issued by $issuer"
                   }
                 }
               } else {

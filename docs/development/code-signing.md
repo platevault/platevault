@@ -118,20 +118,24 @@ the `build` job):
    the six named third-party files: the five NSIS plugins (`nsDialogs`,
    `nsis_tauri_utils`, `NSISdl`, `StartMenu`, `System`) pinned to SHA-256, and
    WiX's `WixUIWixca` custom action required to have a valid Authenticode
-   signature from `WiX Toolset` issued by `.NET Foundation`. This signed-publisher
-   check remains useful across WiX payload and certificate-renewal updates,
-   unlike pinning its bytes. The five NSIS plugins are unsigned, so their exact
-   hashes are the identity evidence. The reviewed pins and source are Tauri CLI
-   2.12.2's bundled NSIS/WiX payloads; the rehearsal run IDs and observed hashes
-   are recorded with the pins in the workflow. Refresh those hashes only after
-   reviewing a tool update and its new binaries. An update that changes a hash
-   fails until its replacement is explicitly reviewed. SignPath Foundation
-   signs only files built from this repository, so these third-party files keep
-   their own identity evidence. A bin target, sidecar or resource added later
-   fails the leg until it is signed or listed. So does a list entry neither
-   installer carries any more, and an unpacked tree (the NSIS files, the
-   `msiexec /a` files or the MSI's streams) with no PE file in it, which would
-   mean the unpacking failed quietly.
+   signature from `WiX Toolset (.NET Foundation)`, issued by
+   `.NET Foundation Projects Code Signing CA2`. Both certificate names come
+   from the valid Authenticode signature on the WiX payload observed in
+   rehearsal run 38963983864. Checking the named publisher and issuer survives
+   WiX payload and certificate renewals, unlike pinning its bytes. The five
+   NSIS plugins are unsigned, so their exact hashes are the identity evidence.
+   Their pins were read from Tauri CLI 2.12.2's bundle in Windows rehearsal run
+   38963983864 (NSIS 3.11, `nsis_tauri_utils` 0.5.3); hashes and provenance are
+   recorded beside the map entries in `release-please.yml`. Refresh a pin only
+   after reviewing the tool update and new binaries; mismatches fail closed.
+   Tauri CLI 2.12.2 bundles WiX 3.14.1 (`wix314-binaries.zip`); its
+   `WixUIWixca` signature supplies the publisher and issuer checked above.
+   SignPath Foundation signs only files built from this repository, so these
+   third-party files retain their own identity evidence. A bin target, sidecar
+   or resource added later fails the leg until signed or listed. So does a list
+   entry neither installer carries, and an unpacked tree (NSIS files,
+   `msiexec /a` files or MSI streams) with no PE file, which indicates failed
+   extraction.
 7. It signs each installer with minisign (`tauri signer sign --app-version`,
    the bundler's key), attests the signed installers, and uploads them and
    their `.sig` files to the GitHub Release.
@@ -327,9 +331,9 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
      (never merge it). It builds the Windows installers, substitutes a
      runner-trusted throwaway certificate and updater key for the release
      secrets, invokes the signed-installer check, emits third-party file hashes
-     and runs mutated copies for the CLI-version, NSIS-hash and WiX-issuer
-     failures. Delete the scratch branch and workflow after recording the
-     passing and negative run IDs. Never use the release signing key.
+     and mutates the CLI lockfile, an NSIS pin, the WiX publisher and issuer to
+     verify their distinct failures. Record the passing and negative run IDs.
+     Never use the release signing key.
 
 ## macOS signing (state and path)
 
