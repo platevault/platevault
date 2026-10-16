@@ -28,6 +28,9 @@
 // Branches 3 and 4 skip values holding a time (200ms, 0.2s): those are
 // animation or transition values, where a colour word is a name, and no
 // colour-bearing CSS value contains a time.
+// url() is matched heuristically, by its opening `url(`: an asset name
+// inside it is skipped, but colour text inside a data: URL counts as a
+// colour, since an inline SVG fill is still a raw colour in the style.
 language js
 
 or {
