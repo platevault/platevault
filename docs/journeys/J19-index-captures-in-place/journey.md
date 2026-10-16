@@ -200,10 +200,10 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S15 — Take Cold-1 offline {#S15}
 
-- **Do:** Eject `Cold-1`. Read the status bar, then open Settings › Locations.
-- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
+- **Do:** Eject `Cold-1`. Read the status bar, open its ⚠ counter and choose `Settings › Locations · 1` in its menu.
+- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens a menu naming `Sessions · <n>` and `Settings › Locations · 1`. n counts the session warnings: 4 for the sessions still in Needs calibration after S10a (12, 24 and 28 Sep and the other-camera session), plus any Needs a Target warnings that G11 leaves open. `Settings › Locations · 1` opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
 - **Expect (negative):** No 12 Sep frame reads Missing and the session is not removed.
-- **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07 · LIB-AC-05 · D11 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
+- **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07, LIB-FR-17 · LIB-AC-05 · 063 FR-032 · D11, D-W92 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
 
 ## Success criteria
 
