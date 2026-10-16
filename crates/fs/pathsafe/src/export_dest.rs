@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Validation and atomic write for a webview-supplied export destination.
+//! Validation and no-replace write for a webview-supplied export destination.
 //!
 //! Constitution II ("MUST never overwrite silently") makes an existing
 //! destination a rejection, not a replacement.
@@ -10,13 +10,15 @@
 //! of the caller's string can move the write outside the directory that was
 //! canonicalized and checked. The temporary file is created inside that same
 //! directory with `create_new`, which refuses to follow a symlink planted after
-//! validation; a symlink planted at the final path after validation is replaced
-//! by `rename` rather than written through.
+//! validation. The final step itself refuses a taken name, so a file,
+//! directory or symlink that appears at the destination after validation is
+//! kept as it is, however late it appears.
 
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+
+use tempfile::NamedTempFile;
 
 /// Why an export destination is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,11 +118,6 @@ impl From<io::Error> for ExportWriteError {
     }
 }
 
-/// Counter that keeps two concurrent exports in one directory off the same
-/// temporary name; `create_new` is what makes a collision an error rather than
-/// a silent share.
-static TEMP_SEQ: AtomicU32 = AtomicU32::new(0);
-
 impl ExportDestination {
     /// The validated write target.
     #[must_use]
@@ -129,52 +126,159 @@ impl ExportDestination {
     }
 
     /// Write through a temporary file inside the validated directory, then
-    /// rename it onto the destination. Returns the byte count written.
+    /// move it onto the destination without replacing anything there.
+    /// Returns the byte count written.
     ///
-    /// The temporary file is removed when `write` fails.
+    /// The final step is [`NamedTempFile::persist_noclobber`], which fails
+    /// when an entry holds the destination name at that moment: a no-replace
+    /// rename (Linux `renameat2` with `RENAME_NOREPLACE`, macOS
+    /// `renameatx_np` with `RENAME_EXCL`, Windows `MoveFileExW` without
+    /// `MOVEFILE_REPLACE_EXISTING`), or a hard link followed by removing the
+    /// temporary name where the volume rejects that rename. A Unix volume
+    /// with neither (exFAT on macOS, some FUSE mounts) gets the destination
+    /// claimed with `create_new` and the bytes copied in: still never a
+    /// replacement, but the copy is visible while it is written.
+    ///
+    /// The temporary file is removed on every path, a panic in `write`
+    /// included.
     ///
     /// # Errors
     /// Returns [`ExportWriteError::Rejected`] with
-    /// [`DestinationRejected::AlreadyExists`] when the destination appeared
-    /// after validation, and [`ExportWriteError::Io`] for filesystem and
-    /// serialisation failures.
+    /// [`DestinationRejected::AlreadyExists`] when an entry took the
+    /// destination name after validation, and [`ExportWriteError::Io`] for
+    /// filesystem and serialisation failures.
     pub fn write_atomically<W>(&self, write: W) -> Result<u64, ExportWriteError>
     where
         W: FnOnce(&mut File) -> io::Result<()>,
     {
-        let (temp_path, mut file) = self.create_temp()?;
+        self.write_then_install(write, |_| {})
+    }
 
-        if let Err(e) = write(&mut file).and_then(|()| file.sync_all()) {
-            drop(file);
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(ExportWriteError::Io(e));
-        }
-        let bytes = file.metadata().map_or(0, |m| m.len());
-        drop(file);
-
-        if self.final_path.symlink_metadata().is_ok() {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(DestinationRejected::AlreadyExists.into());
-        }
-        if let Err(e) = std::fs::rename(&temp_path, &self.final_path) {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(ExportWriteError::Io(e));
-        }
+    /// [`Self::write_atomically`] with `before_install` run between the synced
+    /// write and the final step, the last window in which a concurrent process
+    /// can take the destination name; tests race the final step through it.
+    fn write_then_install<W, B>(&self, write: W, before_install: B) -> Result<u64, ExportWriteError>
+    where
+        W: FnOnce(&mut File) -> io::Result<()>,
+        B: FnOnce(&Path),
+    {
+        let mut temp = self.create_temp()?;
+        write(temp.as_file_mut()).and_then(|()| temp.as_file().sync_all())?;
+        let bytes = temp.as_file().metadata().map_or(0, |m| m.len());
+        before_install(&self.final_path);
+        install(temp, &self.final_path)?;
         Ok(bytes)
     }
 
-    fn create_temp(&self) -> io::Result<(PathBuf, File)> {
-        let pid = std::process::id();
-        let mut last = None;
-        for _ in 0..8 {
-            let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
-            let candidate = self.dir.join(format!(".export-{pid}-{seq}.tmp"));
-            match File::options().write(true).create_new(true).open(&candidate) {
-                Ok(file) => return Ok((candidate, file)),
-                Err(e) => last = Some(e),
-            }
+    /// `create_new` under a random name: a name taken by a concurrent export
+    /// or a planted symlink is skipped, never shared or followed.
+    fn create_temp(&self) -> io::Result<NamedTempFile> {
+        let mut builder = tempfile::Builder::new();
+        builder.prefix(".export-").suffix(".tmp");
+        // tempfile defaults to 0o600; 0o666 leaves the mode to the umask, as
+        // `File::create` does.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            builder.permissions(std::fs::Permissions::from_mode(0o666));
         }
-        Err(last.unwrap_or_else(|| io::Error::other("no temporary file name available")))
+        builder.tempfile_in(&self.dir)
+    }
+}
+
+/// Moves `temp` onto `final_path` unless an entry holds that name at that
+/// moment.
+#[cfg(unix)]
+fn install(temp: NamedTempFile, final_path: &Path) -> Result<(), ExportWriteError> {
+    let temp_path = temp.path().to_path_buf();
+    match temp.persist_noclobber(final_path) {
+        Ok(installed) => {
+            // The hard-link route ignores a failed removal of the temporary
+            // name, which would stay behind as a second link to the export.
+            remove_if_names(&temp_path, &installed);
+            Ok(())
+        }
+        Err(mut failed) if lacks_no_replace_primitives(&failed.error) => {
+            copy_into_new(failed.file.as_file_mut(), final_path)
+        }
+        Err(failed) => Err(refusal_or_io(failed.error, final_path)),
+    }
+}
+
+/// Moves `temp` onto `final_path` unless an entry holds that name at that
+/// moment. `MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` works on every
+/// Windows volume, FAT32 and exFAT included, and leaves no second name.
+#[cfg(not(unix))]
+fn install(temp: NamedTempFile, final_path: &Path) -> Result<(), ExportWriteError> {
+    match temp.persist_noclobber(final_path) {
+        Ok(_) => Ok(()),
+        Err(failed) => Err(refusal_or_io(failed.error, final_path)),
+    }
+}
+
+/// The error that reports a taken name differs between platforms and between
+/// the kinds of entry holding it, so any failure while the name is taken is
+/// the existing-destination refusal.
+fn refusal_or_io(error: io::Error, final_path: &Path) -> ExportWriteError {
+    if error.kind() == io::ErrorKind::AlreadyExists || final_path.symlink_metadata().is_ok() {
+        DestinationRejected::AlreadyExists.into()
+    } else {
+        error.into()
+    }
+}
+
+/// Whether `persist_noclobber` failed because the volume offers neither a
+/// no-replace rename nor hard links. It reports the hard link's error after a
+/// rename the volume rejects as `EINVAL`, and the rename's error otherwise:
+/// macOS exFAT answers `RENAME_EXCL` with `ENOTSUP`, Linux reports a volume
+/// without hard links as `EPERM`, and a FUSE server lacking either operation
+/// answers `ENOSYS`.
+#[cfg(unix)]
+fn lacks_no_replace_primitives(error: &io::Error) -> bool {
+    use rustix::io::Errno;
+
+    Errno::from_io_error(error).is_some_and(|errno| {
+        [Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS, Errno::PERM].contains(&errno)
+    })
+}
+
+/// Claims `final_path` with `create_new`, which fails on any entry already
+/// there, and copies the synced temporary file into it.
+///
+/// Only for a Unix volume that offers neither a no-replace rename nor hard
+/// links: nothing at the name is ever replaced, but unlike a rename a reader
+/// can see the copy while it is written. A copy that fails part-way is removed
+/// while the name still holds it.
+#[cfg(unix)]
+fn copy_into_new(temp: &mut File, final_path: &Path) -> Result<(), ExportWriteError> {
+    use std::io::{Seek, SeekFrom};
+
+    let mut out = File::options()
+        .write(true)
+        .create_new(true)
+        .open(final_path)
+        .map_err(|e| refusal_or_io(e, final_path))?;
+    let copied = temp
+        .seek(SeekFrom::Start(0))
+        .and_then(|_| io::copy(temp, &mut out))
+        .and_then(|_| out.sync_all());
+    if let Err(e) = copied {
+        remove_if_names(final_path, &out);
+        return Err(e.into());
+    }
+    Ok(())
+}
+
+/// Removes `path` only while it still names `file`, so an entry another
+/// process put at that name is left alone.
+#[cfg(unix)]
+fn remove_if_names(path: &Path, file: &File) {
+    use std::os::unix::fs::MetadataExt;
+
+    if let (Ok(named), Ok(held)) = (path.symlink_metadata(), file.metadata()) {
+        if (named.dev(), named.ino()) == (held.dev(), held.ino()) {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -344,13 +448,67 @@ mod tests {
                 std::fs::write(&dest, b"raced").expect("racing writer");
                 f.write_all(b"export")
             })
-            .expect_err("rename refused");
+            .expect_err("final step refused");
 
         assert!(
             matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
             "{err:?}"
         );
         assert_eq!(std::fs::read(&dest).expect("read"), b"raced");
+    }
+
+    /// Creates the destination after every check and immediately before the
+    /// final step, the last moment a concurrent process can take the name. A
+    /// check followed by `rename` replaces the entry here.
+    #[test]
+    fn a_destination_created_just_before_the_final_step_is_kept_byte_identical() {
+        let (_guard, dir) = tempdir();
+        let dest = dir.join("out.json");
+        let validated = validate_export_destination(&dest).expect("valid");
+        let planted: &[u8] = b"written by another process\x00\xff";
+
+        let err = validated
+            .write_then_install(
+                |f| f.write_all(b"export"),
+                |final_path| std::fs::write(final_path, planted).expect("racing writer"),
+            )
+            .expect_err("final step refused");
+
+        assert!(
+            matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
+            "{err:?}"
+        );
+        assert_eq!(std::fs::read(&dest).expect("read"), planted);
+        let left: Vec<PathBuf> =
+            std::fs::read_dir(&dir).expect("read dir").map(|e| e.expect("entry").path()).collect();
+        assert_eq!(left, [dest], "the temporary file is removed");
+    }
+
+    /// A symlink planted at that moment is refused as well: neither replaced
+    /// nor written through.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_created_just_before_the_final_step_is_kept() {
+        let (_guard, dir) = tempdir();
+        let (_outside_guard, outside_dir) = tempdir();
+        let outside = outside_dir.join("outside.json");
+        std::fs::write(&outside, b"outside").expect("seed outside");
+        let dest = dir.join("out.json");
+        let validated = validate_export_destination(&dest).expect("valid");
+
+        let err = validated
+            .write_then_install(
+                |f| f.write_all(b"export"),
+                |final_path| std::os::unix::fs::symlink(&outside, final_path).expect("plant"),
+            )
+            .expect_err("final step refused");
+
+        assert!(
+            matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
+            "{err:?}"
+        );
+        assert_eq!(std::fs::read_link(&dest).expect("still the planted symlink"), outside);
+        assert_eq!(std::fs::read(&outside).expect("read"), b"outside");
     }
 
     #[cfg(unix)]
@@ -383,9 +541,9 @@ mod tests {
         assert!(real.join("out.json").exists());
     }
 
-    /// `create_temp` relies on `create_new` refusing a name already taken by a
-    /// symlink. Naming the temporary path this test occupies would depend on
-    /// [`TEMP_SEQ`], which other tests share whenever they run in one process.
+    /// `create_temp` and the copy fallback rely on `create_new` refusing a name
+    /// already taken by a symlink. The temporary name is random, so this test
+    /// plants a name of its own.
     #[cfg(unix)]
     #[test]
     fn create_new_refuses_a_symlink_instead_of_writing_through_it() {
@@ -404,6 +562,29 @@ mod tests {
 
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
         assert_eq!(std::fs::read(&outside).expect("read"), b"outside");
+    }
+
+    /// The fallback for a volume with neither a no-replace rename nor hard
+    /// links, exercised on whatever volume the temp dir is on.
+    #[cfg(unix)]
+    #[test]
+    fn the_copy_fallback_fills_a_free_name_and_never_replaces_a_taken_one() {
+        let (_guard, dir) = tempdir();
+        let mut temp = tempfile::tempfile_in(&dir).expect("temp");
+        temp.write_all(b"export").expect("write temp");
+
+        let free = dir.join("free.json");
+        copy_into_new(&mut temp, &free).expect("copy into a free name");
+        assert_eq!(std::fs::read(&free).expect("read"), b"export");
+
+        let taken = dir.join("taken.json");
+        std::fs::write(&taken, b"user data").expect("seed");
+        let err = copy_into_new(&mut temp, &taken).expect_err("taken name refused");
+        assert!(
+            matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
+            "{err:?}"
+        );
+        assert_eq!(std::fs::read(&taken).expect("read"), b"user data");
     }
 
     #[cfg(windows)]
