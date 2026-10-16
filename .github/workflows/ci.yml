@@ -846,15 +846,21 @@ jobs:
   # on every crate its scenarios measure, so the closure contains `perf-bench`
   # whenever a change can move a measured count; the trigger follows
   # perf-bench's own dependency graph, not a hand-kept crate list.
-  # The gate also runs when the script cannot scope the change: the `ALL`
-  # sentinel (a rust-relevant file outside every member, e.g. the root
-  # Cargo.toml) and the empty result of an active Rust lane whose files map to
-  # no member: Cargo.lock, justfile, scripts/** (which holds the baseline and
-  # this check), this workflow, assets/seed/**, and any path the `decide`
-  # step's unclassified-path catch-all routes into both lanes. Those are the
-  # two cases the Rust tests step also treats as "run everything".
-  # Skipped when the closure stops short of perf-bench (a desktop_shell- or
-  # e2e_tests-only change); the job-level `if:` already skips non-Rust PRs.
+  # The gate also runs when the change carries a path the crate closure cannot
+  # see, checked independently of the closure so that a co-changed crate
+  # outside perf-bench's graph cannot mask it:
+  #   - the `ALL` sentinel (a rust-relevant file outside every member, e.g.
+  #     the root Cargo.toml);
+  #   - any Rust-lane driver ci-affected-crates.sh ignores: Cargo.lock,
+  #     justfile, scripts/** (which holds the baseline and this check), this
+  #     workflow, and assets/seed/** (embedded with include_bytes!). The list
+  #     mirrors force_full_shared, force_full_rust and the seed entry of the
+  #     `rust` filter in the `changes` job; keep the two in step;
+  #   - an empty closure on an active Rust lane, which is what the `decide`
+  #     step's unclassified-path catch-all produces.
+  # Skipped when none of those holds and the closure stops short of perf-bench
+  # (a desktop_shell- or e2e_tests-only change); the job-level `if:` already
+  # skips non-Rust PRs.
   #
   # Linux-only: the sqlx_stmts counter is deterministic so the result is
   # OS-agnostic; running on one platform avoids redundant compilation on all 3.
@@ -876,11 +882,18 @@ jobs:
           CHANGED_FILES: ${{ needs.changes.outputs.all_files }}
         run: |
           set -euo pipefail
-          args=$(printf '%s' "$CHANGED_FILES" | tr ',' '\n' | bash scripts/ci-affected-crates.sh)
+          files=$(printf '%s' "$CHANGED_FILES" | tr ',' '\n')
+          args=$(printf '%s\n' "$files" | bash scripts/ci-affected-crates.sh)
           scoped=$(printf '%s' "$args" | tr -d '[:space:]')
+          unscoped=$(printf '%s\n' "$files" \
+            | grep -E '^(Cargo\.lock|justfile|scripts/.+|\.github/workflows/ci\.yml|assets/seed/.+)$' || true)
           if [ "$scoped" = "ALL" ] || [ -z "$scoped" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Change is not scoped to workspace members — running perf gate."
+          elif [ -n "$unscoped" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Change touches a path the crate closure cannot see — running perf gate:"
+            printf '%s\n' "$unscoped" | sed 's/^/  /'
           elif printf '%s\n' "$args" | grep -qE '(^| )-p perf-bench( |$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "perf-bench is in the affected closure — running perf gate."

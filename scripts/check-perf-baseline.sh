@@ -40,12 +40,14 @@
 #
 # CI gate (.github/workflows/ci.yml `perf-gate`): runs when the reverse-
 # dependency closure from ci-affected-crates.sh contains perf-bench, i.e. when
-# a change touches any crate a scenario measures, and whenever that script
-# cannot scope the change (`ALL`, or the empty result of a force_full trigger
-# such as Cargo.lock or scripts/**). The trigger follows perf-bench's own
-# dependencies, so a new scenario on a new crate is gated once perf-bench
-# depends on that crate (astro-plan-3tek; before it, a hand-kept inbox/
-# fs_inventory list left the reconcile and plan-apply budgets unenforced).
+# a change touches any crate a scenario measures. It also runs, regardless of
+# the closure, when the change includes a path that script cannot scope (the
+# root Cargo.toml, Cargo.lock, justfile, scripts/**, ci.yml, assets/seed/**) or
+# when the closure is empty on an active Rust lane. The crate trigger follows
+# perf-bench's own dependencies, so a new scenario on a new crate is gated once
+# perf-bench depends on that crate (astro-plan-3tek; before it, a hand-kept
+# inbox/fs_inventory list left the reconcile and plan-apply budgets
+# unenforced).
 
 set -euo pipefail
 
