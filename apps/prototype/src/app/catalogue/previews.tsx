@@ -14,8 +14,12 @@ import { ComponentSection, Specimen } from "./specimen"
 // eslint-disable-next-line alm/no-user-string -- sample runs: target and filter names with a night
 const RUNS = [{ label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" } }, { label: "NGC 7000 · OIII · 2026-09-02", link: { to: "/projects" } }, { label: "IC 1396 · SII · 2026-08-28" }]
 
-// A master dark as the Calibration library records it, and its file name.
-const DARK = { kind: "dark", cameraName: "ZWO ASI2600MM Pro", gain: 100, offset: 50, ccdTempC: -10, exposureS: 300, frameCount: 30 } as const
+// A master dark as the Calibration library records it, with two dated versions, and its file name.
+const OLDER = { id: "mv_older", capturedAt: "2026-05-02T22:10:00.000Z", frameCount: 30, origin: { kind: "library", projectId: null, sourcePath: "", sessionId: null } } as const
+const NEWER = { id: "mv_newer", capturedAt: "2026-09-14T21:40:00.000Z", frameCount: 40, origin: { kind: "stacked", projectId: null, sourcePath: "", sessionId: null } } as const
+const DARK = { kind: "dark", cameraName: "ZWO ASI2600MM Pro", gain: 100, offset: 50, ccdTempC: -10, exposureS: 300, versions: [OLDER, NEWER] } as const
+/** The same settings with only the May version: its newest version is past the age limit. */
+const OLD_DARK = { ...DARK, versions: [OLDER] } as const
 const DARK_FILE = "masterDark_BIN-1_EXPOSURE-300.00s.xisf"
 
 export function PreviewsCatalogue() {
@@ -61,16 +65,19 @@ export function PreviewsCatalogue() {
         </div>
       </ComponentSection>
 
-      <ComponentSection components={["MasterPreview"]} description={m.catalogue_previews_master_desc()}>
+      <ComponentSection components={["MasterPreview"]} description={m.catalogue_previews_master_version_desc()}>
         <div className="space-y-3">
-          <Specimen caption={m.catalogue_previews_master_young()}>
-            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-09-14" age={null} usedBy={2} />
+          <Specimen caption={m.catalogue_previews_master_newer()}>
+            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} version={NEWER} age={null} usedBy={2} />
           </Specimen>
-          <Specimen caption={m.catalogue_previews_master_old()}>
-            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-05-02" age={m.flow_master_old({ n: 165 })} usedBy={0} />
+          <Specimen caption={m.catalogue_previews_master_older()}>
+            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} version={OLDER} age={null} usedBy={2} />
+          </Specimen>
+          <Specimen caption={m.catalogue_previews_master_old_only()}>
+            <MasterPreview label={DARK_FILE} link={{ to: "/calibration" }} master={OLD_DARK} version={OLDER} age={m.flow_master_old({ n: 165 })} usedBy={0} />
           </Specimen>
           <Specimen caption={m.catalogue_previews_master_compact()}>
-            <MasterPreview compact label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} night="2026-09-14" age={null} usedBy={2} />
+            <MasterPreview compact label={DARK_FILE} link={{ to: "/calibration" }} master={DARK} version={NEWER} age={null} usedBy={2} />
           </Specimen>
         </div>
       </ComponentSection>

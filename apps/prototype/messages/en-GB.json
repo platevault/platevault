@@ -6492,5 +6492,190 @@
   "shortcuts_page_rows": "Move one screen of rows",
   "shortcuts_open_row": "Open the focused row",
   "shortcuts_select_row": "Select or clear the focused row",
-  "settings_shortcuts_help": "?, /, [, G sequences and Space on a table row. ⌘K and Ctrl+K always work."
+  "settings_shortcuts_help": "?, /, [, G sequences and Space on a table row. ⌘K and Ctrl+K always work.",
+  "calibration_origin": "Origin",
+  "calibration_origin_generated": "Generated in Processing",
+  "calibration_version": "Version",
+  "calibration_version_n_of": "{n} of {count}",
+  "calibration_choice_pinned_auto": "Pinned automatically",
+  "calibration_choice_none_camera": "{choice}, the camera's default",
+  "calibration_same_night": "Same night",
+  "calibration_nights_apart": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} night apart",
+        "countPlural=*": "{count} nights apart"
+      }
+    }
+  ],
+  "calibration_days_apart": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} day apart",
+        "countPlural=*": "{count} days apart"
+      }
+    }
+  ],
+  "calibration_add_darks": "Add darks",
+  "calibration_add_flats": "Add flats",
+  "calibration_add_bias": "Add bias",
+  "calibration_choices_col_state": "State",
+  "calibration_choices_col_check": "Check",
+  "calibration_choices_col_lights": "Lights",
+  "calibration_choices_col_calibration": "Calibration",
+  "calibration_choices_captured": "Captured",
+  "calibration_choices_apart": "Apart",
+  "calibration_choices_rotation_delta": "Rotation difference",
+  "calibration_choices_no_match": "No match found yet",
+  "calibration_choices_offer_suggested": "{source} (needs confirming)",
+  "calibration_choices_evidence_of": "Evidence for {name}",
+  "calibration_choices_none_suggested": "None of the selected rows has a suggestion to confirm",
+  "calibration_choices_set_no_action": "No calibration",
+  "calibration_choices_empty": "No sessions to calibrate",
+  "calibration_diagram_lights": "Lights",
+  "calibration_diagram_in_night": "In the night folder",
+  "calibration_diagram_mixed_darks": "Mixed dark versions",
+  "calibration_diagram_mixed_bias": "Mixed bias versions",
+  "calibration_diagram_mixed_note": "{kinds}: the Project mixes versions with the same settings, so each night folder holds the version its lights pin and none stays shared.",
+  "calibration_diagram_offline": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} offline",
+        "countPlural=*": "{n} offline"
+      }
+    }
+  ],
+  "calibration_diagram_group_empty": "No sessions in this group",
+  "calibration_diagram_loading": "Loading the calibration diagram",
+  "calibration_diagram_empty": "No sessions yet. The diagram fills in as the Project adds them.",
+  "view_tree_loading": "Loading the planned View",
+  "view_tree_empty": "Nothing to place yet. Add sessions to plan the View.",
+  "view_tree_links": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} link",
+        "countPlural=*": "{count} links"
+      }
+    }
+  ],
+  "view_tree_links_note": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} link to its original; nothing is copied.",
+        "countPlural=*": "{n} links to their originals; nothing is copied."
+      }
+    }
+  ],
+  "view_tree_copies_note": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} independent copy, {size} in total: each folder that uses a file gets its own copy of the original, cloned where the volume supports it.",
+        "countPlural=*": "{n} independent copies, {size} in total: each folder that uses a file gets its own copy of the original, cloned where the volume supports it."
+      }
+    }
+  ],
+  "mosaic_no_panels": "No panel groups yet",
+  "mosaic_panels_label": "Panels",
+  "mosaic_rotation": "rotation {angle}",
+  "mosaic_map_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Panel map: {count} panel, north up, east left",
+        "countPlural=*": "Panel map: {count} panels, north up, east left"
+      }
+    }
+  ],
+  "mosaic_outside_note": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session points outside its panel's field (amber dot).",
+        "countPlural=*": "{count} sessions point outside their panel's field (amber dots)."
+      }
+    }
+  ],
+  "catalogue_previews_master_version_desc": "A master version's name is a link to its master in the Calibration library; hover or focus previews the record's settings, which of its dated versions this is, that version's night, frames and origin, the master's age and how many Projects use it. The card holds no controls, so it takes no focus.",
+  "catalogue_previews_master_newer": "newer of two versions, stacked, used by 2 Projects",
+  "catalogue_previews_master_older": "older of two versions, indexed",
+  "catalogue_previews_master_old_only": "one version, past the age limit, unused",
+  "catalogue_domain_mosaic_map_desc": "The read-only panel map: each panel group at its sessions' median pointing and rotation, north up, east left, with a dot per session (amber: outside its panel). The list under it names every panel; the map takes no focus.",
+  "catalogue_domain_mosaic_live": "IC 5070 mosaic from the library",
+  "catalogue_domain_mosaic_outside": "2 × 2, a session outside its panel, a panel with no pointing",
+  "catalogue_domain_mosaic_fov_unknown": "field of view unknown: list only",
+  "catalogue_f4_title": "F4 shared patterns",
+  "catalogue_f4_error_message": "The sample could not be read. Retry shows it again.",
+  "catalogue_f4_states": "loading, empty, error",
+  "catalogue_f4_diagram_desc": "A Project's calibration, read only: each group, its night folders and each light set with the flat, dark and bias it gets, the version and evidence, No choices, a changed pin, and darks or bias in the nights when versions mix. Names link to the session or the library.",
+  "catalogue_f4_diagram_groups": "three groups, two cameras (Cygnus HOO 2026)",
+  "catalogue_f4_diagram_what_if": "what-if: mixed dark versions, a second flat set, a suggestion, No bias, a changed flat",
+  "catalogue_f4_diagram_mosaic": "mosaic panels, raw flats (IC 5070 mosaic)",
+  "catalogue_f4_diagram_closed": "Closed Project: its frozen calibration",
+  "catalogue_f4_choices_desc": "Controlled per-session, per-kind choices: Confirm, Choose ▸, No and Add files call the host's session actions. Each row opens its evidence; Shift+F10 opens its menu.",
+  "catalogue_f4_choices_live": "several sessions, live actions, selection",
+  "catalogue_f4_choices_one": "one session (a session's details)",
+  "catalogue_f4_choices_read_only": "not changeable: a suggestion, No bias, a changed flat",
+  "catalogue_f4_tree_desc": "The View the next Apply builds, as the Apply sheet shows it. ↑/↓ move, → opens, ← closes, Home/End jump.",
+  "catalogue_f4_tree_one_group": "one group, Copies (M 31 LRGB)",
+  "catalogue_f4_tree_symlinks": "groups, two cameras, Symlinks (Cygnus HOO 2026)",
+  "catalogue_f4_tree_mixed": "what-if, Copies: darks in the nights, NIGHT_…-2",
+  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)"
 }

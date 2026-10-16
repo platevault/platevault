@@ -6506,5 +6506,190 @@
   "shortcuts_page_rows": "Mover uma tela de linhas",
   "shortcuts_open_row": "Abrir a linha em foco",
   "shortcuts_select_row": "Selecionar ou desmarcar a linha em foco",
-  "settings_shortcuts_help": "?, /, [, sequências com G e Espaço numa linha de tabela. ⌘K e Ctrl+K sempre funcionam."
+  "settings_shortcuts_help": "?, /, [, sequências com G e Espaço numa linha de tabela. ⌘K e Ctrl+K sempre funcionam.",
+  "calibration_origin": "Origem",
+  "calibration_origin_generated": "Gerado em Processing",
+  "calibration_version": "Versão",
+  "calibration_version_n_of": "{n} de {count}",
+  "calibration_choice_pinned_auto": "Fixado automaticamente",
+  "calibration_choice_none_camera": "{choice}, padrão da câmera",
+  "calibration_same_night": "Mesma noite",
+  "calibration_nights_apart": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} noite de diferença",
+        "countPlural=*": "{count} noites de diferença"
+      }
+    }
+  ],
+  "calibration_days_apart": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dia de diferença",
+        "countPlural=*": "{count} dias de diferença"
+      }
+    }
+  ],
+  "calibration_add_darks": "Adicionar darks",
+  "calibration_add_flats": "Adicionar flats",
+  "calibration_add_bias": "Adicionar bias",
+  "calibration_choices_col_state": "Estado",
+  "calibration_choices_col_check": "Verificação",
+  "calibration_choices_col_lights": "Lights",
+  "calibration_choices_col_calibration": "Calibração",
+  "calibration_choices_captured": "Capturado",
+  "calibration_choices_apart": "Diferença",
+  "calibration_choices_rotation_delta": "Diferença de rotação",
+  "calibration_choices_no_match": "Nenhuma correspondência encontrada ainda",
+  "calibration_choices_offer_suggested": "{source} (precisa de confirmação)",
+  "calibration_choices_evidence_of": "Evidências de {name}",
+  "calibration_choices_none_suggested": "Nenhuma das linhas selecionadas tem uma sugestão para confirmar",
+  "calibration_choices_set_no_action": "Sem calibração",
+  "calibration_choices_empty": "Nenhuma sessão para calibrar",
+  "calibration_diagram_lights": "Lights",
+  "calibration_diagram_in_night": "Na pasta da noite",
+  "calibration_diagram_mixed_darks": "Versões de darks misturadas",
+  "calibration_diagram_mixed_bias": "Versões de bias misturadas",
+  "calibration_diagram_mixed_note": "{kinds}: o Project mistura versões com as mesmas configurações, então cada pasta de noite recebe a versão que as suas lights fixam e nenhuma fica compartilhada.",
+  "calibration_diagram_offline": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} offline",
+        "countPlural=*": "{n} offline"
+      }
+    }
+  ],
+  "calibration_diagram_group_empty": "Nenhuma sessão neste grupo",
+  "calibration_diagram_loading": "Carregando o diagrama de calibração",
+  "calibration_diagram_empty": "Nenhuma sessão ainda. O diagrama é preenchido conforme o Project as adiciona.",
+  "view_tree_loading": "Carregando a View planejada",
+  "view_tree_empty": "Nada para colocar ainda. Adicione sessões para planejar a View.",
+  "view_tree_links": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} link",
+        "countPlural=*": "{count} links"
+      }
+    }
+  ],
+  "view_tree_links_note": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} link para o original; nada é copiado.",
+        "countPlural=*": "{n} links para os originais; nada é copiado."
+      }
+    }
+  ],
+  "view_tree_copies_note": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} cópia independente, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite.",
+        "countPlural=*": "{n} cópias independentes, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite."
+      }
+    }
+  ],
+  "mosaic_no_panels": "Nenhum grupo de painel ainda",
+  "mosaic_panels_label": "Painéis",
+  "mosaic_rotation": "rotação {angle}",
+  "mosaic_map_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mapa de painéis: {count} painel, norte para cima, leste à esquerda",
+        "countPlural=*": "Mapa de painéis: {count} painéis, norte para cima, leste à esquerda"
+      }
+    }
+  ],
+  "mosaic_outside_note": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão aponta para fora do campo do seu painel (ponto âmbar).",
+        "countPlural=*": "{count} sessões apontam para fora do campo do seu painel (pontos âmbar)."
+      }
+    }
+  ],
+  "catalogue_previews_master_version_desc": "O nome de uma versão de master é um link para o seu master na biblioteca de Calibração; cursor ou foco mostra uma prévia das configurações do registro, qual das versões datadas é esta, a noite, os quadros e a origem dessa versão, a idade do master e quantos Projects o usam. O cartão não tem controles, então não recebe foco.",
+  "catalogue_previews_master_newer": "mais nova de duas versões, empilhada, usada por 2 Projects",
+  "catalogue_previews_master_older": "mais antiga de duas versões, indexada",
+  "catalogue_previews_master_old_only": "uma versão, além do limite de idade, sem uso",
+  "catalogue_domain_mosaic_map_desc": "O mapa de painéis só de leitura: cada grupo de painel na mediana do apontamento e da rotação das suas sessões, norte para cima, leste à esquerda, com um ponto por sessão (âmbar: fora do seu painel). A lista abaixo nomeia cada painel; o mapa não recebe foco.",
+  "catalogue_domain_mosaic_live": "Mosaico IC 5070 da biblioteca",
+  "catalogue_domain_mosaic_outside": "2 × 2, uma sessão fora do seu painel, um painel sem apontamento",
+  "catalogue_domain_mosaic_fov_unknown": "campo de visão desconhecido: só a lista",
+  "catalogue_f4_title": "Padrões compartilhados do F4",
+  "catalogue_f4_error_message": "Não foi possível ler o exemplo. Tentar novamente o mostra de novo.",
+  "catalogue_f4_states": "carregando, vazio, erro",
+  "catalogue_f4_diagram_desc": "A calibração de um Project, só leitura: cada grupo, as suas pastas de noite e cada conjunto de lights com o flat, dark e bias que recebe, a versão e as evidências, escolhas Não, um pin alterado e darks ou bias nas noites quando as versões se misturam. Os nomes levam à sessão ou à biblioteca.",
+  "catalogue_f4_diagram_groups": "três grupos, duas câmeras (Cygnus HOO 2026)",
+  "catalogue_f4_diagram_what_if": "hipótese: versões de darks misturadas, um segundo conjunto de flats, uma sugestão, Sem bias, um flat alterado",
+  "catalogue_f4_diagram_mosaic": "painéis de mosaico, flats brutos (mosaico IC 5070)",
+  "catalogue_f4_diagram_closed": "Project fechado: a sua calibração congelada",
+  "catalogue_f4_choices_desc": "Escolhas controladas por sessão e por tipo: Confirmar, Escolher ▸, Não e Adicionar arquivos chamam as ações de sessão do anfitrião. Cada linha abre as suas evidências; Shift+F10 abre o seu menu.",
+  "catalogue_f4_choices_live": "várias sessões, ações reais, seleção",
+  "catalogue_f4_choices_one": "uma sessão (detalhes de uma sessão)",
+  "catalogue_f4_choices_read_only": "não alterável: uma sugestão, Sem bias, um flat alterado",
+  "catalogue_f4_tree_desc": "A View que o próximo Apply monta, como a folha de Apply a mostra. ↑/↓ movem, → abre, ← fecha, Home/End saltam.",
+  "catalogue_f4_tree_one_group": "um grupo, cópias (M 31 LRGB)",
+  "catalogue_f4_tree_symlinks": "grupos, duas câmeras, Symlinks (Cygnus HOO 2026)",
+  "catalogue_f4_tree_mixed": "hipótese, cópias: darks nas noites, NIGHT_…-2",
+  "catalogue_f4_tree_panels": "painéis de mosaico (mosaico IC 5070)"
 }
