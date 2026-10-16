@@ -157,9 +157,10 @@ struct Framing<'a> {
 /// Split the lights of one night and capture key into sessions by framing.
 pub(super) fn split(frames: &[Frame<'_>], margins: &FramingMargins) -> Vec<Split> {
     let evidence: Vec<Evidence<'_>> = frames.iter().map(Evidence::of).collect();
+    let order = capture_order(frames);
     let mut framings: Vec<Framing<'_>> = Vec::new();
     let mut unframed = Vec::new();
-    for index in capture_order(frames) {
+    for &index in &order {
         let frame = &evidence[index];
         let pointed = frame.centre.is_some();
         if let Some(label) = frame.label {
@@ -184,7 +185,11 @@ pub(super) fn split(frames: &[Frame<'_>], margins: &FramingMargins) -> Vec<Split
             framings.push(Framing { label: None, anchor: Some(index), members: vec![index] });
         }
     }
-    let mut splits = finish(frames, &evidence, framings);
+    let mut rank = vec![0; frames.len()];
+    for (position, &index) in order.iter().enumerate() {
+        rank[index] = position;
+    }
+    let mut splits = finish(frames, &evidence, &rank, framings);
     if !unframed.is_empty() {
         splits.push(Split {
             members: unframed,
@@ -217,23 +222,23 @@ fn nearest<'f, 'a>(
     best.map(|(_, framing)| framing)
 }
 
-/// Number the framings in the capture order of their anchors and record each.
+/// Number the framings in the capture order (`rank`) of their anchors and
+/// record each.
 fn finish(
     frames: &[Frame<'_>],
     evidence: &[Evidence<'_>],
+    rank: &[usize],
     framings: Vec<Framing<'_>>,
 ) -> Vec<Split> {
-    let order = capture_order(frames);
-    let position = |index: usize| order.iter().position(|&ordered| ordered == index);
     let mut anchors: Vec<usize> =
-        framings.iter().filter_map(|framing| framing.anchor.and_then(position)).collect();
+        framings.iter().filter_map(|framing| framing.anchor.map(|anchor| rank[anchor])).collect();
     anchors.sort_unstable();
     framings
         .into_iter()
         .map(|framing| {
             let mut notes = BTreeSet::new();
             let record = framing.anchor.and_then(|anchor| {
-                let ordinal = anchors.binary_search(&position(anchor)?).ok()? + 1;
+                let ordinal = anchors.binary_search(&rank[anchor]).ok()? + 1;
                 let evidence = &evidence[anchor];
                 if evidence.field.is_none() {
                     notes.insert(FIELD_UNKNOWN.to_owned());
