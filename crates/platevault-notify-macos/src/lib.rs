@@ -1,14 +1,23 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! macOS notification center bindings for reminders (spec 072 R13).
+//! macOS notification center bindings for reminders (spec 072 R13) and the
+//! update offer (astro-plan-c72oo).
 //!
 //! A safe API over `UNUserNotificationCenter`: the authorization status, an
-//! authorization request and an immediate notification request, each reporting
-//! the framework's own completion result to a callback. A process without a
-//! bundle identifier gets no center, because the framework aborts such a
+//! authorization request, an immediate notification request, each reporting
+//! the framework's own completion result to a callback, and categories whose
+//! action buttons report the user's choice
+//! ([`NotificationCenter::register_category`]). A process without
+//! a bundle identifier gets no center, because the framework aborts such a
 //! process instead of answering. Callbacks run on a framework queue.
 #![cfg(target_os = "macos")]
+
+mod categories;
+#[allow(unsafe_code)] // the delegate class; its module states the contract
+mod delegate;
+
+pub use categories::Action;
 
 use std::ptr::NonNull;
 use std::sync::Mutex;
@@ -57,11 +66,14 @@ pub fn bundle_identifier() -> Option<String> {
 pub struct NotificationCenter(Retained<UNUserNotificationCenter>);
 
 impl NotificationCenter {
-    /// The current center; `None` without a bundle identifier.
+    /// The current center; `None` without a bundle identifier. The first
+    /// call installs the process's one center delegate.
     #[must_use]
     pub fn current() -> Option<Self> {
         bundle_identifier()?;
-        Some(Self(UNUserNotificationCenter::currentNotificationCenter()))
+        let center = UNUserNotificationCenter::currentNotificationCenter();
+        delegate::install(&center);
+        Some(Self(center))
     }
 
     /// Read the authorization status without prompting.
@@ -97,9 +109,36 @@ impl NotificationCenter {
         body: &str,
         done: impl FnOnce(Result<(), String>) + Send + 'static,
     ) {
+        self.post(identifier, title, body, None, done);
+    }
+
+    /// Post one notification in `category`, which shows its action buttons,
+    /// immediately. Reports the framework's acceptance, or its error text.
+    pub fn submit_in_category(
+        &self,
+        identifier: &str,
+        title: &str,
+        body: &str,
+        category: &str,
+        done: impl FnOnce(Result<(), String>) + Send + 'static,
+    ) {
+        self.post(identifier, title, body, Some(category), done);
+    }
+
+    fn post(
+        &self,
+        identifier: &str,
+        title: &str,
+        body: &str,
+        category: Option<&str>,
+        done: impl FnOnce(Result<(), String>) + Send + 'static,
+    ) {
         let content = UNMutableNotificationContent::new();
         content.setTitle(&NSString::from_str(title));
         content.setBody(&NSString::from_str(body));
+        if let Some(category) = category {
+            content.setCategoryIdentifier(&NSString::from_str(category));
+        }
         let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
             &NSString::from_str(identifier),
             &content,
