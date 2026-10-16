@@ -610,6 +610,7 @@ mod tests {
                     asset_ids: Vec::new(),
                     provisional: Vec::new(),
                     date_basis: None,
+                    framing: None,
                 },
                 location_ids: Vec::new(),
                 asset_count: 0,

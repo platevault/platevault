@@ -97,6 +97,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     decision_revision INTEGER NOT NULL,
     provisional TEXT NOT NULL,
     date_basis TEXT,
+    -- The framing intake split a light session by (D-W107), as model
+    -- `SessionFraming` JSON; NULL without pointing and for other frame types.
+    framing TEXT CHECK (framing IS NULL OR json_valid(framing)),
     superseded_by INTEGER REFERENCES session_lineage (id),
     created_at TEXT NOT NULL
 ) STRICT;

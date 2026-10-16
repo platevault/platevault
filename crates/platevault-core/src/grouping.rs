@@ -1,7 +1,8 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Pure capture grouping: one session candidate per canonical [`CaptureKey`].
+//! Pure capture grouping: one session candidate per canonical [`CaptureKey`]
+//! and, for lights, per framing (D-W107).
 //!
 //! The key is derived only from the effective capture evidence the caller
 //! passes in ([`Asset::effective`]: observed header values overlaid with
@@ -9,6 +10,11 @@
 //! temperature, mechanical rotator angle and pointing remain per-frame evidence
 //! and never enter the key. Unknown values are encoded explicitly and listed as
 //! provisional evidence; nothing falls back to the clock, app settings or zero.
+//! Pointing and rotation split a key's lights into framings within the
+//! framing margins in force at intake; the framing joins the session's
+//! identity beside the key.
+
+mod framing;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,7 +23,8 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 use crate::{
-    Asset, CaptureKey, CaptureMetadata, GroupingResult, ImageTypeEvidence, SessionCandidate,
+    Asset, CaptureKey, CaptureMetadata, FramingMargins, GroupingResult, ImageTypeEvidence,
+    NativePath, SessionCandidate,
 };
 
 /// Version prefix of the canonical key encoding.
@@ -31,45 +38,110 @@ pub const BASIS_LONGITUDE: &str = "longitude-mean-solar-noon";
 /// Provisional: the UTC calendar date of `DATE-OBS`; no local-night evidence.
 pub const BASIS_UTC: &str = "utc-date-provisional";
 
-/// Group assets into metadata-homogeneous session candidates.
+/// Group assets into metadata-homogeneous session candidates, splitting each
+/// key's lights by framing within `margins`.
 ///
-/// Pure and deterministic: the result depends only on each asset's ID and
-/// effective metadata, never on input order, storage or the current time.
-/// Sessions are ordered by key and their asset IDs ascending.
+/// Pure and deterministic: the result depends only on each asset's ID, file
+/// name and effective metadata, never on input order, storage or the current
+/// time. Sessions are ordered by key, then framing, and their asset IDs
+/// ascending.
 #[must_use]
-pub fn group_assets(assets: &[Asset]) -> GroupingResult {
-    let mut sessions: BTreeMap<CaptureKey, Members> = BTreeMap::new();
-    for asset in assets {
-        let capture = derive(&asset.effective);
-        let members = sessions
-            .entry(capture.key)
-            .or_insert_with(|| Members { date_basis: capture.date_basis, ..Members::default() });
-        members.asset_ids.insert(asset.id);
-        members.provisional.extend(capture.provisional);
-    }
-    GroupingResult {
-        sessions: sessions
-            .into_iter()
-            .map(|(key, members)| SessionCandidate {
-                key,
-                asset_ids: members.asset_ids.into_iter().collect(),
-                provisional: members.provisional.into_iter().collect(),
-                date_basis: members.date_basis.map(str::to_owned),
-            })
-            .collect(),
-    }
+pub fn group_assets(assets: &[Asset], margins: &FramingMargins) -> GroupingResult {
+    let names: Vec<String> = assets.iter().map(|asset| file_name(&asset.relative_path)).collect();
+    let frames: Vec<Frame<'_>> = assets
+        .iter()
+        .zip(&names)
+        .map(|(asset, name)| Frame { id: asset.id, name, metadata: &asset.effective })
+        .collect();
+    group_frames(&frames, margins)
 }
 
-#[derive(Default)]
-struct Members {
-    asset_ids: BTreeSet<Uuid>,
-    provisional: BTreeSet<String>,
+/// One frame as grouping reads it: a catalogued asset, or an import item the
+/// import review groups before anything is written.
+#[derive(Clone, Copy)]
+pub(crate) struct Frame<'a> {
+    pub(crate) id: Uuid,
+    /// The file name; it orders frames captured at the same instant.
+    pub(crate) name: &'a str,
+    pub(crate) metadata: &'a CaptureMetadata,
+}
+
+/// The file name of a path, for capture order.
+pub(crate) fn file_name(path: &NativePath) -> String {
+    path.relative_path()
+        .ok()
+        .and_then(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+        .unwrap_or_default()
+}
+
+/// [`group_assets`] over frames.
+pub(crate) fn group_frames(frames: &[Frame<'_>], margins: &FramingMargins) -> GroupingResult {
+    let mut buckets: BTreeMap<CaptureKey, Bucket> = BTreeMap::new();
+    for (index, frame) in frames.iter().enumerate() {
+        let capture = derive(frame.metadata);
+        let bucket = buckets.entry(capture.key).or_insert_with(|| Bucket {
+            date_basis: capture.date_basis,
+            lights: capture.light,
+            members: Vec::new(),
+            notes: Vec::new(),
+        });
+        bucket.members.push(index);
+        bucket.notes.push(capture.provisional);
+    }
+    let mut sessions = Vec::new();
+    for (key, bucket) in buckets {
+        let local: Vec<Frame<'_>> = bucket.members.iter().map(|&index| frames[index]).collect();
+        let splits = if bucket.lights {
+            framing::split(&local, margins)
+        } else {
+            vec![framing::Split {
+                members: (0..local.len()).collect(),
+                framing: None,
+                notes: BTreeSet::new(),
+            }]
+        };
+        let mut candidates: Vec<SessionCandidate> = splits
+            .into_iter()
+            .map(|split| {
+                let mut provisional = split.notes;
+                let mut asset_ids = BTreeSet::new();
+                for member in split.members {
+                    asset_ids.insert(local[member].id);
+                    provisional.extend(bucket.notes[member].iter().cloned());
+                }
+                SessionCandidate {
+                    key: key.clone(),
+                    asset_ids: asset_ids.into_iter().collect(),
+                    provisional: provisional.into_iter().collect(),
+                    date_basis: bucket.date_basis.map(str::to_owned),
+                    framing: split.framing,
+                }
+            })
+            .collect();
+        candidates.sort_by_key(|candidate| {
+            (
+                candidate.framing.as_ref().map_or(u32::MAX, |framing| framing.ordinal),
+                candidate.asset_ids.first().copied(),
+            )
+        });
+        sessions.extend(candidates);
+    }
+    GroupingResult { sessions }
+}
+
+/// The frames of one key, with each frame's provisional notes.
+struct Bucket {
     date_basis: Option<&'static str>,
+    /// The key's frame type is light: only lights split by framing.
+    lights: bool,
+    members: Vec<usize>,
+    notes: Vec<Vec<String>>,
 }
 
 struct Capture {
     key: CaptureKey,
     date_basis: Option<&'static str>,
+    light: bool,
     provisional: Vec<String>,
 }
 
@@ -115,6 +187,7 @@ fn derive(meta: &CaptureMetadata) -> Capture {
     Capture {
         key: CaptureKey(key.key),
         date_basis: night.value.map(|(_, basis)| basis),
+        light: meta.is_light() == Some(true),
         provisional: key.provisional,
     }
 }
@@ -209,6 +282,16 @@ struct Night {
 /// The observing night sessions are keyed by, for naming templates' `{date}`.
 pub(crate) fn observing_night(meta: &CaptureMetadata) -> Option<Date> {
     night(meta).value.map(|(date, _)| date)
+}
+
+/// When a frame was captured, for capture order: `DATE-OBS` in UTC, else
+/// `DATE-LOC`; `None` without a time of day.
+fn capture_instant(meta: &CaptureMetadata) -> Option<PrimitiveDateTime> {
+    let parse = |raw: Option<&str>| match parse_header_time(raw?)? {
+        HeaderTime::DateTime(time, offset) => to_utc(time, offset),
+        HeaderTime::Date(_) => None,
+    };
+    parse(meta.date_obs.as_deref()).or_else(|| parse(meta.date_local.as_deref()))
 }
 
 /// Header-derived observing night; never consults the clock.

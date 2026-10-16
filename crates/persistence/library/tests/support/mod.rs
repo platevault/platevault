@@ -91,6 +91,7 @@ pub fn group(assets: &[Asset]) -> GroupingResult {
                     asset_ids,
                     provisional: Vec::new(),
                     date_basis: Some("2026-09-12".into()),
+                    framing: None,
                 }
             })
             .collect(),

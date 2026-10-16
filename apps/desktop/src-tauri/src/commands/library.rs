@@ -15,7 +15,6 @@ use persistence_library::{
     CorrectionPreview, LocationFailure, SessionFilter, SessionQuery, SessionSummary, TrashedAsset,
     TrashedQuery,
 };
-use platevault_core::grouping::group_assets;
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
 use platevault_core::{
@@ -233,11 +232,7 @@ pub async fn library_preview_metadata(
             value: value.clone(),
         })
         .collect::<Vec<_>>();
-    library
-        .catalog()
-        .preview_correction(&expected, &corrections, group_assets)
-        .await
-        .map_err(fail(None))
+    library.preview_correction(&expected, &corrections).await.map_err(fail(None))
 }
 
 /// Apply a reviewed plan atomically with regroup and lineage, then re-derive the

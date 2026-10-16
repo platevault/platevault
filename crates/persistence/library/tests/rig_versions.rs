@@ -90,6 +90,7 @@ fn night_group(assets: &[Asset]) -> GroupingResult {
                     asset_ids,
                     provisional: Vec::new(),
                     date_basis: Some("date-loc-noon".into()),
+                    framing: None,
                 }
             })
             .collect(),

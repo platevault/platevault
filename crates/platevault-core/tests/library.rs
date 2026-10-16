@@ -193,11 +193,7 @@ async fn confirmed_object_correction_refreshes_the_stored_target_association() {
             value: serde_json::json!("M 31"),
         })
         .collect::<Vec<_>>();
-    let preview = library
-        .catalog()
-        .preview_correction(&expected, &corrections, platevault_core::grouping::group_assets)
-        .await
-        .unwrap();
+    let preview = library.preview_correction(&expected, &corrections).await.unwrap();
     let confirmed = library.confirm_correction(preview.id, &expected).await.unwrap();
     assert!(confirmed.association_refresh.is_none());
     assert_eq!(confirmed.outcome.sessions.len(), 1);
@@ -658,14 +654,8 @@ async fn a_partial_filter_correction_refreshes_every_successor_session() {
         field: "filter".into(),
         value: serde_json::json!("OIII"),
     };
-    let preview = catalog
-        .preview_correction(
-            std::slice::from_ref(&corrected),
-            &[correction],
-            platevault_core::grouping::group_assets,
-        )
-        .await
-        .unwrap();
+    let preview =
+        library.preview_correction(std::slice::from_ref(&corrected), &[correction]).await.unwrap();
     let confirmed = library.confirm_correction(preview.id, &[corrected]).await.unwrap();
     assert!(confirmed.association_refresh.is_none());
     let successors = confirmed.outcome.lineage.unwrap().successors;
@@ -1405,14 +1395,8 @@ async fn decide_and_confirm(
         field: "object".into(),
         value: serde_json::json!("M 31"),
     }];
-    let preview = catalog
-        .preview_correction(
-            std::slice::from_ref(&corrected),
-            &corrections,
-            platevault_core::grouping::group_assets,
-        )
-        .await
-        .unwrap();
+    let preview =
+        library.preview_correction(std::slice::from_ref(&corrected), &corrections).await.unwrap();
     let confirmed = library.confirm_correction(preview.id, &[corrected]).await.unwrap();
     assert!(confirmed.outcome.lineage.is_none(), "no regroup");
     let id = detail.summary.session.id;

@@ -23,13 +23,14 @@ use crate::targets::{
 };
 use crate::view_selection::ViewReferences;
 use crate::{
-    AssetReference, AssociationKind, AssociationState, Availability, FileIdentity, LibraryError,
-    Location, LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview,
-    RetireReview, Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
+    Asset, AssetReference, AssociationKind, AssociationState, Availability, CorrectionInput,
+    ExpectedAsset, FileIdentity, FramingMargins, LibraryError, Location, LocationRole, NativePath,
+    ObservationFingerprint, ReferenceKind, RemapReview, RetireReview, Revision, ScanOperation,
+    ScanOptions, ScanState, TargetCandidate,
 };
 use persistence_library::{
-    Catalog, CorrectionOutcome, LocationReferences, LocationRegistration, SessionDetail,
-    SessionQuery, SuggestedAssociation,
+    Catalog, CorrectionOutcome, CorrectionPreview, LocationReferences, LocationRegistration,
+    SessionDetail, SessionQuery, SuggestedAssociation,
 };
 
 /// What [`AssetReferences::references_to`] returns.
@@ -471,6 +472,34 @@ impl Library {
         ))
     }
 
+    /// The framing margins intake splits sessions with (LIB-FR-04): the
+    /// workflow settings, else their defaults. Read once per intake, so the
+    /// margins in force when frames arrive set their split.
+    ///
+    /// # Errors
+    /// Returns the catalog's read errors.
+    pub async fn framing_margins(&self) -> Result<FramingMargins, LibraryError> {
+        Ok(self.catalog.workflow_settings().await?.0.framing)
+    }
+
+    /// Preview a correction and the regroup it causes under the current
+    /// framing margins; nothing but the plan is recorded.
+    ///
+    /// # Errors
+    /// Returns the catalog's preview errors.
+    pub async fn preview_correction(
+        &self,
+        expected: &[ExpectedAsset],
+        corrections: &[CorrectionInput],
+    ) -> Result<CorrectionPreview, LibraryError> {
+        let margins = self.framing_margins().await?;
+        self.catalog
+            .preview_correction(expected, corrections, |assets: &[Asset]| {
+                group_assets(assets, &margins)
+            })
+            .await
+    }
+
     /// Confirm a reviewed correction preview, then re-derive the target suggestion
     /// of every resulting session: those holding a corrected asset and every
     /// successor of the regroup.
@@ -483,7 +512,13 @@ impl Library {
         preview_id: Uuid,
         expected: &[crate::ExpectedAsset],
     ) -> Result<ConfirmedCorrection, LibraryError> {
-        let outcome = self.catalog.confirm_correction(preview_id, expected, group_assets).await?;
+        let margins = self.framing_margins().await?;
+        let outcome = self
+            .catalog
+            .confirm_correction(preview_id, expected, |assets: &[Asset]| {
+                group_assets(assets, &margins)
+            })
+            .await?;
         let association_refresh = match self.refresh_sessions(&outcome).await {
             Ok(()) => None,
             Err(error) => Some(error.response(Some(preview_id), None)),
@@ -712,6 +747,7 @@ impl Library {
     ) -> Result<(), LibraryError> {
         let operation = self.catalog.scan_status(id).await?;
         let location = self.catalog.location(operation.location_id).await?;
+        let margins = self.framing_margins().await?;
         let catalog = Arc::clone(&self.catalog);
         let progress = self.progress.clone();
         let flag = Arc::clone(canceled);
@@ -732,7 +768,7 @@ impl Library {
                         id,
                         &identity,
                         &batch,
-                        group_assets,
+                        |assets: &[Asset]| group_assets(assets, &margins),
                     ))?;
                     let _ = progress.send(applied);
                     if batch.progress.metadata_read >= next_assessment {
@@ -757,7 +793,7 @@ impl Library {
                         id,
                         &observation,
                         inventory::validate_location_root,
-                        group_assets,
+                        |assets: &[Asset]| group_assets(assets, &margins),
                     ))
                 })
                 .await?;
@@ -984,11 +1020,7 @@ mod tests {
                 value: serde_json::json!("M 31"),
             })
             .collect();
-        let preview = library
-            .catalog
-            .preview_correction(&expected, &corrections, group_assets)
-            .await
-            .unwrap();
+        let preview = library.preview_correction(&expected, &corrections).await.unwrap();
         library.forced_conflicts.store(usize::MAX, Ordering::Release);
         let confirmed = library.confirm_correction(preview.id, &expected).await.unwrap();
         let reported = confirmed.association_refresh.expect("the conflict is reported");
@@ -1013,7 +1045,7 @@ mod tests {
                         id,
                         &identity,
                         &batch,
-                        group_assets,
+                        |assets: &[Asset]| group_assets(assets, &FramingMargins::default()),
                     ))?;
                     Ok(())
                 },

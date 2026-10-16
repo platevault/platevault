@@ -25,6 +25,11 @@
 //! Retry resumes from the recorded journal, never from file names. Landed
 //! copies are indexed by a scan of their destination folder; while one waits
 //! for its offline destination the import stays Interrupted.
+//!
+//! Import review shows the sessions the lights form, split by framing, and
+//! the user can merge or re-split them before the import starts.
+
+mod review;
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -41,7 +46,7 @@ use uuid::Uuid;
 
 use crate::calibration::Rules;
 use crate::custody::trash::OsTrash;
-use crate::grouping::{group_assets, observing_night};
+use crate::grouping::observing_night;
 use crate::inventory;
 use crate::library::{blocking, root_failure, InventoryProbe, Library};
 use crate::{
@@ -53,7 +58,7 @@ use crate::{
     NamingFrameType, NamingMetadata, NativePath, ObservationFingerprint, ReasonCode, RigFilters,
     SavedSource, SavedSourceView, ScanOperation, ScanState, SettleObservation, StorageItem,
     StorageItemDraft, StorageOperation, StorageOperationKind, StorageOperationState, StorageRef,
-    TransferDestination, UnknownFilter, Writability,
+    TransferDestination, UnknownFilter, Writability, FRAMING_LABEL_FIELD,
 };
 
 /// How far apart the two settle checks of a source file are, at least.
@@ -257,6 +262,48 @@ impl Library {
         }
         self.revise_preview(id, expected_revision, Some(ImportChoice { role, location_id }), |_| {
             Ok(())
+        })
+        .await
+    }
+
+    /// Merge sessions of the import's lights into one before the import
+    /// starts (LIB-FR-24, D-W107). `seqs` name an item of each session; only
+    /// sessions that differ in framing alone merge. Nothing is written to any
+    /// location or session: indexing records the merge on the frames.
+    ///
+    /// # Errors
+    /// `InvalidInput` for fewer than two sessions, sessions of different
+    /// capture keys or an item in no session; otherwise as
+    /// [`Self::set_import_type`].
+    pub async fn merge_import_sessions(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+        seqs: &[u32],
+    ) -> Result<ImportOperation, LibraryError> {
+        let margins = self.framing_margins().await?;
+        let label = Uuid::new_v4().to_string();
+        self.revise_preview(id, expected_revision, None, |items| {
+            review::merge(items, seqs, &margins, &label)
+        })
+        .await
+    }
+
+    /// Re-split the merged session holding item `seq`: its lights split by
+    /// framing again.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a session that was not merged or an item in no
+    /// session; otherwise as [`Self::set_import_type`].
+    pub async fn resplit_import_session(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+        seq: u32,
+    ) -> Result<ImportOperation, LibraryError> {
+        let margins = self.framing_margins().await?;
+        self.revise_preview(id, expected_revision, None, |items| {
+            review::resplit(items, seq, &margins)
         })
         .await
     }
@@ -950,10 +997,10 @@ impl Library {
 
     /// Index every landed, unindexed copy: one scan per destination folder,
     /// then each copy counts as indexed once the catalog holds a frame at its
-    /// path with the identity the transfer wrote. A frame type the user set is
-    /// recorded as the frame's IMAGETYP correction. Returns whether a landed
-    /// copy still waits for its offline destination; only a scan of that
-    /// destination can index it and record its type (STO-IMP-FR-08).
+    /// path with the identity the transfer wrote. What the user set in review
+    /// is recorded on the frames. Returns whether a landed copy still waits
+    /// for its offline destination; only a scan of that destination can index
+    /// it and record what the user set (STO-IMP-FR-08).
     async fn index_landed(self: &Arc<Self>, id: Uuid, roots: &Roots) -> Result<bool, LibraryError> {
         let record = self.catalog().import_record(id).await?;
         let landed: Vec<&ImportItemRecord> =
@@ -980,6 +1027,7 @@ impl Library {
         }
         let mut waiting = false;
         let mut indexed = Vec::new();
+        let mut decisions = Vec::new();
         for record in landed {
             let (Some(location_id), Some(path), Some(written)) = (
                 record.item.destination_location_id,
@@ -1000,41 +1048,59 @@ impl Library {
             if !same_identity(&identity, written) {
                 continue;
             }
-            if let Some(frame_type) =
-                record.item.user_type.filter(|typed| Some(*typed) != record.item.classification)
-            {
-                self.record_frame_type(asset_id, frame_type).await?;
-            }
+            decisions.push(ReviewDecision {
+                asset_id,
+                frame_type: record
+                    .item
+                    .user_type
+                    .filter(|typed| Some(*typed) != record.item.classification),
+                framing_label: record.item.framing_label.clone(),
+            });
             let mut next = record.clone();
             next.item.indexed = true;
             indexed.push(next);
         }
+        self.record_decisions(&decisions).await?;
         if !indexed.is_empty() {
             self.catalog().record_import_progress(id, &indexed).await?;
         }
         Ok(waiting)
     }
 
-    /// Record the type the user gave an untyped frame as its IMAGETYP
-    /// correction; the header bytes are untouched.
-    async fn record_frame_type(
-        &self,
-        asset_id: Uuid,
-        frame_type: NamingFrameType,
-    ) -> Result<(), LibraryError> {
-        let asset = self.catalog().asset(asset_id).await?;
-        let expected = [ExpectedAsset {
-            asset_id,
-            decision_revision: asset.decision_revision,
-            fingerprint: asset.fingerprint,
-        }];
-        let corrections = [CorrectionInput {
-            asset_id,
-            field: "imageType".into(),
-            value: serde_json::Value::String(image_type_text(frame_type).into()),
-        }];
-        let preview =
-            self.catalog().preview_correction(&expected, &corrections, group_assets).await?;
+    /// Record what the user set in review on the indexed frames, in one
+    /// reviewed correction so they regroup once: a frame type as the frame's
+    /// IMAGETYP correction and a merge as its framing label. The header bytes
+    /// are untouched.
+    async fn record_decisions(&self, decisions: &[ReviewDecision]) -> Result<(), LibraryError> {
+        let mut expected = Vec::new();
+        let mut corrections = Vec::new();
+        for decision in decisions {
+            let mut fields = Vec::new();
+            if let Some(frame_type) = decision.frame_type {
+                fields.push(("imageType", image_type_text(frame_type).to_owned()));
+            }
+            if let Some(label) = &decision.framing_label {
+                fields.push((FRAMING_LABEL_FIELD, label.clone()));
+            }
+            if fields.is_empty() {
+                continue;
+            }
+            let asset = self.catalog().asset(decision.asset_id).await?;
+            expected.push(ExpectedAsset {
+                asset_id: asset.id,
+                decision_revision: asset.decision_revision,
+                fingerprint: asset.fingerprint,
+            });
+            corrections.extend(fields.into_iter().map(|(field, value)| CorrectionInput {
+                asset_id: asset.id,
+                field: field.into(),
+                value: serde_json::Value::String(value),
+            }));
+        }
+        if corrections.is_empty() {
+            return Ok(());
+        }
+        let preview = self.preview_correction(&expected, &corrections).await?;
         self.confirm_correction(preview.id, &expected).await?;
         Ok(())
     }
@@ -1109,6 +1175,7 @@ impl Library {
 
     async fn import_view(&self, record: ImportRecord) -> Result<ImportOperation, LibraryError> {
         let locations = self.active_locations().await?;
+        let sessions = review::sessions(&record.items, &self.framing_margins().await?);
         let source = record.source_path.to_path_buf();
         let identity = record.source_identity.clone();
         let probes = locations.clone();
@@ -1161,6 +1228,7 @@ impl Library {
             summary: summarize(&items),
             items,
             destinations,
+            sessions,
             created_at: record.created_at,
             updated_at: record.updated_at,
             settled_at: record.settled_at,
@@ -1169,6 +1237,14 @@ impl Library {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// What the user set in review on one indexed frame.
+struct ReviewDecision {
+    asset_id: Uuid,
+    /// The frame type the user set, when it differs from the header's.
+    frame_type: Option<NamingFrameType>,
+    framing_label: Option<String>,
+}
 
 /// The roots an import reads from and writes to, with the identity each must
 /// still have: the source as the preview observed it, and each destination
@@ -1284,6 +1360,7 @@ fn new_record(seq: u32, source_path: NativePath, relative_path: NativePath) -> I
             image_type: None,
             classification: None,
             user_type: None,
+            framing_label: None,
             excluded: false,
             role: None,
             destination_location_id: None,

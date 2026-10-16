@@ -125,6 +125,7 @@ pub async fn index_folder(library: &Library, root: &Path, name: &str) -> Locatio
             },
             provisional: Vec::new(),
             date_basis: Some("date-loc-noon".into()),
+            framing: None,
         }],
     };
     let operation = catalog.begin_scan(location.id, None).await.unwrap();

@@ -67,6 +67,8 @@ mod session_calibration;
 pub use session_calibration::*;
 mod session_intake;
 pub use session_intake::*;
+mod session_framing;
+pub use session_framing::*;
 mod project_inputs;
 pub use project_inputs::*;
 mod project_view;
@@ -594,6 +596,12 @@ pub struct CaptureMetadata {
     /// Integration count: `STACKCNT`, else `NCOMBINE`. Absent stays `None`, never 0.
     #[serde(default)]
     pub stack_count: Option<u32>,
+    /// The user's framing label ([`FRAMING_LABEL_FIELD`]): lights of one night
+    /// and key with the same label are one framing whatever their pointing
+    /// (D-W107). No header holds it; only a correction sets it, when the user
+    /// merges or splits sessions.
+    #[serde(default)]
+    pub framing_label: Option<String>,
 }
 
 fn finite(value: Option<f64>) -> Option<f64> {
@@ -674,6 +682,7 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             focal_length_mm: finite(raw.focal_length_mm),
             pixel_size_um: finite(raw.pixel_size_um),
             stack_count: raw.stack_count,
+            framing_label: None,
         }
     }
 }
@@ -841,6 +850,10 @@ pub struct SessionCandidate {
     pub asset_ids: Vec<Uuid>,
     pub provisional: Vec<String>,
     pub date_basis: Option<String>,
+    /// The framing intake split the session by; `None` for frames without
+    /// pointing and for frames that are not lights (D-W107).
+    #[serde(default)]
+    pub framing: Option<SessionFraming>,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -857,6 +870,9 @@ pub struct Session {
     pub asset_ids: Vec<Uuid>,
     pub provisional: Vec<String>,
     pub date_basis: Option<String>,
+    /// The framing the session was split by at intake; `None` without pointing.
+    #[serde(default)]
+    pub framing: Option<SessionFraming>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
