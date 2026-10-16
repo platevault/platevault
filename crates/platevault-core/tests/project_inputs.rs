@@ -294,6 +294,16 @@ async fn nothing_joins_by_itself_and_a_regroup_never_rekeys_held_frames() {
         pending.iter().all(|change| change.source() == ChangeSource::Library),
         "the Project itself changed nothing: {pending:#?}"
     );
+
+    // An add takes exactly the sessions the user chose, never the Ready
+    // suggestion beside them.
+    let gain = world.admissible(HA_GAIN_0).await;
+    let chosen = add(&world, &[gain.id]).await.unwrap();
+    assert!(chosen.sessions.iter().any(|member| member.session_id == gain.id));
+    assert!(
+        chosen.sessions.iter().all(|member| member.session_id != oiii.id),
+        "the suggestion did not join by itself"
+    );
 }
 
 // ── Groups ───────────────────────────────────────────────────────────────────
