@@ -47,7 +47,8 @@ define_class!(
             completion_handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
         ) {
             let category = notification.request().content().categoryIdentifier().to_string();
-            let options = registry().presentation(&category);
+            let options =
+                registry().presentation(&category, crate::categories::has_banner_options());
             completion_handler.call((options,));
         }
 

@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use block2::RcBlock;
 
 use objc2::rc::Retained;
-use objc2_foundation::{NSArray, NSSet, NSString};
+use objc2_foundation::{NSArray, NSOperatingSystemVersion, NSProcessInfo, NSSet, NSString};
 use objc2_user_notifications::{
     UNNotificationAction, UNNotificationActionOptions, UNNotificationCategory,
     UNNotificationCategoryOptions, UNNotificationPresentationOptions,
@@ -58,12 +58,21 @@ impl Categories {
         self.0.insert(identifier.to_owned(), Category { actions, on_action });
     }
 
-    /// How a notification in `category` shows while the app is frontmost.
-    pub fn presentation(&self, category: &str) -> UNNotificationPresentationOptions {
-        if self.0.contains_key(category) {
+    /// How a notification in `category` shows while the app is frontmost, on
+    /// a macOS that has (`banner_options`) or lacks the macOS 11 `Banner` and
+    /// `List` options.
+    pub fn presentation(
+        &self,
+        category: &str,
+        banner_options: bool,
+    ) -> UNNotificationPresentationOptions {
+        if !self.0.contains_key(category) {
+            UNNotificationPresentationOptions::empty()
+        } else if banner_options {
             UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::List
         } else {
-            UNNotificationPresentationOptions::empty()
+            #[allow(deprecated)] // the only option macOS 10.15 knows
+            UNNotificationPresentationOptions::Alert
         }
     }
 
@@ -87,6 +96,13 @@ impl Categories {
 pub fn registry() -> MutexGuard<'static, Categories> {
     static CATEGORIES: OnceLock<Mutex<Categories>> = OnceLock::new();
     CATEGORIES.get_or_init(Mutex::default).lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Whether this macOS has the `Banner` and `List` presentation options,
+/// which macOS 11 introduced.
+pub fn has_banner_options() -> bool {
+    let big_sur = NSOperatingSystemVersion { majorVersion: 11, minorVersion: 0, patchVersion: 0 };
+    NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(big_sur)
 }
 
 fn build(identifier: &str, actions: &[Action]) -> Retained<UNNotificationCategory> {
@@ -169,11 +185,16 @@ mod tests {
     fn a_reminder_is_not_shown_while_the_app_is_frontmost_as_without_a_delegate() {
         // Reminders post with no category, which the framework reports as "".
         let categories = with_offer(Arc::default());
-        assert_eq!(categories.presentation(""), UNNotificationPresentationOptions::empty());
-        assert_eq!(
-            Categories::default().presentation(""),
-            UNNotificationPresentationOptions::empty()
-        );
+        for banner_options in [true, false] {
+            assert_eq!(
+                categories.presentation("", banner_options),
+                UNNotificationPresentationOptions::empty()
+            );
+            assert_eq!(
+                Categories::default().presentation("", banner_options),
+                UNNotificationPresentationOptions::empty()
+            );
+        }
     }
 
     #[test]
@@ -185,12 +206,19 @@ mod tests {
     }
 
     #[test]
-    fn a_registered_category_shows_while_frontmost() {
+    fn a_registered_category_shows_as_a_banner_while_frontmost_from_macos_11() {
         let categories = with_offer(Arc::default());
         assert_eq!(
-            categories.presentation(OFFER),
+            categories.presentation(OFFER, true),
             UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::List
         );
+    }
+
+    #[test]
+    #[allow(deprecated)] // `Alert` is the only option macOS 10.15 knows
+    fn a_registered_category_shows_as_an_alert_while_frontmost_before_macos_11() {
+        let categories = with_offer(Arc::default());
+        assert_eq!(categories.presentation(OFFER, false), UNNotificationPresentationOptions::Alert);
     }
 
     #[test]
