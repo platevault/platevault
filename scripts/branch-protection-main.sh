@@ -21,8 +21,10 @@
 # Required contexts, and the job that publishes each:
 #   Detect changes (CI)                          ci.yml `changes`
 #   Unit + integration (L1+L2) — ubuntu-latest   ci.yml `integration` (or
-#   Unit + integration (L1+L2) — windows-latest  `integration-idle` when no
-#                                                Rust/frontend lane is active)
+#   Unit + integration (L1+L2) — windows-latest  `integration-idle` when the
+#                                                Rust, frontend and
+#                                                spec_contracts lanes are
+#                                                all idle)
 #   UI mock-mode (Playwright)                    ci.yml `ui-e2e-gate`
 #   Real-UI smoke (L3) — ubuntu-latest           e2e.yml `e2e-smoke-gate-ubuntu`
 #   Supply chain (cargo-deny)                    ci.yml `supply-chain`
@@ -62,10 +64,17 @@
 #                                          paraglide bug). Reconsider including
 #                                          it once those have landed.
 #
-# A context whose job is SKIPPED counts as satisfied by branch protection, so
-# docs-only PRs do not hang. That is why `e2e.yml` gates whole JOBS with a
-# job-level `if:` rather than step-level conditions — see the comment near the
-# top of that workflow. Do not convert those to step-level.
+# Every required context has to be published under its exact name on every PR.
+# A matrix job skipped by its job-level `if:` never expands, so it publishes
+# only the literal `— ${{ matrix.os }}` name and the per-OS contexts never
+# arrive; ci.yml's `integration-idle` shim covers that case. The other gates do
+# not rely on a `skipped` conclusion either: `ui-e2e-gate` (ci.yml) and
+# `e2e-smoke-gate-ubuntu` (e2e.yml) run under `always()` and decide inside
+# their step whether there was work, so they always publish a definitive
+# result (see the comments on those jobs). Keep required gates in that shape;
+# do not move their condition back to a job-level `if:`. The one exception
+# today is `Supply chain (cargo-deny)`, which still skips at job level on PRs
+# that leave the Rust lane idle.
 #
 # Usage:
 #   scripts/branch-protection-main.sh show     # current protection (or 404)
