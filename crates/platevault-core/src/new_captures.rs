@@ -32,17 +32,19 @@
 //!   [`Library`] (register, reselect, remap, retire) is applied at once;
 //!   anything else the catalog lists differently, a removal included, at the
 //!   next sweep.
-//! - Every sweep each root is `stat`ed once, without following links, and so
+//! - Every sweep each root is checked once without following links, and so
 //!   is the root of each location whose live events a debounce tick checks,
-//!   before any path they name is read. A watched root that is gone or no
-//!   longer the same folder (replaced by a link or by another folder, which
-//!   on Windows only its folder ID tells apart) is dropped at once,
+//!   before any path they name is read. The check is one no-follow `stat`;
+//!   on Windows it also opens a handle on the root folder itself, never a
+//!   reparse target, and reads its folder ID. A watched root that is gone or
+//!   no longer the same folder (replaced by a link or by another folder,
+//!   which on Windows only its folder ID tells apart) is dropped at once,
 //!   releasing its OS watch, and nothing below it is read through it. An
-//!   absent root costs that one `stat` per sweep; a present one is checked
+//!   absent root costs that one check per sweep; a present one is checked
 //!   against its registered identity. A root refused because it is not the
-//!   registered folder is checked again only after its `stat` changes, and
-//!   one whose identity could not be observed (a volume query that failed)
-//!   at the next sweep.
+//!   registered folder is checked again only after that check's result
+//!   changes, and one whose identity could not be observed (a volume query
+//!   that failed) at the next sweep.
 //! - An OS watcher error or lost-events notice, a full event channel, a new
 //!   folder (which the watcher does not cover yet) or a path that is not
 //!   UTF-8 restarts that location's watcher and walks it again. So does a walk
@@ -316,8 +318,9 @@ impl Default for Settings {
 
 /// How discovery observes a location root. Every method is blocking.
 pub(crate) trait RootProbe: Send + Sync + 'static {
-    /// One no-follow `stat`: the root's continuity stamp, or `None` when it
-    /// is absent or not a real folder.
+    /// The root's continuity stamp, or `None` when it is absent or not a
+    /// real folder: one no-follow `stat`, and on Windows a query of a handle
+    /// on the root folder itself (never a reparse target) for its folder ID.
     fn stamp(&self, root: &Path) -> Option<RootStamp>;
 
     /// Whether the root is the registered folder on the registered volume,
