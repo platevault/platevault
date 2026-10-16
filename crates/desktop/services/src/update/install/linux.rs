@@ -12,7 +12,7 @@ use std::path::Path;
 use std::process::{Command, ExitStatus};
 
 use super::Installed;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", test))]
 use crate::update::signature::Payload;
 use crate::update::{Package, UpdateError};
 
@@ -96,7 +96,7 @@ pub(super) fn install_package(
 /// Run `command`, a [`package_command`], with the verified `payload` on its
 /// standard input. The handle shares its position with `payload`'s, which
 /// `reverify` and `check_format` leave at the start.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", test))]
 fn run_package(mut command: Command, payload: &mut Payload<'_>) -> Result<Installed, UpdateError> {
     let stdin = payload.reader().try_clone()?;
     let status = command.stdin(stdin).status().map_err(|error| {
@@ -189,19 +189,15 @@ mod tests {
         );
     }
 
-    /// Every program the root script runs is named by absolute path; it
-    /// reads the payload from standard input only, at most one byte more
-    /// than the verified size, and gives the package manager none of it.
+    /// Every program the root script runs is named by absolute path, so
+    /// nothing is looked up on root's `PATH`.
     #[test]
-    fn the_root_script_names_its_programs_and_reads_no_payload_path() {
+    fn the_root_script_names_each_program_by_absolute_path() {
         for program in
             ["/bin/mktemp", "/bin/rm", "/usr/bin/head", "/usr/bin/stat", "/usr/bin/sha256sum"]
         {
             assert!(PRIVILEGED_INSTALL.contains(program), "{program}");
         }
-        assert!(PRIVILEGED_INSTALL.contains(r#"/usr/bin/head -c "$(($2 + 1))" > "$f""#));
-        assert!(PRIVILEGED_INSTALL.contains(r#""$3" "$4" "$f" </dev/null"#));
-        assert!(!PRIVILEGED_INSTALL.contains("$6"), "no further argument");
     }
 
     #[test]
@@ -264,15 +260,15 @@ mod tests {
         assert_eq!(fs::read_dir(dir.path()).expect("dir").count(), 0);
     }
 
-    /// The script's tests run it as `pkexec` would, only without root: the
-    /// `/bin` and `/usr/bin` programs it names are the Linux ones.
-    #[cfg(target_os = "linux")]
+    /// The script's tests run it as `pkexec` would, only without root. The
+    /// `/bin` and `/usr/bin` programs it names are the Linux ones, so they
+    /// run on Linux; every Unix compiles them.
     mod root_script {
         use std::fs;
         use std::io::{Seek as _, Write as _};
         use std::os::unix::fs::PermissionsExt as _;
         use std::path::{Path, PathBuf};
-        use std::process::Command;
+        use std::process::{Command, Stdio};
 
         use sha2::{Digest as _, Sha256};
 
@@ -290,15 +286,16 @@ mod tests {
         }
 
         /// A stand-in package tool in `dir` that exits with `status` after
-        /// recording its flag (`flag`), the path it was given (`given`) and a
-        /// copy of that file (`installed`).
+        /// recording its flag (`flag`), the path it was given (`given`), a
+        /// copy of that file (`installed`) and what its standard input is
+        /// (`stdin`).
         fn package_tool(dir: &Path, status: i32) -> PathBuf {
             let tool = dir.join("tool");
             let out = dir.display();
             fs::write(
                 &tool,
                 format!(
-                    "#!/bin/sh\nprintf '%s' \"$1\" > '{out}/flag'\nprintf '%s' \"$2\" > '{out}/given'\n/bin/cp \"$2\" '{out}/installed'\nexit {status}\n"
+                    "#!/bin/sh\nprintf '%s' \"$1\" > '{out}/flag'\nprintf '%s' \"$2\" > '{out}/given'\n/bin/cp \"$2\" '{out}/installed'\n/usr/bin/readlink /proc/self/fd/0 > '{out}/stdin'\nexit {status}\n"
                 ),
             )
             .expect("tool");
@@ -306,25 +303,29 @@ mod tests {
             tool
         }
 
-        /// Run the script with `payload` on standard input, as the copy the
-        /// app verified as [`PACKAGE`], with digest `sha256`.
+        /// The script as `pkexec` runs it for `tool`, with the payload
+        /// verified as [`PACKAGE`] with digest `sha256`.
+        fn script(sha256: &str, tool: &Path) -> Command {
+            let mut command = Command::new("/bin/sh");
+            command
+                .args(["-c", PRIVILEGED_INSTALL, SCRIPT_NAME, sha256])
+                .arg(PACKAGE.len().to_string())
+                .arg(tool)
+                .args(["-i", "update.deb"]);
+            command
+        }
+
+        /// Run the script with `payload` on standard input.
         fn run(payload: &[u8], sha256: &str, tool: &Path) -> Option<i32> {
             let mut stdin = tempfile::tempfile().expect("payload");
             stdin.write_all(payload).expect("payload bytes");
             stdin.rewind().expect("rewind");
-            Command::new("/bin/sh")
-                .args(["-c", PRIVILEGED_INSTALL, SCRIPT_NAME, sha256])
-                .arg(PACKAGE.len().to_string())
-                .arg(tool)
-                .args(["-i", "update.deb"])
-                .stdin(stdin)
-                .status()
-                .expect("sh")
-                .code()
+            script(sha256, tool).stdin(stdin).status().expect("sh").code()
         }
 
         #[test]
-        fn the_package_manager_gets_the_scripts_own_checked_copy() {
+        #[cfg_attr(not(target_os = "linux"), ignore = "runs the Linux /usr/bin tools")]
+        fn the_package_manager_gets_the_scripts_own_checked_copy_and_no_input() {
             let dir = tempfile::tempdir().expect("tempdir");
             let tool = package_tool(dir.path(), 0);
 
@@ -332,6 +333,11 @@ mod tests {
 
             assert_eq!(fs::read(dir.path().join("installed")).expect("installed"), PACKAGE);
             assert_eq!(fs::read_to_string(dir.path().join("flag")).expect("flag"), "-i");
+            assert_eq!(
+                fs::read_to_string(dir.path().join("stdin")).expect("stdin").trim_end(),
+                "/dev/null",
+                "the package manager reads nothing of the payload's stream"
+            );
             let given = PathBuf::from(fs::read_to_string(dir.path().join("given")).expect("given"));
             assert!(given.starts_with("/tmp"), "{}", given.display());
             assert!(
@@ -350,6 +356,7 @@ mod tests {
         /// after the app verified it, keeping its size, so root's copy no
         /// longer has its digest.
         #[test]
+        #[cfg_attr(not(target_os = "linux"), ignore = "runs the Linux /usr/bin tools")]
         fn a_payload_changed_after_the_check_never_reaches_the_package_manager() {
             let dir = tempfile::tempdir().expect("tempdir");
             let tool = package_tool(dir.path(), 0);
@@ -361,20 +368,39 @@ mod tests {
             assert!(!dir.path().join("given").exists(), "the package manager never ran");
         }
 
-        /// A longer payload is refused on its size: root copies at most one
-        /// byte more than the verified size, however much there is.
+        /// Fed a payload that goes on and on, root stops reading one byte
+        /// past the verified size and refuses the copy on its size, rather
+        /// than copying until `/tmp` is full.
         #[test]
-        fn a_payload_that_grew_is_refused_on_its_size() {
+        #[cfg_attr(not(target_os = "linux"), ignore = "runs the Linux /usr/bin tools")]
+        fn a_payload_that_grew_is_cut_off_at_its_size_and_refused() {
+            const ENDLESS: usize = 64 << 20;
             let dir = tempfile::tempdir().expect("tempdir");
             let tool = package_tool(dir.path(), 0);
-            let grown = [PACKAGE, &[0; 1 << 16]].concat();
+            let mut child =
+                script(&sha256(PACKAGE), &tool).stdin(Stdio::piped()).spawn().expect("sh");
+            let mut stdin = child.stdin.take().expect("stdin");
+            let writer = std::thread::spawn(move || {
+                let chunk = vec![0_u8; 4096];
+                let mut written = PACKAGE.len();
+                stdin.write_all(PACKAGE).expect("the package");
+                // Root's end closes once it has stopped reading.
+                while written < ENDLESS && stdin.write_all(&chunk).is_ok() {
+                    written += chunk.len();
+                }
+                written
+            });
 
-            assert_eq!(run(&grown, &sha256(PACKAGE), &tool), Some(PAYLOAD_SIZE_CHANGED));
+            let status = child.wait().expect("sh").code();
+            let written = writer.join().expect("writer");
 
+            assert_eq!(status, Some(PAYLOAD_SIZE_CHANGED));
+            assert!(written < ENDLESS, "root read {written} bytes");
             assert!(!dir.path().join("given").exists(), "the package manager never ran");
         }
 
         #[test]
+        #[cfg_attr(not(target_os = "linux"), ignore = "runs the Linux /usr/bin tools")]
         fn the_package_managers_status_passes_through_but_never_as_pkexecs_own() {
             let dir = tempfile::tempdir().expect("tempdir");
             let failing = package_tool(dir.path(), 2);
@@ -391,6 +417,7 @@ mod tests {
         /// and a stand-in for `dpkg`: the script gets the whole payload, so
         /// its copy matches the digest.
         #[tokio::test]
+        #[cfg_attr(not(target_os = "linux"), ignore = "runs the Linux /usr/bin tools")]
         async fn the_package_install_hands_the_whole_checked_payload_to_the_script() {
             let dir = tempfile::tempdir().expect("tempdir");
             let tool = package_tool(dir.path(), 0);

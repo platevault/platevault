@@ -102,6 +102,9 @@ pub fn install_bundle(
     signing: &dyn CodeSigning,
     admin_prompt: &str,
 ) -> Result<(), UpdateError> {
+    // Pinned before anything reads the app by path: the privileged install
+    // replaces this entry or nothing (astro-plan-ryj83).
+    let pinned = entry_id(installed)?;
     let identity = signing.identity(installed)?;
     let staging = staging_dir(installed)?;
     tar::Archive::new(GzDecoder::new(payload.reader())).unpack(staging.path())?;
@@ -115,7 +118,7 @@ pub fn install_bundle(
         #[cfg(target_os = "macos")]
         Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             tracing::debug!(%error, "this user cannot move the app; asking for administrator rights");
-            PrivilegedInstall::new(installed, payload, &update, &identity)
+            PrivilegedInstall::new(installed, pinned, payload, &update, &identity)
                 .and_then(|install| install.run(admin_prompt))
         }
         Err(error) => Err(error.into()),
@@ -138,6 +141,14 @@ pub fn install_bundle(
         let _ = std::process::Command::new("/usr/bin/touch").arg(installed).status();
     }
     Ok(())
+}
+
+/// The device and inode of the entry at `path`, a link itself if it is one.
+fn entry_id(path: &Path) -> io::Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let metadata = fs::symlink_metadata(path)?;
+    Ok((metadata.dev(), metadata.ino()))
 }
 
 /// Refuse an `update` that does not satisfy the designated requirement of an
@@ -263,8 +274,11 @@ const KEPT_IN_WORK_DIR: i32 = 68;
 const APP_CHANGED: i32 = 69;
 #[cfg(target_os = "macos")]
 const PAYLOAD_SIZE_CHANGED: i32 = 70;
+#[cfg(target_os = "macos")]
+const OUTCOME_UNKNOWN: i32 = 71;
 /// What [`PRIVILEGED_INSTALL`] writes before the path of an entry it kept in
-/// its own directory ([`KEPT_IN_WORK_DIR`], [`APP_CHANGED`]).
+/// its own directory ([`KEPT_IN_WORK_DIR`], [`APP_CHANGED`],
+/// [`OUTCOME_UNKNOWN`]).
 #[cfg(target_os = "macos")]
 const KEPT_MARKER: &str = "kept:";
 /// The only `PATH` the privileged install's processes see; every program it
@@ -292,9 +306,9 @@ const COPY_SECONDS: u32 = 120;
 /// 1. It enters the installed app's directory and the archive's directory with
 ///    `cd -P` and refuses either when `pwd -P` is not the path the app
 ///    resolved, so no component is a symbolic link. The app must not be a
-///    link, and must be the very entry the user context saw: its device and
-///    inode (`$app`) are pinned (`APP_CHANGED`, 69). Its owner, which the
-///    update is given, is read off that entry.
+///    link, and must be the entry the user context pinned before it read the
+///    app's identity: its device and inode (`$app`, `APP_CHANGED`, 69). The
+///    same `stat` reads its owner, which the update is given.
 /// 2. It opens the archive, refusing a link, and copies from what it opened
 ///    only if that is a regular file: at most one byte more than the
 ///    verified size, giving up after [`COPY_SECONDS`]. A link swapped in
@@ -312,47 +326,53 @@ const COPY_SECONDS: u32 = 120;
 ///    would. What a rename brought into root's directory is told by its
 ///    device and inode, which only root can change there: the pinned app, or
 ///    root's own update. Anything else came from a swap at the installed
-///    path after step 1; root renames it back and installs nothing (69).
+///    path after step 1; root renames it back and installs nothing (69). An
+///    entry whose device and inode cannot be read is not renamed again: what
+///    happened is unknown (`OUTCOME_UNKNOWN`, 71).
 ///
 /// Leaving, whatever the reason, including a signal, root deletes only what
 /// it can tell is its own: its copy of the archive, its unused update, and
-/// the previous app once the update is in place. The previous app, while it
-/// is the only copy, and anything root cannot identify stay in its
-/// directory, which is then opened to the user and named on standard error
-/// (`KEPT_IN_WORK_DIR`, 68, or 69 for an entry that is not the app). A
-/// previous app that cannot be put back is first moved next to the installed
-/// app (`KEPT_NEXT_TO_APP`, 67).
+/// the previous app once one of the two renames that install the update has
+/// succeeded. The pinned app at any other time, and anything root cannot
+/// identify, stay in its directory, which is then opened to the user and
+/// named on standard error: the app as `KEPT_IN_WORK_DIR` (68), anything
+/// else with 69 or 71. A previous app that cannot be put back is first moved
+/// next to the installed app (`KEPT_NEXT_TO_APP`, 67).
 #[cfg(target_os = "macos")]
 const PRIVILEGED_INSTALL: &str = r#"ident() { /usr/bin/stat -f %d:%i -- "$1" 2>/dev/null; }
 there() { [ -e "$1" ] || [ -L "$1" ]; }
 rn() { /usr/bin/osascript -l JavaScript -e "$rename" "$@" </dev/null >/dev/null 2>&1; }
 cd -P -- "$parent" && [ "$(pwd -P)" = "$parent" ] && [ -d "$name" ] && [ ! -L "$name" ] || exit 1
-[ "$(ident "$name")" = "$app" ] || exit 69
-owner=$(/usr/bin/stat -f %u:%g -- "$name") || exit 1
+found=$(/usr/bin/stat -f '%d:%i %u:%g' -- "$name" 2>/dev/null) && [ "${found% *}" = "$app" ] || exit 69
+owner=${found#* }
 work=$(/usr/bin/mktemp -d .platevault-update.XXXXXXXX) && cd -P -- "$work" && here=$(ident .) || exit 1
 cleanup() {
   status=$1
   trap - EXIT HUP INT TERM
   /bin/rm -f -- update.app.tar.gz
-  pending=$(ident "unpacked/$bundle")
-  kept=
+  keep=
   if [ -n "$renaming" ]; then
-    if there "unpacked/$bundle" && [ "$pending" != "$new" ] && [ "$pending" != "$app" ]; then
-      kept="unpacked/$bundle" status=69
-    elif there previous.app && [ "$(ident previous.app)" != "$app" ]; then
-      kept=previous.app status=69
-    elif there previous.app && [ "$pending" = "$new" ]; then
-      kept=previous.app status=68
-    fi
+    for entry in previous.app "unpacked/$bundle"; do
+      there "$entry" || continue
+      id=$(ident "$entry")
+      if [ "$id" = "$new" ] || { [ -n "$done" ] && [ "$id" = "$app" ]; }; then
+        /bin/rm -rf -- "$entry"
+      elif [ "$id" = "$app" ]; then
+        keep=$entry status=68
+      elif [ "$status" != 68 ]; then
+        keep=$entry
+        [ "$status" = 71 ] || status=69
+      fi
+    done
   fi
-  if [ -z "$kept" ]; then
+  if [ -z "$keep" ]; then
     /bin/rm -rf -- unpacked previous.app
     cd -P .. && [ "$(ident "$work")" = "$here" ] && /bin/rmdir -- "$work"
     exit "$status"
   fi
-  [ "$pending" != "$new" ] || /bin/rm -rf -- unpacked
+  /bin/rmdir unpacked 2>/dev/null
   /bin/chmod 755 .
-  printf 'kept:%s/%s/%s' "$parent" "$work" "$kept" >&2
+  printf 'kept:%s/%s/%s' "$parent" "$work" "$keep" >&2
   exit "$status"
 }
 trap 'cleanup $?' EXIT
@@ -372,15 +392,18 @@ digest=$(/usr/bin/shasum -a 256 < update.app.tar.gz) || exit 1
 renaming=yes
 rn swap "unpacked/$bundle" "../$name"
 case "$(ident "unpacked/$bundle")" in
-"$app") exit 0;;
+"$app") done=yes; exit 0;;
 "$new") ;;
+"") exit 71;;
 *) rn swap "unpacked/$bundle" "../$name"; exit 69;;
 esac
 rn excl "../$name" previous.app
 there previous.app || exit 1
-[ "$(ident previous.app)" = "$app" ] || { rn excl previous.app "../$name"; exit 69; }
+moved=$(ident previous.app)
+[ -n "$moved" ] || exit 71
+[ "$moved" = "$app" ] || { rn excl previous.app "../$name"; exit 69; }
 rn excl "unpacked/$bundle" "../$name"
-there "unpacked/$bundle" || exit 0
+there "unpacked/$bundle" || { done=yes; exit 0; }
 rn excl previous.app "../$name"
 there previous.app || exit 1
 rn excl previous.app "../$kept"
@@ -442,28 +465,41 @@ struct PrivilegedInstall {
 #[cfg(target_os = "macos")]
 impl PrivilegedInstall {
     /// The privileged install of `payload`'s bundle, unpacked by the user
-    /// context at `update`, over `installed`, signed as `identity`.
+    /// context at `update`, over `installed`, signed as `identity`. `pinned`
+    /// is the device and inode `installed` had before its identity was read.
     fn new(
         installed: &Path,
+        pinned: (u64, u64),
         payload: &Payload<'_>,
         update: &Path,
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
-        Self::of(installed, payload.path(), (payload.size(), payload.sha256()), update, identity)
+        Self::of(
+            installed,
+            pinned,
+            payload.path(),
+            (payload.size(), payload.sha256()),
+            update,
+            identity,
+        )
     }
 
     /// [`Self::new`] for the archive at `archive` whose verified bytes are
-    /// `size` long and hash to `sha256`.
+    /// `size` long and hash to `sha256`. Refused when `installed` is no
+    /// longer the entry `pinned` names: the identity check, the unpack and
+    /// the failed swap may have taken seconds, in which another process of
+    /// the user's could swap another bundle in.
     fn of(
         installed: &Path,
+        pinned: (u64, u64),
         archive: &Path,
         (size, sha256): (u64, &str),
         update: &Path,
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
-        use std::os::unix::fs::MetadataExt as _;
-
-        let app = fs::symlink_metadata(installed)?;
+        if entry_id(installed)? != pinned {
+            return Err(app_changed(installed, None));
+        }
         let (parent, name) = resolved_location(installed)?;
         let (archive_dir, archive) = resolved_location(archive)?;
         let bundle = update.file_name().ok_or_else(|| {
@@ -472,7 +508,7 @@ impl PrivilegedInstall {
         Ok(Self {
             parent,
             name,
-            app: (app.dev(), app.ino()),
+            app: pinned,
             archive_dir,
             archive,
             size,
@@ -563,11 +599,11 @@ impl PrivilegedInstall {
             // Should the message not parse, the installed app's directory is
             // where the script's directory is.
             Some(KEPT_IN_WORK_DIR) => not_restored(kept_in_work.unwrap_or_else(|| self.parent.clone())),
-            Some(APP_CHANGED) => UpdateError::Install(format!(
-                "{} changed while the update was being installed with administrator rights, so nothing was installed{}",
-                self.parent.join(&self.name).display(),
+            Some(APP_CHANGED) => app_changed(&self.parent.join(&self.name), kept_in_work.as_deref()),
+            Some(OUTCOME_UNKNOWN) => UpdateError::Install(format!(
+                "whether the update was moved into place with administrator rights could not be told{}",
                 kept_in_work.map_or_else(String::new, |kept| format!(
-                    "; what was found there is kept at {}",
+                    "; what was found is kept at {}",
                     kept.display()
                 ))
             )),
@@ -576,6 +612,25 @@ impl PrivilegedInstall {
             )),
         }
     }
+}
+
+/// The error for an `installed` path that no longer held the app the user
+/// context pinned; `kept` is where root kept what it found there instead.
+#[cfg(target_os = "macos")]
+fn app_changed(installed: &Path, kept: Option<&Path>) -> UpdateError {
+    let changed = format!(
+        "{} changed while the update was being installed with administrator rights",
+        installed.display()
+    );
+    UpdateError::Install(match kept {
+        None => format!("{changed}, so nothing was installed"),
+        Some(kept) => {
+            format!(
+                "{changed}; what was found there instead of the app is kept at {}",
+                kept.display()
+            )
+        }
+    })
 }
 
 /// `path`'s directory with every symbolic link resolved, and its name there:
@@ -849,8 +904,8 @@ mod tests {
 
         use super::super::super::codesign::probe_bundle;
         use super::super::{
-            administrator_script, applescript_string, osascript, Identity, PrivilegedInstall,
-            COPY_SECONDS, RENAME_JXA,
+            administrator_script, applescript_string, entry_id, osascript, Identity,
+            PrivilegedInstall, COPY_SECONDS, RENAME_JXA,
         };
         use super::{bundle, owner, version};
         use crate::update::UpdateError;
@@ -880,15 +935,10 @@ mod tests {
             format!("{:x}", Sha256::digest(bytes))
         }
 
-        /// A privileged install in `dir` as the user context leaves it: an
-        /// installed app, and the verified archive of `update` (as `name`) in
-        /// a directory of its own.
-        fn stage_with(
-            dir: &Path,
-            update: &Path,
-            name: &str,
-            identity: &Identity,
-        ) -> (PathBuf, PathBuf, PrivilegedInstall) {
+        /// The files of a privileged install in `dir` as the user context
+        /// leaves them: an installed app, and the verified archive of `update`
+        /// (as `name`) in a directory of its own, with the archive's bytes.
+        fn stage_files(dir: &Path, update: &Path, name: &str) -> (PathBuf, PathBuf, Vec<u8>) {
             let installed = dir.join(INSTALLED);
             bundle(&installed, "old");
             let payload = dir.join("payload");
@@ -896,17 +946,44 @@ mod tests {
             let archive = payload.join("update.app.tar.gz");
             let bytes = archive_of(update, name);
             fs::write(&archive, &bytes).expect("archive");
+            (installed, archive, bytes)
+        }
+
+        /// [`PrivilegedInstall::of`] over [`stage_files`]' files, with the
+        /// app pinned as `pinned`.
+        fn privileged_install(
+            dir: &Path,
+            (installed, archive, bytes): (&Path, &Path, &[u8]),
+            pinned: (u64, u64),
+            name: &str,
+            identity: &Identity,
+        ) -> Result<PrivilegedInstall, UpdateError> {
             // The user context's unpacked copy only lends its name.
             let unpacked = dir.join("staging").join(name);
             let size = u64::try_from(bytes.len()).expect("size");
-            let install = PrivilegedInstall::of(
-                &installed,
-                &archive,
-                (size, &sha256(&bytes)),
+            PrivilegedInstall::of(
+                installed,
+                pinned,
+                archive,
+                (size, &sha256(bytes)),
                 &unpacked,
                 identity,
             )
-            .expect("privileged install");
+        }
+
+        /// A privileged install in `dir` as the user context leaves it, with
+        /// the installed app pinned as it is.
+        fn stage_with(
+            dir: &Path,
+            update: &Path,
+            name: &str,
+            identity: &Identity,
+        ) -> (PathBuf, PathBuf, PrivilegedInstall) {
+            let (installed, archive, bytes) = stage_files(dir, update, name);
+            let pinned = entry_id(&installed).expect("pin");
+            let install =
+                privileged_install(dir, (&installed, &archive, &bytes), pinned, name, identity)
+                    .expect("privileged install");
             (installed, archive, install)
         }
 
@@ -1157,8 +1234,13 @@ function run(argv) {{
             let (installed, _, install) = stage(dir.path());
             let (uid, gid) = owner(&installed);
             assert!(!install.command().contains(" owner="), "no owner from the user context");
-            assert!(install.command().contains(r#"owner=$(/usr/bin/stat -f %u:%g -- "$name")"#));
-            assert!(install.command().contains(r#"/usr/sbin/chown -hR "$owner""#));
+            let script = super::super::PRIVILEGED_INSTALL;
+            assert!(
+                script.contains(r#"found=$(/usr/bin/stat -f '%d:%i %u:%g' -- "$name""#)
+                    && script.contains("owner=${found#* }"),
+                "the owner comes from the stat that checks the pin"
+            );
+            assert!(script.contains(r#"/usr/sbin/chown -hR "$owner""#));
 
             assert_eq!(run(&install.command()), Some(0));
 
@@ -1252,6 +1334,138 @@ function run(argv) {{
             assert_eq!(run(&install.command_with(&script, COPY_SECONDS)), Some(69));
 
             assert_left_as_replaced(dir.path(), &installed);
+        }
+
+        /// The review's case before the prompt: while the user context reads
+        /// the app's identity and unpacks the update, which takes seconds,
+        /// another process swaps a different bundle in. The pin was taken
+        /// before, so the privileged install is refused before it starts.
+        #[test]
+        fn an_installed_app_replaced_after_the_pin_is_refused_before_root_runs() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let source = tempfile::tempdir().expect("source");
+            let update = source.path().join("update.app");
+            bundle(&update, "new");
+            let (installed, archive, bytes) = stage_files(dir.path(), &update, UPDATE);
+            let pinned = entry_id(&installed).expect("pin");
+            replace_installed(dir.path(), &installed);
+
+            let refused = privileged_install(
+                dir.path(),
+                (&installed, &archive, &bytes),
+                pinned,
+                UPDATE,
+                &Identity::AdHoc,
+            );
+
+            match refused {
+                Err(UpdateError::Install(detail)) => {
+                    assert!(detail.contains("nothing was installed"), "{detail}");
+                }
+                other => panic!("not refused: {other:?}"),
+            }
+            assert_left_as_replaced(dir.path(), &installed);
+        }
+
+        /// After the exchange brought another bundle in, another process
+        /// moves the update off the app's name and puts the app back, so
+        /// root's exchange back brings the app itself into its directory.
+        /// Root keeps it there and says where (68) rather than deleting it.
+        #[test]
+        fn an_app_brought_back_by_the_exchange_back_is_kept() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let before = format!(
+                r#"{REPLACE_INSTALLED}
+  else if (argv[0] === "swap" && !fm.fileExistsAtPath("../stolen.app")) {{
+    fm.moveItemAtPathToPathError("../" + installed, "../stolen.app", null);
+    fm.moveItemAtPathToPathError("../moved-away.app", "../" + installed, null);
+  }}"#
+            );
+            let command = install.command_with(&renames_after(&before, true), COPY_SECONDS);
+
+            let output = Command::new("/usr/bin/osascript")
+                .arg("-e")
+                .arg(format!("do shell script {}", applescript_string(&command)))
+                .output()
+                .expect("osascript");
+
+            let error = install.failure(String::from_utf8_lossy(&output.stderr).trim());
+            let UpdateError::PreviousAppNotRestored { kept, .. } = error else {
+                panic!("{error}");
+            };
+            assert_eq!(version(&kept), "old", "the app is kept");
+            assert_eq!(version(&installed), "foreign");
+            assert_eq!(version(&dir.path().join("stolen.app")), "new");
+        }
+
+        /// The exchange brought another bundle in and the exchange back did
+        /// not happen: root keeps the bundle it cannot identify and names it
+        /// (69) instead of deleting it.
+        #[test]
+        fn an_unidentified_entry_root_could_not_put_back_is_kept_and_named() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let before = format!(
+                r#"  if (argv[0] === "swap" && $.NSFileManager.defaultManager.fileExistsAtPath("../moved-away.app")) return;
+{REPLACE_INSTALLED}"#
+            );
+            let command = install.command_with(&renames_after(&before, true), COPY_SECONDS);
+
+            let output = Command::new("/usr/bin/osascript")
+                .arg("-e")
+                .arg(format!("do shell script {}", applescript_string(&command)))
+                .output()
+                .expect("osascript");
+
+            let message = String::from_utf8_lossy(&output.stderr);
+            assert!(message.trim_end().ends_with("(69)"), "{message}");
+            let UpdateError::Install(detail) = install.failure(message.trim()) else {
+                panic!("{message}");
+            };
+            let kept = PathBuf::from(
+                detail.split_once("kept at ").unwrap_or_else(|| panic!("{detail}")).1,
+            );
+            assert_eq!(version(&kept), "foreign", "the other bundle is kept, not deleted");
+            assert_eq!(version(&dir.path().join("moved-away.app")), "old");
+            assert_eq!(version(&installed), "new");
+        }
+
+        /// A `stat` that fails in root's directory right after the exchange
+        /// leaves unknown whether it happened. Root renames nothing more and
+        /// says so (71), rather than letting an exchange back do the install
+        /// and report that nothing was installed. A directory this user may
+        /// not search stands in for the failure, which as root takes a file
+        /// system fault.
+        #[test]
+        fn a_failed_stat_after_the_exchange_renames_nothing_more() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let before = r#"  ObjC.import("stdlib");
+  if (argv[0] === "swap") {
+    if (!$.NSFileManager.defaultManager.fileExistsAtPath("../stat-fault")) {
+      $.system("/usr/bin/touch ../stat-fault; /bin/chmod 000 unpacked");
+      return;
+    }
+    $.system("/bin/chmod 755 unpacked");
+  }"#;
+            let command = install.command_with(&renames_after(before, true), COPY_SECONDS);
+
+            let status = run(&command);
+            let unlocked = Command::new("/bin/chmod")
+                .args(["-R", "u+rwx"])
+                .arg(dir.path())
+                .status()
+                .expect("chmod");
+
+            assert!(unlocked.success());
+            assert_eq!(status, Some(71));
+            assert_eq!(version(&installed), "old", "nothing was installed");
+            let message = "0:1: execution error: The command exited with a non-zero status. (71)";
+            assert!(matches!(
+                install.failure(message),
+                UpdateError::Install(detail) if detail.contains("could not be told")
+            ));
         }
 
         /// A signal between the moves, such as a shutdown, while the previous
@@ -1453,12 +1667,28 @@ function run(argv) {{
             let failure =
                 |status: &str| install.failure(&format!("0:1: execution error: boom ({status})"));
 
-            assert!(matches!(failure("-128"), UpdateError::Permission(_)));
-            assert!(matches!(failure("65"), UpdateError::Signature(_)));
-            assert!(matches!(failure("70"), UpdateError::Signature(_)));
-            assert!(matches!(failure("66"), UpdateError::Identity(_)));
-            assert!(matches!(failure("69"), UpdateError::Install(_)));
-            assert!(matches!(failure("1"), UpdateError::Install(_)));
+            let kinds: Vec<&str> = ["-128", "65", "70", "66", "69", "71", "1"]
+                .into_iter()
+                .map(|status| match failure(status) {
+                    UpdateError::Permission(_) => "permission",
+                    UpdateError::Signature(_) => "signature",
+                    UpdateError::Identity(_) => "identity",
+                    UpdateError::Install(_) => "install",
+                    _ => "other",
+                })
+                .collect();
+            assert_eq!(
+                kinds,
+                [
+                    "permission",
+                    "signature",
+                    "signature",
+                    "identity",
+                    "install",
+                    "install",
+                    "install"
+                ]
+            );
             assert!(matches!(
                 failure("67"),
                 UpdateError::PreviousAppNotRestored { kept, .. }
