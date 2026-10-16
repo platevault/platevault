@@ -548,9 +548,10 @@ impl World {
         let id = session.id.to_string();
         self.sql(
             "INSERT INTO project_sessions (project_id, session_id, group_id, placement, \
-             grouping_revision, calibration_generation, added_at) \
-             SELECT ?1, s.id, ?3, 'framing', s.grouping_revision, c.generation, ?4 FROM sessions s \
-             JOIN session_calibration c ON c.session_id = s.id WHERE s.id = ?2",
+             target_id, grouping_revision, calibration_generation, added_at) \
+             SELECT ?1, s.id, ?3, 'framing', (SELECT target_id FROM associations \
+             WHERE session_id = s.id AND kind = 'target'), s.grouping_revision, c.generation, ?4 \
+             FROM sessions s JOIN session_calibration c ON c.session_id = s.id WHERE s.id = ?2",
             &[&self.project.to_string(), &id, &self.group.to_string(), AT],
         )
         .await;

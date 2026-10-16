@@ -9,6 +9,8 @@
 //! lists each panel with its own gaps, on the Project page and in the Target's
 //! Plan area.
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::path::Path;
@@ -262,13 +264,13 @@ async fn scanned_ngc7000(root: &Path) -> (Arc<Library>, TargetCandidate, Uuid, U
         .id;
     (library, ngc7000, redcat, oiii)
 }
-/// PLAN-FR-02, D-W36, D-W66: NGC 7000 has 2 Ha lights of 300 s and 2 OIII
-/// lights of 120 s on the Project's rig, and the saved run "Ha only" leaves
-/// the OIII session out. The Ha gap names 600 s "in project" and 600 s
-/// "captured" with 3000 s to go; the OIII gap names 0 frames "in project" and
-/// 2 "captured" with 10 to go. The mosaic subject IC 1396 lists each panel by
-/// number with its own goal gap. The Target's Plan area reads the same gaps
-/// for the open Project.
+/// PLAN-FR-02, D-W36, D-W96: NGC 7000 has 2 Ha lights of 300 s and 2 OIII
+/// lights of 120 s on the Project's rig; the Project holds the Ha session and
+/// only suggests the reviewed OIII one. The Ha gap names 600 s "in project"
+/// and 600 s "captured" with 3000 s to go; the OIII gap names 0 frames "in
+/// project" and 2 "captured" with 10 to go. The mosaic subject IC 1396 lists
+/// each panel by number with its own goal gap. The Target's Plan area reads
+/// the same gaps for the open Project.
 #[tokio::test]
 async fn gap_names_in_project_and_captured() {
     let temp = tempfile::tempdir().unwrap();
@@ -313,16 +315,10 @@ async fn gap_names_in_project_and_captured() {
         })
         .await
         .unwrap();
-    let run = NewView {
-        project_id: project.id,
-        subject_id: project.subjects[0].id,
-        rig_id: redcat,
-        name: "Ha only".into(),
-    };
-    let run = catalog.create_view(&run).await.unwrap().view.id;
-    let deselect = DraftEdit::DeselectSessions { session_ids: vec![oiii] };
-    catalog.edit_view_draft(run, 1, &deselect).await.unwrap();
-    catalog.save_view(run, 0, 2).await.unwrap();
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let ha = sessions.iter().map(|summary| summary.session.id).find(|id| *id != oiii).unwrap();
+    membership_support::hold(&library, project.id, ha).await;
+    membership_support::review(&library, oiii).await;
 
     let planning = library.project_planning(&planning_query(project.id, None)).await.unwrap();
     let [nebula, mosaic] = planning.subjects.as_slice() else { panic!("{planning:#?}") };

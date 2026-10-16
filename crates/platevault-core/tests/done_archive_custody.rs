@@ -16,6 +16,8 @@ mod custody_support;
 mod done_archive_support;
 #[path = "support/home.rs"]
 mod home_support;
+#[path = "support/membership.rs"]
+mod membership_support;
 #[path = "support/prepare.rs"]
 mod prepare_support;
 #[path = "support/results.rs"]

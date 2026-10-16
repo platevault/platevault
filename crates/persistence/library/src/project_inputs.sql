@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS project_sessions (
     session_id TEXT NOT NULL REFERENCES sessions (id),
     group_id TEXT NOT NULL,
     placement TEXT NOT NULL CHECK (placement IN ('framing', 'user', 'framing_unknown')),
+    -- The confirmed Target the session joined on: its goals keep counting it
+    -- after the Library re-confirms it as a Target the Project lacks
+    -- (PRJ-AC-26).
+    target_id TEXT NOT NULL REFERENCES targets (id),
     -- The admission basis (`AdmissionBasis`).
     grouping_revision INTEGER NOT NULL CHECK (grouping_revision >= 0),
     calibration_generation INTEGER NOT NULL CHECK (calibration_generation > 0),
@@ -106,9 +110,10 @@ WHEN NEW.grouping_revision IS NOT (SELECT grouping_revision FROM sessions WHERE 
 BEGIN SELECT RAISE(ABORT, 'the admission basis is stale; review the session again'); END;
 
 CREATE TRIGGER IF NOT EXISTS project_sessions_identity_fixed
-BEFORE UPDATE OF project_id, session_id ON project_sessions
+BEFORE UPDATE OF project_id, session_id, target_id ON project_sessions
 WHEN NEW.project_id IS NOT OLD.project_id OR NEW.session_id IS NOT OLD.session_id
-BEGIN SELECT RAISE(ABORT, 'a held session''s Project and identity are fixed'); END;
+    OR NEW.target_id IS NOT OLD.target_id
+BEGIN SELECT RAISE(ABORT, 'a held session''s Project, identity and joined Target are fixed'); END;
 
 -- Moving a session keeps it on its rig: groups follow rigs (PRJ-FR-31).
 CREATE TRIGGER IF NOT EXISTS project_sessions_move_keeps_rig

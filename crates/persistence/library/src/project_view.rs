@@ -22,8 +22,8 @@ use platevault_model::{
     EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords, GroupName,
     InputKind, InputRef, LibraryError, Location, ManifestEntry, ManifestState, NativePath,
     PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis, ProjectLifecycle,
-    ProjectOperation, ProjectOperationKind, Revision, SettledPin, ViewManifest, ViewMode,
-    WorkflowSettings,
+    ProjectOperation, ProjectOperationKind, Revision, SessionPlacement, SettledPin, ViewManifest,
+    ViewMode, WorkflowSettings,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -500,9 +500,10 @@ async fn held_basis(
     let mut held = Held::read(conn, project_id).await?;
     let mut basis =
         HeldBasis { groups: Vec::new(), metadata: BTreeMap::new(), unsettled: Vec::new() };
-    for (id, name, panel, rig_id) in std::mem::take(&mut held.groups) {
+    for mut group in std::mem::take(&mut held.groups) {
         let mut sessions = Vec::new();
-        for (session_id, night) in held.sessions.remove(&id).unwrap_or_default() {
+        for held_session in held.sessions.remove(&group.id).unwrap_or_default() {
+            let session_id = held_session.session_id;
             let calibration = admission::read_calibration(conn, session_id).await?;
             let Some(settled) = calibration.settled() else {
                 basis.unsettled.push((session_id, calibration.unsettled_kinds()));
@@ -528,9 +529,17 @@ async fn held_basis(
             for pin in [&settled.dark, &settled.flat, &settled.bias] {
                 pin_sources(conn, pin, relative).await?;
             }
-            sessions.push(BasisSession { session_id, night, captures, calibration: settled });
+            sessions.push(BasisSession {
+                session_id,
+                night: held_session.night,
+                placement: held_session.placement,
+                target_id: held_session.target_id,
+                captures,
+                calibration: settled,
+            });
         }
-        basis.groups.push(BasisGroup { id, name, panel, rig_id, sessions });
+        group.sessions = sessions;
+        basis.groups.push(group);
     }
     Ok(basis)
 }
@@ -628,12 +637,20 @@ async fn settings_keywords(conn: &mut SqliteConnection) -> Result<GroupKeywords>
         .unwrap_or_default())
 }
 
+/// One held session before its calibration is read.
+struct HeldSession {
+    session_id: Uuid,
+    night: Option<Date>,
+    placement: SessionPlacement,
+    target_id: Uuid,
+}
+
 /// What a Project holds, before calibration is read.
 struct Held {
-    /// (id, name, panel, rig) in position order.
-    groups: Vec<(Uuid, GroupName, bool, Uuid)>,
-    /// Each group's sessions with their nights.
-    sessions: BTreeMap<Uuid, Vec<(Uuid, Option<Date>)>>,
+    /// Every group in position order, its sessions not filled in yet.
+    groups: Vec<BasisGroup>,
+    /// Each group's sessions.
+    sessions: BTreeMap<Uuid, Vec<HeldSession>>,
     /// Each session's captures, inclusion resolved against the live Library.
     captures: BTreeMap<Uuid, Vec<BasisCapture>>,
     /// Every held copy that is neither Trashed nor retired.
@@ -645,35 +662,49 @@ impl Held {
         let project = project_id.to_string();
         let mut groups = Vec::new();
         for row in sqlx::query(
-            "SELECT id, name, panel, rig_id FROM project_groups WHERE project_id = ?1 \
-             ORDER BY position, id",
+            "SELECT id, name, panel, rig_id, origin, optics, framing, position \
+             FROM project_groups WHERE project_id = ?1 ORDER BY position, id",
         )
         .bind(&project)
         .fetch_all(&mut *conn)
         .await?
         {
-            groups.push((
-                parse_uuid(&row.try_get::<String, _>("id")?)?,
-                GroupName::new(&row.try_get::<String, _>("name")?)?,
-                row.try_get::<i64, _>("panel")? == 1,
-                parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
-            ));
+            groups.push(BasisGroup {
+                id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+                name: GroupName::new(&row.try_get::<String, _>("name")?)?,
+                panel: row.try_get::<i64, _>("panel")? == 1,
+                rig_id: parse_uuid(&row.try_get::<String, _>("rig_id")?)?,
+                origin: from_text(&row.try_get::<String, _>("origin")?)?,
+                optics: from_json(&row.try_get::<String, _>("optics")?)?,
+                framing: row
+                    .try_get::<Option<String>, _>("framing")?
+                    .map(|framing| from_json(&framing))
+                    .transpose()?,
+                position: u32::try_from(row.try_get::<i64, _>("position")?).map_err(|_| {
+                    LibraryError::PersistenceFailure("corrupt group position".into())
+                })?,
+                sessions: Vec::new(),
+            });
         }
-        let mut sessions: BTreeMap<Uuid, Vec<(Uuid, Option<Date>)>> = BTreeMap::new();
+        let mut sessions: BTreeMap<Uuid, Vec<HeldSession>> = BTreeMap::new();
         for row in sqlx::query(
-            "SELECT ps.session_id, ps.group_id, s.capture_key FROM project_sessions ps \
-             JOIN sessions s ON s.id = ps.session_id WHERE ps.project_id = ?1 \
-             ORDER BY ps.session_id",
+            "SELECT ps.session_id, ps.group_id, ps.placement, ps.target_id, s.capture_key \
+             FROM project_sessions ps JOIN sessions s ON s.id = ps.session_id \
+             WHERE ps.project_id = ?1 ORDER BY ps.session_id",
         )
         .bind(&project)
         .fetch_all(&mut *conn)
         .await?
         {
             let key = CaptureKey(row.try_get("capture_key")?);
-            sessions
-                .entry(parse_uuid(&row.try_get::<String, _>("group_id")?)?)
-                .or_default()
-                .push((parse_uuid(&row.try_get::<String, _>("session_id")?)?, night_of(&key)));
+            sessions.entry(parse_uuid(&row.try_get::<String, _>("group_id")?)?).or_default().push(
+                HeldSession {
+                    session_id: parse_uuid(&row.try_get::<String, _>("session_id")?)?,
+                    night: night_of(&key),
+                    placement: from_text(&row.try_get::<String, _>("placement")?)?,
+                    target_id: parse_uuid(&row.try_get::<String, _>("target_id")?)?,
+                },
+            );
         }
         let mut copies: BTreeMap<Uuid, Vec<CopyBasis>> = BTreeMap::new();
         for row in sqlx::query(
@@ -703,8 +734,8 @@ impl Held {
             .collect();
         let mut captures: BTreeMap<Uuid, Vec<BasisCapture>> = BTreeMap::new();
         for row in sqlx::query(
-            "SELECT capture_key, session_id, inclusion, basis FROM project_captures \
-             WHERE project_id = ?1 ORDER BY capture_key",
+            "SELECT capture_key, session_id, inclusion, basis, quality_when_added \
+             FROM project_captures WHERE project_id = ?1 ORDER BY capture_key",
         )
         .bind(&project)
         .fetch_all(&mut *conn)
@@ -724,6 +755,7 @@ impl Held {
                 included: inclusion.admits(project_inputs::live_quality(&assets)),
                 inclusion,
                 copies,
+                quality_when_added: from_json(&row.try_get::<String, _>("quality_when_added")?)?,
             });
         }
         Ok(Self { groups, sessions, captures, live })

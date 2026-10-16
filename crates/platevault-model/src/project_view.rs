@@ -23,9 +23,10 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    require_sha256, validate_copies, CaptureInclusion, CopyBasis, CorrectedField, EntryEvidence,
-    FileIdentity, GroupKeywords, GroupName, InputKind, LibraryError, NativePath,
-    ObservationFingerprint, Revision, SettledCalibration, ViewMode,
+    require_sha256, validate_copies, ApplicableQuality, CaptureInclusion, CopyBasis,
+    CorrectedField, EntryEvidence, FileIdentity, FramingEvidence, GroupKeywords, GroupName,
+    GroupOrigin, InputKind, LibraryError, NativePath, ObservationFingerprint, OpticsSignature,
+    Revision, SessionPlacement, SettledCalibration, ViewMode,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -38,7 +39,8 @@ fn invalid(message: String) -> LibraryError {
 /// the Project's own choice the build saw. `included` is that choice
 /// resolved against the live Library; keeping both tells a later pending
 /// change apart: the Project's edit when the choice differs, the Library's
-/// when only the Library moved (D-W109).
+/// when only the Library moved (D-W109). `quality_when_added` is the held
+/// record's, so discarding a removal restores the capture exactly.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisCapture {
@@ -46,33 +48,45 @@ pub struct BasisCapture {
     pub included: bool,
     pub inclusion: CaptureInclusion,
     pub copies: Vec<CopyBasis>,
+    pub quality_when_added: ApplicableQuality,
 }
 
-/// One session of the basis: its night and its settled calibration.
+/// One session of the basis: its night and its settled calibration, with
+/// the placement and joined Target the Project held it with, so discarding
+/// a removal or a move restores it exactly.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisSession {
     pub session_id: Uuid,
     #[serde(default, with = "crate::iso_date::option")]
     pub night: Option<Date>,
+    pub placement: SessionPlacement,
+    pub target_id: Uuid,
     pub captures: Vec<BasisCapture>,
     pub calibration: SettledCalibration,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// One group of the basis, with everything a discard needs to bring it
+/// back after the Project removed it: origin, optics, framing and position.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisGroup {
     pub id: Uuid,
     pub name: GroupName,
     pub panel: bool,
     pub rig_id: Uuid,
+    pub origin: GroupOrigin,
+    pub optics: OpticsSignature,
+    /// `None` reads "Framing unknown".
+    pub framing: Option<FramingEvidence>,
+    pub position: u32,
     pub sessions: Vec<BasisSession>,
 }
 
 /// The exact inputs a View was built from, or that a Closed Project froze:
 /// groups with their names, sessions with their nights and calibration, and
 /// each capture's choice and copies.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectBasis {
     pub mode: ViewMode,
@@ -236,7 +250,7 @@ pub struct ManifestEntry {
 }
 
 /// What one Apply placed and the basis it was built from.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewManifest {
     pub project_id: Uuid,

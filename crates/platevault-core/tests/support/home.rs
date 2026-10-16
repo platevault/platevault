@@ -3,10 +3,11 @@
 
 //! Shared fixtures for the Home tests (spec 065 PRJ-FR-17..19): indexed light
 //! sessions in every new-sessions group with two Projects, and helpers over
-//! the PREP world (`support/prepare.rs`) that review its frames, set goals and
-//! a default site, block a run each way and start one Running operation of
-//! each kind. Included with `#[path = "support/home.rs"] mod home_support;`
-//! beside `prepare_support`.
+//! the PREP world (`support/prepare.rs`) that review its frames, hold its Ha
+//! session, set goals and a default site, block a run each way and start one
+//! Running operation of each kind. Included with `#[path =
+//! "support/home.rs"] mod home_support;` beside `prepare_support` and
+//! `membership_support`.
 #![allow(dead_code)]
 
 use std::fs;
@@ -22,6 +23,7 @@ use time::macros::date;
 use time::Date;
 use uuid::Uuid;
 
+use crate::membership_support;
 use crate::prepare_support::{World, HA_LIGHTS, OIII_LIGHTS};
 use crate::support;
 
@@ -113,16 +115,21 @@ fn rig() -> Equipment {
     }
 }
 
-/// Six indexed light sessions, one per night: three with no confirmed
-/// Target, two confirmed IC 1396 (no Project's subject), one confirmed NGC
-/// 7000 on the rig, a candidate of "Summer nebulae". "Andromeda" is the
-/// second Project.
+/// Eight indexed light sessions, one per night: three with no confirmed
+/// Target, two confirmed IC 1396 (no Project's subject) and three confirmed
+/// NGC 7000 on the rig, candidates of "Summer nebulae": one it holds, one
+/// with its frames still Unreviewed, and one Ready and settled that it only
+/// suggests. "Andromeda" is the second Project.
 pub struct Indexed {
     pub temp: tempfile::TempDir,
     pub library: Arc<Library>,
     pub needs_target: Vec<Uuid>,
+    /// Confirmed sessions no Project holds: the two IC 1396 ones, the
+    /// unreviewed candidate and the suggestion.
     pub not_in_project: Vec<Uuid>,
-    pub candidate: Uuid,
+    pub held: Uuid,
+    pub unreviewed: Uuid,
+    pub suggested: Uuid,
     pub nebulae: Project,
     pub galaxies: Project,
 }
@@ -130,7 +137,7 @@ pub struct Indexed {
 pub async fn indexed() -> Indexed {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("Astro-T7/Captures");
-    for day in 1..=6 {
+    for day in 1..=8 {
         let path = root.join(format!("2026-09-0{day}/Ha_001.fits"));
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let start = format!("'2026-09-0{day}T22:00:00'");
@@ -161,7 +168,7 @@ pub async fn indexed() -> Indexed {
         .into_iter()
         .map(|summary| summary.session)
         .collect();
-    assert_eq!(sessions.len(), 6, "one session per night");
+    assert_eq!(sessions.len(), 8, "one session per night");
     sessions.sort_by_key(|session| session.id);
     let ngc = catalog.save_target(&target("NGC 7000", 314.75, 44.33), None).await.unwrap();
     let ic = catalog.save_target(&target("IC 1396", 324.74, 57.5), None).await.unwrap();
@@ -180,18 +187,40 @@ pub async fn indexed() -> Indexed {
     for (session, target) in [(&sessions[3], ic.candidate.id), (&sessions[4], ic.candidate.id)] {
         catalog.associate_target(&[expected_session(session)], target).await.unwrap();
     }
-    catalog.associate_target(&[expected_session(&sessions[5])], ngc.candidate.id).await.unwrap();
-    let candidate = catalog.session(sessions[5].id).await.unwrap().summary.session;
-    catalog.confirm_equipment(&[expected_session(&candidate)], redcat.id).await.unwrap();
+    for session in &sessions[5..] {
+        catalog.associate_target(&[expected_session(session)], ngc.candidate.id).await.unwrap();
+        let session = catalog.session(session.id).await.unwrap().summary.session;
+        catalog.confirm_equipment(&[expected_session(&session)], redcat.id).await.unwrap();
+    }
+    let (held, unreviewed, suggested) = (sessions[5].id, sessions[6].id, sessions[7].id);
+    membership_support::hold(&library, nebulae.id, held).await;
+    membership_support::admit(&library, suggested).await;
+    let nebulae = catalog.project(nebulae.id).await.unwrap();
     Indexed {
         temp,
         library,
         needs_target: sessions[..3].iter().map(|session| session.id).collect(),
-        not_in_project: vec![sessions[3].id, sessions[4].id],
-        candidate: candidate.id,
+        not_in_project: vec![sessions[3].id, sessions[4].id, unreviewed, suggested],
+        held,
+        unreviewed,
+        suggested,
         nebulae,
         galaxies,
     }
+}
+
+/// The Project holds the PREP world's Ha session through the membership
+/// writer, reviewed and settled.
+pub async fn hold_ha(world: &World) {
+    let light = light(world, HA_LIGHTS[0]).await.id;
+    let sessions = world.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
+    let ha = sessions
+        .into_iter()
+        .map(|summary| summary.session)
+        .find(|session| session.asset_ids.contains(&light))
+        .unwrap()
+        .id;
+    membership_support::hold(&world.library, project(world).await.id, ha).await;
 }
 
 /// The PREP world's Project.

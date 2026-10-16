@@ -6,7 +6,8 @@
 //! no account and no network: the six sections in order, the top line equal
 //! to the Sessions filters, each Next rule as the first that applies, a
 //! trashed run never blocked, Done Projects only under "Show done", and the
-//! running work of every kind.
+//! running work of every kind. Projects hold sessions through the membership
+//! writer; a suggestion holds nothing.
 #![cfg(unix)]
 
 #[path = "support/cleanup.rs"]
@@ -15,13 +16,15 @@ mod cleanup_support;
 mod group_support;
 #[path = "support/home.rs"]
 mod home_support;
+#[path = "support/membership.rs"]
+mod membership_support;
 #[path = "support/prepare.rs"]
 mod prepare_support;
 mod support;
 
 use home_support::{
-    captures_offline, default_site, failed_preparation, ha_goal, indexed, project, review_all,
-    running_import, running_preparation, running_storage, tonight, unmatched_run,
+    captures_offline, default_site, failed_preparation, ha_goal, hold_ha, indexed, project,
+    review_all, running_import, running_preparation, running_storage, tonight, unmatched_run,
 };
 use persistence_library::{SessionFilter, SessionQuery};
 use platevault_core::home::HomeDashboard;
@@ -51,7 +54,8 @@ fn in_order(json: &str, keys: &[&str]) {
 /// PRJ-AC-18, PRJ-FR-17, root FR-020, LIB-AC-09: with indexed sessions and
 /// two Projects, Home opens offline with the top line and six sections in
 /// order; the new-sessions section has its four groups in order and every row
-/// has a one-click action.
+/// has a one-click action. A session an open Project suggests opens that
+/// Project's suggestions (PRJ-FR-19).
 #[tokio::test]
 async fn six_sections_in_order() {
     let indexed = indexed().await;
@@ -76,28 +80,25 @@ async fn six_sections_in_order() {
     in_order(&groups, &["needsTarget", "notInProject", "unreviewed", "readyToAdd"]);
     let sessions = &home.new_sessions;
     assert_eq!(sessions.needs_target.len(), 3);
-    assert_eq!(sessions.not_in_project.len(), 2);
+    assert_eq!(sessions.not_in_project.len(), 4);
     assert_eq!(sessions.unreviewed.len(), 1);
     assert_eq!(sessions.ready_to_add.len(), 1);
     assert!(sessions.needs_target.iter().all(|row| !row.actions.is_empty()));
     assert!(sessions.not_in_project.iter().all(|row| !row.actions.is_empty()));
     assert!(sessions.unreviewed.iter().all(|row| !row.actions.is_empty()));
     assert!(sessions.ready_to_add.iter().all(|row| !row.actions.is_empty()));
-    assert_eq!(sessions.unreviewed[0].session_id, indexed.candidate);
-    assert_eq!(
-        sessions.ready_to_add[0].actions,
-        [SessionAction::StartRun {
-            project_id: indexed.nebulae.id,
-            subject_id: indexed.nebulae.subjects[0].id,
-            rig_id: indexed.nebulae.rig_ids[0],
-        }]
-    );
+    assert_eq!(sessions.unreviewed[0].session_id, indexed.unreviewed);
+    let [ready] = sessions.ready_to_add.as_slice() else { panic!("{sessions:#?}") };
+    assert_eq!(ready.candidate.session_id, indexed.suggested);
+    assert!(ready.blockers.is_empty(), "settled, so it can be added");
+    assert_eq!(ready.actions, [SessionAction::OpenSuggestions { project_id: indexed.nebulae.id }]);
 }
 
-/// PRJ-AC-20, PRJ-FR-19: three sessions with no confirmed Target and two
-/// confirmed sessions in no Project read "3 sessions need a Target · 2 not in
-/// any Project", exactly the Sessions filters' counts and lists; each "not in
-/// a Project" row offers Create Project and Add to Project.
+/// PRJ-AC-20, PRJ-FR-19: three sessions with no confirmed Target read "need a
+/// Target", and the four confirmed sessions no Project holds (two of
+/// another Target, an unreviewed candidate and a suggestion) read "not in
+/// any Project", exactly the Sessions filters' counts and lists; each "not
+/// in a Project" row offers Create Project and Add to Project.
 #[tokio::test]
 async fn top_line_counts_match_session_filters() {
     let indexed = indexed().await;
@@ -109,7 +110,7 @@ async fn top_line_counts_match_session_filters() {
     assert!(needs_calibration > 0, "no calibration was ingested, so sessions wait for it");
     assert_eq!(
         counts,
-        SessionFilterCounts { needs_target: 3, not_in_any_project: 2, needs_calibration }
+        SessionFilterCounts { needs_target: 3, not_in_any_project: 4, needs_calibration }
     );
     let home = dashboard(&indexed.library, false).await;
     assert_eq!(home.top_line, counts);
@@ -136,7 +137,7 @@ async fn top_line_counts_match_session_filters() {
         let mut want = expected.clone();
         want.sort();
         assert_eq!(sorted, want, "{filter:?}");
-        assert!(!shown.contains(&indexed.candidate), "a candidate is in a Project");
+        assert!(!shown.contains(&indexed.held), "a held session is in a Project");
     }
     assert!(home
         .new_sessions
@@ -253,6 +254,7 @@ async fn trashed_run_never_blocked() {
 async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
     let world = world().await;
     review_all(&world).await;
+    hold_ha(&world).await;
     default_site(&world.library).await;
     ha_goal(&world, 50).await;
     let target = project(&world).await.subjects[0].target_id;
@@ -265,12 +267,15 @@ async fn next_rule3_plan_tonight_when_goal_unmet_and_window() {
     assert_eq!(status[0].goals[0].still_needed, GoalShortfall::FrameCount { frames: 48 });
 }
 
-/// PRJ-FR-18 rule 4: with every goal met, or an unmet goal and no window
-/// tonight, Next is "Start a processing run".
+/// PRJ-FR-18 rule 4: with every goal met in project, or an unmet goal and
+/// no window tonight, Next is the last rule (its F4 copy, "Apply N changes",
+/// "Open in {app}" or "Add sessions", is not built yet; it reads "Start a
+/// processing run").
 #[tokio::test]
 async fn next_rule4_start_run() {
     let world = world().await;
     review_all(&world).await;
+    hold_ha(&world).await;
     ha_goal(&world, 50).await;
     let home = dashboard(&world.library, false).await;
     assert!(home.tonight.windows.is_empty(), "no default site");

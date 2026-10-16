@@ -156,8 +156,9 @@ impl F4 {
         run(
             &mut self.conn,
             "INSERT INTO project_sessions (project_id, session_id, group_id, placement, \
-             grouping_revision, calibration_generation, added_at) \
-             SELECT ?1, s.id, ?3, 'framing', s.grouping_revision, \
+             target_id, grouping_revision, calibration_generation, added_at) \
+             SELECT ?1, s.id, ?3, 'framing', (SELECT target_id FROM associations \
+             WHERE session_id = s.id AND kind = 'target'), s.grouping_revision, \
              coalesce(c.generation, 1), ?4 FROM sessions s \
              LEFT JOIN session_calibration c ON c.session_id = s.id WHERE s.id = ?2",
             &[&self.project, &self.session, &self.group, AT],
@@ -407,9 +408,11 @@ async fn sql_admits_only_ready_settled_sessions_at_their_current_basis_once() {
     .await;
     refused(
         &mut f4.conn,
-        "INSERT INTO project_sessions (project_id, session_id, group_id, placement, \
+        "INSERT INTO project_sessions (project_id, session_id, group_id, placement, target_id, \
          grouping_revision, calibration_generation, added_at) \
-         SELECT ?1, s.id, ?3, 'framing', s.grouping_revision, 1, ?4 FROM sessions s WHERE s.id = ?2",
+         SELECT ?1, s.id, ?3, 'framing', (SELECT target_id FROM associations \
+         WHERE session_id = s.id AND kind = 'target'), s.grouping_revision, 1, ?4 \
+         FROM sessions s WHERE s.id = ?2",
         &[&f4.project, &f4.session, &f4.group, AT],
         "admission basis is stale",
     )

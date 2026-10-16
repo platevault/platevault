@@ -763,3 +763,226 @@ async fn edits_never_touch_the_view_and_read_as_pending_changes_by_source() {
         .unwrap_err();
     assert!(refusal(&error).contains("takes no edit"), "{error}");
 }
+
+// ── Discard ──────────────────────────────────────────────────────────────────
+
+/// One held session as a discard restores it.
+type HeldSession = (Uuid, Uuid, SessionPlacement, Uuid, Revision, Revision);
+
+/// What a discard restores: the View settings, the groups, each held
+/// session with its group, placement, joined Target and admission basis,
+/// and every capture with its copies, choice and quality when added.
+fn shape(
+    state: &ProjectDesired,
+) -> (ProjectViewSettings, Vec<ProjectGroup>, Vec<HeldSession>, Vec<ProjectCapture>) {
+    let mut sessions: Vec<HeldSession> = state
+        .sessions
+        .iter()
+        .map(|member| {
+            (
+                member.session_id,
+                member.group_id,
+                member.placement,
+                member.target_id,
+                member.grouping_revision,
+                member.calibration_generation,
+            )
+        })
+        .collect();
+    sessions.sort_by_key(|session| session.0);
+    (state.settings.clone(), state.groups.clone(), sessions, state.captures.clone())
+}
+
+async fn discard(world: &World, revision: Revision) -> Result<ProjectDesired, LibraryError> {
+    world.catalog().discard_project_edits(world.project, revision).await
+}
+
+/// D-W100, D-W109, VSEL-FR-12, VSEL-AC-33: once the View exists, Discard
+/// reverts every edit of the Project's own (a session added and one
+/// removed, a split moving a session, a rename and a mosaic mark of the
+/// group the removal then emptied, frame choices, the input mode and the
+/// keywords) to what the View was built from, in one revision and without
+/// touching the View. The Library's changes (a rejected frame, calibration
+/// reassigned) stay pending, and a second Discard finds nothing of the
+/// Project's own.
+#[tokio::test]
+async fn discard_reverts_only_the_projects_own_edits() {
+    let world = world().await;
+    let ha = world.admissible(HA[0]).await;
+    let oiii = world.admissible(OIII[0]).await;
+    add(&world, &[ha.id, oiii.id]).await.unwrap();
+    world.apply().await;
+    let applied = desired(&world).await;
+    let tree = World::tree(&world.view());
+    let [group] = applied.groups.as_slice() else { panic!("{applied:#?}") };
+    let keys = |session: Uuid| -> Vec<Uuid> {
+        applied
+            .captures
+            .iter()
+            .filter(|capture| capture.session_id == session)
+            .map(|capture| capture.capture_key)
+            .collect()
+    };
+    let (ha_keys, oiii_keys) = (keys(ha.id), keys(oiii.id));
+
+    // The Project's own edits.
+    let state = world
+        .library
+        .split_project_group(world.project, applied.revision, group.id, &[oiii.id], None)
+        .await
+        .unwrap();
+    let state = world
+        .library
+        .rename_project_group(world.project, state.revision, group.id, "Ha nights")
+        .await
+        .unwrap();
+    let state = world
+        .library
+        .set_project_group_panel(world.project, state.revision, group.id, true, None)
+        .await
+        .unwrap();
+    let excluded = [ha_keys[0], oiii_keys[0]];
+    let state = world
+        .catalog()
+        .set_project_frames(world.project, state.revision, &excluded, FrameChoice::Exclude)
+        .await
+        .unwrap();
+    let mut settings = state.settings.clone();
+    settings.mode = ViewMode::Copies;
+    settings.keywords = Some(GroupKeywords::new("SET", "TILE").unwrap());
+    let state = world
+        .catalog()
+        .set_project_view_settings(world.project, state.revision, &settings)
+        .await
+        .unwrap();
+    let state = world
+        .catalog()
+        .remove_project_sessions(world.project, state.revision, &[ha.id])
+        .await
+        .unwrap();
+    assert!(state.groups.iter().all(|held| held.id != group.id), "the emptied framing group went");
+    let gain = world.admissible(HA_GAIN_0).await;
+    add(&world, &[gain.id]).await.unwrap();
+
+    // The Library's changes.
+    let asset = world
+        .catalog()
+        .session(oiii.id)
+        .await
+        .unwrap()
+        .assets
+        .into_iter()
+        .find(|asset| asset.id == oiii_keys[1])
+        .unwrap();
+    let mark = ExpectedAsset {
+        asset_id: asset.id,
+        decision_revision: asset.decision_revision,
+        fingerprint: asset.fingerprint.clone(),
+    };
+    world
+        .catalog()
+        .set_quality(&[mark], Quality::Unusable, InventoryProbe::default())
+        .await
+        .unwrap();
+    world.pin(oiii.id, "dark", &PinState::Declined { origin: DeclineOrigin::User }).await;
+
+    let pending = world.catalog().project_pending_changes(world.project).await.unwrap();
+    let own: Vec<&PendingChange> = pending.iter().filter(|change| change.discardable()).collect();
+    for expected in [
+        PendingChange::SessionRemoved { session_id: ha.id, group_id: group.id },
+        PendingChange::GroupRemoved { group_id: group.id, name: group.name.clone() },
+        PendingChange::ModeSwitched { from: ViewMode::Symlinks, to: ViewMode::Copies },
+        PendingChange::FramesExcluded { session_id: oiii.id, capture_keys: vec![oiii_keys[0]] },
+    ] {
+        assert!(own.contains(&&expected), "missing {expected:?} in {pending:#?}");
+    }
+    assert!(own.iter().any(|change| matches!(
+        change,
+        PendingChange::SessionAdded { session_id, .. } if *session_id == gain.id
+    )));
+    assert!(own.iter().any(|change| matches!(change, PendingChange::SessionMoved { .. })));
+    assert!(own.iter().any(|change| matches!(change, PendingChange::GroupAdded { .. })));
+    assert!(own.iter().any(|change| matches!(change, PendingChange::KeywordsChanged { .. })));
+    let library: Vec<PendingChange> =
+        pending.iter().filter(|change| !change.discardable()).cloned().collect();
+    assert!(
+        library.contains(&PendingChange::LibraryRejected {
+            session_id: oiii.id,
+            capture_keys: vec![oiii_keys[1]],
+        }),
+        "{pending:#?}"
+    );
+    assert!(library
+        .iter()
+        .any(|change| matches!(change, PendingChange::CalibrationChanged { .. })));
+
+    let before = desired(&world).await;
+    let after = discard(&world, before.revision).await.unwrap();
+    assert_eq!(after.revision, before.revision + 1, "one edit, one revision");
+    assert_eq!(shape(&after), shape(&applied), "back to what the View was built from");
+    assert_eq!(
+        world.catalog().project_pending_changes(world.project).await.unwrap(),
+        library,
+        "only the Library's changes stay pending"
+    );
+    assert_eq!(World::tree(&world.view()), tree, "a discard never touches the View");
+    let error = discard(&world, after.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("no edit of its own"), "{error}");
+}
+
+/// D-W100, D-W109, PRJ-FR-25, PRJ-FR-29: Discard needs a View and an edit
+/// of the Project's own and the current revision. A removed session the
+/// Library no longer lets join stays out until that is fixed at its source,
+/// a panel group with goals stays a panel, and a Closed Project takes no
+/// discard. A refusal writes nothing.
+#[tokio::test]
+async fn discard_refuses_what_it_cannot_restore_and_writes_nothing() {
+    let world = world().await;
+    let ha = world.admissible(HA[0]).await;
+    let state = add(&world, &[ha.id]).await.unwrap();
+    let error = discard(&world, state.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("no View yet"), "{error}");
+    world.apply().await;
+    let state = desired(&world).await;
+    let error = discard(&world, state.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("no edit of its own"), "{error}");
+
+    let state = world
+        .catalog()
+        .remove_project_sessions(world.project, state.revision, &[ha.id])
+        .await
+        .unwrap();
+    let error = discard(&world, state.revision - 1).await;
+    assert!(matches!(error, Err(LibraryError::Conflict { .. })), "{error:?}");
+    world.catalog().reopen_session_review(ha.id).await.unwrap();
+    let error = discard(&world, state.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("needs its review finished"), "{error}");
+    assert_eq!(desired(&world).await, state, "a refusal writes nothing");
+
+    // Fixed at its source, the removal can be discarded.
+    let session = world.catalog().session(ha.id).await.unwrap().summary.session;
+    world.catalog().finish_session_review(ha.id, session.grouping_revision).await.unwrap();
+    let restored = discard(&world, state.revision).await.unwrap();
+    assert!(restored.sessions.iter().any(|member| member.session_id == ha.id));
+
+    let group = restored.groups[0].id;
+    let marked = world
+        .library
+        .set_project_group_panel(world.project, restored.revision, group, true, None)
+        .await
+        .unwrap();
+    let target = subject_target(&world, world.project).await;
+    world
+        .catalog()
+        .set_project_goals(world.project, marked.revision, &[ha_frames(target, Some(group), 4)])
+        .await
+        .unwrap();
+    let state = desired(&world).await;
+    let error = discard(&world, state.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("stays a panel"), "{error}");
+    assert_eq!(desired(&world).await, state, "a refusal writes nothing");
+
+    close(&world, world.project).await;
+    let error = discard(&world, state.revision).await.unwrap_err();
+    assert!(refusal(&error).contains("takes no edit"), "{error}");
+}

@@ -25,11 +25,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
     logical_quality, AdmissionBasis, ApplicableQuality, Asset, Availability, BasisCapture,
-    CaptureInclusion, CopyBasis, ExclusionBasis, FrameChoice, FramingEvidence, GroupKeywords,
-    GroupName, GroupOrigin, InclusionBasis, LibraryError, NativePath, OpticsSignature,
-    PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture, ProjectDesired, ProjectGroup,
-    ProjectLifecycle, ProjectSessionMember, ProjectSuggestion, ProjectViewSettings, Revision,
-    SessionAdmission, SessionPlacement, SessionReadiness, ViewMode,
+    BasisGroup, BasisSession, CaptureInclusion, CopyBasis, ExclusionBasis, FrameChoice,
+    FramingEvidence, GroupKeywords, GroupName, GroupOrigin, InclusionBasis, LibraryError,
+    NativePath, OpticsSignature, PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture,
+    ProjectDesired, ProjectGroup, ProjectLifecycle, ProjectSessionMember, ProjectSuggestion,
+    ProjectViewSettings, Revision, SessionAdmission, SessionPlacement, SessionReadiness, ViewMode,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
@@ -146,13 +146,7 @@ impl Catalog {
             let next = begin_edit(conn, id, expected).await?;
             for session in sessions {
                 require_held(conn, id, *session).await?;
-                sqlx::query(
-                    "DELETE FROM project_sessions WHERE project_id = ?1 AND session_id = ?2",
-                )
-                .bind(id.to_string())
-                .bind(session.to_string())
-                .execute(&mut *conn)
-                .await?;
+                delete_member(conn, id, *session).await?;
             }
             drop_empty_framing_groups(conn, id).await?;
             commit_revision(conn, id, next).await?;
@@ -295,17 +289,10 @@ impl Catalog {
         let desired = write_txn!(self, |conn| {
             let next = begin_edit(conn, id, expected).await?;
             require_group(conn, id, group_id).await?;
-            if !panel {
-                let goals: i64 =
-                    sqlx::query_scalar("SELECT count(*) FROM project_goals WHERE group_id = ?1")
-                        .bind(group_id.to_string())
-                        .fetch_one(&mut *conn)
-                        .await?;
-                if goals > 0 {
-                    return Err(LibraryError::InvalidInput(format!(
-                        "group {group_id} has panel goals and stays a panel; remove them first"
-                    )));
-                }
+            if !panel && has_goals(conn, group_id).await? {
+                return Err(LibraryError::InvalidInput(format!(
+                    "group {group_id} has panel goals and stays a panel; remove them first"
+                )));
             }
             sqlx::query("UPDATE project_groups SET panel = ?2 WHERE id = ?1")
                 .bind(group_id.to_string())
@@ -354,19 +341,7 @@ impl Catalog {
                 })?;
                 let quality =
                     live_quality(&live_of(capture, &live)).unwrap_or(ApplicableQuality::Unreviewed);
-                let (inclusion, basis) =
-                    inclusion_columns(CaptureInclusion::chosen(choice, quality));
-                sqlx::query(
-                    "UPDATE project_captures SET inclusion = ?3, basis = ?4, updated_at = ?5 \
-                     WHERE project_id = ?1 AND capture_key = ?2",
-                )
-                .bind(id.to_string())
-                .bind(key.to_string())
-                .bind(inclusion)
-                .bind(basis)
-                .bind(now()?)
-                .execute(&mut *conn)
-                .await?;
+                write_inclusion(conn, id, *key, CaptureInclusion::chosen(choice, quality)).await?;
             }
             commit_revision(conn, id, next).await?;
             read_desired(conn, id).await?
@@ -413,6 +388,49 @@ impl Catalog {
             .bind(settings.parent.as_ref().map(to_json).transpose()?)
             .execute(&mut *conn)
             .await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Discard Project `id`'s own edits since its installed View (D-W100,
+    /// D-W109, VSEL-FR-12, VSEL-AC-33): the sessions it added go, the ones
+    /// it removed come back with the frames and choices it held, moved
+    /// sessions go back to their groups, and its groups, names, mosaic
+    /// marks, frame choices, input mode and keywords return to what that
+    /// View was built from. A Library change stays pending, because it is
+    /// fixed at its source or by removing the session; goals, subjects,
+    /// rigs, notes and the application and processing location are no
+    /// View inputs and stay. All or none, one revision.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision, or with its successors for a removed
+    /// session the Library has since regrouped; `NotFound` for an unknown
+    /// Project; `InvalidInput` for a Project that isn't open, has no View
+    /// yet or no edit of its own pending, a group to remove or unmark that
+    /// carries goals, or a removed session that can no longer join,
+    /// naming each blocker.
+    pub async fn discard_project_edits(
+        &self,
+        id: Uuid,
+        expected: Revision,
+    ) -> Result<ProjectDesired> {
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            let Some(applied) = installed_basis(conn, id).await? else {
+                return Err(LibraryError::InvalidInput(format!(
+                    "project {id} has no View yet, so it has no pending edit to discard"
+                )));
+            };
+            let desired = read_desired(conn, id).await?;
+            let pending = changes_against(conn, &desired, &applied).await?;
+            if !pending.iter().any(PendingChange::discardable) {
+                return Err(LibraryError::InvalidInput(format!(
+                    "project {id} has no edit of its own to discard"
+                )));
+            }
+            restore_basis(conn, &desired, &applied).await?;
             commit_revision(conn, id, next).await?;
             read_desired(conn, id).await?
         });
@@ -666,6 +684,46 @@ async fn drop_empty_framing_groups(conn: &mut SqliteConnection, project: Uuid) -
     Ok(())
 }
 
+/// Whether a group carries goals; a panel group with goals stays a panel.
+async fn has_goals(conn: &mut SqliteConnection, group: Uuid) -> Result<bool> {
+    Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM project_goals WHERE group_id = ?1)")
+        .bind(group.to_string())
+        .fetch_one(&mut *conn)
+        .await?)
+}
+
+/// The Project's choice for one held capture.
+async fn write_inclusion(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    capture_key: Uuid,
+    inclusion: CaptureInclusion,
+) -> Result<()> {
+    let (inclusion, basis) = inclusion_columns(inclusion);
+    sqlx::query(
+        "UPDATE project_captures SET inclusion = ?3, basis = ?4, updated_at = ?5 \
+         WHERE project_id = ?1 AND capture_key = ?2",
+    )
+    .bind(project.to_string())
+    .bind(capture_key.to_string())
+    .bind(inclusion)
+    .bind(basis)
+    .bind(now()?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Remove a held session; its captures and copies go with it.
+async fn delete_member(conn: &mut SqliteConnection, project: Uuid, session: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM project_sessions WHERE project_id = ?1 AND session_id = ?2")
+        .bind(project.to_string())
+        .bind(session.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 // ── Membership add ───────────────────────────────────────────────────────────
 
 /// Add one whole session in the caller's transaction, in the order
@@ -693,23 +751,59 @@ async fn add_session(conn: &mut SqliteConnection, project: Uuid, add: &SessionAd
         add.expected.as_ref(),
     )
     .await?;
-    session_filters::append_target_and_rig(conn, project, add.session_id).await?;
+    let joined = session_filters::append_target_and_rig(conn, project, add.session_id).await?;
+    insert_member(
+        conn,
+        project,
+        add.session_id,
+        add.group_id,
+        add.placement,
+        joined.target_id,
+        &basis,
+    )
+    .await?;
+    for capture in session_captures(conn, add.session_id).await? {
+        insert_capture(
+            conn,
+            project,
+            capture.session_id,
+            capture.capture_key,
+            &capture.copies,
+            capture.inclusion,
+            capture.quality_when_added,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// The session row with the admission basis `require_admission` returned
+/// in the caller's transaction, in its group with its placement and the
+/// Target it joins on.
+async fn insert_member(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    session: Uuid,
+    group: Uuid,
+    placement: SessionPlacement,
+    target: Uuid,
+    basis: &AdmissionBasis,
+) -> Result<()> {
     sqlx::query(
-        "INSERT INTO project_sessions (project_id, session_id, group_id, placement, \
-         grouping_revision, calibration_generation, added_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO project_sessions (project_id, session_id, group_id, placement, target_id, \
+         grouping_revision, calibration_generation, added_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
     )
     .bind(project.to_string())
-    .bind(add.session_id.to_string())
-    .bind(add.group_id.to_string())
-    .bind(to_text(&add.placement)?)
+    .bind(session.to_string())
+    .bind(group.to_string())
+    .bind(to_text(&placement)?)
+    .bind(target.to_string())
     .bind(super::db_revision(basis.grouping_revision)?)
     .bind(super::db_revision(basis.calibration_generation)?)
     .bind(now()?)
     .execute(&mut *conn)
     .await?;
-    for capture in session_captures(conn, add.session_id).await? {
-        insert_capture(conn, project, &capture).await?;
-    }
     Ok(())
 }
 
@@ -745,13 +839,18 @@ async fn session_captures(
     Ok(captures)
 }
 
-/// One capture and its copies; each is held once per Project.
+/// One capture of `session_id` and its copies, with the Project's choice
+/// and its quality when added; each is held once per Project.
 async fn insert_capture(
     conn: &mut SqliteConnection,
     project: Uuid,
-    capture: &ProjectCapture,
+    session_id: Uuid,
+    capture_key: Uuid,
+    copies: &[CopyBasis],
+    inclusion: CaptureInclusion,
+    quality_when_added: ApplicableQuality,
 ) -> Result<()> {
-    let ids: Vec<String> = capture.copies.iter().map(|copy| copy.asset_id.to_string()).collect();
+    let ids: Vec<String> = copies.iter().map(|copy| copy.asset_id.to_string()).collect();
     let holder: Option<String> = sqlx::query_scalar(
         "SELECT c.session_id FROM project_capture_copies cc JOIN project_captures c \
          ON c.project_id = cc.project_id AND c.capture_key = cc.capture_key \
@@ -760,36 +859,36 @@ async fn insert_capture(
     )
     .bind(project.to_string())
     .bind(to_json(&ids)?)
-    .bind(capture.capture_key.to_string())
+    .bind(capture_key.to_string())
     .fetch_optional(&mut *conn)
     .await?;
     if let Some(holder) = holder {
         return Err(LibraryError::InvalidInput(format!(
-            "capture {} is already held through session {holder}; a frame enters a Project once",
-            capture.capture_key
+            "capture {capture_key} is already held through session {holder}; a frame enters a \
+             Project once"
         )));
     }
-    let (inclusion, basis) = inclusion_columns(capture.inclusion);
+    let (inclusion, basis) = inclusion_columns(inclusion);
     sqlx::query(
         "INSERT INTO project_captures (project_id, capture_key, session_id, inclusion, basis, \
          quality_when_added, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
     )
     .bind(project.to_string())
-    .bind(capture.capture_key.to_string())
-    .bind(capture.session_id.to_string())
+    .bind(capture_key.to_string())
+    .bind(session_id.to_string())
     .bind(inclusion)
     .bind(basis)
-    .bind(to_json(&capture.quality_when_added)?)
+    .bind(to_json(&quality_when_added)?)
     .bind(now()?)
     .execute(&mut *conn)
     .await?;
-    for copy in &capture.copies {
+    for copy in copies {
         sqlx::query(
             "INSERT INTO project_capture_copies (project_id, capture_key, asset_id, \
              decision_revision, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .bind(project.to_string())
-        .bind(capture.capture_key.to_string())
+        .bind(capture_key.to_string())
         .bind(copy.asset_id.to_string())
         .bind(super::db_revision(copy.decision_revision)?)
         .bind(to_json(&copy.fingerprint)?)
@@ -862,8 +961,9 @@ pub async fn read_desired(conn: &mut SqliteConnection, id: Uuid) -> Result<Proje
     }
     let mut sessions = Vec::new();
     for member in sqlx::query(
-        "SELECT session_id, group_id, placement, grouping_revision, calibration_generation, \
-         added_at FROM project_sessions WHERE project_id = ?1 ORDER BY added_at, session_id",
+        "SELECT session_id, group_id, placement, target_id, grouping_revision, \
+         calibration_generation, added_at FROM project_sessions WHERE project_id = ?1 \
+         ORDER BY added_at, session_id",
     )
     .bind(&project)
     .fetch_all(&mut *conn)
@@ -873,6 +973,7 @@ pub async fn read_desired(conn: &mut SqliteConnection, id: Uuid) -> Result<Proje
             session_id: parse_uuid(&member.try_get::<String, _>("session_id")?)?,
             group_id: parse_uuid(&member.try_get::<String, _>("group_id")?)?,
             placement: from_text(&member.try_get::<String, _>("placement")?)?,
+            target_id: parse_uuid(&member.try_get::<String, _>("target_id")?)?,
             grouping_revision: revision(member.try_get("grouping_revision")?)?,
             calibration_generation: revision(member.try_get("calibration_generation")?)?,
             added_at: member.try_get("added_at")?,
@@ -993,14 +1094,28 @@ async fn pending_changes(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<Pe
     if !desired.lifecycle.is_open() {
         return Ok(Vec::new());
     }
+    let Some(applied) = installed_basis(conn, id).await? else { return Ok(Vec::new()) };
+    changes_against(conn, &desired, &applied).await
+}
+
+/// The basis of the Project's installed View; `None` before its first Apply.
+async fn installed_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<Option<ProjectBasis>> {
     let basis: Option<String> = sqlx::query_scalar(
         "SELECT basis FROM view_manifests WHERE project_id = ?1 AND state = 'installed'",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
     .await?;
-    let Some(basis) = basis else { return Ok(Vec::new()) };
-    let applied: ProjectBasis = from_json(&basis)?;
+    basis.as_deref().map(from_json).transpose()
+}
+
+/// `desired` with the live Library against `applied`: the Project's own
+/// edits first, then the Library's.
+async fn changes_against(
+    conn: &mut SqliteConnection,
+    desired: &ProjectDesired,
+    applied: &ProjectBasis,
+) -> Result<Vec<PendingChange>> {
     let keywords = match &desired.settings.keywords {
         Some(keywords) => keywords.clone(),
         None => read_workflow_settings(conn).await?.0.keywords,
@@ -1127,6 +1242,291 @@ async fn session_change(
         .then_some(PendingChange::SessionNotReady { session_id, readiness }))
 }
 
+// ── Discard ──────────────────────────────────────────────────────────────────
+
+/// The installed basis's sessions, each with its group.
+type BasisSessions<'a> = BTreeMap<Uuid, (Uuid, &'a BasisSession)>;
+
+/// Put the Project's own choices back to `applied` in the order the
+/// triggers allow: added sessions go, removed groups come back, moved
+/// sessions go back, created groups go, every group's name, mark and
+/// position return, removed sessions rejoin through admission, held frames'
+/// choices return, then the input mode and keywords. Library state is only
+/// read, so its changes stay pending.
+async fn restore_basis(
+    conn: &mut SqliteConnection,
+    desired: &ProjectDesired,
+    applied: &ProjectBasis,
+) -> Result<()> {
+    let project = desired.project_id;
+    let sessions: BasisSessions<'_> = applied
+        .groups
+        .iter()
+        .flat_map(|group| {
+            group.sessions.iter().map(move |session| (session.session_id, (group.id, session)))
+        })
+        .collect();
+    for member in &desired.sessions {
+        if !sessions.contains_key(&member.session_id) {
+            delete_member(conn, project, member.session_id).await?;
+        }
+    }
+    for group in &applied.groups {
+        if desired.groups.iter().all(|held| held.id != group.id) {
+            restore_group(conn, project, group).await?;
+        }
+    }
+    move_back(conn, desired, &sessions).await?;
+    drop_created_groups(conn, desired, applied).await?;
+    restore_group_names(conn, desired, applied).await?;
+    for (session_id, (group, session)) in &sessions {
+        if desired.sessions.iter().any(|member| member.session_id == *session_id) {
+            restore_frames(conn, project, session, &desired.captures).await?;
+        } else {
+            rejoin(conn, project, *group, session).await?;
+        }
+    }
+    restore_settings(conn, desired, applied).await
+}
+
+/// A placeholder name key no group name has (names carry no control
+/// character), so restored names can swap within one transaction.
+fn placeholder_key(group: Uuid) -> String {
+    format!("\u{1}{group}")
+}
+
+/// A group the Project removed, back with its basis identity, rig, optics,
+/// framing and position, under a placeholder name key.
+async fn restore_group(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    group: &BasisGroup,
+) -> Result<()> {
+    group.optics.validate()?;
+    if let Some(framing) = &group.framing {
+        framing.validate()?;
+    }
+    sqlx::query(
+        "INSERT INTO project_groups (id, project_id, rig_id, name, name_key, panel, origin, \
+         optics, framing, position, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, \
+         ?10, ?11)",
+    )
+    .bind(group.id.to_string())
+    .bind(project.to_string())
+    .bind(group.rig_id.to_string())
+    .bind(group.name.as_str())
+    .bind(placeholder_key(group.id))
+    .bind(i64::from(group.panel))
+    .bind(to_text(&group.origin)?)
+    .bind(to_json(&group.optics)?)
+    .bind(group.framing.as_ref().map(to_json).transpose()?)
+    .bind(i64::from(group.position))
+    .bind(now()?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Held sessions the Project moved go back to their basis group and
+/// placement; a session stays on its rig, so the move is always allowed.
+async fn move_back(
+    conn: &mut SqliteConnection,
+    desired: &ProjectDesired,
+    sessions: &BasisSessions<'_>,
+) -> Result<()> {
+    for member in &desired.sessions {
+        let Some((group, session)) = sessions.get(&member.session_id) else { continue };
+        if member.group_id != *group || member.placement != session.placement {
+            sqlx::query(
+                "UPDATE project_sessions SET group_id = ?3, placement = ?4 \
+                 WHERE project_id = ?1 AND session_id = ?2",
+            )
+            .bind(desired.project_id.to_string())
+            .bind(member.session_id.to_string())
+            .bind(group.to_string())
+            .bind(to_text(&session.placement)?)
+            .execute(&mut *conn)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Groups the Project created since the View go; by now they hold no
+/// session. A group with goals stays until the user removes them.
+async fn drop_created_groups(
+    conn: &mut SqliteConnection,
+    desired: &ProjectDesired,
+    applied: &ProjectBasis,
+) -> Result<()> {
+    for group in &desired.groups {
+        if applied.groups.iter().any(|was| was.id == group.id) {
+            continue;
+        }
+        if has_goals(conn, group.id).await? {
+            return Err(LibraryError::InvalidInput(format!(
+                "group {} is new since the View and has goals; remove them before discarding",
+                group.name.as_str()
+            )));
+        }
+        sqlx::query("DELETE FROM project_groups WHERE id = ?1")
+            .bind(group.id.to_string())
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Every basis group's name, mosaic mark and position, in two passes so
+/// two groups can swap names. A panel group with goals stays a panel.
+async fn restore_group_names(
+    conn: &mut SqliteConnection,
+    desired: &ProjectDesired,
+    applied: &ProjectBasis,
+) -> Result<()> {
+    for group in &applied.groups {
+        sqlx::query("UPDATE project_groups SET name_key = ?2 WHERE id = ?1")
+            .bind(group.id.to_string())
+            .bind(placeholder_key(group.id))
+            .execute(&mut *conn)
+            .await?;
+    }
+    for group in &applied.groups {
+        let marked = desired.groups.iter().any(|held| held.id == group.id && held.panel);
+        if marked && !group.panel && has_goals(conn, group.id).await? {
+            return Err(LibraryError::InvalidInput(format!(
+                "group {} has panel goals and stays a panel; remove them before discarding",
+                group.name.as_str()
+            )));
+        }
+        sqlx::query(
+            "UPDATE project_groups SET name = ?2, name_key = ?3, panel = ?4, position = ?5 \
+             WHERE id = ?1",
+        )
+        .bind(group.id.to_string())
+        .bind(group.name.as_str())
+        .bind(group.name.key())
+        .bind(i64::from(group.panel))
+        .bind(i64::from(group.position))
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+/// A session the Project removed joins again through the admission rule,
+/// at the current basis, with the frames and choices the View was built
+/// from. A Library change since (a regroup, a review reopened, an
+/// association or calibration that no longer admits it) refuses it: that
+/// is fixed at its source.
+async fn rejoin(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    group: Uuid,
+    session: &BasisSession,
+) -> Result<()> {
+    let basis =
+        admission::require_admission(conn, project, group, session.session_id, None).await?;
+    insert_member(
+        conn,
+        project,
+        session.session_id,
+        group,
+        session.placement,
+        session.target_id,
+        &basis,
+    )
+    .await?;
+    insert_basis_captures(conn, project, session).await
+}
+
+async fn insert_basis_captures(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    session: &BasisSession,
+) -> Result<()> {
+    for capture in &session.captures {
+        insert_capture(
+            conn,
+            project,
+            session.session_id,
+            capture.capture_key,
+            &capture.copies,
+            capture.inclusion,
+            capture.quality_when_added,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// A held session's frames as the basis held them: each choice back, or,
+/// when the session was removed and added again since, its basis captures
+/// in place of the ones it was added again with.
+async fn restore_frames(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    session: &BasisSession,
+    held: &[ProjectCapture],
+) -> Result<()> {
+    let current: Vec<&ProjectCapture> =
+        held.iter().filter(|capture| capture.session_id == session.session_id).collect();
+    let same = current.len() == session.captures.len()
+        && session.captures.iter().all(|was| {
+            current.iter().any(|capture| {
+                capture.capture_key == was.capture_key
+                    && capture.copies == was.copies
+                    && capture.quality_when_added == was.quality_when_added
+            })
+        });
+    if !same {
+        sqlx::query("DELETE FROM project_captures WHERE project_id = ?1 AND session_id = ?2")
+            .bind(project.to_string())
+            .bind(session.session_id.to_string())
+            .execute(&mut *conn)
+            .await?;
+        return insert_basis_captures(conn, project, session).await;
+    }
+    for was in &session.captures {
+        if current
+            .iter()
+            .any(|now| now.capture_key == was.capture_key && now.inclusion != was.inclusion)
+        {
+            write_inclusion(conn, project, was.capture_key, was.inclusion).await?;
+        }
+    }
+    Ok(())
+}
+
+/// The input mode and keyword names the View was built with. Keywords the
+/// Project resolves to the basis's stay as they are; otherwise the Project
+/// follows Settings again when Settings give the basis's names, and keeps
+/// the basis's names as its own when they don't.
+async fn restore_settings(
+    conn: &mut SqliteConnection,
+    desired: &ProjectDesired,
+    applied: &ProjectBasis,
+) -> Result<()> {
+    let project = desired.project_id.to_string();
+    sqlx::query("UPDATE projects SET view_mode = ?2 WHERE id = ?1")
+        .bind(&project)
+        .bind(to_text(&applied.mode)?)
+        .execute(&mut *conn)
+        .await?;
+    let follow = read_workflow_settings(conn).await?.0.keywords;
+    if *desired.settings.keywords.as_ref().unwrap_or(&follow) == applied.keywords {
+        return Ok(());
+    }
+    let own = (follow != applied.keywords).then_some(&applied.keywords);
+    sqlx::query("UPDATE projects SET group_keyword = ?2, panel_keyword = ?3 WHERE id = ?1")
+        .bind(&project)
+        .bind(own.map(|keywords| keywords.group().as_str()))
+        .bind(own.map(|keywords| keywords.panel().as_str()))
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 // ── Suggestions and held frames, for progress too ────────────────────────────
 
 async fn suggestions(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<ProjectSuggestion>> {
@@ -1181,8 +1581,10 @@ pub(super) async fn suggested(
 pub(super) struct HeldCapture {
     pub capture: ProjectCapture,
     pub group_id: Uuid,
-    /// The Project subject of its session's confirmed Target; `None` while
-    /// that Target is no subject or unconfirmed.
+    /// The Project subject its goals count it toward: its session's
+    /// confirmed Target's, else the Target's it joined on, so a Library
+    /// re-confirmation as a Target the Project lacks keeps it counting
+    /// (PRJ-AC-26); `None` once neither is a subject.
     pub subject_id: Option<Uuid>,
 }
 
@@ -1194,10 +1596,12 @@ pub(super) async fn held_captures(
     let project = id.to_string();
     let mut places: BTreeMap<Uuid, (Uuid, Option<Uuid>)> = BTreeMap::new();
     for row in sqlx::query(
-        "SELECT ps.session_id, ps.group_id, (SELECT sub.id FROM associations a \
+        "SELECT ps.session_id, ps.group_id, coalesce((SELECT sub.id FROM associations a \
          JOIN project_subjects sub ON sub.project_id = ps.project_id AND sub.target_id = a.target_id \
-         WHERE a.session_id = ps.session_id AND a.kind = 'target' AND a.state = 'confirmed') \
-         AS subject_id FROM project_sessions ps WHERE ps.project_id = ?1",
+         WHERE a.session_id = ps.session_id AND a.kind = 'target' AND a.state = 'confirmed'), \
+         (SELECT sub.id FROM project_subjects sub WHERE sub.project_id = ps.project_id \
+         AND sub.target_id = ps.target_id)) AS subject_id \
+         FROM project_sessions ps WHERE ps.project_id = ?1",
     )
     .bind(&project)
     .fetch_all(&mut *conn)

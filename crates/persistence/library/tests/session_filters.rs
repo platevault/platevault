@@ -3,23 +3,28 @@
 
 //! The Sessions filters "Needs a Target" and "Not in any Project" with their
 //! counts, Create Project prefill and Add to Project (LIB-FR-17, LIB-AC-18,
-//! PRJ-FR-19, PRJ-AC-20, D-W59). The filters derive from current associations,
-//! Project subjects and rigs, and run memberships, and assign nothing to a run.
+//! PRJ-FR-19, PRJ-AC-20, D-W59). The filters derive from current
+//! associations and the sessions Projects hold; Add to Project adds the
+//! session through the membership writer, and nothing here assigns a run.
 //! Fixture files are real and only read.
 #![cfg(unix)]
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use membership_support::{add, add_at, admit, hold};
 use persistence_library::{
     Catalog, SessionFilter, SessionQuery, SourceProbe, SuggestedAssociation,
 };
 use platevault_model::{
-    AssociationKind, AssociationState, Equipment, EvidenceItem, Location, Membership, NewView,
-    Project, ProjectInput, ProjectQuery, Provenance, ScanFile, ScanObservation, ScanProgress,
-    ScanState, Session, SessionFilterCounts, SubjectInput, TargetRecord,
+    AdmissionBasis, AssociationKind, AssociationState, Equipment, EvidenceItem, Location,
+    Membership, NewView, Project, ProjectInput, ProjectQuery, Provenance, Quality, ScanFile,
+    ScanObservation, ScanProgress, ScanState, Session, SessionFilterCounts, SubjectInput,
+    TargetRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -311,11 +316,12 @@ async fn needs_target_lists_unconfirmed_incl_needs_review() {
     world.catalog.close().await.unwrap();
 }
 
-/// LIB-FR-17, LIB-AC-18, PRJ-AC-20: "Not in any Project" lists confirmed-Target
-/// sessions that are no Project's candidate and no run's member. A member stays
-/// out after its rig changes and it stops being a candidate.
+/// LIB-FR-17, LIB-AC-18, PRJ-FR-19, PRJ-AC-20, record §9: "Not in any
+/// Project" lists confirmed-Target sessions that no Project holds; a
+/// suggestion holds nothing. A held session stays out after its rig changes
+/// and it stops being a candidate.
 #[tokio::test]
-async fn not_in_any_project_excludes_candidates_and_members() {
+async fn not_in_any_project_lists_sessions_no_project_holds() {
     let world = world().await;
     let confirmed = world.ids(&[RC_HA, ES_HA, RC_L, RC_SII]).await;
     assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, confirmed);
@@ -326,38 +332,46 @@ async fn not_in_any_project_excludes_candidates_and_members() {
         "the counts are the filters' list lengths"
     );
 
-    // NGC 7000 on RedCat: only the RedCat Ha session is a candidate. The SII
-    // session has the Target but no confirmed rig, so it stays out.
+    // NGC 7000 on RedCat: the RedCat Ha session is a candidate, which is no
+    // holding, so it is still in no Project.
     let project = world.project("NGC 7000", &[&world.ngc7000], &[world.redcat.id]).await;
+    let ha = world.id(RC_HA).await;
+    let candidates = world.catalog.project_candidates(project.id).await.unwrap();
+    assert_eq!(candidates.iter().map(|c| c.session_id).collect::<Vec<_>>(), vec![ha]);
+    assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, confirmed);
+
+    // Held, it leaves the list; then its rig changes: no longer a candidate
+    // (Esprit is not a Project rig), but held, so still out.
+    hold(&world.catalog, project.id, ha, world.redcat.id).await;
     let outside = world.ids(&[ES_HA, RC_L, RC_SII]).await;
     assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, outside);
     assert_eq!(world.counts().await.not_in_any_project, 3);
-
-    // The candidate becomes a run member, then its rig changes: no longer a
-    // candidate (Esprit is not a Project rig), but a member, so still in.
-    world.saved_run(&project, world.redcat.id).await;
     world.confirm(RC_HA, None, Some(world.esprit.id)).await;
-    let ha = world.id(RC_HA).await;
     assert!(
         world.catalog.project_candidates(project.id).await.unwrap().is_empty(),
-        "the member is no candidate on its new rig"
+        "the held session is no candidate on its new rig"
     );
-    let members = world.catalog.project_members(project.id).await.unwrap();
-    assert_eq!(members.iter().map(|m| m.session_id).collect::<Vec<_>>(), vec![ha]);
-    assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, outside, "members stay out");
+    let held = world.catalog.project_desired(project.id).await.unwrap().sessions;
+    assert_eq!(held.iter().map(|m| m.session_id).collect::<Vec<_>>(), vec![ha]);
+    assert_eq!(
+        world.listed(SessionFilter::NotInAnyProject).await,
+        outside,
+        "held sessions stay out"
+    );
 
-    // A rig-matching Project of another Target makes nothing a candidate.
+    // A rig-matching Project of another Target holds nothing.
     world.project("M 81 on Esprit", &[&world.m81], &[world.esprit.id]).await;
     assert_eq!(world.listed(SessionFilter::NotInAnyProject).await, outside);
     world.catalog.close().await.unwrap();
 }
 
-/// PRJ-FR-19, LIB-FR-17, D-W59: Add to Project adds the session's Target as a
-/// subject and, when the Project lacks it, the session's rig. The preview names
-/// the rig it adds before anything is saved; the write checks the Project and
-/// session it was previewed against.
+/// PRJ-FR-19, PRJ-FR-02, LIB-FR-17, D-W59: Add to Project adds the session
+/// and, when the Project lacks them, its Target as a subject and its rig, in
+/// one revision. The preview names the rig it adds before anything is
+/// saved; the add checks the Project revision and the admission basis the
+/// user saw.
 #[tokio::test]
-async fn add_to_project_adds_subject_and_missing_rig_with_note() {
+async fn add_to_project_adds_session_subject_and_missing_rig_with_note() {
     let world = world().await;
     let catalog = &world.catalog;
     let project = world.project("NGC 7000", &[&world.ngc7000], &[world.redcat.id]).await;
@@ -374,14 +388,15 @@ async fn add_to_project_adds_subject_and_missing_rig_with_note() {
     assert!(note.contains("Esprit 100"), "{note}");
     assert_eq!(catalog.project(project.id).await.unwrap(), project, "a preview saves nothing");
 
-    let stale = catalog.add_session_to_project(&preview.session, project.id, 0).await;
+    admit(catalog, esprit_ha.id, Quality::Usable).await;
+    let stale = add_at(catalog, project.id, 0, esprit_ha.id, world.esprit.id, None).await;
     assert_eq!(kind(&stale.unwrap_err()), "conflict", "a stale Project revision is refused");
-    let outcome = catalog.add_session_to_project(&preview.session, project.id, 1).await.unwrap();
-    assert_eq!(outcome.project.revision, 2);
-    assert_eq!(outcome.project.rig_ids, vec![world.redcat.id, world.esprit.id]);
-    assert_eq!(outcome.addition.note, preview.note, "the saved note is the previewed one");
-    let candidates = catalog.project_candidates(project.id).await.unwrap();
-    assert!(candidates.iter().any(|c| c.session_id == esprit_ha.id), "now a candidate");
+    add(catalog, project.id, esprit_ha.id, world.esprit.id).await.unwrap();
+    let saved = catalog.project(project.id).await.unwrap();
+    assert_eq!(saved.revision, 2, "the session, its subject and rig in one revision");
+    assert_eq!(saved.rig_ids, vec![world.redcat.id, world.esprit.id]);
+    let held = catalog.project_desired(project.id).await.unwrap().sessions;
+    assert!(held.iter().any(|m| m.session_id == esprit_ha.id), "the session is held");
     assert!(!world.listed(SessionFilter::NotInAnyProject).await.contains(&esprit_ha.id));
 
     // RedCat L: the rig is on the Project, the Target is not: no note.
@@ -389,29 +404,41 @@ async fn add_to_project_adds_subject_and_missing_rig_with_note() {
     let preview = catalog.preview_project_addition(l.id, project.id).await.unwrap();
     assert!(preview.adds_subject);
     assert!(preview.added_rig.is_none() && preview.note.is_none(), "{preview:?}");
-    let outcome = catalog.add_session_to_project(&preview.session, project.id, 2).await.unwrap();
-    let targets: Vec<Uuid> = outcome.project.subjects.iter().map(|s| s.target_id).collect();
+    hold(catalog, project.id, l.id, world.redcat.id).await;
+    let saved = catalog.project(project.id).await.unwrap();
+    let targets: Vec<Uuid> = saved.subjects.iter().map(|s| s.target_id).collect();
     assert_eq!(targets, vec![world.ngc7000.candidate.id, world.m81.candidate.id]);
-    assert_eq!(outcome.project.rig_ids, vec![world.redcat.id, world.esprit.id]);
+    assert_eq!(saved.rig_ids, vec![world.redcat.id, world.esprit.id]);
 
-    // A Project lacking both gains both in one revision.
+    // A Project lacking both gains both with the session in one revision.
     let other = world.project("M 81", &[&world.m81], &[world.esprit.id]).await;
     let ha = world.session(RC_HA).await;
     let preview = catalog.preview_project_addition(ha.id, other.id).await.unwrap();
     assert!(preview.adds_subject);
     assert_eq!(preview.added_rig.as_ref().map(|r| r.id), Some(world.redcat.id));
-    let outcome = catalog.add_session_to_project(&preview.session, other.id, 1).await.unwrap();
-    assert_eq!(outcome.project.revision, 2);
-    assert_eq!(outcome.project.rig_ids, vec![world.esprit.id, world.redcat.id]);
-    assert_eq!(outcome.project.subjects.len(), 2);
+    hold(catalog, other.id, ha.id, world.redcat.id).await;
+    let saved = catalog.project(other.id).await.unwrap();
+    assert_eq!(saved.revision, 2);
+    assert_eq!(saved.rig_ids, vec![world.esprit.id, world.redcat.id]);
+    assert_eq!(saved.subjects.len(), 2);
 
-    // A session whose association changed since its preview is refused.
+    // A session with no confirmed rig can't join; once its rig is confirmed
+    // it can, but only at the basis it now stands at.
     let sii = world.session(RC_SII).await;
     let preview = catalog.preview_project_addition(sii.id, other.id).await.unwrap();
     assert!(preview.added_rig.is_none(), "no confirmed rig, so none to add");
+    admit(catalog, sii.id, Quality::Usable).await;
+    let error = add_at(catalog, other.id, 2, sii.id, world.redcat.id, None).await;
+    assert_eq!(kind(&error.unwrap_err()), "invalid_input", "it needs its rig");
     world.confirm(RC_SII, None, Some(world.redcat.id)).await;
-    let stale = catalog.add_session_to_project(&preview.session, other.id, 2).await;
-    assert_eq!(kind(&stale.unwrap_err()), "conflict", "a changed session is refused");
+    let admission = catalog.session_admission(sii.id).await.unwrap();
+    let older = AdmissionBasis {
+        grouping_revision: admission.intake.grouping_revision,
+        calibration_generation: admission.calibration.generation - 1,
+    };
+    let stale = add_at(catalog, other.id, 2, sii.id, world.redcat.id, Some(older)).await;
+    assert_eq!(kind(&stale.unwrap_err()), "conflict", "a basis the session left is refused");
+    assert_eq!(catalog.project(other.id).await.unwrap().revision, 2, "no refusal wrote anything");
 
     // No confirmed Target: nothing to add.
     let oiii = world.id(RC_OIII).await;

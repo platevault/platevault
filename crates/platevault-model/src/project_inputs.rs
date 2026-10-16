@@ -313,13 +313,16 @@ pub enum SessionPlacement {
 }
 
 /// One whole session the Project holds, with the admission basis it was
-/// added on.
+/// added on and the confirmed Target it joined on: the session keeps
+/// counting toward that Target's subject after the Library re-confirms it as
+/// a Target the Project lacks (PRJ-AC-26).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSessionMember {
     pub session_id: Uuid,
     pub group_id: Uuid,
     pub placement: SessionPlacement,
+    pub target_id: Uuid,
     pub grouping_revision: Revision,
     pub calibration_generation: Revision,
     pub added_at: String,

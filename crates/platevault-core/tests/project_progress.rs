@@ -6,6 +6,8 @@
 //! channel, read from calibration-matching evidence over generated FITS frames
 //! indexed through Library scans. A warning is never a goal and assigns nothing.
 
+#[path = "support/membership.rs"]
+mod membership_support;
 mod support;
 
 use std::path::Path;
@@ -105,7 +107,8 @@ fn ngc7000() -> TargetCandidate {
 /// PRJ-FR-11, CAL-FR-12: Ha lights at 300 s find only 120 s darks that match
 /// on every other criterion, so Ha warns of an exposure mismatch on the rig;
 /// OIII lights at 120 s have a matching dark and do not. The warning is no
-/// goal row.
+/// goal row: the reviewed sessions are suggestions, captured and not in
+/// project.
 #[tokio::test]
 async fn exposure_mismatch_warns_per_subject_and_channel() {
     let temp = tempfile::tempdir().unwrap();
@@ -175,6 +178,9 @@ async fn exposure_mismatch_warns_per_subject_and_channel() {
         }],
     };
     let project = catalog.create_project(&input).await.unwrap();
+    for summary in &sessions {
+        membership_support::review(&library, summary.session.id).await;
+    }
 
     let progress = library.project_progress(project.id).await.unwrap();
     assert_eq!((progress.project_id, progress.revision), (project.id, project.revision));

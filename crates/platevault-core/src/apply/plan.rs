@@ -527,9 +527,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        BasisCapture, CaptureInclusion, CopyBasis, Evaluation, FileIdentity, GroupKeywords,
-        GroupName, InclusionBasis, NativePath, PathSensitivity, PinnedFile, SettledCalibration,
-        Verdict, VolumeIdentity,
+        ApplicableQuality, BasisCapture, CaptureInclusion, CopyBasis, Evaluation, FileIdentity,
+        GroupKeywords, GroupName, GroupOrigin, InclusionBasis, NativePath, OpticsSignature,
+        PathSensitivity, PinnedFile, SessionPlacement, SettledCalibration, Verdict, VolumeIdentity,
     };
 
     fn id(n: u128) -> Uuid {
@@ -646,6 +646,7 @@ mod tests {
                                 decision_revision: 1,
                                 fingerprint: fingerprint(*light),
                             }],
+                            quality_when_added: ApplicableQuality::Usable,
                         }
                     })
                     .collect();
@@ -661,6 +662,8 @@ mod tests {
                 basis_sessions.push(BasisSession {
                     session_id: id(session.id),
                     night: Some(session.night),
+                    placement: SessionPlacement::Framing,
+                    target_id: id(3000),
                     captures,
                     calibration: SettledCalibration {
                         dark: session.dark,
@@ -674,6 +677,10 @@ mod tests {
                 name: GroupName::new(name).unwrap(),
                 panel: false,
                 rig_id: id(2000 + index as u128),
+                origin: GroupOrigin::Framing,
+                optics: OpticsSignature::new(None, Some(250.0), None).unwrap(),
+                framing: None,
+                position: u32::try_from(index).unwrap(),
                 sessions: basis_sessions,
             });
         }
