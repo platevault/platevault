@@ -416,7 +416,7 @@ pub fn run_app(
 
     // astro-plan-5wcib: the services-crate updater. A staged "Install on quit"
     // holds the first quit while it installs, then exits.
-    updater::register(app.handle());
+    updater::register(app.handle(), services.notifier().clone());
 
     app.run(move |handle, event| {
         updater::on_run_event(handle, &event);

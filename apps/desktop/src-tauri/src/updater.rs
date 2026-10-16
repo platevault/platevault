@@ -18,6 +18,7 @@
 //! a quit exits without installing, and the next launch's check offers the
 //! update again.
 
+use desktop_services::notifications::Notifier;
 use desktop_services::update::{
     Package, Platform, QuitDecision, UpdateHost, Updater, UpdaterConfig,
 };
@@ -32,24 +33,32 @@ use crate::MAIN_WINDOW_LABEL;
 pub const UPDATE_STATUS_EVENT: &str = "update:status";
 
 /// Hands installs back to the Tauri app.
-struct TauriHost<R: Runtime>(AppHandle<R>);
+struct TauriHost<R: Runtime> {
+    app: AppHandle<R>,
+    notifier: Notifier,
+}
 
 impl<R: Runtime> UpdateHost for TauriHost<R> {
     fn relaunch(&self) {
         // Through `ExitRequested` and `Exit`, so the clean-shutdown marker is
         // written and the log flushed before the new version starts.
-        self.0.request_restart();
+        self.app.request_restart();
     }
 
     fn exit(&self) {
-        self.0.exit(0);
+        self.app.exit(0);
+    }
+
+    fn notify(&self, title: &str, body: &str) {
+        self.notifier.notify_before_exit(title, body);
     }
 }
 
 /// Build the updater, manage it, and start pushing its status to the
-/// webview. A configuration the updater cannot use is logged, and the app
-/// runs without updates.
-pub fn register<R: Runtime>(app: &AppHandle<R>) {
+/// webview. `notifier` shows what an install at quit must tell the user
+/// once the window is gone. A configuration the updater cannot use is
+/// logged, and the app runs without updates.
+pub fn register<R: Runtime>(app: &AppHandle<R>, notifier: Notifier) {
     let config = match updater_config(app.config(), current_version(app)) {
         Ok(config) => config,
         Err(error) => {
@@ -57,7 +66,7 @@ pub fn register<R: Runtime>(app: &AppHandle<R>) {
             return;
         }
     };
-    let updater = match Updater::new(config, TauriHost(app.clone())) {
+    let updater = match Updater::new(config, TauriHost { app: app.clone(), notifier }) {
         Ok(updater) => updater,
         Err(error) => {
             tracing::error!(%error, "updates are off");
@@ -159,6 +168,7 @@ mod tests {
     impl UpdateHost for NoHost {
         fn relaunch(&self) {}
         fn exit(&self) {}
+        fn notify(&self, _title: &str, _body: &str) {}
     }
 
     #[test]

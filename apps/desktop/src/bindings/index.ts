@@ -895,6 +895,18 @@ export const commands = {
 	 */
 	updateInstallOnQuit: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit")),
 	/**
+	 *  `update.set_locale` — the webview's active locale, sent at startup and on
+	 *  every locale change, for the text the updater shows outside the webview:
+	 *  the macOS administrator prompt and the notification an install at quit
+	 *  raises. A tag that is not a shipped locale means the base locale. Without
+	 *  an updater there is nothing to tell, which is not an error.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Never; the `Result` keeps the shape every update command has.
+	 */
+	updateSetLocale: (locale: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_set_locale", { locale })),
+	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
 	 *  Applies a server-side default limit clamp (1..=500, default 100) to prevent

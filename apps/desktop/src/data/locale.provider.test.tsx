@@ -26,6 +26,12 @@ const nativeMenuSetLabelsMock =
       labels: unknown,
     ) => Promise<{ status: string; data?: null; error?: unknown }>
   >();
+const updateSetLocaleMock =
+  vi.fn<
+    (
+      locale: string,
+    ) => Promise<{ status: string; data?: null; error?: unknown }>
+  >();
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => isTauriMock(),
@@ -37,6 +43,7 @@ vi.mock('@/bindings/index', () => ({
     settingsUpdate: (scope: string, values: unknown) =>
       settingsUpdateMock(scope, values),
     nativeMenuSetLabels: (labels: unknown) => nativeMenuSetLabelsMock(labels),
+    updateSetLocale: (locale: string) => updateSetLocaleMock(locale),
   },
 }));
 
@@ -70,6 +77,8 @@ describe('LocaleProvider / useLocale', () => {
     settingsUpdateMock.mockResolvedValue({ status: 'ok', data: null });
     nativeMenuSetLabelsMock.mockReset();
     nativeMenuSetLabelsMock.mockResolvedValue({ status: 'ok', data: null });
+    updateSetLocaleMock.mockReset();
+    updateSetLocaleMock.mockResolvedValue({ status: 'ok', data: null });
     localStorage.clear();
     document.documentElement.lang = 'en';
 
@@ -205,6 +214,66 @@ describe('LocaleProvider / useLocale', () => {
       minimise: 'Minimizar',
       closeWindow: 'Fechar janela',
     });
+  });
+
+  it('tells the updater the active locale on mount and on every change', async () => {
+    isTauriMock.mockReturnValue(true);
+    localStorage.setItem('pv.locale', 'en-GB');
+    settingsGetMock.mockResolvedValue({
+      status: 'ok',
+      data: { scope: 'general', values: { locale: 'en-GB' } },
+    });
+
+    render(
+      <LocaleProviderUnderTest>
+        <Probe />
+      </LocaleProviderUnderTest>,
+    );
+    await waitFor(() => {
+      expect(updateSetLocaleMock).toHaveBeenCalledTimes(1);
+    });
+    expect(updateSetLocaleMock).toHaveBeenLastCalledWith('en-GB');
+
+    act(() => {
+      screen.getByRole('button', { name: 'switch' }).click();
+    });
+
+    await waitFor(() => {
+      expect(updateSetLocaleMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateSetLocaleMock).toHaveBeenLastCalledWith('pt-BR');
+  });
+
+  it('tells the updater even when relabelling the native menu fails, and the other way round', async () => {
+    nativeMenuSetLabelsMock.mockRejectedValue(new Error('menu refused'));
+    updateSetLocaleMock.mockRejectedValueOnce(new Error('updater refused'));
+    isTauriMock.mockReturnValue(true);
+    localStorage.setItem('pv.locale', 'en-GB');
+    settingsGetMock.mockResolvedValue({
+      status: 'ok',
+      data: { scope: 'general', values: { locale: 'en-GB' } },
+    });
+
+    render(
+      <LocaleProviderUnderTest>
+        <Probe />
+      </LocaleProviderUnderTest>,
+    );
+    await waitFor(() => {
+      expect(updateSetLocaleMock).toHaveBeenCalledTimes(1);
+    });
+    expect(nativeMenuSetLabelsMock).toHaveBeenCalledTimes(1);
+
+    nativeMenuSetLabelsMock.mockResolvedValue({ status: 'ok', data: null });
+    act(() => {
+      screen.getByRole('button', { name: 'switch' }).click();
+    });
+
+    await waitFor(() => {
+      expect(nativeMenuSetLabelsMock).toHaveBeenCalledTimes(2);
+      expect(updateSetLocaleMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateSetLocaleMock).toHaveBeenLastCalledWith('pt-BR');
   });
 
   it.each([
