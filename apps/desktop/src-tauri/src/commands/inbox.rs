@@ -464,7 +464,7 @@ pub async fn inbox_scan_folder(
 
     // Rows an earlier scan stored under the old backslash text for an entry
     // this scan just stored under its own text (bd astro-plan-3pvvc).
-    retire_legacy_rows(&mut *tx, &req.root_id, &legacy_rows)
+    retire_legacy_rows(&mut tx, &req.root_id, &legacy_rows)
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 

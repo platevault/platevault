@@ -132,26 +132,64 @@ pub async fn update_source_group_child_count_conn(
     Ok(())
 }
 
-/// Delete the inbox rows stored for the folder `relative_path` under
-/// `root_id`: every folder item without an open plan, then the source group
-/// once no item refers to it. Items with an open plan, and their group, stay.
+/// Delete every inbox row stored for the folder `relative_path` under
+/// `root_id` — its items, the source groups at that path, and through their
+/// `ON DELETE CASCADE` keys the items' classification, evidence, breakdown,
+/// file metadata and the groups' file overrides — when all of them are
+/// unconfirmed.
+///
+/// The folder's rows are the folder items at that path and every item in a
+/// source group at that path. They are unconfirmed when each is still
+/// `pending_classification` or `classified` and no plan links it. When any is
+/// not, nothing at that path is deleted, so a confirmed or plan-linked
+/// sub-item keeps its siblings, its group and the group's overrides.
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on connection failure.
-pub async fn delete_unlinked_folder_rows_conn(
+pub async fn delete_unconfirmed_folder_rows_conn(
     conn: &mut SqliteConnection,
     root_id: &str,
     relative_path: &str,
 ) -> DbResult<()> {
+    // The folder's items, as one literal in each statement: sqlx accepts only
+    // literal SQL here.
+    let kept: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM inbox_items
+         WHERE root_id = ?1
+           AND ((relative_path = ?2 AND is_master_item = 0)
+                OR source_group_id IN (
+                    SELECT id FROM inbox_source_groups WHERE root_id = ?1 AND relative_path = ?2))
+           AND (state NOT IN ('pending_classification', 'classified')
+                OR id IN (SELECT inbox_item_id FROM inbox_plan_links))",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .fetch_one(&mut *conn)
+    .await?;
+    if kept > 0 {
+        return Ok(());
+    }
     sqlx::query(
         "DELETE FROM inbox_items
-         WHERE root_id = ? AND relative_path = ? AND is_master_item = 0
-           AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
+         WHERE root_id = ?1
+           AND ((relative_path = ?2 AND is_master_item = 0)
+                OR source_group_id IN (
+                    SELECT id FROM inbox_source_groups WHERE root_id = ?1 AND relative_path = ?2))",
     )
     .bind(root_id)
     .bind(relative_path)
     .execute(&mut *conn)
     .await?;
+    delete_unreferenced_groups_at_conn(conn, root_id, relative_path).await
+}
+
+/// Delete the source groups at `relative_path` under `root_id` that no inbox
+/// item refers to; their file overrides go with them.
+pub(super) async fn delete_unreferenced_groups_at_conn(
+    conn: &mut SqliteConnection,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<()> {
     sqlx::query(
         "DELETE FROM inbox_source_groups
          WHERE root_id = ? AND relative_path = ?

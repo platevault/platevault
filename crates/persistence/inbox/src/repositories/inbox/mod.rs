@@ -32,7 +32,7 @@ pub use classification::{
     UpsertClassification, UpsertClassificationRow,
 };
 pub use items::{
-    delete_sub_item_if_unlinked_conn, delete_unlinked_master_item_conn, get_inbox_item,
+    delete_sub_item_if_unlinked_conn, delete_unconfirmed_master_rows_conn, get_inbox_item,
     get_source_group_id_for_item, insert_inbox_item, list_inbox_sub_items,
     list_inbox_sub_items_conn, list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed,
     update_inbox_item_scan_conn, update_inbox_item_state, update_inbox_item_state_conn,
@@ -56,7 +56,7 @@ pub use projections::{
     list_unacknowledged_across_roots, InboxItemGroupingKeys, InboxListRow, InboxStatsRow,
 };
 pub use source_groups::{
-    delete_unlinked_folder_rows_conn, last_scanned_by_root, list_unclassified_source_groups,
+    delete_unconfirmed_folder_rows_conn, last_scanned_by_root, list_unclassified_source_groups,
     update_source_group_child_count_conn, upsert_inbox_source_group, InboxSourceGroupListRow,
     InboxSourceGroupRow, UpsertSourceGroup,
 };

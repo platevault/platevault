@@ -1,0 +1,249 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! `inbox.scan.folder` retires the rows an earlier scan stored for a macOS or
+//! Linux name containing a backslash (bd astro-plan-3pvvc).
+//!
+//! Before that fix the scan turned every `\` into `/`, so the folder `c\d` was
+//! stored as `c/d` and the master `a\b.fits` as `a/b.fits`. The scan now
+//! stores them under their own text and, in the same transaction, deletes the
+//! old rows with everything hanging off them, unless a plan links one of
+//! them. The command is called directly with the pool from a mock app, so this
+//! covers the wiring the use-case tests cannot reach.
+#![cfg(unix)]
+
+use std::path::Path;
+
+use contracts_core::inbox::InboxScanFolderRequest;
+use desktop_shell::commands::inbox::inbox_scan_folder;
+use persistence_core::Database;
+use persistence_inbox::repositories::inbox as repo;
+use sqlx::SqlitePool;
+use tauri::Manager;
+
+/// A FITS file the scan reads: a master when `stack_count` is set.
+fn write_fits(dir: &Path, name: &str, imagetyp: &str, stack_count: Option<u32>) {
+    let mut cards = vec![
+        "SIMPLE  =                    T".to_owned(),
+        "BITPIX  =                    8".to_owned(),
+        "NAXIS   =                    2".to_owned(),
+        "NAXIS1  =                    1".to_owned(),
+        "NAXIS2  =                    1".to_owned(),
+        "EXPTIME =                300.0".to_owned(),
+        "FILTER  = 'Ha'".to_owned(),
+        format!("IMAGETYP= '{imagetyp}'"),
+    ];
+    if let Some(count) = stack_count {
+        cards.push(format!("STACKCNT= {count:>20}"));
+    }
+    let mut block = vec![b' '; 2880];
+    for (idx, card) in cards.iter().enumerate() {
+        block[idx * 80..idx * 80 + card.len()].copy_from_slice(card.as_bytes());
+    }
+    let end = cards.len() * 80;
+    block[end..end + 3].copy_from_slice(b"END");
+    block.extend_from_slice(&[0; 2880]);
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join(name), block).unwrap();
+}
+
+/// Give `item_id` a classification, evidence, metadata and a breakdown row.
+async fn seed_classified(pool: &SqlitePool, item_id: &str, file: &str) {
+    repo::upsert_classification(
+        pool,
+        &repo::UpsertClassification {
+            inbox_item_id: item_id,
+            result: "classified",
+            frame_type: Some("light"),
+            content_signature: "sig-old",
+            unclassified_file_count: 0,
+        },
+    )
+    .await
+    .unwrap();
+    repo::insert_evidence(
+        pool,
+        &repo::InsertEvidence {
+            id: &format!("ev-{item_id}"),
+            inbox_item_id: item_id,
+            relative_file_path: file,
+            frame_type: Some("light"),
+            evidence_source: "imagetyp_header",
+            raw_value: Some("Light Frame"),
+            unclassified: false,
+            manual_override: None,
+            is_master: false,
+            master_detector: None,
+        },
+    )
+    .await
+    .unwrap();
+    repo::upsert_inbox_file_metadata(
+        pool,
+        &repo::UpsertFileMetadata {
+            inbox_item_id: item_id,
+            relative_file_path: file,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    repo::upsert_breakdown_row(pool, &format!("bd-{item_id}"), item_id, "light", 1, None, "[]")
+        .await
+        .unwrap();
+    repo::update_inbox_item_state(pool, item_id, "classified").await.unwrap();
+}
+
+/// An old folder row as the scan and classify stored it: the folder's source
+/// group with a file override, and one classified sub-item.
+async fn seed_old_folder(pool: &SqlitePool, group: &str, item: &str, path: &str) {
+    let row = repo::UpsertSourceGroup {
+        id: group,
+        root_id: "root-1",
+        relative_path: path,
+        content_signature: Some("sig-old"),
+        format: Some("fits"),
+        lane: Some("move"),
+        file_count: 1,
+    };
+    repo::upsert_inbox_source_group(pool, &row).await.unwrap();
+    let file = format!("{path}/x.fits");
+    repo::set_file_override(pool, group, &file, "filter", "OIII", None, None).await.unwrap();
+    let sub = repo::UpsertInboxSubItem {
+        id: item,
+        root_id: "root-1",
+        relative_path: path,
+        source_group_id: group,
+        group_key: "type=light",
+        group_label: "(root) · light",
+        frame_type: Some("light"),
+        content_signature: "sig-old",
+        file_count: 1,
+        lane: "fits",
+        needs_review: false,
+    };
+    repo::upsert_inbox_sub_item(pool, &sub).await.unwrap();
+    seed_classified(pool, item, &file).await;
+}
+
+/// The rows the old scan stored. The master `a/b.fits` was classified, which
+/// reads the light frame at that path, and has an override. The folders
+/// `c/d` and `e/f` each have a classified sub-item; `e/f`'s is linked to an
+/// open plan.
+async fn seed_old_rows(pool: &SqlitePool) {
+    repo::insert_inbox_item(
+        pool,
+        &repo::InsertInboxItem {
+            id: "old-master",
+            root_id: "root-1",
+            relative_path: "a/b.fits",
+            file_count: 1,
+            content_signature: Some("sig-old"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = 'old-master'")
+        .execute(pool)
+        .await
+        .unwrap();
+    seed_classified(pool, "old-master", "a/b.fits").await;
+    repo::set_overrides(pool, "old-master", "a/b.fits", None, Some("Ha"), None, None)
+        .await
+        .unwrap();
+    seed_old_folder(pool, "old-cd", "old-cd-light", "c/d").await;
+    seed_old_folder(pool, "old-ef", "old-ef-light", "e/f").await;
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-open",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
+    repo::insert_plan_link(pool, "old-ef-light", "plan-open").await.unwrap();
+    repo::update_inbox_item_state(pool, "old-ef-light", "plan_open").await.unwrap();
+}
+
+#[tokio::test]
+async fn scan_retires_old_backslash_rows_with_their_children_and_keeps_linked_ones() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    // On disk: the folders `c\d` and `e\f`, and the master `a\b.fits` beside
+    // the folder `a` holding a light frame named `b.fits`.
+    write_fits(&root.join("c\\d"), "x.fits", "LIGHT", None);
+    write_fits(&root.join("e\\f"), "x.fits", "LIGHT", None);
+    write_fits(root, "a\\b.fits", "DARK", Some(30));
+    write_fits(&root.join("a"), "b.fits", "LIGHT", None);
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_old_rows(&pool).await;
+
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("build mock app");
+    app.manage(pool.clone());
+    let req = InboxScanFolderRequest {
+        root_id: "root-1".to_owned(),
+        root_absolute_path: root.to_str().unwrap().to_owned(),
+    };
+    inbox_scan_folder(req, app.state::<SqlitePool>()).await.expect("scan succeeds");
+
+    let strings = |sql: &'static str| {
+        let pool = pool.clone();
+        async move { sqlx::query_scalar::<_, String>(sql).fetch_all(&pool).await.unwrap() }
+    };
+    assert_eq!(
+        strings("SELECT relative_path FROM inbox_items ORDER BY relative_path").await,
+        ["a\\b.fits", "e/f"],
+        "the new master row is stored; the old master and `c/d` go; linked `e/f` stays"
+    );
+    assert_eq!(
+        strings("SELECT relative_path FROM inbox_source_groups ORDER BY relative_path").await,
+        ["", "a", "c\\d", "e/f", "e\\f"],
+        "the scan's groups are stored; the old `c/d` and the old master's group go"
+    );
+    assert_eq!(
+        strings(
+            "SELECT g.relative_path FROM inbox_file_overrides o \
+             JOIN inbox_source_groups g ON g.id = o.source_group_id"
+        )
+        .await,
+        ["e/f"],
+        "only the kept folder's override is left"
+    );
+    for table in [
+        "inbox_classifications",
+        "inbox_classification_evidence",
+        "inbox_file_metadata",
+        "inbox_classification_breakdown",
+    ] {
+        // AssertSqlSafe: `table` comes from the fixed list above.
+        let left: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT inbox_item_id FROM {table} ORDER BY 1"
+        )))
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(left, ["old-ef-light"], "{table}: the deleted rows' children go with them");
+    }
+    let overrides: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_file_overrides")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(overrides, 1, "no override is orphaned");
+}

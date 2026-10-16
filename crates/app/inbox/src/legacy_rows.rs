@@ -15,8 +15,10 @@
 //! An old row is kept when this scan stores the same text itself (a nested
 //! folder or master really is there, and the row is its own), or when
 //! something the scan could not account for is at the nested path: an
-//! unreadable folder, a link the scan does not follow, a file of another kind.
-//! Rows with an open plan are never deleted.
+//! unreadable folder, a link on the way there (a dangling one may be an
+//! unmounted drive), a file of another kind. Only unconfirmed rows are
+//! deleted: still `pending_classification` or `classified`, with no plan
+//! linking them; a folder is kept whole when any of its items is not.
 //!
 //! On Windows the wire text never contains `\`, so nothing is ever found.
 #![allow(clippy::doc_markdown)]
@@ -24,6 +26,8 @@
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use fs_pathsafe::is_link_or_junction_metadata;
 
 use persistence_core::DbResult;
 use persistence_inbox::repositories::inbox as repo;
@@ -58,7 +62,7 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
 
     let mut rows = LegacyRows::default();
     for old in folders.iter().filter_map(|text| old_text(text)) {
-        if !folders.contains(old.as_str()) && (never_current(&old) || is_absent(&root.join(&old))) {
+        if !folders.contains(old.as_str()) && (never_current(&old) || is_absent(root, &old)) {
             rows.folders.push(old);
         }
     }
@@ -66,10 +70,10 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
         if masters.contains(old.as_str()) {
             continue;
         }
-        if never_current(&old) || {
-            let nested = root.join(&old);
-            is_absent(&nested) || frames.contains(&nested.as_path())
-        } {
+        if never_current(&old)
+            || is_absent(root, &old)
+            || frames.contains(&root.join(&old).as_path())
+        {
             rows.masters.push(old);
         }
     }
@@ -80,16 +84,19 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
     rows
 }
 
-/// Delete the `rows` of `root_id`, keeping any item with an open plan.
+/// Delete the unconfirmed `rows` of `root_id` with everything that hangs off
+/// them: see `delete_unconfirmed_master_rows_conn` and
+/// `delete_unconfirmed_folder_rows_conn`. Masters go first, so a source group
+/// at a folder path is never kept alive by a master row this call deletes.
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on connection failure.
 pub async fn retire(conn: &mut SqliteConnection, root_id: &str, rows: &LegacyRows) -> DbResult<()> {
-    for folder in &rows.folders {
-        repo::delete_unlinked_folder_rows_conn(conn, root_id, folder).await?;
-    }
     for master in &rows.masters {
-        repo::delete_unlinked_master_item_conn(conn, root_id, master).await?;
+        repo::delete_unconfirmed_master_rows_conn(conn, root_id, master).await?;
+    }
+    for folder in &rows.folders {
+        repo::delete_unconfirmed_folder_rows_conn(conn, root_id, folder).await?;
     }
     Ok(())
 }
@@ -107,7 +114,23 @@ fn never_current(text: &str) -> bool {
     text.split('/').any(|name| name.is_empty() || name == "." || name == "..")
 }
 
-/// Whether nothing at all is at `path`. Any other stat error leaves it unknown.
-fn is_absent(path: &Path) -> bool {
-    matches!(std::fs::symlink_metadata(path), Err(e) if e.kind() == io::ErrorKind::NotFound)
+/// Whether nothing at all is at the root-relative `text` under `root`, with
+/// every folder on the way there a real folder.
+///
+/// Each name is checked in turn without following links. The first missing
+/// one makes the path absent. A link or junction on the way makes the answer
+/// unknown, because a dangling link (an unmounted drive, say) reports the path
+/// below it missing although the drive may hold it. So does any other stat
+/// error. Unknown is never absent.
+fn is_absent(root: &Path, text: &str) -> bool {
+    let mut path = root.to_path_buf();
+    for name in text.split('/') {
+        path.push(name);
+        match std::fs::symlink_metadata(&path) {
+            Err(e) => return e.kind() == io::ErrorKind::NotFound,
+            Ok(meta) if is_link_or_junction_metadata(&meta) => return false,
+            Ok(_) => {}
+        }
+    }
+    false
 }

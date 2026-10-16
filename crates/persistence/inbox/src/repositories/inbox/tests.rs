@@ -2150,3 +2150,193 @@ async fn list_and_stats_agree_when_stale_placeholder_has_evidence() {
         "stale placeholder must not inflate inbox_stats' per-type folder_count"
     );
 }
+
+/// Give `item_id` everything classify writes for one file: a classification,
+/// an evidence row, a file-metadata row and a breakdown row.
+async fn seed_classified_children(pool: &SqlitePool, item_id: &str, file: &str) {
+    upsert_classification(
+        pool,
+        &UpsertClassification {
+            inbox_item_id: item_id,
+            result: "classified",
+            frame_type: Some("light"),
+            content_signature: "sig",
+            unclassified_file_count: 0,
+        },
+    )
+    .await
+    .unwrap();
+    insert_evidence(
+        pool,
+        &InsertEvidence {
+            id: &format!("ev-{item_id}"),
+            inbox_item_id: item_id,
+            relative_file_path: file,
+            frame_type: Some("light"),
+            evidence_source: "imagetyp_header",
+            raw_value: Some("Light Frame"),
+            unclassified: false,
+            manual_override: None,
+            is_master: false,
+            master_detector: None,
+        },
+    )
+    .await
+    .unwrap();
+    upsert_inbox_file_metadata(
+        pool,
+        &UpsertFileMetadata {
+            inbox_item_id: item_id,
+            relative_file_path: file,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    upsert_breakdown_row(pool, &format!("bd-{item_id}"), item_id, "light", 1, None, "[]")
+        .await
+        .unwrap();
+    update_inbox_item_state(pool, item_id, "classified").await.unwrap();
+}
+
+/// The rows an earlier scan and classify stored for backslash names, each with
+/// every child classify and `set_overrides` write.
+///
+/// Masters: `m-old` (`a/b.fits`) and `m-linked` (`p/q.fits`, linked to
+/// `plan-open`) are classified, `m-done` (`r/s.fits`) was applied.
+/// `set_overrides` gives each a source group at its own path. Folders: `c/d`
+/// has two classified sub-items, `e/f` a plan-linked sub-item beside a
+/// classified one, `j/k` only the scan's group. Every group has an override.
+async fn seed_old_rows(pool: &SqlitePool) {
+    let plan = persistence_plans::repositories::plans::InsertPlan {
+        id: "plan-open",
+        title: "Inbox confirm",
+        origin: "inbox",
+        origin_path: None,
+        plan_type: "split",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+    persistence_plans::repositories::plans::insert_plan(pool, &plan).await.unwrap();
+
+    for (id, path) in [("m-old", "a/b.fits"), ("m-linked", "p/q.fits"), ("m-done", "r/s.fits")] {
+        insert_inbox_item(pool, &sample_item_at(id, path)).await.unwrap();
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        seed_classified_children(pool, id, path).await;
+        set_overrides(pool, id, path, None, Some("Ha"), None, None).await.unwrap();
+    }
+    insert_plan_link(pool, "m-linked", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "m-done", "resolved").await.unwrap();
+
+    for (group, path) in [("g-cd", "c/d"), ("g-ef", "e/f"), ("g-jk", "j/k")] {
+        let row = UpsertSourceGroup {
+            id: group,
+            root_id: "root-1",
+            relative_path: path,
+            content_signature: None,
+            format: Some("fits"),
+            lane: Some("move"),
+            file_count: 2,
+        };
+        upsert_inbox_source_group(pool, &row).await.unwrap();
+        set_file_override(pool, group, &format!("{path}/x.fits"), "filter", "Ha", None, None)
+            .await
+            .unwrap();
+    }
+    for (id, group, path, key) in [
+        ("cd-light", "g-cd", "c/d", "type=light"),
+        ("cd-dark", "g-cd", "c/d", "type=dark"),
+        ("ef-light", "g-ef", "e/f", "type=light"),
+        ("ef-dark", "g-ef", "e/f", "type=dark"),
+    ] {
+        let sub = UpsertInboxSubItem {
+            id,
+            root_id: "root-1",
+            relative_path: path,
+            source_group_id: group,
+            group_key: key,
+            group_label: key,
+            frame_type: Some("light"),
+            content_signature: "sig",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        };
+        upsert_inbox_sub_item(pool, &sub).await.unwrap();
+        seed_classified_children(pool, id, &format!("{path}/{id}.fits")).await;
+    }
+    insert_plan_link(pool, "ef-light", "plan-open").await.unwrap();
+    update_inbox_item_state(pool, "ef-light", "plan_open").await.unwrap();
+}
+
+/// bd astro-plan-3pvvc: the rows an earlier scan stored for a backslash name
+/// carry a classification, evidence, metadata, a breakdown, file overrides
+/// and, for a folder, sub-items. Deleting an unconfirmed row removes all of
+/// it through the foreign keys, without an error. A folder with one
+/// plan-linked sub-item, and a confirmed master, are kept whole.
+#[tokio::test]
+async fn deleting_unconfirmed_old_rows_removes_their_children_and_keeps_linked_folders() {
+    let db = test_db().await;
+    let pool = db.pool();
+    let count = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, i64>(sql).fetch_one(pool).await.unwrap()
+    };
+    let ids = |sql: &'static str| async move {
+        sqlx::query_scalar::<_, String>(sql).fetch_all(pool).await.unwrap()
+    };
+    seed_old_rows(pool).await;
+    let mut conn = pool.acquire().await.unwrap();
+    for path in ["a/b.fits", "p/q.fits", "r/s.fits"] {
+        delete_unconfirmed_master_rows_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    for path in ["c/d", "e/f", "j/k"] {
+        delete_unconfirmed_folder_rows_conn(&mut conn, "root-1", path).await.unwrap();
+    }
+    drop(conn);
+
+    assert_eq!(
+        ids("SELECT id FROM inbox_items ORDER BY id").await,
+        ["ef-dark", "ef-light", "m-done", "m-linked"],
+        "the unconfirmed master and folder go; a plan-linked folder keeps every sub-item"
+    );
+    assert_eq!(
+        ids("SELECT relative_path FROM inbox_source_groups ORDER BY relative_path").await,
+        ["e/f", "p/q.fits", "r/s.fits"],
+        "a deleted row's source group goes with it, the kept rows' groups stay"
+    );
+    assert_eq!(
+        ids("SELECT DISTINCT g.relative_path FROM inbox_file_overrides o \
+             JOIN inbox_source_groups g ON g.id = o.source_group_id ORDER BY 1")
+        .await,
+        ["e/f", "p/q.fits", "r/s.fits"],
+        "overrides follow their group"
+    );
+    assert_eq!(count("SELECT COUNT(*) FROM inbox_file_overrides").await, 3, "no override orphaned");
+    for (table, kept) in [
+        ("inbox_classifications", 4),
+        ("inbox_classification_evidence", 4),
+        ("inbox_file_metadata", 4),
+        ("inbox_classification_breakdown", 4),
+    ] {
+        // AssertSqlSafe: `table` comes from the fixed list above.
+        let rows: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(rows, kept, "{table}: only the kept items' rows are left");
+        let orphans: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table} WHERE inbox_item_id NOT IN (SELECT id FROM inbox_items)"
+        )))
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(orphans, 0, "{table}: no orphaned rows");
+    }
+    assert_eq!(count("SELECT COUNT(*) FROM inbox_plan_links").await, 2, "plan links stay");
+}

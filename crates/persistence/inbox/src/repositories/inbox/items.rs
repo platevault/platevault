@@ -275,11 +275,16 @@ pub async fn delete_sub_item_if_unlinked_conn(
 }
 
 /// Delete the master item stored for the file `relative_path` under
-/// `root_id`, unless a plan is open for it.
+/// `root_id` while it is unconfirmed: still `pending_classification` or
+/// `classified`, with no plan linking it. Its classification, evidence,
+/// breakdown and file metadata go with it through their `ON DELETE CASCADE`
+/// keys. Then delete the source groups at that path that no item refers to
+/// any more — the group `set_overrides` creates for a master that had none,
+/// with its file overrides.
 ///
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on connection failure.
-pub async fn delete_unlinked_master_item_conn(
+pub async fn delete_unconfirmed_master_rows_conn(
     conn: &mut SqliteConnection,
     root_id: &str,
     relative_path: &str,
@@ -287,13 +292,14 @@ pub async fn delete_unlinked_master_item_conn(
     sqlx::query(
         "DELETE FROM inbox_items
          WHERE root_id = ? AND relative_path = ? AND is_master_item = 1
+           AND state IN ('pending_classification', 'classified')
            AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
     )
     .bind(root_id)
     .bind(relative_path)
     .execute(&mut *conn)
     .await?;
-    Ok(())
+    super::source_groups::delete_unreferenced_groups_at_conn(conn, root_id, relative_path).await
 }
 
 /// List all single-type sub-items belonging to a source group, ordered by
