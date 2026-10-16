@@ -1224,10 +1224,29 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
         })
         .await?;
 
+    // [DEBUG-dock] scratch-only: what the old graceful_shutdown's import did.
+    let old_import: String = match app
+        .driver
+        .execute_async(
+            "var cb = arguments[arguments.length - 1];\
+             import('@tauri-apps/api/window').then(function () { cb('resolved'); },\
+             function (e) { cb('rejected: ' + e); });",
+            vec![],
+        )
+        .await
+    {
+        Ok(ret) => ret.convert::<String>().unwrap_or_else(|e| format!("<undeserialisable: {e}>")),
+        Err(e) => format!("<script failed: {e}>"),
+    };
+    eprintln!("[DEBUG-dock] old import('@tauri-apps/api/window') outcome: {old_import}");
+    let shutdown_started = std::time::Instant::now();
     // A real quit: WebView2 commits localStorage on an orderly close, not on a
     // kill, and only an exit the app performs itself is a real restart.
     let shutdown = app.graceful_shutdown().await?;
-    eprintln!("[dock-restart] shutdown: {shutdown}");
+    eprintln!(
+        "[dock-restart] shutdown: {shutdown} [DEBUG-dock] graceful_shutdown wall time {:.1?}",
+        shutdown_started.elapsed()
+    );
     anyhow::ensure!(
         shutdown.orderly(),
         "phase failed: shutdown — the app did not exit by itself once its window was closed: \
@@ -1287,5 +1306,6 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
     })
     .await?;
 
-    app.shutdown().await
+    app.shutdown().await?;
+    anyhow::bail!("[DEBUG-dock] scratch-only failure so nextest prints the timings above")
 }
