@@ -24,7 +24,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 ## Preconditions
 
-- P1: Fresh replay of J34 through S5. Project `NGC 7000 HOO` is open and its Wrap up has Clean up Skipped (J34/S3b) and Trash current; no frame has been trashed, and Archive is read-only. The Project has no pending changes. Its View is in Symlinks mode and holds the J34/P1 symlinks, among them 35 to the 35 frames of 26 Sep. Open Project `NGC 7000 Ha deep` holds 28 Sep. 30 Sep is only a suggestion of open Project `NGC 7000 SHO`. The View's application is not running.
+- P1: Fresh replay of J34 through S5. Project `NGC 7000 HOO` is open and its Wrap up has Clean up Skipped (J34/S3b) and Trash current; no frame has been trashed, and Archive is read-only. The Project has no pending changes. Its View is in Symlinks mode and holds the J34/P1 symlinks, among them 35 to the 35 frames of 26 Sep. Open Project `NGC 7000 Ha deep` holds 28 Sep. 30 Sep is only a suggestion of open Project `NGC 7000 SHO`. The View's application is Siril, located in Settings › Applications, and it is not running.
 - P2: The J34/P9 volume `Archive`, with free space for the four archived sessions and `4 Oct M 33`, holds the archive locations `Archive/NGC7000`, marked Default in Settings › Locations, and `Archive/Long-term`. A second disposable volume can be mounted under the same name `Archive`.
 - P3: The J19/P5 manifest and a SHA-256 list of the five member sessions' files are recorded. `Cold-1` stays offline.
 - P4: A fault control makes the repoint of one named View symlink fail until it is released: the symlink to the 26 Sep frame F-ref, which is not the P5 frame (fault fixture for S8; G3).
@@ -151,8 +151,8 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 ### S10 — Unplug the archive later {#S10}
 
-- **Do:** Unplug `Archive`. Open Project `NGC 7000 HOO`, read its sessions and totals, and choose **Open in {app}** on its View step.
-- **Expect:** The Project's captured and usable totals remain unchanged, and its archived sessions read Offline. Its View still names the unavailable originals. **Open in {app}** is refused before launch: it names the symlink targets it cannot re-verify and offers to reconnect the archive, and the View reads unverified.
+- **Do:** Unplug `Archive`. Open Project `NGC 7000 HOO`, read its sessions and totals, and choose **Open in Siril** on its View step.
+- **Expect:** The Project's captured and usable totals remain unchanged, and its archived sessions read Offline. Its View still names the unavailable originals. **Open in Siril** is refused before launch: it names the symlink targets it cannot re-verify and offers to reconnect the archive, and the View reads unverified.
 - **Expect (negative):** No unavailable input is omitted, and the application is never launched on a partial View.
 - **Trace:** flow J · PREP-FR-10 · STO-FR-08, VSEL-FR-09 · STO-AC-07 · PRJ-FR-25 · D-W3, D-W97
 
@@ -172,11 +172,11 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 ### S12 — Retire the location {#S12}
 
-- **Do:** Confirm the fresh **Retire location** review. Read Settings › Locations, Sessions and the Target NGC 7000. Open Project `NGC 7000 HOO` and choose **Open in {app}** on its View step.
+- **Do:** Confirm the fresh **Retire location** review. Read Settings › Locations, Sessions and the Target NGC 7000. Open Project `NGC 7000 HOO` and choose **Open in Siril** on its View step.
 - **Expect:**
   - The location reads Retired, and its 158 copies read Retired. `Archive/Long-term` keeps its Default pill. Sessions still lists `4 Oct M 33` as Archived at its `Archive/Long-term` path.
   - NGC 7000 captured integration falls by exactly 13h 10m, and its usable integration counts no retired copy.
-  - The Project still holds its five sessions. Every frame of 18, 24, 26 and 30 Sep is named unresolved and Retired, and its 28 Sep frames still resolve. **Open in {app}** is refused and names the retired inputs.
+  - The Project still holds its five sessions. Every frame of 18, 24, 26 and 30 Sep is named unresolved and Retired, and its 28 Sep frames still resolve. **Open in Siril** is refused and names the retired inputs.
 - **Expect (negative):** No copy reads Missing. The Project's sessions are unchanged, and no retired copy is offered as an input.
 - **Trace:** flow A4 · HARNESS-V5-IA.md S9, S16 · P-ARC1 · LIB-FR-15, VSEL-FR-09 · LIB-AC-16 · PREP-FR-10 · PRJ-FR-25 · D02, D11
 
@@ -194,7 +194,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - SC3: The Project's sessions and goals are unchanged by archive transfer, and its View holds no entry for its library-Unusable frames (S1, S8, S10).
 - SC4: 0 View entries change kind and 0 reference-mode choices are offered. Each affected View symlink is repointed to its session's `Archive/NGC7000` path, and F-ref's source is retired only after its repoint verifies (S4, S8, S9, S9a).
 - SC5: The impostor volume disables Close project… (S2).
-- SC6: With `Archive` unplugged, Open in {app} on the Project's View is refused and 0 inputs are omitted (S10).
+- SC6: With `Archive` unplugged, Open in Siril on the Project's View is refused and 0 inputs are omitted (S10).
 - SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
 - SC8: Retiring changes 0 files and 0 copies read Missing (S12). After S13 captured integration rises by exactly 11h 30m, the 18, 26 and 30 Sep lights, so no capture is counted twice and no retired association transfers.
 - SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
@@ -205,16 +205,16 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S9, S12, S16 and S17; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1 and Round 5 P-STO2, P-SB3 and Sessions, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775). It also follows the specs, the defaults that the authorized autonomous run set in decisions D06, D09, D11 and D19, and the workflow decisions D-W3, D-W20, D-W26 and D-W46. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the harness v5 design (HARNESS-V5-IA.md S9, S12, S16 and S17; HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1 and Round 5 P-STO2, P-SB3 and Sessions, on ui-harness-v5 @ b5e813a5; Round 6 @ 4f470775). It also follows the specs, the defaults that the authorized autonomous run set in decisions D06, D09, D11 and D19, and the workflow decisions D-W3, D-W20, D-W26 and D-W93 to D-W116. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised. Blocks readiness.
 - G3: Unresolved implementation qualification: no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification. Blocks readiness.
-- G4: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: there is no file-list mode, so the Project's inputs are links or copies in its View.
+- G4: (dissolved 2026-10-12): answered by §Round 7 P-PREP3: there is no file-list mode, so every run's inputs are links or copies in its run folder.
 - G5: Unresolved implementation qualification: no fault control yet pauses an item after destination verification and before retirement (P5). S7a depends on it, and no source-retirement acceptance is complete until S7a passes. Blocks readiness.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Archive… from Sessions"; S9b and S9c now assert that a session in no Project is archived from Sessions through the same reviewed transfer as Wrap up, to the Default `Archive/Long-term`, with nothing moved before approval. Archiving part of a Project from Sessions stays open as G9.
-- G7: (dissolved 2026-10-12): answered by §Input modes "Archiving with links" (Q-ARCHIVE-LINKS) and §Round 7 P-PREP3 (no hard links); S4, S8, S9 and SC4 assert that the View's symlinks are repointed and that no reference-mode choice is offered.
-- G8: Library-wide duplicate copies are J39's. Closed and Archived Projects have no Reopen or restore action (PRJ-FR-25, STO-FR-13).
+- G7: (dissolved 2026-10-12): answered by §Input modes "Archiving with links" (Q-ARCHIVE-LINKS) and §Round 7 P-PREP3 (no hard links); S4, S8, S9 and SC4 assert that the symlinks of both `26 Sep symlink check` and `NGC7000-HOO-Siril` are repointed and that no reference-mode choice is offered.
+- G8: Out of scope for this journey: library-wide duplicate copies are J39's. Closed and Archived Projects have no Reopen or restore action (PRJ-FR-25, STO-FR-13), so J34 restores no archived session.
 - G9: Unresolved product question: Round 6 lets Sessions archive sessions that are in no Project. The F4 specs start Archive from the Archive step of a Project's Wrap up (STO-FR-06, STO-FR-13) and name no Sessions entry point. Round 6 also says nothing about a Sessions selection that holds a session of a Project or a session a Project suggests. S9b and S9c follow Round 6 and select only a session in no Project. Blocks readiness until a human decides.
-- G10: (dissolved 2026-10-12): answered by §Round 7 P-PREP3. The Project View entries are symlinks, so with `Archive` unplugged or retired its View holds no readable inputs. PREP-FR-10, STO-FR-08 and VSEL-FR-09 refuse Open on the unavailable View, and S10 and S12 assert the refusal.
+- G10: (dissolved 2026-10-12): answered by §Round 7 P-PREP3. The entries of `NGC7000-HOO-Siril` are symlinks, so with `Archive` unplugged or retired its run folder holds no readable input. STO-FR-08 and VSEL-FR-09 refuse Open on it as on `26 Sep symlink check`, and S10 and S12 assert both refusals.
 
 ## Delta log
 
