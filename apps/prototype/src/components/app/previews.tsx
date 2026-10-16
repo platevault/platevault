@@ -13,13 +13,17 @@
  *   renders its own "reason ▸" trigger beside a refusal line.
  * - UsedByPreview: "Used by 6 sessions ▸", a link to the full list,
  *   previewing the first rows.
- * - MasterPreview: a calibration master's name, a link to it in the
- *   Calibration library, previewing one version's facts (kind, camera,
- *   gain · offset, temperature, exposure, frames, night), its age badge and
- *   how many Projects use it. The card holds no controls, so it takes no
- *   focus. Compact, the trigger is an icon link beside a control that
+ * - MasterPreview: one dated version of a calibration master (CAL-FR-14):
+ *   the master's name, a link to it in the Calibration library, previewing
+ *   the record's settings (kind, camera, gain · offset, temperature,
+ *   exposure) and that version's own facts (which of the versions it is,
+ *   its capture night, frames and origin), the master's age badge and how
+ *   many Projects use the master. The card holds no controls, so it takes
+ *   no focus. Compact, the trigger is an icon link beside a control that
  *   already shows the name (a master picker), and the card takes the name
  *   as its title.
+ * - PlaceLink: the plain link to a place these previews use as their
+ *   trigger, for a place with nothing to preview (a raw calibration session).
  *
  * The card opens over the page, so nothing moves when it opens (C-8).
  */
@@ -31,9 +35,10 @@ import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { KIND_NAME } from "@/domain/calibration"
 import type { StepLink } from "@/domain/derive"
+import { nightOf } from "@/domain/indexing"
 import type { CalibrationMaster, MasterVersion } from "@/domain/types"
 import { formatCount, formatExposure, formatNight } from "@/lib/format"
-import { say } from "@/lib/i18n"
+import { type MessageRef, msg, say } from "@/lib/i18n"
 import type { Blocker } from "./contracts"
 import { KeyValueList } from "./data"
 import { Pill } from "./pill"
@@ -98,8 +103,8 @@ function routerLink(link: StepLink) {
   return <Link to={link.to as never} params={link.params as never} search={link.search as never} />
 }
 
-/** A link to a place. It forwards the props a HoverCard trigger merges into it (handlers, ref). */
-function PlaceLink({ link, children, ...props }: Omit<ComponentProps<typeof Button>, "render" | "variant" | "size"> & { link: StepLink }) {
+/** A link to a place, "Name ▸". It forwards the props a HoverCard trigger merges into it (handlers, ref). */
+export function PlaceLink({ link, children, ...props }: Omit<ComponentProps<typeof Button>, "render" | "variant" | "size"> & { link: StepLink }) {
   return (
     <Button {...props} variant="link" size="xs" className="min-h-0 px-0 text-sm" render={routerLink(link)}>
       {children}
@@ -191,18 +196,26 @@ export function UsedByPreview({ label, link, items }: UsedByPreviewProps) {
   )
 }
 
+/** Where a master version came from (P-CAL3). */
+const ORIGIN_NAME: Record<MasterVersion["origin"]["kind"], MessageRef> = {
+  library: msg("calibration_origin_indexed"),
+  generated: msg("calibration_origin_generated"),
+  stacked: msg("calibration_origin_stacked"),
+  imported: msg("calibration_origin_imported"),
+}
+
 export interface MasterPreviewProps {
   /** The master's name as the page lists it: the trigger's text, or the card's title when compact. */
   label: string
   /** The master in the Calibration library: `{ to: "/calibration", search: { master: id } }`. */
   link: StepLink
-  /** The master's settings with the frame count of the version shown. */
-  master: Pick<CalibrationMaster, "kind" | "cameraName" | "gain" | "offset" | "ccdTempC" | "exposureS"> & Pick<MasterVersion, "frameCount">
-  /** The night the version was taken, YYYY-MM-DD. */
-  night: string
-  /** "Old · 120 d" once the master is past the age limit (`masterAge`); null while it is younger. */
+  /** The master record: the settings it matches, and its versions' ids (oldest capture first) to place `version` among them. */
+  master: Pick<CalibrationMaster, "kind" | "cameraName" | "gain" | "offset" | "ccdTempC" | "exposureS"> & { versions: ReadonlyArray<Pick<MasterVersion, "id">> }
+  /** The dated version the place names, such as a session's pin: its capture time, frames and origin. */
+  version: Pick<MasterVersion, "id" | "capturedAt" | "frameCount" | "origin">
+  /** "Old · 120 d" once the master's newest version is past the age limit (`masterAge`); null while it is younger, and for flats. */
   age: string | null
-  /** How many Projects use the master through their sessions (`masterProjects`). */
+  /** How many Projects, open or Closed, use the master through their sessions (`masterProjects`). */
   usedBy: number
   /**
    * An icon trigger ("Open master: <name>") for a place that already shows the
@@ -211,17 +224,20 @@ export interface MasterPreviewProps {
   compact?: boolean
 }
 
-export function MasterPreview({ label, link, master, night, age, usedBy, compact = false }: MasterPreviewProps) {
+export function MasterPreview({ label, link, master, version, age, usedBy, compact = false }: MasterPreviewProps) {
   const m = useMessages()
   const none = "–"
+  const position = master.versions.findIndex((v) => v.id === version.id) + 1
   const items = [
     { label: m.run_col_kind(), value: say(m, KIND_NAME[master.kind]) },
     { label: m.calibration_key_camera(), value: master.cameraName ?? none },
     { label: m.session_gain_offset(), value: `${master.gain ?? none} · ${master.offset ?? none}` },
     { label: m.domain_criterion_temperature(), value: master.ccdTempC === null ? none : `${Math.round(master.ccdTempC)} °C` },
     { label: m.calibration_key_exposure(), value: master.exposureS === null ? none : formatExposure(master.exposureS) },
-    { label: m.calibration_frames(), value: master.frameCount === null ? none : formatCount(master.frameCount) },
-    { label: m.tonight_night(), value: formatNight(night, true) },
+    { label: m.calibration_version(), value: position > 0 ? m.calibration_version_n_of({ n: formatCount(position), count: formatCount(master.versions.length) }) : none },
+    { label: m.tonight_night(), value: formatNight(nightOf(version.capturedAt), true) },
+    { label: m.calibration_frames(), value: version.frameCount === null ? none : formatCount(version.frameCount) },
+    { label: m.calibration_origin(), value: say(m, ORIGIN_NAME[version.origin.kind]) },
     { label: m.calibration_used_by(), value: m.about_count_projects({ count: usedBy, n: formatCount(usedBy) }) },
   ]
   const trigger = compact ? (

@@ -9,6 +9,7 @@ import { AppFrameCatalogue } from "./app-frame"
 import { DataTableCatalogue } from "./data-table"
 import { DialogsCatalogue } from "./dialogs"
 import { DomainCatalogue } from "./domain"
+import { F4Catalogue } from "./f4"
 import { FeedbackCatalogue } from "./feedback"
 import { FieldsCatalogue } from "./fields"
 import { GoalFieldsCatalogue } from "./goal-fields"
@@ -52,6 +53,7 @@ export const CATALOGUE: CatalogueEntry[] = [
     components: ["Plate", "Histogram", "MoonLine", "DarkLine", "AltitudeSpark", "NightCalendar", "MoonPhase", "MosaicField", "SiteMap", "CornerGrid", "FrameThumbnails", "SessionPlots", "StarCutouts"],
     Entry: DomainCatalogue,
   },
+  { id: "f4", components: ["CalibrationDiagram", "CalibrationChoices", "CalibrationChoiceBadge", "ViewFolderTree", "PlaceLink"], Entry: F4Catalogue },
   { id: "goal-fields", components: ["GoalKindsFields", "GoalValuesEditor"], Entry: GoalFieldsCatalogue },
   { id: "step-flow", components: ["StepStrip", "StepFooter", "CurrentLink"], Entry: StepFlowCatalogue },
   {

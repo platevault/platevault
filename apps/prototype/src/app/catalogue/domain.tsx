@@ -3,8 +3,10 @@
  * CornerGrid, FrameThumbnails, SessionPlots, StarCutouts, MoonLine, DarkLine,
  * AltitudeSpark, NightCalendar, MoonPhase, MosaicField and SiteMap. The
  * plates render the prototype's synthetic star field; the night visuals
- * compute a real night at sample sites; the mosaic is a 2 × 2 layout around
- * M 31. Captions are reviewer labels; site and frame names are sample data.
+ * compute a real night at sample sites; the mosaic is the sample library's
+ * IC 5070 Project read from the store, then a 2 × 2 layout around M 31 with a
+ * session outside its panel and a panel with no pointing. Captions are
+ * reviewer labels; site and frame names are sample data.
  */
 import { lazy, Suspense, useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
@@ -13,7 +15,7 @@ import { Section } from "@/components/app/page"
 import { CornerGrid } from "@/components/domain/corner-grid"
 import { FrameThumbnails } from "@/components/domain/frame-thumbnails"
 import { Histogram } from "@/components/domain/histogram"
-import { type MosaicFieldPanel, MosaicField, mosaicFreeSlots } from "@/components/domain/mosaic-field"
+import { type MosaicFieldPanel, MosaicField, type MosaicPointing, mosaicFieldModel } from "@/components/domain/mosaic-field"
 import { Plate, type PlateImage, type PlateView, STRETCH_LABEL, STRETCHES, type Stretch, type ViewWindow, ZOOM_LABEL, ZOOMS, type Zoom } from "@/components/domain/plate"
 import { type PlotSeries, SessionPlots } from "@/components/domain/session-plots"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
@@ -27,6 +29,7 @@ import { formatCount, formatDecimal } from "@/lib/format"
 import { detectedStars, linearHistogram, renderWindow, type StarField, starField } from "@/components/domain/raster"
 import { nightGrid } from "@/features/v5/e-targets-plan-settings/sky-tonight"
 import { positionSky, type SkyContext } from "@/features/v5/e-targets-plan-settings/targets-model"
+import { useStore } from "@/store/core"
 import { ComponentSection, Specimen } from "./specimen"
 
 const SiteMap = lazy(() => import("@/components/domain/site-map").then((module) => ({ default: module.SiteMap })))
@@ -258,36 +261,55 @@ function NightCalendars() {
 
 const FOV = { widthDeg: 1.2, heightDeg: 0.8 }
 
+/** A 2 × 2 layout around M 31: Panel 4 has no session with a pointing yet. */
+const M31_PANELS: Array<Omit<MosaicFieldPanel, "name"> & { n: number }> = [
+  { id: "p1", n: 1, centre: { ra: 11.4, dec: 41.6 }, rotationDeg: 0, sessions: 2 },
+  { id: "p2", n: 2, centre: { ra: 10.0, dec: 41.6 }, rotationDeg: 0, sessions: 2 },
+  { id: "p3", n: 3, centre: { ra: 11.4, dec: 40.88 }, rotationDeg: 2, sessions: 1 },
+  { id: "p4", n: 4, centre: null, rotationDeg: null, sessions: 1 },
+]
+
+/** Each session's pointing; the second Panel 2 session points outside its panel's field. */
+const M31_POINTINGS: MosaicPointing[] = [
+  { id: "s1", ra: 11.38, dec: 41.58, panelId: "p1", inside: true },
+  { id: "s2", ra: 11.43, dec: 41.62, panelId: "p1", inside: true },
+  { id: "s3", ra: 10.02, dec: 41.59, panelId: "p2", inside: true },
+  { id: "s4", ra: 11.0, dec: 41.0, panelId: "p2", inside: false },
+  { id: "s5", ra: 11.4, dec: 40.9, panelId: "p3", inside: true },
+]
+
 function MosaicFields() {
   const m = useMessages()
-  const [panels, setPanels] = useState<MosaicFieldPanel[]>(() => [
-    { id: "p1", n: 1, ra: 11.4, dec: 41.6, rotationDeg: 0, include: true },
-    { id: "p2", n: 2, ra: 10.0, dec: 41.6, rotationDeg: 0, include: true },
-    { id: "p3", n: 3, ra: 11.4, dec: 40.88, rotationDeg: 0, include: true },
-    { id: "p4", n: 4, ra: 10.0, dec: 40.88, rotationDeg: 0, include: false },
-  ])
-  const [dropOn, setDropOn] = useState<string | null>(null)
-  const slots = mosaicFreeSlots(panels, FOV)
+  const catalog = useStore((s) => s.catalog)
+  const ic5070 = catalog.projects.prj_ic5070
+  const live = ic5070 ? mosaicFieldModel(catalog, ic5070) : null
+  const panels = M31_PANELS.map(({ n, ...panel }) => ({ ...panel, name: m.common_panel_n({ n }) }))
   return (
-    <ComponentSection components={["MosaicField"]} description={m.catalogue_domain_mosaic_desc()} level={3}>
-      <Specimen caption={m.catalogue_domain_mosaic_layout()}>
-        <div className="w-full max-w-xl">
-          <MosaicField
-            panels={panels}
-            slots={slots}
-            field={FOV}
-            pointings={[
-              { id: "s1", ra: 11.38, dec: 41.58, state: "placed" },
-              { id: "s2", ra: 10.7, dec: 41.25, state: "flagged" },
-              { id: "s3", ra: 12.3, dec: 40.4, state: "unplaced" },
-            ]}
-            dropOn={dropOn}
-            onDropOnChange={setDropOn}
-            onToggle={(id) => setPanels((list) => list.map((p) => (p.id === id ? { ...p, include: !p.include } : p)))}
-            onAdd={(ra, dec) => setPanels((list) => [...list, { id: `p${list.length + 1}`, n: list.length + 1, ra, dec, rotationDeg: 0, include: true }])}
-          />
-        </div>
-      </Specimen>
+    <ComponentSection components={["MosaicField"]} description={m.catalogue_domain_mosaic_map_desc()} level={3}>
+      <div className="space-y-3">
+        {live ? (
+          <Specimen caption={m.catalogue_domain_mosaic_live()}>
+            <div className="w-full max-w-xl">
+              <MosaicField panels={live.panels} pointings={live.pointings} field={live.field} />
+            </div>
+          </Specimen>
+        ) : null}
+        <Specimen caption={m.catalogue_domain_mosaic_outside()}>
+          <div className="w-full max-w-xl">
+            <MosaicField panels={panels} pointings={M31_POINTINGS} field={FOV} />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_domain_mosaic_fov_unknown()}>
+          <div className="w-full max-w-xl">
+            <MosaicField panels={panels} pointings={M31_POINTINGS} field={null} />
+          </div>
+        </Specimen>
+        <Specimen caption={m.catalogue_pickers_state_empty()}>
+          <div className="w-full max-w-xl">
+            <MosaicField panels={[]} field={FOV} />
+          </div>
+        </Specimen>
+      </div>
     </ComponentSection>
   )
 }
