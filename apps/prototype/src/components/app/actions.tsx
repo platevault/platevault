@@ -54,9 +54,9 @@ import { useQuickActionMode } from "@/store/simulation"
 import { ConfirmDialog } from "./confirm-dialog"
 import type { Action, ActionKind, MenuItem, QuickUndo } from "./contracts"
 import { ActionError, toast } from "./feedback"
+import { useFollowLink } from "./links"
 import { BlockersPreview } from "./previews"
 import { Refusal, refusalFrom } from "./refusal"
-import { useFollowLink } from "./run-step"
 
 // ---------------------------------------------------------------------------
 // Descriptor helpers

@@ -17,7 +17,6 @@ import { PaletteCatalogue } from "./palette"
 import { PickersCatalogue } from "./pickers"
 import { PreviewsCatalogue } from "./previews"
 import { PrimitivesCatalogue } from "./primitives"
-import { RunStepCatalogue } from "./run-step"
 import { ShellPartsCatalogue } from "./shell-parts"
 import { StatusCatalogue } from "./status"
 import { StatusBarCatalogue } from "./status-bar"
@@ -54,7 +53,7 @@ export const CATALOGUE: CatalogueEntry[] = [
     Entry: DomainCatalogue,
   },
   { id: "goal-fields", components: ["GoalKindsFields", "GoalValuesEditor"], Entry: GoalFieldsCatalogue },
-  { id: "step-flow", components: ["StepStrip", "StepFooter"], Entry: StepFlowCatalogue },
+  { id: "step-flow", components: ["StepStrip", "StepFooter", "CurrentLink"], Entry: StepFlowCatalogue },
   {
     id: "data-table",
     components: [
@@ -126,7 +125,6 @@ export const CATALOGUE: CatalogueEntry[] = [
     Entry: StatusBarCatalogue,
   },
   { id: "palette", components: ["CommandPalette", "PaletteTrigger"], Entry: PaletteCatalogue },
-  { id: "run-step", components: ["StepGlyph", "StepRail", "GateLabel", "CurrentLink", "useFollowLink", "gateWord", "stepName"], Entry: RunStepCatalogue },
   { id: "walk", components: ["CoachWalk"], Entry: WalkCatalogue },
   { id: "workspace", components: ["Workspace"], Entry: WorkspaceCatalogue },
   {

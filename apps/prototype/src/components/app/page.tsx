@@ -4,7 +4,7 @@
  * (components/templates) build on PageHeader.
  */
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
-import { CurrentLink } from "@/components/app/run-step"
+import { CurrentLink } from "@/components/app/links"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import type { StepLink } from "@/domain/derive"
 import { m } from "@/lib/i18n"
