@@ -6692,5 +6692,117 @@
   "catalogue_f4_tree_one_group": "one group, Copies (M 31 LRGB)",
   "catalogue_f4_tree_symlinks": "groups, two cameras, Symlinks (Cygnus HOO 2026)",
   "catalogue_f4_tree_mixed": "what-if, Copies: darks in the nights, NIGHT_…-2",
-  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)"
+  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)",
+  "project_pending_with_source": "{change} ({source})",
+  "project_pending_added": "Added",
+  "project_pending_moved": "Moved from {group}",
+  "project_pending_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame changed",
+        "countPlural=*": "{n} frames changed"
+      }
+    }
+  ],
+  "project_pending_calibration": "{kind} changed",
+  "project_pending_renamed": "Renamed from {name}",
+  "project_group_no_folder": "No group folder",
+  "project_col_folder": "Folder",
+  "project_group_unmark_title": "Stop using {name} as a mosaic panel?",
+  "project_group_unmark_last": "The Project is no longer a mosaic: its panel goals become goals for the whole subject.",
+  "project_group_unmark_goals": "Its panel goals are removed.",
+  "project_group_mark_panel_title": "Mark {name} as a mosaic panel",
+  "project_group_rename_hint": "Its folder is renamed on the next Apply.",
+  "project_group_panel_goals": "The panel gets its own goals, and its folder uses the PANEL keyword.",
+  "project_group_panel_first": "The Project becomes a mosaic: panel folders use the PANEL keyword, each panel gets its own goals, the page shows a panel map and Output/Panels/ holds each panel's result.",
+  "project_col_framing": "Framing",
+  "project_select_sessions_first": "Select sessions first",
+  "project_move_needs_group": "The Project has one group: split or create another first",
+  "project_split_one_group": "Select sessions of one group",
+  "project_remove_sessions_title": [
+    {
+      "declarations": [
+        "input count",
+        "input project",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remove {count} session from {project}?",
+        "countPlural=*": "Remove {count} sessions from {project}?"
+      }
+    }
+  ],
+  "project_split_confirm": "Split",
+  "project_split_moves": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session moves into the new group with all its frames. The folder appears on the next Apply.",
+        "countPlural=*": "{count} sessions move into the new group with all their frames. The folder appears on the next Apply."
+      }
+    }
+  ],
+  "project_move_whole": "Sessions move whole, with all their frames. Their folder changes on the next Apply.",
+  "project_panel_map": "Panel map",
+  "project_col_match": "Match",
+  "project_framing_unknown": "Framing unknown",
+  "project_rotation_unknown": "Rotation unknown",
+  "project_rotatang": "ROTATANG {angle}",
+  "project_joins_new_group": "New group {name}",
+  "project_col_joins": "Joins",
+  "project_add_other": "Other Target or rig",
+  "project_note_adds_subject": "Also adds the subject {name} to {project}, with the Project's goals.",
+  "project_add_sessions_title": "Add sessions to {name}",
+  "project_add_waiting_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} matching session needs review before it can be added",
+        "countPlural=*": "{count} matching sessions need review before they can be added"
+      }
+    }
+  ],
+  "project_add_none": "No Ready sessions to add",
+  "project_add_no_match": "No sessions match the filters",
+  "project_duplicate_part_count": "{part} ({count})",
+  "project_duplicate_current_pins": "Each session brings its calibration as it is now, not as frozen at Close.",
+  "project_sessions_need_calibration": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session needs calibration",
+        "countPlural=*": "{n} sessions need calibration"
+      }
+    }
+  ]
 }

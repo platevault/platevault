@@ -6706,5 +6706,117 @@
   "catalogue_f4_tree_one_group": "um grupo, cópias (M 31 LRGB)",
   "catalogue_f4_tree_symlinks": "grupos, duas câmeras, Symlinks (Cygnus HOO 2026)",
   "catalogue_f4_tree_mixed": "hipótese, cópias: darks nas noites, NIGHT_…-2",
-  "catalogue_f4_tree_panels": "painéis de mosaico (mosaico IC 5070)"
+  "catalogue_f4_tree_panels": "painéis de mosaico (mosaico IC 5070)",
+  "project_pending_with_source": "{change} ({source})",
+  "project_pending_added": "Adicionada",
+  "project_pending_moved": "Movida de {group}",
+  "project_pending_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame alterado",
+        "countPlural=*": "{n} frames alterados"
+      }
+    }
+  ],
+  "project_pending_calibration": "{kind} alterado",
+  "project_pending_renamed": "Renomeado de {name}",
+  "project_group_no_folder": "Sem pasta de grupo",
+  "project_col_folder": "Pasta",
+  "project_group_unmark_title": "Deixar de usar {name} como painel de mosaico?",
+  "project_group_unmark_last": "O projeto deixa de ser um mosaico: as metas dos painéis passam a ser metas do objeto inteiro.",
+  "project_group_unmark_goals": "As metas deste painel são removidas.",
+  "project_group_mark_panel_title": "Marcar {name} como painel de mosaico",
+  "project_group_rename_hint": "A pasta é renomeada no próximo Aplicar.",
+  "project_group_panel_goals": "O painel recebe metas próprias, e a pasta usa a palavra-chave PANEL.",
+  "project_group_panel_first": "O projeto passa a ser um mosaico: as pastas dos painéis usam a palavra-chave PANEL, cada painel recebe metas próprias, a página mostra um mapa de painéis e Output/Panels/ guarda o resultado de cada painel.",
+  "project_col_framing": "Enquadramento",
+  "project_select_sessions_first": "Selecione sessões primeiro",
+  "project_move_needs_group": "O projeto tem um só grupo: separe ou crie outro primeiro",
+  "project_split_one_group": "Selecione sessões de um só grupo",
+  "project_remove_sessions_title": [
+    {
+      "declarations": [
+        "input count",
+        "input project",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remover {count} sessão de {project}?",
+        "countPlural=*": "Remover {count} sessões de {project}?"
+      }
+    }
+  ],
+  "project_split_confirm": "Separar",
+  "project_split_moves": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão vai para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar.",
+        "countPlural=*": "{count} sessões vão para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar."
+      }
+    }
+  ],
+  "project_move_whole": "As sessões se movem inteiras, com todos os frames. A pasta muda no próximo Aplicar.",
+  "project_panel_map": "Mapa de painéis",
+  "project_col_match": "Correspondência",
+  "project_framing_unknown": "Enquadramento desconhecido",
+  "project_rotation_unknown": "Rotação desconhecida",
+  "project_rotatang": "ROTATANG {angle}",
+  "project_joins_new_group": "Novo grupo {name}",
+  "project_col_joins": "Entra em",
+  "project_add_other": "Outro alvo ou setup",
+  "project_note_adds_subject": "Também adiciona o objeto {name} a {project}, com as metas do Projeto.",
+  "project_add_sessions_title": "Adicionar sessões a {name}",
+  "project_add_waiting_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão correspondente precisa de revisão antes de ser adicionada",
+        "countPlural=*": "{count} sessões correspondentes precisam de revisão antes de serem adicionadas"
+      }
+    }
+  ],
+  "project_add_none": "Nenhuma sessão pronta para adicionar",
+  "project_add_no_match": "Nenhuma sessão corresponde aos filtros",
+  "project_duplicate_part_count": "{part} ({count})",
+  "project_duplicate_current_pins": "Cada sessão leva a calibração atual, não a congelada ao fechar.",
+  "project_sessions_need_calibration": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão precisa de calibração",
+        "countPlural=*": "{n} sessões precisam de calibração"
+      }
+    }
+  ]
 }

@@ -1,24 +1,23 @@
 /**
- * S3 Project sections of the Sessions tab (slice B; DetailPage sections,
- * each a Box holding a BoxTable or a KeyValueList): the groups and the
- * sessions they hold first (PRJ-FR-08, PRJ-FR-27 to PRJ-FR-29), then the
- * suggestions, goals, subjects (with the C7 progress: weakest panel, panel
- * balance, channel ratio and nights left), rigs, tonight's planning and the
- * archived sessions. Every edit goes through a foundation store action and
- * changes the desired state only: the View follows on the next Apply. A
- * refusal shows beside the action that was refused. A Closed or Archived
- * Project is read-only for good (PRJ-FR-25): its sections keep Open only.
+ * S3 Project sections of the Sessions tab after the groups, held sessions
+ * and suggestions (`groups.tsx`); slice B DetailPage sections, each a Box
+ * holding a BoxTable or a KeyValueList: the goals, subjects (with the C7
+ * progress: weakest panel, panel balance, channel ratio and nights left),
+ * rigs, tonight's planning and the archived sessions. Every edit goes
+ * through a foundation store action; a goal edit takes effect at once, with
+ * no Apply (PRJ-AC-40). A refusal shows beside the action that was refused.
+ * A Closed or Archived Project is read-only for good (PRJ-FR-25): its
+ * sections keep Open only.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Crosshair, Eye, FolderInput, Pencil, Plus, Split, X } from "lucide-react"
+import { Crosshair, Eye, Pencil, Plus, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { SelectField, SwitchField, TextField } from "@/components/app/fields"
+import { SelectField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
-import { useFollowLink } from "@/components/app/links"
 import { TargetPicker } from "@/components/app/pickers"
 import { Refusal } from "@/components/app/refusal"
 import { StatusBadge } from "@/components/app/status"
@@ -32,49 +31,26 @@ import {
   liveAssetIds,
   panelGroups,
   planningSite,
-  projectSessionsNeedingReview,
   projectSuggestions,
   rigCameraKind,
   rigFieldOfView,
   rigName,
-  sessionIntakeLink,
-  sessionRigId,
   sessionTargetId,
-  sessionUnreviewedFrames,
-  type Suggestion,
   type SubjectProgress,
   subjectCentre,
   subjectName,
   subjectProgress,
   subjectTarget,
 } from "@/domain/derive"
-import { sessionLongRef } from "@/domain/membership"
 import { bestWindowTonight, defaultCriteria, tonightAt, upcomingNight } from "@/domain/planning"
-import { groupInputs } from "@/domain/project-view"
-import type { Catalog, Goal, OpticalTrainId, Project, ProjectGroup, ProjectInput, Session, Subject } from "@/domain/types"
-import { formatCount, formatDegrees, formatTime } from "@/lib/format"
+import type { Catalog, Goal, OpticalTrainId, Project, Session, Subject } from "@/domain/types"
+import { formatDegrees, formatTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import {
-  addRig,
-  addSessions,
-  addSubject,
-  applyGoalTemplate,
-  changeSubjectTarget,
-  createGroup,
-  moveSessions,
-  removeGroup,
-  removeRig,
-  removeSessions,
-  removeSubject,
-  renameGroup,
-  setGoals,
-  setGroupPanel,
-  splitGroup,
-} from "@/store/actions/projects"
+import { addRig, addSubject, applyGoalTemplate, changeSubjectTarget, removeRig, removeSubject, setGoals } from "@/store/actions/projects"
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, nowIso, type PrototypeState, useStore } from "@/store/core"
 import { goalTemplates, projectChannels, templateChanges } from "./model"
-import { type SubjectPick, useTargetSearch } from "./parts"
+import { type SubjectPick, sessionLine, sessionSubjectName, useTargetSearch } from "./parts"
 import { resolvePick } from "./subject-actions"
 
 /** A goal's subject, with its panel group in a mosaic: "IC 5070 · Panel 2". */
@@ -85,249 +61,7 @@ function subjectLabel(m: Messages, catalog: Catalog, project: Project, subjectId
   return group ? `${subjectName(m, catalog, subject)} · ${group.name}` : subjectName(m, catalog, subject)
 }
 
-/** "18 Sep · Ha · 300 s", as calibration and View lists name a session. */
-function sessionLine(m: Messages, session: Session): string {
-  return say(m, sessionLongRef(session))
-}
-
-function subjectNameOf(m: Messages, catalog: Catalog, project: Project, session: Session): string {
-  const subject = project.subjects.find((s) => s.targetId === sessionTargetId(session))
-  return subject ? subjectName(m, catalog, subject) : (session.objectLabel ?? m.project_unknown_subject())
-}
-
 const openSession = (navigate: ReturnType<typeof useNavigate>, sessionId: string) => void navigate({ to: "/sessions/$sessionId", params: { sessionId } })
-
-// ---------------------------------------------------------------------------
-// Groups (PRJ-FR-27 to PRJ-FR-29)
-// ---------------------------------------------------------------------------
-
-/** What the group dialog writes: a new group, or a rename of `groupId`. */
-type GroupDraft = { groupId: string | null; name: string; panel: boolean }
-
-/**
- * The Project's groups: one rig and framing each, or a mosaic panel. New
- * group… names it (and may mark it a panel); Rename… changes its folder on
- * the next Apply; marking a group as a panel makes the Project a mosaic.
- * Remove is refused while the group holds a session.
- */
-export function useGroupsSection(project: Project): DetailSection {
-  const m = useMessages()
-  const [draft, setDraft] = useState<GroupDraft | null>(null)
-  const open = !isLocked(project)
-  const held = (group: ProjectGroup) => groupInputs(project, group.id).length
-  const kind = (group: ProjectGroup) => (group.panel ? m.common_mosaic_panel() : m.project_group_kind_group())
-  const columns: Column<ProjectGroup>[] = [
-    { id: "name", header: m.newproject_field_name(), cell: (g) => g.name, sortValue: (g) => g.name, rowHeader: true, truncate: true },
-    { id: "kind", header: m.project_col_kind(), cell: kind, sortValue: kind },
-    { id: "sessions", header: m.nav_sessions(), cell: held, sortValue: held, align: "right" },
-  ]
-  const rowActions = (group: ProjectGroup): MenuItem[] =>
-    open
-      ? [
-          { id: "rename", label: m.project_group_rename(), icon: Pencil, opensDialog: true, run: () => setDraft({ groupId: group.id, name: group.name, panel: group.panel }) },
-          { id: "panel", label: group.panel ? m.project_group_unmark_panel() : m.project_group_mark_panel(), run: () => setGroupPanel(project.id, group.id, !group.panel) },
-          { separator: true },
-          {
-            id: "remove",
-            label: m.project_group_remove(),
-            icon: X,
-            kind: "destructive",
-            confirm: { title: m.project_group_remove_title({ name: group.name }), confirm: { label: m.project_remove(), kind: "destructive" } },
-            run: () => removeGroup(project.id, group.id),
-          },
-        ]
-      : []
-  const actions: Action[] = open ? [{ id: "new-group", label: m.project_group_new(), icon: Plus, opensDialog: true, run: () => setDraft({ groupId: null, name: "", panel: false }) }] : []
-  const save = (next: GroupDraft): CommitResult => (next.groupId ? renameGroup(project.id, next.groupId, next.name) : createGroup(project.id, next.name, next.panel).result)
-  const saveLabel = draft?.groupId ? m.settings_save() : m.project_group_new()
-  const nameError = draft && !draft.name.trim() ? m.settings_name_required() : undefined
-  return {
-    id: "groups",
-    title: m.project_groups(),
-    count: project.groups.length,
-    flush: true,
-    actions,
-    content: (
-      <>
-        <BoxTable label={m.project_groups_of({ name: project.name })} rows={project.groups} columns={columns} getRowId={(g) => g.id} rowLabel={(g) => g.name} rowActions={rowActions} empty={m.project_no_groups()} />
-        <FormDialog
-          open={draft !== null}
-          onOpenChange={(next) => !next && setDraft(null)}
-          title={draft?.groupId ? m.common_rename_title({ name: project.groups.find((g) => g.id === draft.groupId)?.name ?? "" }) : m.project_group_new()}
-          size="sm"
-          confirm={{
-            id: "group-save",
-            label: saveLabel,
-            kind: "primary",
-            run: () => (draft ? save(draft) : undefined),
-            unavailable: nameError ? { action: m.actions_blocked({ action: saveLabel }), reason: nameError, blockers: [] } : undefined,
-          }}
-        >
-          {draft ? (
-            <>
-              <TextField label={m.newproject_field_name()} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} error={nameError} required autoFocus />
-              {draft.groupId === null ? <SwitchField label={m.common_mosaic_panel()} description={m.project_group_panel_hint()} checked={draft.panel} onChange={(panel) => setDraft({ ...draft, panel })} /> : null}
-            </>
-          ) : null}
-        </FormDialog>
-      </>
-    ),
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Held sessions (PRJ-FR-08, PRJ-FR-27)
-// ---------------------------------------------------------------------------
-
-interface HeldRow {
-  input: ProjectInput
-  session: Session
-  group: ProjectGroup | undefined
-  frames: number
-}
-
-function heldRows(state: PrototypeState, project: Project): HeldRow[] {
-  return project.inputs.flatMap((input) => {
-    const session = state.catalog.sessions[input.sessionId]
-    return session ? [{ input, session, group: findGroup(project, input.groupId), frames: liveAssetIds(state.catalog, session).length - input.excluded.length }] : []
-  })
-}
-
-/**
- * The sessions the Project holds, each in one group. Move to group and
- * Split into a new group move whole sessions; Remove from Project takes its
- * frames out of the View on the next Apply. Files, the library and other
- * Projects never change.
- */
-export function useHeldSection(project: Project): DetailSection {
-  const m = useMessages()
-  const navigate = useNavigate()
-  const catalog = useStore((s) => s.catalog)
-  const rows = useStore((s) => heldRows(s, project))
-  const open = !isLocked(project)
-  const label = (r: HeldRow) => `${subjectNameOf(m, catalog, project, r.session)} · ${sessionLine(m, r.session)}`
-  const rigOf = (r: HeldRow) => rigName(m, catalog, sessionRigId(r.session))
-  const columns: Column<HeldRow>[] = [
-    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
-    { id: "subject", header: m.project_col_subject(), cell: (r) => subjectNameOf(m, catalog, project, r.session), sortValue: (r) => subjectNameOf(m, catalog, project, r.session), truncate: true },
-    { id: "rig", header: m.project_col_rig(), cell: rigOf, sortValue: rigOf, truncate: true },
-    { id: "group", header: m.project_col_group(), cell: (r) => r.group?.name ?? "–", sortValue: (r) => r.group?.name ?? null, truncate: true },
-    { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(r.frames), sortValue: (r) => r.frames, align: "right" },
-  ]
-  const rowActions = (r: HeldRow): MenuItem[] => {
-    const others = project.groups.filter((g) => g.id !== r.input.groupId)
-    return [
-      { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
-      ...(open
-        ? [
-            ...(others.length > 0 ? [{ submenu: m.project_move_to_group(), items: others.map((g): MenuItem => ({ id: `move-${g.id}`, label: g.name, icon: FolderInput, run: () => moveSessions(project.id, [r.session.id], g.id) })) }] : []),
-            { id: "split", label: m.project_split_group(), icon: Split, run: () => splitGroup(project.id, r.input.groupId, [r.session.id]).result },
-            { separator: true } as const,
-            {
-              id: "remove",
-              label: m.project_remove_session(),
-              icon: X,
-              kind: "destructive" as const,
-              confirm: { title: m.project_remove_from_title({ name: label(r), project: project.name }), summary: m.project_remove_session_summary(), confirm: { label: m.project_remove(), kind: "destructive" as const } },
-              run: () => removeSessions(project.id, [r.session.id]),
-            },
-          ]
-        : []),
-    ]
-  }
-  return {
-    id: "sessions",
-    title: m.nav_sessions(),
-    count: rows.length,
-    flush: true,
-    content: (
-      <BoxTable
-        label={m.common_sessions_of({ name: project.name })}
-        rows={rows}
-        columns={columns}
-        getRowId={(r) => r.session.id}
-        initialSort={{ columnId: "session", direction: "desc" }}
-        rowLabel={label}
-        rowActions={rowActions}
-        empty={m.project_no_sessions()}
-      />
-    ),
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Suggestions (PRJ-FR-08, PRJ-FR-09, P-REV2)
-// ---------------------------------------------------------------------------
-
-/**
- * Suggestions: Ready matching sessions the Project doesn't hold. They are
- * never added by themselves; Add to Project is offered once the session's
- * calibration is settled, else its blocker shows ("Choose its flats first").
- * A matching session that still needs review waits in the review queue; the
- * section offers its frames to review, counted as every page counts them
- * (`sessionUnreviewedFrames`, C10).
- */
-export function useSuggestionsSection(project: Project): DetailSection {
-  const m = useMessages()
-  const navigate = useNavigate()
-  const follow = useFollowLink()
-  const catalog = useStore((s) => s.catalog)
-  const rows = useStore((s) => projectSuggestions(s.catalog, project))
-  const waiting = useStore((s) => projectSessionsNeedingReview(s.catalog, project))
-  const unreviewed = waiting.reduce((n, c) => n + sessionUnreviewedFrames(catalog, c.session), 0)
-  const firstWaiting = waiting.find((c) => sessionUnreviewedFrames(catalog, c.session) > 0)
-  const open = !isLocked(project)
-  const addable = rows.filter((r) => r.blocked === null)
-
-  const label = (r: Suggestion) => `${subjectName(m, catalog, r.subject)} · ${sessionLine(m, r.session)}`
-  const status = (r: Suggestion) => (r.blocked ? say(m, r.blocked) : m.status_ready())
-  const columns: Column<Suggestion>[] = [
-    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
-    { id: "subject", header: m.project_col_subject(), cell: (r) => subjectName(m, catalog, r.subject), sortValue: (r) => subjectName(m, catalog, r.subject), truncate: true },
-    { id: "rig", header: m.project_col_rig(), cell: (r) => rigName(m, catalog, r.rigId), sortValue: (r) => rigName(m, catalog, r.rigId), truncate: true },
-    { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(liveAssetIds(catalog, r.session).length), sortValue: (r) => liveAssetIds(catalog, r.session).length, align: "right" },
-    { id: "status", header: m.dialog_col_status(), cell: status, sortValue: status, truncate: true },
-  ]
-  const addLabel = m.session_add_to_project()
-  const rowActions = (r: Suggestion): MenuItem[] => [
-    { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
-    ...(open
-      ? [
-          {
-            id: "add",
-            label: addLabel,
-            icon: Plus,
-            unavailable: r.blocked ? { action: m.actions_blocked({ action: addLabel }), reason: say(m, r.blocked), blockers: [{ label: label(r), link: { to: "/sessions/$sessionId", params: { sessionId: r.session.id } } }] } : undefined,
-            run: () => addSessions(project.id, [r.session.id]),
-          },
-        ]
-      : []),
-  ]
-  const actions: Action[] = [
-    ...(open && addable.length > 0 ? [{ id: "add-all", label: m.project_add_suggested({ count: addable.length }), icon: Plus, run: () => addSessions(project.id, addable.map((r) => r.session.id)) }] : []),
-    ...(unreviewed > 0 && firstWaiting ? [{ id: "review", label: m.domain_next_review_new_frames({ count: unreviewed, n: formatCount(unreviewed) }), run: () => follow(sessionIntakeLink(firstWaiting.session.id, "review")) }] : []),
-  ]
-
-  return {
-    id: "suggestions",
-    title: m.project_suggestions(),
-    count: rows.length,
-    flush: true,
-    actions,
-    content: (
-      <BoxTable
-        label={m.project_suggestions_of({ name: project.name })}
-        rows={rows}
-        columns={columns}
-        getRowId={(r) => `${r.session.id}|${r.rigId}`}
-        initialSort={{ columnId: "session", direction: "desc" }}
-        rowLabel={label}
-        rowActions={rowActions}
-        empty={m.project_no_suggestions()}
-      />
-    ),
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Goals (C7)
@@ -664,7 +398,8 @@ export function useRigsSection(project: Project): DetailSection {
   const m = useMessages()
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
-  const suggestions = useStore((s) => projectSuggestions(s.catalog, project))
+  // A locked Project takes no suggestions (VSEL-AC-20), so its rigs count none.
+  const suggestions = useStore((s) => (isLocked(project) ? [] : projectSuggestions(s.catalog, project)))
   const [adding, setAdding] = useState(false)
   const others = Object.values(catalog.opticalTrains).filter((r) => !project.rigIds.includes(r.id))
   const [choice, setChoice] = useState("")
@@ -799,7 +534,7 @@ export function useArchivedSection(project: Project): DetailSection | null {
     return first?.copies.find((c) => catalog.locations[c.locationId]?.role === "archive")?.path.split("/").slice(0, -1).join("/") ?? "–"
   }
   const columns: Column<Session>[] = [
-    { id: "session", header: m.project_col_session(), cell: (s) => `${subjectNameOf(m, catalog, project, s)} · ${sessionLine(m, s)}`, sortValue: (s) => s.night, rowHeader: true, truncate: true },
+    { id: "session", header: m.project_col_session(), cell: (s) => `${sessionSubjectName(m, catalog, project, s)} · ${sessionLine(m, s)}`, sortValue: (s) => s.night, rowHeader: true, truncate: true },
     { id: "path", header: m.project_col_archive_path(), cell: archivePath, sortValue: archivePath, truncate: true },
   ]
   return {

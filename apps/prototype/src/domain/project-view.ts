@@ -199,19 +199,30 @@ export function groupPlacement(m: Messages, world: Pick<World, "catalog" | "sett
     const members = groupInputs(project, group.id).map((i) => catalog.sessions[i.sessionId]).filter((s): s is Session => s !== undefined)
     if (members.some((s) => opticsKey(catalog, s) === optics && sameFraming(sessionFraming(catalog, s), framing, world.settings.matching.framing))) return { groupId: group.id, name: group.name, panel: group.panel }
   }
+  if (isMosaic(project)) return { groupId: null, name: panelGroupName(m, project, [session.objectLabel]), panel: true }
   const taken = new Set(project.groups.map((g) => g.name))
-  if (isMosaic(project)) {
-    const fromCapture = PANEL_IN_NAME.exec(session.objectLabel ?? "")?.[1]
-    let n = fromCapture ? Number(fromCapture) : project.groups.filter((g) => g.panel).length + 1
-    while (taken.has(say(m, msg("common_panel_n", { n })))) n += 1
-    return { groupId: null, name: say(m, msg("common_panel_n", { n })), panel: true }
-  }
   const rig = rigName(m, catalog, sessionRigId(session))
   const onRig = project.groups.filter((g) => groupInputs(project, g.id).some((i) => sessionRigId(catalog.sessions[i.sessionId] ?? session) === sessionRigId(session))).length
   if (onRig === 0 && !taken.has(rig)) return { groupId: null, name: rig, panel: false }
   let n = Math.max(2, onRig + 1)
   while (taken.has(say(m, msg("project_group_framing_n", { rig, n })))) n += 1
   return { groupId: null, name: say(m, msg("project_group_framing_n", { rig, n })), panel: false }
+}
+
+/**
+ * "Panel N", the default name of a mosaic panel group (PRJ-FR-29): N from
+ * the first capture (NINA) name that holds one ("IC 5070 Panel 2"), else
+ * the next panel number; the first name no other group has. `except` is a
+ * group being marked as a panel, which counts neither as a panel nor as a
+ * name taken.
+ */
+export function panelGroupName(m: Messages, project: Pick<Project, "groups">, captureNames: ReadonlyArray<string | null>, except: ProjectGroupId | null = null): string {
+  const others = project.groups.filter((g) => g.id !== except)
+  const taken = new Set(others.map((g) => g.name))
+  const fromCapture = captureNames.map((name) => PANEL_IN_NAME.exec(name ?? "")?.[1]).find((n) => n !== undefined)
+  let n = fromCapture ? Number(fromCapture) : others.filter((g) => g.panel).length + 1
+  while (taken.has(say(m, msg("common_panel_n", { n })))) n += 1
+  return say(m, msg("common_panel_n", { n }))
 }
 
 /** "<Group> · 2": the default name of a group split from `group` (PRJ-FR-27), the first number not taken. */

@@ -53,7 +53,8 @@ describe("Project page on the F4 model", () => {
     const source = projects().find((p) => p.state === "open" && p.inputs.length > 0 && p.view !== null)!
     renderProject(source.id)
     expect(await screen.findByRole("table", { name: m.project_groups_of({ name: source.name }) })).toBeInTheDocument()
-    expect(within(screen.getByRole("table", { name: m.common_sessions_of({ name: source.name }) })).getAllByRole("row")).toHaveLength(source.inputs.length + 1)
+    // Rows sit under a heading row per group; each session is one data row.
+    expect(screen.getByRole("table", { name: m.common_sessions_of({ name: source.name }) }).querySelectorAll("tr[data-row]")).toHaveLength(source.inputs.length)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole("button", { name: m.project_noun() }))
