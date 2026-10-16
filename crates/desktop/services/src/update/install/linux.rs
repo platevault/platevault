@@ -85,11 +85,21 @@ pub(super) fn install_package(
     payload: &mut Payload<'_>,
     package: Package,
 ) -> Result<Installed, UpdateError> {
+    run_package(package_command(package, payload.sha256()), payload)
+}
+
+/// Run `command`, a [`package_command`], with the verified `payload` on its
+/// standard input. The handle shares its position with `payload`'s, which
+/// `reverify` and `check_format` leave at the start.
+#[cfg(target_os = "linux")]
+fn run_package(mut command: Command, payload: &mut Payload<'_>) -> Result<Installed, UpdateError> {
     let stdin = payload.reader().try_clone()?;
-    let status =
-        package_command(package, payload.sha256()).stdin(stdin).status().map_err(|error| {
-            UpdateError::Install(format!("cannot run {PKEXEC} to install the update: {error}"))
-        })?;
+    let status = command.stdin(stdin).status().map_err(|error| {
+        UpdateError::Install(format!(
+            "cannot run {} to install the update: {error}",
+            command.get_program().to_string_lossy()
+        ))
+    })?;
     package_outcome(status)
 }
 
@@ -247,7 +257,11 @@ mod tests {
 
         use sha2::{Digest as _, Sha256};
 
-        use super::super::{PAYLOAD_CHANGED, PRIVILEGED_INSTALL, SCRIPT_NAME};
+        use super::super::{
+            package_command, run_package, PAYLOAD_CHANGED, PRIVILEGED_INSTALL, SCRIPT_NAME,
+        };
+        use crate::update::install::{check_format, Installed};
+        use crate::update::Package;
 
         const PACKAGE: &[u8] = b"!<arch>\ndebian-binary 2.0";
 
@@ -334,6 +348,31 @@ mod tests {
             // read as a dismissed polkit prompt.
             let missing = dir.path().join("no-such-tool");
             assert_eq!(run(PACKAGE, &sha256(PACKAGE), &missing), Some(1));
+        }
+
+        /// The install as `OsInstaller` runs it, from a real verified
+        /// payload after the format check, with `sh` in place of `pkexec`
+        /// and a stand-in for `dpkg`: the script gets the whole payload, so
+        /// its copy matches the digest.
+        #[tokio::test]
+        async fn the_package_install_hands_the_whole_checked_payload_to_the_script() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let tool = package_tool(dir.path(), 0);
+            let staged = crate::update::tests::stage(Package::Deb, PACKAGE).await;
+            let mut payload = staged.reverify().expect("verified");
+            check_format(payload.reader(), Package::Deb).expect("a deb");
+            let pkexec = package_command(Package::Deb, payload.sha256());
+            let mut args: Vec<std::ffi::OsString> =
+                pkexec.get_args().map(std::ffi::OsStr::to_os_string).collect();
+            assert_eq!(args[5], "/usr/bin/dpkg");
+            args[5] = tool.into_os_string();
+            let mut command = Command::new(&args[0]);
+            command.args(&args[1..]);
+
+            let installed = run_package(command, &mut payload);
+
+            assert!(matches!(installed, Ok(Installed::Relaunch)), "{installed:?}");
+            assert_eq!(fs::read(dir.path().join("installed")).expect("installed"), PACKAGE);
         }
     }
 }

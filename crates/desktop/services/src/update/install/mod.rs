@@ -8,8 +8,8 @@
 //! an installer. Every program an install runs is named by absolute path. A
 //! step that runs with more rights than the user's checks the payload again
 //! once it holds them (astro-plan-ryj83): the deb/rpm and macOS root scripts
-//! against [`Payload`]'s SHA-256, and the Windows installers through the
-//! handle that keeps writers out.
+//! against [`Payload`]'s size and SHA-256, and the Windows installers through
+//! the handle that keeps ordinary writers out (not code running as the user).
 //!
 //! [`Staged::reverify`]: super::signature::Staged::reverify
 

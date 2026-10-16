@@ -23,8 +23,10 @@
 //! signature has verified. [`Staged::reverify`] checks it again right before
 //! an installer reads it. An installer that hands the file to a process with
 //! more rights than the user's re-checks it there (astro-plan-ryj83): on Unix
-//! against the SHA-256 of the bytes `reverify` verified, and on Windows the
-//! handle `reverify` opened keeps every writer out until the installer exits.
+//! against the size and SHA-256 of the bytes `reverify` verified; on Windows
+//! the handle `reverify` opened keeps ordinary writers out until the
+//! installer exits, though not code running as the user (see
+//! `open_payload`).
 
 use std::fs::{self, File};
 use std::io::{self, Read as _, Seek as _, Write as _};
@@ -91,6 +93,8 @@ impl Staged {
         let mut verifier = stream_verifier(&self.key, &self.signature)?;
         #[cfg(unix)]
         let mut digest = Sha256::new();
+        #[cfg(target_os = "macos")]
+        let mut size = 0_u64;
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
             let read = file.read(&mut buffer)?;
@@ -100,6 +104,10 @@ impl Staged {
             verifier.update(&buffer[..read]);
             #[cfg(unix)]
             digest.update(&buffer[..read]);
+            #[cfg(target_os = "macos")]
+            {
+                size += read as u64;
+            }
         }
         verifier.finalize().map_err(|_| {
             UpdateError::Signature(
@@ -112,6 +120,8 @@ impl Staged {
             file,
             #[cfg(unix)]
             sha256: format!("{:x}", digest.finalize()),
+            #[cfg(target_os = "macos")]
+            size,
         })
     }
 
@@ -144,9 +154,11 @@ pub struct Payload<'a> {
     staged: &'a Staged,
     file: File,
     /// SHA-256 of exactly the bytes [`Staged::reverify`] verified, lowercase
-    /// hex.
+    /// hex, and how many there were.
     #[cfg(unix)]
     sha256: String,
+    #[cfg(target_os = "macos")]
+    size: u64,
 }
 
 impl Payload<'_> {
@@ -170,6 +182,12 @@ impl Payload<'_> {
         &self.sha256
     }
 
+    /// How many bytes verified, which bounds the privileged step's copy.
+    #[cfg(target_os = "macos")]
+    pub const fn size(&self) -> u64 {
+        self.size
+    }
+
     /// See [`Staged::keep`].
     #[cfg(windows)]
     pub fn keep(&self) {
@@ -178,12 +196,20 @@ impl Payload<'_> {
 }
 
 /// Open the staged payload to verify it for an install. Windows opens it
-/// sharing reads only (`FILE_SHARE_READ`): while this handle, or a duplicate
-/// an installer inherits, is open, nothing can open the file for writing,
-/// delete it or rename it, and the open fails while anything already holds it
-/// for writing. So the bytes it verified are the bytes the installer reads,
-/// even the Windows Installer service, which reads the MSI after the UAC
-/// prompt and after this process has exited.
+/// sharing reads only (`FILE_SHARE_READ`), and the installer inherits a
+/// duplicate of the handle (`windows::launch_installer`). While either is
+/// open, the open fails for anything that already holds the file for writing
+/// through a handle, and later opens for writing, deleting or renaming it fail
+/// too, so the Windows Installer service, which reads the MSI after the UAC
+/// prompt and after this process has exited, reads the bytes that verified.
+///
+/// This is a lock against ordinary opens, not a boundary against code that
+/// runs as this user (astro-plan-ryj83). A writable view a process mapped
+/// before this open, with its handles closed, holds no share access and can
+/// still change the file; and the `msiexec` client that holds the duplicate
+/// runs unelevated as this user, so such code can close or replace its
+/// handle, or tamper with that process outright. Unix has the same
+/// precondition; there the privileged step checks a copy of its own.
 #[cfg(windows)]
 fn open_payload(path: &Path) -> io::Result<File> {
     use std::os::windows::fs::OpenOptionsExt as _;

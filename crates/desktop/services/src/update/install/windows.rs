@@ -27,9 +27,12 @@ const DEFAULT_SYSTEM_ROOT: &str = r"C:\Windows";
 ///
 /// The installer gets a duplicate of the handle [`Staged::reverify`] opened
 /// as its standard input, which it ignores but holds until it exits. That
-/// handle shares reads only, so nothing can write, delete or rename the file
-/// between the check and the install: the Windows Installer service reads the
-/// MSI after the UAC prompt and after this process is gone (astro-plan-ryj83).
+/// handle shares reads only, so ordinary opens cannot write, delete or rename
+/// the file between the check and the install: the Windows Installer service
+/// reads the MSI after the UAC prompt and after this process is gone
+/// (astro-plan-ryj83). It does not stop code running as this user, which can
+/// change the file through a view it mapped earlier or tamper with the
+/// unelevated `msiexec` client that holds the handle (see `open_payload`).
 /// No elevated step of the app's own runs before `msiexec` to check the MSI,
 /// since starting one would mean a second, unexplained UAC prompt.
 ///

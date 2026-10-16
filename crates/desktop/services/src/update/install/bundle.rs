@@ -263,71 +263,106 @@ const KEPT_IN_WORK_DIR: i32 = 68;
 /// left in its own directory ([`KEPT_IN_WORK_DIR`]).
 #[cfg(target_os = "macos")]
 const KEPT_MARKER: &str = "kept:";
+/// The only `PATH` the privileged install's processes see; every program it
+/// runs is named by absolute path anyway.
+#[cfg(target_os = "macos")]
+const SAFE_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+/// How long root waits for its copy of the archive. A same-user process may
+/// have swapped the archive for a FIFO, which would block the copy forever.
+#[cfg(target_os = "macos")]
+const COPY_SECONDS: u32 = 120;
 
-/// The root shell script of a [`PrivilegedInstall`], after the assignments
-/// [`PrivilegedInstall::command`] puts in front of it.
+/// The root shell script of a [`PrivilegedInstall`], run with only the
+/// values [`PrivilegedInstall::command`] sets in an otherwise empty
+/// environment.
 ///
 /// By the time the user has typed a password, another process of theirs may
 /// have changed anything they can write: the staged archive, the tree the
-/// user context unpacked, or a directory on the way to either. So root works
-/// in a directory only it can enter, made with `mktemp -d` next to the
-/// installed app (so on its volume, for the exchange), and from there checks
-/// everything again:
+/// user context unpacked, a directory on the way to either, and for a member
+/// of the admin group even the installed app's directory (`/Applications` is
+/// `root:admin 775`). So root works in a directory only it can enter, made
+/// with `mktemp -d` next to the installed app (so on its volume, for the
+/// exchange), and from there checks everything again:
 ///
 /// 1. It enters the installed app's directory and the archive's directory with
 ///    `cd -P` and refuses either when `pwd -P` is not the path the app
 ///    resolved, so no component is a symbolic link; the app and the archive
 ///    must not be links either.
-/// 2. It copies the archive into its directory and checks the copy against
-///    the SHA-256 of the bytes the app verified (`PAYLOAD_CHANGED`, 65).
+/// 2. It copies at most one byte more than the verified size of the archive
+///    into its directory, giving up after [`COPY_SECONDS`], and checks the
+///    copy's size and SHA-256 against the bytes the app verified
+///    (`PAYLOAD_CHANGED`, 65).
 /// 3. It unpacks its copy, and for a certificate-signed installed app checks
 ///    the bundle against its designated requirement with `codesign` as root
 ///    (`IDENTITY_REFUSED`, 66).
 /// 4. It gives the bundle to the installed app's owner, then swaps it in as
-///    [`swap`] does, by paths relative to its directory, whose parent no one
-///    but root can change.
+///    [`swap`] does. Every rename goes through [`RENAME_JXA`]: the exchange,
+///    or else exclusive moves (`RENAME_EXCL`), which fail on a name another
+///    process put at the destination instead of moving into the directory
+///    or through the link it planted, as `mv` would. Whether a rename
+///    happened is read off root's own directory, which only root changes.
 ///
-/// Leaving, it removes its directory, which then holds the previous app,
-/// unless the previous app could not be put back after a failed move: it is
-/// then kept next to the installed app (`KEPT_NEXT_TO_APP`, 67) or, failing
-/// that, left in the directory, which is opened to the user and named on
-/// standard error (`KEPT_IN_WORK_DIR`, 68).
+/// Leaving, it empties and removes its directory, which then holds the
+/// previous app, unless the previous app could not be put back after a
+/// failed move: it is then kept next to the installed app
+/// (`KEPT_NEXT_TO_APP`, 67) or, failing that, left in the directory, which is
+/// opened to the user and named on standard error (`KEPT_IN_WORK_DIR`, 68).
 #[cfg(target_os = "macos")]
 const PRIVILEGED_INSTALL: &str = r#"cd -P -- "$parent" && [ "$(pwd -P)" = "$parent" ] && [ -d "$name" ] && [ ! -L "$name" ] || exit 1
 work=$(/usr/bin/mktemp -d .platevault-update.XXXXXXXX) && cd -P -- "$work" || exit 1
-trap 'cd -P .. && /bin/rm -rf -- "$work"' EXIT
-(cd -P -- "$archive_dir" && [ "$(pwd -P)" = "$archive_dir" ] && [ -f "$archive" ] && [ ! -L "$archive" ] && exec /bin/cat -- "$archive") > update.app.tar.gz || exit 1
+trap '/bin/rm -rf -- unpacked previous.app update.app.tar.gz; cd -P .. && /bin/rmdir -- "$work"' EXIT
+there() { [ -e "$1" ] || [ -L "$1" ]; }
+rn() { /usr/bin/osascript -l JavaScript -e "$rename" "$@" </dev/null >/dev/null 2>&1; }
+(cd -P -- "$archive_dir" && [ "$(pwd -P)" = "$archive_dir" ] && [ -f "$archive" ] && [ ! -L "$archive" ] && exec /usr/bin/head -c "$((size + 1))" -- "$archive") > update.app.tar.gz & copy=$!
+(/bin/sleep "$copy_seconds"; /bin/kill "$copy") </dev/null >/dev/null 2>&1 & timer=$!
+wait "$copy"; copied=$?
+{ /bin/kill "$timer"; wait "$timer"; } 2>/dev/null
+[ "$copied" = 0 ] || exit 1
+[ "$(/usr/bin/stat -f %z update.app.tar.gz)" = "$size" ] || exit 65
 digest=$(/usr/bin/shasum -a 256 < update.app.tar.gz) || exit 1
 [ "$digest" = "$sha256  -" ] || exit 65
 /bin/mkdir unpacked && /usr/bin/tar -x --no-same-owner -z -f update.app.tar.gz -C unpacked || exit 1
 [ -d "unpacked/$bundle" ] && [ ! -L "unpacked/$bundle" ] || exit 1
 [ -z "$requirement" ] || /usr/bin/codesign --verify --deep --strict --test-requirement "=$requirement" "unpacked/$bundle" || exit 66
 /usr/sbin/chown -hR "$owner" "unpacked/$bundle" || exit 1
-case "$(/usr/bin/osascript -l JavaScript -e "$swap" "unpacked/$bundle" "../$name" 2>/dev/null)" in
-swapped) ;;
-failed)
-  /bin/mv -f "../$name" previous.app || exit 1
-  if ! /bin/mv -f "unpacked/$bundle" "../$name"; then
-    /bin/mv -f previous.app "../$name" && exit 1
-    [ ! -e "../$kept" ] && [ ! -L "../$kept" ] && /bin/mv previous.app "../$kept" && exit 67
-    trap - EXIT
-    /bin/chmod 755 .
-    printf 'kept:%s/%s/previous.app' "$parent" "$work" >&2
-    exit 68
-  fi;;
-*) exit 1;;
-esac"#;
+new=$(/usr/bin/stat -f %i "unpacked/$bundle") || exit 1
+rn swap "unpacked/$bundle" "../$name"
+now=$(/usr/bin/stat -f %i "unpacked/$bundle") || exit 1
+[ "$now" = "$new" ] || exit 0
+rn excl "../$name" previous.app
+there previous.app || exit 1
+rn excl "unpacked/$bundle" "../$name"
+there "unpacked/$bundle" || exit 0
+rn excl previous.app "../$name"
+there previous.app || exit 1
+rn excl previous.app "../$kept"
+there previous.app || exit 67
+trap - EXIT
+/bin/chmod 755 .
+printf 'kept:%s/%s/previous.app' "$parent" "$work" >&2
+exit 68"#;
 
-/// Exchanges the two paths it is given like [`exchange`], for the privileged
-/// swap: the shell has no command for it, but `osascript` running this
-/// JavaScript for Automation can call `renamex_np` (`2` is `RENAME_SWAP`). It
-/// prints `swapped` or `failed`, so the script can tell a swap that did not
-/// happen from an `osascript` failure that leaves unknown whether it did.
+/// The renames of the privileged install: the shell has no command for an
+/// exchange or an exclusive move, but `osascript` running this JavaScript
+/// for Automation can call `renamex_np`. `swap A B` exchanges the two paths
+/// like [`exchange`] (`RENAME_SWAP`, 2); `excl A B` moves `A` to `B` only
+/// while nothing is at `B` (`RENAME_EXCL`, 4). Neither follows a link.
 #[cfg(target_os = "macos")]
-const SWAP_JXA: &str = r#"function run(argv) {
+const RENAME_JXA: &str = r#"function run(argv) {
   ObjC.import("stdio");
-  return $.renamex_np(argv[0], argv[1], 2) === 0 ? "swapped" : "failed";
+  $.renamex_np(argv[1], argv[2], argv[0] === "swap" ? 2 : 4);
 }"#;
+
+/// `/usr/bin/osascript` with an empty environment but [`SAFE_PATH`]: what
+/// `do shell script` runs, root included, inherits it, so another process
+/// of the user's cannot hand root `PERL5OPT`, exported shell functions or
+/// the like.
+#[cfg(target_os = "macos")]
+fn osascript() -> std::process::Command {
+    let mut command = std::process::Command::new("/usr/bin/osascript");
+    command.env_clear().env("PATH", SAFE_PATH);
+    command
+}
 
 /// The install with administrator rights, for an app this user may not
 /// rename: [`PRIVILEGED_INSTALL`] as root under `do shell script ... with
@@ -343,9 +378,10 @@ struct PrivilegedInstall {
     /// The installed app's owner, which the update is given.
     owner: (u32, u32),
     /// The verified `.app.tar.gz`'s directory, with every link resolved, its
-    /// name there and the SHA-256 of its verified bytes.
+    /// name there, and the size and SHA-256 of its verified bytes.
     archive_dir: PathBuf,
     archive: OsString,
+    size: u64,
     sha256: String,
     /// The app bundle's name in the archive.
     bundle: OsString,
@@ -367,15 +403,15 @@ impl PrivilegedInstall {
         update: &Path,
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
-        Self::of(installed, payload.path(), payload.sha256(), update, identity)
+        Self::of(installed, payload.path(), (payload.size(), payload.sha256()), update, identity)
     }
 
-    /// [`Self::new`] for the archive at `archive` whose verified bytes hash
-    /// to `sha256`.
+    /// [`Self::new`] for the archive at `archive` whose verified bytes are
+    /// `size` long and hash to `sha256`.
     fn of(
         installed: &Path,
         archive: &Path,
-        sha256: &str,
+        (size, sha256): (u64, &str),
         update: &Path,
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
@@ -393,6 +429,7 @@ impl PrivilegedInstall {
             owner: (owner.uid(), owner.gid()),
             archive_dir,
             archive,
+            size,
             sha256: sha256.to_owned(),
             bundle: bundle.to_os_string(),
             requirement: match identity {
@@ -406,39 +443,41 @@ impl PrivilegedInstall {
     /// Run the install as root once the user authorized it in a dialog that
     /// says `prompt`.
     fn run(&self, prompt: &str) -> Result<(), UpdateError> {
-        let output = std::process::Command::new("/usr/bin/osascript")
-            .arg("-e")
-            .arg(administrator_script(&self.command(), prompt))
-            .output()?;
+        let output =
+            osascript().arg("-e").arg(administrator_script(&self.command(), prompt)).output()?;
         if output.status.success() {
             return Ok(());
         }
         Err(self.failure(String::from_utf8_lossy(&output.stderr).trim()))
     }
 
-    /// The shell command that runs as root: each value as a quoted
-    /// assignment, then [`PRIVILEGED_INSTALL`].
+    /// The shell command that runs as root: [`PRIVILEGED_INSTALL`] in a fresh
+    /// `sh` whose environment holds [`SAFE_PATH`] and each value, and
+    /// nothing else, whatever the shell that starts it was given.
     fn command(&self) -> String {
-        self.command_with_swap(SWAP_JXA)
+        self.command_with(RENAME_JXA, COPY_SECONDS)
     }
 
-    /// [`Self::command`] with `swap` as the exchange's script, which tests
-    /// replace to reach the fallback moves on APFS.
-    fn command_with_swap(&self, swap: &str) -> String {
+    /// [`Self::command`] with `rename` as the renames' script and
+    /// `copy_seconds` as the copy's limit, which tests replace to plant names
+    /// between renames and to reach the fallback moves on APFS.
+    fn command_with(&self, rename: &str, copy_seconds: u32) -> String {
         let text = |value: &OsString| sh_quote(&value.to_string_lossy());
         let path = |value: &Path| sh_quote(&value.to_string_lossy());
         let (uid, gid) = self.owner;
         format!(
-            "parent={} name={} owner={uid}:{gid} archive_dir={} archive={} sha256={} bundle={} requirement={} kept={} swap={}\n{PRIVILEGED_INSTALL}",
+            "exec /usr/bin/env -i PATH={SAFE_PATH} parent={} name={} owner={uid}:{gid} archive_dir={} archive={} size={} sha256={} bundle={} requirement={} kept={} rename={} copy_seconds={copy_seconds} /bin/sh -c {}",
             path(&self.parent),
             text(&self.name),
             path(&self.archive_dir),
             text(&self.archive),
+            self.size,
             sh_quote(&self.sha256),
             text(&self.bundle),
             sh_quote(self.requirement.as_deref().unwrap_or_default()),
             text(&self.kept),
-            sh_quote(swap),
+            sh_quote(rename),
+            sh_quote(PRIVILEGED_INSTALL),
         )
     }
 
@@ -754,7 +793,10 @@ mod tests {
         use sha2::{Digest as _, Sha256};
 
         use super::super::super::codesign::probe_bundle;
-        use super::super::{administrator_script, applescript_string, Identity, PrivilegedInstall};
+        use super::super::{
+            administrator_script, applescript_string, osascript, Identity, PrivilegedInstall,
+            COPY_SECONDS, RENAME_JXA,
+        };
         use super::{bundle, owner, version};
         use crate::update::UpdateError;
 
@@ -801,9 +843,15 @@ mod tests {
             fs::write(&archive, &bytes).expect("archive");
             // The user context's unpacked copy only lends its name.
             let unpacked = dir.join("staging").join(name);
-            let install =
-                PrivilegedInstall::of(&installed, &archive, &sha256(&bytes), &unpacked, identity)
-                    .expect("privileged install");
+            let size = u64::try_from(bytes.len()).expect("size");
+            let install = PrivilegedInstall::of(
+                &installed,
+                &archive,
+                (size, &sha256(&bytes)),
+                &unpacked,
+                identity,
+            )
+            .expect("privileged install");
             (installed, archive, install)
         }
 
@@ -818,6 +866,26 @@ mod tests {
         /// Run `command` as root would, only as this user.
         fn run(command: &str) -> Option<i32> {
             Command::new("/bin/sh").arg("-c").arg(command).status().expect("sh").code()
+        }
+
+        /// What a previous app that cannot be put back is called beside it.
+        const KEPT: &str = "Bob's \"App\" (previous version).app";
+
+        /// A rename script for [`PrivilegedInstall::command_with`] that never
+        /// exchanges, as on HFS+, leaves each source in `refuse` where it is,
+        /// and plants a directory at each destination in `plant` just before
+        /// moving there, as another process of the user's could. Every move
+        /// it makes is [`RENAME_JXA`]'s own.
+        fn moves_only(plant: &[&str], refuse: &[&str]) -> String {
+            let real = RENAME_JXA.replacen("function run(argv)", "function real(argv)", 1);
+            format!(
+                r#"{real}
+function run(argv) {{
+  if (argv[0] === "swap" || {refuse:?}.indexOf(argv[1]) >= 0) return;
+  if ({plant:?}.indexOf(argv[2]) >= 0) $.NSFileManager.defaultManager.createDirectoryAtPathWithIntermediateDirectoriesAttributesError(argv[2], false, $(), null);
+  real(argv);
+}}"#
+            )
         }
 
         /// The names left in `dir`, sorted.
@@ -1029,11 +1097,144 @@ mod tests {
         fn without_the_exchange_the_moves_install_the_update() {
             let dir = tempfile::tempdir().expect("tempdir");
             let (installed, _, install) = stage(dir.path());
-            let no_exchange = r#"function run(argv) { return "failed"; }"#;
 
-            assert_eq!(run(&install.command_with_swap(no_exchange)), Some(0));
+            assert_eq!(run(&install.command_with(&moves_only(&[], &[]), COPY_SECONDS)), Some(0));
 
             assert_installed(dir.path(), &installed);
+        }
+
+        #[test]
+        fn a_failed_move_puts_the_previous_app_back() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let script = moves_only(&[], &[&format!("unpacked/{UPDATE}")]);
+
+            assert_eq!(run(&install.command_with(&script, COPY_SECONDS)), Some(1));
+
+            assert_refused(dir.path(), &installed);
+        }
+
+        /// The review's case for a directory the user can write, such as
+        /// `/Applications` for an admin: once the previous app is out,
+        /// another process plants a directory at the installed path. `mv`
+        /// would move the update into it; the exclusive moves refuse it, the
+        /// move back too, so the previous app is kept beside it (67).
+        #[test]
+        fn a_directory_planted_at_the_installed_path_is_never_moved_into() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let script = moves_only(&[&format!("../{INSTALLED}")], &[]);
+
+            assert_eq!(run(&install.command_with(&script, COPY_SECONDS)), Some(67));
+
+            assert!(entries(&installed).is_empty(), "nothing went into the planted directory");
+            assert_eq!(version(&dir.path().join(KEPT)), "old");
+            assert_eq!(entries(dir.path()).len(), 3, "the app, the kept app and the payload");
+            let message = "0:1: execution error: The command exited with a non-zero status. (67)";
+            assert!(matches!(
+                install.failure(message),
+                UpdateError::PreviousAppNotRestored { kept, .. } if kept == install.parent.join(KEPT)
+            ));
+        }
+
+        /// With a name planted beside the app too, the previous app stays in
+        /// root's directory, which `osascript` reports by path (68).
+        #[test]
+        fn a_previous_app_with_nowhere_to_go_stays_in_roots_directory_and_is_named() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let script = moves_only(&[&format!("../{INSTALLED}"), &format!("../{KEPT}")], &[]);
+            let command = install.command_with(&script, COPY_SECONDS);
+
+            let output = Command::new("/usr/bin/osascript")
+                .arg("-e")
+                .arg(format!("do shell script {}", applescript_string(&command)))
+                .output()
+                .expect("osascript");
+
+            assert!(!output.status.success());
+            let error = install.failure(String::from_utf8_lossy(&output.stderr).trim());
+            let UpdateError::PreviousAppNotRestored { kept, .. } = error else {
+                panic!("{error}");
+            };
+            assert_eq!(version(&kept), "old");
+            assert!(kept.starts_with(&install.parent), "{}", kept.display());
+            assert!(entries(&installed).is_empty() && entries(&dir.path().join(KEPT)).is_empty());
+        }
+
+        /// Another process of the user's cannot reach root through the
+        /// environment: the root script runs in one of its own, whatever the
+        /// shell that starts it was given, and `osascript` starts empty.
+        #[test]
+        fn the_root_script_ignores_the_environment_it_is_started_with() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+
+            let status = Command::new("/bin/sh")
+                .arg("-c")
+                .arg(install.command())
+                .env("PERL5OPT", "-MNo::Such::Module")
+                .env("BASH_FUNC_cd%%", "() { exit 9; }")
+                .status()
+                .expect("sh");
+
+            assert_eq!(status.code(), Some(0));
+            assert_installed(dir.path(), &installed);
+            let output = osascript()
+                .arg("-e")
+                .arg(r#"do shell script "/usr/bin/env""#)
+                .output()
+                .expect("osascript");
+            // `do shell script` hands back its lines ending in CR.
+            let env = String::from_utf8_lossy(&output.stdout);
+            let lines: Vec<&str> =
+                env.split(['\r', '\n']).filter(|line| !line.is_empty()).collect();
+            assert!(
+                lines.iter().all(|line| line.split_once('=').is_some_and(|(name, _)| [
+                    "__CF_USER_TEXT_ENCODING",
+                    "PATH",
+                    "PWD",
+                    "SHLVL",
+                    "_"
+                ]
+                .contains(&name))),
+                "{env}"
+            );
+            assert!(lines.contains(&"PATH=/usr/bin:/bin:/usr/sbin:/sbin"), "{env}");
+        }
+
+        /// Root copies at most one byte more than the verified size, so an
+        /// archive that grew is refused on its size before its digest.
+        #[test]
+        fn an_archive_larger_than_the_verified_one_is_refused() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, archive, install) = stage(dir.path());
+            let mut grown = fs::read(&archive).expect("archive");
+            grown.extend_from_slice(&[0; 4096]);
+            fs::write(&archive, grown).expect("grow the archive");
+            assert!(install.command().contains(r#"/usr/bin/head -c "$((size + 1))""#));
+
+            assert_eq!(run(&install.command()), Some(65));
+
+            assert_refused(dir.path(), &installed);
+        }
+
+        /// A FIFO in the archive's place, which would block root's copy, is
+        /// refused at once; one swapped in after that check hits the copy's
+        /// time limit instead.
+        #[test]
+        fn an_archive_swapped_for_a_fifo_is_refused_without_waiting() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, archive, install) = stage(dir.path());
+            fs::remove_file(&archive).expect("remove the archive");
+            let made = Command::new("/usr/bin/mkfifo").arg(&archive).status().expect("mkfifo");
+            assert!(made.success());
+            let started = std::time::Instant::now();
+
+            assert_eq!(run(&install.command_with(RENAME_JXA, 5)), Some(1));
+
+            assert!(started.elapsed() < std::time::Duration::from_secs(5));
+            assert_refused(dir.path(), &installed);
         }
 
         #[test]
