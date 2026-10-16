@@ -43,15 +43,15 @@ pub fn ejectable_roots(roots: &[WatchedRoot]) -> HashMap<Uuid, PathBuf> {
 mod notices {
     use platevault_core::new_captures::{CaptureWatch, WatchedRoot};
     use platevault_eject_windows::{Removal, RemovalNotices, Roots};
-    use tauri::{AppHandle, Manager};
+    use tauri::{AppHandle, Manager, Runtime};
     use tokio::sync::watch;
     use uuid::Uuid;
 
     use super::ejectable_roots;
 
     /// Forwards removal notices to the managed [`CaptureWatch`] until dropped.
-    /// Drop it after the watch shut down, so no removal request waits on a
-    /// discovery that is stopping.
+    /// Drop it after the watch shut down: a removal request that waits on
+    /// discovery then returns, so the drop does not wait on it.
     pub struct EjectNotices {
         /// Held for its drop, which ends every registration and the window
         /// thread.
@@ -59,12 +59,27 @@ mod notices {
     }
 
     impl EjectNotices {
-        /// Start forwarding to the [`CaptureWatch`] that `app` manages.
-        ///
-        /// # Errors
-        /// `app` manages no capture watch yet, or Windows refused the notice
-        /// window.
-        pub fn start(app: &AppHandle) -> Result<Self, String> {
+        /// Start forwarding to the [`CaptureWatch`] that `app` manages. When
+        /// that fails (Windows refused the notice window or its thread, or no
+        /// capture watch is managed yet), the reason is logged and `None`
+        /// returned: start-up goes on without the notices, and only the
+        /// automatic release of discovery's watcher on a drive being safely
+        /// removed is lost.
+        #[must_use = "dropping it ends the removal notices"]
+        pub fn start<R: Runtime>(app: &AppHandle<R>) -> Option<Self> {
+            Self::try_start(app)
+                .inspect_err(|error| {
+                    tracing::error!(
+                        %error,
+                        "removal notices did not start; PlateVault runs without them, so safely \
+                         removing a Captures drive no longer releases the new-captures watcher on \
+                         it, and Windows reports the drive in use until PlateVault is closed"
+                    );
+                })
+                .ok()
+        }
+
+        fn try_start<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
             let roots = app
                 .try_state::<CaptureWatch>()
                 .ok_or("removal notices start once the capture watch is managed")?
@@ -80,8 +95,9 @@ mod notices {
     }
 
     /// Tell discovery what Windows reported. A requested removal returns once
-    /// discovery holds no handle on the location's volume.
-    fn forward(app: &AppHandle, location: Uuid, removal: Removal) {
+    /// discovery holds no handle on the location's volume, or once discovery
+    /// is asked to stop.
+    fn forward<R: Runtime>(app: &AppHandle<R>, location: Uuid, removal: Removal) {
         // `start` found it managed, and managed state stays.
         let captures = app.state::<CaptureWatch>();
         match removal {
@@ -125,5 +141,19 @@ mod tests {
             roots,
             HashMap::from([(card.location_id, card.root), (ssd.location_id, ssd.root)])
         );
+    }
+
+    /// Start-up goes on when the removal notices cannot start: `start` logs
+    /// why and gives the shell nothing to hold, instead of an error that
+    /// would end `run`. No capture watch is managed here, which fails the
+    /// start before any window exists, as a refused window does after.
+    #[cfg(windows)]
+    #[test]
+    fn start_up_goes_on_when_removal_notices_cannot_start() {
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock app");
+
+        assert!(EjectNotices::start(app.handle()).is_none());
     }
 }

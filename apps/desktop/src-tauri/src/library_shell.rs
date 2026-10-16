@@ -356,14 +356,16 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     app.manage(library);
     app.manage(captures);
     // Windows ejects a Captures drive only once discovery's watcher lets go
-    // of it (astro-plan-ef440).
+    // of it (astro-plan-ef440). Without the notices, which `start` logs, the
+    // app still starts; only that release is lost.
     #[cfg(windows)]
-    let mut eject = Some(crate::eject::EjectNotices::start(app.handle())?);
+    let mut eject = crate::eject::EjectNotices::start(app.handle());
     app.run(move |handle, event| {
         // No watcher outlives the app: every OS watch is released before exit.
         if let tauri::RunEvent::Exit = event {
             tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
-            // Once discovery stopped, so no removal request waits on it.
+            // Once discovery is stopping, a removal request that waited on it
+            // has returned, so dropping the notices never waits on one.
             #[cfg(windows)]
             drop(eject.take());
         }
