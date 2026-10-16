@@ -137,7 +137,9 @@ impl ExportDestination {
     /// temporary name where the volume rejects that rename. A Unix volume
     /// with neither (exFAT on macOS, some FUSE mounts) gets the destination
     /// claimed with `create_new` and the bytes copied in: still never a
-    /// replacement, but the copy is visible while it is written.
+    /// replacement, but the copy is visible while it is written. If the
+    /// process dies during that copy, a truncated file remains at the
+    /// destination name, and a retry to that name is refused as existing.
     ///
     /// The temporary file is removed on every path, a panic in `write`
     /// included.
@@ -248,7 +250,8 @@ fn lacks_no_replace_primitives(error: &io::Error) -> bool {
 /// Only for a Unix volume that offers neither a no-replace rename nor hard
 /// links: nothing at the name is ever replaced, but unlike a rename a reader
 /// can see the copy while it is written. A copy that fails part-way is removed
-/// while the name still holds it.
+/// while the name still holds it. If the process dies during the copy, a
+/// truncated file remains at the destination name.
 #[cfg(unix)]
 fn copy_into_new(temp: &mut File, final_path: &Path) -> Result<(), ExportWriteError> {
     use std::io::{Seek, SeekFrom};
@@ -511,6 +514,33 @@ mod tests {
         assert_eq!(std::fs::read(&outside).expect("read"), b"outside");
     }
 
+    /// A directory planted at that moment is refused and left alone. Whatever
+    /// code the platform reports for a directory at the target, the taken name
+    /// makes it the existing-destination refusal.
+    #[test]
+    fn a_directory_created_just_before_the_final_step_is_left_alone() {
+        let (_guard, dir) = tempdir();
+        let dest = dir.join("out.json");
+        let validated = validate_export_destination(&dest).expect("valid");
+
+        let err = validated
+            .write_then_install(
+                |f| f.write_all(b"export"),
+                |final_path| std::fs::create_dir(final_path).expect("plant dir"),
+            )
+            .expect_err("final step refused");
+
+        assert!(
+            matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
+            "{err:?}"
+        );
+        assert!(dest.symlink_metadata().expect("planted dir").is_dir());
+        assert_eq!(std::fs::read_dir(&dest).expect("read planted dir").count(), 0);
+        let left: Vec<PathBuf> =
+            std::fs::read_dir(&dir).expect("read dir").map(|e| e.expect("entry").path()).collect();
+        assert_eq!(left, [dest], "the temporary file is removed");
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_symlink_at_the_destination_is_refused_rather_than_followed() {
@@ -587,6 +617,68 @@ mod tests {
         assert_eq!(std::fs::read(&taken).expect("read"), b"user data");
     }
 
+    /// A copy that fails after the name is claimed removes the file it
+    /// created. A write-only temporary file makes the copy's read fail with
+    /// `EBADF` once `create_new` has succeeded.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_copy_removes_the_file_it_claimed() {
+        let (_guard, dir) = tempdir();
+        let temp_path = dir.join("temp");
+        let mut temp = File::options().write(true).create_new(true).open(&temp_path).expect("temp");
+        temp.write_all(b"export").expect("write temp");
+        let dest = dir.join("out.json");
+
+        let err = copy_into_new(&mut temp, &dest).expect_err("copy fails");
+
+        let ebadf = rustix::io::Errno::BADF.raw_os_error();
+        assert!(
+            matches!(&err, ExportWriteError::Io(e) if e.raw_os_error() == Some(ebadf)),
+            "{err:?}"
+        );
+        assert!(dest.symlink_metadata().is_err(), "the claimed name is removed");
+        let left: Vec<PathBuf> =
+            std::fs::read_dir(&dir).expect("read dir").map(|e| e.expect("entry").path()).collect();
+        assert_eq!(left, [temp_path]);
+    }
+
+    /// The cleanup removes a name only while it holds the file the export
+    /// created; an entry another process swapped in under that name stays.
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_leaves_an_entry_swapped_in_under_the_name() {
+        let (_guard, dir) = tempdir();
+        let dest = dir.join("out.json");
+        let ours = File::options().write(true).create_new(true).open(&dest).expect("claim");
+        let theirs = dir.join("theirs");
+        std::fs::write(&theirs, b"another process").expect("seed");
+        std::fs::rename(&theirs, &dest).expect("swap another inode in under the name");
+
+        remove_if_names(&dest, &ours);
+
+        assert_eq!(std::fs::read(&dest).expect("still there"), b"another process");
+    }
+
+    /// Pins which `persist_noclobber` failures take the copy fallback: only a
+    /// volume lacking the primitives, never a taken name, a permission or
+    /// argument error, or a cross-device move.
+    #[cfg(unix)]
+    #[test]
+    fn only_a_missing_primitive_routes_to_the_copy_fallback() {
+        use rustix::io::Errno;
+
+        let routed = |errno: Errno| {
+            lacks_no_replace_primitives(&io::Error::from_raw_os_error(errno.raw_os_error()))
+        };
+        for errno in [Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS, Errno::PERM] {
+            assert!(routed(errno), "{errno:?} takes the copy fallback");
+        }
+        for errno in [Errno::EXIST, Errno::ACCESS, Errno::INVAL, Errno::XDEV] {
+            assert!(!routed(errno), "{errno:?} is reported, not copied around");
+        }
+        assert!(!lacks_no_replace_primitives(&io::Error::other("not an OS error")));
+    }
+
     #[cfg(windows)]
     #[test]
     fn a_destination_differing_only_by_case_is_refused() {
@@ -595,6 +687,34 @@ mod tests {
 
         let err = validate_export_destination(&dir.join("export.JSON")).unwrap_err();
         assert_eq!(err, DestinationRejected::AlreadyExists);
+    }
+
+    /// A case variant of the name planted just before the final step takes the
+    /// name on a case-insensitive volume, so it is refused and kept.
+    #[cfg(windows)]
+    #[test]
+    fn a_case_variant_created_just_before_the_final_step_is_kept() {
+        let (_guard, dir) = tempdir();
+        let validated = validate_export_destination(&dir.join("out.json")).expect("valid");
+        let planted = dir.join("OUT.JSON");
+
+        let err = validated
+            .write_then_install(
+                |f| f.write_all(b"export"),
+                |_| std::fs::write(&planted, b"original").expect("plant case variant"),
+            )
+            .expect_err("final step refused");
+
+        assert!(
+            matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
+            "{err:?}"
+        );
+        assert_eq!(std::fs::read(&planted).expect("read"), b"original");
+        let names: Vec<std::ffi::OsString> = std::fs::read_dir(&dir)
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name())
+            .collect();
+        assert_eq!(names, ["OUT.JSON"], "the temporary file is removed");
     }
 
     #[cfg(windows)]
