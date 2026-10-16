@@ -36,12 +36,30 @@ Per the [official terms](https://signpath.org/terms.html), a project must be:
    and publishes GitHub Releases with Windows bundles, so this condition is
    met once the first tagged release exists.
 6. Documented (functionality described on the release/download page).
+7. Reputable, for an executable program: "we require a certain verifiable
+   reputation" (terms, *Common misunderstandings*).
 
-**Verdict: eligible.** No blockers identified. The certificate is issued to
-SignPath Foundation itself (Sectigo-issued OV cert), so the Authenticode
-publisher name shown to users will read "SignPath Foundation," not
-"PlateVault" or the maintainer's name — this is a program-wide constraint, not
-something specific to this repo.
+**Verdict: not yet.** PlateVault meets conditions 1–6, but probably not
+condition 7 today. On 2026-10-16 the repository had no stars and one fork,
+five months after it was created, and the research of 2026-10-13 found no
+outside references to it. In June 2026 SignPath declined a comparable project
+for this reason and invited it to apply again later. The rejection, as that
+project reported it, names what SignPath looks at: stars, forks and
+contributors, independent discussions, articles, and sustained activity
+([Arsarneq/docent#72](https://github.com/Arsarneq/docent/issues/72)).
+
+On 2026-10-13 the owner chose to prepare now and apply later (decision D1,
+recorded in `astro-plan-eub2i`): the code signing policy, the privacy
+statement and the signing pipeline below are prepared now, and the owner
+applies once the project has outside references. The project-page conditions
+SignPath also sets, such as the code signing policy, team roles, MFA and
+privacy, are tracked under
+[Code signing policy → Open conditions](../release/code-signing-policy.md#open-conditions).
+
+The certificate is issued to SignPath Foundation itself (Sectigo-issued OV
+cert), so the Authenticode publisher name shown to users will read "SignPath
+Foundation," not "PlateVault" or the maintainer's name — this is a
+program-wide constraint, not something specific to this repo.
 
 ## How SignPath integrates with GitHub Actions / Tauri
 
@@ -157,7 +175,8 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
 
 ## Application checklist (user action required)
 
-1. Apply at <https://signpath.org/apply> with the repo URL
+1. Once the project has outside references (see the verdict above), apply at
+   <https://signpath.org/apply> with the repo URL
    (`https://github.com/platevault/platevault`) and confirm AGPL-3.0-only
    licensing.
 2. Once approved, create in the SignPath dashboard: an organization, a
