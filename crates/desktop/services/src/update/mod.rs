@@ -754,18 +754,16 @@ impl Updater {
                 let installed = staged.reverify().and_then(|payload| {
                     installing.inner.installer.install(payload, InstallMode::OnQuit, &admin_prompt)
                 });
-                if let Err(error) = installed {
+                let notice = installed.err().and_then(|error| {
                     tracing::warn!(%error, "update install at quit failed; the next launch offers the update again");
-                    if let Some(notice) = installing.notice_for_quit(&error) {
-                        installing.inner.host.notify(&notice.title, &notice.body);
-                    }
-                }
-                installing.exit_after_quit_install();
+                    installing.notice_for_quit(&error)
+                });
+                installing.exit_after_quit_install(notice.as_ref());
             },
         );
         if let Err(error) = install {
             tracing::warn!(%error, "cannot start the update install at quit; quitting without it");
-            self.exit_after_quit_install();
+            self.exit_after_quit_install(None);
             return;
         }
         let watchdog = self.clone();
@@ -773,7 +771,7 @@ impl Updater {
         let spawned = std::thread::Builder::new().name("update-install-watchdog".to_owned()).spawn(
             move || {
                 std::thread::sleep(ceiling);
-                if watchdog.exit_after_quit_install() {
+                if watchdog.exit_after_quit_install(None) {
                     tracing::warn!(?ceiling, "update install at quit passed its ceiling; exiting");
                 }
             },
@@ -783,15 +781,18 @@ impl Updater {
         }
     }
 
-    /// End the install at quit and exit, once: `true` for the caller that did.
-    fn exit_after_quit_install(&self) -> bool {
+    /// End the install at quit and exit, once, showing `notice` first: `true`
+    /// for the caller that did. The state leaves the install before the
+    /// notice, so the watchdog cannot exit while the notice is still being
+    /// delivered.
+    fn exit_after_quit_install(&self, notice: Option<&Notice>) -> bool {
         let mut state = self.lock();
         if !matches!(*state, State::Installing { run: Run::AtQuit, .. }) {
             return false;
         }
         *state = State::Exiting;
         drop(state);
-        self.inner.host.exit();
+        self.leave(notice, false);
         true
     }
 

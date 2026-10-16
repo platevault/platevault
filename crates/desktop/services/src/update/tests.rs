@@ -221,20 +221,26 @@ enum HostCall {
     Notify { title: String, body: String },
 }
 
-struct FakeHost(Mutex<mpsc::Sender<HostCall>>);
+/// Records each call; `notify` takes `notify_delay` first, as the OS can take
+/// a while to accept a notification.
+struct FakeHost {
+    calls: Mutex<mpsc::Sender<HostCall>>,
+    notify_delay: Duration,
+}
 
 impl UpdateHost for FakeHost {
     fn relaunch(&self) {
-        let _ = self.0.lock().expect("host").send(HostCall::Relaunch);
+        let _ = self.calls.lock().expect("host").send(HostCall::Relaunch);
     }
 
     fn exit(&self) {
-        let _ = self.0.lock().expect("host").send(HostCall::Exit);
+        let _ = self.calls.lock().expect("host").send(HostCall::Exit);
     }
 
     fn notify(&self, title: &str, body: &str) {
+        std::thread::sleep(self.notify_delay);
         let call = HostCall::Notify { title: title.to_owned(), body: body.to_owned() };
-        let _ = self.0.lock().expect("host").send(call);
+        let _ = self.calls.lock().expect("host").send(call);
     }
 }
 
@@ -259,6 +265,18 @@ impl Rig {
         package: Option<Package>,
         quit_install_ceiling: Duration,
     ) -> Self {
+        Self::with_host(signer, source, installer, package, quit_install_ceiling, Duration::ZERO)
+    }
+
+    /// [`Self::build`] with a host whose `notify` takes `notify_delay`.
+    fn with_host(
+        signer: &Signer,
+        source: &Arc<FakeSource>,
+        installer: Box<dyn Installer>,
+        package: Option<Package>,
+        quit_install_ceiling: Duration,
+        notify_delay: Duration,
+    ) -> Self {
         let (calls, host) = mpsc::channel();
         let updater = Updater::assemble(Parts {
             current_version: Version::parse(RUNNING).expect("version"),
@@ -267,7 +285,7 @@ impl Rig {
             platform: test_platform(package),
             source: Box::new(Arc::clone(source)),
             installer,
-            host: Box::new(FakeHost(Mutex::new(calls))),
+            host: Box::new(FakeHost { calls: Mutex::new(calls), notify_delay }),
             quit_install_ceiling,
             wording: super::wording::Wording::in_locale("en-GB").expect("en-GB wording"),
         });
@@ -882,6 +900,34 @@ async fn an_install_at_quit_that_kept_the_previous_app_says_where_before_exiting
 
     assert_eq!(rig.next_host_call(), kept_notice_en_gb(), "the notice comes first");
     assert_eq!(rig.next_host_call(), HostCall::Exit);
+}
+
+/// The notice can take longer than what is left of the ceiling: the watchdog
+/// must not exit while it is still being delivered.
+#[tokio::test]
+async fn the_watchdog_waits_for_the_notice_of_a_kept_previous_app() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = FakeInstaller::answering(vec![Err(previous_app_not_restored())]);
+    let rig = Rig::with_host(
+        &signer,
+        &source,
+        Box::new(Arc::clone(&installer)),
+        Some(Package::AppImage),
+        Duration::from_millis(50),
+        Duration::from_millis(300),
+    );
+    rig.updater.check().await;
+    rig.updater.install_on_quit().await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+
+    assert_eq!(rig.next_host_call(), kept_notice_en_gb(), "the notice comes first");
+    assert_eq!(rig.next_host_call(), HostCall::Exit);
+    assert!(
+        rig.host.recv_timeout(Duration::from_millis(200)).is_err(),
+        "nothing exits a second time"
+    );
 }
 
 #[tokio::test]
