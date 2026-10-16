@@ -1167,16 +1167,15 @@ async fn insert_entries(
                 (to_text(&kind)?, None, None, Some(master_id))
             }
         };
-        let (placement, linked) = match entry.placement {
-            EntryPlacement::Symlink => ("symlink", None),
-            EntryPlacement::Copy => ("copy", None),
-            EntryPlacement::Clone => ("clone", None),
-            EntryPlacement::Hardlink { of } => ("hardlink", Some(i64::from(of))),
+        let placement = match entry.placement {
+            EntryPlacement::Symlink => "symlink",
+            EntryPlacement::Copy => "copy",
+            EntryPlacement::Clone => "clone",
         };
         sqlx::query(
             "INSERT INTO view_manifest_entries (project_id, generation, seq, path_key, input, \
-             placement, linked_seq, capture_key, asset_id, master_id, group_id, source_sha256, \
-             entry) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+             placement, capture_key, asset_id, master_id, group_id, source_sha256, entry) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         )
         .bind(project_id.to_string())
         .bind(generation_value(generation)?)
@@ -1184,7 +1183,6 @@ async fn insert_entries(
         .bind(path_key(&entry.path))
         .bind(input)
         .bind(placement)
-        .bind(linked)
         .bind(capture_key.map(|id| id.to_string()))
         .bind(asset_id.map(|id| id.to_string()))
         .bind(master_id.map(|id| id.to_string()))

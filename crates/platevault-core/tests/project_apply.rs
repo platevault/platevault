@@ -69,15 +69,23 @@ async fn the_first_apply_builds_the_night_layout_from_symlinks_to_the_originals(
     }
 }
 
+/// D-W81, 063 FR-005: every Copies entry is its own file made from the
+/// original, so a flat set placed for two nights is two files, a write to
+/// one leaves the other as it was, and the footprint counts both.
 #[tokio::test]
-async fn copies_clone_or_copy_once_and_hard_link_only_their_own_copy() {
+async fn copies_place_every_entry_as_its_own_file_and_never_hard_link() {
     let world = catalogued(ViewMode::Copies).await;
     world.hold(HA[0]).await;
     world.hold(HA_GAIN_0).await;
+    let preview = world.preview().await;
+    let footprint: u64 = preview.entries.iter().map(|entry| entry.size_bytes).sum();
+    assert!(preview.entries.iter().all(|entry| entry.placement == EntryPlacement::Copy));
+    assert_eq!(preview.copy_bytes, footprint, "the footprint counts each copy");
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
 
     let tree = World::tree(&world.view());
+    assert_eq!(tree.len(), preview.entries.len(), "{tree:#?}");
     // Gain is part of the folder name when the Project mixes it; offset is not.
     assert_eq!(names(&tree, "NIGHT_2026-10-12/Lights/Ha_GAIN_100_300s/").len(), 2, "{tree:#?}");
     assert_eq!(names(&tree, "NIGHT_2026-10-14/Lights/Ha_GAIN_0_300s/").len(), 1, "{tree:#?}");
@@ -91,19 +99,27 @@ async fn copies_clone_or_copy_once_and_hard_link_only_their_own_copy() {
     assert_eq!(names(&tree, "Darks/GAIN_100/").len(), 2, "{tree:#?}");
     assert_eq!(names(&tree, "Darks/GAIN_0/").len(), 2, "{tree:#?}");
 
+    for entry in &tree {
+        let metadata = fs::symlink_metadata(world.view().join(entry)).unwrap();
+        assert!(metadata.is_file(), "{entry} is a copy");
+        assert_eq!(metadata.nlink(), 1, "{entry} is no hard link");
+    }
     for (index, flat) in HA_FLATS.iter().enumerate() {
         let original = world.calibration_file(flat);
         let a = world.view().join("NIGHT_2026-10-12/Flats/Ha_GAIN_100").join(&first[index]);
         let b = world.view().join("NIGHT_2026-10-14/Flats/Ha_GAIN_0").join(&second[index]);
-        let (a, b, original) =
-            (fs::metadata(a).unwrap(), fs::metadata(b).unwrap(), fs::metadata(original).unwrap());
-        assert_eq!(a.ino(), b.ino(), "the second placement hard-links this build's own copy");
-        assert_ne!(a.ino(), original.ino(), "an original is never hard-linked");
-        assert_eq!(original.nlink(), 1);
-    }
-    for entry in &tree {
-        let path = world.view().join(entry);
-        assert!(fs::symlink_metadata(&path).unwrap().is_file(), "{entry} is a copy");
+        let (inode_a, inode_b, inode_original) = (
+            fs::metadata(&a).unwrap().ino(),
+            fs::metadata(&b).unwrap().ino(),
+            fs::metadata(&original).unwrap().ino(),
+        );
+        assert_ne!(inode_a, inode_b, "each night's flat is its own file");
+        assert_ne!(inode_a, inode_original, "an original is never hard-linked");
+        assert_eq!(fs::metadata(&original).unwrap().nlink(), 1);
+        let bytes = fs::read(&b).unwrap();
+        fs::write(&a, b"rewritten by a stacking tool").unwrap();
+        assert_eq!(fs::read(&b).unwrap(), bytes, "rewriting one night's copy leaves the other");
+        assert_eq!(digest(&b), digest(&original));
     }
     let light = names(&tree, "NIGHT_2026-10-14/Lights/Ha_GAIN_0_300s/").remove(0);
     let placed = world.view().join("NIGHT_2026-10-14/Lights/Ha_GAIN_0_300s").join(light);

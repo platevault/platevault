@@ -236,22 +236,16 @@ impl F4 {
         .await
     }
 
-    async fn entry(
-        &mut self,
-        n: &str,
-        seq: &str,
-        placement: &str,
-        linked: Option<&str>,
-    ) -> Result<(), String> {
+    async fn entry(&mut self, n: &str, seq: &str, placement: &str) -> Result<(), String> {
         let asset = self.first_asset().await;
         run(
             &mut self.conn,
             "INSERT INTO view_manifest_entries (project_id, generation, seq, path_key, input, \
-             placement, linked_seq, capture_key, asset_id, source_sha256, entry) \
+             placement, capture_key, asset_id, source_sha256, entry) \
              VALUES (?1, CAST(?2 AS INTEGER), CAST(?3 AS INTEGER), CAST(?3 AS BLOB), 'light', ?4, \
-             CAST(nullif(?5, '') AS INTEGER), ?6, ?6, ?7, json_object('seq', CAST(?3 AS INTEGER), \
-             'sourceSha256', ?7, 'placement', json_object('kind', ?4)))",
-            &[&self.project, n, seq, placement, linked.unwrap_or(""), &asset, SHA],
+             ?5, ?5, ?6, json_object('seq', CAST(?3 AS INTEGER), \
+             'sourceSha256', ?6, 'placement', json_object('kind', ?4)))",
+            &[&self.project, n, seq, placement, &asset, SHA],
         )
         .await
     }
@@ -594,10 +588,11 @@ async fn close_needs_its_snapshot_and_wrap_up_and_a_closed_project_is_locked() {
 
 // ── View and Apply ───────────────────────────────────────────────────────────
 
-/// PREP-FR-06/09, STO-FR-10, D-W100, D-W110: one building, installed and
-/// previous View per Project; entries are fixed once installed; links only in
-/// Symlinks mode and hard links only to the build's own copies; the journal
-/// moves forward; unreviewed leftovers hold the next Apply.
+/// PREP-FR-06/09, STO-FR-10, D-W81, D-W100, D-W110: one building, installed
+/// and previous View per Project; entries are fixed once installed; links
+/// only in Symlinks mode and never a hard link, so each Copies entry is its
+/// own file; the journal moves forward; unreviewed leftovers hold the next
+/// Apply.
 #[tokio::test]
 async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     let mut f4 = F4::new().await;
@@ -605,12 +600,21 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     f4.building(&apply, "1", "copies").await.unwrap();
     let error = f4.building(&apply, "2", "copies").await.unwrap_err();
     assert!(error.contains("UNIQUE"), "one building View: {error}");
-    f4.entry("1", "0", "copy", None).await.unwrap();
-    f4.entry("1", "1", "hardlink", Some("0")).await.unwrap();
-    let error = f4.entry("1", "2", "symlink", None).await.unwrap_err();
+    f4.entry("1", "0", "copy").await.unwrap();
+    f4.entry("1", "1", "clone").await.unwrap();
+    let error = f4.entry("1", "2", "symlink").await.unwrap_err();
     assert!(error.contains("Symlinks mode"), "{error}");
-    let error = f4.entry("1", "3", "hardlink", Some("1")).await.unwrap_err();
-    assert!(error.contains("own copy"), "{error}");
+    let error = f4.entry("1", "3", "hardlink").await.unwrap_err();
+    assert!(error.contains("placement IN ('symlink', 'copy', 'clone')"), "{error}");
+    let linking: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM pragma_table_info('view_manifest_entries') \
+         WHERE name = 'linked_seq') + (SELECT count(*) FROM sqlite_master \
+         WHERE type = 'trigger' AND sql LIKE '%hard link%')",
+    )
+    .fetch_one(&mut f4.conn)
+    .await
+    .unwrap();
+    assert_eq!(linking, 0, "no column or trigger places a hard link");
 
     let insert_journal = "INSERT INTO apply_operations (operation_id, project_id, generation, \
          phase, expected, updated_at) VALUES (?1, ?2, 1, 'reserved', '{}', ?3)";
@@ -647,7 +651,7 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
     )
     .await;
     f4.manifest_state("1", "installed").await.unwrap();
-    let error = f4.entry("1", "4", "copy", None).await.unwrap_err();
+    let error = f4.entry("1", "4", "copy").await.unwrap_err();
     assert!(error.contains("fixed once built"), "{error}");
     ok(
         &mut f4.conn,

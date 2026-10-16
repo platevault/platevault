@@ -19,7 +19,7 @@
 //! under the gain and offset folder when those are mixed; when lights with
 //! the same settings use different versions, every one of those goes into
 //! the night folders of the lights that use it. In Copies mode a file
-//! placed twice is copied once and hard-linked from that copy (provisional).
+//! placed twice is two copies of its original, never a hard link (D-W81).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -456,8 +456,8 @@ fn place_pin(
 }
 
 /// Name every input, drop repeats of one input in one folder, order by path
-/// and place: links in Symlinks mode; in Copies mode the first placement of
-/// a source copies it and every later one hard-links that copy.
+/// and place: links in Symlinks mode, a copy of the original for every entry
+/// in Copies mode.
 fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
     let mut taken: BTreeSet<String> = input.names.values().map(|name| name_key(name)).collect();
     let mut assigned: BTreeMap<EntryInput, String> = BTreeMap::new();
@@ -496,20 +496,14 @@ fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
         };
         placed.entry(draft.folder.join(name)).or_insert(draft);
     }
-    let mut first: BTreeMap<Uuid, u32> = BTreeMap::new();
+    // Copies mode: every entry is its own copy of the original, also where
+    // one source sits in several night folders (D-W81, 063 FR-005).
+    let placement = match input.basis.mode {
+        ViewMode::Symlinks => EntryPlacement::Symlink,
+        ViewMode::Copies => EntryPlacement::Copy,
+    };
     let mut entries = Vec::with_capacity(placed.len());
     for (seq, (path, draft)) in (0_u32..).zip(placed) {
-        let placement = match input.basis.mode {
-            ViewMode::Symlinks => EntryPlacement::Symlink,
-            ViewMode::Copies => {
-                if let Some(&of) = first.get(&draft.source_id) {
-                    EntryPlacement::Hardlink { of }
-                } else {
-                    first.insert(draft.source_id, seq);
-                    EntryPlacement::Copy
-                }
-            }
-        };
         entries.push(PlanEntry {
             seq,
             path,
