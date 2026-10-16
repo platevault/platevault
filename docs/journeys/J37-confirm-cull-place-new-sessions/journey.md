@@ -22,7 +22,7 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ## Preconditions
 
-- P1: J31 completed through S9. `Astro-T7 captures`, `Cold-1 captures` and `Astro-T7 calibration` are registered and online. Rigs `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC) exist, detected by indexing and renamed at J19/S9b. No Project exists. No `NGC 7000/Ha/2026-10-04/` folder exists. Calibration for every listed light session is settled: each dark, flat and bias kind is pinned or explicitly set to its No choice.
+- P1: J31 completed through S9. `Astro-T7 captures`, `Cold-1 captures` and `Astro-T7 calibration` are registered and online. Rigs `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC) exist, detected by indexing and renamed at J19/S9b. No Project exists. No `NGC 7000/Ha/2026-10-04/` folder exists. After J31, the user settled the calibration of every listed light session. J19/S10a pinned 26 Sep's flats. The user confirmed the flats that J19/S7a only suggested: the 30 Sep OIII flats for 12 and 24 Sep, and the 18 Sep Ha flats for 28 Sep. For the other-camera session, for which indexing found no calibration (J19/S7a), the user chose No darks, No flats and No bias. Each kind the J31 imports left unsettled on `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` is pinned or set to its No choice (J31 G9). So each dark, flat and bias kind of each listed light session is pinned or set to its No choice. The raw calibration processes that J19/S7a and J31/S6 made still await Stack.
 - P2: The catalog holds 10 light sessions:
 
   | Session | Frames | Target | Rig | OBJECT | Pointing |
@@ -33,7 +33,7 @@ After import, the user resolves Target and rig associations, reviews new session
   | `2 Oct OIII` (J31/S5a, S6) | 6 | NGC 7000 Confirmed in the Import preview (J31/S5a) | Needs review: no TELESCOP or FOCALLEN | none | none |
   | `4 Oct Ha` (J31/S9) | 12 | none: Unclassified at import, its frames under `unclassified/Ha/2026-10-04/light/` in `Astro-T7 captures` | `RedCat` Associated from its optics keywords (G3) | `NGC7000` | none |
 
-- P3: Every frame in `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` reads Unreviewed. The six J19 sessions and the other-camera session are Ready. Among `2 Oct Ha`, `Light_Ha_0005.fits`, `Light_Ha_0017.fits` and `Light_Ha_0023.fits` are clouded (J31/P2).
+- P3: Every frame in `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` reads Unreviewed. J19 left every frame of its sessions Unreviewed (J19 SC6); after J31, the user finished the intake review of the six J19 sessions and the other-camera session, so those seven are Ready. Among `2 Oct Ha`, `Light_Ha_0005.fits`, `Light_Ha_0017.fits` and `Light_Ha_0023.fits` are clouded (J31/P2).
 - P4: No location is offline or unreadable, no work has failed or been interrupted, and no frame or pinned calibration assignment has drifted.
 - P5: A manifest (relative path, size, SHA-256) of every file under the three registered locations, recorded outside PlateVault before S1.
 
@@ -41,8 +41,8 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ### S1 — Start from the status bar {#S1}
 
-- **Do:** Read the status bar. Choose its ℹ counter and read where it leads, then return and choose its ⚠ counter.
-- **Expect:** The status bar shows the ⚠ warnings and ℹ info counters and no ⛔ errors counter. Each counter opens the owning Sessions page filtered to the affected rows, not a list of issues: the ℹ counter reads 9 and opens Sessions filtered to **Not in any Project**, and the ⚠ counter reads 1 and opens Sessions filtered to **Needs a Target**. The filters read All 10, Needs a Target 1, Not in any Project 9 and Trashed 0, and Needs a Target lists exactly `4 Oct Ha`. No calibration process waits for Stack; each light session's calibration is already settled.
+- **Do:** Read the status bar. Open its ℹ counter, read its menu and choose `Sessions · 9`, then return and choose its ⚠ counter.
+- **Expect:** The status bar shows the ⚠ warnings and ℹ info counters and no ⛔ errors counter. No counter opens a list of issues. The ℹ counter opens a menu naming `Sessions · 9` (`9 not in a Project`), which opens Sessions filtered to **Not in any Project**, and `Calibration · <n>` (`<n> to stack`) for the raw calibration processes that J19/S7a and J31/S6 left awaiting Stack. The ⚠ counter reads 1 and opens Sessions filtered to **Needs a Target**. The filters read All 10, Needs a Target 1, Needs calibration 0, Not in any Project 9 and Trashed 0, and Needs a Target lists exactly `4 Oct Ha`.
 - **Expect (negative):** Choosing a counter changes no session, Target, rig or Project. Neither `2 Oct Ha` nor `2 Oct OIII` is listed under Needs a Target, because their Targets were confirmed at import.
 - **Trace:** LIB-FR-17, LIB-FR-23, PRJ-FR-17 · D-W92, D-W105
 
@@ -66,10 +66,10 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ### S4 — Confirm a rig from Sessions {#S4}
 
-- **Do:** In Sessions, choose **Not in any Project**. Right-click `2 Oct OIII` and choose **Confirm rig**. In the Rig box, choose `RedCat` and click **Confirm rig**. Review its six frames, mark them Usable, and choose **Finish review**.
-- **Expect:** Before confirmation, the `2 Oct OIII` row reads `Rig needs review`, its Rig box reads `Unsettled`, and its Target box reads NGC 7000 Confirmed from import. Afterwards, the Rig box reads `RedCat` Confirmed. After its six frames are marked and **Finish review** is chosen, the session reads Ready; its settled calibration allows it to be suggested to Projects listing its Target and rig.
-- **Expect (negative):** Confirming changes no frame count, header or file, and no move is offered. `2 Oct OIII` joins no Project.
-- **Trace:** LIB-FR-05, LIB-FR-20, LIB-FR-23, PRJ-FR-09 · D-W78, D-W104, D-W105
+- **Do:** In Sessions, choose **Not in any Project**. Right-click `2 Oct OIII` and choose **Confirm rig**. In the Rig box, choose `RedCat` and click **Confirm rig**. Open its intake Review step, select all six frames with **⌘A** (Ctrl+A off macOS), press **P**, read the confirmation and confirm it, then choose **Finish review**.
+- **Expect:** Before confirmation, the `2 Oct OIII` row reads `Rig needs review`, its Rig box reads `Unsettled`, and its Target box reads NGC 7000 Confirmed from import. Afterwards, the Rig box reads `RedCat` Confirmed. **P** on the ⌘A selection opens the bulk confirmation `Mark 6 frames Usable?`. After confirming, the six frames read Picked, and **Finish review** makes the session Ready; its settled calibration allows it to be suggested to Projects listing its Target and rig.
+- **Expect (negative):** Confirming changes no frame count, header or file, and no move is offered. No frame changes before the bulk confirmation is accepted. `2 Oct OIII` joins no Project.
+- **Trace:** LIB-FR-05, LIB-FR-20, LIB-FR-23, PRJ-FR-09 · PIX-FR-14, PIX-AC-21 · D-W78, D-W104, D-W105, D-W118
 
 ### S5 — Confirm the pointing association of a session indexed in place {#S5}
 
@@ -109,7 +109,7 @@ After import, the user resolves Target and rig associations, reviews new session
   - The preview, titled `Add <session> to NGC 7000 HOO?`, lists `Adds rig Esprit` and the session it adds. It lists no subject change, because NGC 7000 is already a subject.
   - After **Add session**, a notice reads `Added <session> to NGC 7000 HOO`, with `Also adds the rig Esprit to NGC 7000 HOO.`
   - The Project's rigs are `RedCat` and `Esprit`. It holds the sessions the user added, while matching Ready sessions it does not hold remain suggestions.
-  - Not in any Project reads 8. The status bar's ℹ counter reads 8 and still opens Sessions filtered to Not in any Project.
+  - Not in any Project reads 8. The status bar's ℹ counter menu names `Sessions · 8`, which still opens Sessions filtered to Not in any Project.
 - **Expect (negative):** Adding a session changes no source file and never adds a subject unless the Project lacks that Target. The session joins only after the user chooses Add to Project.
 - **Trace:** LIB-FR-17 · PRJ-FR-02, PRJ-FR-08 · D-W59, D-W94, D-W96, D-W105
 
@@ -136,22 +136,22 @@ After import, the user resolves Target and rig associations, reviews new session
 
 ## Success criteria
 
-- SC1: At S1 the filters read exactly All 10, Needs a Target 1, Not in any Project 9 and Trashed 0, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target, not a list of issues.
+- SC1: At S1 the filters read exactly All 10, Needs a Target 1, Needs calibration 0, Not in any Project 9 and Trashed 0. The ℹ counter's menu names `Sessions · 9`, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target, not a list of issues.
 - SC2: After S3, Needs a Target reads 0, and confirming the Target and rig changes zero source paths. 0 Targets were taken from an OBJECT label: `4 Oct Ha`'s picker opened with no Target chosen (S3), and no evidence list named OBJECT (S3, S5).
 - SC3: After S6, `2 Oct Ha` reads 32 Usable, 3 Unusable and 0 Unreviewed frames, still 35 frames in all, and the Trashed filter reads 0.
 - SC4: After S7, the Project holds only the Ready session the user explicitly added. After S8 and S10, it holds exactly four user-added sessions, lists rigs `RedCat` and `Esprit`, and keeps unadded matching Ready sessions as suggestions.
-- SC5: After S9, `4 Oct Ha` reads 12 Picked frames and Ready. Both ⌘A marks (32 frames at S6, 12 at S9) asked first, and 0 frames changed before the confirmation.
+- SC5: After S9, `4 Oct Ha` reads 12 Picked frames and Ready. All three ⌘A marks (6 frames at S4, 32 at S6, 12 at S9) asked first, and 0 frames changed before the confirmation.
 - SC6: At S10, both Ready sessions with settled calibration are added only after the user's action, and other matching Ready sessions remain suggestions.
 - SC7: The S11 manifest equals P5 for 100% of files.
 
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 6, `apps/prototype/` on ui-harness-v5 @ b5e813a5; the prototype at 4f470775 does not yet implement Round 6) and specs 064, 065 and 067. No implementation has been validated against it.
-- G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2). No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
+- G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2). P1 and P3 also add the calibration choices and intake reviews the user made after J31, which no step here walks. No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
 - G3: Unresolved implementation qualification: P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05). The v5 design does not state the equipment-matching rule for a session whose TELESCOP and FOCALLEN match an existing rig. Blocks readiness.
 - G4: Out of scope for this journey, covered elsewhere: reopening a Ready session's Review and its labelled pending changes on open Projects (J22), moving Unusable frames to Trash during Wrap up (J44, J34), status-bar counters opening their owning pages (J38), Home's Open work and Next action (J32), creating rigs and filter lists (J15), first Apply and later View changes (J21, J24, J25), and a failed catalog write while confirming (J19/S11).
 - G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled. Blocks readiness until covered by a step or a journey.
-- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, so S6 (32 frames) and S9 (12 frames) both ask, and single-frame marks such as S6's three X marks never ask.
+- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, so S4 (6 frames), S6 (32 frames) and S9 (12 frames) all ask, and single-frame marks such as S6's three X marks never ask.
 - G7: (dissolved 2026-10-15): D-W94 and LIB-FR-12 make confirming a Target a change to the session's catalog association only, so no move review follows it. Imported files stay at the paths listed in the Import preview; this journey verifies that P5 remains unchanged (LIB-FR-12, STO-IMP-FR-02).
 - G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes Ready RedCat sessions with Target NGC 7000 suggestions of `NGC 7000 HOO` (S7, S10), and D-W94's rig list that only decides suggestions (S8). If the owner changes one, the steps that cite it change.
 
@@ -164,6 +164,6 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Δ3** 2026-10-15 · S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11 · behavior-change
   Import never waits for calibration: only Ready sessions with settled calibration can be added. Frame review is the session intake step, and Finish review makes a fully reviewed session Ready. Project membership is explicit, matching sessions remain suggestions, and confirming a Target never moves imported files, so S3 confirms a Target and rig with no move and SC7 expects no changed path. The status bar counters open their Sessions filters, S2 reads Home's Pending work, and Not in any Project reads 9, 8 and 6 as the user adds sessions at S7, S8 and S10.
   Evidence: D-W89, D-W92, D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-17, LIB-FR-20, LIB-FR-23, LIB-FR-24, 065 PRJ-FR-08, PRJ-FR-09, 066 VSEL-FR-03, 067 PIX-FR-18, 068 CAL-FR-02, CAL-FR-09 · by: SpecF4Writer2 (intent-gated)
-- **Δ4** 2026-10-16 · S6, S9 · behavior-change
-  Every mark on a ⌘A selection asks first, whatever its count: S6 reads `Mark 32 frames Usable?` and S9 `Mark 12 frames Usable?`, and single-frame marks never ask. G6 is dissolved.
+- **Δ4** 2026-10-16 · S4, S6, S9 · behavior-change
+  Every mark on a ⌘A selection asks first, whatever its count: S4 reads `Mark 6 frames Usable?`, S6 `Mark 32 frames Usable?` and S9 `Mark 12 frames Usable?`, and single-frame marks never ask. G6 is dissolved.
   Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-AC-21 · by: EncodeOwnerAnswers2 (intent-gated)
