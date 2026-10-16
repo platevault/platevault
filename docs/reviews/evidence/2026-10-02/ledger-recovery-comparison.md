@@ -117,7 +117,9 @@ The installed `bd` 1.3.1 (`c1c4b642a`) rules out the two single-command routes:
 - `bd create --id` cannot be combined with `--parent`; the command refuses with "cannot specify both --id and --parent flags". With `--parent` alone, `bd` mints a new child suffix, so the 64 child ids would not keep their historical values.
 - `bd batch` accepts only `create <type> <priority> <title...>` and rejects every flag, including `--id`.
 
-`bd create --graph` does fit. A graph plan node takes an explicit `id` and a `parent_key`. The tool keeps the explicit id and records the parent link as a `parent-child` dependency instead of minting a suffix. It also checks each explicit id against the database prefix, and refuses any id that already exists. The whole plan applies in one transaction and one Dolt commit. These behaviours come from the help text and the `c1c4b642a` source (`cmd/bd/create.go`, `cmd/bd/graph_apply.go`, `internal/storage/issueops/create.go`). This investigation did not dry-run the plan: `--readonly` refuses `create` even with `--dry-run`, so step 3 is the first execution check.
+`bd create --graph` does fit. A graph plan node takes an explicit `id` and a `parent_key`. The tool keeps the explicit id and records the parent link as a `parent-child` dependency instead of minting a suffix. It also checks each explicit id against the database prefix, and refuses any id that already exists. The whole plan applies in one transaction and one Dolt commit. These behaviours come from the help text and the `c1c4b642a` source (`cmd/bd/create.go`, `cmd/bd/graph_apply.go`, `internal/storage/issueops/create.go`).
+
+Never use `bd create --graph --dry-run` as a preview against the live store. Upstream issue [gastownhall/beads#3893](https://github.com/gastownhall/beads/issues/3893) reports that it wrote every node and edge, and the issue is still open. The installed source contains the fix (`480ffe4d4`) and its regression tests (`b422cff71`), but nobody has run the dry-run on this machine, because `--readonly` refuses `create` even with `--dry-run`. The procedure therefore validates the plan without `bd`, and runs `bd` only against an isolated copy until the final apply.
 
 1. Preserve the live store:
    - Pause writers and take `bd export --all`.
@@ -130,14 +132,20 @@ The installed `bd` 1.3.1 (`c1c4b642a`) rules out the two single-command routes:
    - a description and metadata that cite the referencing commits and trailers.
 
    The 80 hierarchical nodes (64 children and 16 `3v3r.N` parents) carry `parent_key`. No node has an assignee, a status override or any other edge, so every record starts deferred and unclaimed.
-3. Run `bd create --graph <plan> --dry-run --json`. Expect 198 nodes, 0 edges and 80 parent-child links.
-4. A second reviewer checks the plan against this JSON and confirms that no existing id appears in it.
-5. Run `bd create --graph <plan> --json` once. Then check that the counts grew by exactly 198 issues and 80 dependencies, all among the new ids. Comments and claims on pre-existing ids must not change.
-6. If a check fails, preview the removal with `bd delete --from-file <198 ids> --dry-run`, then run it with `--force`. Every new edge stays inside the set, so the delete touches no existing bead.
+3. Validate the plan without `bd`. Take a fresh `bd export --all --readonly -o <file>`, then run `python3 validate_placeholder_plan.py <plan> ledger-recovery-comparison.json <file>` from the sources archive. It must exit 0 and report 198 nodes, 80 parent links, 0 edges and 0 collisions. It also refuses unknown or extra fields, a parent declared after its child, and any id set that differs from this JSON.
+4. Rehearse on an isolated copy, never on the live store:
+   - Copy the step 1 `.beads` directory to a new scratch directory.
+   - In the copy, remove `sync.remote` from `config.yaml`. Inside `embeddeddolt/astro_plan`, run `dolt remote remove origin`, `dolt backup remove backup_export` and `dolt backup remove default`. The live store's `backup_export` points at the live `.beads/backup`, so a copy that keeps it could sync into the live backup.
+   - With `BEADS_DIR` set to the copy and `--sandbox` on every call, run `bd create --graph <plan> --dry-run --json`. Then confirm with `bd count` that the copy gained no issues; if it gained any, the dry-run wrote, so record that and do not use it again.
+   - In the same copy, run `bd create --graph <plan> --json`. Confirm that it gained exactly 198 issues and 80 dependencies, all among the new ids, and that comments and claims on existing ids are unchanged.
+   - Rehearse the rollback there: `bd delete --from-file <198 ids>` without `--force` previews, then `--force` removes them. Confirm the copy is back to its step 1 counts.
+5. A second reviewer checks the plan, the step 3 output and the step 4 counts against this JSON.
+6. On the live store, run `bd create --graph <plan> --json` once, without `--dry-run`. Then repeat the step 4 count checks.
+7. If a check fails, roll back on the live store with the rehearsed `bd delete --from-file <198 ids> --force`. Every new edge stays inside the set, so the delete touches no existing bead.
 
 The plan covers the 198 ids in scope. The 28 further strings outside the 183 stay out unless the owner extends it. Eleven of them are `3v3r` descendants; adding them would also need an `astro-plan-3v3r.20` parent node.
 
-**Option C, the 26 clone-only design molecules.** Recommended: do not import them. They came from a scratch design run that nothing on main references. If the owner wants them, export them from the isolated copy, run `bd import --dry-run` to confirm 26 creates and zero updates, and import without `--allow-stale` after the step 1 preservation above.
+**Option C, the 26 clone-only design molecules.** Recommended: do not import them. They came from a scratch design run that nothing on main references. If the owner wants them, export them from the isolated copy and rehearse the import on a scratch copy of the live store, as in Option B step 4. Confirm 26 creates and zero updates there. Then import on the live store without `--allow-stale`, after the step 1 preservation above.
 
 Dependencies the dispatcher may record:
 
