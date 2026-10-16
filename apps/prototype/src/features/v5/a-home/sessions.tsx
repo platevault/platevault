@@ -4,15 +4,17 @@
  * into a calibration process (P-CAL3, the Calibration library).
  *
  * - The Status facet: All, Needs review (the intake queue, C14), Needs a
- *   Target, Not in any Project, Unusable and Trashed, with counts (D-W25,
- *   D-W43). Trashed sessions show only under Trashed.
+ *   Target, Needs calibration (the Library's calibration queue, LIB-FR-23),
+ *   Not in any Project, Unusable and Trashed, with counts (D-W25, D-W43).
+ *   Trashed sessions show only under Trashed.
  * - A row opens the session; its ⋯ and context menu offer Review frames
  *   (the intake at its first open step), Choose Target and Add to Project
  *   (D-W59).
- * - Selected sessions in no Project offer Archive… (the reviewed transfer
- *   Wrap up uses; round 6: refused for sessions in a Project). The Unusable
- *   facet offers Move to Trash… for its Unusable frames (library clean-up
- *   through the OS Trash engine).
+ * - Selected sessions offer Archive… (the reviewed transfer Wrap up uses,
+ *   STO-FR-13): refused for a session an open Project holds; a Closed
+ *   Project's kept View is repointed. The Unusable facet offers Move to
+ *   Trash… for its Unusable frames (library clean-up through the OS Trash
+ *   engine).
  * - After an Import, `?import=<operation>` lists the sessions it filled
  *   first and marks them New.
  */
@@ -39,13 +41,14 @@ import { type PrototypeState, useStore } from "@/store/core"
 import type { ImportPayload } from "./import-run"
 import { addToProjectItems } from "./parts"
 import { ReadinessBadge } from "./session"
-import { filterCounts, filterLabel, inProject, matchesFilter, parseFilter, SESSION_FILTERS, type SessionFilter, type SessionRow, sessionRows } from "./session-model"
+import { filterCounts, filterLabel, matchesFilter, openHolder, parseFilter, SESSION_FILTERS, type SessionFilter, type SessionRow, sessionRows } from "./session-model"
 
 function emptyTitle(m: Messages, filter: SessionFilter): string {
   const title: Record<SessionFilter, () => string> = {
     all: m.sessions_empty_all,
     "needs-review": m.sessions_empty_needs_review,
     "needs-target": m.sessions_empty_needs_target,
+    "needs-calibration": m.sessions_empty_needs_calibration,
     "not-in-project": m.sessions_empty_not_in_project,
     unusable: m.sessions_empty_unusable,
     trashed: m.sessions_empty_trashed,
@@ -56,12 +59,12 @@ function emptyTitle(m: Messages, filter: SessionFilter): string {
 /** Why Archive… is unavailable for the selection (round 6); null when it can run. */
 function archiveUnavailable(m: Messages, selected: SessionRow[], plan: ArchivePlan): Action["unavailable"] {
   const action = m.sessions_cant_archive()
-  const held = selected.filter(inProject)
+  const held = selected.flatMap((r) => {
+    const project = openHolder(r)
+    return project ? [{ row: r, project }] : []
+  })
   if (held.length > 0) {
-    const blockers = held.map((r) => {
-      const projectId = r.candidateOf[0]?.project.id ?? r.runs[0]!.projectId
-      return { label: sessionLabel(m, r.session), link: { to: "/projects/$projectId", params: { projectId } } }
-    })
+    const blockers = held.map(({ row, project }) => ({ label: sessionLabel(m, row.session), link: { to: "/projects/$projectId", params: { projectId: project.id } } }))
     return { action, reason: m.sessions_in_a_project({ count: held.length }), blockers }
   }
   if (plan.blocked) return { action, reason: say(m, plan.blocked), blockers: [{ label: m.common_locations(), link: { to: "/settings/locations" } }] }
@@ -95,7 +98,7 @@ function archiveAction(m: Messages, state: PrototypeState, selected: SessionRow[
       confirm: { label: m.wrapup_archive_title() },
     },
     run: () => {
-      startArchiveTransfer(null, plan.rows, "archive")
+      startArchiveTransfer(null, plan.rows)
       onDone()
     },
   }
@@ -123,7 +126,6 @@ function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionR
         kind: "rejected-frames",
         title: msg("wrapup_offer_rejected", { count: offer.count, n: formatCount(offer.count), size: formatBytes(offer.sizeBytes) }),
         projectId: null,
-        runIds: [],
         items: offer.items,
         href: "/sessions?filter=unusable",
       })
@@ -226,14 +228,13 @@ export function SessionsPage() {
     { id: "review", header: m.sessions_column_review(), sortValue: (r) => (r.trashed ? "" : r.readiness), cell: (r) => <ReadinessBadge readiness={r.readiness} unreviewed={r.unreviewed} trashed={r.trashed} /> },
     {
       id: "projects",
-      header: m.sessions_column_projects_runs(),
+      header: m.nav_projects(),
       truncate: true,
-      sortValue: (r) => r.candidateOf.map((c) => c.project.name).join(","),
+      sortValue: (r) => r.projects.map((p) => p.name).join(","),
       cell: (r) => {
         if (r.trashed) return "–"
-        if (r.candidateOf.length === 0) return r.notInProject ? m.sessions_no_project() : "–"
-        const runs = r.runs.length === 0 ? m.sessions_no_run() : m.sessions_run_count({ count: r.runs.length })
-        return `${r.candidateOf.map((c) => c.project.name).join(", ")} · ${runs}`
+        if (r.projects.length === 0) return r.notInProject ? m.sessions_no_project() : "–"
+        return r.projects.map((p) => p.name).join(", ")
       },
     },
   ]

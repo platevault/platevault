@@ -22,7 +22,7 @@
  */
 import { masterStoragePath } from "@/domain/calibration-process"
 import { fileAt, freeBytes, volumeForPath } from "@/domain/disk"
-import { isUnder, nightOf, sessionGroupingKey, targetAtPointing } from "@/domain/indexing"
+import { framingOf, isUnder, nightOf, sessionGroupingKey, splitByFraming, targetAtPointing } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/contracts"
@@ -109,10 +109,12 @@ export interface TargetChoice {
   name: string
 }
 
-/** An incoming light session (P-IMP2): its frames, grouped as indexing groups them, file under its Target. */
+/** An incoming light session (P-IMP2): its frames, grouped and split by framing as indexing does (LIB-AC-31), file under its Target. */
 export interface IncomingSession {
-  /** The session grouping key; the draft's Target choice is keyed by it. */
+  /** The session grouping key, with its framing after the first; the draft's Target choice is keyed by it. */
   key: string
+  /** 1 for the capture key's first framing, 2 for "framing 2" and so on (D-W107). */
+  framing: number
   /** OBJECT: a hint only, never the Target. */
   objectLabel: string | null
   /** The Target whose footprint contains the session's pointing (nearest centre); null without one. */
@@ -297,22 +299,29 @@ function lightKey(file: DiskFile): string {
 }
 
 /**
- * The incoming light sessions (P-IMP2), by grouping key: each prefilled with
- * the Target its mean pointing associates, unless the draft chose another
- * Target or Unclassified (null).
+ * The incoming light sessions (P-IMP2) of each light, by file path: grouped
+ * by key, then split by framing with the Settings margins as intake splits
+ * them (`splitByFraming`), each prefilled with the Target its mean pointing
+ * associates, unless the draft chose another Target or Unclassified (null).
  */
-function incomingSessions(catalog: Catalog, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
+function incomingSessions(state: PrototypeState, draft: ImportDraft, lights: DiskFile[]): Map<string, IncomingSession> {
+  const { catalog } = state
   const byKey = new Map<string, DiskFile[]>()
   for (const file of lights) byKey.set(lightKey(file), [...(byKey.get(lightKey(file)) ?? []), file])
   const out = new Map<string, IncomingSession>()
-  for (const [key, files] of byKey) {
-    const pointed = files.map((f) => f.header!).filter((h) => h.ra !== null && h.dec !== null)
-    const suggested =
-      pointed.length > 0 ? targetAtPointing(catalog, pointed.reduce((n, h) => n + h.ra!, 0) / pointed.length, pointed.reduce((n, h) => n + h.dec!, 0) / pointed.length) : null
-    const chosen = key in draft.targets ? draft.targets[key] : suggested?.id
-    const record = chosen ? catalog.targets[chosen] : undefined
-    const target = !chosen ? null : chosen === suggested?.id ? suggested : record ? { id: record.id, name: record.name } : suggested
-    out.set(key, { key, objectLabel: files[0]!.header!.object, suggested, target })
+  for (const [captureKey, all] of byKey) {
+    splitByFraming(all, (f) => framingOf(f.header!), state.settings.matching.framing).forEach((files, i) => {
+      const framing = i + 1
+      const key = framing === 1 ? captureKey : `${captureKey}|framing ${framing}`
+      const pointed = files.map((f) => f.header!).filter((h) => h.ra !== null && h.dec !== null)
+      const suggested =
+        pointed.length > 0 ? targetAtPointing(catalog, pointed.reduce((n, h) => n + h.ra!, 0) / pointed.length, pointed.reduce((n, h) => n + h.dec!, 0) / pointed.length) : null
+      const chosen = key in draft.targets ? draft.targets[key] : suggested?.id
+      const record = chosen ? catalog.targets[chosen] : undefined
+      const target = !chosen ? null : chosen === suggested?.id ? suggested : record ? { id: record.id, name: record.name } : suggested
+      const session: IncomingSession = { key, framing, objectLabel: files[0]!.header!.object, suggested, target }
+      for (const file of files) out.set(file.path, session)
+    })
   }
   return out
 }
@@ -381,12 +390,12 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
   }
   // A light's folder follows its session's Target, so sessions are known before any destination.
   const sessions = incomingSessions(
-    catalog,
+    state,
     draft,
     accepted.filter((a) => a.type === "light").map((a) => a.file),
   )
   for (const { file, type, typed, role, location } of accepted) {
-    const session = type === "light" ? sessions.get(lightKey(file))! : null
+    const session = type === "light" ? sessions.get(file.path)! : null
     const { destFolder, destPath, fallbacks } = destinationFor(state, location, file, type, session?.target?.name ?? null)
     const existing = fileAt(disk, destPath)?.sha256 ?? planned.get(destPath)
     if (existing !== undefined && existing !== file.sha256) {

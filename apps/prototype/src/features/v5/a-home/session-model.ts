@@ -1,23 +1,20 @@
 /**
  * Slice-local derivations for S1 Home and S12 Sessions: one row model per
  * library light session, the Sessions facet buckets (D-W24, D-W25, D-W43;
- * Unusable, round 6; Needs review is the intake queue, C14), the runs that
- * use a session, the intake Review step's search, and the run a ready
- * candidate can join. The Target and Project buckets come from the
- * foundation `sessionsNeedingWork`, the queue from `reviewQueue` and the
- * Unreviewed count from `sessionUnreviewedFrames`, so Home, the Issues hub,
- * the intake gates and the Sessions facets always agree. Nothing here writes
- * state.
+ * Unusable, round 6; Needs review is the intake queue, C14; Needs
+ * calibration is the Library's calibration queue, LIB-FR-23), the Projects
+ * that hold a session, and the intake Review step's search. The Target,
+ * Project and calibration buckets come from the foundation
+ * `sessionsNeedingWork`, the queue from `reviewQueue` and the Unreviewed
+ * count from `sessionUnreviewedFrames`, so Home, the Issues hub, the intake
+ * gates and the Sessions facets always agree. Nothing here writes state.
  */
 import {
-  type Candidate,
+  findInput,
   isTrashedSession,
-  latestRevision,
   liveAssetIds,
-  projectCandidates,
   reviewQueue,
   rigRef,
-  runCandidates,
   type SessionReadiness,
   sessionReadiness,
   sessionRigId,
@@ -26,20 +23,21 @@ import {
   sessionUnreviewedFrames,
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
-import type { AssetId, Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
+import type { AssetId, Catalog, Project, Session, SessionId } from "@/domain/types"
 import type { MessageRef, Messages } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
-export type SessionFilter = "all" | "needs-review" | "needs-target" | "not-in-project" | "unusable" | "trashed"
+export type SessionFilter = "all" | "needs-review" | "needs-target" | "needs-calibration" | "not-in-project" | "unusable" | "trashed"
 
 /** The Sessions facet's values after "All", in menu order. */
-export const SESSION_FILTERS: Array<Exclude<SessionFilter, "all">> = ["needs-review", "needs-target", "not-in-project", "unusable", "trashed"]
+export const SESSION_FILTERS: Array<Exclude<SessionFilter, "all">> = ["needs-review", "needs-target", "needs-calibration", "not-in-project", "unusable", "trashed"]
 
 export function filterLabel(m: Messages, filter: SessionFilter): string {
   const label: Record<SessionFilter, () => string> = {
     all: m.sessions_filter_all,
     "needs-review": m.status_needs_review,
     "needs-target": m.sessions_filter_needs_target,
+    "needs-calibration": m.sessions_filter_needs_calibration,
     "not-in-project": m.sessions_filter_not_in_project,
     unusable: m.status_unusable,
     trashed: m.status_trashed,
@@ -61,21 +59,23 @@ export interface SessionRow {
   unreviewed: number
   /** Live frames whose library quality is Unusable for their current bytes: purge candidates (round 6). */
   unusable: AssetId[]
-  candidateOf: Array<{ project: Project; candidate: Candidate }>
-  runs: Run[]
+  /** The Projects that hold the session (PRJ-FR-08), open or Closed, by name; a suggestion does not count. */
+  projects: Project[]
   /** Where intake stands (C10): Target, rig, then every frame reviewed. */
   readiness: SessionReadiness
   /** In the review queue (C14): a live session that is not Ready. */
   queued: boolean
   needsTarget: boolean
+  /** In the Library's Needs calibration queue (LIB-FR-23): a kind not settled, or a pinned file changed or missing. */
+  needsCalibration: boolean
   notInProject: boolean
   trashed: boolean
 }
 
-/** Runs outside the Trash whose latest saved membership or open draft holds the session. */
-export function runsUsingSession(catalog: Catalog, sessionId: SessionId): Run[] {
-  return Object.values(catalog.runs)
-    .filter((run) => !run.trashedAt && [latestRevision(run), run.draft].some((c) => c?.sessions.some((s) => s.sessionId === sessionId)))
+/** The Projects that hold the session, open or Closed, by name. */
+export function projectsHolding(catalog: Catalog, sessionId: SessionId): Project[] {
+  return Object.values(catalog.projects)
+    .filter((project) => findInput(project, sessionId) !== undefined)
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -88,17 +88,12 @@ function unusableIds(catalog: Catalog, session: Session): AssetId[] {
 
 /** Every current light session, Trashed ones included (only the Trashed filter shows those). */
 export function sessionRows(state: PrototypeState): SessionRow[] {
-  const { catalog } = state
-  const work = sessionsNeedingWork(catalog)
+  const { catalog, disk } = state
+  const work = sessionsNeedingWork(catalog, disk)
   const needsTarget = new Set(work.needsTarget.map((s) => s.id))
+  const needsCalibration = new Set(work.needsCalibration.map((s) => s.id))
   const notInProject = new Set(work.notInProject.map((s) => s.id))
   const queued = new Set(reviewQueue(catalog).map((s) => s.id))
-  const candidates = new Map<SessionId, Array<{ project: Project; candidate: Candidate }>>()
-  for (const project of Object.values(catalog.projects)) {
-    for (const candidate of projectCandidates(catalog, project)) {
-      candidates.set(candidate.session.id, [...(candidates.get(candidate.session.id) ?? []), { project, candidate }])
-    }
-  }
   return Object.values(catalog.sessions)
     .filter((s) => s.imageType === "light" && !s.supersededBy)
     .map((session): SessionRow => {
@@ -114,11 +109,11 @@ export function sessionRows(state: PrototypeState): SessionRow[] {
         seconds: ids.reduce((n, id) => n + (catalog.assets[id] ? effectiveExposureS(catalog, catalog.assets[id]!) : 0), 0),
         unreviewed: trashed ? 0 : sessionUnreviewedFrames(catalog, session),
         unusable: trashed ? [] : unusableIds(catalog, session),
-        candidateOf: candidates.get(session.id) ?? [],
-        runs: runsUsingSession(catalog, session.id),
+        projects: projectsHolding(catalog, session.id),
         readiness: sessionReadiness(catalog, session),
         queued: queued.has(session.id),
         needsTarget: needsTarget.has(session.id),
+        needsCalibration: needsCalibration.has(session.id),
         notInProject: notInProject.has(session.id),
         trashed,
       }
@@ -131,6 +126,7 @@ export function matchesFilter(row: SessionRow, filter: SessionFilter): boolean {
   if (row.trashed) return false
   if (filter === "needs-review") return row.queued
   if (filter === "needs-target") return row.needsTarget
+  if (filter === "needs-calibration") return row.needsCalibration
   if (filter === "not-in-project") return row.notInProject
   if (filter === "unusable") return row.unusable.length > 0
   return true
@@ -142,28 +138,19 @@ export function filterCounts(rows: SessionRow[]): Record<SessionFilter, number> 
     all: count("all"),
     "needs-review": count("needs-review"),
     "needs-target": count("needs-target"),
+    "needs-calibration": count("needs-calibration"),
     "not-in-project": count("not-in-project"),
     unusable: count("unusable"),
     trashed: count("trashed"),
   }
 }
 
-/** A session in a Project: a candidate of one, or held by one of its runs. Archive… from Sessions refuses it (round 6); Wrap up archives it. */
-export function inProject(row: SessionRow): boolean {
-  return row.candidateOf.length > 0 || row.runs.length > 0
+/** The open Project holding the session, if any: Archive… from Sessions refuses it (STO-FR-13); a Closed holder's kept View is repointed instead. */
+export function openHolder(row: SessionRow): Project | undefined {
+  return row.projects.find((p) => p.state === "open")
 }
 
 /** The intake Review step (`/sessions/$sessionId?step=review`, C14), opened on Unreviewed while any frame is. */
 export function sessionReviewSearch(unreviewed: number): Record<string, string> {
   return unreviewed > 0 ? { step: "review", filter: "unreviewed" } : { step: "review" }
-}
-
-/** The open run a "ready to add" candidate can join: same subject, rig and (for a panel run) panel. */
-export function runToJoin(catalog: Catalog, projectId: ProjectId, sessionId: SessionId): Run | null {
-  return (
-    Object.values(catalog.runs)
-      .filter((r) => r.projectId === projectId && !r.trashedAt && r.completion === "open")
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .find((r) => runCandidates(catalog, r).some((c) => c.session.id === sessionId)) ?? null
-  )
 }

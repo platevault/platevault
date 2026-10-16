@@ -2,15 +2,16 @@
  * S12 Session detail (slice A) as a DetailPage: one library light session's
  * facts. Intake (Target → Rig → Review) is the session's StepPage
  * (`?step=`, session-intake.tsx), opened by Review frames; this page shows
- * where intake stands, the Projects that consider the session a candidate,
- * the runs that use it, its frames and its header values (each with where
+ * where intake stands, its darks, flats and bias (each pinned, suggested,
+ * waiting or No, with Confirm, Choose and No; LIB-FR-23, LIB-FR-25), the
+ * Projects that hold it, its frames and its header values (each with where
  * it came from).
  *
  * A raw calibration session is not a library session: it reads where its
  * calibration process stands (P-CAL3) and links to the Calibration library.
  */
 import { useNavigate, useParams } from "@tanstack/react-router"
-import { Copy, Eye, ListChecks } from "lucide-react"
+import { Check, Copy, Eye, ListChecks } from "lucide-react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/app/run-ui"
@@ -22,14 +23,15 @@ import { Pill } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { DetailPage } from "@/components/templates/detail-page"
+import { calibrationSources, candidatesFor, CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, PIN_KINDS, type PinProblem, sessionPinProblems, sourceRef } from "@/domain/calibration"
 import { CALIBRATION_STEP_NAME, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
-import { formatHours, rigName, runFlowState, runStepLink, sessionIntakeEntry, sessionIntakeLink, type SessionReadiness, sessionRigId, sessionTargetId } from "@/domain/derive"
-import { STEP_NAME } from "@/domain/labels"
+import { findGroup, findInput, formatHours, sessionIntakeEntry, sessionIntakeLink, type SessionReadiness, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
 import { sessionLongLabel } from "@/domain/membership"
-import type { Asset, Run, Session } from "@/domain/types"
+import type { Asset, CalibrationChoice, PinKind, Project, Session } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatExposure, formatNight, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
+import { confirmCalibration, pickCalibration, setNoCalibration } from "@/store/actions/calibration"
 import { type PrototypeState, useStore } from "@/store/core"
 import { typeLabel } from "./import-model"
 import { addToProjectItems } from "./parts"
@@ -102,8 +104,8 @@ function SessionDetail({ session }: { session: Session }) {
       notice={notice}
       sections={[
         { id: "intake", title: m.session_intake(), content: <IntakeFacts row={row} />, actions: row.trashed ? [] : intakeActions(m, follow, session) },
-        { id: "projects", title: m.nav_projects(), count: row.candidateOf.length, flush: true, content: <ProjectsTable row={row} /> },
-        { id: "runs", title: m.common_runs(), count: row.runs.length, flush: true, content: <RunsTable state={state} runs={row.runs} /> },
+        { id: "calibration", title: m.nav_calibration(), flush: true, content: <CalibrationTable state={state} session={session} changeable={!row.trashed} /> },
+        { id: "projects", title: m.nav_projects(), count: row.projects.length, flush: true, content: <ProjectsTable row={row} /> },
         { id: "frames", title: m.sessions_column_frames(), count: assets.length, flush: true, content: <FramesTable state={state} assets={assets} session={session} reviewable={!row.trashed} /> },
         { id: "headers", title: m.session_headers(), content: <Metadata state={state} session={session} hours={hours} /> },
       ]}
@@ -147,58 +149,72 @@ function IntakeFacts({ row }: { row: SessionRow }) {
   )
 }
 
+interface CalibrationRow {
+  kind: PinKind
+  choice: CalibrationChoice
+  /** A pinned file that changed, went missing or cannot be read now: the pin stays (section 8 of the F4 record). */
+  problem: PinProblem | undefined
+}
+
+function ChoiceBadge({ row }: { row: CalibrationRow }) {
+  const m = useMessages()
+  if (row.problem) return row.problem.state === "changed" ? <StatusBadge kind="content" value="drifted" /> : <StatusBadge kind="availability" value={row.problem.state === "missing" ? "absent" : "offline"} />
+  if (row.choice.state === "pinned") return <StatusBadge kind="assignment" value="accepted" label={say(m, CHOICE_STATE_NAME.pinned)} />
+  if (row.choice.state === "suggested") return <StatusBadge kind="assignment" value="suggested" label={say(m, CHOICE_STATE_NAME.suggested)} />
+  if (row.choice.state === "waiting") return <StatusBadge kind="assignment" value="unresolved" label={say(m, CHOICE_STATE_NAME.waiting)} />
+  return <Pill tone="muted">{say(m, NO_KIND_NAME[row.kind])}</Pill>
+}
+
+/** Darks, flats and bias, matched at ingestion and pinned on the session (LIB-FR-23): Confirm a suggestion, Choose any offered source, or No. */
+function CalibrationTable({ state, session, changeable }: { state: PrototypeState; session: Session; changeable: boolean }) {
+  const m = useMessages()
+  const { catalog, disk, settings } = state
+  const calibration = session.calibration
+  const problems = sessionPinProblems(disk, calibration)
+  const rows: CalibrationRow[] = calibration ? PIN_KINDS.map((kind) => ({ kind, choice: calibration[kind], problem: problems.find((p) => p.kind === kind) })) : []
+  const sources = calibrationSources(catalog, disk)
+  const source = (r: CalibrationRow) => (r.choice.state === "pinned" || r.choice.state === "suggested" ? say(m, sourceRef(catalog, disk, r.choice.source)) : "–")
+  const columns: Column<CalibrationRow>[] = [
+    { id: "kind", header: m.run_col_kind(), rowHeader: true, sortValue: (r) => PIN_KINDS.indexOf(r.kind), cell: (r) => say(m, KIND_NAME[r.kind]) },
+    { id: "state", header: m.session_project_state(), sortValue: (r) => r.choice.state, cell: (r) => <ChoiceBadge row={r} /> },
+    { id: "source", header: m.evidence_column_source(), truncate: true, sortValue: source, cell: source },
+  ]
+  const actions = (r: CalibrationRow): MenuItem[] => {
+    if (!changeable) return []
+    const pick = { sessionId: session.id, kind: r.kind }
+    const offered = candidatesFor(catalog, settings, session, r.kind, sources)
+    return [
+      ...(r.choice.state === "suggested" ? [{ id: `confirm-${r.kind}`, label: m.verb_confirm(), icon: Check, run: () => confirmCalibration([pick]) }] : []),
+      ...(offered.length > 0
+        ? [{ submenu: m.verb_choose(), items: offered.map((c) => ({ id: `choose-${r.kind}-${c.source.key}`, label: say(m, sourceRef(catalog, disk, c.source.source)), run: () => pickCalibration(session.id, r.kind, c.source.source, session.revision) })) }]
+        : []),
+      ...(r.choice.state === "none" ? [] : [{ id: `no-${r.kind}`, label: say(m, NO_KIND_NAME[r.kind]), run: () => setNoCalibration([pick]) }]),
+    ]
+  }
+  return <BoxTable label={m.nav_calibration()} rows={rows} columns={columns} getRowId={(r) => r.kind} rowLabel={(r) => say(m, KIND_NAME[r.kind])} rowActions={actions} empty={m.session_none()} />
+}
+
+/** The Projects that hold the session, open or Closed, with the group each puts it in. */
 function ProjectsTable({ row }: { row: SessionRow }) {
   const m = useMessages()
   const follow = useFollowLink()
-  type Item = SessionRow["candidateOf"][number]
-  const open = (item: Item) => follow({ to: "/projects/$projectId", params: { projectId: item.project.id } })
-  const columns: Column<Item>[] = [
-    { id: "project", header: m.project_noun(), rowHeader: true, truncate: true, sortValue: (c) => c.project.name, cell: (c) => c.project.name },
-    { id: "state", header: m.session_project_state(), sortValue: (c) => c.project.state, cell: (c) => <StatusBadge kind="project" value={c.project.state === "open" ? "open" : "done"} /> },
-    { id: "reason", header: m.session_reason(), truncate: true, sortValue: (c) => say(m, c.candidate.reason), cell: (c) => say(m, c.candidate.reason) },
+  const open = (project: Project) => follow({ to: "/projects/$projectId", params: { projectId: project.id } })
+  const group = (project: Project) => findGroup(project, findInput(project, row.session.id)?.groupId ?? null)?.name ?? "–"
+  const columns: Column<Project>[] = [
+    { id: "project", header: m.project_noun(), rowHeader: true, truncate: true, sortValue: (p) => p.name, cell: (p) => p.name },
+    { id: "state", header: m.session_project_state(), sortValue: (p) => p.state, cell: (p) => <StatusBadge kind="project" value={p.state} /> },
+    { id: "group", header: m.session_project_group(), truncate: true, sortValue: group, cell: group },
   ]
   return (
     <BoxTable
       label={m.nav_projects()}
-      rows={row.candidateOf}
+      rows={row.projects}
       columns={columns}
-      getRowId={(c) => c.project.id}
-      rowLabel={(c) => c.project.name}
-      rowActions={(c) => [{ id: "open", label: m.verb_open(), icon: Eye, run: () => open(c) }]}
+      getRowId={(p) => p.id}
+      rowLabel={(p) => p.name}
+      rowActions={(p) => [{ id: "open", label: m.verb_open(), icon: Eye, run: () => open(p) }]}
       onRowClick={open}
       empty={row.needsTarget ? m.session_needs_target_first() : m.session_none()}
-    />
-  )
-}
-
-function RunsTable({ state, runs }: { state: PrototypeState; runs: Run[] }) {
-  const m = useMessages()
-  const follow = useFollowLink()
-  const flows = new Map(runs.map((run) => [run.id, runFlowState(state, run)]))
-  const open = (run: Run) => follow(runStepLink(run, flows.get(run.id)!.current))
-  const step = (run: Run) => say(m, STEP_NAME[flows.get(run.id)!.current])
-  const summary = (run: Run) => {
-    const flow = flows.get(run.id)!
-    const current = flow.steps.find((s) => s.id === flow.current)
-    return current?.summary ? say(m, current.summary) : "–"
-  }
-  const columns: Column<Run>[] = [
-    { id: "run", header: m.session_run(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
-    { id: "project", header: m.project_noun(), truncate: true, sortValue: (r) => state.catalog.projects[r.projectId]?.name ?? "", cell: (r) => state.catalog.projects[r.projectId]?.name ?? "–" },
-    { id: "rig", header: m.sessions_column_rig(), truncate: true, sortValue: (r) => rigName(m, state.catalog, r.rigId), cell: (r) => rigName(m, state.catalog, r.rigId) },
-    { id: "step", header: m.session_run_step(), sortValue: step, cell: step },
-    { id: "status", header: m.session_run_status(), truncate: true, sortValue: summary, cell: (r) => (r.draft ? `${m.status_draft()} · ${summary(r)}` : summary(r)) },
-  ]
-  return (
-    <BoxTable
-      label={m.common_runs()}
-      rows={runs}
-      columns={columns}
-      getRowId={(r) => r.id}
-      rowLabel={(r) => r.name}
-      rowActions={(r) => [{ id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) }]}
-      onRowClick={open}
-      empty={m.session_none()}
     />
   )
 }

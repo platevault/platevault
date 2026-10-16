@@ -1,14 +1,15 @@
 /**
  * Slice A shared pieces: Add to Project as menu items (D-W59: it also adds
- * the session's rig) with its confirm, Create Project prefilled from a
- * session, and the terse refusal for a failed write. Used by Home, Sessions
- * and the session detail.
+ * the session's Target as a subject and its rig, then the session itself,
+ * which must be Ready and settled, PRJ-FR-08) with its confirm, Create
+ * Project prefilled from a session, and the terse refusal for a failed
+ * write. Used by Home, Sessions and the session detail.
  */
 import type { Action, MenuItem } from "@/components/app/contracts"
 import { toast } from "@/components/app/feedback"
 import { type RefusalProps, refusalFrom } from "@/components/app/refusal"
 import { openSheet } from "@/app/ui-state"
-import { projectCandidates, rigName, sessionRigId, sessionTargetId } from "@/domain/derive"
+import { findInput, rigName, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
 import type { Catalog, Project, SessionId } from "@/domain/types"
 import type { Messages } from "@/lib/i18n"
@@ -21,10 +22,10 @@ export function refusalOf(result: CommitResult, action: string): RefusalProps | 
   return refusalFrom(result, action) ?? { action, reason: result.message, blockers: [] }
 }
 
-/** Open Projects a session can join: not those that already consider it a candidate. */
+/** Open Projects a session can join: not those that already hold it. */
 function openProjects(catalog: Catalog, sessionId: SessionId): Project[] {
   return Object.values(catalog.projects)
-    .filter((p) => p.state === "open" && !projectCandidates(catalog, p).some((c) => c.session.id === sessionId))
+    .filter((p) => p.state === "open" && !findInput(p, sessionId))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -43,7 +44,7 @@ function addAction(m: Messages, catalog: Catalog, sessionId: SessionId, project:
   const changes = [
     ...(targetName && !project.subjects.some((s) => s.targetId === targetId) ? [m.session_adds_subject({ name: targetName })] : []),
     ...(rigId && !project.rigIds.includes(rigId) ? [m.session_adds_rig({ name: rigName(m, catalog, rigId) })] : []),
-    m.session_becomes_candidate({ name: label }),
+    m.session_joins_project({ name: label }),
   ]
   return {
     id: `add-to-${project.id}`,

@@ -1,15 +1,14 @@
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import { setLocale } from "@/app/preferences"
 import { Toaster } from "@/components/ui/toast"
-import { latestRevision, liveAssetIds, runPreparations } from "@/domain/derive"
-import { filesUnder, removeFile } from "@/domain/disk"
+import { findInput, liveAssetIds } from "@/domain/derive"
 import { pendingWork } from "@/domain/home"
 import { sessionLongLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
-import type { Run, SessionId } from "@/domain/types"
+import type { SessionId } from "@/domain/types"
 import { formatNight } from "@/lib/format"
 import { DEFAULT_LOCALE, m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
@@ -43,8 +42,22 @@ function trashSessions(state: PrototypeState, sessionIds: SessionId[]) {
   }
 }
 
-function holds(run: Run, sessionId: SessionId): boolean {
-  return (run.draft ?? latestRevision(run))?.sessions.some((s) => s.sessionId === sessionId) ?? false
+/**
+ * Clear the rows ahead of Ready to add: trash the sessions that need a Target or calibration or sit in no
+ * Project, and review every unreviewed frame as Usable. Returns the first Ready to add row.
+ */
+function onlyReadyToAdd(state: PrototypeState) {
+  for (const w of pendingWork(state)) {
+    if (w.kind === "needs-target" || w.kind === "needs-calibration" || w.kind === "not-in-project") trashSessions(state, [w.session.id])
+    if (w.kind !== "unreviewed") continue
+    for (const id of liveAssetIds(state.catalog, w.session)) {
+      const asset = state.catalog.assets[id]!
+      state.catalog.assets[id] = { ...asset, quality: { value: "usable", decidedAt: AT, basisSha256: asset.sha256 } }
+    }
+  }
+  const ready = pendingWork(state).find((w) => w.kind === "ready-to-add")
+  if (ready?.kind !== "ready-to-add") throw new Error("the demo has no session ready to add")
+  return ready
 }
 
 // The detail page measures its room; jsdom has no ResizeObserver.
@@ -60,57 +73,42 @@ afterAll(() => {
   globalThis.ResizeObserver = originalResizeObserver
 })
 
-describe("Home: Add to run with Undo", () => {
-  beforeEach(() => {
-    // Clear the rows ahead of Ready to add: trash the sessions without a Target, and review every unreviewed frame as Usable.
+describe("Home: Add to Project with Undo", () => {
+  it("adds a ready suggestion to its Project in one click, and Undo takes it out again", async () => {
     const state = demoState()
-    for (const w of pendingWork(state)) {
-      if (w.kind === "needs-target") trashSessions(state, [w.session.id])
-      if (w.kind !== "unreviewed") continue
-      for (const id of liveAssetIds(state.catalog, w.session)) {
-        const asset = state.catalog.assets[id]!
-        state.catalog.assets[id] = { ...asset, quality: { value: "usable", decidedAt: AT, basisSha256: asset.sha256 } }
-      }
-    }
+    const ready = onlyReadyToAdd(state)
     store.replace(state)
-  })
-
-  it("adds the session to the open run's draft in one click, and Undo takes it out again", async () => {
-    const run = Object.values(store.getState().catalog.runs).find((r) => r.name === "NGC 7000 OIII deep")!
-    // ses_k30zg8 (NGC 7000 OIII) is ready for the open run "NGC 7000 OIII deep" and sits in Pending work's first 5 rows.
-    const session = store.getState().catalog.sessions.ses_k30zg8!
-    const label = sessionLongLabel(m, session)
-    expect(holds(run, session.id)).toBe(false)
+    const project = store.getState().catalog.projects[ready.projectId]!
+    const label = sessionLongLabel(m, ready.session)
+    const holds = () => findInput(store.getState().catalog.projects[project.id]!, ready.session.id) !== undefined
+    expect(holds()).toBe(false)
     const user = userEvent.setup()
     renderHome()
     const pending = await screen.findByRole("table", { name: m.home_pending_work() })
     const row = within(pending).getByRole("rowheader", { name: label }).closest("tr")!
-    expect(row).toHaveTextContent(m.home_ready_for({ name: run.name }))
+    expect(row).toHaveTextContent(m.home_ready_for({ name: project.name }))
 
-    await user.click(within(row).getByRole("button", { name: m.target_add_to_named({ name: run.name }) }))
-    const toast = await screen.findByText(m.home_added_to_draft({ session: label, run: run.name }))
-    expect(holds(store.getState().catalog.runs[run.id]!, session.id)).toBe(true)
+    await user.click(within(row).getByRole("button", { name: m.target_add_to_named({ name: project.name }) }))
+    const toast = await screen.findByText(m.session_added_to_project({ session: label, project: project.name }))
+    expect(holds()).toBe(true)
     await waitFor(() => expect(within(pending).queryByRole("rowheader", { name: label })).toBeNull())
 
     await user.click(within(toast.closest<HTMLElement>("[data-slot=toast]")!).getByRole("button", { name: m.wrapup_undo() }))
     await waitFor(() => expect(within(pending).getByRole("rowheader", { name: label })).toBeInTheDocument())
-    expect(holds(store.getState().catalog.runs[run.id]!, session.id)).toBe(false)
+    expect(holds()).toBe(false)
   })
 })
 
 describe("Home: the empty line of each section", () => {
   /**
    * The demo library with nothing to do: its Captures locations hold nothing new once the
-   * never-scanned NAS one is retired, no jobs, every listed session trashed, the finished run's
-   * prepared view gone, and the open Projects' goals removed. The default site stays.
+   * never-scanned NAS one is retired, no jobs, every listed session trashed, and the open
+   * Projects' goals removed. The default site stays.
    */
   function emptyHome(): PrototypeState {
     const state = { ...demoState(), operations: {} }
     state.catalog.locations.loc_nas = { ...state.catalog.locations.loc_nas!, retiredAt: AT }
-    for (const w of pendingWork(state)) {
-      if (w.kind !== "clean-up") trashSessions(state, [w.session.id])
-      else for (const prep of runPreparations(state.catalog, w.run.id)) for (const file of filesUnder(state.disk, prep.folderPath)) state.disk = removeFile(state.disk, file.volumeId, file.path)
-    }
+    trashSessions(state, pendingWork(state).map((w) => w.session.id))
     for (const project of Object.values(state.catalog.projects)) project.goals = []
     return state
   }
