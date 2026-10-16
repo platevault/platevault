@@ -18,6 +18,7 @@ use std::io;
 use std::mem;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
+use std::path::Path;
 use std::ptr;
 use std::sync::mpsc;
 use std::thread;
@@ -29,6 +30,7 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Storage::FileSystem::{
     GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+    FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -278,10 +280,7 @@ fn create_window() -> io::Result<HWND> {
 /// took its path is refused by its folder ID. The default share mode leaves
 /// every other process free to read, write and delete in it.
 fn open_root(root: &Root) -> io::Result<File> {
-    let handle = OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(&root.path)?;
+    let handle = open_folder(&root.path)?;
     let info = information(&handle)?;
     if info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(io::Error::new(
@@ -299,6 +298,34 @@ fn open_root(root: &Root) -> io::Result<File> {
         ));
     }
     Ok(handle)
+}
+
+/// Open the entry at `path` itself, never a reparse target, with only the
+/// access the registration needs, so a folder that grants these rights
+/// registers even when it denies others `GENERIC_READ` asks for (its
+/// extended attributes or its security descriptor):
+/// - `FILE_LIST_DIRECTORY`, the access the new-captures watcher already
+///   holds on every watched folder (notify opens each one with it for
+///   `ReadDirectoryChangesW`), so a root discovery watches always opens.
+///   `RegisterDeviceNotificationW` documents no access right for a
+///   `DBT_DEVTYP_HANDLE` filter's handle ("A handle to the device to be
+///   checked": learn.microsoft.com/windows/win32/api/dbt/ns-dbt-dev_broadcast_handle),
+///   and Microsoft's removal-request example opens its handle with
+///   `GENERIC_READ` (learn.microsoft.com/windows/win32/devio/processing-a-request-to-remove-a-device),
+///   which includes this right. It also takes part in the sharing checks,
+///   which the tests use to see the handle.
+/// - `FILE_READ_ATTRIBUTES`, for `GetFileInformationByHandle`: the basic
+///   information it reads requires it
+///   (learn.microsoft.com/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntqueryinformationfile,
+///   `FileBasicInformation`).
+///
+/// The handle still counts as open on the volume, which is why a requested
+/// removal closes it.
+fn open_folder(path: &Path) -> io::Result<File> {
+    OpenOptions::new()
+        .access_mode(FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
 }
 
 /// `GetFileInformationByHandle` for an open handle.
@@ -534,7 +561,6 @@ impl<K: Clone + Eq + Hash> Handle for Handler<K> {
 /// tests send as Windows sends them; only a real device removal is left out.
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
     use std::time::Instant;
 
     use windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW;
@@ -588,12 +614,25 @@ mod tests {
 
     /// The root at `path`, bound to the folder there now.
     fn root_at(path: &Path) -> Root {
-        let handle = OpenOptions::new()
-            .read(true)
-            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
-            .open(path)
-            .unwrap();
+        let handle = open_folder(path).unwrap();
         Root { path: path.to_path_buf(), folder: folder_id(&information(&handle).unwrap()) }
+    }
+
+    /// Deny everyone `rights` on `path`, in `icacls` notation, or lift that
+    /// with `None`: `icacls` ships with Windows, and the owner can change a
+    /// folder's access list without elevation.
+    fn deny_everyone(path: &Path, rights: Option<&str>) {
+        let path = path.to_str().unwrap();
+        let args = match rights {
+            Some(rights) => vec![path.to_owned(), "/deny".into(), format!("*S-1-1-0:({rights})")],
+            None => vec![path.to_owned(), "/remove:d".into(), "*S-1-1-0".into()],
+        };
+        let status = std::process::Command::new("icacls")
+            .args(&args)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .expect("icacls invocation failed");
+        assert!(status.success(), "icacls {args:?} failed");
     }
 
     /// Put a directory junction to `target` at `link`, with the `mklink /J`
@@ -777,5 +816,36 @@ mod tests {
         assert_eq!(registered(window, 1).len(), 1, "registered the folder that took its path");
         assert!(held(&other), "the root beside it is registered");
         assert!(!held(&card), "a registration holds the folder that took its path");
+    }
+
+    /// A root folder that denies its extended attributes to everyone, a
+    /// right `GENERIC_READ` asks for, registers all the same: the root opens
+    /// with only the rights the registration needs.
+    #[test]
+    fn a_root_denying_rights_the_registration_does_not_need_registers() {
+        /// Lifts the deny entry when dropped, so a failing test still lets
+        /// the folder be removed.
+        struct Allow<'a>(&'a Path);
+        impl Drop for Allow<'_> {
+            fn drop(&mut self) {
+                deny_everyone(self.0, None);
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let card = dir.path().join("card");
+        std::fs::create_dir(&card).unwrap();
+        let card_root = root_at(&card);
+        deny_everyone(&card, Some("REA"));
+        let _allow = Allow(&card);
+        let generic_read = OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&card);
+        assert!(generic_read.is_err(), "the deny entry does not take");
+        let (notices, _reports) = retrying();
+        let window = notices.roots.window;
+
+        assert!(notices.roots().watch(HashMap::from([("card", card_root)])));
+        assert_eq!(registered(window, 1).len(), 1, "a root denying its extended attributes");
     }
 }
