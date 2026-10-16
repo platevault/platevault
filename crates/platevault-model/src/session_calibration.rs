@@ -9,9 +9,10 @@
 //! master version with its exact files and digests, or explicitly No. A
 //! session is settled when every kind is pinned or No; a suggestion never
 //! settles. A pin stays when its file changes or goes missing: the session
-//! shows it and Apply refuses until it is reassigned. CAL owns matching,
-//! confirmation and reassignment; every change advances the session's
-//! calibration generation, which writers compare before they write.
+//! shows it, reads Needs calibration, and Apply refuses until it is
+//! reassigned (decision record §9). CAL owns matching, confirmation and
+//! reassignment; every change advances the session's calibration generation,
+//! which writers compare before they write.
 
 use std::collections::BTreeSet;
 
@@ -290,12 +291,33 @@ impl SessionCalibration {
         }
         Ok(())
     }
+
+    /// Why the session is in the Library's Needs calibration queue, in kind
+    /// order: a kind neither pinned nor No, or a pinned kind whose files
+    /// `health` reports changed or missing. Any session can be in the queue,
+    /// Ready or not; Import never waits for it.
+    #[must_use]
+    pub fn needs(&self, health: impl Fn(InputKind) -> PinHealth) -> Vec<CalibrationNeed> {
+        [InputKind::Bias, InputKind::Dark, InputKind::Flat]
+            .into_iter()
+            .filter_map(|kind| match self.kind(kind) {
+                PinState::Unresolved | PinState::Suggested { .. } => {
+                    Some(CalibrationNeed::Unsettled { kind })
+                }
+                PinState::Pinned { .. } => {
+                    let health = health(kind);
+                    health.blocks_apply().then_some(CalibrationNeed::PinDrift { kind, health })
+                }
+                PinState::Declined { .. } => None,
+            })
+            .collect()
+    }
 }
 
 /// Whether a pin's files still hold what it recorded (D-W113). Computed on
 /// read, never stored: the pin stays, the session shows the file as changed
-/// or missing, and Apply refuses until the kind is reassigned or the bytes
-/// return.
+/// or missing and reads Needs calibration, and Apply refuses until the kind
+/// is reassigned or the bytes return.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PinHealth {
@@ -309,4 +331,15 @@ impl PinHealth {
     pub const fn blocks_apply(self) -> bool {
         !matches!(self, Self::Intact)
     }
+}
+
+/// One reason a session is in the Library's Needs calibration queue
+/// (LIB-FR-17, LIB-FR-23; decision record §9).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(tag = "need", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum CalibrationNeed {
+    /// Neither pinned nor No: "Choose its flats first".
+    Unsettled { kind: InputKind },
+    /// The pin stays, but its file changed or went missing.
+    PinDrift { kind: InputKind, health: PinHealth },
 }

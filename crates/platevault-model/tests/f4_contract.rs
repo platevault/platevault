@@ -10,20 +10,20 @@
 
 use platevault_model::{
     admit_session, session_blockers, AdmissionBlocker, ApplicableQuality, ApplyJournal,
-    ApplyOutcome, ApplyPhase, BasisCapture, BasisGroup, BasisSession, Camera, CameraBasis,
-    CameraLink, CaptureInclusion, ChangeSource, Classification, ClosePolicy, ClosedSnapshot,
-    CopyBasis, DeclineOrigin, EntryEvidence, EntryInput, EntryKind, EntryName, EntryPlacement,
-    EntrySource, Evaluation, ExclusionBasis, ExpectedTree, FileIdentity, ForeignItem,
-    ForeignItemState, GroupKeywords, GroupName, GroupOrigin, InclusionBasis, InputKind, InputRef,
-    ManifestEntry, ManifestState, MasterBasis, MasterEvidence, MasterOfferState, NativePath,
-    ObservationFingerprint, OpticsSignature, OutputKind, OutputObservation, OutputOrigin,
-    OutputState, PathSensitivity, PendingChange, PinOrigin, PinState, PinTarget, PinnedFile,
-    PreviousItem, PreviousItemReason, PreviousItemReview, ProcessingMasterOffer, ProjectBasis,
-    ProjectCapture, ProjectDesired, ProjectGroup, ProjectLifecycle, ProjectOperation,
-    ProjectOperationKind, ProjectOperationState, ProjectSessionMember, ProjectViewSettings,
-    RigVersion, RotatorPresence, SessionCalibration, SessionIntake, SessionPlacement,
-    SessionReadiness, SettledPin, ViewManifest, ViewMode, VolumeIdentity, WorkflowSettings,
-    WrapUpOutcome, WrapUpRecord, WrapUpStep,
+    ApplyOutcome, ApplyPhase, BasisCapture, BasisGroup, BasisSession, CalibrationNeed, Camera,
+    CameraBasis, CameraLink, CaptureInclusion, ChangeSource, Classification, ClosePolicy,
+    ClosedSnapshot, CopyBasis, DeclineOrigin, EntryEvidence, EntryInput, EntryKind, EntryName,
+    EntryPlacement, EntrySource, Evaluation, ExclusionBasis, ExpectedTree, FileIdentity,
+    ForeignItem, ForeignItemState, GroupKeywords, GroupName, GroupOrigin, InclusionBasis,
+    InputKind, InputRef, ManifestEntry, ManifestState, MasterBasis, MasterEvidence,
+    MasterOfferState, NativePath, ObservationFingerprint, OpticsSignature, OutputKind,
+    OutputObservation, OutputOrigin, OutputState, PathSensitivity, PendingChange, PinHealth,
+    PinOrigin, PinState, PinTarget, PinnedFile, PreviousItem, PreviousItemReason,
+    PreviousItemReview, ProcessingMasterOffer, ProjectBasis, ProjectCapture, ProjectDesired,
+    ProjectGroup, ProjectLifecycle, ProjectOperation, ProjectOperationKind, ProjectOperationState,
+    ProjectSessionMember, ProjectViewSettings, RigVersion, RotatorPresence, SessionCalibration,
+    SessionIntake, SessionPlacement, SessionReadiness, SettledPin, ViewManifest, ViewMode,
+    VolumeIdentity, WorkflowSettings, WrapUpOutcome, WrapUpRecord, WrapUpStep,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -525,6 +525,37 @@ fn calibration_is_settled_only_when_every_kind_is_pinned_or_declined() {
     assert_eq!(fresh.unsettled_kinds(), [InputKind::Bias, InputKind::Dark, InputKind::Flat]);
 }
 
+/// LIB-FR-17, decision record §9: Needs calibration holds a session with a
+/// kind not settled, or with a pin whose file changed or went missing; the
+/// pin itself stays.
+#[test]
+fn needs_calibration_names_unsettled_kinds_and_drifted_pins() {
+    let mut calibration = settled_calibration(id(20));
+    assert_eq!(calibration.needs(|_| PinHealth::Intact), Vec::<CalibrationNeed>::new());
+    let drifted = calibration.needs(|kind| {
+        if kind == InputKind::Dark {
+            PinHealth::Missing
+        } else {
+            PinHealth::Intact
+        }
+    });
+    assert_eq!(
+        drifted,
+        [CalibrationNeed::PinDrift { kind: InputKind::Dark, health: PinHealth::Missing }]
+    );
+    assert!(calibration.settled().is_some(), "a drifted pin stays pinned");
+    calibration.flat = PinState::Suggested { target: raw_target() };
+    assert_eq!(
+        calibration.needs(|_| PinHealth::Changed),
+        [
+            CalibrationNeed::PinDrift { kind: InputKind::Dark, health: PinHealth::Changed },
+            CalibrationNeed::Unsettled { kind: InputKind::Flat },
+        ],
+        "a declined kind needs nothing"
+    );
+    round_trip(&drifted[0]);
+}
+
 #[test]
 fn a_pin_names_its_exact_files_and_digests() {
     master_target().validate().unwrap();
@@ -857,7 +888,8 @@ fn evidence(file: &str) -> EntryEvidence {
 }
 
 #[test]
-fn only_ticked_foreign_files_move_and_unreviewed_leftovers_hold_the_next_apply() {
+fn only_ticked_foreign_files_move_and_unreviewed_and_kept_leftovers_stay_settled() {
+    use PreviousItemReview::{Kept, Moved, Pending, Trashed};
     let item = ForeignItem {
         seq: 0,
         path: path("NIGHT_2026-10-14/Lights/Ha/a.Info.txt"),
@@ -872,15 +904,15 @@ fn only_ticked_foreign_files_move_and_unreviewed_leftovers_hold_the_next_apply()
     assert!(ForeignItem { state: ForeignItemState::Failed, ..item }.validate().is_err());
 
     let leftover = |review| PreviousItem {
-        path: path("notes.txt"),
+        path: path("View (previous)/notes.txt"),
         reason: PreviousItemReason::UntickedFile,
         evidence: evidence("/View (previous)/notes.txt"),
         review,
     };
-    round_trip(&leftover(PreviousItemReview::Kept));
-    assert!(PreviousItem::blocks_apply(&[leftover(PreviousItemReview::Pending)]));
-    assert!(!PreviousItem::blocks_apply(&[
-        leftover(PreviousItemReview::Kept),
-        leftover(PreviousItemReview::Trashed),
-    ]));
+    round_trip(&leftover(Kept));
+    assert!(PreviousItem::blocks_apply(&[leftover(Pending)]));
+    assert!(!PreviousItem::blocks_apply(&[leftover(Kept), leftover(Trashed)]));
+    assert!(Pending.can_become(Kept) && Kept.can_become(Trashed) && Kept.can_become(Moved));
+    assert!(!Kept.can_become(Pending), "a kept file is not asked about again");
+    assert!(!Trashed.can_become(Kept) && !Moved.can_become(Pending));
 }

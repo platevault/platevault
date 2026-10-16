@@ -550,7 +550,9 @@ pub enum PreviousItemReason {
     UnverifiedLink,
 }
 
-/// The user's review of a leftover (D-W110).
+/// The user's review of a leftover (D-W110). A kept file is not asked about
+/// again (decision record §9): the decision is recorded, and the file may
+/// still be moved or trashed later, such as by Wrap up's Clean up.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PreviousItemReview {
@@ -560,7 +562,22 @@ pub enum PreviousItemReview {
     Trashed,
 }
 
-/// One leftover in `View (previous)/`, relative to that folder.
+impl PreviousItemReview {
+    /// A pending leftover takes any review; a kept one may still be moved or
+    /// trashed but is never pending again; a moved or trashed one is gone.
+    #[must_use]
+    pub const fn can_become(self, next: Self) -> bool {
+        matches!(
+            (self, next),
+            (Self::Pending, _) | (Self::Kept, Self::Kept | Self::Moved | Self::Trashed)
+        )
+    }
+}
+
+/// One leftover of an Apply with its recorded review. The path is relative to
+/// the Project folder (`<Project>/`): today the file sits in
+/// `View (previous)/`, and where kept files go when the next outgoing View
+/// arrives is still open with the owner (decision record §9).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviousItem {

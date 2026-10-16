@@ -675,6 +675,13 @@ async fn manifests_entries_and_the_apply_journal_hold_their_invariants() {
         &[&f4.project, AT],
     )
     .await;
+    refused(
+        &mut f4.conn,
+        "UPDATE view_previous_items SET review = 'pending', reviewed_at = NULL WHERE project_id = ?1",
+        &[&f4.project],
+        "not asked about again",
+    )
+    .await;
     let second = f4.reserve("apply").await.unwrap();
     let error = f4.building(&second, "1", "symlinks").await.unwrap_err();
     assert!(error.contains("generation"), "generations only grow: {error}");

@@ -7,9 +7,9 @@
 -- D-W113, D-W114). Manifests are internal CAS generations of one View, never
 -- `(rev N)` folders: at most one building, one installed (`View/`) and one
 -- previous (`View (previous)/`) per Project, and once built a manifest's
--- entries never change. Paths are native-path keys relative to `View/` (or
--- `View (previous)/`); structured values are shared-model JSON whose key
--- fields the columns repeat and must agree with.
+-- entries never change. Entry paths are native-path keys relative to `View/`
+-- and leftover paths relative to the Project folder; structured values are
+-- shared-model JSON whose key fields the columns repeat and must agree with.
 
 CREATE TABLE IF NOT EXISTS view_manifests (
     project_id TEXT NOT NULL REFERENCES projects (id),
@@ -274,10 +274,12 @@ CREATE TABLE IF NOT EXISTS apply_foreign_items (
     CHECK ((state = 'failed') = (reason IS NOT NULL))
 ) STRICT;
 
--- What `View (previous)/` still holds after a swap (STO-FR-10): changed or
--- unverifiable copies, unticked files and links that failed the no-follow
--- check. Apply waits until the user has reviewed each (D-W110); a kept file
--- is not asked about again.
+-- What an Apply left behind (STO-FR-10): changed or unverifiable copies,
+-- unticked files and links that failed the no-follow check, today in
+-- `View (previous)/`. Apply waits until the user has reviewed each (D-W110),
+-- and a kept file is not asked about again (decision record §9). Paths are
+-- relative to the Project folder: where kept files go when the next outgoing
+-- View arrives is still open with the owner.
 CREATE TABLE IF NOT EXISTS view_previous_items (
     project_id TEXT NOT NULL REFERENCES projects (id),
     path_key BLOB NOT NULL,
@@ -293,6 +295,12 @@ CREATE TABLE IF NOT EXISTS view_previous_items (
     FOREIGN KEY (project_id, operation_id) REFERENCES project_operations (project_id, id),
     CHECK ((review = 'pending') = (reviewed_at IS NULL))
 ) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS view_previous_items_reviewed_once
+BEFORE UPDATE OF review ON view_previous_items
+WHEN OLD.review <> 'pending' AND NEW.review IS NOT OLD.review
+    AND NOT (OLD.review = 'kept' AND NEW.review IN ('moved', 'trashed'))
+BEGIN SELECT RAISE(ABORT, 'a reviewed leftover is not asked about again'); END;
 
 CREATE TRIGGER IF NOT EXISTS project_operations_previous_reviewed
 BEFORE INSERT ON project_operations
