@@ -100,19 +100,29 @@ astronomiques de Strasbourg (CDS).
 
 ## Observing-site map (OpenStreetMap)
 
+The **Pick on map** section appears in the **Observing Site** step of
+first-run setup and in the add or edit form under **Settings → Target
+Planner → Observing Sites**. It shows a short notice and a **Show map**
+button in place of the map.
+
 - **Where:** map tiles from `a.tile.openstreetmap.org`,
   `b.tile.openstreetmap.org` and `c.tile.openstreetmap.org`, over HTTPS.
-- **When:** whenever the **Pick on map** map is on screen: the **Observing
-  Site** step of first-run setup, and the add or edit form under **Settings →
-  Target Planner → Observing Sites**. The map loads as soon as the form opens,
-  before you click anything.
+- **When:** only after you click **Show map**, and only while that step or
+  form stays open. Opening the step or the form sends nothing. The choice is
+  not remembered: each time you open the step or a form, the map is hidden
+  again until you click **Show map**.
 - **What is sent:** requests for the map tiles on display, along with your IP
-  address and the standard headers of the app's built-in web view. When you
-  have entered coordinates, the map centres on them, so the tiles requested
-  show roughly where your site is.
-- **How to avoid it:** the current release has no setting for this, and the
-  add and edit forms always show the map. To avoid the requests, skip the
-  **Observing Site** step and do not open the site form, or block
+  address and the standard headers of the app's built-in web view. Each tile
+  covers a known patch of the world, so the tiles requested reveal the area
+  you are looking at. When you have entered coordinates, the map opens
+  centred on them, so the tiles show roughly where your site is.
+- **How to avoid it:** do not click **Show map**. Type the latitude and
+  longitude into their fields instead. The site works the same without the
+  map.
+- **Releases without the button:** up to and including the 0.6.x releases,
+  the map loads as soon as the step or form opens, before you click
+  anything. Those releases cannot turn it off. To avoid the requests there,
+  skip the **Observing Site** step and do not open the site form, or block
   `*.tile.openstreetmap.org` in your firewall.
 - **OpenStreetMap's policies:** [OSMF Privacy Policy](https://osmfoundation.org/wiki/Privacy_Policy)
   and [Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/).
@@ -120,9 +130,9 @@ astronomiques de Strasbourg (CDS).
 ## Links you open yourself
 
 **Settings → Target Resolution** credits SIMBAD and OpenNGC with links to
-their websites. The **Pick on map** map shows OpenStreetMap and Leaflet
-credits, which link to their websites. These links open in your browser only
-when you click them.
+their websites. Once you click **Show map**, the map shows OpenStreetMap and
+Leaflet credits, which link to their websites. These links open in your
+browser only when you click them.
 
 ## During installation on Windows
 

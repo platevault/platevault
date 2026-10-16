@@ -91,10 +91,6 @@ These SignPath conditions are not met yet. Each one blocks the application:
 
 - **Privacy policy shown during installation.** Neither Windows installer
   shows the privacy statement yet.
-- **Option to disable the observing-site map.** The map requests
-  OpenStreetMap tiles as soon as its form opens. It needs to load tiles only
-  when you ask for them. Target lookups to CDS already have an off switch,
-  **Online SIMBAD resolution**.
 
 These SignPath conditions are met:
 
@@ -102,6 +98,11 @@ These SignPath conditions are met:
   startup can be turned off with **Settings → Advanced → Software Update →
   Check for updates automatically**. With it off, PlateVault contacts GitHub
   for updates only when you click **Check for updates**.
+- **Option to disable the observing-site map.** The map requests no
+  OpenStreetMap tiles until you click **Show map** in the step or form that
+  shows it. Without that click, the coordinate fields work on their own.
+  Target lookups to CDS have their own off switch, **Online SIMBAD
+  resolution**.
 
 ## Uninstalling
 
