@@ -1022,7 +1022,10 @@ mod tests {
     /// different frame. It leaves out a nested entry's own row, and any old
     /// text whose path runs through a link, which may be a drive that is not
     /// mounted. A nested master's own row is listed for a refresh of its
-    /// master fields when a master with the backslash text is beside it.
+    /// master fields when a master with the backslash text is beside it. The
+    /// old texts of the frames in the folders are listed as master rows when
+    /// they name a path outside the root (`/v/x.fits`, `./w/x.fits`,
+    /// `../z/x.fits`) or a frame that is not a master (`t/u/x.fits`).
     /// Deleting the listed rows is covered by `persistence_inbox`'s
     /// `deleting_unconfirmed_old_rows_*` tests and by `desktop_shell`'s
     /// `inbox_scan_legacy_rows` test.
@@ -1057,7 +1060,16 @@ mod tests {
             scanned.legacy_rows,
             crate::legacy_rows::LegacyRows {
                 folders: ["../z", "./w", "/v", "c/d"].map(str::to_owned).to_vec(),
-                masters: ["a/b.fits", "n/o.fits"].map(str::to_owned).to_vec(),
+                masters: [
+                    "../z/x.fits",
+                    "./w/x.fits",
+                    "/v/x.fits",
+                    "a/b.fits",
+                    "n/o.fits",
+                    "t/u/x.fits"
+                ]
+                .map(str::to_owned)
+                .to_vec(),
                 masters_to_refresh: vec!["k/m.fits".to_owned()],
                 ..Default::default()
             }
@@ -1249,6 +1261,59 @@ mod tests {
                 ..Default::default()
             }
         );
+    }
+
+    /// The old scan read `a\b.fits` as a master and stored its master row at
+    /// `a/b.fits`. This scan reads it as a light frame, and the nested
+    /// `a/b.fits` too, so a master row there would plan that light frame as a
+    /// master: `a/b.fits` is listed. So is `/c.fits`, the old text of the light
+    /// frame `\c.fits`, which names a path outside the root. Kept: `d/e.fits`,
+    /// the old text of the light frame `d\e.fits`, where nothing is. A master
+    /// row there cannot be classified, and the scan looks there only for a
+    /// file it reads as a master.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_the_old_master_row_of_a_backslash_file_that_is_no_longer_a_master() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        for name in ["a\\b.fits", "\\c.fits", "d\\e.fits"] {
+            write_realistic_fits(root, name, Some("LIGHT"), None);
+        }
+        let nested = root.join("a");
+        fs::create_dir_all(&nested).unwrap();
+        write_realistic_fits(&nested, "b.fits", Some("LIGHT"), None);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                masters: ["/c.fits", "a/b.fits"].map(str::to_owned).to_vec(),
+                ..Default::default()
+            }
+        );
+    }
+
+    /// On Windows `\` is a separator, so no wire text holds one and nothing
+    /// has old text: a bare nested folder `c\d`, a nested master `a\b.fits`
+    /// and a nested light frame `a\x.fits` list nothing. Without the
+    /// `cfg!(windows)` guard in `legacy_rows::old_text_under`, the walk's own
+    /// paths would give the old texts `c/d`, `a/b.fits` and `a/x.fits`, and
+    /// the rows of the real folder `c/d` and of the masters there would be
+    /// retired or rewritten.
+    #[cfg(windows)]
+    #[test]
+    fn scan_lists_no_old_rows_on_windows() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("c").join("d")).unwrap();
+        let folder = root.join("a");
+        fs::create_dir_all(&folder).unwrap();
+        write_realistic_fits(&folder, "b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(scanned.items.len(), 1, "the folder `a` is stored");
+        assert_eq!(scanned.legacy_rows, crate::legacy_rows::LegacyRows::default());
     }
 
     /// A readable master `a\b.fits` beside the nested `a/b.fits` whose header

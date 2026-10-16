@@ -369,7 +369,8 @@ async fn delete_unconfirmed_master_item_conn(
 ///   which of the three it was, so a readable file with no known `IMAGETYP`
 ///   keeps the row here too. The row then stays, and confirm's own guards
 ///   decide: with no frame type its classification is `unclassified`, which
-///   confirm refuses.
+///   confirm refuses, unless a frame-type override gives it one (the user's
+///   own statement of what the file is).
 ///
 /// Its children and the source groups left at its path go as in
 /// [`delete_unconfirmed_master_rows_conn`].

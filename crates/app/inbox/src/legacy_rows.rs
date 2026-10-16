@@ -9,7 +9,11 @@
 //! stores such an entry under its own text, which adds a new row; the old row
 //! stays and names the nested path. When nothing is there, the old row can
 //! never be classified. When a frame that is not a master is there, a master
-//! row would classify and confirm that other file. When a folder is there, a
+//! row would classify and confirm that other file; the old master row may come
+//! from any image file whose text holds `\`, also one that is no longer a
+//! master, so every such file is a source. Only the cases where confirm would
+//! act on another file (that frame, or a path outside the root) are checked
+//! for a file this scan does not read as a master. When a folder is there, a
 //! master row names something that cannot be a master file; when this scan
 //! stores that folder, its source groups stay, and only the master item and
 //! its own overrides go.
@@ -53,7 +57,9 @@
 //! plans covers every way a link goes away (cancel, discard, a failed apply,
 //! the startup repair sweep) and does not race the plan listener.
 //!
-//! On Windows the wire text never contains `\`, so nothing is ever found.
+//! On Windows `\` is a separator, so the wire text never contains it, and
+//! `old_text_under` returns nothing for the walk's own paths (its
+//! `cfg!(windows)` guard): nothing is ever found.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashSet;
@@ -74,14 +80,16 @@ use crate::scan::ScannedInboxItem;
 pub struct LegacyRows {
     /// Folder paths: the source group and its items.
     pub folders: Vec<String>,
-    /// Master item paths.
+    /// Master item paths. Each is the old text of an image file this scan
+    /// lists, also one it no longer reads as a master: the old scan may have
+    /// read that file as one and stored a master row there.
     pub masters: Vec<String>,
     /// Master item paths that now name a folder this scan stores. A master
     /// item names a file, so such a row is stale too, but the source groups at
     /// its path are the folder's and stay: only the item and its own
     /// overrides go. A folder the scan does not store (empty, or holding only
-    /// subfolders) has no group of its own, so a master row there is listed
-    /// in `masters` and goes with its groups.
+    /// subfolders or other files) has no group of its own, so a master row
+    /// there is listed in `masters` and goes with its groups.
     pub masters_at_folders: Vec<String>,
     /// Master item paths this scan stores itself that are also the old text
     /// of an image file it lists, as `a/b.fits` is for `a\b.fits`. The row is
@@ -139,14 +147,28 @@ pub(crate) fn find(
             rows.folders.push(old);
         }
     }
-    for old in masters.iter().filter_map(|text| old_text(text)) {
+    // Every image file whose text holds `\`: the old scan may have read it as
+    // a master and stored a master row at its old text, whatever this scan
+    // reads in it now.
+    let old_images =
+        items.iter().flat_map(|item| item.fits_files.iter().chain(&item.xisf_files)).filter_map(
+            |file| Some((old_text_under(root, file)?, master_files.contains(file.as_path()))),
+        );
+    for (old, is_master) in old_images {
         if masters.contains(old.as_str()) {
-            // The nested master's own row, refreshed below.
-            continue;
-        }
-        if never_current(&old) || frames.contains(&root.join(&old).as_path()) {
+            // The nested master's own row. The old scan may have filled its
+            // master fields from this file; rewriting them from its own file
+            // is always right.
+            rows.masters_to_refresh.push(old);
+        } else if never_current(&old) || frames.contains(&root.join(&old).as_path()) {
+            // A master row there would plan a path outside the root, or a
+            // frame that is not a master.
             rows.masters.push(old);
-        } else {
+        } else if is_master {
+            // A master row at an absent path or at a folder cannot be
+            // classified, so it is looked up only for a file this scan reads
+            // as a master; for any other file that would stat, and delete at,
+            // every backslash frame on every scan.
             match look_up(root, &old) {
                 Entry::Folder if folders.contains(old.as_str()) => {
                     rows.masters_at_folders.push(old);
@@ -154,19 +176,6 @@ pub(crate) fn find(
                 Entry::Absent | Entry::Folder => rows.masters.push(old),
                 Entry::Other | Entry::Unknown => {}
             }
-        }
-    }
-    // The old scan may have read any image file whose text holds `\` as a
-    // master and filled the master row at its old text from it, whatever this
-    // scan reads in it now. Rewriting a kept row from its own file is always
-    // right, so every such row this scan stores is refreshed.
-    for old in items
-        .iter()
-        .flat_map(|item| item.fits_files.iter().chain(&item.xisf_files))
-        .filter_map(|file| old_text_under(root, file))
-    {
-        if masters.contains(old.as_str()) {
-            rows.masters_to_refresh.push(old);
         }
     }
     for paths in [
