@@ -26,7 +26,7 @@ export default {
     // bypasses theming and the contrast checks run on the token set.
     'color-no-hex': true,
     // Regex with /i: CSS function names are case-insensitive, so RGB() is rgb().
-    'function-disallowed-list': ['/^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i'],
+    'function-disallowed-list': ['/^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|device-cmyk)$/i'],
     // Named colours (`red`, `black`) are raw literals too. The rule leaves
     // transparent, currentColor and the CSS-wide keywords alone.
     'color-named': 'never',
