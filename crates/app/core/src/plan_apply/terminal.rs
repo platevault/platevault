@@ -162,6 +162,10 @@ pub(super) async fn handle_completed(
         return;
     }
 
+    // TEMPORARY (fail-first evidence, reverted before review): widen the window
+    // between the terminal state commit and the rest of the handler.
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
     let _ = apply_repo::append_event(
         pool,
         &new_id(),
