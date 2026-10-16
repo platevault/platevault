@@ -1,13 +1,15 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { filesUnder } from "@/domain/disk"
-import { applyPlan, projectPaths } from "@/domain/project-view"
+import { fileAt, filesUnder } from "@/domain/disk"
+import { applyPlan, processingMasters, projectPaths } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
 import type { Operation, Project } from "@/domain/types"
+import { m, say } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { cancelOperation, isSettled, registerOperationHandlers } from "@/store/operations"
-import { deleteFileExternally, setViewFileHeld } from "@/store/simulation"
+import { createExternalFile, deleteFileExternally, setViewFileHeld } from "@/store/simulation"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { type ApplyPhase, applyPhase, PROJECT_VIEW_HANDLERS, startApply } from "./project-view"
+import { adoptionCheck, adoptProcessingMaster, type ApplyPhase, applyPhase, PROJECT_VIEW_HANDLERS, reviewLeftover, startApply } from "./project-view"
+import { setFramesExcluded } from "./projects"
 
 // "NGC 7000 HOO" has an applied View with pending changes (a session added since, three Ha frames marked Unusable) and
 // the user's notes.txt in View, a file PlateVault didn't place.
@@ -115,5 +117,68 @@ describe("a failed or canceled Apply leaves the current View intact (PREP-FR-06)
     expect(folder(paths().building)).toEqual([])
     expect(folder(paths().view)).toEqual(before.files)
     expect(project().view).toEqual(before.view)
+  })
+})
+
+describe("View (previous)/ holds kept files (D-W110; stopgap while the merge rule is open, decision record §9)", () => {
+  /** Apply once, keep the unticked notes.txt it left in View (previous)/, then make the next Apply's change and a new unplaced file. */
+  function keptThenChanged(): string {
+    runUntil(start())
+    expect(reviewLeftover(CYGNUS, "notes.txt", "keep")).toEqual({ ok: true })
+    const input = project().inputs[0]!
+    expect(setFramesExcluded(CYGNUS, input.sessionId, [store.getState().catalog.sessions[input.sessionId]!.assetIds[0]!], true)).toEqual({ ok: true })
+    createExternalFile(`${paths().view}/tool-log.txt`)
+    return "tool-log.txt"
+  }
+
+  it("refuses an Apply that would leave more files beside the kept ones, and keeps the current View", () => {
+    const unplaced = keptThenChanged()
+    const before = { view: project().view, files: folder(paths().view) }
+    const plan = applyPlan(store.getState(), project())
+    expect(plan.refusals).toEqual([])
+    const { result, operationId } = startApply(CYGNUS, { fingerprint: plan.fingerprint, tickedUnplaced: [] })
+    expect(result).toMatchObject({ ok: false, reason: "refused", reasons: [m.apply_refused_previous_kept({ count: 1 })] })
+    expect(operationId).toBeNull()
+    expect(project().view).toEqual(before.view)
+    expect(folder(paths().view)).toEqual(before.files)
+    expect(project().previous?.leftovers).toContainEqual(expect.objectContaining({ path: "notes.txt", kept: true }))
+    expect(fileAt(store.getState().disk, `${paths().view}/${unplaced}`)).toBeDefined()
+  })
+
+  it("goes ahead once every file PlateVault didn't place is ticked, so nothing new joins the kept files", () => {
+    const unplaced = keptThenChanged()
+    const plan = applyPlan(store.getState(), project())
+    const { result, operationId } = startApply(CYGNUS, { fingerprint: plan.fingerprint, tickedUnplaced: [unplaced] })
+    expect(result).toEqual({ ok: true })
+    expect(runUntil(operationId!).at(-1)).toBe("swapping")
+    expect(operation(operationId!).status).toBe("succeeded")
+  })
+})
+
+describe("adopting a generated master refuses PlateVault's own unregistered copy (CAL-FR-06, decision record §9)", () => {
+  const generated = () => processingMasters(store.getState(), project()).find((o) => o.kind === "flat")!.file
+
+  it("names the copy at the destination and adds nothing", () => {
+    const check = adoptionCheck(store.getState(), CYGNUS, generated().path)
+    expect(check.ok).toBe(false)
+    if (check.ok) return
+    expect(check.ownCopy).not.toBeNull()
+    expect(check.reasons.map((r) => say(m, r))).toEqual([m.adopt_refused_own_copy({ path: check.ownCopy! })])
+    const masters = store.getState().catalog.masters
+    expect(adoptProcessingMaster(CYGNUS, generated().path, generated().sha256)).toMatchObject({ ok: false, reason: "refused" })
+    expect(store.getState().catalog.masters).toEqual(masters)
+    expect(fileAt(store.getState().disk, check.ownCopy!)).toBeDefined()
+  })
+
+  it("moves the reviewed copy to the OS Trash, then adds the master as a dated version", () => {
+    const check = adoptionCheck(store.getState(), CYGNUS, generated().path)
+    const own = check.ok ? null : check.ownCopy
+    const file = generated()
+    expect(adoptProcessingMaster(CYGNUS, file.path, file.sha256, { trashOwnCopy: true })).toEqual({ ok: true })
+    const state = store.getState()
+    expect(state.disk.trash.some((t) => t.originalPath === own)).toBe(true)
+    const version = Object.values(state.catalog.masters).flatMap((mst) => mst.versions).find((v) => v.origin.sourcePath === file.path)
+    expect(version).toMatchObject({ origin: { kind: "generated", projectId: CYGNUS }, adoption: { destinationPath: own, verifiedSha256: file.sha256 } })
+    expect(project().masterOffers).toContainEqual(expect.objectContaining({ path: file.path, state: "adopted" }))
   })
 })
