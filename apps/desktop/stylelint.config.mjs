@@ -25,7 +25,9 @@ export default {
     // Hand-written CSS takes colour from tokens only (#1334): a raw literal
     // bypasses theming and the contrast checks run on the token set.
     'color-no-hex': true,
-    'function-disallowed-list': ['rgb', 'rgba', 'hsl', 'hsla'],
+    'function-disallowed-list': [
+      'rgb', 'rgba', 'hsl', 'hsla', 'hwb', 'lab', 'lch', 'oklab', 'oklch', 'color',
+    ],
   },
   ignoreFiles: ['dist/**', 'node_modules/**', '.ds-css/**'],
   overrides: [
