@@ -6,6 +6,43 @@
  */
 
 /**
+ * This interface was referenced by `LogExport`'s JSON-Schema
+ * via the `definition` "Error".
+ */
+export type Error =
+  | {
+      /**
+       * The first four codes reject the request. database.error, serialise.error and io.error report a failure reading the log or writing the file.
+       */
+      code:
+        | "path.write.denied"
+        | "path.parent.missing"
+        | "range.invalid"
+        | "format.unsupported"
+        | "database.error"
+        | "serialise.error"
+        | "io.error";
+      message: string;
+      details?: {
+        [k: string]: unknown;
+      };
+    }
+  | {
+      /**
+       * The write failed part-way and left the export's own incomplete file at the destination.
+       */
+      code: "export.unfinished_file";
+      message: string;
+      details: {
+        /**
+         * The absolute path of the incomplete file left at the destination.
+         */
+        path: string;
+        [k: string]: unknown;
+      };
+    };
+
+/**
  * Export a window of log entries to a JSON file at a user-chosen path. The format is fixed to JSON; the format field is retained for forward compatibility but is not surfaced as a user setting.
  */
 export interface LogExport {
@@ -62,30 +99,4 @@ export interface LogExport {
         errors: Error[];
       };
   [k: string]: unknown;
-}
-/**
- * This interface was referenced by `LogExport`'s JSON-Schema
- * via the `definition` "Error".
- */
-export interface Error {
-  /**
-   * The first four codes reject the request. database.error, serialise.error and io.error report a failure reading the log or writing the file. export.unfinished_file means the write failed part-way and left the export's own incomplete file at the destination; details.path names it.
-   */
-  code:
-    | "path.write.denied"
-    | "path.parent.missing"
-    | "range.invalid"
-    | "format.unsupported"
-    | "database.error"
-    | "serialise.error"
-    | "io.error"
-    | "export.unfinished_file";
-  message: string;
-  details?: {
-    /**
-     * For export.unfinished_file: the absolute path of the incomplete file left at the destination.
-     */
-    path?: string;
-    [k: string]: unknown;
-  };
 }
