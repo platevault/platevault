@@ -81,16 +81,20 @@ export interface NightPickerProps {
   /** ‹ › step a week instead of a night. */
   weekStep?: boolean
   disabled?: boolean
+  /** Inside a Field: the control id and the label and description that name the group instead of "Night". */
+  id?: string
+  "aria-labelledby"?: string
+  "aria-describedby"?: string
 }
 
 /** ‹ · night · › · Today, as one labelled group. Today stays in place (disabled) on tonight, so nothing moves. */
-export function NightPicker({ value, onChange, today, min = today, weekStep = false, disabled = false }: NightPickerProps) {
+export function NightPicker({ value, onChange, today, min = today, weekStep = false, disabled = false, id, "aria-labelledby": labelledBy, "aria-describedby": describedBy }: NightPickerProps) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
   const step = weekStep ? 7 : 1
   const choose = (night: string) => onChange(night < min ? min : night)
   return (
-    <span role="group" aria-label={m.tonight_night()} className="inline-flex items-center gap-0.5" data-night-picker>
+    <span role="group" id={id} aria-label={labelledBy ? undefined : m.tonight_night()} aria-labelledby={labelledBy} aria-describedby={describedBy} className="inline-flex items-center gap-0.5" data-night-picker>
       <IconButton label={weekStep ? m.picker_week_previous() : m.targets_night_previous()} icon={ChevronLeft} disabled={disabled || value <= min} onClick={() => choose(shiftNight(value, -step))} />
       <Popover open={open} onOpenChange={setOpen}>
         {/* A fixed minimum width, so a shorter date never moves the › and Today buttons. */}

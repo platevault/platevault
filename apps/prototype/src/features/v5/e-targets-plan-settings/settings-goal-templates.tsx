@@ -133,13 +133,13 @@ export function GoalTemplatesSettingsPage() {
 
   return (
     <SettingsPage title={m.settings_goal_templates()}>
-      <ListSection<GoalTemplate> title={m.template_built_in()} table={{ ...table(BUILT_IN_GOAL_TEMPLATES), label: m.template_table_caption({ group: m.template_built_in() }), rowActions: (t: GoalTemplate): MenuItem[] => [duplicateAction(t)] }} />
+      <ListSection<GoalTemplate> title={m.template_built_in()} table={{ ...table(BUILT_IN_GOAL_TEMPLATES), label: m.template_table_caption_built_in(), rowActions: (t: GoalTemplate): MenuItem[] => [duplicateAction(t)] }} />
       <ListSection<GoalTemplate>
         title={m.template_yours()}
         add={create}
         table={{
           ...table(user),
-          label: m.template_table_caption({ group: m.template_yours() }),
+          label: m.template_table_caption_yours(),
           empty: <EmptyState icon={Copy} title={m.template_none_yours()} action={<ActionButton action={create} />} />,
           rowActions: (t: GoalTemplate): MenuItem[] => [
             { id: "edit", label: m.settings_edit(), icon: Pencil, opensDialog: true, run: () => setDraft({ id: t.id, name: t.name, values: structuredClone(t.values), conditions: structuredClone(templateConditions(t)), title: m.settings_edit_title({ name: t.name }) }) },

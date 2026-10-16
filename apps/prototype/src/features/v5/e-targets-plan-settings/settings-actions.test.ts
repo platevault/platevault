@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { rigBands, unknownFilterValues } from "@/domain/derive"
 import { rigVersions, sessionRigVersion } from "@/domain/indexing"
+import { shiftNight } from "@/domain/planning"
 import { createSeed } from "@/domain/seed"
 import type { OpticalTrain } from "@/domain/types"
+import { setCameraAlias } from "@/store/actions/settings"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { filterName, type RigInput, removeEquipment, saveCamera, saveFilter, saveRig } from "./settings-actions"
+import { cameraLabel, camerasNeedingAlias, filterName, type RigInput, removeEquipment, rigVersionSessionCounts, saveCamera, saveFilter, saveRig } from "./settings-actions"
 
 const RIG = "otr_esprit"
 /** A night after every seed rig version began, so an edit there starts a new version. */
@@ -72,20 +74,58 @@ describe("Settings › Equipment: rig versions (PLAN-EQ-FR-07)", () => {
     expect(saveRig(RIG, asInput(rigNow(), { rotator: !before.rotator, from: before.versionFrom })).result).toMatchObject({ ok: false, reason: "refused" })
     expect(rigNow().versionId).toBe(before.versionId)
   })
+
+  it("a new camera from a night leaves every session's captured version, its pins and every Project as they were (LIB-AC-29, PLAN-EQ-AC-08)", () => {
+    const before = store.getState().catalog
+    const rig = rigNow()
+    const held = Object.values(before.sessions).filter((s) => !s.supersededBy && sessionRigVersion(before, s)?.rigId === RIG)
+    expect(held.length).toBeGreaterThan(0)
+    expect(saveRig(RIG, asInput(rig, { cameraId: "cam_2600b" })).result.ok).toBe(true)
+    const after = store.getState().catalog
+    expect(after.opticalTrains[RIG]).toMatchObject({ cameraId: "cam_2600b", versionFrom: LATER })
+    expect(after.opticalTrains[RIG]!.history.at(-1)).toMatchObject({ id: rig.versionId, cameraId: rig.cameraId })
+    for (const session of held) {
+      const now = after.sessions[session.id]!
+      expect(now.rigVersionId).toBe(session.rigVersionId)
+      expect(sessionRigVersion(after, now)?.version.id).toBe(sessionRigVersion(before, session)?.version.id)
+      expect(now.calibration).toEqual(session.calibration)
+    }
+    expect(after.projects).toEqual(before.projects)
+    // The version table counts the sessions each version holds: the edit moved none onto the new one.
+    const counts = rigVersionSessionCounts(after, RIG)
+    expect(counts.get(rig.versionId)).toBe(held.length)
+    expect(counts.get(after.opticalTrains[RIG]!.versionId)).toBeUndefined()
+  })
+
+  it("provisional: a version dated before a session's night leaves the version that session recorded (PLAN-EQ-AC-09)", () => {
+    const rig = rigNow()
+    const { catalog } = store.getState()
+    const later = Object.values(catalog.sessions).find((s) => !s.supersededBy && s.rigVersionId === rig.versionId && s.night > shiftNight(rig.versionFrom, 1))
+    expect(later).toBeDefined()
+    expect(saveRig(RIG, asInput(rig, { rotator: !rig.rotator, from: shiftNight(rig.versionFrom, 1) })).result.ok).toBe(true)
+    const now = store.getState().catalog
+    expect(now.sessions[later!.id]!.rigVersionId).toBe(rig.versionId)
+    expect(sessionRigVersion(now, now.sessions[later!.id]!)?.version.id).toBe(rig.versionId)
+  })
 })
 
 describe("Settings › Equipment: camera alias and calibration defaults (PLAN-EQ-FR-08)", () => {
-  it("a second camera of a model is refused without an alias, adding nothing, and saves with its own (PLAN-EQ-AC-10)", () => {
+  it("a second camera of a model is refused until both have their own alias, adding nothing (PLAN-EQ-AC-10)", () => {
     const first = store.getState().catalog.cameras.cam_533!
     const count = () => Object.values(store.getState().catalog.cameras).filter((c) => c.name === first.name).length
     const input = { name: first.name, kind: first.kind, widthPx: first.widthPx, heightPx: first.heightPx, pixelSizeUm: first.pixelSizeUm, physicalAlias: "", noDarks: false, noBias: false }
     expect(saveCamera(null, input).result).toMatchObject({ ok: false, reason: "refused" })
-    expect(count()).toBe(1)
     expect(saveCamera(null, { ...input, physicalAlias: "2600MM #1" }).result).toMatchObject({ ok: false, reason: "refused" })
+    // Its own alias is not enough while the first ASI533MC still has none: the dialog asks for that one too.
+    expect(camerasNeedingAlias(store.getState().catalog, "", first.name).map((c) => c.id)).toEqual([first.id])
+    expect(saveCamera(null, { ...input, physicalAlias: "533 B" }).result).toMatchObject({ ok: false, reason: "refused" })
+    expect(count()).toBe(1)
+    expect(setCameraAlias(first.id, "533 A").ok).toBe(true)
     const saved = saveCamera(null, { ...input, physicalAlias: "533 B" })
     expect(saved.result.ok).toBe(true)
     expect(store.getState().catalog.cameras[saved.id]).toMatchObject({ name: first.name, physicalAlias: "533 B" })
     expect(count()).toBe(2)
+    expect(cameraLabel(store.getState().catalog.cameras[saved.id]!)).toBe(`${first.name} · 533 B`)
   })
 
   it("Don't use bias settles the camera's unpinned bias as No by the camera default, and keeps every pin", () => {
@@ -107,13 +147,23 @@ describe("Settings › Equipment: camera alias and calibration defaults (PLAN-EQ
 })
 
 describe("Settings › Equipment: same-named filters read apart", () => {
+  it("the demo has no two filters with one name: the rigs that carry the same Ha share one record", () => {
+    const filters = Object.values(store.getState().catalog.filters)
+    const names = filters.map((f) => f.name.toLowerCase())
+    expect(new Set(names).size).toBe(names.length)
+    const ha = filters.find((f) => f.name === "Ha")!
+    const carriers = Object.values(store.getState().catalog.opticalTrains).filter((r) => r.filterIds.includes(ha.id))
+    expect(carriers.map((r) => r.id).sort()).toEqual(["otr_fra400", "otr_redcat"])
+  })
+
   it("two filters named Ha each add their FILTER matches, so their items differ", () => {
+    expect(saveFilter(null, { name: "Ha", matches: ["Ha 3nm"], bands: ["Ha"] }).result.ok).toBe(true)
     const filters = Object.values(store.getState().catalog.filters)
     const has = filters.filter((f) => f.name === "Ha")
     expect(has).toHaveLength(2)
     const labels = has.map((f) => filterName(f, has))
     expect(new Set(labels).size).toBe(2)
-    expect(labels).toEqual(expect.arrayContaining(["Ha · Ha, H-alpha", "Ha · Ha"]))
+    expect(labels).toEqual(expect.arrayContaining(["Ha · Ha, H-alpha", "Ha · Ha 3nm"]))
     const oiii = filters.find((f) => f.name === "OIII")!
     expect(filterName(oiii, filters)).toBe("OIII")
   })

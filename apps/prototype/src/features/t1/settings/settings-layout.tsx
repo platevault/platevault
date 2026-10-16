@@ -36,11 +36,7 @@ export function SettingsLayout() {
   return (
     <>
       <PageHeader title={m.nav_settings()} />
-      <ListDetail
-        listLabel={m.settings_sections()}
-        list={<NavList label={m.settings_sections()} groups={sectionGroups()} current={currentSection(pathname)} surface="content" />}
-        detail={<Outlet />}
-      />
+      <ListDetail list={<NavList label={m.settings_sections()} groups={sectionGroups()} current={currentSection(pathname)} surface="content" />} detail={<Outlet />} />
     </>
   )
 }

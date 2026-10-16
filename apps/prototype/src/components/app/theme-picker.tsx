@@ -129,7 +129,7 @@ export function ThemePicker() {
             <label key={option.id} className={OPTION} data-theme-option={option.id}>
               <ThemeSwatch id={option.id as ThemeId} />
               <span className="flex items-center gap-1.5 px-0.5 text-xs">
-                <RadioGroupItem value={option.id} />
+                <RadioGroupItem value={option.id} aria-label={option.name} />
                 <span className="truncate">{option.name}</span>
               </span>
             </label>

@@ -1,12 +1,15 @@
 /**
  * `/settings/applications` — Applications (PREP-FR-01, PREP-FR-02,
  * PREP-FR-04, PRJ-FR-28; J23 S8; plan §4a, C AP1-AP7). One table of
- * application profiles: the application, whether its profile is verified,
- * the located executable and what PlateVault detects there, and its launch
- * arguments, which every application takes. A row's disclosure shows the
- * profile's evidence. Locate opens the OS chooser with the applications
- * PlateVault detects on this computer; Add application adds a generic
- * profile. Project defaults hold the View mode a new Project starts with,
+ * application profiles: the applications PlateVault detects and has a
+ * profile for, then the ones the user added. Each row shows whether its
+ * profile is verified, the located executable and what PlateVault detects
+ * there, and its launch arguments, which every application takes; its
+ * disclosure says how the application treats corrected values. There is no
+ * generic "Open in…" row: Add application… adds any other application, with
+ * its executable and launch arguments, and only those can be removed. Locate
+ * opens the OS chooser with the applications PlateVault detects on this
+ * computer. Project defaults hold the View mode a new Project starts with,
  * the GROUP and PANEL folder keywords (a Project may set its own) and, on
  * Windows, the Developer Mode check symlinks need (P-PREP3).
  */
@@ -29,6 +32,7 @@ import { type Messages, say } from "@/lib/i18n"
 import { addApplicationProfile, checkExecutable, keywordRefusals, locateExecutable, removeApplicationProfile, setDefaultInputMode, setGroupKeywords, setLaunchArgs } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 
+/** Profile order: the applications PlateVault has a profile for, then the ones the user added (by name). */
 const ORDER = ["pixinsight-wbpp", "siril", "seti-astro", "generic"]
 
 /** The tokens launch arguments may use; PlateVault fills them in at launch. */
@@ -36,18 +40,11 @@ const ARGUMENT_TOKENS = ["viewFolder"] as const
 
 const INPUT_MODES: InputMode[] = ["symlink", "copy"]
 
-/** The profile's evidence and what it does not support, under its row's disclosure (D04, PREP-FR-01). */
+/** What the profile does not support, under its row's disclosure (D04, PREP-FR-01): corrected values only reach it through its configuration, if at all. */
 function ProfileDetails({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
   const c = profile.capability
-  return (
-    <KeyValueList
-      items={[
-        { label: m.apps_evidence(), value: say(m, c.evidence) },
-        { label: m.apps_corrected_values(), value: `${c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()} · ${m.apps_rename_note()}` },
-      ]}
-    />
-  )
+  return <KeyValueList items={[{ label: m.apps_corrected_values(), value: `${c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()} · ${m.apps_rename_note()}` }]} />
 }
 
 /** The applications PlateVault detects on this computer, for the Detected choice. */
@@ -155,7 +152,18 @@ function AddApplicationDialog({ open, onClose }: { open: boolean; onClose: () =>
   )
 }
 
-/** The GROUP and PANEL keyword names every Project's View uses unless it sets its own (PRJ-FR-28). Refused inline while a name cannot name a View folder. */
+/** The keyword field a refusal names: the one whose name it quotes; "GROUP and PANEL need different names" goes under the panel keyword. */
+function keywordErrors(m: Messages, keywords: GroupKeywords): Record<keyof GroupKeywords, string[]> {
+  const errors: Record<keyof GroupKeywords, string[]> = { group: [], panel: [] }
+  for (const reason of keywordRefusals(keywords)) {
+    const named = "key" in reason ? reason.params.name : undefined
+    const fields: (keyof GroupKeywords)[] = named === undefined ? ["panel"] : (["group", "panel"] as const).filter((field) => (keywords[field] || "–") === named)
+    for (const field of fields) errors[field].push(say(m, reason))
+  }
+  return errors
+}
+
+/** The GROUP and PANEL keyword names every Project's View uses unless it sets its own (PRJ-FR-28). Refused inline, under the field it names, while a name cannot name a View folder. */
 function KeywordsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const m = useMessages()
   const current = useStore((s) => s.settings.keywords)
@@ -167,12 +175,13 @@ function KeywordsDialog({ open, onClose }: { open: boolean; onClose: () => void 
   }
   const label = m.settings_save()
   const next = { group: keywords.group.trim(), panel: keywords.panel.trim() }
-  const reasons = Object.fromEntries(keywordRefusals(next).map((reason, i) => [String(i), say(m, reason)]))
+  const errors = keywordErrors(m, next)
+  const reasons = Object.fromEntries([...errors.group, ...errors.panel].map((reason, i) => [String(i), reason]))
   const confirm: Action = { id: "save-keywords", label, kind: "primary", unavailable: blockedByErrors(label, reasons), run: () => setGroupKeywords(next) }
   return (
     <FormDialog open={open} onOpenChange={(value) => !value && onClose()} title={m.settings_label_group_keywords()} size="sm" confirm={confirm}>
-      <TextField label={m.apps_keyword_group()} value={keywords.group} onChange={(group) => setKeywords({ ...keywords, group })} mono autoFocus />
-      <TextField label={m.apps_keyword_panel()} value={keywords.panel} onChange={(panel) => setKeywords({ ...keywords, panel })} mono />
+      <TextField label={m.apps_keyword_group()} value={keywords.group} onChange={(group) => setKeywords({ ...keywords, group })} error={errors.group} mono autoFocus />
+      <TextField label={m.apps_keyword_panel()} value={keywords.panel} onChange={(panel) => setKeywords({ ...keywords, panel })} error={errors.panel} mono />
     </FormDialog>
   )
 }
@@ -197,7 +206,7 @@ export function SettingsApplicationsPage() {
   const [adding, setAdding] = useState(false)
   const [editingKeywords, setEditingKeywords] = useState(false)
   const { save, indicator } = useSaveState()
-  const rows = Object.values(profiles).sort((a, b) => ORDER.indexOf(a.application) - ORDER.indexOf(b.application))
+  const rows = Object.values(profiles).sort((a, b) => ORDER.indexOf(a.application) - ORDER.indexOf(b.application) || a.name.localeCompare(b.name))
 
   function locate(profile: ApplicationProfile): Action {
     return { id: "locate", label: profile.executablePath ? m.apps_change_action() : m.apps_locate_action(), opensDialog: true, run: () => setLocating(profile) }

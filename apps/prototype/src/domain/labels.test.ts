@@ -6,23 +6,26 @@ import type { ApplicationProfile, Catalog } from "./types"
 
 describe("orderedProfiles", () => {
   const demo = createSeed("demo").catalog
+  const app = Object.values(demo.profiles)[0]!
+  /** An application the user added (Add application…): a generic launcher under the name they gave it. */
+  const added = (id: string, name: string): ApplicationProfile => ({ ...app, id, name, application: "generic", capability: { ...app.capability, verified: false } })
 
-  it("lists the applications by name and the generic profile last", () => {
-    const generic = Object.values(demo.profiles).find((p) => p.application === "generic")!
-    const app = Object.values(demo.profiles).find((p) => p.application !== "generic")!
-    // Insert the generic profile first and an "Aaa" application after it, so neither order nor insertion decides.
-    const profiles: Catalog["profiles"] = { [generic.id]: generic, ...demo.profiles, prof_aaa: { ...app, id: "prof_aaa", name: "Aaa" } as ApplicationProfile }
-    const ordered = orderedProfiles({ profiles })
-    expect(ordered.at(-1)?.id).toBe(generic.id)
-    const names = ordered.slice(0, -1).map((p) => p.name)
-    expect(names[0]).toBe("Aaa")
-    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)))
-    expect(ordered.filter((p) => p.application === "generic")).toHaveLength(1)
+  it("ships no generic Open in… profile: the demo lists only the applications PlateVault has a profile for", () => {
+    expect(Object.values(demo.profiles).filter((p) => p.application === "generic")).toEqual([])
   })
 
-  it("words the generic profile as Other app and an application by its name", () => {
-    const ordered = orderedProfiles(demo)
-    expect(say(m, profileRef(ordered.at(-1)!))).toBe(m.startrun_profile_other())
-    expect(say(m, profileRef(ordered[0]!))).toBe(ordered[0]!.name)
+  it("lists the applications by name, then the ones the user added by name", () => {
+    // Insert the added ones first and an "Aaa" application last, so neither order nor insertion decides.
+    const profiles: Catalog["profiles"] = { prof_zz: added("prof_zz", "Zeta tool"), prof_app: added("prof_app", "Astro Pixel Processor"), ...demo.profiles, prof_aaa: { ...app, id: "prof_aaa", name: "Aaa" } }
+    const ordered = orderedProfiles({ profiles })
+    expect(ordered.slice(-2).map((p) => p.id)).toEqual(["prof_app", "prof_zz"])
+    const names = ordered.slice(0, -2).map((p) => p.name)
+    expect(names[0]).toBe("Aaa")
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it("words every profile by its name, an added application included", () => {
+    expect(say(m, profileRef(app))).toBe(app.name)
+    expect(say(m, profileRef(added("prof_app", "Astro Pixel Processor")))).toBe("Astro Pixel Processor")
   })
 })

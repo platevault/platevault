@@ -185,14 +185,14 @@ export function unitCount(unit: OperationUnit, count: number): MessageRef {
   }
 }
 
-/** Application profiles in choice order: the applications by name, then the generic launcher last. */
+/** Application profiles in choice order: the applications PlateVault has a profile for, by name, then the ones the user added, by name. */
 export function orderedProfiles(catalog: Pick<Catalog, "profiles">): ApplicationProfile[] {
+  const byName = (a: ApplicationProfile, b: ApplicationProfile) => a.name.localeCompare(b.name)
   const profiles = Object.values(catalog.profiles)
-  const apps = profiles.filter((p) => p.application !== "generic").sort((a, b) => a.name.localeCompare(b.name))
-  return [...apps, ...profiles.filter((p) => p.application === "generic")]
+  return [...profiles.filter((p) => p.application !== "generic").sort(byName), ...profiles.filter((p) => p.application === "generic").sort(byName)]
 }
 
-/** A profile's name as a choice: an application's own name; the generic launcher reads "Other app" (`startrun_profile_other`). */
+/** A profile's name as a choice: the application's own name, or the name the user gave an application they added. */
 export function profileRef(profile: ApplicationProfile): MessageRef {
-  return profile.application === "generic" ? msg("startrun_profile_other") : verbatim(profile.name)
+  return verbatim(profile.name)
 }
