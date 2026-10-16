@@ -74,6 +74,7 @@ Owners: CAL, STO.
 - An existing entry at the destination path blocks adoption and is never overwritten; the path is checked again immediately before writing.
 - No master becomes reusable merely by discovery.
 - Amended by D-W97 and D-W98: a generated master is found in the Project's `Processing/` folder, and its reviewed cleanup is Wrap up's "Move N processing files to Trash (size)".
+- Amended by D-W119: when the entry at the destination is PlateVault's own unregistered copy, known by its recorded operation entry and digest, the refusal names it and offers a reviewed Move to Trash, and adoption then retries. The copy is never overwritten, reused or registered.
 
 ### D06
 
