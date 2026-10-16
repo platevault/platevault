@@ -214,23 +214,21 @@ jobs:
             }
             'Unsigned third-party PE' = {
               $path = 'nsis/$PLUGINSDIR/nsDialogs.dll'
-              $identity = $thirdParty[$path]
+              $expectedHash = '0000000000000000000000000000000000000000000000000000000000000000'
+              $actualHash = (Get-FileHash -LiteralPath "unpacked/$path" -Algorithm SHA256).Hash
               $signature = Get-AuthenticodeSignature -LiteralPath "unpacked/$path"
               $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
-              if ($signature.Status -ne 'Valid' -or $signer -cne 'Named publisher') {
-                throw "$path must carry a valid signature by a named publisher or match reviewed SHA-256 $($identity.sha256); found $($signature.Status), '$signer'"
-              }
-              throw 'the unsigned PE mutation unexpectedly passed'
+              if ($signature.Status -ne 'Valid' -and $actualHash -cne $expectedHash) { throw "$path must carry a valid signature by a named publisher or match reviewed SHA-256 $expectedHash; found $($signature.Status), '$signer', hash $actualHash" }
+              throw 'the unsigned third-party PE mutation unexpectedly passed'
             }
             'Wrong WiX publisher' = {
               $path = 'msi-streams/Binary.WixUIWixca'
               $file = Get-Item "unpacked/$path"
               $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
-              $identity = $thirdParty[$path]
-              $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+              $actualSigner = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
               $issuer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $true) } else { 'nobody' }
-              $wrongPublisher = 'Wrong publisher'
-              if ($signature.Status -ne 'Valid' -or $signer -cne $wrongPublisher -or $issuer -cne $identity.issuer) { throw "$path must carry a valid Authenticode signature by $wrongPublisher issued by $($identity.issuer); found $($signature.Status), '$signer' issued by '$issuer'" }
+              $wrongPublisher = "$actualSigner (mutation)"
+              if ($signature.Status -ne 'Valid' -or $actualSigner -cne $wrongPublisher -or $issuer -cne '.NET Foundation Projects Code Signing CA2') { throw "$path must carry a valid Authenticode signature by $wrongPublisher issued by .NET Foundation Projects Code Signing CA2; found $($signature.Status), '$actualSigner' issued by '$issuer'" }
               throw 'the wrong publisher mutation unexpectedly passed'
             }
             'WiX issuer' = {
