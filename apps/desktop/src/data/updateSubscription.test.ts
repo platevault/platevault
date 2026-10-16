@@ -294,14 +294,30 @@ describe('startUpdateSubscription', () => {
       vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
       push?.(status({ phase: 'available', version: '0.7.1' }));
 
+      // Past 0.7.0's due time: its timer must not have fired.
       vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
       expect(holder()).toBe('deciding');
+      expect(getUpdateOfferSnapshot()).toEqual(NO_OFFER);
       vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
       expect(getUpdateOfferSnapshot()).toEqual({
         version: '0.7.1',
         channel: 'in-app',
       });
       warn.mockRestore();
+    });
+
+    it('keeps a newer release’s system offer past the older release’s due time', async () => {
+      await startUpdateSubscription();
+      push?.(status({ phase: 'available', version: '0.7.0' }));
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS);
+      push?.(status({ phase: 'available', version: '0.7.1' }));
+      pushOffer?.({ version: '0.7.1', channel: 'system' });
+
+      vi.advanceTimersByTime(UPDATE_OFFER_DEADLINE_MS * 4);
+      expect(getUpdateOfferSnapshot()).toEqual({
+        version: '0.7.1',
+        channel: 'system',
+      });
     });
   });
 
