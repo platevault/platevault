@@ -647,7 +647,8 @@ impl Watched {
                     self.new.insert(key, relative.to_path_buf());
                 }
             }
-            // A folder's own change; folders that appear arrive as rescans.
+            // A folder's own change; folders that appear, or whose access
+            // changes, arrive as rescans.
             Entry::Folder => {}
             Entry::Other => {
                 if self.new.remove(&key).is_none() {

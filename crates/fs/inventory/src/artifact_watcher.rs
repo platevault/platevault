@@ -23,16 +23,17 @@
 //!
 //! [`start_tree_watcher`] is the same event source for a tree whose new
 //! folders must be watched too (the library's Captures locations): it never
-//! follows links and reports a folder that appears below a watched path as
-//! `NeedsRescan`. Both report an OS watcher error, an OS lost-events notice
-//! and a full channel (through the overflow flag) for a rescan.
+//! follows links and reports a folder that appears below a watched path, or
+//! whose permissions or owner change, as `NeedsRescan`. Both report an OS
+//! watcher error, an OS lost-events notice and a full channel (through the
+//! overflow flag) for a rescan.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use notify::event::ModifyKind;
+use notify::event::{MetadataKind, ModifyKind};
 use notify::{Event, EventKind, RecommendedWatcher};
 use tokio::sync::mpsc;
 
@@ -174,8 +175,10 @@ pub struct TreeWatch {
 /// `follow_symlinks` off), so a folder created or moved in below `paths` is
 /// not watched yet: it is reported as [`ArtifactEventKind::NeedsRescan`], and
 /// the consumer restarts the watcher over the new folder set and walks the
-/// tree for the files the new folder already holds. So is an event about a
-/// path that is not UTF-8, which cannot be forwarded. A link or junction at a
+/// tree for the files the new folder already holds. So is a change of a
+/// folder's permissions or owner, which can change what a walk lists below
+/// it while no event names the files there, and an event about a path that
+/// is not UTF-8, which cannot be forwarded. A link or junction at a
 /// path an event names is reported as that path, never followed, so a watched
 /// folder that a link replaced reaches the consumer like one that went away.
 /// The folders are listed before they are registered, in one batch; one
@@ -203,7 +206,8 @@ enum NewFolders {
     /// watched, on any volume.
     Skip,
     /// [`ArtifactEventKind::NeedsRescan`], because the folder is not watched;
-    /// so does an event about a path that is not UTF-8. A link or junction
+    /// so does a change of a folder's access ([`changes_access`]) and an
+    /// event about a path that is not UTF-8. A link or junction
     /// is forwarded as its own path. Only the folders on each path's own
     /// volume are watched.
     Rescan,
@@ -213,6 +217,20 @@ enum NewFolders {
 /// renamed to (or, where the platform cannot pair renames, from) its name.
 const fn brings_folder(kind: EventKind) -> bool {
     matches!(kind, EventKind::Create(_) | EventKind::Modify(ModifyKind::Name(_)))
+}
+
+/// Whether `kind` may change who can list a folder: its permissions, owner
+/// or access list changed (inotify `IN_ATTRIB`, `FSEvents` inode metadata or
+/// owner changes). Its timestamps and extended attributes do not. Windows
+/// reports no metadata kind, only `Modify(Any)`, also for a folder whose
+/// contents changed, so this never holds there.
+const fn changes_access(kind: EventKind) -> bool {
+    matches!(
+        kind,
+        EventKind::Modify(ModifyKind::Metadata(
+            MetadataKind::Any | MetadataKind::Permissions | MetadataKind::Ownership
+        ))
+    )
 }
 
 fn needs_rescan() -> ArtifactFileEvent {
@@ -278,8 +296,8 @@ fn forward_path(
         return send(ArtifactFileEvent { path: utf8, kind });
     }
     if utf8.is_dir() {
-        let unwatched = rescans && brings_folder(event_kind);
-        return !unwatched || send(needs_rescan());
+        let rescan = rescans && (brings_folder(event_kind) || changes_access(event_kind));
+        return !rescan || send(needs_rescan());
     }
     send(ArtifactFileEvent { path: utf8, kind })
 }
@@ -539,11 +557,36 @@ mod tests {
 
     #[test]
     fn only_creations_and_renames_bring_a_folder() {
-        use notify::event::{CreateKind, MetadataKind, RenameMode};
+        use notify::event::{CreateKind, RenameMode};
         assert!(brings_folder(EventKind::Create(CreateKind::Folder)));
         assert!(brings_folder(EventKind::Modify(ModifyKind::Name(RenameMode::To))));
         assert!(!brings_folder(EventKind::Modify(ModifyKind::Metadata(MetadataKind::WriteTime))));
         assert!(!brings_folder(EventKind::Remove(notify::event::RemoveKind::Folder)));
+    }
+
+    /// A folder whose permissions or owner changed may list other files now:
+    /// a tree watcher asks for a rescan. Its timestamps and extended
+    /// attributes change nothing a walk lists, and the artifact watcher
+    /// forwards no folder event.
+    #[test]
+    fn a_folder_access_change_asks_a_tree_watcher_for_a_rescan() {
+        let dir = tempfile::tempdir().unwrap();
+        let rescans = |kind: MetadataKind| {
+            let changed = Event::new(EventKind::Modify(ModifyKind::Metadata(kind)))
+                .add_path(dir.path().to_path_buf());
+            let mut kinds = Vec::new();
+            forward(Ok(changed.clone()), NewFolders::Rescan, |event| {
+                kinds.push(event.kind);
+                true
+            });
+            assert_eq!(forwarded(Ok(changed)), [] as [ArtifactEventKind; 0]);
+            kinds == [ArtifactEventKind::NeedsRescan]
+        };
+        assert!(rescans(MetadataKind::Any), "inotify IN_ATTRIB, FSEvents inode metadata");
+        assert!(rescans(MetadataKind::Permissions));
+        assert!(rescans(MetadataKind::Ownership));
+        assert!(!rescans(MetadataKind::WriteTime));
+        assert!(!rescans(MetadataKind::Extended));
     }
 
     #[tokio::test]

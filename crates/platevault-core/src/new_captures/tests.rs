@@ -904,6 +904,35 @@ async fn a_folder_listed_only_in_part_is_walked_once_it_lists_in_full() {
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
 }
 
+/// A counted folder made unreadable leaves the count, as the next scan
+/// cannot read it, and returns to it once readable: the watcher reports the
+/// folder's permission change, while no event names the files below it. A
+/// frame added to a readable folder is still counted live, without a walk.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_counted_folder_made_unreadable_leaves_the_count_until_it_is_readable() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let night = root.join("night");
+    frame(&night.join("Ha_001.fits"));
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 1).await;
+    frame(&night.join("Ha_002.fits"));
+    count_is(&watch, location.id, 2).await;
+    assert_eq!(walks(&watch), 1, "a new frame is counted live");
+
+    let _unlock = Unlock(&night);
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(fs::read_dir(&night).is_err(), "needs a user file permissions bind, not root");
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o755)).unwrap();
+    count_is(&watch, location.id, 2).await;
+}
+
 /// A root that is not UTF-8 cannot be watched (Linux only: macOS refuses
 /// such names), so every sweep walks it again and its count follows.
 #[cfg(target_os = "linux")]
