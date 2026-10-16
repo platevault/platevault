@@ -27,6 +27,7 @@ pub mod test_support;
 use std::fs::{self, Metadata};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use camino::Utf8Path;
 
@@ -199,18 +200,34 @@ fn same_volume(folder: &Metadata, root: &Metadata) -> bool {
 /// folders `enters` accepts from their no-follow metadata. An entry that
 /// cannot be `stat`ed is refused, as [`is_link_or_junction`] refuses it, and
 /// an unreadable folder is listed without its contents.
+///
+/// A folder counts only while it, and every folder above it, is still the
+/// real folder found when it was queued: one swapped for a link or junction
+/// before it is listed is left out, and so is one swapped while it was being
+/// read, with what that read found. No folder outside `root` is therefore
+/// returned through a swapped one. The folders are returned by path, so one
+/// swapped after this returns is followed by whatever opens that path.
 fn real_dirs(root: &Path, mut enters: impl FnMut(&Metadata) -> bool) -> Vec<PathBuf> {
-    if is_link_or_junction(root) {
-        return Vec::new();
-    }
-
-    let mut dirs = vec![root.to_path_buf()];
-    let mut stack = vec![root.to_path_buf()];
+    let meta = match fs::symlink_metadata(root) {
+        Ok(meta) if !is_link_or_junction_metadata(&meta) => meta,
+        // A missing root is listed alone; a link, a junction or any other
+        // failure refuses it.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return vec![root.to_path_buf()],
+        Ok(_) | Err(_) => return Vec::new(),
+    };
+    let mut dirs = Vec::new();
+    let mut stack = vec![Rc::new(Queued { path: root.to_path_buf(), meta, parent: None })];
 
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let is_root = dir.parent.is_none();
+        if !is_root && !still_queued(&dir) {
+            continue;
+        }
+        dirs.push(dir.path.clone());
+        let Ok(entries) = fs::read_dir(&dir.path) else {
             continue;
         };
+        let mut children = Vec::new();
         for entry in entries.flatten() {
             let path = entry.path();
             let Ok(meta) = fs::symlink_metadata(&path) else {
@@ -219,12 +236,51 @@ fn real_dirs(root: &Path, mut enters: impl FnMut(&Metadata) -> bool) -> Vec<Path
             if is_link_or_junction_metadata(&meta) || !meta.is_dir() || !enters(&meta) {
                 continue;
             }
-            dirs.push(path.clone());
-            stack.push(path);
+            children.push(Rc::new(Queued { path, meta, parent: Some(Rc::clone(&dir)) }));
         }
+        // A listing read through a folder swapped mid-read is not the tree's.
+        if !still_queued(&dir) {
+            if !is_root {
+                dirs.pop();
+            }
+            continue;
+        }
+        stack.extend(children);
     }
 
     dirs
+}
+
+/// A folder [`real_dirs`] queued, with its no-follow metadata then.
+struct Queued {
+    path: PathBuf,
+    meta: Metadata,
+    parent: Option<Rc<Self>>,
+}
+
+/// Whether `folder`, and every folder above it, is still the real folder it
+/// was when queued: not a link or junction and, on Unix, the same device
+/// and inode. Windows reports no stable folder id here, but a folder swapped
+/// for a junction or symlink reads as a reparse point.
+fn still_queued(folder: &Queued) -> bool {
+    folder.parent.as_deref().is_none_or(still_queued)
+        && fs::symlink_metadata(&folder.path).is_ok_and(|now| {
+            !is_link_or_junction_metadata(&now) && now.is_dir() && same_folder(&now, &folder.meta)
+        })
+}
+
+/// Whether two no-follow metadata reads are of the same folder.
+fn same_folder(now: &Metadata, then: &Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        now.dev() == then.dev() && now.ino() == then.ino()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (now, then);
+        true
+    }
 }
 
 /// Recursively collect every real (non-link) **file** under `root`, together
@@ -436,6 +492,42 @@ mod tests {
         every.sort();
         assert_eq!(on_volume, every);
         assert_eq!(real_dirs_on_volume(&dir.path().join("missing")), [] as [PathBuf; 0]);
+    }
+
+    /// A folder of the tree is swapped for a link to its moved original
+    /// while the walk runs: as `swap_at` is offered to `enters`, before the
+    /// swapped folder is listed or while it is.
+    #[cfg(unix)]
+    fn swapped_during_walk(swap_at: &str) -> Vec<PathBuf> {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("root");
+        fs::create_dir_all(root.join("a/b/c")).unwrap();
+        let trigger = fs::symlink_metadata(root.join(swap_at)).unwrap().ino();
+        let mut swapped = false;
+        let dirs = real_dirs(&root, |meta| {
+            if !swapped && meta.ino() == trigger {
+                let moved = dir.path().join("moved");
+                fs::rename(root.join("a"), &moved).unwrap();
+                std::os::unix::fs::symlink(&moved, root.join("a")).unwrap();
+                swapped = true;
+            }
+            true
+        });
+        assert!(swapped);
+        dirs
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_dirs_never_lists_through_a_folder_swapped_for_a_link() {
+        let names = |dirs: Vec<PathBuf>| -> Vec<String> {
+            dirs.iter().map(|dir| dir.file_name().unwrap().to_string_lossy().into_owned()).collect()
+        };
+        // `a` is swapped as the root's listing offers it: queued, then a link.
+        assert_eq!(names(swapped_during_walk("a")), ["root"]);
+        // `a` is swapped while it is read, as its listing offers `b`.
+        assert_eq!(names(swapped_during_walk("a/b")), ["root"]);
     }
 
     /// `mount` is a real folder below `root` that another volume is mounted
