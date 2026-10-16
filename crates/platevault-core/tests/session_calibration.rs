@@ -438,6 +438,29 @@ async fn a_cameras_dont_use_darks_settles_new_sessions_as_no_darks() {
 }
 
 #[tokio::test]
+async fn a_camera_default_never_replaces_a_pin_or_a_users_choice() {
+    let world = world(true).await;
+    world.ingest(true, &calibration()).await;
+    world.ingest(false, &lights()).await;
+    world.library.match_pending_calibration().await.unwrap();
+    let matched = world.status().await.calibration;
+    let dark = world.raw_set(DARKS[0]).await;
+    assert_eq!(pinned(&matched.dark), Some((dark, PinOrigin::Automatic)), "pinned before the rig");
+    let light = world.light().await.id;
+    let bias = world
+        .catalog()
+        .decline_calibration(&[(light, matched.generation)], InputKind::Bias)
+        .await
+        .unwrap()
+        .remove(0)
+        .bias;
+    world.confirm_rig().await;
+    let confirmed = world.status().await.calibration;
+    assert_eq!(confirmed.dark, matched.dark, "Don't use darks applies to waiting kinds only");
+    assert_eq!(confirmed.bias, bias, "the user's No stays");
+}
+
+#[tokio::test]
 async fn confirm_no_and_reassign_check_the_generation_the_user_saw() {
     let world = world(false).await;
     world.ingest(true, &calibration()).await;

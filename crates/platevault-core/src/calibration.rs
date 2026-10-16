@@ -582,6 +582,9 @@ fn rig_version(light: &SessionLight, input: &SessionInput) -> CriterionResult {
 /// Flats only: the largest ROTATANG difference over the flats' frames. Fine
 /// within the fine angle, a warning up to the offered angle, never offered
 /// beyond it; a missing angle reads unknown unless the rig has no rotator.
+/// The angles are the caller's settings; their defaults, fine within 2° and
+/// offered up to 5°, are the owner's approved starting values (decision
+/// record §8, 2026-10-15/16; CAL-FR-20, CAL-AC-26).
 fn flat_rotation(
     light: &SessionLight,
     input: &SessionInput,
