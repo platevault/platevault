@@ -5,6 +5,7 @@ import { createSeed, defaultFaults } from "@/domain/seed"
 import type { SeedName } from "@/domain/types"
 import { msg } from "@/lib/i18n"
 import { CALIBRATION_HANDLERS } from "./actions/calibration"
+import { PROJECT_VIEW_HANDLERS } from "./actions/project-view"
 import { STORAGE_HANDLERS } from "./actions/storage"
 import { FOUNDATION_HANDLERS } from "./actions/trash"
 import { type PrototypeState, recordActivity, SCHEMA_VERSION, store } from "./core"
@@ -72,7 +73,7 @@ export function initializeStore() {
   if (initialized) return
   initialized = true
   // Foundation handlers first, so a slice that owns the same kind replaces it.
-  registerOperationHandlers([...FOUNDATION_HANDLERS, ...CALIBRATION_HANDLERS, ...STORAGE_HANDLERS])
+  registerOperationHandlers([...FOUNDATION_HANDLERS, ...CALIBRATION_HANDLERS, ...STORAGE_HANDLERS, ...PROJECT_VIEW_HANDLERS])
   for (const slice of Object.values(SLICES)) if (slice.operations) registerOperationHandlers(slice.operations)
   store.replace(launchChecks(interruptRunningOperations(load() ?? fromSeed("empty"))))
   // A dismissed issue that ends or changes is forgotten, so it comes back if it returns (P-ISS1).
