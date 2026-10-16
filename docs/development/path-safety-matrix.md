@@ -84,7 +84,7 @@ junctions and reparse-point kinds `is_symlink()` does not classify.
 | V5 | A stored path containing NUL is refused when rebuilt | same | same | same | `platevault-model/src/lib.rs:237-254` | none | **UNTESTED** |
 | V6 | Image extensions match ASCII case-insensitively (`.FITS`, `.Xisf`) | same | same | same | `platevault-core/src/inventory.rs:775-779`; `platevault-core/src/import.rs:1693-1694` | none with an upper-case extension | **UNTESTED** |
 | V7 | Results discovery skips dot-files, `Thumbs.db` and `desktop.ini`, any case | same | same | same | `platevault-core/src/results.rs:181-186` | none | **UNTESTED** |
-| V8 | A scan never crosses into another volume mounted inside the root; that folder is a boundary scope | tested with a disk image | a volume mounted on a folder meets the same device check | a filesystem mounted inside meets the same device check; a bind mount of the same filesystem keeps its device and is walked | `platevault-core/src/inventory.rs:300-301`, `:485-501` | `platevault-core/tests/inventory.rs:786-807` | macOS only, ignored (MAC-1); Windows and Linux **UNTESTED** (LNX-3) |
+| V8 | A scan never crosses into another volume mounted inside the root; that folder becomes an issue and an incomplete scope, so nothing under it is proven absent | a different device number: "a different volume is mounted here; not traversed", `IdentityConflict`; tested with a disk image | a volume mounted on a folder is a reparse point (OS behaviour), so the link branch records "link or junction not followed", `Unreadable`, before the device check runs; a scan scope through it is refused as passing through a link. Stamps carry no device number (`device: None`), so the device check cannot tell volumes apart and the reparse-point check is the only guard | a filesystem mounted inside has a different device number: `IdentityConflict`; a bind mount of the same filesystem keeps its device and is walked | `platevault-core/src/inventory.rs:296-301`, `:478-501`, `:619-623`; `platevault-core/src/inventory/identity.rs:168-185`; `fs/pathsafe/src/lib.rs:62-75` | `platevault-core/tests/inventory.rs:786-807` | macOS only, ignored (MAC-1); Windows and Linux **UNTESTED** (WIN-11, LNX-3) |
 | V9 | A location root needs a remount-stable folder ID, so FAT and exFAT roots are refused; on Windows only NTFS qualifies, so ReFS is refused too | FAT, exFAT refused | only NTFS accepted | vfat, exFAT and unknown filesystems refused | `platevault-core/src/inventory/identity.rs:203-205`, `:322-331`, `:815` | `platevault-core/tests/inventory.rs:811-848` | macOS only, ignored (MAC-1); Windows and Linux **UNTESTED** (WIN-7, LNX-4) |
 
 ## 4. Roots, prefixes, separators and shares
@@ -159,6 +159,11 @@ matrix row the item proves.
 - [ ] **WIN-10 (P7)** Deny the current user read on a subfolder (`icacls sub
   /deny %USERNAME%:(RX)`). Scan. Expect an `access_denied` issue at that folder,
   an incomplete scope, and siblings reconciled.
+- [ ] **WIN-11 (V8)** Mount a second volume (a USB disk or a VHD) on an empty
+  NTFS folder inside a location root (`mountvol` or Disk Management). Put a FITS
+  file on that volume. Scan. Expect an `unreadable` issue at that folder reading
+  "link or junction not followed", no file from the mounted volume, and
+  siblings reconciled.
 
 ### Linux (ext4 home unless stated)
 
