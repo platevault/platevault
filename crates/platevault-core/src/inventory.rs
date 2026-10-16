@@ -249,6 +249,11 @@ pub(crate) enum Entry {
     /// Absent, or nothing the walker reads: a link, a junction, an unsupported
     /// file, a nested foreign volume, or anything below one of those.
     Other,
+    /// Not observed: its metadata, or that of a folder above it, could not be
+    /// read for another reason than its absence (a share's brief I/O error,
+    /// a folder without search permission), or a folder above it changed
+    /// while it was looked up. What it is stays unknown.
+    Unobserved,
 }
 
 /// One entry by the walker's rules, from its no-follow metadata. The scan
@@ -284,8 +289,8 @@ fn kind(meta: &Metadata, relative: &Path, root: &Stamp) -> Kind {
 }
 
 /// What one entry is to discovery, by the walker's rules ([`Kind`]).
-fn classify(meta: &Metadata, relative: &Path, root: &Stamp) -> Entry {
-    match kind(meta, relative, root) {
+fn entry_of(kind: &Kind) -> Entry {
+    match kind {
         Kind::Folder(_) => Entry::Folder,
         Kind::File(ImageFormat::Fits | ImageFormat::Xisf) => Entry::Frame,
         Kind::Link | Kind::ForeignVolume | Kind::File(ImageFormat::Unsupported) => Entry::Other,
@@ -294,27 +299,67 @@ fn classify(meta: &Metadata, relative: &Path, root: &Stamp) -> Entry {
 
 /// What `relative` (a path below `root`, whose stamp is `stamp`) is by the
 /// walker's rules: every folder from the root down must be a real folder on
-/// the root's volume.
+/// the root's volume. See [`entry_at_with`].
 pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry {
-    let mut path = root.to_path_buf();
-    let mut components = relative.components().peekable();
-    while let Some(component) = components.next() {
-        let Component::Normal(name) = component else {
-            return Entry::Other;
-        };
-        path.push(name);
-        let Ok(meta) = fs::symlink_metadata(&path) else {
-            return Entry::Other;
-        };
-        let entry = classify(&meta, relative, &stamp.stamp);
-        if components.peek().is_none() {
-            return entry;
-        }
-        if entry != Entry::Folder {
-            return Entry::Other;
-        }
+    entry_at_with(root, stamp, relative, |path| fs::symlink_metadata(path))
+}
+
+/// [`entry_at`], reading each entry's no-follow metadata on the way down
+/// through `stat`.
+///
+/// An entry, or a folder above it, that is not there is [`Entry::Other`]; one
+/// whose metadata could not be read for another reason is
+/// [`Entry::Unobserved`]. Each folder above the entry is checked only before
+/// the lookup steps into it, so, as the walker does ([`changed_folder`]), the
+/// root and every folder above the entry are checked again once the lookup
+/// ended: when one of them is no longer the real folder recorded on the way
+/// down (swapped for a link or junction meanwhile, which a later step
+/// followed), the result is not the tree's and is [`Entry::Unobserved`].
+pub(crate) fn entry_at_with(
+    root: &Path,
+    stamp: RootStamp,
+    relative: &Path,
+    mut stat: impl FnMut(&Path) -> std::io::Result<Metadata>,
+) -> Entry {
+    let depth = relative.components().count();
+    if depth == 0 || relative.components().any(|part| !matches!(part, Component::Normal(_))) {
+        return Entry::Other;
     }
-    Entry::Other
+    // The stamps of the folders above the entry, as the lookup found them.
+    let mut above = Vec::with_capacity(depth - 1);
+    let mut path = root.to_path_buf();
+    let found = 'lookup: {
+        for (step, part) in relative.components().enumerate() {
+            path.push(part);
+            let meta = match stat(&path) {
+                Ok(meta) => meta,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    break 'lookup Entry::Other;
+                }
+                Err(_) => break 'lookup Entry::Unobserved,
+            };
+            let kind = kind(&meta, relative, &stamp.stamp);
+            if step + 1 == depth {
+                break 'lookup entry_of(&kind);
+            }
+            let Kind::Folder(folder) = kind else {
+                break 'lookup Entry::Other;
+            };
+            above.push(folder);
+        }
+        Entry::Other
+    };
+    let mut path = root.to_path_buf();
+    let unchanged = still_folder(&path, &stamp.stamp)
+        && relative.components().zip(&above).all(|(part, recorded)| {
+            path.push(part);
+            still_folder(&path, recorded)
+        });
+    if unchanged {
+        found
+    } else {
+        Entry::Unobserved
+    }
 }
 
 /// What [`frame_paths`] found below a location root, as relative paths.
@@ -667,13 +712,21 @@ struct Folder {
 /// The topmost folder from the root down to `folder` that is no longer the
 /// real directory the walk recorded, if any.
 fn changed_folder(folder: &Folder) -> Option<&Folder> {
-    folder.parent.as_deref().and_then(changed_folder).or_else(|| {
-        let unchanged = fs::symlink_metadata(&folder.path).is_ok_and(|meta| {
-            !fs_pathsafe::is_link_or_junction_metadata(&meta)
-                && meta.is_dir()
-                && identity::stamp(&meta) == folder.stamp
-        });
-        (!unchanged).then_some(folder)
+    folder
+        .parent
+        .as_deref()
+        .and_then(changed_folder)
+        .or_else(|| (!still_folder(&folder.path, &folder.stamp)).then_some(folder))
+}
+
+/// Whether the entry at `path` is still the real folder recorded with
+/// `stamp`: not a link or junction, a folder, and the same stamp. One
+/// no-follow `stat`.
+fn still_folder(path: &Path, stamp: &Stamp) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|meta| {
+        !fs_pathsafe::is_link_or_junction_metadata(&meta)
+            && meta.is_dir()
+            && identity::stamp(&meta) == *stamp
     })
 }
 
@@ -1232,6 +1285,73 @@ mod swapped_folders {
             assert!(!lists_fully(&root, stamp, folder), "{folder:?} listed through the root link");
             assert!(!opens(&root, stamp, folder), "{folder:?} opened through the root link");
         }
+    }
+
+    /// A folder above an entry is swapped for a link once the lookup checked
+    /// it, before the entry is read: what was read through the link is not
+    /// the tree's.
+    #[test]
+    fn an_ancestor_swapped_during_a_lookup_leaves_the_entry_unobserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("Ha_901.fits"), b"").unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        let frame = Path::new("night/Ha_901.fits");
+
+        let mut swapped = false;
+        let entry = entry_at_with(&root, stamp, frame, |path| {
+            if path == root.join(frame) && !swapped {
+                swapped = true;
+                fs::rename(root.join("night"), dir.path().join("moved"))?;
+                symlink(&outside, root.join("night"))?;
+            }
+            fs::symlink_metadata(path)
+        });
+        assert!(swapped);
+        assert_eq!(entry, Entry::Unobserved, "read through the swapped folder");
+        assert_eq!(entry_at(&root, stamp, frame), Entry::Other, "below a link");
+    }
+}
+
+/// [`entry_at`] tells a path that is not there from one whose metadata, or
+/// that of a folder above it, could not be read.
+#[cfg(test)]
+mod entry_lookups {
+    use super::*;
+
+    /// `fs::symlink_metadata`, failing for `failed` as a share's brief I/O
+    /// error does.
+    fn failing_at(failed: &Path) -> impl FnMut(&Path) -> std::io::Result<Metadata> + '_ {
+        move |path| {
+            if path == failed {
+                Err(std::io::Error::other("the share did not answer"))
+            } else {
+                fs::symlink_metadata(path)
+            }
+        }
+    }
+
+    #[test]
+    fn an_unreadable_entry_is_unobserved_not_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        fs::write(root.join("night/Ha_001.fits"), b"").unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        let frame = Path::new("night/Ha_001.fits");
+        assert_eq!(entry_at(&root, stamp, frame), Entry::Frame);
+
+        let above = root.join("night");
+        let unread = entry_at_with(&root, stamp, frame, failing_at(&above));
+        assert_eq!(unread, Entry::Unobserved, "a folder above it could not be read");
+        let itself = root.join(frame);
+        let unread = entry_at_with(&root, stamp, frame, failing_at(&itself));
+        assert_eq!(unread, Entry::Unobserved, "it could not be read");
+        assert_eq!(entry_at(&root, stamp, Path::new("night/Ha_002.fits")), Entry::Other);
+        assert_eq!(entry_at(&root, stamp, Path::new("gone/Ha_001.fits")), Entry::Other);
     }
 }
 

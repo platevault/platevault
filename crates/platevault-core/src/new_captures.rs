@@ -17,9 +17,15 @@
 //! Discovery writes nothing and reads no header. The walk lists entries by
 //! the indexer's own rules ([`inventory::frame_paths`]: no link, junction or
 //! nested foreign volume, the adapters' supported extensions) and a live
-//! event re-checks only the path it names. The catalog is read for the paths
-//! it already holds in the location. New files are keyed by each path's
-//! identity on the location's volume ([`NativePath::identity_on`], the name
+//! event re-checks only the path it names ([`inventory::entry_at`]), without
+//! following a link, checking the root and every folder above the path
+//! again once it was looked up. A path whose metadata, or that of a folder
+//! above it, cannot be read for another reason than its absence (a share's
+//! brief I/O error), or a folder above which changed during the lookup,
+//! keeps what was counted there, and the location is walked again. The
+//! catalog is read for the paths it already holds in the location. New
+//! files are keyed by each path's identity on the location's volume
+//! ([`NativePath::identity_on`], the name
 //! comparison the indexer uses), so a file that both the walk and the watcher
 //! see, or that they see under two spellings the volume treats as one, counts
 //! once. A removed file leaves the set, so a rename is a removal plus an
@@ -62,9 +68,13 @@
 //! - A volume mounted inside a location is neither walked nor watched, and a
 //!   walk never lists through a folder swapped for a link or junction. Nor
 //!   does a sweep's check of a folder no walk could list in full, or of one
-//!   the OS refused to watch. Once such a volume is unmounted (on macOS
-//!   reported as a removal of its mount point, where a folder still is), the
-//!   folder below it is walked and watched.
+//!   the OS refused to watch. On macOS, where `FSEvents` reports an unmount
+//!   of such a volume as a removal of its mount point, the folder below it
+//!   is then walked and watched. Linux raises no inotify event in the folder
+//!   above a mount point when its volume is unmounted, and Windows likely
+//!   reports only a `Modify(Any)` on a folder that still opens, which asks
+//!   for no rescan: there the folder below is found only by the next walk of
+//!   the location (a rescan for another reason, or the next start).
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
 //! - Windows ejects a volume only once no process holds a handle on it, and
@@ -667,7 +677,9 @@ impl Watched {
     }
 
     /// Bring the count up to date for one path a live event named, from the
-    /// entry found there now.
+    /// entry found there now. An entry that could not be observed keeps what
+    /// was counted at and below it, and the location is walked again, which
+    /// finds what is there.
     fn recheck(&mut self, relative: &Path, entry: Entry) {
         let key = self.identity(relative);
         match entry {
@@ -690,6 +702,7 @@ impl Watched {
                     self.forget_below(relative);
                 }
             }
+            Entry::Unobserved => self.rescan = true,
         }
     }
 
@@ -1286,7 +1299,9 @@ impl Run {
     /// read on a blocking thread once the root was checked there: a root that
     /// is no longer the folder its watch started on (replaced by a link, say)
     /// takes the location offline, and no path below it is read. Checks that
-    /// were interrupted are redone by a walk, as events the OS lost are.
+    /// were interrupted, and paths that could not be observed
+    /// ([`Entry::Unobserved`]), are redone by a walk, as events the OS lost
+    /// are.
     async fn recheck(&mut self, id: Uuid, touched: HashSet<PathBuf>) {
         if touched.is_empty() {
             return;

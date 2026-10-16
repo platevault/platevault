@@ -198,7 +198,14 @@ struct Probe {
     feed: Mutex<Option<tokio::sync::mpsc::Receiver<ArtifactFileEvent>>>,
     /// How many paths that live events named were read below a root.
     entries: AtomicUsize,
+    /// Run once just before the lookup of a path a live event named reads
+    /// the metadata of the given path; its error is that read's error, as a
+    /// share's brief I/O error is. It can also change the tree mid-lookup.
+    before_stat: Mutex<Option<StatHook>>,
 }
+
+/// A path, and what to do just before its metadata is read.
+type StatHook = (PathBuf, Box<dyn FnOnce() -> std::io::Result<()> + Send>);
 
 /// Take one from `counter` unless it is zero.
 fn take_one(counter: &AtomicUsize) -> bool {
@@ -271,7 +278,16 @@ impl RootProbe for Probe {
 
     fn entry(&self, root: &Path, stamp: RootStamp, relative: &Path) -> Entry {
         self.entries.fetch_add(1, Ordering::SeqCst);
-        OsProbe.entry(root, stamp, relative)
+        inventory::entry_at_with(root, stamp, relative, |path| {
+            let hook = {
+                let mut hook = self.before_stat.lock().unwrap();
+                hook.take_if(|(at, _)| *at == path)
+            };
+            if let Some((_, run)) = hook {
+                run()?;
+            }
+            fs::symlink_metadata(path)
+        })
     }
 }
 
@@ -1276,15 +1292,82 @@ async fn a_root_replaced_by_a_link_is_never_read_through() {
     frame(&elsewhere.join("night/Ha_002.fits"));
     fs::rename(&root, fx.base.join("moved")).unwrap();
     std::os::unix::fs::symlink(&elsewhere, &root).unwrap();
-    let named = |path: PathBuf, kind| ArtifactFileEvent {
-        path: Utf8PathBuf::from_path_buf(path).unwrap(),
-        kind,
-    };
     events.try_send(named(root.join("night/Ha_002.fits"), ArtifactEventKind::Created)).unwrap();
     events.try_send(named(root.clone(), ArtifactEventKind::Modified)).unwrap();
 
     until(&watch, <[NewCaptureCount]>::is_empty).await;
     assert_eq!(probe.entries.load(Ordering::SeqCst), 0, "a path was read through the root's link");
+}
+
+/// An event the OS watcher would send about `path`.
+fn named(path: PathBuf, kind: ArtifactEventKind) -> ArtifactFileEvent {
+    ArtifactFileEvent { path: Utf8PathBuf::from_path_buf(path).unwrap(), kind }
+}
+
+/// The metadata of a folder above a counted frame cannot be read once, as a
+/// share answers an event's lookup with a brief I/O error: the frame stays
+/// counted, and the location is walked again, which finds it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_frame_whose_lookup_fails_stays_counted_and_is_walked_again() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("night/Ha_001.fits"));
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    let _opens = Opens(&probe.list_gate);
+    let watch = probed(&fx.library, &probe);
+    count_is(&watch, location.id, 1).await;
+
+    let failure: Box<dyn FnOnce() -> std::io::Result<()> + Send> =
+        Box::new(|| Err(std::io::Error::other("the share did not answer")));
+    *probe.before_stat.lock().unwrap() = Some((root.join("night"), failure));
+    // The walk that follows waits at the gate, so the count seen meanwhile
+    // is the one the event left.
+    probe.list_gate.close();
+    events.try_send(named(root.join("night/Ha_001.fits"), ArtifactEventKind::Modified)).unwrap();
+    holding(&probe.list_gate).await;
+    assert_eq!(new_files(&watch.counts(), location.id), Some(1), "an unobserved frame left");
+    probe.list_gate.open();
+    count_is(&watch, location.id, 1).await;
+    assert_eq!(walks(&watch), 2);
+}
+
+/// A folder above an event's path is swapped for a link to a folder outside
+/// the location while the path is looked up, once that folder was checked:
+/// what the lookup read through the link is not counted, and the location
+/// is walked again, which does not enter the link.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_swapped_for_a_link_during_a_lookup_is_not_counted_through() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    fs::create_dir_all(root.join("night")).unwrap();
+    let elsewhere = fx.base.join("elsewhere");
+    frame(&elsewhere.join("Ha_901.fits"));
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    let _opens = Opens(&probe.list_gate);
+    let watch = probed(&fx.library, &probe);
+    count_is(&watch, location.id, 0).await;
+
+    let (night, moved) = (root.join("night"), fx.base.join("moved"));
+    let swap: Box<dyn FnOnce() -> std::io::Result<()> + Send> = Box::new(move || {
+        fs::rename(&night, moved)?;
+        std::os::unix::fs::symlink(elsewhere, &night)
+    });
+    let created = root.join("night/Ha_901.fits");
+    *probe.before_stat.lock().unwrap() = Some((created.clone(), swap));
+    probe.list_gate.close();
+    events.try_send(named(created, ArtifactEventKind::Created)).unwrap();
+    holding(&probe.list_gate).await;
+    assert_eq!(new_files(&watch.counts(), location.id), Some(0), "counted through the link");
+    probe.list_gate.open();
+    count_is(&watch, location.id, 0).await;
+    assert_eq!(walks(&watch), 2);
 }
 
 /// A folder the OS refused to watch was swapped for a link to a readable
