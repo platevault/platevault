@@ -4,7 +4,7 @@
  * sibling modules, not these. Activity copy is a `MessageRef`, worded when it
  * is read; a refusal's returned message is worded now.
  */
-import type { FlowGate } from "@/domain/derive"
+import { type FlowGate, isLocked } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"
 import type { Project } from "@/domain/types"
 import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
@@ -29,19 +29,20 @@ export function refuse(title: MessageRef, reasons: MessageRef[], href: string | 
   return { ok: false, reason: "refused", message: say(m, msg("store_refusal_message", { title, reasons: detail })), reasons: reasons.map((reason) => say(m, reason)) }
 }
 
-/** A flow gate as a refusal (F3): one reason per blocker ("Locked by a prepared run view · M 31 LRGB"), or the gate's reason alone. */
+/** A flow gate as a refusal (F3): one reason per blocker ("Apply or discard the pending changes · View"), or the gate's reason alone. */
 export function refuseWithGate(label: MessageRef, gate: FlowGate, href: string | null): CommitResult {
   const reasons = gate.blockers.length > 0 ? gate.blockers.map((b) => joinRefs([gate.reason, b.label], " · ")) : [gate.reason]
   return refuse(msg("store_refused", { label }), reasons, href)
 }
 
 /**
- * A closed (Done or Archived) Project is read-only: every write to it or to
- * its runs is refused, naming it, until Reopen. Null while it is open.
+ * A Closed or Archived Project is locked for good (PRJ-FR-25; no Reopen,
+ * provisional): every write to it is refused, naming it. Null while it is
+ * open. To go on with its work, the user duplicates it.
  */
 export function closedRefusal(project: Project | undefined, label: MessageRef): CommitResult | null {
-  if (!project || project.state === "open") return null
-  return refuse(msg("store_refused", { label }), [msg("store_reason_project_done", { project: project.name })], `/projects/${project.id}`)
+  if (!project || !isLocked(project)) return null
+  return refuse(msg("store_refused", { label }), [msg("store_reason_project_closed", { project: project.name })], `/projects/${project.id}`)
 }
 
 export const MISSING: CommitResult = {

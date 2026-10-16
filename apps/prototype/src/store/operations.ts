@@ -1,23 +1,26 @@
 /**
  * Simulated operations (foundation-owned runner).
  *
- * Long app-owned work (indexing, measurement, import, preparation, cleanup,
- * archive, OS Trash moves, master adoption) runs as an Operation with
- * visible progress, per-item outcomes and exactly one settled status. The
- * foundation owns "index" (here) and "trash" (`store/actions/trash.ts`); a
- * slice owns another kind by registering an `OperationHandler` in its slice
- * definition. The runner advances every running operation once per tick.
+ * Long app-owned work (indexing, measurement, import, Apply, Copy to Output,
+ * cleanup, archive, OS Trash moves, master adoption) runs as an Operation
+ * with visible progress, per-item outcomes and exactly one settled status.
+ * The foundation owns "index" (here) and "trash" (`store/actions/trash.ts`);
+ * another kind registers its `OperationHandler` through the store's handler
+ * lists or a slice definition. The runner advances every running operation
+ * once per tick. Indexing reads files through `ingestFiles`, so calibration
+ * is matched as they arrive (CAL-FR-02).
  *
  * After a restart, operations that were running become "interrupted" with
  * their recorded items intact; Retry resumes from the recorded state and
  * never infers progress from file names (D09).
  */
-import { runHref } from "@/domain/derive"
+import { projectHref } from "@/domain/derive"
 import { fileKey } from "@/domain/disk"
-import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
+import { ingestFiles, listLocation, markScanStopped, markVerificationPending, settleLocationScan } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
+import type { ProjectTabId } from "@/domain/project-view"
 import { runningDuplicateScan } from "@/domain/storage"
-import type { ActivityEvent, LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, OperationUnit, RunStep, SettledStatus } from "@/domain/types"
+import type { ActivityEvent, LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, OperationUnit, SettledStatus } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "./core"
@@ -197,10 +200,9 @@ export function cancelOperation(id: OperationId) {
     }
     const handler = handlers[op.kind]
     if (handler?.cancel) next = handler.cancel(next, op)
-    // A canceled operation still links to its owning surface in Activity (seam 16).
-    const runId = op.scope.runIds?.[0]
-    const run = runId ? next.catalog.runs[runId] : undefined
-    const step: Partial<Record<OperationKind, RunStep>> = { prepare: "prepare", cleanup: "results" }
+    // A canceled operation still links to its owning surface in Activity (seam 16): a Project's work to its tab.
+    const tab: Partial<Record<OperationKind, ProjectTabId>> = { apply: "view", "copy-to-output": "output", cleanup: "wrap-up", trash: "wrap-up", archive: "wrap-up" }
+    const projectTab = op.scope.projectId ? tab[op.kind] : undefined
     const href =
       handler?.href?.(op) ??
       (op.kind === "index"
@@ -209,11 +211,9 @@ export function cancelOperation(id: OperationId) {
           ? "/calibration"
           : op.kind === "import"
             ? "/sessions"
-            : run && step[op.kind]
-              ? runHref(run, step[op.kind])
-              : op.scope.projectId
-                ? `/projects/${op.scope.projectId}`
-                : null)
+            : op.scope.projectId
+              ? projectHref(op.scope.projectId, projectTab ? { stage: projectTab } : undefined)
+              : null)
     return settleOperation(next, id, "canceled", msg("op_canceled_summary", { done, total: op.items.length || op.progress.total }), href)
   })
 }
@@ -330,7 +330,7 @@ const indexHandler: OperationHandler = {
     const size = volume?.network ? (ticks % NETWORK_TICKS_PER_FILE === 0 ? 1 : 0) : next.faults.slowIndexing ? SLOW_BATCH : BATCH
     const batchPaths = volumeMounted ? current.pending.slice(0, size) : []
     const files = batchPaths.map((p) => next.disk.files[fileKey(location.volumeId, p)]).filter((f) => f !== undefined)
-    if (files.length > 0) next = { ...next, catalog: readFiles(next.catalog, location, files, nowIso()) }
+    if (files.length > 0) next = { ...next, catalog: ingestFiles(next.catalog, next.disk, next.settings, location, files, nowIso()) }
     const observed = [...current.observed, ...batchPaths]
     const pending = current.pending.slice(batchPaths.length)
     payload = { ...payload, ticks, current: { ...current, pending, observed }, counts: { ...payload.counts, read: payload.counts.read + files.length } }

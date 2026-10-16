@@ -1,22 +1,23 @@
 /**
- * The OS Trash engine (foundation-owned; D-W26, D-W43, D-W57, D-W72, D-W74).
+ * The OS Trash engine (foundation-owned; D-W26, D-W43, D-W57, D-W74).
  *
- * Every approved move to the OS Trash (Done / Archive offers, Empty Trash,
- * Import Move sources, a run's Clean up) runs as one operation with visible
- * per-item progress and records one `TrashEpisode`. Nothing is ever deleted
- * permanently: a file goes to `disk.trash`, or it is kept and listed as
- * refused with its reason (`trashBlock`, asked again for every item; it
- * keeps a file linked by an unfinished run's view, P-TRASH2). A file's links
- * in kept run views go with it. A frame with copies in several locations
- * moves every copy, and if any copy is refused the whole frame is refused
- * (D-W57).
+ * Every approved move to the OS Trash (Wrap up's Clean up and Trash offers,
+ * Import Move sources, a calibration process's raws, a reviewed View
+ * (previous) file, PlateVault's own unregistered copy at an adoption
+ * destination) runs as one operation with visible per-item progress and
+ * records one `TrashEpisode`. Nothing is ever deleted permanently: a file
+ * goes to `disk.trash`, or it is kept and listed as refused with its reason
+ * (`trashBlock`, asked again for every item; it keeps a file an open
+ * Project's View links, P-TRASH2). A file's links in kept Views go with it.
+ * A frame with copies in several locations moves every copy, and if any
+ * copy is refused the whole frame is refused (D-W57).
  */
 import { stepRecord } from "@/domain/calibration-process"
 import { fileAt, filesUnder, removeFile } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
-import { keptViewLinks, runViewLinks, type RunViewLinks, type TrashItem, trashBlock } from "@/domain/storage"
-import type { AssetId, CalibrationProcessId, Disk, DiskFile, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
+import { keptViewLinks, type TrashItem, trashBlock, viewLinks, type ViewLinks } from "@/domain/storage"
+import type { AssetId, CalibrationProcessId, Catalog, Disk, DiskFile, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
 import { fileName, formatBytes, formatCount } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
@@ -30,11 +31,8 @@ export interface MoveToOsTrash {
   kind: TrashEpisodeKind
   title: MessageRef
   projectId: ProjectId | null
-  runIds: RunId[]
   items: TrashItem[]
-  /** Run records removed once the episode settles (Empty Trash). */
-  removeRunIds?: RunId[]
-  /** Roots whose emptied folders leave the disk once the episode settles (a run's prepared folders); a folder still holding a file stays. */
+  /** Roots whose emptied folders leave the disk once the episode settles (a View, View (previous)/); a folder still holding a file stays. */
   pruneFolders?: string[]
   /** What one item is, for progress and the summary; "items" by default. */
   unit?: OperationUnit
@@ -43,9 +41,9 @@ export interface MoveToOsTrash {
   calibrationProcessId?: CalibrationProcessId
 }
 
-/** A run's Clean up is its own operation kind, so its step reads its state apart from other trash moves. */
+/** Clean up is its own operation kind, so Wrap up's Clean up step reads its state apart from other trash moves. */
 function operationKind(kind: TrashEpisodeKind): OperationKind {
-  return kind === "run-cleanup" ? "cleanup" : "trash"
+  return kind === "view-cleanup" ? "cleanup" : "trash"
 }
 
 interface TrashPayload extends Omit<MoveToOsTrash, "title" | "items"> {
@@ -54,27 +52,12 @@ interface TrashPayload extends Omit<MoveToOsTrash, "title" | "items"> {
   episodeId: string
 }
 
-/** Prepared entries of a run: every file in its preparation folders (PREP-FR-14). */
-export function preparedEntryItems(state: Pick<PrototypeState, "catalog" | "disk">, runId: RunId): TrashItem[] {
-  const out: TrashItem[] = []
-  for (const prep of Object.values(state.catalog.preparations)) {
-    if (prep.runId !== runId) continue
-    const files = filesUnder(state.disk, prep.folderPath)
-    if (files.length === 0 && !fileAt(state.disk, prep.folderPath)) {
-      const volume = Object.values(state.disk.volumes).find((v) => isUnder(prep.folderPath, v.mountPath))
-      if (volume && !volume.mounted) out.push({ path: prep.folderPath, refusedReason: msg("run_cleanup_volume_offline", { name: volume.name }) })
-      continue
-    }
-    for (const file of files) out.push({ path: file.path })
-  }
-  return out
-}
-
-/** A run's Results folder content as known to the catalog. */
-export function resultItems(state: PrototypeState, runId: RunId): TrashItem[] {
-  return Object.values(state.catalog.results)
-    .filter((r) => r.runId === runId && !r.trashed)
-    .map((r) => ({ path: r.path, resultId: r.id }))
+/** Every file under a folder, as items; a folder on a volume that is not mounted is one refused item ("Offline"). */
+export function folderItems(state: Pick<PrototypeState, "disk">, folder: string): TrashItem[] {
+  const files = filesUnder(state.disk, folder)
+  if (files.length > 0) return files.map((file) => ({ path: file.path }))
+  const volume = Object.values(state.disk.volumes).find((v) => isUnder(folder, v.mountPath))
+  return volume && !volume.mounted ? [{ path: folder, refusedReason: msg("run_cleanup_volume_offline", { name: volume.name }) }] : []
 }
 
 function groupItems(items: TrashItem[]): TrashItem[][] {
@@ -114,8 +97,6 @@ export function queueOsTrash(state: PrototypeState, input: MoveToOsTrash): { sta
   const payload: TrashPayload = {
     kind: input.kind,
     projectId: input.projectId,
-    runIds: input.runIds,
-    removeRunIds: input.removeRunIds ?? [],
     pruneFolders: input.pruneFolders ?? [],
     unit,
     href: input.href,
@@ -127,7 +108,7 @@ export function queueOsTrash(state: PrototypeState, input: MoveToOsTrash): { sta
   const added = addOperation(state, {
     kind: operationKind(input.kind),
     title: input.title,
-    scope: { runIds: input.runIds, projectId: input.projectId ?? undefined },
+    scope: { projectId: input.projectId ?? undefined },
     total: input.items.length,
     unit,
     items: input.items.map((item) => ({ id: item.path, label: verbatim(fileName(item.path)), path: item.path, status: "pending", phase: null, detail: item.refusedReason ?? null })),
@@ -137,7 +118,7 @@ export function queueOsTrash(state: PrototypeState, input: MoveToOsTrash): { sta
   return { state: added.state, operationId: added.id }
 }
 
-function refusal(disk: Disk, links: RunViewLinks, item: TrashItem): MessageRef | null {
+function refusal(disk: Disk, links: ViewLinks, item: TrashItem): MessageRef | null {
   return item.refusedReason ?? trashBlock(disk, links, item.path)?.reason ?? null
 }
 
@@ -152,7 +133,7 @@ function trashStep(kind: OperationKind): OperationHandler {
     kind,
     step(state, op) {
       const payload = op.payload as unknown as TrashPayload
-      const links = runViewLinks(state.catalog, state.disk)
+      const links = viewLinks(state.catalog, state.disk)
       let disk = state.disk
       const queue = [...payload.queue]
       const done = [...payload.done]
@@ -163,7 +144,7 @@ function trashStep(kind: OperationKind): OperationHandler {
         const firstRefusal = reasons.find((r) => r !== null) ?? null
         for (const [index, item] of group.entries()) {
           const file = fileAt(disk, item.path)
-          const base = { path: item.path, volumeId: file?.volumeId ?? "", sizeBytes: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), assetId: item.assetId ?? null, resultId: item.resultId ?? null }
+          const base = { path: item.path, volumeId: file?.volumeId ?? "", sizeBytes: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), assetId: item.assetId ?? null }
           if (firstRefusal !== null) {
             // D-W57: one refused copy keeps every copy of the frame.
             const reason = reasons[index] ?? msg("op_trash_other_copy_refused", { reason: firstRefusal })
@@ -172,7 +153,7 @@ function trashStep(kind: OperationKind): OperationHandler {
             continue
           }
           disk = toTrash(disk, file!, at)
-          // P-TRASH2: the file's links in kept run views go with it.
+          // P-TRASH2: the file's links in kept Views go with it.
           for (const link of keptViewLinks(links, [item.path])) if (fileAt(disk, link.path)) disk = toTrash(disk, link, at)
           done.push({ ...base, outcome: "trashed", reason: null })
           outcomes.set(item.path, { status: "done", detail: msg("op_trash_moved") })
@@ -204,19 +185,26 @@ function pruneEmptiedFolders(disk: Disk, roots: string[]): Disk {
   return { ...disk, folders: disk.folders.filter((folder) => !roots.some((root) => isUnder(folder.path, root)) || holdsFile(folder)) }
 }
 
-/** Record the episode, mark Trashed frames and Results, remove emptied runs, and settle a calibration process's Raws step. */
+/**
+ * A Project's `View (previous)/` record after files left it: trashed
+ * leftovers drop out, and the record goes once the folder is empty
+ * (provisional, D-W110). Kept leftovers stay, still not asked about.
+ */
+export function withPreviousReconciled(catalog: Catalog, disk: Disk, projectId: ProjectId | null): Catalog {
+  const project = projectId ? catalog.projects[projectId] : undefined
+  const previous = project?.previous
+  if (!project || !previous) return catalog
+  const leftovers = previous.leftovers.filter((l) => fileAt(disk, `${previous.folderPath}/${l.path}`) !== undefined)
+  const empty = leftovers.length === 0 && filesUnder(disk, previous.folderPath).length === 0
+  if (!empty && leftovers.length === previous.leftovers.length) return catalog
+  return { ...catalog, projects: { ...catalog.projects, [project.id]: { ...project, previous: empty ? null : { ...previous, leftovers }, revision: project.revision + 1 } } }
+}
+
+/** Record the episode, mark Trashed frames, settle a calibration process's Raws step and reconcile View (previous)/. */
 function settleEpisode(state: PrototypeState, operationId: OperationId, payload: TrashPayload): PrototypeState {
   const at = nowIso()
-  const episode: TrashEpisode = {
-    id: payload.episodeId,
-    kind: payload.kind,
-    at,
-    projectId: payload.projectId,
-    runIds: payload.runIds,
-    items: payload.done,
-    operationId,
-  }
-  const catalog = { ...state.catalog, assets: { ...state.catalog.assets }, results: { ...state.catalog.results } }
+  const episode: TrashEpisode = { id: payload.episodeId, kind: payload.kind, at, projectId: payload.projectId, items: payload.done, operationId }
+  let catalog: Catalog = { ...state.catalog, assets: { ...state.catalog.assets } }
   const trashedPaths = new Set(payload.done.filter((i) => i.outcome === "trashed").map((i) => i.path))
   for (const assetId of new Set(payload.done.map((i) => i.assetId).filter((id): id is AssetId => id !== null))) {
     const asset = catalog.assets[assetId]
@@ -225,18 +213,6 @@ function settleEpisode(state: PrototypeState, operationId: OperationId, payload:
     if (remaining.length === asset.copies.length) continue
     // A frame whose every copy went is Trashed; a duplicate copy only leaves the copy list (D-W74).
     catalog.assets[assetId] = remaining.length === 0 ? { ...asset, trashed: { at, episodeId: episode.id } } : { ...asset, copies: remaining }
-  }
-  for (const item of payload.done) {
-    if (item.outcome !== "trashed" || !item.resultId) continue
-    const result = catalog.results[item.resultId]
-    if (result) catalog.results[item.resultId] = { ...result, trashed: { at, episodeId: episode.id } }
-  }
-  const remove = new Set(payload.removeRunIds ?? [])
-  if (remove.size > 0) {
-    catalog.runs = Object.fromEntries(Object.entries(catalog.runs).filter(([id]) => !remove.has(id)))
-    catalog.preparations = Object.fromEntries(Object.entries(catalog.preparations).filter(([, p]) => !remove.has(p.runId)))
-    catalog.results = Object.fromEntries(Object.entries(catalog.results).filter(([, r]) => !r.runId || !remove.has(r.runId) || r.trashed))
-    catalog.runGroups = Object.fromEntries(Object.entries(catalog.runGroups).map(([id, g]) => [id, { ...g, runIds: g.runIds.filter((r) => !remove.has(r)) }]))
   }
   catalog.trashEpisodes = { ...catalog.trashEpisodes, [episode.id]: episode }
   const process = payload.calibrationProcessId ? catalog.calibrationProcesses[payload.calibrationProcessId] : undefined
@@ -248,7 +224,9 @@ function settleEpisode(state: PrototypeState, operationId: OperationId, payload:
       [process.id]: { ...process, raws: refused.length === 0 ? "trashed" : null, operationId: null, steps: { ...process.steps, raws }, updatedAt: at },
     }
   }
-  return { ...state, catalog, disk: pruneEmptiedFolders(state.disk, payload.pruneFolders ?? []) }
+  const disk = pruneEmptiedFolders(state.disk, payload.pruneFolders ?? [])
+  catalog = withPreviousReconciled(catalog, disk, payload.projectId)
+  return { ...state, catalog, disk }
 }
 
 /** Operation handlers the foundation owns; slices register their own kinds in their slice definitions. */

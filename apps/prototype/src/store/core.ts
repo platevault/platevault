@@ -20,8 +20,8 @@ import type { ActivityEvent, Catalog } from "@/domain/types"
 import { type MessageRef, m, msg, say } from "@/lib/i18n"
 import type { SliceId, SliceStates } from "./slices"
 
-/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. 10: Target evidence is pointing and user rows only (OBJECT is a label). 11: plans are per night (the seed's plan is tonight's). 12: run views are Symlinks or Copies (P-PREP3). 13: no product inputs; a Result can be rejected; a preparation counts its copied masters; a Complete run's calibration is what it recorded (Complete records its automatic choices). 14: no Project-only rejects (P-REJ2); a Wrap up step record lists the operations its Proceed started and its Redo flag (C3, F2); a replaced master names its replacement and settings hold Old masters after (C9); settings hold one Moon-avoidance curve per filter (C6). 15: goal conditions (C7): a subject holds its panel balance and its "Finish by" or season window (`Subject.conditions`); a goal template carries them (`GoalTemplate.conditions`); a closed Project holds its goal figures frozen at Close (`Project.goalFreeze`); the demo's goals count Usable frames. 16: filters and reducers are Equipment records a rig selects by id (`Catalog.filters`, `Catalog.reducers`, `OpticalTrain.filterIds`, `OpticalTrain.reducerId`; ngm9g, C E2); settings hold the naming tokens omitted when missing (`AppSettings.namingOmit`, wmbp9). 17: a run step is Select, Calibrate, Prepare or Results (D1, C2: no Review or Done step), so `Run.stageBeforeComplete` and stored run links name only those. */
-export const SCHEMA_VERSION = 17
+/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. 10: Target evidence is pointing and user rows only (OBJECT is a label). 11: plans are per night (the seed's plan is tonight's). 12: run views are Symlinks or Copies (P-PREP3). 13: no product inputs; a Result can be rejected; a preparation counts its copied masters; a Complete run's calibration is what it recorded (Complete records its automatic choices). 14: no Project-only rejects (P-REJ2); a Wrap up step record lists the operations its Proceed started and its Redo flag (C3, F2); a replaced master names its replacement and settings hold Old masters after (C9); settings hold one Moon-avoidance curve per filter (C6). 15: goal conditions (C7): a subject holds its panel balance and its "Finish by" or season window (`Subject.conditions`); a goal template carries them (`GoalTemplate.conditions`); a closed Project holds its goal figures frozen at Close; the demo's goals count Usable frames. 16: filters and reducers are Equipment records a rig selects by id (`Catalog.filters`, `Catalog.reducers`, `OpticalTrain.filterIds`, `OpticalTrain.reducerId`; ngm9g, C E2); settings hold the naming tokens omitted when missing (`AppSettings.namingOmit`, wmbp9). 17: a run step is Select, Calibrate, Prepare or Results. 18: the F4 Project model: no runs, run groups, preparations or Results; a Project holds its inputs, groups, settings, applied View, View (previous), Output records, master offers and Close snapshot; a session carries its framing, rig version and pinned calibration; a master holds dated versions; a camera holds its physical alias and No darks / No bias defaults; a rig holds dated versions; settings hold the group keywords and matching thresholds. */
+export const SCHEMA_VERSION = 18
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number
@@ -97,7 +97,7 @@ export function recordActivity(event: Omit<ActivityEvent, "id" | "at">) {
   store.setState((s) => ({ ...s, activity: [entry, ...s.activity].slice(0, 200) }))
 }
 
-type RevisionedCollection = "runs" | "runGroups" | "projects" | "sessions" | "targets"
+type RevisionedCollection = "projects" | "sessions" | "targets"
 
 export type CommitResult =
   | { ok: true }
@@ -120,7 +120,7 @@ export interface CommitOptions {
 /**
  * Durable catalog write. Failed writes stay unsaved: the caller keeps the
  * edited value on screen, marks it "Not saved" and offers Retry. `label`
- * names the write in Activity ("Save run"); the returned message is worded
+ * names the write in Activity ("Add sessions"); the returned message is worded
  * now, the Activity entry when it is read.
  */
 export function commit(label: MessageRef, mutate: (state: PrototypeState) => PrototypeState, options: CommitOptions = {}): CommitResult {
@@ -143,7 +143,7 @@ export function commit(label: MessageRef, mutate: (state: PrototypeState) => Pro
     const { collection, id, revision } = options.expect
     const entity = (current.catalog[collection] as Catalog[RevisionedCollection])[id]
     if (entity && entity.revision !== revision) {
-      // The record version is internal (D08); it is not the run membership "Revision N" a page shows, so the message names no number.
+      // The record version is internal (D08), never shown, so the message names no number.
       const message = msg("store_stale_message", { label })
       recordActivity({ kind: "write-refused", title: msg("store_refused", { label }), detail: message, operationId: null, href: options.href ?? null })
       return { ok: false, reason: "stale", message: say(m, message) }
