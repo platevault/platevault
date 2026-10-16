@@ -147,4 +147,13 @@ ignore = [
   { id = "RUSTSEC-2024-0384", reason = "instant via notify-types; moka 0.12 transitive; no moka release without instant yet" },
   # paste: unmaintained, pulled in transitively by specta rc chain.
   { id = "RUSTSEC-2024-0436", reason = "paste via specta macros; pinned to specta 2.0.0-rc.25; unblock when specta stable ships" },
+  # zip 8.6 reaches the workspace only through thirtyfour 0.37 (dev-only: e2e_tests).
+  # The three advisories cover ZipArchive::extract and ZipStreamReader::extract.
+  # thirtyfour never calls those: its driver manager reads entries by index and
+  # writes only the driver binary itself (thirtyfour 0.37.4 src/manager/download.rs:664-687).
+  # The fix is zip >= 9, and thirtyfour 0.37.8 (latest, 2026-10-12) still requires zip ^8.
+  # Remove these when thirtyfour accepts zip >= 9.
+  { id = "RUSTSEC-2026-0367", reason = "zip SUID/SGID bits kept by extract(); dev-only via thirtyfour, which never calls extract()" },
+  { id = "RUSTSEC-2026-0368", reason = "zip extract() symlink targets outside the destination; dev-only via thirtyfour, which never calls extract()" },
+  { id = "RUSTSEC-2026-0369", reason = "zip extract() applies Unix permissions through symlinks; dev-only via thirtyfour, which never calls extract()" },
 ]
