@@ -15,10 +15,10 @@
  * Sessions keep their header evidence either way.
  */
 import { type StepLink, sessionRigId } from "@/domain/derive"
-import { rigVersions } from "@/domain/indexing"
-import type { Camera, CameraId, Catalog, Filter, FilterId, NightDate, OpticalTrain, OpticalTrainId, Reducer, ReducerId, RigVersion, Telescope, TelescopeId } from "@/domain/types"
+import { rigVersions, sessionRigVersion } from "@/domain/indexing"
+import type { Camera, CameraId, Catalog, Filter, FilterId, NightDate, OpticalTrain, OpticalTrainId, Reducer, ReducerId, RigVersion, RigVersionId, Telescope, TelescopeId } from "@/domain/types"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
-import { addRigVersion, type RigOptics, setCameraAlias, setCameraCalibrationDefaults } from "@/store/actions/settings"
+import { addRigVersion, cameraAliasRefusal, type RigOptics, setCameraAlias, setCameraCalibrationDefaults } from "@/store/actions/settings"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 
@@ -43,15 +43,30 @@ function aliasesAfterRename(previous: { name: string; aliases: string[] } | unde
 
 export type CameraInput = Pick<Camera, "name" | "kind" | "widthPx" | "heightPx" | "pixelSizeUm" | "physicalAlias" | "noDarks" | "noBias">
 
+/** A camera where several are listed together: its name, then its alias when it has one ("ASI2600MM Pro · 2600MM #1"). */
+export function cameraLabel(camera: Pick<Camera, "name" | "physicalAlias">): string {
+  return camera.physicalAlias ? `${camera.name} · ${camera.physicalAlias}` : camera.name
+}
+
+/**
+ * The other cameras of `model` that have no alias yet (PLAN-EQ-AC-10): once
+ * a second camera of a model is saved, each of them needs its own, so the
+ * camera dialog asks for theirs too and `saveCamera` refuses until they have one.
+ */
+export function camerasNeedingAlias(catalog: Catalog, cameraId: CameraId, model: string): Camera[] {
+  return Object.values(catalog.cameras).filter((c) => c.id !== cameraId && !c.physicalAlias && c.name.toLowerCase() === model.toLowerCase())
+}
+
 /**
  * Add a camera by hand (`id` null; it is Manual) or edit one, detected ones
  * included. Refused up front, so nothing is half saved, while its alias is
- * another camera's or missing while another camera shares its model
- * (LIB-FR-26, PLAN-EQ-AC-10): the same rule `setCameraAlias` applies. The
- * record is one write; a changed alias then goes through `setCameraAlias`
- * and changed defaults through `setCameraCalibrationDefaults`, which
- * settles its sessions (CAL-FR-22). Returns the camera's id, so a retry
- * after a later failed write edits the camera it already added.
+ * another camera's, or it or another camera of its model has none
+ * (LIB-FR-26, PLAN-EQ-FR-08, PLAN-EQ-AC-10): `cameraAliasRefusal`, the rule
+ * `setCameraAlias` applies, plus `camerasNeedingAlias`. The record is one
+ * write; a changed alias then goes through `setCameraAlias` and changed
+ * defaults through `setCameraCalibrationDefaults`, which settles its
+ * sessions (CAL-FR-22). Returns the camera's id, so a retry after a later
+ * failed write edits the camera it already added.
  */
 export function saveCamera(id: CameraId | null, input: CameraInput): { result: CommitResult; id: CameraId } {
   const { catalog } = store.getState()
@@ -60,9 +75,7 @@ export function saveCamera(id: CameraId | null, input: CameraInput): { result: C
   if (id && !previous) return { result: MISSING, id: cameraId }
   const { physicalAlias, noDarks, noBias, ...record } = input
   const alias = physicalAlias?.trim() || null
-  const others = Object.values(catalog.cameras).filter((c) => c.id !== cameraId)
-  const taken = alias ? others.find((c) => c.physicalAlias?.toLowerCase() === alias.toLowerCase()) : undefined
-  const refusal = taken ? msg("settings_camera_alias_taken", { alias: alias!, name: taken.name }) : !alias && others.some((c) => c.name.toLowerCase() === record.name.toLowerCase()) ? msg("settings_camera_alias_needed", { name: record.name }) : null
+  const refusal = cameraAliasRefusal(catalog, cameraId, record.name, alias) ?? (camerasNeedingAlias(catalog, cameraId, record.name).length > 0 ? msg("settings_camera_alias_needed", { name: record.name }) : null)
   if (refusal) return { result: refuse(msg("store_refused", { label: msg("settings_label_camera_alias", { name: record.name }) }), [refusal], HREF), id: cameraId }
   const camera: Camera = { id: cameraId, source: previous?.source ?? "manual", physicalAlias: previous?.physicalAlias ?? null, noDarks: previous?.noDarks ?? false, noBias: previous?.noBias ?? false, ...record, aliases: aliasesAfterRename(previous, input.name) }
   const label = previous ? msg("settings_edit_title", { name: previous.name }) : msg("equipment_add_camera")
@@ -200,6 +213,22 @@ export function saveRig(id: OpticalTrainId | null, input: RigInput): { result: C
   const result = commit(msg("settings_edit_title", { name: previous.name }), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, name: input.name } } })), { href })
   if (result.ok) recordSaved(msg("equipment_saved_named", { name: input.name }), null, href)
   return { result, id: rigId }
+}
+
+/**
+ * How many current sessions each version of a rig holds (LIB-FR-26): the
+ * version a session recorded, or while it records none the one in effect on
+ * its night, where a night before the first version reads the first. A later
+ * version never moves a session, so these counts change only as sessions do.
+ */
+export function rigVersionSessionCounts(catalog: Catalog, rigId: OpticalTrainId): Map<RigVersionId, number> {
+  const counts = new Map<RigVersionId, number>()
+  for (const session of Object.values(catalog.sessions)) {
+    if (session.supersededBy) continue
+    const captured = sessionRigVersion(catalog, session)
+    if (captured?.rigId === rigId) counts.set(captured.version.id, (counts.get(captured.version.id) ?? 0) + 1)
+  }
+  return counts
 }
 
 // ---------------------------------------------------------------------------

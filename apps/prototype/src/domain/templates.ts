@@ -297,14 +297,19 @@ export function headerNamingValues(header: FrameHeader, frameType: string, targe
 
 const RESERVED = new Set(["con", "prn", "aux", "nul", "com1", "lpt1", ".", ".."])
 const MAX_SEGMENT = 80
+/** Characters no file or folder name may hold on Windows, and so on no computer PlateVault writes to. */
+const UNSAFE_NAME_CHARACTERS = /[\\:*?"<>|]/g
 
-/** Errors a template has before it is saved or resolved: unknown tokens, `..` and reserved names. */
+/** Errors a template has before it is saved or resolved: unknown tokens, literal characters no file or folder name may hold, `..` and reserved names. */
 export function validateNamingTemplate(template: string): MessageRef[] {
   const errors: MessageRef[] = []
   const known = new Set(NAMING_TOKENS.map((t) => t.token))
   for (const match of template.matchAll(/\{([^}]*)\}/g)) {
     if (!known.has(match[1] as NamingToken)) errors.push(msg("domain_naming_unknown_token", { token: match[0] }))
   }
+  // Token values are made safe when they resolve (`sanitize`); the text typed around them is checked here.
+  const unsafe = [...new Set(template.replace(/\{[^}]*\}/g, "").match(UNSAFE_NAME_CHARACTERS) ?? [])]
+  if (unsafe.length > 0) errors.push(msg("domain_naming_unsafe_characters", { characters: unsafe.join(" ") }))
   for (const segment of template.split("/")) {
     if (segment === "..") errors.push(msg("domain_naming_parent_folder"))
     else if (RESERVED.has(segment.toLowerCase())) errors.push(msg("domain_naming_reserved", { name: segment }))
@@ -314,7 +319,7 @@ export function validateNamingTemplate(template: string): MessageRef[] {
 }
 
 function sanitize(value: string): string {
-  return value.replace(/[\\:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, MAX_SEGMENT)
+  return value.replace(UNSAFE_NAME_CHARACTERS, "-").replace(/\s+/g, " ").trim().slice(0, MAX_SEGMENT)
 }
 
 /**

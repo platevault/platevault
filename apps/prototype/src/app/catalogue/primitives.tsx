@@ -692,9 +692,8 @@ function Structure() {
       <ComponentSection components={["ListDetail"]} description={m.catalogue_primitives_list_detail_desc()}>
         <div className="flex h-48 flex-col overflow-hidden rounded-lg border bg-background">
           <ListDetail
-            listLabel={m.catalogue_primitives_list_detail_label()}
             list={
-              <ul className="p-1">
+              <ul aria-label={m.catalogue_primitives_list_detail_label()} className="p-1">
                 {panes.map((value) => (
                   <li key={value}>
                     <Button variant="ghost" size="sm" className="w-full justify-start" aria-current={pane === value ? "true" : undefined} onClick={() => setPane(value)}>

@@ -411,11 +411,11 @@ export function deviceFiles(disk: Disk, volumeId: VolumeId): DiskFile[] {
   return [...files, ...earlier]
 }
 
+/** The applications PlateVault ships a profile for; the user adds any other one (Add application…). */
 export const PROFILE_IDS = {
   pixinsight: "prof_pixinsight",
   siril: "prof_siril",
   seti: "prof_seti",
-  generic: "prof_generic",
 } as const
 
 /** Built-in application profiles (D04). Capability evidence is fixture data. */
@@ -461,21 +461,6 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
       capability: {
         verified: false,
         evidence: msg("seed_apps_evidence_seti"),
-        inputWrite: "unknown",
-        correctedMetadata: "none",
-        masterStacking: false,
-      },
-    },
-    {
-      id: PROFILE_IDS.generic,
-      application: "generic",
-      name: "Open in…",
-      executablePath: null,
-      executableState: "not-configured",
-      launchArgs: "",
-      capability: {
-        verified: false,
-        evidence: msg("seed_apps_evidence_generic"),
         inputWrite: "unknown",
         correctedMetadata: "none",
         masterStacking: false,
@@ -637,7 +622,8 @@ function equipment(catalog: Catalog) {
     tel_esprit: { id: "tel_esprit", name: "Esprit 100", aliases: ["SkyWatcher Esprit 100ED"], source: "manual", focalLengthMm: 550, apertureMm: 100 },
     tel_fra400: { id: "tel_fra400", name: "Askar FRA400", aliases: ["FRA400"], source: "manual", focalLengthMm: 400, apertureMm: 72 },
   }
-  // Each rig's filters as it lists them. Filters are records the rigs select (ngm9g): a definition two rigs share (name, bands and FILTER matches) is one record.
+  // Each rig's filters as it lists them. Filters are records the rigs select (ngm9g): a definition two rigs share (name, bands and FILTER matches) is one record,
+  // so the RedCat and the FRA400 carry the same Ha and no two filters share a name.
   const lists: Record<string, Array<Omit<Filter, "id">>> = {
     [RIG.redcat]: [
       { name: "Ha", bands: ["Ha"], matches: ["Ha", "H-alpha"] },
@@ -650,7 +636,7 @@ function equipment(catalog: Catalog) {
       { name: "R", bands: ["R"], matches: ["R"] },
       { name: "G", bands: ["G"], matches: ["G"] },
       { name: "B", bands: ["B"], matches: ["B"] },
-      { name: "Ha", bands: ["Ha"], matches: ["Ha"] },
+      { name: "Ha", bands: ["Ha"], matches: ["Ha", "H-alpha"] },
     ],
   }
   const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i])

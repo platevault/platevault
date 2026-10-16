@@ -63,7 +63,7 @@ describe("ListPage", () => {
   it("as a level-2 child of the settings pane (ListDetail), fills the detail pane", () => {
     render(
       <div data-testid="pane" className="flex h-full flex-col">
-        <ListDetail listLabel="Settings" list={<a href="#/settings">Library</a>} detail={<ListPage level={2} title="Locations" table={TABLE} />} />
+        <ListDetail list={<a href="#/settings">Library</a>} detail={<ListPage level={2} title="Locations" table={TABLE} />} />
       </div>,
     )
     const page = screen.getByRole("heading", { level: 2, name: "Locations" }).closest<HTMLElement>("[data-template='list']")!

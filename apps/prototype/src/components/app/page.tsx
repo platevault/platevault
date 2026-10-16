@@ -180,10 +180,9 @@ export function PageBody({ children, className }: { children: ReactNode; classNa
 }
 
 export interface ListDetailProps {
+  /** The list pane's content. It brings its own landmark or name (a NavList is a named nav), so the pane adds none. */
   list: ReactNode
   detail: ReactNode
-  /** Accessible name for the list pane, e.g. "Sessions". */
-  listLabel: string
   className?: string
 }
 
@@ -192,7 +191,7 @@ export interface ListDetailProps {
  * At 1024 px the list keeps 18rem and the detail takes the rest. Below
  * 768 px the panes stack and scroll with the page (WCAG 1.4.10).
  */
-export function ListDetail({ list, detail, listLabel, className }: ListDetailProps) {
+export function ListDetail({ list, detail, className }: ListDetailProps) {
   return (
     <div
       className={cn(
@@ -200,9 +199,7 @@ export function ListDetail({ list, detail, listLabel, className }: ListDetailPro
         className,
       )}
     >
-      <nav aria-label={listLabel} className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">
-        {list}
-      </nav>
+      <div className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">{list}</div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">{detail}</div>
     </div>
   )

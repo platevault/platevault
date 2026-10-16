@@ -14,6 +14,7 @@ import {
   subjectConditions,
   subjectConditionsFrom,
   templateConditions,
+  validateNamingTemplate,
 } from "./templates"
 import type { GoalTemplate, SubjectWindow } from "./types"
 
@@ -125,5 +126,18 @@ describe("resolveNamingTemplate omit (Settings › Naming, wmbp9)", () => {
 
   it("writes an omitted token's value when it has one", () => {
     expect(resolveNamingTemplate("{target}/{filter}", { ...values, filter: "Ha" }, ["filter"]).path).toBe("M 31/Ha")
+  })
+})
+
+describe("validateNamingTemplate (Settings › Naming, wmbp9)", () => {
+  it("refuses literal characters no file or folder name may hold, each named once", () => {
+    expect(validateNamingTemplate("{target}/a:b*c?<x>|/light/").map((ref) => say(m, ref))).toEqual([m.domain_naming_unsafe_characters({ characters: ": * ? < > |" })])
+    expect(validateNamingTemplate('{target}\\"x"/light/').map((ref) => say(m, ref))).toEqual([m.domain_naming_unsafe_characters({ characters: '\\ "' })])
+  })
+
+  it("passes every default template, and token text inside braces is checked as a token, not as a literal", () => {
+    expect(validateNamingTemplate("{target}/{filter}/{date}/light/")).toEqual([])
+    expect(validateNamingTemplate("Darks/{camera}/{exposure}_g{gain}_o{offset}_{set_temp}/")).toEqual([])
+    expect(validateNamingTemplate("{a:b}/light/").map((ref) => say(m, ref))).toEqual([m.domain_naming_unknown_token({ token: "{a:b}" })])
   })
 })

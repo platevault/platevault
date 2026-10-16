@@ -380,6 +380,22 @@ export function addRigVersion(rigId: OpticalTrainId, from: NightDate, optics: Ri
 }
 
 /**
+ * Why `alias` cannot name the camera `cameraId` (or a new camera, under an id
+ * not in the catalog) whose model is `model` (LIB-FR-26, PLAN-EQ-FR-08): another
+ * camera already uses it, or it is empty while another camera has this
+ * model. Null when it can. `setCameraAlias`, `saveCamera` and the camera
+ * dialog all apply this one rule.
+ */
+export function cameraAliasRefusal(catalog: Catalog, cameraId: CameraId, model: string, alias: string | null): MessageRef | null {
+  const next = alias?.trim() || null
+  const others = Object.values(catalog.cameras).filter((c) => c.id !== cameraId)
+  const taken = next ? others.find((c) => c.physicalAlias?.toLowerCase() === next.toLowerCase()) : undefined
+  if (taken) return msg("settings_camera_alias_taken", { alias: next!, name: taken.name })
+  if (!next && others.some((c) => c.name.toLowerCase() === model.toLowerCase())) return msg("settings_camera_alias_needed", { name: model })
+  return null
+}
+
+/**
  * Name one physical camera (LIB-FR-26): darks and bias link to it by this
  * alias once the rigs hold two cameras of its model. Unique across cameras;
  * null clears it, refused while another camera shares its model.
@@ -391,10 +407,8 @@ export function setCameraAlias(cameraId: CameraId, alias: string | null): Commit
   const href = EQUIPMENT_HREF
   const label = msg("settings_label_camera_alias", { name: camera.name })
   const next = alias?.trim() || null
-  const others = Object.values(catalog.cameras).filter((c) => c.id !== cameraId)
-  const taken = next ? others.find((c) => c.physicalAlias?.toLowerCase() === next.toLowerCase()) : undefined
-  if (taken) return refuse(msg("store_refused", { label }), [msg("settings_camera_alias_taken", { alias: next!, name: taken.name })], href)
-  if (!next && others.some((c) => c.name.toLowerCase() === camera.name.toLowerCase())) return refuse(msg("store_refused", { label }), [msg("settings_camera_alias_needed", { name: camera.name })], href)
+  const refusal = cameraAliasRefusal(catalog, cameraId, camera.name, next)
+  if (refusal) return refuse(msg("store_refused", { label }), [refusal], href)
   const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, cameras: { ...c.cameras, [cameraId]: { ...c.cameras[cameraId]!, physicalAlias: next } } })), { href })
   if (result.ok) recordSaved(msg("equipment_saved_named", { name: camera.name }), next ? verbatim(next) : null, href)
   return result
