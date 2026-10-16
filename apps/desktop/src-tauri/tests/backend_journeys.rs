@@ -86,10 +86,12 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// The plan states `plans.apply.status` can settle in.
 const TERMINAL_PLAN_STATES: [&str; 4] = ["applied", "partially_applied", "failed", "cancelled"];
-/// The deprecated protection-default snapshot is process-global and unkeyed
-/// by database. The inbox-apply, cleanup, and archive journeys exercise that
-/// DB-backed path, so serialize those three and reset the snapshot via the
-/// normal settings use case before asserting migration defaults.
+// `app_core_cache` retains a deprecated protection-default snapshot that is
+// process-global and unkeyed by database. The inbox-apply, cleanup, and
+// archive journeys exercise that DB-backed path, so serialize those three and
+// reset it via the normal settings use case before asserting migration defaults.
+static PROTECTION_DEFAULTS_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 // ─── Harness ────────────────────────────────────────────────────────────────
 
 /// The managed state `desktop_shell`'s `boot` gives every command, without a
@@ -154,26 +156,22 @@ impl Backend {
 
 /// Reset the DB-backed protection defaults while holding
 /// `PROTECTION_DEFAULTS_TEST_LOCK`. The production compatibility cache is
-/// process-global and unkeyed by database; writing each value through the
-/// normal use case invalidates it after commit. The final DB values match the
-/// migration defaults used by these journeys.
+/// process-global and unkeyed by database; `set_global_protection_default`
+/// invalidates it after each call, even when the value already matches.
 async fn reset_protection_defaults(be: &Backend) {
     let state = be.app.state::<AppState>();
-    for (key, away, expected) in [
-        ("defaultProtection", json!("unprotected"), json!("protected")),
-        ("blockPermanentDelete", json!(false), json!(true)),
-    ] {
-        for value in [away, expected] {
-            app_core::protection::set_global_protection_default(
-                state.repo.pool(),
-                &state.bus,
-                "global",
-                key,
-                value,
-            )
-            .await
-            .unwrap_or_else(|error| panic!("reset protection default {key}: {error}"));
-        }
+    for (key, value) in
+        [("defaultProtection", json!("protected")), ("blockPermanentDelete", json!(true))]
+    {
+        app_core::protection::set_global_protection_default(
+            state.repo.pool(),
+            &state.bus,
+            "global",
+            key,
+            value,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("reset protection default {key}: {error:?}"));
     }
 }
 
