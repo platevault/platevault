@@ -89,8 +89,11 @@ pub fn register<R: Runtime>(app: &AppHandle<R>, notifier: Notifier, identity: &A
         |status, error| tracing::debug!(phase = ?status.phase, %error, "update status event not delivered"),
     ));
     let speaker = updater.clone();
-    let offers =
-        Offers::spawn(updater.clone(), offer::platform(identity), move || speaker.locale());
+    let (offers, offer_task) =
+        Offers::new(updater.clone(), offer::platform(identity), move || speaker.locale());
+    // On Tauri's runtime, as the feed forwards are; the port operations a
+    // button runs are spawned from this task, so they run there too.
+    tauri::async_runtime::spawn(offer_task);
     tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
         app.clone(),
         UPDATE_OFFER_EVENT,

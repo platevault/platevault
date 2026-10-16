@@ -25,10 +25,11 @@ use std::sync::Mutex;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::Bool;
-use objc2_foundation::{NSBundle, NSError, NSString};
+use objc2_foundation::{NSArray, NSBundle, NSError, NSString};
 use objc2_user_notifications::{
-    UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent,
-    UNNotificationRequest, UNNotificationSettings, UNUserNotificationCenter,
+    UNAlertStyle, UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent,
+    UNNotificationRequest, UNNotificationSetting, UNNotificationSettings,
+    UNUserNotificationCenter,
 };
 
 /// The authorization status the framework reports.
@@ -56,6 +57,16 @@ impl Authorization {
     }
 }
 
+/// The app's notification settings that decide whether a notification is
+/// seen.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Settings {
+    pub authorization: Authorization,
+    /// Notifications appear on screen as a banner or an alert, not only in
+    /// Notification Center.
+    pub alerts: bool,
+}
+
 /// The main bundle's identifier; `None` for an unbundled process.
 #[must_use]
 pub fn bundle_identifier() -> Option<String> {
@@ -78,15 +89,31 @@ impl NotificationCenter {
 
     /// Read the authorization status without prompting.
     pub fn authorization(&self, done: impl FnOnce(Authorization) + Send + 'static) {
+        self.settings(move |settings| done(settings.authorization));
+    }
+
+    /// Read the app's notification settings without prompting.
+    pub fn settings(&self, done: impl FnOnce(Settings) + Send + 'static) {
         let done = once(done);
         let block = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
             // SAFETY: the framework passes a valid settings object that lives
             // for the duration of this completion handler.
             #[allow(unsafe_code)]
             let settings = unsafe { settings.as_ref() };
-            done(Authorization::from_status(settings.authorizationStatus()));
+            done(Settings {
+                authorization: Authorization::from_status(settings.authorizationStatus()),
+                alerts: settings.alertSetting() == UNNotificationSetting::Enabled
+                    && settings.alertStyle() != UNAlertStyle::None,
+            });
         });
         self.0.getNotificationSettingsWithCompletionHandler(&block);
+    }
+
+    /// Remove the delivered notification `identifier` from the screen and
+    /// from Notification Center.
+    pub fn withdraw(&self, identifier: &str) {
+        let identifiers = NSArray::from_retained_slice(&[NSString::from_str(identifier)]);
+        self.0.removeDeliveredNotificationsWithIdentifiers(&identifiers);
     }
 
     /// Ask the user for alert and sound permission. Reports whether it was

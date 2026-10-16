@@ -5,16 +5,25 @@
 //!
 //! When a check finds a release, a system notification offers Install now
 //! and Install on quit. Each button runs the [`UpdatePort`] operation the
-//! matching in-app button runs; this module has no update logic of its own.
+//! matching in-app button runs, and only where that in-app button shows: for
+//! the release the status names, in a phase that offers it
+//! ([`allows`]). A click on a notification for another release, or during
+//! a download or install, is dropped. This module has no update logic of
+//! its own.
+//!
 //! [`Offers::current`] and [`Offers::feed`] say where the offer for the
-//! release was made: [`OfferChannel::System`] once the OS accepted the
-//! notification, else [`OfferChannel::InApp`], and the UI shows its in-app
-//! notice instead. The in-app notice takes over when notification permission
-//! is denied, the notification system shows no buttons, the notification
-//! cannot be shown, or the OS has not accepted it within [`OFFER_DEADLINE`].
+//! release stands: [`OfferChannel::System`] only while the notification the
+//! OS accepted is on screen, else [`OfferChannel::InApp`], and the UI shows
+//! its in-app notice. The in-app notice takes over when notification
+//! permission is denied, the notification system shows no buttons, the
+//! notification cannot be shown, the OS has not accepted it within
+//! [`OFFER_DEADLINE`], the user answered or closed it, or it was withdrawn.
+//! The notification is withdrawn when the phase leaves "available" or a
+//! newer release is offered. A release offered once and available again,
+//! after a failed download for one, is offered in-app.
 //!
 //! The offer is made from the check result alone, so nothing downloads
-//! before a click. Each release is offered once per process.
+//! before a click.
 //!
 //! [`SystemOffer`] is the seam to the OS ([`platform`]): macOS posts through
 //! `UNUserNotificationCenter` in a category carrying both actions, Windows
@@ -71,11 +80,31 @@ impl OfferAction {
         }
     }
 
-    /// The button `identifier` names; `None` for the notification's own
-    /// responses, such as a click on its body or a dismissal.
+    /// The button `identifier` names.
     #[must_use]
     pub fn from_identifier(identifier: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|action| action.identifier() == identifier)
+    }
+}
+
+/// What the user did with an offer notification. Either way it is gone.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Response {
+    /// Clicked a button.
+    Chose(OfferAction),
+    /// Clicked the notification's body or closed it, or the notification
+    /// system dropped it.
+    Dismissed,
+}
+
+impl Response {
+    /// The response a notification reports by `identifier`: a button's
+    /// identifier, else a dismissal, such as a body click (`default`, the
+    /// macOS default action) or a close (`__closed`, the macOS dismiss
+    /// action).
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Self {
+        OfferAction::from_identifier(identifier).map_or(Self::Dismissed, Self::Chose)
     }
 }
 
@@ -132,7 +161,8 @@ impl OfferText {
 /// Why the system notification cannot carry the offer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Refusal {
-    /// The user has not given notification permission.
+    /// The user has not given notification permission, or the OS shows the
+    /// app's notifications without a banner or alert.
     PermissionDenied,
     /// The notification system shows no buttons.
     ActionsUnsupported,
@@ -140,36 +170,50 @@ pub enum Refusal {
     Failed(String),
 }
 
-/// Hands a clicked button to the offer, from any thread.
-#[derive(Clone, Debug)]
-pub struct Chooser(mpsc::UnboundedSender<OfferAction>);
+/// What the offer task handles, in order.
+enum Event {
+    Status(UpdateStatus),
+    Response { version: String, response: Response },
+    /// The update status ended with the updater.
+    Ended,
+}
 
-impl Chooser {
-    /// The user clicked `action`.
-    pub fn choose(&self, action: OfferAction) {
-        // A closed channel means the offer task ended with the process.
-        let _ = self.0.send(action);
+/// Reports the user's response to the notification for one release, from
+/// any thread.
+#[derive(Clone, Debug)]
+pub struct Responder {
+    version: String,
+    events: mpsc::UnboundedSender<Event>,
+}
+
+impl Responder {
+    /// The user responded with `response`.
+    pub fn respond(&self, response: Response) {
+        let event = Event::Response { version: self.version.clone(), response };
+        // A closed channel means the offer task ended with the updater.
+        self.events.send(event).ok();
     }
 
-    /// The user clicked the button `identifier` names; anything else, such
-    /// as a click on the notification's body, is ignored.
-    pub fn choose_identifier(&self, identifier: &str) {
-        if let Some(action) = OfferAction::from_identifier(identifier) {
-            self.choose(action);
-        }
+    /// The notification reported `identifier` ([`Response::from_identifier`]).
+    pub fn respond_identifier(&self, identifier: &str) {
+        self.respond(Response::from_identifier(identifier));
     }
 }
 
 /// The OS side of the offer: a system notification with both buttons.
 pub trait SystemOffer: Send + Sync + 'static {
     /// Show `text` with an Install now and an Install on quit button, and
-    /// pass each click to `chooser`. Resolves once the OS accepted the
-    /// notification, or with why it cannot carry the offer.
+    /// pass the user's response to `responder`. Resolves once the OS accepted
+    /// the notification, or with why it cannot carry the offer.
     fn post(
         &self,
         text: &OfferText,
-        chooser: Chooser,
+        responder: Responder,
     ) -> impl Future<Output = Result<(), Refusal>> + Send;
+
+    /// Take the notification [`Self::post`] showed off screen, where the OS
+    /// allows it.
+    fn withdraw(&self);
 }
 
 #[cfg(target_os = "macos")]
@@ -185,6 +229,19 @@ pub fn platform(identity: &AppIdentity) -> impl SystemOffer {
     Platform::new(identity)
 }
 
+/// Whether the in-app notice offers `action` for `version` in `status`,
+/// mirroring the UI's `canInstall`: Install now from every installable
+/// phase, Install on quit from each but the one it leads to.
+#[must_use]
+pub fn allows(status: &UpdateStatus, version: &str, action: OfferAction) -> bool {
+    let installable = match status.phase {
+        UpdatePhase::Available | UpdatePhase::DownloadFailed | UpdatePhase::InstallFailed => true,
+        UpdatePhase::InstallOnQuit => action == OfferAction::InstallNow,
+        _ => false,
+    };
+    installable && status.version.as_deref() == Some(version)
+}
+
 /// The update offers of one process. Cheap to clone.
 #[derive(Clone)]
 pub struct Offers {
@@ -193,26 +250,40 @@ pub struct Offers {
 
 impl Offers {
     /// Offer each release `port` finds through `system`, in the locale
-    /// `locale` names at the time. Runs on the ambient tokio runtime until
-    /// `port`'s status ends.
-    pub fn spawn<P, S>(
+    /// `locale` names at the time. The returned task does the work: spawn it
+    /// on the runtime the port's operations should run on. It ends with
+    /// `port`'s status.
+    #[must_use]
+    pub fn new<P, S>(
         port: P,
         system: S,
-        locale: impl Fn() -> &'static ShippedLocale + Send + 'static,
-    ) -> Self
+        locale: impl Fn() -> &'static ShippedLocale + Send + Sync + 'static,
+    ) -> (Self, impl Future<Output = ()> + Send + 'static)
     where
         P: UpdatePort + Clone + 'static,
         S: SystemOffer,
     {
         let (published, _) = watch::channel(UpdateOffer::none());
         let published = Arc::new(published);
-        let (choices, chosen) = mpsc::unbounded_channel();
-        tokio::spawn(run_choices(port.clone(), chosen));
-        tokio::spawn(make_offers(port, system, locale, Chooser(choices), Arc::clone(&published)));
-        Self { published }
+        let (events, received) = mpsc::unbounded_channel();
+        let statuses = forward_statuses(port.status(), events.clone());
+        let offer = Offer {
+            port,
+            system,
+            locale,
+            events,
+            published: Arc::clone(&published),
+            latest: UpdateStatus::idle(),
+            offered: None,
+            outstanding: false,
+        };
+        let task = async move {
+            tokio::join!(statuses, offer.run(received));
+        };
+        (Self { published }, task)
     }
 
-    /// Where the offer for the release the last check found was made.
+    /// Where the offer for the release the last check found stands.
     #[must_use]
     pub fn current(&self) -> UpdateOffer {
         self.published.borrow().clone()
@@ -225,14 +296,112 @@ impl Offers {
     }
 }
 
-/// Run the port operation of each clicked button, each on its own task as
-/// each in-app button runs its own command.
-async fn run_choices<P: UpdatePort + Clone + 'static>(
+async fn forward_statuses(mut status: Latest<UpdateStatus>, events: mpsc::UnboundedSender<Event>) {
+    while let Some(status) = status.next().await {
+        if events.send(Event::Status(status)).is_err() {
+            return;
+        }
+    }
+    events.send(Event::Ended).ok();
+}
+
+/// The offer task's state.
+struct Offer<P, S, L> {
     port: P,
-    mut chosen: mpsc::UnboundedReceiver<OfferAction>,
-) {
-    while let Some(action) = chosen.recv().await {
-        let port = port.clone();
+    system: S,
+    locale: L,
+    events: mpsc::UnboundedSender<Event>,
+    published: Arc<watch::Sender<UpdateOffer>>,
+    /// The last status the port published.
+    latest: UpdateStatus,
+    /// The release last posted.
+    offered: Option<String>,
+    /// Whether the notification for `offered` is on screen.
+    outstanding: bool,
+}
+
+impl<P, S, L> Offer<P, S, L>
+where
+    P: UpdatePort + Clone + 'static,
+    S: SystemOffer,
+    L: Fn() -> &'static ShippedLocale,
+{
+    async fn run(mut self, mut received: mpsc::UnboundedReceiver<Event>) {
+        while let Some(event) = received.recv().await {
+            match event {
+                Event::Status(status) => self.on_status(status).await,
+                Event::Response { version, response } => self.on_response(&version, response),
+                Event::Ended => return,
+            }
+        }
+    }
+
+    async fn on_status(&mut self, status: UpdateStatus) {
+        let available =
+            status.version.clone().filter(|_| status.phase == UpdatePhase::Available);
+        self.latest = status;
+        match available {
+            Some(version) if self.offered.as_ref() == Some(&version) => {
+                // Still on screen, or answered, closed or withdrawn earlier.
+                if !self.outstanding {
+                    self.publish(&version, OfferChannel::InApp);
+                }
+            }
+            Some(version) => {
+                self.withdraw();
+                self.offered = Some(version.clone());
+                let channel = match self.post(&version).await {
+                    Ok(()) => {
+                        self.outstanding = true;
+                        OfferChannel::System
+                    }
+                    Err(refusal) => {
+                        tracing::info!(?refusal, version, "the in-app notice offers the update");
+                        OfferChannel::InApp
+                    }
+                };
+                self.publish(&version, channel);
+            }
+            None => self.withdraw(),
+        }
+    }
+
+    /// Post the offer of `version`; a notification the OS does not accept in
+    /// time is withdrawn should it appear later.
+    async fn post(&self, version: &str) -> Result<(), Refusal> {
+        let text = OfferText::new((self.locale)(), version).map_err(Refusal::Failed)?;
+        let responder = Responder { version: version.to_owned(), events: self.events.clone() };
+        let posted = tokio::time::timeout(OFFER_DEADLINE, self.system.post(&text, responder)).await;
+        posted.unwrap_or_else(|_| {
+            self.system.withdraw();
+            Err(Refusal::Failed("the OS did not accept the notification in time".to_owned()))
+        })
+    }
+
+    /// Take the outstanding notification off screen and offer in-app.
+    fn withdraw(&mut self) {
+        if !self.outstanding {
+            return;
+        }
+        self.outstanding = false;
+        self.system.withdraw();
+        if let Some(version) = self.offered.clone() {
+            self.publish(&version, OfferChannel::InApp);
+        }
+    }
+
+    fn on_response(&mut self, version: &str, response: Response) {
+        if self.outstanding && self.offered.as_deref() == Some(version) {
+            self.outstanding = false;
+            self.publish(version, OfferChannel::InApp);
+        }
+        let Response::Chose(action) = response else { return };
+        if !allows(&self.latest, version, action) {
+            tracing::info!(?action, version, phase = ?self.latest.phase, "a stale offer button was ignored");
+            return;
+        }
+        // Each on its own task, as each in-app button runs its own command.
+        let port = self.port.clone();
         tokio::spawn(async move {
             match action {
                 OfferAction::InstallNow => port.install_now().await,
@@ -240,46 +409,8 @@ async fn run_choices<P: UpdatePort + Clone + 'static>(
             }
         });
     }
-}
 
-/// Offer each newly available release, and publish where it was offered.
-async fn make_offers<P, S>(
-    port: P,
-    system: S,
-    locale: impl Fn() -> &'static ShippedLocale,
-    chooser: Chooser,
-    published: Arc<watch::Sender<UpdateOffer>>,
-) where
-    P: UpdatePort,
-    S: SystemOffer,
-{
-    let mut status = port.status();
-    let mut offered: Option<String> = None;
-    while let Some(status) = status.next().await {
-        let Some(version) = newly_available(&status, offered.as_deref()) else { continue };
-        offered = Some(version.to_owned());
-        let refusal = match OfferText::new(locale(), version) {
-            Ok(text) => tokio::time::timeout(OFFER_DEADLINE, system.post(&text, chooser.clone()))
-                .await
-                .unwrap_or_else(|_| {
-                    Err(Refusal::Failed("the OS did not accept the notification in time".to_owned()))
-                })
-                .err(),
-            Err(error) => Some(Refusal::Failed(error)),
-        };
-        let channel = match refusal {
-            None => OfferChannel::System,
-            Some(refusal) => {
-                tracing::info!(?refusal, version, "the in-app notice offers the update");
-                OfferChannel::InApp
-            }
-        };
-        published.send_replace(UpdateOffer { version: Some(version.to_owned()), channel });
+    fn publish(&self, version: &str, channel: OfferChannel) {
+        self.published.send_replace(UpdateOffer { version: Some(version.to_owned()), channel });
     }
-}
-
-/// The release `status` offers, unless it is the one already `offered`.
-fn newly_available<'a>(status: &'a UpdateStatus, offered: Option<&str>) -> Option<&'a str> {
-    let version = status.version.as_deref().filter(|_| status.phase == UpdatePhase::Available)?;
-    (offered != Some(version)).then_some(version)
 }

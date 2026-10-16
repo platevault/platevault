@@ -12,11 +12,16 @@
 //!   notification, a reminder for one, is not shown, which is what the
 //!   framework does when no delegate is installed;
 //! - who handles the user's response: a registered category's handler gets
-//!   the chosen action's identifier, and a response to any other
-//!   notification is only acknowledged, as before.
+//!   the chosen action's identifier, the default action's for a click on
+//!   the body, or the dismiss action's for a close (the categories carry
+//!   `CustomDismissAction`), and a response to any other notification is
+//!   only acknowledged, as before.
 
 use std::collections::HashMap;
+use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+
+use block2::RcBlock;
 
 use objc2::rc::Retained;
 use objc2_foundation::{NSArray, NSSet, NSString};
@@ -96,20 +101,25 @@ fn build(identifier: &str, actions: &[Action]) -> Retained<UNNotificationCategor
         &NSString::from_str(identifier),
         &NSArray::from_retained_slice(&actions),
         &NSArray::new(),
-        UNNotificationCategoryOptions::empty(),
+        UNNotificationCategoryOptions::CustomDismissAction,
     )
 }
 
 impl NotificationCenter {
     /// Register `category` with `actions`, replacing an earlier registration
     /// of it and keeping every other category. A response to a notification
-    /// in `category` reaches `on_action` with the chosen action's identifier,
-    /// on the main thread, so `on_action` must return promptly.
+    /// in `category` reaches `on_action` with the response's action
+    /// identifier, on the main thread, so `on_action` must return promptly.
+    ///
+    /// `registered` reports whether the categories the framework reads back
+    /// afterwards hold `category`, so the caller posts in it only once its
+    /// buttons are in place.
     pub fn register_category(
         &self,
         category: &str,
         actions: Vec<Action>,
         on_action: impl Fn(&str) + Send + Sync + 'static,
+        registered: impl FnOnce(bool) + Send + 'static,
     ) {
         let built = {
             let mut categories = registry();
@@ -117,6 +127,16 @@ impl NotificationCenter {
             categories.built()
         };
         self.0.setNotificationCategories(&built);
+        let identifier = category.to_owned();
+        let registered = crate::once(registered);
+        let block = RcBlock::new(move |set: NonNull<NSSet<UNNotificationCategory>>| {
+            // SAFETY: the framework passes a valid set that lives for the
+            // duration of this completion handler.
+            #[allow(unsafe_code)]
+            let set = unsafe { set.as_ref() };
+            registered(set.iter().any(|category| category.identifier().to_string() == identifier));
+        });
+        self.0.getNotificationCategoriesWithCompletionHandler(&block);
     }
 }
 

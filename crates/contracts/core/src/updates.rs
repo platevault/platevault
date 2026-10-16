@@ -87,15 +87,16 @@ impl UpdateStatus {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "kebab-case")]
 pub enum OfferChannel {
-    /// A system notification carries both buttons.
+    /// A system notification with both buttons is on screen.
     System,
     /// The in-app notice carries them: notification permission was denied,
-    /// the notification system shows no buttons, or the notification could
-    /// not be shown.
+    /// the notification system shows no buttons, the notification could not
+    /// be shown or was not accepted in time, or the user answered or closed
+    /// it, or it was withdrawn.
     InApp,
 }
 
-/// Where the offer for the release the last check found was made.
+/// Where the offer for the release the last check found stands.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateOffer {

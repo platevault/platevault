@@ -5,12 +5,18 @@
 //! both buttons over D-Bus, when the notification server advertises the
 //! `actions` capability. A server without it, or no server at all, gets the
 //! in-app notice. The notification does not expire, so its buttons stay
-//! until the user acts on them.
+//! until the user acts on them; a click on its body (`default`) or a close
+//! reports a close.
+//!
+//! The offer cannot take the notification off screen: `notify-rust` hands it
+//! to the thread waiting for its action. A button on a notification left
+//! behind is ignored unless the in-app notice offers the same choice for its
+//! release.
 
 use notify_rust::{Notification, Timeout};
 
 use super::notify::{show, show_blocking};
-use super::{Chooser, OfferText, Refusal, SystemOffer};
+use super::{OfferText, Refusal, Responder, SystemOffer};
 use crate::AppIdentity;
 
 /// The capability a server advertises when it shows action buttons.
@@ -27,7 +33,7 @@ impl XdgOffer {
 }
 
 impl SystemOffer for XdgOffer {
-    async fn post(&self, text: &OfferText, chooser: Chooser) -> Result<(), Refusal> {
+    async fn post(&self, text: &OfferText, responder: Responder) -> Result<(), Refusal> {
         let text = text.clone();
         show_blocking(move || {
             let capabilities = notify_rust::get_capabilities()
@@ -37,8 +43,10 @@ impl SystemOffer for XdgOffer {
             }
             let mut notification = Notification::new();
             notification.auto_icon().timeout(Timeout::Never);
-            show(notification, &text, chooser)
+            show(notification, &text, responder)
         })
         .await
     }
+
+    fn withdraw(&self) {}
 }
