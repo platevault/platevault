@@ -1,7 +1,8 @@
 /**
- * ThemePicker (plan §3.3 P14; user item 256): the mode first (Light, Dark,
- * Match system), then the themes of that mode. Choices apply at once and
- * persist in this browser (`app/preferences.ts`).
+ * ThemePicker (plan §3.3 P14; user item 256): the mode first (Dark, Light,
+ * Match system: the owner's order, as in HIGH-LEVEL-DESIGN.md), then the
+ * themes of that mode. Choices apply at once and persist in this browser
+ * (`app/preferences.ts`).
  *
  * - `ThemePicker`: the Settings › Appearance form, a segmented mode control
  *   over live swatches of that mode's themes.
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils"
 
 export type ThemeMode = ThemeScheme | "system"
 
-const MODES: ThemeMode[] = ["light", "dark", "system"]
+const MODES: ThemeMode[] = ["dark", "light", "system"]
 
 const MODE_ICON = { light: Sun, dark: Moon, system: Monitor } as const
 

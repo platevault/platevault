@@ -5,7 +5,8 @@ import { calibrationQueue, type World } from "./derive"
 import { fileAt, writeFiles } from "./disk"
 import { deriveIssues, isDismissable, issuesFor } from "./issues"
 import { createSeed } from "./seed"
-import type { Session } from "./types"
+import { duplicateCopies } from "./storage"
+import type { Operation, Session } from "./types"
 
 // Far past every master's age limit: an old master is a library badge, never an issue (CAL-FR-15).
 const LATER = Date.now() + 400 * 86_400_000
@@ -61,5 +62,13 @@ describe("deriveIssues on the Project model (F7)", () => {
     expect(calibrationQueue(drifted.catalog, drifted.disk).map((s) => s.id)).toContain(session.id)
     expect(drifted.catalog.sessions[session.id]!.calibration).toEqual(session.calibration)
     expect(deriveIssues(demo, LATER).some((i) => i.kind === "pin-drift" && i.about === session.id)).toBe(false)
+  })
+
+  it("leads the duplicates warning to its owning filter, Sessions › Duplicates, not to Settings › Locations (F5, F7)", () => {
+    const base = Object.values(demo.operations)[0]!
+    const scan: Operation = { ...base, id: "op_duplicate_scan_test", kind: "duplicate-scan", status: "succeeded", payload: { groups: duplicateCopies(demo.catalog, demo.disk) } }
+    const scanned: World = { ...demo, operations: { ...demo.operations, [scan.id]: scan } }
+    const issue = deriveIssues(scanned, LATER).find((i) => i.kind === "duplicates")
+    expect(issue).toMatchObject({ severity: "warning", owner: { kind: "library" }, link: { to: "/sessions", search: { filter: "duplicates" } } })
   })
 })

@@ -10,7 +10,7 @@
  * `&step=`), `?add=goal` (open Add goal);
  * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
  * planning values use; tonight when absent or past), `?project=`;
- * `/settings/locations?duplicates=review` (the Duplicates review sheet);
+ * `/sessions?duplicates=review` (the Duplicates review over Sessions › Duplicates);
  * `/import?step=` and `/sessions/$sessionId?step=` (the staged Import and
  * intake flows; without `step` the plain view shows).
  */

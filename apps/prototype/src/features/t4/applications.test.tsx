@@ -54,6 +54,16 @@ describe("Settings › Applications (cmvgf)", () => {
     expect(screen.queryByText(m.seed_apps_evidence_pixinsight())).toBeNull()
   })
 
+  it("keeps Arguments out of the default columns and shows each application's launch arguments in its details", async () => {
+    addApplicationProfile({ name: "Astro Pixel Processor", executablePath: "/Applications/APP.app", launchArgs: "--batch" })
+    const user = userEvent.setup()
+    renderPage()
+    const table = await screen.findByRole("table", { name: m.settings_applications() })
+    expect(within(table).queryByRole("columnheader", { name: m.apps_col_arguments() })).toBeNull()
+    await user.click(screen.getByRole("button", { name: m.table_row_details({ name: "Astro Pixel Processor" }) }))
+    expect((await screen.findByText(m.apps_launch_arguments(), { selector: "dt" })).nextElementSibling?.textContent).toBe("--batch")
+  })
+
   it("refuses a group keyword a View folder already uses, inline under its field, and Save stays unavailable", async () => {
     const user = userEvent.setup()
     renderPage()

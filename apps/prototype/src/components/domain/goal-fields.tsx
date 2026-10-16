@@ -1,8 +1,10 @@
 /**
  * Goal fields (L2-domain): one channel's goal as C7 settles it, an amount of
  * time or of frames with an optional quality bar ("count only frames with
- * FWHM ≤ x″"; Usable frames always), the line that sums it up, and the
- * per-channel editor of template values. A Project's goals (Add goal…,
+ * FWHM ≤ x″"), the line that sums it up, and the per-channel editor of
+ * template values. Every goal counts Usable frames only, so the amount says
+ * so ("Usable hours", "Usable frames") and the line names only the FWHM
+ * limit. A Project's goals (Add goal…,
  * Edit…), New Project and Settings › Goal templates all edit goals through
  * these, so a template edits exactly like a Project's goals. Channels come
  * from the band set (`GOAL_CHANNELS`) through "Add goal ▾", never free text
@@ -16,11 +18,11 @@ import { Box } from "@/components/app/box"
 import type { MenuItem } from "@/components/app/contracts"
 import { FieldGroup, NumberField, SegmentedField } from "@/components/app/fields"
 import { formatHours } from "@/domain/derive"
-import { GOAL_CHANNELS, qualityBarRef } from "@/domain/labels"
+import { GOAL_CHANNELS, numberText } from "@/domain/labels"
 import { fwhmBar, qualityBarFor } from "@/domain/templates"
 import type { GoalChannel, GoalTemplateValue } from "@/domain/types"
 import { formatCount } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
+import type { Messages } from "@/lib/i18n"
 
 export type GoalKinds = Pick<GoalTemplateValue, "integrationS" | "frameCount" | "qualityBar">
 
@@ -32,10 +34,11 @@ function unitOf(kinds: GoalKinds): Unit {
   return kinds.integrationS === null && kinds.frameCount !== null ? "frames" : "time"
 }
 
-/** "10 h · FWHM ≤ 2.5″", "120 frames"; "Not set" without an amount. */
+/** "10 h · FWHM ≤ 2.5″", "120 frames"; "Not set" without an amount. Usable goes unsaid: every goal counts Usable frames only (C7). */
 export function kindsLine(m: Messages, goal: GoalKinds): string {
   const amount = goal.integrationS !== null ? formatHours(goal.integrationS) : goal.frameCount !== null ? m.project_frames_count({ count: goal.frameCount, n: formatCount(goal.frameCount) }) : null
-  const bar = fwhmBar(goal.qualityBar) !== null ? say(m, qualityBarRef(goal.qualityBar)) : null
+  const limit = fwhmBar(goal.qualityBar)
+  const bar = limit !== null ? m.domain_quality_max_fwhm({ arcsec: numberText(limit) }) : null
   return [amount, bar].filter((part): part is string => part !== null).join(" · ") || m.status_not_set()
 }
 
@@ -67,7 +70,7 @@ export function GoalKindsFields({ value, onChange }: { value: GoalKinds; onChang
       />
       {unit === "time" ? (
         <NumberField
-          label={m.goal_hours()}
+          label={m.goal_usable_hours()}
           min={0}
           step={0.5}
           value={value.integrationS === null ? null : value.integrationS / 3600}
@@ -75,7 +78,7 @@ export function GoalKindsFields({ value, onChange }: { value: GoalKinds; onChang
           error={goalKindsError(m, value)}
         />
       ) : (
-        <NumberField label={m.goal_frames()} min={0} step={1} value={value.frameCount} onChange={(frames) => onChange({ frameCount: frames === null ? null : Math.round(frames) })} error={goalKindsError(m, value)} />
+        <NumberField label={m.goal_usable_frames()} min={0} step={1} value={value.frameCount} onChange={(frames) => onChange({ frameCount: frames === null ? null : Math.round(frames) })} error={goalKindsError(m, value)} />
       )}
       <NumberField label={m.goal_fwhm_max()} min={0.5} step={0.1} value={fwhmBar(value.qualityBar)} onChange={(limit) => onChange({ qualityBar: qualityBarFor(limit) })} />
     </>

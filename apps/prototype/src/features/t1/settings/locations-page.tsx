@@ -7,12 +7,12 @@
  * remap, Choose folder again, Retire location and Remove are in the row's
  * menu and on right-click; a row's disclosure shows its details. Several
  * archive locations may be registered; the Default archive location is the
- * Archive step's default destination. `?locationId=` opens one location,
- * `?add=<role>` starts adding one, `?duplicates=review` opens the Duplicates
- * review (the duplicates issue links there). A location that is offline or
- * unreadable offers Dismiss issue in its menu, then Restore issue once
- * dismissed (F7, P-ISS1); every location always shows, so the menu is where
- * a dismissed issue comes back.
+ * Archive step's default destination. `?locationId=` opens one location and
+ * `?add=<role>` starts adding one. The duplicate copies have no place here:
+ * their issue is a status-bar counter that opens Sessions › Duplicates (F5,
+ * F7). A location that is offline or unreadable offers Dismiss issue in its
+ * menu, then Restore issue once dismissed (F7, P-ISS1); every location always
+ * shows, so the menu is where a dismissed issue comes back.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { FolderPlus, Play, RotateCw } from "lucide-react"
@@ -37,7 +37,6 @@ import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
 import { useIssues } from "@/store/issues"
 import { AddLocationFlow } from "../components/add-location-flow"
-import { DuplicatesReview } from "../components/duplicates-review"
 import { blockedByErrors } from "@/components/app/form-dialog"
 import { useLocationActions } from "../components/location-actions"
 import { LocationAttentionBadge } from "../components/location-attention"
@@ -50,11 +49,12 @@ function count(message: (inputs: { count: number; n: string }) => string, value:
   return message({ count: value, n: formatCount(value) })
 }
 
-/** One location as the table shows it, read once per render. */
+/** One location as the table shows it, read once per render. The disk figures are null while its volume is not mounted, or once it is retired. */
 interface LocationRow extends LocationStatus {
   frames: number
   footprint: number | null
   free: number | null
+  capacity: number | null
 }
 
 function EditLocationDialog({ location, onClose }: { location: Location | null; onClose: () => void }) {
@@ -99,11 +99,12 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
   )
 }
 
-/** A location's facts, under its row's disclosure. */
-function LocationDetails({ location }: { location: Location }) {
+/** A location's facts, under its row's disclosure: what the hideable Frames, Size and Disk free columns show, too, so they read without opening the Columns menu. */
+function LocationDetails({ row }: { row: LocationRow }) {
   const m = useMessages()
   const disk = useStore((s) => s.disk)
   const catalog = useStore((s) => s.catalog)
+  const { location } = row
   const volume = disk.volumes[location.volumeId]
   return (
     <KeyValueList
@@ -111,11 +112,14 @@ function LocationDetails({ location }: { location: Location }) {
       items={[
         { label: m.location_path(), value: location.path, mono: true },
         { label: m.location_volume(), value: volume ? m.location_volume_identity({ name: volume.name, uuid: volume.volumeUuid }) : m.location_volume_unknown() },
-        { label: m.location_availability(), value: <StatusBadge kind="availability" value={locationAvailability(disk, location)} /> },
+        { label: m.location_availability(), value: <StatusBadge kind="availability" value={row.availability} /> },
         { label: m.location_access(), value: <StatusBadge kind="access" value={location.access} /> },
         { label: m.location_scan_scope(), value: <StatusBadge kind="scanScope" value={location.scanScope} /> },
         { label: m.location_registered(), value: formatDateTime(location.registeredAt) },
         { label: m.location_last_indexed(), value: location.lastIndexedAt ? formatDateTime(location.lastIndexedAt) : m.location_not_indexed_yet() },
+        { label: m.location_col_frames(), value: formatCount(row.frames) },
+        { label: m.location_col_size(), value: row.footprint === null ? "–" : formatBytes(row.footprint) },
+        { label: m.location_col_free(), value: row.free === null || row.capacity === null ? "–" : m.location_free_of({ free: formatBytes(row.free), capacity: formatBytes(row.capacity) }) },
         { label: m.nav_sessions(), value: count(m.location_sessions_count, sessionsInLocation(catalog, location.id)) },
         { label: m.session_os_trash(), value: volume ? <StatusBadge kind="trash" value={volume.trash} /> : m.status_unknown() },
         { label: m.location_link_symlinks(), value: volume ? (volume.symlinks ? m.location_symlinks_supported() : m.location_links_none()) : m.status_unknown() },
@@ -156,6 +160,7 @@ export function LocationsPage() {
       indexing: indexingIds.has(location.id),
       footprint: use?.footprintBytes ?? null,
       free: use?.freeBytes ?? null,
+      capacity: use?.capacityBytes ?? null,
     }
   })
   const archives = rows.filter((r) => r.location.role === "archive" && !r.location.retiredAt).map((r) => r.location)
@@ -273,7 +278,7 @@ export function LocationsPage() {
           empty: <EmptyState icon={FolderPlus} title={m.storage_no_locations()} action={<ActionButton action={add} />} />,
           primaryRowAction: (r) => (r.availability === "retired" ? null : rescan(r)),
           rowActions,
-          expand: { render: (r) => <LocationDetails location={r.location} />, defaultExpanded: search.locationId ? [search.locationId] : [] },
+          expand: { render: (r) => <LocationDetails row={r} />, defaultExpanded: search.locationId ? [search.locationId] : [] },
         }}
       />
 
@@ -299,10 +304,6 @@ export function LocationsPage() {
         href={HREF}
       />
       <EditLocationDialog location={editing} onClose={() => setEditing(null)} />
-      <DuplicatesReview
-        open={search.duplicates === "review"}
-        onClose={() => void navigate({ to: HREF, search: (prev: Record<string, string | undefined>) => ({ ...prev, duplicates: undefined }), replace: true })}
-      />
       {actions.dialogs}
     </SettingsPage>
   )

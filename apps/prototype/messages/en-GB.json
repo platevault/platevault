@@ -1207,6 +1207,8 @@
   "project_back_to_projects": "Open Projects",
   "goal_hours": "Hours",
   "goal_frames": "Frames",
+  "goal_usable_hours": "Usable hours",
+  "goal_usable_frames": "Usable frames",
   "goal_fwhm_max": "FWHM ≤ ″",
   "project_unknown_subject": "Unknown subject",
   "project_panels": [
@@ -3126,9 +3128,7 @@
   "common_mosaic_panel": "Mosaic panel",
   "domain_result_assembled_mosaic": "Assembled mosaic",
   "domain_result_other": "Other",
-  "domain_quality_any": "Any quality",
   "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
-  "domain_quality_usable_max_fwhm": "Usable, FWHM ≤ {arcsec}″",
   "domain_rig_unknown": "Unknown rig",
   "domain_fov_unknown": "Field of view unknown",
   "domain_candidate_reason": "Target {target} on {rig}",
@@ -5396,6 +5396,7 @@
   "location_col_frames": "Frames",
   "location_col_size": "Size",
   "location_col_free": "Disk free",
+  "location_free_of": "{free} of {capacity}",
   "location_offline_count": [
     {
       "declarations": [

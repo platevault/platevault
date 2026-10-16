@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { m, say } from "@/lib/i18n"
-import { numberText, panelBalanceRef, qualityBarRef, windowRuleRef } from "./labels"
+import { numberText, panelBalanceRef, windowRuleRef } from "./labels"
 import {
   BUILT_IN_GOAL_TEMPLATES,
   clampPanelBalance,
@@ -40,8 +40,7 @@ describe("quality bar (C7)", () => {
     expect(fwhmBar({ kind: "max-fwhm", maxArcsec: 4 })).toBe(4)
   })
 
-  it("names the limit in the reader's digits, as precise as it was set", () => {
-    expect(say(m, qualityBarRef(qualityBarFor(3.5)))).toBe(m.domain_quality_usable_max_fwhm({ arcsec: "3.5" }))
+  it("writes a limit in the reader's digits, as precise as it was set", () => {
     expect([numberText(10), numberText(1.1), numberText(5.25)]).toEqual(["10", "1.1", "5.25"])
   })
 })

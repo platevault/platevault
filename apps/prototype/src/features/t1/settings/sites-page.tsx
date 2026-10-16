@@ -11,7 +11,8 @@ import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import type { Action, ConfirmSpec, MenuItem } from "@/components/app/contracts"
+import type { Action, Column, ConfirmSpec, MenuItem } from "@/components/app/contracts"
+import { KeyValueList } from "@/components/app/data"
 import { EmptyState, type PageNotice, useSaveState } from "@/components/app/feedback"
 import { ComboboxField, NumberField, SegmentedField, SelectField, SwitchField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
@@ -20,6 +21,7 @@ import { SettingsSection } from "@/components/app/settings"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import type { ObservingSite } from "@/domain/types"
 import { formatCount } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { store, useStore } from "@/store/core"
 import { blockedByErrors, shownErrors } from "@/components/app/form-dialog"
 import { deleteSite, formatCoordinates, remindersMoveWith, saveSite, setDefaultSite, type SiteValues, siteValues, TIME_ZONES, unmatchedCaptureSites, validateSite } from "../lib/sites"
@@ -35,6 +37,34 @@ function numberText(value: number | null): string {
 function textNumber(value: string): number | null {
   const parsed = Number(value.trim().replace(",", "."))
   return value.trim() === "" || Number.isNaN(parsed) ? null : parsed
+}
+
+/** A site's facts in the reader's words, shared by its table cells and its row details. */
+function siteFacts(m: Messages, site: ObservingSite) {
+  return {
+    coordinates: formatCoordinates(site.latitude, site.longitude),
+    elevation: site.elevationM === null ? "–" : m.site_elevation_value({ metres: formatCount(site.elevationM) }),
+    darkness: site.twilight === "astronomical" ? m.site_twilight_astronomical() : m.site_twilight_nautical(),
+    altitude: m.site_degrees_value({ degrees: formatCount(site.minAltitudeDeg) }),
+  }
+}
+
+/** A site's facts, under its row's disclosure: what the hideable Elevation, Darkness and Min. altitude columns show, too, so they read without opening the Columns menu. */
+function SiteDetails({ site }: { site: ObservingSite }) {
+  const m = useMessages()
+  const facts = siteFacts(m, site)
+  return (
+    <KeyValueList
+      columns={2}
+      items={[
+        { label: m.site_coordinates_header(), value: facts.coordinates },
+        { label: m.site_elevation(), value: facts.elevation },
+        { label: m.site_time_zone(), value: site.timeZone },
+        { label: m.site_darkness(), value: facts.darkness },
+        { label: m.site_min_altitude(), value: facts.altitude },
+      ]}
+    />
+  )
 }
 
 function SiteDialog({ editing, onClose }: { editing: Editing | null; onClose: () => void }) {
@@ -152,6 +182,16 @@ export function SitesPage() {
   const add: Action = { id: "add-site", label: m.tonight_add_site(), opensDialog: true, run: () => setEditing({ site: null }) }
   const notice: PageNotice | null = sites.length > 0 && !defaultSiteId ? { tone: "info", title: m.site_no_default() } : null
   const NONE = "none"
+  // Name, Default, Coordinates and Time zone fit the pane from 1280 px in both locales; Elevation, Darkness and Min. altitude are hideable, hidden by default, and in the row details.
+  const siteColumns: Column<ObservingSite>[] = [
+    { id: "name", header: m.site_name(), rowHeader: true, sortValue: (r) => r.name, cell: (r) => r.name },
+    { id: "default", header: m.settings_default(), sortValue: (r) => (r.id === defaultSiteId ? 0 : 1), cell: (r) => (r.id === defaultSiteId ? m.settings_default() : "") },
+    { id: "coords", header: m.site_coordinates_header(), sortValue: (r) => r.latitude, cell: (r) => siteFacts(m, r).coordinates },
+    { id: "elevation", header: m.site_elevation(), align: "right", hideable: true, defaultHidden: true, sortValue: (r) => r.elevationM, cell: (r) => siteFacts(m, r).elevation },
+    { id: "zone", header: m.site_time_zone(), sortValue: (r) => r.timeZone, cell: (r) => r.timeZone },
+    { id: "twilight", header: m.site_darkness(), hideable: true, defaultHidden: true, sortValue: (r) => r.twilight, cell: (r) => siteFacts(m, r).darkness },
+    { id: "alt", header: m.site_min_altitude(), align: "right", hideable: true, defaultHidden: true, sortValue: (r) => r.minAltitudeDeg, cell: (r) => siteFacts(m, r).altitude },
+  ]
 
   return (
     <SettingsPage title={m.settings_sites()} notice={notice}>
@@ -188,15 +228,9 @@ export function SitesPage() {
             { separator: true },
             removeAction(r),
           ],
-          columns: [
-            { id: "name", header: m.site_name(), rowHeader: true, sortValue: (r) => r.name, cell: (r) => r.name },
-            { id: "default", header: m.settings_default(), sortValue: (r) => (r.id === defaultSiteId ? 0 : 1), cell: (r) => (r.id === defaultSiteId ? m.settings_default() : "") },
-            { id: "coords", header: m.site_coordinates_header(), sortValue: (r) => r.latitude, cell: (r) => formatCoordinates(r.latitude, r.longitude) },
-            { id: "elevation", header: m.site_elevation(), align: "right", sortValue: (r) => r.elevationM, cell: (r) => (r.elevationM === null ? "–" : m.site_elevation_value({ metres: formatCount(r.elevationM) })) },
-            { id: "zone", header: m.site_time_zone(), sortValue: (r) => r.timeZone, cell: (r) => r.timeZone },
-            { id: "twilight", header: m.site_darkness(), sortValue: (r) => r.twilight, cell: (r) => (r.twilight === "astronomical" ? m.site_twilight_astronomical() : m.site_twilight_nautical()) },
-            { id: "alt", header: m.site_min_altitude(), align: "right", sortValue: (r) => r.minAltitudeDeg, cell: (r) => m.site_degrees_value({ degrees: formatCount(r.minAltitudeDeg) }) },
-          ],
+          columns: siteColumns,
+          columnsId: "settings.sites",
+          expand: { render: (r) => <SiteDetails site={r} /> },
         }}
       />
 
