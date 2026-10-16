@@ -1415,6 +1415,9 @@ const mockHandlers = {
   update_status: async () => {
     return { phase: 'idle', version: null, body: null, error: null };
   },
+  update_offer: async () => {
+    return { version: null, channel: 'in-app' };
+  },
   update_check_on_startup: async () => {
     return null;
   },

@@ -4,17 +4,22 @@
 //! Update commands (spec 051 US10, astro-plan-5wcib): the webview's side of
 //! the services-crate updater. Each one runs an `UpdatePort` operation; its
 //! progress reaches the webview as `update:status` events
-//! (`crate::updater::UPDATE_STATUS_EVENT`).
+//! (`crate::updater::UPDATE_STATUS_EVENT`), and where the offer of a found
+//! release was made as `update:offer` events
+//! (`crate::updater::UPDATE_OFFER_EVENT`, astro-plan-c72oo).
 
-use contracts_core::updates::UpdateStatus;
+use contracts_core::updates::{UpdateOffer, UpdateStatus};
 use contracts_core::ContractError;
+use desktop_services::update::offer::Offers;
 use desktop_services::update::{UpdatePort as _, Updater};
 use tauri::{AppHandle, Manager, Runtime};
 
+fn unavailable() -> ContractError {
+    ContractError::internal("updates are unavailable in this build")
+}
+
 fn updater<R: Runtime>(app: &AppHandle<R>) -> Result<Updater, ContractError> {
-    app.try_state::<Updater>()
-        .map(|updater| updater.inner().clone())
-        .ok_or_else(|| ContractError::internal("updates are unavailable in this build"))
+    app.try_state::<Updater>().map(|updater| updater.inner().clone()).ok_or_else(unavailable)
 }
 
 /// `update.status` — the update status to show now; later changes arrive as
@@ -28,6 +33,20 @@ fn updater<R: Runtime>(app: &AppHandle<R>) -> Result<Updater, ContractError> {
 #[allow(clippy::needless_pass_by_value)] // Tauri injects the app handle by value
 pub fn update_status(app: AppHandle) -> Result<UpdateStatus, ContractError> {
     Ok(updater(&app)?.current_status())
+}
+
+/// `update.offer` — where the Install now and Install on quit offer for the
+/// release the last check found was made: the system notification, or the
+/// in-app notice. Later changes arrive as `update:offer` events.
+///
+/// # Errors
+///
+/// `InternalError` when the build has no usable updater configuration.
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value)] // Tauri injects the app handle by value
+pub fn update_offer(app: AppHandle) -> Result<UpdateOffer, ContractError> {
+    app.try_state::<Offers>().map(|offers| offers.current()).ok_or_else(unavailable)
 }
 
 /// `update.check_on_startup` — the check at app start, run once per process

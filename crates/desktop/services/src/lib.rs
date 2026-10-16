@@ -77,6 +77,7 @@ pub struct Config {
 
 /// The running services of one process.
 pub struct Services {
+    identity: AppIdentity,
     notifier: Notifier,
     /// Flushes the log file when dropped; `None` when an earlier start in this
     /// process installed the logging.
@@ -94,10 +95,17 @@ impl Services {
     #[must_use]
     pub fn start(config: &Config) -> Self {
         Self {
+            identity: config.identity.clone(),
             notifier: Notifier::new(&config.identity),
             log: Mutex::new(logging::init(&config.log_dir)),
             tasks: Mutex::default(),
         }
+    }
+
+    /// The identity the OS attributes this application's notifications to.
+    #[must_use]
+    pub const fn identity(&self) -> &AppIdentity {
+        &self.identity
     }
 
     #[must_use]
