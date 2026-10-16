@@ -1,0 +1,39 @@
+# TEMPORARY (astro-plan-5gll9): removed before this PR lands.
+#
+# Runs the whole app_core test set 20 times in a row on windows-latest with no
+# retries, so the plan_resume_integration flake's fix is judged by repeated
+# Windows passes under app_core's own parallel load, not by a single green run.
+name: Stress astro-plan-5gll9 (temporary)
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+
+concurrency:
+  group: stress-astro-plan-5gll9-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+
+jobs:
+  stress:
+    name: app_core stress x20 — windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-windows-latest-v2"
+          save-if: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+      - name: app_core tests, 20 consecutive iterations, no retries
+        run: cargo nextest run -p app_core --no-fail-fast --retries 0 --failure-output immediate-final --stress-count 20
