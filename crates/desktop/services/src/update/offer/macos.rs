@@ -12,8 +12,16 @@
 //! beside the in-app notice. A process without a bundle, such as
 //! `cargo tauri dev`, gets the in-app notice.
 //!
-//! The category's handler answers for the release of the last post, so
-//! every post first withdraws the notification an earlier post left.
+//! Each release is posted under a request identifier of its own, and the
+//! category's one handler routes a response by the identifier of the
+//! notification that received it ([`Responders`]). A response to an older
+//! release's notification, already queued when a newer release registered
+//! the category again, so answers for its own release, which the offer
+//! then drops as stale. Every post also first withdraws the notification an
+//! earlier post left.
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use platevault_notify_macos::{Action, AlertStyle, Authorization, NotificationCenter, Settings};
 use tokio::sync::oneshot;
@@ -24,26 +32,60 @@ use crate::AppIdentity;
 /// The category the offer is posted in, which carries its buttons.
 const CATEGORY: &str = "update-offer";
 
-/// The offer's request identifier, so a newer offer replaces one still
-/// shown and a withdrawal removes it.
-const REQUEST: &str = "update-offer";
+/// The request identifier of the offer of `version`.
+fn request_for(version: &str) -> String {
+    format!("update-offer-{version}")
+}
+
+/// The responder of every offer posted, by request identifier. Kept for the
+/// process, one per release offered, so a response that arrives after a
+/// newer post still reaches the responder of its own release.
+#[derive(Default)]
+struct Responders {
+    by_request: HashMap<String, Responder>,
+    /// The request of the last post, which [`SystemOffer::withdraw`] removes.
+    last: Option<String>,
+}
+
+impl Responders {
+    /// Keep `responder` and return its request identifier.
+    fn add(&mut self, responder: Responder) -> String {
+        let request = request_for(&responder.version);
+        self.by_request.insert(request.clone(), responder);
+        self.last = Some(request.clone());
+        request
+    }
+
+    /// The notification `request` reported `action`.
+    fn respond(&self, request: &str, action: &str) {
+        if let Some(responder) = self.by_request.get(request) {
+            responder.respond_identifier(action);
+        }
+    }
+}
 
 /// The offer through the process's notification center.
-pub struct MacOffer;
+pub struct MacOffer {
+    responders: Arc<Mutex<Responders>>,
+}
 
 impl MacOffer {
     /// The center posts under the bundle's own identifier.
-    pub const fn new(_identity: &AppIdentity) -> Self {
-        Self
+    pub fn new(_identity: &AppIdentity) -> Self {
+        Self { responders: Arc::default() }
+    }
+
+    /// The request of the last post.
+    fn last_request(&self) -> Option<String> {
+        self.responders.lock().unwrap_or_else(PoisonError::into_inner).last.clone()
     }
 }
 
 impl SystemOffer for MacOffer {
     async fn post(&self, text: &OfferText, responder: Responder) -> Result<Delivery, Refusal> {
-        // Its buttons would reach the handler registered below, for this
-        // release.
-        center()?.withdraw(REQUEST);
+        self.withdraw();
         let delivery = delivery(permission().await?)?;
+        let request = self.responders.lock().unwrap_or_else(PoisonError::into_inner).add(responder);
         let (send, registered) = oneshot::channel();
         {
             let actions = OfferAction::ALL
@@ -53,10 +95,16 @@ impl SystemOffer for MacOffer {
                     title: text.label(action).to_owned(),
                 })
                 .collect();
+            let responders = Arc::clone(&self.responders);
             center()?.register_category(
                 CATEGORY,
                 actions,
-                move |identifier| responder.respond_identifier(identifier),
+                move |request, action| {
+                    responders
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .respond(request, action);
+                },
                 move |registered| {
                     send.send(registered).ok();
                 },
@@ -66,7 +114,7 @@ impl SystemOffer for MacOffer {
             return Err(Refusal::Failed("the offer's buttons were not registered".to_owned()));
         }
         let (send, accepted) = oneshot::channel();
-        center()?.submit_in_category(REQUEST, &text.title, &text.body, CATEGORY, move |result| {
+        center()?.submit_in_category(&request, &text.title, &text.body, CATEGORY, move |result| {
             drop(send.send(result));
         });
         accepted.await.map_err(|_| never_answered())?.map_err(Refusal::Failed)?;
@@ -74,8 +122,9 @@ impl SystemOffer for MacOffer {
     }
 
     fn withdraw(&self) {
-        if let Some(center) = NotificationCenter::current() {
-            center.withdraw(REQUEST);
+        if let (Some(request), Some(center)) = (self.last_request(), NotificationCenter::current())
+        {
+            center.withdraw(&request);
         }
     }
 }
@@ -123,9 +172,47 @@ async fn permission() -> Result<Settings, Refusal> {
 
 #[cfg(test)]
 mod tests {
+    use contracts_core::updates::{UpdatePhase, UpdateStatus};
     use platevault_notify_macos::{AlertStyle, Authorization, Settings};
+    use tokio::sync::mpsc;
 
-    use super::{delivery, Delivery, Refusal};
+    use super::super::{allows, Event, OfferAction, Responder, Response};
+    use super::{delivery, Delivery, Refusal, Responders};
+
+    #[test]
+    fn a_response_to_an_older_alert_answers_for_its_own_release_and_is_dropped() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let responder =
+            |version: &str| Responder { version: version.to_owned(), events: events.clone() };
+        let mut responders = Responders::default();
+        let older = responders.add(responder("0.7.0"));
+        // A newer release is posted, re-registering the category's handler,
+        // before the response to the older alert is handled.
+        responders.add(responder("0.7.1"));
+        responders.respond(&older, OfferAction::InstallNow.identifier());
+
+        let Ok(Event::Response { version, response }) = received.try_recv() else {
+            panic!("the response did not reach a responder");
+        };
+        assert_eq!(version, "0.7.0");
+        assert_eq!(response, Response::Chose(OfferAction::InstallNow));
+        let now = UpdateStatus {
+            phase: UpdatePhase::Available,
+            version: Some("0.7.1".to_owned()),
+            body: None,
+            error: None,
+        };
+        assert!(!allows(&now, &version, OfferAction::InstallNow), "a stale click would install");
+    }
+
+    #[test]
+    fn a_response_to_an_unknown_request_reaches_no_responder() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let mut responders = Responders::default();
+        responders.add(Responder { version: "0.7.0".to_owned(), events });
+        responders.respond("update-offer", OfferAction::InstallNow.identifier());
+        assert!(received.try_recv().is_err());
+    }
 
     #[test]
     fn only_the_alert_style_carries_the_offer_and_a_banner_is_a_heads_up() {

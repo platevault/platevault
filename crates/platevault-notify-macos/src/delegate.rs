@@ -59,13 +59,16 @@ define_class!(
             response: &UNNotificationResponse,
             completion_handler: &DynBlock<dyn Fn()>,
         ) {
-            let category =
-                response.notification().request().content().categoryIdentifier().to_string();
+            let request = response.notification().request();
+            let category = request.content().categoryIdentifier().to_string();
             // Out of the registry before the call, so a handler that
             // registers a category cannot deadlock on it.
             let handler = registry().handler(&category);
             if let Some(handler) = handler {
-                handler(&response.actionIdentifier().to_string());
+                handler(
+                    &request.identifier().to_string(),
+                    &response.actionIdentifier().to_string(),
+                );
             }
             completion_handler.call(());
         }

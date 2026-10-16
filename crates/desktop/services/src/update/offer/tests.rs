@@ -390,15 +390,29 @@ async fn an_unanswered_notification_falls_back_at_the_deadline_and_is_withdrawn(
 }
 
 #[tokio::test]
-async fn phases_after_available_make_no_offer() {
+async fn each_phase_after_available_makes_no_offer_and_withdraws_the_notification() {
     let (port, system, offers) = started(Answer::Now(Ok(Delivery::Persistent)));
-    for phase in [UpdatePhase::Downloading, UpdatePhase::InstallOnQuit, UpdatePhase::UpToDate] {
-        port.publish(phase, "0.7.0");
+    let phases = [
+        UpdatePhase::Downloading,
+        UpdatePhase::DownloadFailed,
+        UpdatePhase::Installing,
+        UpdatePhase::InstallFailed,
+        UpdatePhase::InstallOnQuit,
+        UpdatePhase::Checking,
+        UpdatePhase::CheckFailed,
+        UpdatePhase::UpToDate,
+        UpdatePhase::Idle,
+    ];
+    for (index, phase) in phases.into_iter().enumerate() {
+        let version = format!("0.7.{index}");
+        port.publish(UpdatePhase::Available, &version);
+        published(&offers, &offer(&version, OfferChannel::System)).await;
+        port.publish(phase, &version);
+        // The withdrawal shows the offer saw this phase before the next.
+        published(&offers, &offer(&version, OfferChannel::InApp)).await;
+        assert_eq!(system.withdrawn(), index + 1, "{phase:?}");
+        assert_eq!(system.posts(), index + 1, "{phase:?} made an offer");
     }
-    // The offer of a later release is posted after every status before it.
-    port.publish(UpdatePhase::Available, "0.7.1");
-    published(&offers, &offer("0.7.1", OfferChannel::System)).await;
-    assert_eq!(system.posts(), 1);
 }
 
 #[tokio::test]

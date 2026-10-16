@@ -12,9 +12,11 @@
 //!   notification, a reminder for one, is not shown, which is what the
 //!   framework does when no delegate is installed;
 //! - who handles the user's response: a registered category's handler gets
-//!   the chosen action's identifier, the default action's for a click on
-//!   the body, or the dismiss action's for a close (the categories carry
-//!   `CustomDismissAction`), and a response to any other notification is
+//!   the responding notification's request identifier, so a caller that
+//!   posts several notifications in one category tells them apart, and the
+//!   chosen action's identifier: a button's, the default action's for a
+//!   click on the body, or the dismiss action's for a close (the categories
+//!   carry `CustomDismissAction`). A response to any other notification is
 //!   only acknowledged, as before.
 
 use std::collections::HashMap;
@@ -41,8 +43,9 @@ pub struct Action {
     pub title: String,
 }
 
-/// Receives the identifier of the action the user chose.
-pub type Handler = Arc<dyn Fn(&str) + Send + Sync>;
+/// Receives the responding notification's request identifier and the
+/// identifier of the action the user chose.
+pub type Handler = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
 struct Category {
     actions: Vec<Action>,
@@ -127,8 +130,9 @@ fn build(identifier: &str, actions: &[Action]) -> Retained<UNNotificationCategor
 impl NotificationCenter {
     /// Register `category` with `actions`, replacing an earlier registration
     /// of it and keeping every other category. A response to a notification
-    /// in `category` reaches `on_action` with the response's action
-    /// identifier, on the main thread, so `on_action` must return promptly.
+    /// in `category` reaches `on_action` with the notification's request
+    /// identifier and the response's action identifier, on the main thread,
+    /// so `on_action` must return promptly.
     ///
     /// `registered` reports whether the categories the framework reads back
     /// afterwards hold `category`, so the caller posts in it only once its
@@ -137,7 +141,7 @@ impl NotificationCenter {
         &self,
         category: &str,
         actions: Vec<Action>,
-        on_action: impl Fn(&str) + Send + Sync + 'static,
+        on_action: impl Fn(&str, &str) + Send + Sync + 'static,
         registered: impl FnOnce(bool) + Send + 'static,
     ) {
         let built = {
@@ -167,7 +171,14 @@ mod tests {
 
     const OFFER: &str = "update-offer";
 
-    fn with_offer(chosen: Arc<Mutex<Vec<String>>>) -> Categories {
+    /// Each response as "request:action".
+    type Chosen = Arc<Mutex<Vec<String>>>;
+
+    fn recording(chosen: Chosen) -> Handler {
+        Arc::new(move |request, action| chosen.lock().unwrap().push(format!("{request}:{action}")))
+    }
+
+    fn with_offer(chosen: Chosen) -> Categories {
         let mut categories = Categories::default();
         let button = |identifier: &str| Action {
             identifier: identifier.to_owned(),
@@ -176,7 +187,7 @@ mod tests {
         categories.insert(
             OFFER,
             vec![button("install-now"), button("install-on-quit")],
-            Arc::new(move |action| chosen.lock().unwrap().push(action.to_owned())),
+            recording(chosen),
         );
         categories
     }
@@ -199,7 +210,7 @@ mod tests {
 
     #[test]
     fn a_response_to_a_reminder_reaches_no_handler() {
-        let chosen = Arc::default();
+        let chosen: Chosen = Arc::default();
         let categories = with_offer(Arc::clone(&chosen));
         assert!(categories.handler("").is_none());
         assert!(chosen.lock().unwrap().is_empty());
@@ -222,27 +233,22 @@ mod tests {
     }
 
     #[test]
-    fn a_response_in_a_registered_category_reaches_its_handler_with_the_action() {
-        let chosen = Arc::default();
+    fn a_response_reaches_its_categorys_handler_with_its_request_and_action() {
+        let chosen: Chosen = Arc::default();
         let categories = with_offer(Arc::clone(&chosen));
         let handler = categories.handler(OFFER).expect("registered");
-        handler("install-on-quit");
-        assert_eq!(*chosen.lock().unwrap(), ["install-on-quit"]);
+        handler("update-offer-0.7.0", "install-on-quit");
+        assert_eq!(*chosen.lock().unwrap(), ["update-offer-0.7.0:install-on-quit"]);
     }
 
     #[test]
     fn registering_a_category_again_replaces_it() {
-        let first = Arc::default();
-        let second: Arc<Mutex<Vec<String>>> = Arc::default();
+        let first: Chosen = Arc::default();
+        let second: Chosen = Arc::default();
         let mut categories = with_offer(Arc::clone(&first));
-        let replacement = Arc::clone(&second);
-        categories.insert(
-            OFFER,
-            Vec::new(),
-            Arc::new(move |action: &str| replacement.lock().unwrap().push(action.to_owned())),
-        );
-        categories.handler(OFFER).expect("registered")("install-now");
+        categories.insert(OFFER, Vec::new(), recording(Arc::clone(&second)));
+        categories.handler(OFFER).expect("registered")("update-offer-0.7.1", "install-now");
         assert!(first.lock().unwrap().is_empty());
-        assert_eq!(*second.lock().unwrap(), ["install-now"]);
+        assert_eq!(*second.lock().unwrap(), ["update-offer-0.7.1:install-now"]);
     }
 }
