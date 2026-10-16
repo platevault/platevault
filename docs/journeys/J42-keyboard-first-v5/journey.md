@@ -75,7 +75,7 @@ Done means:
 
 - **Do:** On Sessions, with the search field empty, press Tab until a session row has focus. Press ↓ twice, then **End**, **Home**, **Page Down** and **Page Up**. Press Space, read the batch bar, and press Space again. Press **⇧F10**, read the menu, then press **Esc**. Press Tab until focus leaves the table, then press Shift+Tab once.
 - **Expect:**
-  - Tab lands on the table's current row, its first row on this first visit. Provisional (G7): before the rows, Tab first reaches the table's header controls, its select-all and sort buttons, each as its own stop.
+  - Tab lands on the table's current row, its first row on this first visit. Provisional (G7): the table's header controls, its select-all and sort buttons, each keep their own Tab stop.
   - ↓ moves one row each time, **End** to the last row and **Home** to the first, and **Page Down** and **Page Up** move by one screen of rows. Focus and the current row move together.
   - The first Space selects the focused row, and the batch bar replaces the toolbar with `1 selected`; the second Space clears it, and the toolbar returns.
   - **⇧F10** opens the row's menu, named after the row. **Esc** closes it, and focus is back on the row.
@@ -195,9 +195,9 @@ Done means:
 - G2: Unresolved implementation qualification: S7 needs a rescan that runs long enough to focus (P6). No pacing fixture exists. Blocks readiness.
 - G3: Unresolved implementation qualification: SC1 needs a driver that sends only key events and records any pointer event, on both interface profiles. No such driver is set up. Blocks readiness.
 - G4: Out of scope for this journey: frame review's keyboard. There Review's own handler keeps ↑/↓ and Space, and a frame row that takes focus through Home, End, Page Up or Page Down becomes the current frame. The filmstrip view, Compare (C), the review filters (⌥1 to ⌥4), Unreviewed (U), Pick (P, Shift+P), the review shortcuts sheet and palette actions such as theme and language are out of scope too. J22/S11a covers P, Shift+P and the filters with a pointer.
-- G5: Out of scope for this journey: the order in which Tab reaches each region (toolbar, source list, page, status bar), which the v5 design doesn't state, and the focus target after a row is removed. FR-037 sets that target: the next row, or the previous one when the last row goes (provisional), whether a confirmed action, the row's `⋯` or its context menu removed it. No step here removes a row, because no keystroke in this journey trashes, moves or deletes anything.
+- G5: Out of scope for this journey: the order in which Tab reaches each region (toolbar, source list, page, status bar), which the v5 design doesn't state, and the focus target after a row is removed. FR-037 sets that target after a confirmed action removes a row: the next row, or the previous one when the last row goes (provisional). No step here removes a row, because no keystroke in this journey trashes, moves or deletes anything.
 - G6: Unresolved implementation qualification: no screen-reader check (VoiceOver on macOS, NVDA on Windows) has confirmed how a table's current row, its selection and its row menu are announced. Blocks readiness.
-- G7: Rests on provisional items, pending the owner's confirmation in PR #1804. Under D-W121, a table's header controls (select-all and the sort buttons) keep their own Tab stops before the rows (S3a), and focus moves to the previous row after the last row is removed (G5, FR-037). If the owner changes either, the steps that cite it change.
+- G7: Rests on provisional items, pending the owner's confirmation in PR #1804. Under D-W121, a table's header controls (select-all and the sort buttons) keep their own Tab stops (S3a), and focus moves to the previous row after the last row is removed (G5, FR-037). Neither rule sets where the header stops fall in the Tab order. If the owner changes either rule, the steps that cite it change.
 
 ## Delta log
 - **Δ2** 2026-10-15 · S1, S5, S9, S10, S11, S12, S13, S14 · behavior-change
