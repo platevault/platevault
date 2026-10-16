@@ -193,6 +193,14 @@ fn base_builder() -> Builder<tauri::Wry> {
             u32::try_from(desktop_services::update::offer::OFFER_DEADLINE.as_millis())
                 .expect("the offer deadline fits in u32 milliseconds"),
         )
+        // astro-plan-c72oo: how long a notification that stays on screen
+        // carries the offer before the backend offers it in-app too, so the
+        // webview reads the offer again should that event be lost.
+        .constant(
+            "UPDATE_PERSISTENT_OFFER_TIMEOUT_MS",
+            u32::try_from(desktop_services::update::offer::PERSISTENT_OFFER_TIMEOUT.as_millis())
+                .expect("the persistent offer timeout fits in u32 milliseconds"),
+        )
 }
 
 // `collect_commands!` uses `$b:ident $(:: …)*` patterns — it cannot accept a

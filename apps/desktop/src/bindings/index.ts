@@ -2208,6 +2208,8 @@ export const commands = {
 /* Constants */
 export const UPDATE_OFFER_DEADLINE_MS = 30000 as const;
 
+export const UPDATE_PERSISTENT_OFFER_TIMEOUT_MS = 300000 as const;
+
 /* Types */
 /**
  *  An acquisition session as seen through the IPC boundary.

@@ -83,7 +83,9 @@ pub const OFFER_DEADLINE: Duration = Duration::from_secs(30);
 
 /// The longest a notification that stays on screen carries the offer
 /// unanswered before the in-app notice offers the update too: a Focus may
-/// have sent it unseen to Notification Center.
+/// have sent it unseen to Notification Center. The webview reads the offer
+/// again after it (`UPDATE_PERSISTENT_OFFER_TIMEOUT_MS`), should the event
+/// that hands the offer in-app be lost.
 pub const PERSISTENT_OFFER_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// A button of the offer.

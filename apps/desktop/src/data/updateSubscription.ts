@@ -15,7 +15,9 @@
  * (`update:offer` events, astro-plan-c72oo): while the system notification
  * carries Install now and Install on quit, or the backend is still deciding
  * whether it can, the in-app notice leaves the `available` phase to it
- * (`offerHolder`).
+ * (`offerHolder`). Each wait is bounded, should an offer event be lost: the
+ * in-app notice offers a release the backend never decided, and the offer is
+ * read again once the system notification's time is up.
  *
  * - `startUpdateSubscription()` listens first, reads the current status and
  *   offer, then asks for the startup check. The backend runs that check once
@@ -34,6 +36,7 @@ import { type IpcResult, unwrap } from '@/api/ipc';
 import {
   commands,
   UPDATE_OFFER_DEADLINE_MS,
+  UPDATE_PERSISTENT_OFFER_TIMEOUT_MS,
   type UpdateOffer,
   type UpdatePhase,
   type UpdateStatus,
@@ -49,10 +52,11 @@ const STATUS_EVENT = 'update:status';
 const OFFER_EVENT = 'update:offer';
 
 /**
- * How much longer than the backend's own deadline for the system post the
- * in-app choices wait for its offer, so the offer event has time to arrive.
+ * How much longer than each of the backend's own time limits the webview
+ * waits for the offer event that follows it, so the event has time to
+ * arrive.
  */
-const DECIDING_MARGIN_MS = 5_000;
+const EVENT_MARGIN_MS = 5_000;
 
 // E2E test-injection seam: a journey spec can set this before navigation to
 // seed a specific update phase without a backend updater. Only consulted in
@@ -84,7 +88,8 @@ export function canInstall(state: UpdateState): boolean {
 
 /**
  * Who offers Install now and Install on quit for `state`'s release:
- * - `system`: the system notification carries both buttons;
+ * - `system`: the system notification carries both buttons, for at most the
+ *   backend's `UPDATE_PERSISTENT_OFFER_TIMEOUT_MS`;
  * - `in-app`: the in-app notice does, because the backend could not offer the
  *   release in a notification, the notification was answered, closed or
  *   withdrawn, or the phase is past the offer;
@@ -154,11 +159,64 @@ function watchDeciding(): void {
       `[updateSubscription] no offer for ${version} arrived; the in-app notice offers it`,
     );
     setOffer({ version, channel: 'in-app' });
-  }, UPDATE_OFFER_DEADLINE_MS + DECIDING_MARGIN_MS);
+  }, UPDATE_OFFER_DEADLINE_MS + EVENT_MARGIN_MS);
+}
+
+/**
+ * The release the system notification carries, and the timer after which
+ * the offer is read again: the backend offers it in-app once the
+ * notification has gone unanswered for its timeout, and that `update:offer`
+ * event may be lost.
+ */
+let carriedFor: string | null = null;
+let carriedTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearCarried(): void {
+  if (carriedTimer !== null) clearTimeout(carriedTimer);
+  carriedTimer = null;
+  carriedFor = null;
+}
+
+/** Start or stop timing the system notification, after every change. */
+function watchCarried(): void {
+  const version =
+    offerHolder(current, currentOffer) === 'system' ? current.version : null;
+  if (version === carriedFor) return;
+  clearCarried();
+  if (version === null) return;
+  carriedFor = version;
+  carriedTimer = setTimeout(() => {
+    carriedTimer = null;
+    // Timed afresh by the next change, should the read still say `system`.
+    carriedFor = null;
+    void readCarriedOffer(version);
+  }, UPDATE_PERSISTENT_OFFER_TIMEOUT_MS + EVENT_MARGIN_MS);
+}
+
+/**
+ * Read the offer for `version` again; the in-app notice offers it if the
+ * read fails. A stop, or an offer event during the read, is newer and wins.
+ */
+async function readCarriedOffer(version: string): Promise<void> {
+  const token = generation;
+  const before = currentOffer;
+  let offer: UpdateOffer;
+  try {
+    offer = unwrap(await commands.updateOffer());
+  } catch (err) {
+    console.warn(
+      `[updateSubscription] reading the offer for ${version} failed; the in-app notice offers it:`,
+      err,
+    );
+    offer = { version, channel: 'in-app' };
+  }
+  if (token !== generation || currentOffer !== before) return;
+  setOffer(offer);
 }
 
 function notify(): void {
   watchDeciding();
+  watchCarried();
   for (const listener of listeners) listener();
 }
 

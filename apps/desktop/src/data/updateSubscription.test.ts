@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   UPDATE_OFFER_DEADLINE_MS,
+  UPDATE_PERSISTENT_OFFER_TIMEOUT_MS,
   type UpdateOffer,
   type UpdateStatus,
 } from '@/bindings/index';
@@ -318,6 +319,129 @@ describe('startUpdateSubscription', () => {
         version: '0.7.1',
         channel: 'system',
       });
+    });
+  });
+
+  // The backend offers a release in-app once its system notification has
+  // gone unanswered for its timeout; that `update:offer` event may be lost.
+  describe('while the system notification carries a release', () => {
+    const TIMEOUT = UPDATE_PERSISTENT_OFFER_TIMEOUT_MS;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const holder = () =>
+      offerHolder(getUpdateSnapshot(), getUpdateOfferSnapshot());
+
+    /** The system notification carries `version`; the startup read is done. */
+    async function carried(version: string): Promise<void> {
+      await startUpdateSubscription();
+      push?.(status({ phase: 'available', version }));
+      pushOffer?.({ version, channel: 'system' });
+      expect(mockCommands.updateOffer).toHaveBeenCalledTimes(1);
+    }
+
+    /** How often the offer was read after the startup read. */
+    const rereads = () => mockCommands.updateOffer.mock.calls.length - 1;
+
+    it('keeps the system offer until the backend’s timeout', async () => {
+      await carried('0.7.0');
+      await vi.advanceTimersByTimeAsync(TIMEOUT);
+      expect(holder()).toBe('system');
+      expect(rereads()).toBe(0);
+    });
+
+    it('reads the offer again after the timeout and applies it', async () => {
+      await carried('0.7.0');
+      // The backend handed the release in-app; that event was lost.
+      mockCommands.updateOffer.mockImplementation(() =>
+        ok<UpdateOffer>({ version: '0.7.0', channel: 'in-app' }),
+      );
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 2);
+      expect(rereads()).toBe(1);
+      expect(holder()).toBe('in-app');
+      expect(getUpdateOfferSnapshot()).toEqual({
+        version: '0.7.0',
+        channel: 'in-app',
+      });
+    });
+
+    it('offers it in-app when that read fails', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await carried('0.7.0');
+      mockCommands.updateOffer.mockImplementation(() =>
+        Promise.reject(new Error('no IPC')),
+      );
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 2);
+      expect(rereads()).toBe(1);
+      expect(getUpdateOfferSnapshot()).toEqual({
+        version: '0.7.0',
+        channel: 'in-app',
+      });
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('reads again later while the backend still says system', async () => {
+      await carried('0.7.0');
+      mockCommands.updateOffer.mockImplementation(() =>
+        ok<UpdateOffer>({ version: '0.7.0', channel: 'system' }),
+      );
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 1.5);
+      expect(rereads()).toBe(1);
+      expect(holder()).toBe('system');
+      await vi.advanceTimersByTimeAsync(TIMEOUT);
+      expect(rereads()).toBe(2);
+    });
+
+    it('keeps an offer event that arrives during the read', async () => {
+      await carried('0.7.0');
+      let resolveRead: (offer: UpdateOffer) => void = () => {};
+      mockCommands.updateOffer.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveRead = (offer) => resolve({ status: 'ok', data: offer });
+          }),
+      );
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 1.5);
+      expect(rereads()).toBe(1);
+      // The user closed the notification while the read was in flight.
+      pushOffer?.({ version: '0.7.0', channel: 'in-app' });
+      resolveRead({ version: '0.7.0', channel: 'system' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(holder()).toBe('in-app');
+    });
+
+    it('stops timing once the offer turns in-app', async () => {
+      await carried('0.7.0');
+      await vi.advanceTimersByTimeAsync(TIMEOUT / 2);
+      pushOffer?.({ version: '0.7.0', channel: 'in-app' });
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 2);
+      expect(rereads()).toBe(0);
+    });
+
+    it('times a newer release afresh', async () => {
+      await carried('0.7.0');
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 0.6);
+      push?.(status({ phase: 'available', version: '0.7.1' }));
+      pushOffer?.({ version: '0.7.1', channel: 'system' });
+
+      // Past 0.7.0's due time: its timer must not have fired.
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 0.6);
+      expect(rereads()).toBe(0);
+      await vi.advanceTimersByTimeAsync(TIMEOUT);
+      expect(rereads()).toBe(1);
+    });
+
+    it('stops timing when the subscription stops', async () => {
+      await carried('0.7.0');
+      stopUpdateSubscription();
+      await vi.advanceTimersByTimeAsync(TIMEOUT * 2);
+      expect(rereads()).toBe(0);
     });
   });
 
