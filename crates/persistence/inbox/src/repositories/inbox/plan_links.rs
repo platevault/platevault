@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -31,6 +31,18 @@ pub async fn insert_plan_link(
     inbox_item_id: &str,
     plan_id: &str,
 ) -> DbResult<()> {
+    insert_plan_link_conn(pool.acquire().await?.as_mut(), inbox_item_id, plan_id).await
+}
+
+/// Connection-level variant of [`insert_plan_link`].
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on constraint or connection failure.
+pub async fn insert_plan_link_conn(
+    conn: &mut SqliteConnection,
+    inbox_item_id: &str,
+    plan_id: &str,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO inbox_plan_links (inbox_item_id, plan_id, linked_at)
@@ -39,7 +51,7 @@ pub async fn insert_plan_link(
     .bind(inbox_item_id)
     .bind(plan_id)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }

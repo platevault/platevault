@@ -49,13 +49,16 @@
 //! A master row with a plan link survives the scan, but the plan can still be
 //! discarded or fail later, which removes the link and returns the row to
 //! unconfirmed with no scan in between. [`retire_stale_master`] closes that
-//! gap: `confirm` calls it before planning, so such a row is deleted rather
-//! than confirmed again. Its verdict comes from the database alone: the scan
-//! stored the row's current text beside it, and classify read the file at the
-//! old path and classified it as a frame that is not a master (a file it
-//! found no frame type for proves nothing). Checking at the one step that
-//! plans covers every way a link goes away (cancel, discard, a failed apply,
-//! the startup repair sweep) and does not race the plan listener.
+//! gap: `confirm` calls it before planning, and again with
+//! [`retire_stale_master_conn`] in the transaction that links the plan,
+//! because a scan may store the row's current text in between; so such a row
+//! is deleted rather than confirmed again. Its verdict comes from the
+//! database alone: the scan stored the row's current text beside it, and
+//! classify read the file at the old path and classified it as a frame that
+//! is not a master (a file it found no frame type for proves nothing).
+//! Checking at the one step that plans covers every way a link goes away
+//! (cancel, discard, a failed apply, the startup repair sweep) and does not
+//! race the plan listener.
 //!
 //! On Windows `\` is a separator, so the wire text never contains it, and
 //! `old_text_under` returns nothing for the walk's own paths (its
@@ -219,13 +222,25 @@ pub async fn retire(conn: &mut SqliteConnection, root_id: &str, rows: &LegacyRow
 /// # Errors
 /// Returns `persistence_core::DbError::Database` on connection failure.
 pub async fn retire_stale_master(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<bool> {
+    let mut tx = pool.begin().await?;
+    let retired = retire_stale_master_conn(&mut tx, inbox_item_id).await?;
+    tx.commit().await?;
+    Ok(retired)
+}
+
+/// [`retire_stale_master`] as a step of the caller's open transaction: the
+/// item and the source groups left at its path go in two statements.
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on connection failure.
+pub(crate) async fn retire_stale_master_conn(
+    conn: &mut SqliteConnection,
+    inbox_item_id: &str,
+) -> DbResult<bool> {
     if cfg!(windows) {
         return Ok(false);
     }
-    let mut tx = pool.begin().await?;
-    let retired = repo::delete_stale_old_text_master_conn(&mut tx, inbox_item_id).await?;
-    tx.commit().await?;
-    Ok(retired)
+    repo::delete_stale_old_text_master_conn(conn, inbox_item_id).await
 }
 
 /// The text the old `wire_path` stored for `text`, when it differs. Also used
