@@ -162,7 +162,7 @@ async fn read_intake(conn: &mut SqliteConnection, session_id: Uuid) -> Result<Se
 
 /// The session's calibration record; a session without one reads every kind
 /// unresolved at generation 0.
-async fn read_calibration(
+pub(crate) async fn read_calibration(
     conn: &mut SqliteConnection,
     session_id: Uuid,
 ) -> Result<SessionCalibration> {
