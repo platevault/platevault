@@ -600,7 +600,11 @@ async fn require_free_name(
     }
 }
 
-async fn insert_group(conn: &mut SqliteConnection, project: Uuid, group: &NewGroup) -> Result<()> {
+pub(super) async fn insert_group(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    group: &NewGroup,
+) -> Result<()> {
     group.optics.validate()?;
     if let Some(framing) = &group.framing {
         framing.validate()?;
@@ -780,7 +784,7 @@ async fn add_session(conn: &mut SqliteConnection, project: Uuid, add: &SessionAd
 /// The session row with the admission basis `require_admission` returned
 /// in the caller's transaction, in its group with its placement and the
 /// Target it joins on.
-async fn insert_member(
+pub(super) async fn insert_member(
     conn: &mut SqliteConnection,
     project: Uuid,
     session: Uuid,
@@ -809,7 +813,7 @@ async fn insert_member(
 
 /// The session's live logical captures (D16) as they stand, each with every
 /// copy's decision revision and observation.
-async fn session_captures(
+pub(super) async fn session_captures(
     conn: &mut SqliteConnection,
     session_id: Uuid,
 ) -> Result<Vec<ProjectCapture>> {
@@ -841,7 +845,7 @@ async fn session_captures(
 
 /// One capture of `session_id` and its copies, with the Project's choice
 /// and its quality when added; each is held once per Project.
-async fn insert_capture(
+pub(super) async fn insert_capture(
     conn: &mut SqliteConnection,
     project: Uuid,
     session_id: Uuid,
@@ -1132,7 +1136,10 @@ impl FrameChanges {
     }
 }
 
-async fn pending_changes(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<PendingChange>> {
+pub(super) async fn pending_changes(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+) -> Result<Vec<PendingChange>> {
     let desired = read_desired(conn, id).await?;
     if !desired.lifecycle.is_open() {
         return Ok(Vec::new());

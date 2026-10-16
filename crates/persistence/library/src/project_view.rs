@@ -581,7 +581,10 @@ async fn failed_building(
         .and_then(|expected| expected.building))
 }
 
-async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Result<ApplyInputs> {
+pub(super) async fn read_inputs(
+    conn: &mut SqliteConnection,
+    project_id: Uuid,
+) -> Result<ApplyInputs> {
     let project = read_project(conn, project_id).await?;
     let mut relative = Relative::new();
     let held = held_basis(conn, project_id, &mut relative).await?;

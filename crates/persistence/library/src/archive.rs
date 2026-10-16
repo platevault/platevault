@@ -25,10 +25,10 @@ use sqlx::{Connection, Row, SqliteConnection};
 use uuid::Uuid;
 
 use super::cleanup::removed_entry_sql;
+use super::project_wrap_up::{move_asset_record, RecordMove};
 use super::{
-    asset_from_row, conflict, db_revision, db_size, fingerprint_matches, from_json, from_text,
-    json_ids, load_asset, now, parse_uuid, path_key, rebind_association_bases, revision, to_json,
-    to_text, Catalog, Result,
+    asset_from_row, conflict, db_revision, db_size, from_json, from_text, json_ids, now,
+    parse_uuid, path_key, revision, to_json, to_text, Catalog, Result,
 };
 
 /// One reviewed item of a new transfer.
@@ -413,57 +413,19 @@ impl Catalog {
     ) -> Result<ArchiveRecord> {
         let record = write_txn!(self, |conn| {
             require_running_item(conn, id, seq, expected).await?;
-            let asset = load_asset(conn, repoint.asset_id).await?;
-            if asset.location_id != repoint.from_location_id
-                || asset.relative_path != repoint.from_path
-                || !fingerprint_matches(&asset.fingerprint, &repoint.from_fingerprint)
-            {
-                return Err(changed(format!(
-                    "the catalog record of {} changed since the transfer reviewed it",
-                    asset.relative_path.display()
-                )));
-            }
-            let occupant: Option<String> = sqlx::query_scalar(
-                "SELECT id FROM assets WHERE location_id = ?1 AND path_key = ?2",
+            let at = move_asset_record(
+                conn,
+                &RecordMove {
+                    asset_id: repoint.asset_id,
+                    from_location_id: repoint.from_location_id,
+                    from_path: &repoint.from_path,
+                    from_fingerprint: &repoint.from_fingerprint,
+                    to_location_id: repoint.to_location_id,
+                    to_path: &repoint.to_path,
+                    to_fingerprint: &repoint.to_fingerprint,
+                },
             )
-            .bind(repoint.to_location_id.to_string())
-            .bind(path_key(&repoint.to_path))
-            .fetch_optional(&mut *conn)
             .await?;
-            if occupant.is_some() {
-                return Err(changed(format!(
-                    "the catalog records another frame at {}",
-                    repoint.to_path.display()
-                )));
-            }
-            let fingerprint = &repoint.to_fingerprint;
-            let basis = asset.quality_basis.as_ref().map(|basis| {
-                if fingerprint_matches(&asset.fingerprint, basis) {
-                    fingerprint.clone()
-                } else {
-                    basis.clone()
-                }
-            });
-            let at = now()?;
-            sqlx::query(
-                "UPDATE assets SET location_id = ?1, path_key = ?2, fingerprint = ?3, \
-                 size_bytes = ?4, modified_ns = ?5, availability = 'available', \
-                 verification_pending = 0, quality_basis = ?6, last_verified_at = ?7 \
-                 WHERE id = ?8",
-            )
-            .bind(repoint.to_location_id.to_string())
-            .bind(path_key(&repoint.to_path))
-            .bind(to_json(fingerprint)?)
-            .bind(db_size(fingerprint.size_bytes)?)
-            .bind(fingerprint.modified_ns.to_string())
-            .bind(basis.as_ref().map(to_json).transpose()?)
-            .bind(&at)
-            .bind(asset.id.to_string())
-            .execute(&mut *conn)
-            .await?;
-            let rebound =
-                HashMap::from([(asset.id, (asset.fingerprint.clone(), fingerprint.clone()))]);
-            rebind_association_bases(conn, &rebound).await?;
             for entry in &repoint.entries {
                 repoint_entry(conn, entry, &at).await?;
             }

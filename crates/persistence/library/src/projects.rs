@@ -14,18 +14,21 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
     builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
-    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, GoalIdentity,
-    GoalInput, GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, LibraryError,
-    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MetricId, MetricState, Microseconds,
-    PanelInput, Project, ProjectCandidate, ProjectDetail, ProjectGoal, ProjectInput, ProjectQuery,
-    ProjectRejection, ProjectState, ProjectSubject, ProjectSummary, QualityCriterion,
-    RecordValidity, ReferenceKind, RejectionMark, Revision, RunStage, SubjectInput, SubjectPanel,
+    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, CaptureInclusion,
+    DuplicateRequest, ExclusionBasis, GoalIdentity, GoalInput, GoalProgress, GoalSpec, GoalTally,
+    GoalTemplate, GoalTemplateInput, InclusionBasis, LibraryError, MeasurementMethod,
+    MeasurementOutcome, MeasurementRecord, MetricId, MetricState, Microseconds, PanelInput,
+    Project, ProjectCandidate, ProjectDetail, ProjectGoal, ProjectInput, ProjectQuery,
+    ProjectRejection, ProjectState, ProjectSubject, ProjectSummary, ProjectViewSettings,
+    QualityCriterion, RecordValidity, ReferenceKind, RejectionMark, Revision, RunStage,
+    SubjectInput, SubjectPanel,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
-use super::project_inputs;
+use super::project_inputs::{self, NewGroup};
+use super::admission;
 use super::views::{self, RunUse};
 use super::{
     capture_quality, conflict, db_revision, fingerprint_matches, from_json, from_text, json_ids,
@@ -1178,7 +1181,7 @@ const fn counted(asset: &Asset) -> bool {
     !matches!(asset.availability, Availability::Trashed | Availability::Retired)
 }
 
-async fn progress_basis(
+pub(super) async fn progress_basis(
     conn: &mut SqliteConnection,
     id: Uuid,
     method: &MeasurementMethod,
@@ -1477,6 +1480,145 @@ impl Catalog {
         });
         Ok(project)
     }
+
+    /// Duplicate… (PRJ-FR-30; D-W96, D-W112): a new open Project at revision
+    /// 1 with the source's subjects and rigs, the chosen `sessions` in copies
+    /// of their groups with their placement, joined Target and frame
+    /// overrides, and, as ticked, its goals, notes and View settings. Each
+    /// session joins through the admission rule on its current calibration
+    /// pins, never the source's Close snapshot. No file is copied: the
+    /// duplicate has no View until its first Apply, and nothing links it to
+    /// the source, which stays unchanged. Open, Closed and Archived Projects
+    /// duplicate alike.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a blank name, a session the source doesn't hold,
+    /// or one the admission rule refuses now, naming its blockers;
+    /// `Conflict` for a session regrouped since; `NotFound` for an unknown
+    /// Project.
+    pub async fn duplicate_project(&self, request: &DuplicateRequest) -> Result<Project> {
+        validate_project_name(&request.name)?;
+        let project = write_txn!(self, |conn| {
+            let source = load_project(conn, request.project_id).await?;
+            let desired = project_inputs::read_desired(conn, request.project_id).await?;
+            let chosen: BTreeSet<Uuid> = request.sessions.iter().copied().collect();
+            if let Some(stray) = chosen
+                .iter()
+                .find(|session| desired.sessions.iter().all(|held| held.session_id != **session))
+            {
+                return Err(LibraryError::InvalidInput(format!(
+                    "session {stray} is not in Project '{}'",
+                    source.name
+                )));
+            }
+            let id = Uuid::new_v4();
+            let at = now()?;
+            sqlx::query(
+                "INSERT INTO projects (id, name, notes, state, revision, created_at, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)",
+            )
+            .bind(id.to_string())
+            .bind(request.name.trim())
+            .bind(if request.notes { notes(source.notes.as_deref()) } else { None })
+            .bind(to_text(&ProjectState::Open)?)
+            .bind(&at)
+            .execute(&mut *conn)
+            .await?;
+            if request.settings {
+                copy_view_settings(conn, id, &desired.settings).await?;
+            }
+            write_subjects(conn, id, &subject_inputs(&source)).await?;
+            write_rigs(conn, id, &source.rig_ids).await?;
+            let goal_groups: BTreeSet<Uuid> = if request.goals {
+                source.goals.iter().filter_map(|goal| goal.group_id).collect()
+            } else {
+                BTreeSet::new()
+            };
+            let mut groups: HashMap<Uuid, Uuid> = HashMap::new();
+            for group in &desired.groups {
+                let holds = desired
+                    .sessions
+                    .iter()
+                    .any(|held| held.group_id == group.id && chosen.contains(&held.session_id));
+                if !holds && !goal_groups.contains(&group.id) {
+                    continue;
+                }
+                let copy = NewGroup {
+                    id: Uuid::new_v4(),
+                    rig_id: group.rig_id,
+                    name: group.name.clone(),
+                    origin: group.origin,
+                    optics: group.optics.clone(),
+                    framing: group.framing.clone(),
+                };
+                project_inputs::insert_group(conn, id, &copy).await?;
+                if group.panel {
+                    sqlx::query("UPDATE project_groups SET panel = 1 WHERE id = ?1")
+                        .bind(copy.id.to_string())
+                        .execute(&mut *conn)
+                        .await?;
+                }
+                groups.insert(group.id, copy.id);
+            }
+            // The user's own frame choices carry over by copy; every other
+            // capture follows the Library as it stands now.
+            let overrides: HashMap<Uuid, CaptureInclusion> = desired
+                .captures
+                .iter()
+                .filter(|capture| {
+                    matches!(
+                        capture.inclusion,
+                        CaptureInclusion::Included { basis: InclusionBasis::Explicit }
+                            | CaptureInclusion::Excluded { basis: ExclusionBasis::User }
+                    )
+                })
+                .flat_map(|capture| {
+                    capture.copies.iter().map(|copy| (copy.asset_id, capture.inclusion))
+                })
+                .collect();
+            for held in desired.sessions.iter().filter(|held| chosen.contains(&held.session_id)) {
+                let group = groups[&held.group_id];
+                let basis =
+                    admission::require_admission(conn, id, group, held.session_id, None).await?;
+                project_inputs::insert_member(
+                    conn,
+                    id,
+                    held.session_id,
+                    group,
+                    held.placement,
+                    held.target_id,
+                    &basis,
+                )
+                .await?;
+                for capture in project_inputs::session_captures(conn, held.session_id).await? {
+                    let inclusion = capture
+                        .copies
+                        .iter()
+                        .find_map(|copy| overrides.get(&copy.asset_id).copied())
+                        .unwrap_or(capture.inclusion);
+                    project_inputs::insert_capture(
+                        conn,
+                        id,
+                        capture.session_id,
+                        capture.capture_key,
+                        &capture.copies,
+                        inclusion,
+                        capture.quality_when_added,
+                    )
+                    .await?;
+                }
+            }
+            if request.goals {
+                let mut goals = goal_inputs(conn, request.project_id).await?;
+                for goal in &mut goals {
+                    goal.group_id = goal.group_id.and_then(|group| groups.get(&group).copied());
+                }
+                write_goals(conn, id, &goals).await?;
+            }
+            load_project(conn, id).await?
+        });
+        Ok(project)
+    }
 }
 
 /// The Project's name and state.
@@ -1501,6 +1643,51 @@ async fn set_state(
         .bind(done_at)
         .execute(&mut *conn)
         .await?;
+    Ok(())
+}
+
+/// The source Project's subjects as they are written for a duplicate.
+fn subject_inputs(source: &Project) -> Vec<SubjectInput> {
+    source
+        .subjects
+        .iter()
+        .map(|subject| SubjectInput {
+            target_id: subject.target_id,
+            name: subject.name.clone(),
+            mosaic: subject.mosaic,
+            panels: subject
+                .panels
+                .iter()
+                .map(|panel| PanelInput {
+                    number: panel.number,
+                    ra_deg: panel.ra_deg,
+                    dec_deg: panel.dec_deg,
+                    rotation_deg: panel.rotation_deg,
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+/// Copy the source's View settings onto the duplicate: mode, keywords,
+/// profile and processing location.
+async fn copy_view_settings(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    settings: &ProjectViewSettings,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE projects SET view_mode = ?2, group_keyword = ?3, panel_keyword = ?4, \
+         profile_id = ?5, processing_parent = ?6 WHERE id = ?1",
+    )
+    .bind(id.to_string())
+    .bind(to_text(&settings.mode)?)
+    .bind(settings.keywords.as_ref().map(|keywords| keywords.group().as_str().to_owned()))
+    .bind(settings.keywords.as_ref().map(|keywords| keywords.panel().as_str().to_owned()))
+    .bind(settings.profile_id.map(|id| id.to_string()))
+    .bind(settings.parent.as_ref().map(to_json).transpose()?)
+    .execute(&mut *conn)
+    .await?;
     Ok(())
 }
 

@@ -86,6 +86,7 @@ const SCHEMA: &str = schema_modules![
     "project_lifecycle.sql",
     "project_view.sql",
     "project_output.sql",
+    "project_wrap_up.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -219,6 +220,14 @@ pub use project_inputs::{NewGroup, SessionAdd};
 // The F4 workflow settings: read by intake and matching, saved by Settings.
 mod workflow_settings;
 pub use workflow_settings::WORKFLOW_SETTINGS_ID;
+// Wrap up's catalog side: step records, Clean up removals, Trash and archive
+// journals, Close with its snapshot, and kept-View repoints
+// (project_wrap_up.sql).
+mod project_wrap_up;
+pub use project_wrap_up::{
+    ArchiveDraft, ArchiveMoveRecord, ArchiveRun, ClosedProject, KeptLinkRecord, TrashBasis,
+    TrashItemDraft, WrapUpFrame, WrapUpTrash, WrapUpTrashItem,
+};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

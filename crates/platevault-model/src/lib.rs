@@ -81,6 +81,8 @@ mod project_output;
 pub use project_output::*;
 mod project_apply;
 pub use project_apply::*;
+mod project_wrap_up;
+pub use project_wrap_up::*;
 
 time::serde::format_description!(pub(crate) iso_date, Date, "[year]-[month]-[day]");
 
