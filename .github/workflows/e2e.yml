@@ -1238,7 +1238,7 @@ jobs:
           FIRST_CLASS: ${{ steps.e2e.outputs.class }}
         run: |
           if (-not $env:FIRST_CLASS) {
-            Write-Output "::warning title=Runner failure, not a test failure::Shard attempt 1 died before its shell started the suite (no class recorded; its exit code is on that step, e.g. -1073741502 = 0xC0000142 STATUS_DLL_INIT_FAILED). Re-running the shard once."
+            Write-Output "::warning title=Runner failure (not a test failure)::Shard attempt 1 died before its shell started the suite (no class recorded; its exit code is on that step, e.g. -1073741502 = 0xC0000142 STATUS_DLL_INIT_FAILED). Re-running the shard once."
           }
           ./scripts/e2e-shard-attempt.ps1 -Attempt 2 -- `
             cargo nextest run `

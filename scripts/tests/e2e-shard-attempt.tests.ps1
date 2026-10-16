@@ -78,10 +78,10 @@ function Invoke-Attempt([int]$Attempt, [string]$FakeBody) {
 $r = Invoke-Attempt 1 'exit 3'
 Assert-Equal 'silent death: class' 'runner-failure' $r.Class
 Assert-Equal 'silent death: exit code kept' 3 $r.Code
-Assert-Equal 'silent death on attempt 1: re-run warning' $true ($r.Text -match '::warning title=Runner failure, not a test failure::Shard attempt 1 .*re-running the shard once')
+Assert-Equal 'silent death on attempt 1: re-run warning' $true ($r.Text -match '::warning title=Runner failure \(not a test failure\)::Shard attempt 1 exited 3 \(0x00000003\): no output and no test started\..*re-running the shard once')
 
 $r = Invoke-Attempt 2 'exit 3'
-Assert-Equal 'silent death on attempt 2: error tells the triager to re-run the job' $true ($r.Text -match '::error title=Runner failure, not a test failure::Shard attempt 2 .*re-run the job')
+Assert-Equal 'silent death on attempt 2: error tells the triager to re-run the job' $true ($r.Text -match '::error title=Runner failure \(not a test failure\)::Shard attempt 2 .*re-run the job')
 
 $r = Invoke-Attempt 1 "'    Starting 2 tests across 1 binary'; '        FAIL [   1.000s] (1/2) e2e_tests::smoke x'; exit 100"
 Assert-Equal 'failing journey: class' 'suite-failure' $r.Class

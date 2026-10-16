@@ -65,18 +65,18 @@ function Get-ShardAttemptClass {
   # nextest prints `Starting N tests across M binaries` before the first test
   # runs, so a non-zero N means the suite itself reached its tests.
   if ($text -match '(?m)^\s*Starting\s+[1-9]\d*\s+tests?\b') {
-    return [pscustomobject]@{ Class = 'suite-failure'; Reason = 'failed after tests started' }
+    return [pscustomobject]@{ Class = 'suite-failure'; Reason = 'the suite started its tests and failed' }
   }
   if ((ConvertTo-UnsignedExitCode $ExitCode) -eq $StatusDllInitFailed) {
-    return [pscustomobject]@{ Class = 'runner-failure'; Reason = 'exited with STATUS_DLL_INIT_FAILED before any test started' }
+    return [pscustomobject]@{ Class = 'runner-failure'; Reason = 'STATUS_DLL_INIT_FAILED before any test started' }
   }
   if ($text -match '(?i)0xC0000142|STATUS_DLL_INIT_FAILED') {
-    return [pscustomobject]@{ Class = 'runner-failure'; Reason = 'reported STATUS_DLL_INIT_FAILED before any test started' }
+    return [pscustomobject]@{ Class = 'runner-failure'; Reason = 'its output reports STATUS_DLL_INIT_FAILED and no test started' }
   }
   if ([string]::IsNullOrWhiteSpace($text)) {
-    return [pscustomobject]@{ Class = 'runner-failure'; Reason = 'died with no output before any test started' }
+    return [pscustomobject]@{ Class = 'runner-failure'; Reason = 'no output and no test started' }
   }
-  [pscustomobject]@{ Class = 'suite-failure'; Reason = 'stopped before any test started and said why' }
+  [pscustomobject]@{ Class = 'suite-failure'; Reason = 'no test started and nextest says why above' }
 }
 
 function Write-ShardClass([string]$Class) {
@@ -113,16 +113,17 @@ $result = Get-ShardAttemptClass -ExitCode $exitCode -Output $output
 Write-ShardClass $result.Class
 
 $shown = '{0} (0x{1:X8})' -f $exitCode, (ConvertTo-UnsignedExitCode $exitCode)
+# A comma ends a workflow-command property, so annotation titles carry none.
 switch ($result.Class) {
   'runner-failure' {
     if ($Attempt -eq 1) {
-      Write-Output "::warning title=Runner failure, not a test failure::Shard attempt 1 exited $shown and $($result.Reason). The runner could not start the suite; re-running the shard once."
+      Write-Output "::warning title=Runner failure (not a test failure)::Shard attempt 1 exited ${shown}: $($result.Reason). The runner could not start the suite; re-running the shard once."
     } else {
-      Write-Output "::error title=Runner failure, not a test failure::Shard attempt 2 exited $shown and $($result.Reason), and attempt 1 also failed before any test ran. The runner is broken, not the code under test: re-run the job."
+      Write-Output "::error title=Runner failure (not a test failure)::Shard attempt 2 exited ${shown}: $($result.Reason), and attempt 1 also failed before any test ran. The runner is broken, not the code under test: re-run the job."
     }
   }
   'suite-failure' {
-    Write-Output "::error title=E2E suite failure::Shard attempt $Attempt exited $shown and $($result.Reason). This is a real failure: read the nextest output above."
+    Write-Output "::error title=E2E suite failure::Shard attempt $Attempt exited ${shown}: $($result.Reason). This is a real failure: read the nextest output above."
   }
 }
 exit [int]$exitCode
