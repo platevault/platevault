@@ -1124,6 +1124,76 @@ async fn mark_file_override_stale_sets_flag_for_path_only() {
     assert_eq!(b.override_stale, 0, "unrelated file must be untouched");
 }
 
+/// bd astro-plan-3pvvc: `rekey_file_overrides_conn` moves every override of
+/// one file in a group to another path with its value, identity and flag. An
+/// override the target path already has for the same property is kept, and
+/// the moved file's one for that property goes. Other files and groups are
+/// untouched.
+#[tokio::test]
+async fn rekey_file_overrides_moves_a_files_overrides_and_keeps_existing_ones() {
+    let db = test_db().await;
+    let pool = db.pool();
+    for id in ["sg-rekey", "sg-other"] {
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id,
+                root_id: "root-1",
+                relative_path: id,
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let identity = (Some(4_194_304), Some("2025-10-10T22:00:00Z"));
+    for (group, path, key, value) in [
+        ("sg-rekey", "a/b.fits", "target", "M 42"),
+        ("sg-rekey", "a/b.fits", "gain", "100"),
+        ("sg-rekey", "a\\b.fits", "gain", "120"),
+        ("sg-rekey", "x.fits", "gain", "200"),
+        ("sg-other", "a/b.fits", "gain", "300"),
+    ] {
+        set_file_override(pool, group, path, key, value, identity.0, identity.1).await.unwrap();
+    }
+    mark_file_override_stale(pool, "sg-rekey", "a/b.fits").await.unwrap();
+
+    let mut conn = pool.acquire().await.unwrap();
+    assert_eq!(
+        list_file_override_paths_conn(&mut conn, "sg-rekey").await.unwrap(),
+        ["a/b.fits", "a\\b.fits", "x.fits"]
+    );
+    rekey_file_overrides_conn(&mut conn, "sg-rekey", "a/b.fits", "a\\b.fits").await.unwrap();
+    drop(conn);
+
+    let rows = |group: &'static str| async move {
+        list_file_overrides_for_group(pool, group)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|o| (o.relative_file_path, o.property_key, o.value, o.override_stale))
+            .collect::<Vec<_>>()
+    };
+    let row = |path: &str, key: &str, value: &str, stale: i64| {
+        (path.to_owned(), key.to_owned(), value.to_owned(), stale)
+    };
+    assert_eq!(
+        rows("sg-rekey").await,
+        [
+            row("a\\b.fits", "gain", "120", 0),
+            row("a\\b.fits", "target", "M 42", 1),
+            row("x.fits", "gain", "200", 0),
+        ]
+    );
+    assert_eq!(rows("sg-other").await, [row("a/b.fits", "gain", "300", 0)]);
+    let moved = list_file_overrides_for_group(pool, "sg-rekey").await.unwrap();
+    let target = moved.iter().find(|o| o.property_key == "target").unwrap();
+    assert_eq!((target.file_size_bytes, target.file_mtime.as_deref()), identity);
+}
+
 /// #1294: `list_evidence` must join the `target` override the same way it
 /// already joins filter/exposureS/binning/frameType — otherwise a target
 /// override (written by `cone_search::confirm`) is a write nobody reads

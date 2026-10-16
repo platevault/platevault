@@ -25,11 +25,12 @@ mod tests;
 
 pub use classification::{
     delete_evidence_for_item_conn, delete_evidence_for_items, get_classification, insert_evidence,
-    insert_evidence_batch, insert_evidence_conn, list_evidence, list_file_overrides_for_group,
-    mark_file_override_stale, mark_override_stale, set_file_override, set_overrides,
-    upsert_classification, upsert_classification_batch, upsert_classification_conn,
-    FileOverrideRow, InboxClassificationRow, InboxEvidenceRow, InsertEvidence,
-    UpsertClassification, UpsertClassificationRow,
+    insert_evidence_batch, insert_evidence_conn, list_evidence, list_file_override_paths_conn,
+    list_file_overrides_for_group, mark_file_override_stale, mark_override_stale,
+    rekey_file_overrides_conn, set_file_override, set_overrides, upsert_classification,
+    upsert_classification_batch, upsert_classification_conn, FileOverrideRow,
+    InboxClassificationRow, InboxEvidenceRow, InsertEvidence, UpsertClassification,
+    UpsertClassificationRow,
 };
 pub use items::{
     delete_stale_old_text_master_conn, delete_sub_item_if_unlinked_conn,
