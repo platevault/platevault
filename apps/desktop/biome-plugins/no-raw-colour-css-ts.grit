@@ -1,6 +1,9 @@
 // Hand-written vanilla-extract styles take colour from theme vars only (#1334).
 // Loaded only for *.css.ts, excluding generated src/styles/themes.css.ts.
-// Branch 1: hex and colour functions, case-insensitive, in any string.
+// Branch 1: hex and colour functions, case-insensitive, in any string. A hex
+// colour must start a CSS word (after the string start, whitespace, a comma,
+// a colon or a "(" that is not url's), so URL fragments such as
+// `url("/sprites.svg#abc")` or `url(#fade)` pass.
 // Branch 2: a string whose whole value is a named colour, under any key.
 // Branches 3 and 4 also reject the CSS system colours (Canvas, CanvasText,
 // Highlight and the rest, deprecated ones included). Branch 2 rejects only
@@ -19,6 +22,9 @@
 // constant (`const redBorder = '1px solid red'`), when the value also looks
 // like a CSS value: a number with a CSS unit or %, or a function call. Values
 // built inside function arguments or across files are not followed.
+// Branches 3 and 4 skip values holding a time (200ms, 0.2s): those are
+// animation or transition values, where a colour word is a name, and no
+// colour-bearing CSS value contains a time.
 language js
 
 or {
@@ -26,7 +32,7 @@ or {
     string() as $s,
     r"[^`'\"=;]*(?i)(?:#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()[^`'\"=;]*" as $s
   } where {
-    $s <: r"(?i)[^\n]*(?:#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()[^\n]*",
+    $s <: r"(?i)[^\n]*(?:(?:^['\"`]?|[\s,:]|(?:^|[^l])\(|(?:^|[^r])l\(|(?:^|[^u])rl\()#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()[^\n]*",
     register_diagnostic(
       span = $s,
       message = "Raw colour literal in a vanilla-extract style (#1334). Use a theme var from styles/themes.css.ts.",
@@ -47,6 +53,7 @@ or {
       $key <: r"(?i)^['\"]?(?:--[a-z0-9_-]+|(?:-?webkit-?)?(?:colou?r|background(?:-?(?:color|image))?|border(?:-?(?:top|right|bottom|left|block|inline)(?:-?(?:start|end))?)?(?:-?color)?|border-?image(?:-?source)?|outline(?:-?color)?|box-?shadow|text-?shadow|text-?decoration(?:-?color)?|text-?emphasis(?:-?color)?|caret-?color|accent-?color|column-?rule(?:-?color)?|fill|stroke|stop-?color|flood-?color|lighting-?color|scrollbar-?color|filter|backdrop-?filter|mask(?:-?(?:image|border(?:-?source)?))?|list-?style(?:-?image)?|shape-?outside|text-?fill-?color|text-?stroke(?:-?color)?|tap-?highlight-?color))['\"]?$"
     },
     $value <: or { JsStringLiteralExpression(), JsTemplateExpression() },
+    $value <: not r"(?is).*\d(?:ms|s)\b.*",
     $value <: r"(?is).*(?:^|[\s,('\"`])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen|accentcolor|accentcolortext|activetext|buttonborder|buttonface|buttontext|canvas|canvastext|field|fieldtext|graytext|highlight|highlighttext|linktext|mark|marktext|selecteditem|selecteditemtext|visitedtext|activeborder|activecaption|appworkspace|background|buttonhighlight|buttonshadow|captiontext|inactiveborder|inactivecaption|inactivecaptiontext|infobackground|infotext|menu|menutext|scrollbar|threeddarkshadow|threedface|threedhighlight|threedlightshadow|threedshadow|window|windowframe|windowtext)(?:$|[\s,)'\"`;!]).*",
     register_diagnostic(
       span = $value,
@@ -56,6 +63,7 @@ or {
   },
   JsInitializerClause(expression = $c) where {
     $c <: or { JsStringLiteralExpression(), JsTemplateExpression() },
+    $c <: not r"(?is).*\d(?:ms|s)\b.*",
     $c <: r"(?is).*(?:\d(?:px|r?em|ch|ex|vh|vw|vmin|vmax|deg|turn|m?s)\b|\d%|[a-z-]+\().*",
     $c <: r"(?is).*(?:^|[\s,('\"`])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen|accentcolor|accentcolortext|activetext|buttonborder|buttonface|buttontext|canvas|canvastext|field|fieldtext|graytext|highlight|highlighttext|linktext|mark|marktext|selecteditem|selecteditemtext|visitedtext|activeborder|activecaption|appworkspace|background|buttonhighlight|buttonshadow|captiontext|inactiveborder|inactivecaption|inactivecaptiontext|infobackground|infotext|menu|menutext|scrollbar|threeddarkshadow|threedface|threedhighlight|threedlightshadow|threedshadow|window|windowframe|windowtext)(?:$|[\s,)'\"`;!]).*",
     register_diagnostic(
