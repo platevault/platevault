@@ -1196,6 +1196,8 @@
   "setup_wizard_continue_without_site": "Continue without a site →",
   "setup_site_intro": "Optional — add one observing site now, or skip and add it later from Settings → Target Planner.",
   "setup_site_map_label": "Pick on map",
+  "setup_site_map_notice": "The map loads from OpenStreetMap, which sees your IP address and the area on screen. You can type your coordinates below instead.",
+  "setup_site_map_show": "Show map",
   "setup_site_map_unavailable": "Map unavailable right now — enter your coordinates in the fields below.",
   "setup_site_skip_note": "You can leave this blank and set it up later; the Planner will prompt you when it's needed.",
   "setup_step_scan_desc": "Scanning each source folder and detecting ingestion groups.",

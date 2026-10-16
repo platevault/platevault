@@ -1194,6 +1194,8 @@
   "setup_wizard_continue_without_site": "Continuar sem um local →",
   "setup_site_intro": "Opcional — adicione um local de observação agora, ou pule e adicione depois em Configurações → Planejador de alvos.",
   "setup_site_map_label": "Escolher no mapa",
+  "setup_site_map_notice": "O mapa é carregado do OpenStreetMap, que vê seu endereço IP e a área exibida. Você pode digitar suas coordenadas abaixo.",
+  "setup_site_map_show": "Mostrar mapa",
   "setup_site_map_unavailable": "Mapa indisponível no momento — insira suas coordenadas nos campos abaixo.",
   "setup_site_skip_note": "Você pode deixar isso em branco e configurar depois; o Planejador solicitará quando for necessário.",
   "setup_step_scan_desc": "Escaneando cada pasta de origem e detectando grupos de ingestão.",
