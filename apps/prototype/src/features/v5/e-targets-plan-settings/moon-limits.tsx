@@ -40,7 +40,7 @@ export function MoonLimitsDialog({ open, onOpenChange, bands }: { open: boolean;
   }, [open])
 
   const current = draft[band]
-  const missing = (value: number | null) => (tried && value === null ? m.tonight_curve_number_needed() : undefined)
+  const missing = (value: number | null) => (tried && value === null ? m.common_enter_number() : undefined)
   const edit = (patch: Partial<Draft[Band]>) => setDraft((d) => ({ ...d, [band]: { ...d[band], ...patch } }))
 
   function save(): CommitResult | void {

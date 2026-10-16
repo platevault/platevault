@@ -785,7 +785,7 @@ export function alsoUseCalibration(source: CalibrationSource, sessionIds: Sessio
   const calSource = sourceFor(state.catalog, state.disk, source)
   if (!calSource) return MISSING
   const kind = calSource.kind
-  const label = msg("store_cal_label_also_use")
+  const label = msg("calibration_also_use_title")
   const href = sessionsHref(sessionIds)
   const at = nowIso()
   const writes: ChoiceWrite[] = []

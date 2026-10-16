@@ -32,7 +32,7 @@ function useCommands(): PaletteCommand[] {
   if (project && !isLocked(project))
     commands.push({
       id: "b:apply",
-      label: m.project_apply_in_project({ name: project.name }),
+      label: m.project_apply_in_project_ellipsis({ name: project.name }),
       group: "Actions",
       keywords: "apply view build folder changes symlinks copies",
       run: () => {

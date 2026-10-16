@@ -217,7 +217,7 @@ function ListDemo() {
   const latestNight = nights.at(-1)
   const open = openId ? catalog.sessions[openId] : undefined
   const ran = (label: string) => () => setLast(label)
-  const trash: Action = { id: "trash", label: m.run_move_to_trash(), kind: "destructive", opensDialog: true, run: ran(m.run_move_to_trash()) }
+  const trash: Action = { id: "trash", label: m.common_move_to_trash(), kind: "destructive", opensDialog: true, run: ran(m.common_move_to_trash()) }
 
   const actions: Action[] = [
     { id: "import", label: m.import_open(), kind: "primary", run: ran(m.import_open()) },
@@ -368,7 +368,7 @@ function ListPathDemo() {
             columns: sessionColumns(m, catalog),
             getRowId: (s) => s.id,
             rowLabel: (s) => sessionLabel(catalog, s),
-            toolbar: { search: { label: m.catalogue_templates_search_sessions(), value: query, onChange: setQuery }, matchCount: shown.length },
+            toolbar: { search: { label: m.sessions_search(), value: query, onChange: setQuery }, matchCount: shown.length },
           }}
         />
       </Frame>
@@ -671,7 +671,7 @@ function StepDemo() {
             flow={flow}
             viewing={viewing}
             onSelectStep={setViewing}
-            stepsLabel={m.catalogue_templates_wrapup_steps()}
+            stepsLabel={m.wrapup_steps()}
             views={{
               label: m.catalogue_templates_project_views(),
               value: "wrap-up",

@@ -94,7 +94,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
         title: m.wrapup_offer_duplicates({ count: files.length, n: formatCount(files.length), size: formatBytes(files.length * g.sizeBytes) }),
         summary: [m.duplicates_frames_keep_copy({ count: 1, n: formatCount(1) }), ...(viewLinks > 0 ? [m.trash_also_removes_links({ count: viewLinks })] : [])].join(" · "),
         groups: [{ label: locationName(catalog, leaving(g)[0]!), rows: files, defaultOpen: true }],
-        confirm: { label: m.run_move_to_trash(), kind: "destructive" },
+        confirm: { label: m.common_move_to_trash(), kind: "destructive" },
       },
       run: () => move([g]),
     }

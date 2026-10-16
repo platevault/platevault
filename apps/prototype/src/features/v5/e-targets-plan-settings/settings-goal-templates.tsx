@@ -119,7 +119,7 @@ export function GoalTemplatesSettingsPage() {
   function duplicate(t: GoalTemplate) {
     let name = m.template_copy_name({ name: t.name })
     for (let n = 2; allNames.some((x) => x.toLowerCase() === name.toLowerCase()); n += 1) name = m.template_copy_name_numbered({ name: t.name, n: String(n) })
-    setDraft({ id: null, name, values: structuredClone(t.values), conditions: structuredClone(templateConditions(t)), title: m.template_duplicate_title({ name: t.name }) })
+    setDraft({ id: null, name, values: structuredClone(t.values), conditions: structuredClone(templateConditions(t)), title: m.common_duplicate_title({ name: t.name }) })
   }
   const create: Action = { id: "new-template", label: m.template_new(), opensDialog: true, run: () => setDraft({ id: null, name: "", values: [], conditions: DEFAULT_TEMPLATE_CONDITIONS, title: m.template_new() }) }
   const duplicateAction = (t: GoalTemplate): Action => ({ id: "duplicate", label: m.template_duplicate(), icon: Copy, opensDialog: true, run: () => duplicate(t) })

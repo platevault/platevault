@@ -137,7 +137,7 @@ export function startApply(projectId: ProjectId, sheet: ApplySheet): { result: C
   const state = store.getState()
   const project = state.catalog.projects[projectId]
   if (!project) return { result: MISSING, operationId: null }
-  const label = msg("op_apply_title", { name: project.name })
+  const label = msg("common_apply_named", { name: project.name })
   const closed = closedRefusal(project, label)
   if (closed) return { result: closed, operationId: null }
   const plan = applyPlan(state, project)
@@ -374,7 +374,7 @@ export function reviewLeftover(projectId: ProjectId, path: string, decision: Lef
   const previous = project?.previous
   const leftover = previous?.leftovers.find((l) => l.path === path)
   if (!project || !previous || !leftover) return MISSING
-  const label = decision === "keep" ? msg("project_label_keep_previous", { name: fileName(path) }) : decision === "move" ? msg("project_label_move_previous", { name: fileName(path) }) : msg("project_label_trash_previous", { name: fileName(path) })
+  const label = decision === "keep" ? msg("project_label_keep_previous", { name: fileName(path) }) : decision === "move" ? msg("project_label_move_previous", { name: fileName(path) }) : msg("store_label_move_to_trash_named", { name: fileName(path) })
   const closed = closedRefusal(project, label)
   if (closed) return closed
   const href = viewHref(projectId)

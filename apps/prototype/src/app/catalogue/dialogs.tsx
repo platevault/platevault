@@ -82,7 +82,7 @@ function ConfirmSpecimens({ archiveName }: { archiveName: string }) {
   const sum = totals(folded)
   const trashTitle = m.catalogue_dialogs_trash_title({ count: sum.count })
   const trashSummary = m.catalogue_dialogs_totals({ size: sum.size, count: sum.locations })
-  const trash = { label: m.run_move_to_trash(), kind: "destructive" as const }
+  const trash = { label: m.common_move_to_trash(), kind: "destructive" as const }
   const archiveGroups: ConfirmGroup[] = [{ label: m.nav_sessions(), rows: frames(4, "R", "move", ARCHIVE) }]
   const archive = { label: m.wrapup_archive_title() }
   // The default specimen goes through useAction, so a ConfirmSpec on an Action opens the same dialog.
@@ -126,7 +126,7 @@ function RenameSpecimen({ caption, name, run, startEmpty = false }: { caption: s
   return (
     <Specimen caption={caption}>
       <FormDialog
-        title={m.equipment_rename_title({ name })}
+        title={m.common_rename_title({ name })}
         size="sm"
         confirm={confirm}
         onOpenChange={(open) => {
@@ -148,7 +148,7 @@ function SkipSpecimen({ name }: { name: string }) {
   return (
     <Specimen caption={m.catalogue_dialogs_state_skip()}>
       <FormDialog
-        title={m.equipment_rename_title({ name })}
+        title={m.common_rename_title({ name })}
         confirm={proceed}
         skip={skip}
         trigger={<Button variant="outline" size="sm">{opener(proceed.label)}</Button>}

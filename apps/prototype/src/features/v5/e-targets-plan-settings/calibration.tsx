@@ -193,14 +193,14 @@ export function CalibrationPage() {
     }
   }
   const trash = (master: CalibrationMaster): Action => {
-    const label = m.calibration_move_to_trash()
+    const label = m.common_move_to_trash()
     return {
       id: "trash-master",
       label,
       kind: "destructive",
       unavailable: inUse(master, label),
       confirm: {
-        title: m.calibration_trash_master_title({ name: masterLabel(m, master) }),
+        title: m.common_trash_named_title({ name: masterLabel(m, master) }),
         summary: released(master),
         groups: [{ label: m.calibration_versions(), rows: versionsNewestFirst(master).map((v) => trashRow(disk, v)), defaultOpen: true }],
         confirm: { label, kind: "destructive" },

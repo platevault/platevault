@@ -60,7 +60,7 @@ function MatchingDialog({ open, onClose }: { open: boolean; onClose: () => void 
   const m = useMessages()
   const current = useStore((s) => s.settings.matching)
   const { values, set, shown } = useDialogForm<MatchingForm>(open, () => formOf(current))
-  const errors: FieldErrors<keyof MatchingForm> = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === null ? m.equipment_error_number() : undefined]))
+  const errors: FieldErrors<keyof MatchingForm> = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === null ? m.common_enter_number() : undefined]))
   const label = m.settings_save()
   const confirm: Action = {
     id: "matching-save",

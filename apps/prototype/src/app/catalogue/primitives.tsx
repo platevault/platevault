@@ -282,8 +282,8 @@ function Menus() {
                   <DropdownMenuSubTrigger>{m.common_more()}</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="min-w-48">
                     <DropdownMenuItem onClick={ran(m.location_rescan())}>{m.location_rescan()}</DropdownMenuItem>
-                    <DropdownMenuItem variant="destructive" onClick={ran(m.run_move_to_trash())}>
-                      {m.run_move_to_trash()}
+                    <DropdownMenuItem variant="destructive" onClick={ran(m.common_move_to_trash())}>
+                      {m.common_move_to_trash()}
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -311,7 +311,7 @@ function Menus() {
                   <ContextMenuItem onClick={ran(m.location_rescan())}>{m.location_rescan()}</ContextMenuItem>
                 </ContextMenuGroup>
                 <ContextMenuSeparator />
-                <ContextMenuItem onClick={ran(m.run_move_to_trash())}>{m.run_move_to_trash()}</ContextMenuItem>
+                <ContextMenuItem onClick={ran(m.common_move_to_trash())}>{m.common_move_to_trash()}</ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
           </Specimen>

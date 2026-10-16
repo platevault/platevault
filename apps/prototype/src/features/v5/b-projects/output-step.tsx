@@ -117,7 +117,7 @@ export function useOutputSections(project: Project): DetailSection[] {
   const [copying, setCopying] = useState(false)
   const editable = !isLocked(project)
 
-  const state = (r: OutputRow) => (r.state === "writing" ? m.project_output_writing() : m.status_ready())
+  const state = (r: OutputRow) => (r.state === "writing" ? m.store_reason_still_being_written() : m.status_ready())
   const columns: Column<OutputRow>[] = [
     { id: "file", header: m.dialog_col_file(), cell: (r) => r.path, sortValue: (r) => r.path, rowHeader: true, truncate: true },
     { id: "kind", header: m.project_col_kind(), cell: (r) => (r.kind ? say(m, OUTPUT_KIND_NAME[r.kind]) : "–"), sortValue: (r) => r.kind },
@@ -165,12 +165,12 @@ export function useOutputSections(project: Project): DetailSection[] {
   if (editable && hidden.length > 0)
     sections.push({
       id: "hidden-masters",
-      title: m.project_output_hidden_masters(),
+      title: m.calibration_hidden_masters(),
       count: hidden.length,
       flush: true,
       content: (
         <BoxTable
-          label={m.project_output_hidden_masters()}
+          label={m.calibration_hidden_masters()}
           rows={hidden}
           columns={hiddenColumns}
           getRowId={(o) => o.path}

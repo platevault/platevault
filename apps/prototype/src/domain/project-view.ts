@@ -203,8 +203,8 @@ export function groupPlacement(m: Messages, world: Pick<World, "catalog" | "sett
   if (isMosaic(project)) {
     const fromCapture = PANEL_IN_NAME.exec(session.objectLabel ?? "")?.[1]
     let n = fromCapture ? Number(fromCapture) : project.groups.filter((g) => g.panel).length + 1
-    while (taken.has(say(m, msg("project_group_panel_n", { n })))) n += 1
-    return { groupId: null, name: say(m, msg("project_group_panel_n", { n })), panel: true }
+    while (taken.has(say(m, msg("common_panel_n", { n })))) n += 1
+    return { groupId: null, name: say(m, msg("common_panel_n", { n })), panel: true }
   }
   const rig = rigName(m, catalog, sessionRigId(session))
   const onRig = project.groups.filter((g) => groupInputs(project, g.id).some((i) => sessionRigId(catalog.sessions[i.sessionId] ?? session) === sessionRigId(session))).length

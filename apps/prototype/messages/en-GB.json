@@ -17,7 +17,6 @@
   "verb_retry": "Retry",
   "verb_review": "Review",
   "verb_stack": "Stack",
-  "verb_save": "Save",
   "common_more": "More",
   "common_locations": "Locations",
   "common_runs": "Runs",
@@ -85,7 +84,6 @@
       }
     }
   ],
-  "shell_next": "Next: {label}",
   "shell_import": "Import",
   "shell_search_or_jump_ellipsis": "Search or jump to…",
   "shell_with_shortcut": "{label} ({shortcut})",
@@ -201,8 +199,6 @@
   "issue_location_offline": "{name} offline",
   "issue_failed": "{name} failed",
   "issue_interrupted": "{name} interrupted",
-  "issue_to_review": "{name}: {count} to review",
-  "issue_blocked": "{name} blocked",
   "issue_master_offered": [
     {
       "declarations": [
@@ -725,25 +721,7 @@
   "home_scan": "Scan",
   "home_everything_imported": "Everything is imported.",
   "home_add_captures_location": "Add a Captures location to find new captures.",
-  "home_column_item": "Session or run",
   "home_ready_for": "Ready to add to {name}",
-  "home_clean_up_frees": "Clean up frees {bytes}",
-  "home_clean_up_links": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} link to remove",
-        "countPlural=*": "{n} links to remove"
-      }
-    }
-  ],
   "home_import_to_start": "Import captures to start sorting them.",
   "home_nothing_to_sort": "Nothing to sort or review.",
   "home_column_name": "Name",
@@ -771,9 +749,7 @@
   "sessions_filter_needs_target": "Needs a Target",
   "sessions_filter_needs_calibration": "Needs calibration",
   "sessions_filter_not_in_project": "Not in any Project",
-  "session_object": "OBJECT {name}",
   "session_no_object": "No OBJECT",
-  "session_cant_confirm": "Can't confirm",
   "session_target_confirmed": "Target confirmed: {name}",
   "session_frames_unreviewed": [
     {
@@ -791,11 +767,7 @@
       }
     }
   ],
-  "home_candidate_of": "Candidate of {name}",
-  "session_cant_add": "Can't add",
-  "home_added_to_draft": "{session} added to the {run} draft",
   "home_tonight": "Tonight",
-  "home_panel": "{name} · Panel {n}",
   "home_column_goal": "Goal",
   "session_frame_count": [
     {
@@ -818,7 +790,6 @@
   "session_label": "Session",
   "session_adds_subject": "Adds subject {name}, with the Project's goals",
   "session_adds_rig": "Adds rig {name}",
-  "session_becomes_candidate": "{name} becomes a candidate",
   "session_add_to_project_title": "Add {session} to {project}?",
   "session_no_rig": "no rig",
   "session_no_target": "No Target",
@@ -842,23 +813,6 @@
   "sessions_column_rig": "Rig",
   "sessions_rig_needs_review": "Rig needs review",
   "sessions_column_frames": "Frames",
-  "sessions_column_projects_runs": "Projects · runs",
-  "sessions_no_run": "no run",
-  "sessions_run_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} run",
-        "countPlural=*": "{count} runs"
-      }
-    }
-  ],
   "sessions_no_project": "No Project",
   "sessions_light_count": [
     {
@@ -915,9 +869,7 @@
   "session_step_failed": "{step} failed",
   "session_in_os_trash": "In the OS Trash",
   "session_target_evidence": "Target evidence for {name}",
-  "session_no_evidence": "No evidence",
   "session_rig_evidence": "Rig evidence for {name}",
-  "session_reason": "Reason",
   "session_needs_target_first": "Needs a Target first",
   "session_none": "None",
   "session_headers": "Headers",
@@ -1146,8 +1098,6 @@
     }
   ],
   "newproject_open_ellipsis": "New Project…",
-  "startrun_in_project_ellipsis": "Start run in {name}…",
-  "mosaic_new_in_project_ellipsis": "New mosaic in {name}…",
   "wrapup_project": "Wrap up {name}",
   "project_noun": "Project",
   "wrapup_its_volume": "Its volume",
@@ -1157,10 +1107,6 @@
   "wrapup_refusal_file_exists": "Another file already exists at {path}",
   "project_target_not_added": "{name} could not be added as a Target.",
   "mosaic_choose_target_first": "Choose a Target first.",
-  "project_gone": "This Project no longer exists.",
-  "mosaic_subject_not_saved": "The mosaic subject was not saved.",
-  "project_subject_gone": "This subject no longer exists.",
-  "mosaic_profile_not_saved": "Group started; profile not saved: {message}",
   "wrapup_offer_rejected": [
     {
       "declarations": [
@@ -1179,24 +1125,6 @@
     }
   ],
   "wrapup_offer_rejected_none": "Move Unusable frames to Trash: none left",
-  "wrapup_offer_intermediates": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input size",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Move {n} processing intermediate to Trash ({size})",
-        "countPlural=*": "Move {n} processing intermediates to Trash ({size})"
-      }
-    }
-  ],
-  "wrapup_offer_intermediates_none": "Move processing intermediates to Trash: none left",
   "wrapup_offer_duplicates": [
     {
       "declarations": [
@@ -1215,7 +1143,6 @@
     }
   ],
   "wrapup_offer_duplicates_none": "Move duplicate copies to Trash: none left",
-  "wrapup_refusal_result_input": "input of {name}",
   "wrapup_refusal_archive_moving": "archive moving",
   "wrapup_refusal_outside_captures": "copy outside Captures",
   "wrapup_copies": [
@@ -1233,17 +1160,12 @@
       }
     }
   ],
-  "wrapup_intermediate_of": "Intermediate of {name}",
-  "wrapup_intermediate": "Intermediate",
-  "wrapup_refusal_kept_unverifiable": "The kept library copy {path} cannot be verified",
-  "wrapup_master_source_duplicate": "Generated master source: verified duplicate; keeps the library copy {path}",
   "wrapup_copy_on": "{name} on {location}",
   "wrapup_unknown_location": "an unknown location",
   "wrapup_refusal_kept_copy_unverified": "kept copy on {name} unverified",
   "wrapup_keeps_copy_on": "Keeps the copy on {name}: {path}",
   "wrapup_refusal_space": "{name}: {free} free of {size}",
   "wrapup_no_archive_location": "no archive location",
-  "project_nothing_to_restore": "Nothing archived is left to restore",
   "project_target_label": "Target",
   "project_search_placeholder": "Name or catalogue number",
   "project_search_subject_of": "Subject of {names}",
@@ -1274,13 +1196,9 @@
   "projects_no_subjects": "No subjects",
   "projects_col_state": "State",
   "projects_col_goals": "Goals",
-  "projects_col_open_runs": "Open runs",
-  "projects_next_for": "for {name}",
   "startrun_open_ellipsis": "Start run…",
-  "mosaic_new_ellipsis": "New mosaic…",
   "wrapup_action": "Wrap up",
   "trash_title": "Trash",
-  "trash_with_count": "Trash ({count})",
   "projects_count": [
     {
       "declarations": [
@@ -1296,38 +1214,15 @@
       }
     }
   ],
-  "projects_show_done": "Show done",
   "newproject_title": "New Project",
   "projects_empty": "No Projects yet",
   "projects_no_goals": "No goals",
   "projects_goals_met": "{met} of {total} met",
   "project_back_to_projects": "Open Projects",
-  "project_reopen_title": "Reopen {name}?",
-  "project_reopen_no_file_moves": "No file moves.",
-  "project_reopen": "Reopen",
-  "goal_bar_any": "Any",
   "goal_hours": "Hours",
   "goal_frames": "Frames",
-  "goal_quality": "Quality",
   "goal_fwhm_max": "FWHM ≤ ″",
-  "trash_move_ellipsis": "Move to Trash…",
-  "project_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} run",
-        "countPlural=*": "{count} runs"
-      }
-    }
-  ],
   "startrun_title": "Start run",
-  "project_no_runs": "No runs yet",
   "project_unknown_subject": "Unknown subject",
   "project_panels": [
     {
@@ -1344,13 +1239,6 @@
       }
     }
   ],
-  "project_run_noun_capital": "Run",
-  "project_run_complete_title": "Complete {name}?",
-  "project_run_trash_title": "Move {name} to Trash?",
-  "project_run_trash_description": "Restore brings it back as it was.",
-  "project_placement_ambiguous": "Ambiguous",
-  "project_placement_off_panel": "Off panel",
-  "project_placement_no_pointing": "No pointing",
   "project_col_session": "Session",
   "project_col_subject": "Subject",
   "project_col_rig": "Rig",
@@ -1370,9 +1258,6 @@
     }
   ],
   "project_open_session": "Open session",
-  "project_candidates": "Candidates",
-  "project_no_candidates": "No candidates",
-  "project_candidate_sessions_of": "Candidate sessions of {name}",
   "project_frames_count": [
     {
       "declarations": [
@@ -1427,7 +1312,6 @@
     }
   ],
   "project_open_target": "Open Target",
-  "mosaic_make": "Make mosaic",
   "project_remove": "Remove",
   "project_subjects": "Subjects",
   "project_subjects_count": [
@@ -1445,7 +1329,6 @@
       }
     }
   ],
-  "mosaic_new_button": "New mosaic",
   "project_used_by_runs": [
     {
       "declarations": [
@@ -1463,22 +1346,6 @@
   ],
   "project_subjects_of": "Subjects of {name}",
   "project_col_kind": "Kind",
-  "project_col_centre": "Centre",
-  "mosaic_of_panels": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Mosaic of {count} panel: start mosaic run",
-        "countPlural=*": "Mosaic of {count} panels: start mosaic run"
-      }
-    }
-  ],
   "project_open_in": "Open in {name}",
   "project_rigs": "Rigs",
   "project_rigs_count": [
@@ -1504,7 +1371,6 @@
   "project_camera_osc": "OSC",
   "project_camera_mono": "Mono",
   "project_add_rig": "Add rig",
-  "project_add_session": "Add to Project",
   "project_add_suggested": [
     {
       "declarations": [
@@ -1532,28 +1398,9 @@
   "project_no_sessions": "No sessions yet. Add one from the suggestions.",
   "project_no_suggestions": "No matching sessions to add",
   "project_none_tonight": "None tonight",
-  "project_restore_title": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Restore {count} session?",
-        "countPlural=*": "Restore {count} sessions?"
-      }
-    }
-  ],
-  "project_restore_description": "Back to where Archive found each frame.",
-  "project_restore": "Restore",
-  "project_restore_nothing_now": "Nothing chosen can be restored now.",
   "project_archived_of": "Archived sessions of {name}",
   "project_col_archive_path": "Archive path",
   "project_remove_named": "Remove {name}",
-  "project_remove_rig": "Remove rig",
   "project_remove_session": "Remove from Project",
   "project_remove_session_summary": "Its frames leave the View on the next Apply. Files, the library and other Projects don't change.",
   "newproject_new_target": "New Target",
@@ -1579,53 +1426,7 @@
     }
   ],
   "newproject_create": "Create Project",
-  "startrun_profile_none": "None",
   "startrun_profile_other": "Other app",
-  "startrun_blocker_done": "{name} is Done",
-  "startrun_no_subject": "No subject",
-  "startrun_not_created": "The run was not created.",
-  "startrun_profile_not_saved": "Run started; profile not saved: {message}",
-  "startrun_profile_optional": "Profile (optional)",
-  "startrun_place_panels": "Place panels",
-  "trash_entries": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} entry",
-        "countPlural=*": "{count} entries"
-      }
-    }
-  ],
-  "trash_of_project": "Trash of {name}",
-  "trash_is_empty": "Trash is empty",
-  "trash_restore_title": "Restore {name}?",
-  "trash_restore_to_group": "{name} → its run group",
-  "trash_restore_to_runs": "{name} → the Project's runs",
-  "trash_restore_run": "Restore run",
-  "trash_run_restored": "{name} restored",
-  "trash_empty_runs_title": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Empty {count} run?",
-        "countPlural=*": "Empty {count} runs?"
-      }
-    }
-  ],
-  "trash_empty_run": "Empty run",
-  "trash_empty": "Empty Trash",
   "wrapup_offer_rejects": "Unusable frames",
   "wrapup_offer_duplicates_label": "Duplicates",
   "wrapup_offer_processing": [
@@ -1714,7 +1515,6 @@
       }
     }
   ],
-  "wrapup_trash_offer_description": "To the OS Trash only. Each item is re-verified first.",
   "wrapup_items_to_trash": [
     {
       "declarations": [
@@ -1733,9 +1533,7 @@
   ],
   "wrapup_refused": "refused",
   "wrapup_archive_title": "Archive",
-  "wrapup_archive_ellipsis": "Archive…",
   "wrapup_archive_confirm_title": "Archive {name}?",
-  "wrapup_archive_description": "Each session moves whole or stays.",
   "wrapup_archive_change": [
     {
       "declarations": [
@@ -1754,7 +1552,6 @@
     }
   ],
   "wrapup_archive_fallback": "archive",
-  "wrapup_archive_links_follow": "Prepared links follow the move",
   "wrapup_destination": "Destination",
   "wrapup_sessions_to_move": [
     {
@@ -1771,60 +1568,8 @@
       }
     }
   ],
-  "wrapup_sessions_stay": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} session stays",
-        "countPlural=*": "{count} sessions stay"
-      }
-    }
-  ],
   "wrapup_used_by_other_reason": "used by another Project",
-  "mosaic_placed_by_you": "Placed by you",
   "mosaic_left_out": "Left out",
-  "mosaic_two_panels": "Two panels",
-  "mosaic_included_panel": "Included panel",
-  "mosaic_default_name": "{name} mosaic",
-  "mosaic_place_on": "Place on",
-  "mosaic_by_pointing": "By pointing",
-  "mosaic_leave_out": "Leave out",
-  "mosaic_run": "Mosaic run",
-  "mosaic_start_group": "Start group",
-  "mosaic_items_missing": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} item missing",
-        "countPlural=*": "{count} items missing"
-      }
-    }
-  ],
-  "mosaic_name_placeholder": "IC 5070 mosaic",
-  "mosaic_fov_unknown": "Field of view unknown · panels drawn at 1°",
-  "mosaic_panels_title": "Panels",
-  "mosaic_done_adding": "Done adding",
-  "mosaic_add_panels": "Add panels",
-  "mosaic_refusal_remove_panel": "Can't remove Panel {n}",
-  "mosaic_in_a_run": "In a run",
-  "mosaic_no_sessions_on": "No sessions on {rig}",
-  "mosaic_this_rig": "this rig",
-  "mosaic_pick_target": "Pick a Target",
-  "mosaic_sessions_to_place": "Sessions to place",
-  "mosaic_layout": "Layout",
-  "mosaic_excluded_panel": "Excluded panel",
   "mosaic_field_label": "Mosaic field: click a panel to include or exclude it",
   "mosaic_add_slot": "Add panel {side} of Panel {n}",
   "mosaic_excluded": "excluded",
@@ -1857,7 +1602,6 @@
   "tonight_no_filters": "No filters",
   "tonight_moon_limits": "Moon limits",
   "tonight_filter": "Filter",
-  "tonight_actions": "Actions",
   "tonight_no_window": "No window tonight",
   "tonight_altitude": "Altitude",
   "tonight_window": "Window",
@@ -1917,8 +1661,6 @@
   "targets_add_to_plan": "Add to Plan",
   "targets_remove_from_plan": "Remove from Plan",
   "target_open_project": "Open Project",
-  "plan_remove_named": "Remove {name} from Plan",
-  "plan_add_named": "Add {name} to Plan",
   "plan_list": "Plan list",
   "plan_targets_count": [
     {
@@ -1935,7 +1677,6 @@
       }
     }
   ],
-  "plan_list_empty": "Plan list empty",
   "plan_show_all": "Show all",
   "plan_dark": "Dark",
   "plan_dark_none": "none",
@@ -2029,7 +1770,6 @@
     }
   ],
   "tonight_curve_default": "Default {value}",
-  "tonight_curve_number_needed": "Enter a number",
   "tonight_curve_incomplete": "{band}: enter both values",
   "domain_grade_badge": "{band} {grade}",
   "domain_grade_good": "good",
@@ -2078,7 +1818,6 @@
   "target_angular_size": "Angular size",
   "target_size_unknown": "Size unknown",
   "target_field": "Field",
-  "target_sessions_caption": "Sessions of {name}",
   "target_channel": "Channel",
   "calibration_frames": "Frames",
   "target_add_to_title": "Add {target} to {project}?",
@@ -2113,8 +1852,6 @@
   "activity_destination_session": "Session",
   "activity_destination_project": "Project",
   "activity_destination_about": "About",
-  "activity_destination_run": "run",
-  "activity_destination_trash": "Project Trash",
   "activity_destination_page": "page",
   "activity_recorded": "Recorded",
   "activity_refused": "Refused",
@@ -2166,13 +1903,12 @@
   "calibration_status_to_stack": "To stack",
   "calibration_status_stacking": "Stacking",
   "calibration_status_importing": "Importing",
-  "calibration_step_todo": "To do",
   "calibration_steps_of": "{name} steps",
   "calibration_raws_kept": "Kept",
   "calibration_keep_raws": "Keep raws",
   "calibration_stack_again": "Stack again",
   "calibration_trash_raws": "Trash raws",
-  "calibration_trash_master_title": "Move {name} to Trash?",
+  "common_trash_named_title": "Move {name} to Trash?",
   "calibration_show_master": "Show master",
   "calibration_process": "Process",
   "calibration_no_raw_sessions": "No raw sessions",
@@ -2200,13 +1936,8 @@
   "calibration_origin_results": "Run Results",
   "calibration_origin_stacked": "Stacked",
   "calibration_origin_imported": "Imported",
-  "calibration_open_offer": "Open offer",
   "calibration_used_by": "Used by",
   "calibration_open_raw_session": "Open raw session",
-  "calibration_offered": "Offered",
-  "calibration_offer_restored": "Offer restored",
-  "calibration_open_run": "Open run",
-  "calibration_dismissed": "Dismissed",
   "calibration_master": "Master",
   "calibration_run": "Run",
   "calibration_masters_count": [
@@ -2270,143 +2001,24 @@
   "notice_finished": "{name} finished",
   "notice_partial": "{name} partial",
   "notice_canceled": "{name} canceled",
-  "run_step_next": "Next",
-  "run_dismiss": "Dismiss",
   "run_profile_application": "Application",
-  "run_open_project": "Open the Project",
-  "run_in_trash": "In Trash · {date}",
-  "run_open_trash": "Open Trash",
-  "run_restore": "Restore",
-  "run_reopen_run": "Reopen run",
-  "run_reopen_summary": "Its steps become editable again; no file moves",
-  "run_reopened": "{name} reopened",
-  "run_clean_up": "Clean up",
-  "run_move_to_trash": "Move to Trash",
+  "common_move_to_trash": "Move to Trash",
   "run_trash_blocked": "Move to Trash blocked",
   "run_trash_title": "Move {name} to the Trash?",
-  "run_trash_leaves": "Leaves run lists, pickers and goal totals",
-  "run_trash_waits_detail": "Restore brings it back as it was",
   "run_actions_for": "Actions for {name}",
   "run_remove": "Remove",
-  "run_none": "None",
   "run_col_night": "Night",
   "run_col_channel": "Channel",
   "run_col_frames": "Frames",
   "run_col_integration": "Integration",
-  "run_col_reason": "Reason",
-  "run_col_state": "State",
   "run_col_kind": "Kind",
-  "run_col_source": "Source",
-  "run_select_pointing_inside_panel": "Pointing inside the panel",
-  "run_selection_blocked": "Selection change blocked",
-  "run_select_remove_from_run": "Remove from run",
-  "run_select_add_to_run": "Add to run",
-  "run_select_frames_of": "{included} of {total}",
-  "run_select_no_longer_matches": "No longer matches",
-  "run_select_in_run": "In the run",
-  "run_select_members_only": "In the run only",
-  "run_select_members_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} session in the run",
-        "countPlural=*": "{count} sessions in the run"
-      }
-    }
-  ],
-  "run_select_add_new": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Add {count} new candidate",
-        "countPlural=*": "Add {count} new candidates"
-      }
-    }
-  ],
-  "run_select_sessions_label": "Sessions for {name}",
-  "run_select_no_candidates": "No candidates on {rig}",
-  "run_select_revision": "Revision {revision}",
-  "run_save_revision": "Save revision {revision}",
-  "run_save_blocked": "Save blocked",
-  "run_completed": "{name} Complete",
-  "run_clean_up_blocked": "Clean up blocked",
   "run_col_size": "Size",
-  "run_open_prepare": "Open Prepare",
-  "run_open_calibrate": "Open Calibrate",
   "run_cal_auto_assign": "Auto-assign",
-  "run_cal_policy_blocked": "Auto-assign blocked",
-  "run_cal_off": "Off",
   "run_cal_no_sessions": "No sessions",
-  "run_cal_policy_shared": "Policy shared by every panel",
-  "run_cal_requirements": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requirement",
-        "countPlural=*": "{count} requirements"
-      }
-    }
-  ],
-  "run_cal_no_sessions_saved": "No sessions saved",
-  "run_cal_automatic": "Automatic",
-  "run_cal_stack_from": "Stack from {name}",
-  "run_cal_assign_blocked": "Assignment blocked",
   "run_cal_kind_dark": "dark",
   "run_cal_kind_flat": "flat",
   "run_cal_kind_bias": "bias",
-  "run_use_named": "Use {name}",
-  "run_cal_use_automatic": "Use automatic",
-  "run_cal_no_master": "No master",
-  "run_cal_col_light_session": "Light session",
-  "run_cal_col_master": "Master",
-  "run_cal_recommended": "Recommended",
-  "run_cal_other_masters": "Other masters",
-  "run_cal_without_master": "Without a master",
-  "run_cal_no_calibration": "No calibration",
-  "run_cal_master_for": "Master for {name}",
-  "run_cal_to_review_col": "To review",
-  "run_cal_requirements_label": "Calibration requirements",
-  "run_cal_exception_title": "Exception: {name}",
-  "run_cal_add_blocked": "Add to library blocked",
-  "run_cal_masters_found": "Masters found",
-  "run_cal_masters_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} master",
-        "countPlural=*": "{count} masters"
-      }
-    }
-  ],
-  "run_cal_add_to_library": "Add to library",
-  "run_cal_bin": "bin {binning}",
   "run_wrap_up": "Wrap up",
-  "run_accept": "Accept",
-  "run_not_prepared": "Not prepared",
   "run_files_count": [
     {
       "declarations": [
@@ -2423,274 +2035,28 @@
     }
   ],
   "run_col_file": "File",
-  "run_col_revision": "Revision",
   "run_col_project": "Project",
-  "run_results_look_again_blocked": "Look again blocked",
-  "run_results_folder": "Results folder",
-  "run_results_rescan": "Rescan",
-  "run_results_ignore": "Ignore",
-  "run_results_intermediate": "Intermediate",
-  "run_results_kind_of": "Kind for {name}",
-  "run_results_choose_file": "Choose a file",
-  "run_results_attach": "Attach",
-  "run_results_attach_blocked": "Attach blocked",
-  "run_results_products": "Products",
-  "run_results_products_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} product",
-        "countPlural=*": "{count} products"
-      }
-    }
-  ],
   "run_results_intermediates": "Intermediates",
-  "run_results_intermediates_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} intermediate",
-        "countPlural=*": "{count} intermediates"
-      }
-    }
-  ],
-  "run_results_inspect_again": "Inspect again",
-  "run_results_kind_missing": "Kind?",
-  "run_results_changed": "Changed",
-  "run_results_accept_named": "Accept {name}",
-  "run_results_reject_named": "Reject {name}",
-  "run_results_no_products": "No products yet",
-  "run_results_attach_title": "Attach a result",
-  "run_results_file_path": "File path",
-  "run_results_channel_optional": "Channel (optional)",
-  "run_results_channel_placeholder": "Ha",
-  "run_results_run_group": "Run group",
   "run_read_only_because": "Read-only · {reason}",
-  "run_prepare_shared_title": "Profile, mode and policy shared by every panel",
-  "run_layout_output": "<output>",
-  "run_layout_not_chosen": "Not chosen",
   "run_layout_group": "Group",
   "run_layout_output_folder": "Output folder",
-  "run_prepare_setup": "Setup",
-  "run_prepare_inputs": "Inputs",
   "run_prepare_title": "Prepare {name}?",
-  "run_prepare_title_rev": "Prepare {name} (rev {revision})?",
-  "run_prepare_confirm": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Prepare {count} input",
-        "countPlural=*": "Prepare {count} inputs"
-      }
-    }
-  ],
-  "run_prepare_creates": "Creates {folder}",
   "run_profile_not_verified": "Not verified",
   "run_profile_read_only": "Read-only",
-  "run_profile_evidence": "{name} evidence",
-  "run_opened": "Opened {name}",
   "run_open_in": "Open in {app}",
-  "run_unverified_since": "Unverified since {date}",
-  "run_entries_changed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} entry changed",
-        "countPlural=*": "{count} entries changed"
-      }
-    }
-  ],
-  "run_partial_count": "Partial {done}/{total}",
-  "run_lock_trashed": "In the Project Trash",
-  "run_lock_complete": "Complete · Reopen to change",
   "run_parent_none": "No output folder",
-  "run_parent_missing": "{name} missing",
   "run_parent_read_only": "{name} not writable",
   "run_field_target": "Target",
   "run_field_equipment": "Equipment",
   "run_field_filter": "Filter",
   "run_field_exposure": "Exposure",
   "run_field_focal_length": "Focal length",
-  "run_mode_semantics_copy": "Temporary copies, removed when the run completes.",
-  "run_check_lock": "Run state",
-  "run_check_membership": "Saved membership",
-  "run_check_profile": "Application profile",
-  "run_check_metadata": "Corrected metadata",
   "run_check_mode": "Run view",
-  "run_check_destination": "Run folder",
   "run_check_space": "Free space",
-  "run_check_sources": "Source presence",
-  "run_check_entries": "Inputs",
-  "run_entry_denied": "Unreadable: read access to {path} is denied",
   "run_entry_offline": "Offline: {name} is not connected",
   "run_entry_its_volume": "its volume",
-  "run_entry_retired": "Retired: {name} is retired and never an input",
-  "run_entry_its_location": "its location",
-  "run_entry_not_found": "Not found at {path} at the last scan",
-  "run_entry_frame": "Frame",
-  "run_entry_master": "Master",
-  "run_entry_to_prepare": "To prepare",
-  "run_entry_unresolved": "Unresolved member: it could not be read when it was selected",
-  "run_entry_not_readable": "Not readable at {path}",
-  "run_mode_needs_space": "Needs {bytes} · {free} free",
-  "run_check_requirements_to_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requirement to review",
-        "countPlural=*": "{count} requirements to review"
-      }
-    }
-  ],
-  "run_check_patched_needs_isolated": "Patched copies need Copies",
-  "run_check_folder_exists": "{name} exists",
-  "run_check_sources_readable": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} source readable",
-        "countPlural=*": "{count} sources readable"
-      }
-    }
-  ],
-  "run_check_sources_unreadable": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} source unreadable · Partial",
-        "countPlural=*": "{count} sources unreadable · Partial"
-      }
-    }
-  ],
-  "run_check_no_frames": "No included frames",
-  "run_verify_entry_missing": "The run folder entry is missing or its volume is offline.",
-  "run_verify_source_unreadable": "The source cannot be read now (offline or missing).",
-  "run_verify_snapshot_differs": "Changed since its preparation snapshot: its SHA-256 differs.",
-  "run_verify_entry_differs": "This entry no longer matches what was prepared.",
-  "run_verify_digest_differs": "Changed since it was prepared: its SHA-256 differs from the recorded digest.",
-  "run_verify_entry_missing_or_differs": "Its run folder entry is missing or no longer matches what was prepared.",
-  "run_rev": "Rev {revision}",
   "run_cleanup_volume_offline": "{name} is offline",
-  "rungroup_panels_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} panel",
-        "countPlural=*": "{count} panels"
-      }
-    }
-  ],
-  "rungroup_in_trash": "{count} in Trash",
-  "rungroup_col_panel": "Panel",
-  "rungroup_col_candidates": "Candidates",
-  "rungroup_col_nearest": "Nearest panel",
-  "rungroup_col_folder": "Folder",
-  "rungroup_col_accepted": "Accepted",
-  "rungroup_col_panel_run": "Panel run",
-  "rungroup_col_status": "Status",
   "rungroup_panels_label": "Panels of {name}",
-  "rungroup_placed_by_you": "Placed on {panel} by you ({detail})",
-  "rungroup_to_place": "To place",
-  "rungroup_place_on": "Place on {panel}",
-  "rungroup_save": "Save",
-  "rungroup_candidates_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} candidate",
-        "countPlural=*": "{count} candidates"
-      }
-    }
-  ],
-  "rungroup_open_folder": "Open folder",
-  "rungroup_setup_locked": "Setup locked",
-  "rungroup_complete_panels": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} Complete panel",
-        "countPlural=*": "{count} Complete panels"
-      }
-    }
-  ],
-  "rungroup_result": "Group Result",
-  "rungroup_every_panel_complete": "Every panel Complete",
-  "rungroup_prepare_all_title": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Prepare all {count} panel of {name}?",
-        "countPlural=*": "Prepare all {count} panels of {name}?"
-      }
-    }
-  ],
   "rungroup_blocked_count": [
     {
       "declarations": [
@@ -2706,54 +2072,6 @@
       }
     }
   ],
-  "rungroup_prepare_panels": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Prepare {count} panel",
-        "countPlural=*": "Prepare {count} panels"
-      }
-    }
-  ],
-  "rungroup_panel_results": "Panel Results",
-  "rungroup_accepted_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} accepted",
-        "countPlural=*": "{count} accepted"
-      }
-    }
-  ],
-  "rungroup_rejected_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} rejected",
-        "countPlural=*": "{count} rejected"
-      }
-    }
-  ],
-  "rungroup_open_panel_results": "Open {panel} Results",
-  "run_mode_no_symlinks": "{name}: no symlinks",
   "location_role_captures_description": "Light frames",
   "location_role_captures_add": "Add capture location",
   "location_role_captures_picker": "Choose a capture folder",
@@ -2815,10 +2133,8 @@
   "site_west": "W",
   "location_not_saved": "Location registration was not saved.",
   "location_folder": "Folder",
-  "location_change": "Change",
   "location_display_name": "Display name",
   "location_role": "Role",
-  "location_names_more": "{names} and {count} more",
   "location_remap_refused": "Remap refused",
   "location_folder_unchanged": "Folder not changed",
   "location_remap_saved": "Remap saved",
@@ -2878,59 +2194,6 @@
   "location_volume_evidence": "Volume evidence",
   "location_from": "From",
   "location_to": "To",
-  "location_remap_change_move": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input path",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame moves to {path}, verified by SHA-256",
-        "countPlural=*": "{frames} frames move to {path}, verified by SHA-256"
-      }
-    }
-  ],
-  "location_remap_change_differ": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input names",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame refused, bytes differ: {names}",
-        "countPlural=*": "{frames} frames refused, bytes differ: {names}"
-      }
-    }
-  ],
-  "location_remap_change_not_found": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input names",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame not found in the new folder: {names}",
-        "countPlural=*": "{frames} frames not found in the new folder: {names}"
-      }
-    }
-  ],
-  "location_remap_change_refused_note": "Refused frames read Not found here",
-  "location_remap_change_points": "{name} points to {path}",
   "location_remap_confirm": [
     {
       "declarations": [
@@ -2982,8 +2245,6 @@
       }
     }
   ],
-  "location_last_attempt": "Last attempt {date}",
-  "location_indexed": "Indexed {date}",
   "location_frames": [
     {
       "declarations": [
@@ -3000,58 +2261,19 @@
       }
     }
   ],
-  "location_state_group": "{name} state",
   "location_indexing": "Indexing",
   "location_volume_not_mounted": "{name} not mounted",
-  "location_volume_missing": "Volume not mounted",
   "location_locate_or_remap": "Locate or remap",
   "location_retire": "Retire location",
   "location_choose_folder_again": "Choose folder again",
-  "location_incomplete_unread": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Incomplete scope · {count} folder unread",
-        "countPlural=*": "Incomplete scope · {count} folders unread"
-      }
-    }
-  ],
-  "location_retired_copies": [
-    {
-      "declarations": [
-        "input count",
-        "input date",
-        "input copies",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Retired {date} · {copies} copy",
-        "countPlural=*": "Retired {date} · {copies} copies"
-      }
-    }
-  ],
-  "location_more_actions": "More actions for {name}",
-  "settings_actions": "Actions",
   "settings_sections": "Settings sections",
   "settings_back_to_session": "Back to session",
   "settings_back_to_plan": "Back to Plan",
   "settings_back_to_target": "Back to Target",
   "settings_back_to_run": "Back to run",
   "settings_back_to_storage": "Back to Storage",
-  "settings_back_to_calibration": "Back to Calibration",
   "settings_back_to_project": "Back to Project",
   "settings_go_back": "Go back",
-  "about_no_files_touched": "No files touched",
-  "about_no_network": "No network",
   "about_this_build": "This build",
   "about_version": "Version",
   "about_data": "Data",
@@ -3107,22 +2329,6 @@
       }
     }
   ],
-  "about_count_runs": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} processing run",
-        "countPlural=*": "{n} processing runs"
-      }
-    }
-  ],
   "about_count_projects": [
     {
       "declarations": [
@@ -3142,7 +2348,6 @@
   "about_clock": "PlateVault clock",
   "prototype_about_clock": "{date} (simulated)",
   "about_clock_system": "This computer",
-  "about_onboarding": "Onboarding",
   "about_first_run_setup": "First-run setup",
   "about_restart_setup": "Restart setup",
   "about_simulation": "Simulation",
@@ -3151,8 +2356,6 @@
   "settings_at_defaults": "Already at the defaults",
   "settings_restore_defaults": "Restore defaults",
   "settings_keyboard": "Keyboard",
-  "settings_shortcuts_about": "About single-key shortcuts",
-  "settings_shortcuts_help": "?, /, [ and G sequences. ⌘K and Ctrl+K always work.",
   "settings_restore_title": "Restore appearance defaults?",
   "settings_edit_title": "Edit {name}",
   "settings_save": "Save",
@@ -3165,7 +2368,6 @@
   "location_scan_scope": "Scan scope",
   "location_last_indexed": "Last indexed",
   "location_not_indexed_yet": "Not indexed yet",
-  "location_indexed_frames": "Indexed frames",
   "location_sessions_count": [
     {
       "declarations": [
@@ -3186,11 +2388,7 @@
   "location_links_none": "Not supported",
   "location_unreadable_folders": "Unreadable folders at the last scan",
   "settings_none": "None",
-  "location_retire_review_title": "Review: retire {name}",
   "location_label": "Location",
-  "location_root": "Root",
-  "location_availability_at_review": "Availability at review",
-  "location_copies": "Copies",
   "location_copies_count": [
     {
       "declarations": [
@@ -3207,8 +2405,6 @@
       }
     }
   ],
-  "location_sessions_list": "{count}: {list}",
-  "location_changes": "Changes",
   "location_copies_read_retired": [
     {
       "declarations": [
@@ -3225,32 +2421,11 @@
       }
     }
   ],
-  "location_leaves_totals": "Leaves totals",
   "location_no_file_changes": "No file changes",
-  "location_availability_changed": "Availability changed",
-  "location_close_review": "Close review",
-  "location_make_default_blocked": "Make default blocked",
-  "location_make_default_not_saved": "Make default not saved",
   "settings_details": "Details",
   "location_index_now": "Index now",
   "settings_make_default": "Make default",
   "settings_edit": "Edit",
-  "location_remove_with_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Remove · {n} frame",
-        "countPlural=*": "Remove · {n} frames"
-      }
-    }
-  ],
   "settings_remove": "Remove",
   "settings_default": "Default",
   "settings_remove_title": "Remove {name}?",
@@ -3268,7 +2443,6 @@
   "site_twilight_nautical": "Nautical",
   "site_sun_below": "Sun −{degrees}°",
   "site_min_altitude_field": "Min. altitude (°)",
-  "site_default_about": "About the default site",
   "site_default_help": "Reminders move to the default site.",
   "site_save_changes_button": "Save changes",
   "site_no_default": "No default site",
@@ -3277,24 +2451,6 @@
   "site_elevation": "Elevation",
   "site_min_altitude": "Min. altitude",
   "site_from_headers": "From headers",
-  "site_headers_about": "About header coordinates",
-  "site_headers_help": "SITELAT and SITELONG without a saved site.",
-  "site_in_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "· in {n} session",
-        "countPlural=*": "· in {n} sessions"
-      }
-    }
-  ],
   "site_add_as_site": "Add as site",
   "settings_default_named": "Default: {name}",
   "site_clear_planning": "Clear the planning site",
@@ -3302,7 +2458,6 @@
   "site_make_default_title": "Make {name} the default?",
   "site_reminders_change": "Reminders: {from} → {to}",
   "site_previous": "previous site",
-  "settings_lookup_sesame_sources": "SIMBAD, NED, VizieR",
   "settings_lookup_simbad_only": "SIMBAD only",
   "settings_lookup_resolved": "Resolved by {provider}.",
   "settings_lookup_not_found": "{provider} returned no object named {query}.",
@@ -3343,7 +2498,6 @@
     }
   ],
   "settings_lookup_online": "Look up Targets online",
-  "settings_lookup_online_about": "About online lookup",
   "settings_lookup_online_help": "Sends Target names to the provider. A failed lookup never blocks indexing.",
   "settings_lookup_provider": "Provider",
   "settings_lookup_test": "Test",
@@ -3354,7 +2508,6 @@
   "settings_lookup_coordinates": "Coordinates",
   "settings_lookup_object_type": "Object type",
   "settings_lookup_aliases": "Aliases",
-  "settings_lookup_failed_title": "Lookup failed",
   "settings_lookup_off_title": "Online lookup off",
   "setup_step_welcome": "Welcome",
   "setup_step_index": "Index",
@@ -3481,29 +2634,19 @@
   "apps_badge_read_only": "Read-only inputs",
   "apps_badge_writes_unknown": "Input writes unknown",
   "apps_badge_write_prone": "Writes into inputs",
-  "apps_unsupported_corrected": "reading corrected values through configuration",
   "apps_evidence": "Evidence",
-  "apps_input_writes": "Input writes",
-  "apps_none_recorded": "None recorded",
   "apps_corrected_values": "Corrected values",
   "apps_corrected_through": "Through configuration",
   "apps_corrected_not_through": "Not through configuration",
   "apps_rename_note": "Renaming files never overrides header values.",
   "apps_not_located": "No application located",
-  "apps_locate_any": "Locate an application",
   "apps_use_this": "Use this application",
-  "apps_generic_description": "Launches any application with your arguments. It is not a verified preparation profile.",
   "apps_check_again": "Check again",
   "apps_launch_arguments": "Launch arguments",
   "apps_launch_placeholder": "e.g. --input \"{token}\"",
   "apps_save_arguments": "Save arguments",
-  "apps_back_to_task": "Back to the task",
-  "apps_controls_title": "applications on this computer",
   "apps_present": "present",
   "apps_moved_away": "moved away",
-  "apps_next_launch_fails": " · next launch fails",
-  "apps_move_away": "Move away",
-  "apps_put_back": "Put back",
   "apps_fail_next_launch": "Fail next launch",
   "settings_raw_frames": "Raw frames",
   "settings_keep_raws": "Keep raw calibration frames",
@@ -3516,7 +2659,6 @@
   "template_column_template": "Template",
   "template_copy_name": "{name} copy",
   "template_copy_name_numbered": "{name} copy {n}",
-  "template_duplicate_title": "Duplicate {name}",
   "template_new": "New template",
   "template_built_in": "Built-in",
   "template_duplicate": "Duplicate",
@@ -3556,17 +2698,14 @@
   "equipment_telescope": "Telescope",
   "equipment_filters": "Filters",
   "equipment_no_filters_osc": "No filters · OSC",
-  "equipment_rename_title": "Rename {name}",
+  "common_rename_title": "Rename {name}",
   "equipment_rig_name": "Rig name",
   "equipment_no_rigs": "No rigs",
   "settings_lookup_test_heading": "Test",
   "review_filter_all": "All",
   "review_picked": "Picked",
   "review_rejected": "Rejected",
-  "review_run_complete_help": "Membership stays. Marks change library quality and Project rejects.",
-  "review_panel_complete": "Panel complete",
-  "review_panel_complete_help": "A Complete panel run keeps its membership. Marks change library quality only.",
-  "review_panel_n": "Panel {n}",
+  "common_panel_n": "Panel {n}",
   "review_frames_count": [
     {
       "declarations": [
@@ -3583,24 +2722,13 @@
     }
   ],
   "review_mark_announcement": "{mark}: {what}. Library scope.",
-  "review_mark_draft_removed": "Removed from the run's draft as Rejected.",
-  "review_mark_draft_back": "Back in the run's draft.",
-  "review_mark_draft_still_out": "Still out of the run's draft: rejected for this Project.",
   "review_name_file": "File name",
   "review_name_filter_night": "Filter, night, number",
   "review_name_target_filter": "Target, filter, exposure, number",
   "review_name_night_camera": "Night, camera, gain, temperature, number",
-  "review_quality_rejected_both": "Rejected · Library and this Project",
-  "review_quality_rejected_both_short": "Rejected · both",
-  "review_quality_rejected_library": "Rejected · Library",
-  "review_quality_rejected_project": "Rejected · This Project",
   "review_quality_unreviewed_changed": "Unreviewed · changed content",
   "review_quality_unreviewed_pending": "Unreviewed · verification pending",
-  "review_quality_rejected_project_compact": "Rejected · Project",
-  "review_quality_library_title": "Library: {word}",
   "review_member_included": "Included",
-  "review_member_rejected": "Out of draft · Rejected",
-  "review_member_excluded": "Out of run · Unusable",
   "review_key_prev_next": "Previous or next frame",
   "review_key_pick": "Pick",
   "review_key_reject": "Reject",
@@ -3618,11 +2746,6 @@
   "review_key_escape": "Leave fullscreen, then clear selection",
   "review_key_shortcuts": "Shortcuts",
   "review_shortcuts_title": "Review shortcuts",
-  "review_shortcuts_description": "Table, filmstrip and grid. A mark applies to the whole selection.",
-  "review_auto_advance": "Auto-advance",
-  "review_auto_advance_help": "Auto-advance help",
-  "review_auto_advance_tip": "After P, X or U, the next frame becomes current.",
-  "review_all_shortcuts": "All app shortcuts",
   "review_done": "Done",
   "measure_frames_not_measured": [
     {
@@ -3673,7 +2796,6 @@
   "measure_interrupted_restart": "Interrupted by a restart",
   "measure_verifying_cached": "Verifying cached values",
   "measure_measuring": "Measuring",
-  "measure_progress_label": "Measurement progress",
   "measure_progress_text": "{word}: {done} of {total}",
   "measure_frames_unreadable": [
     {
@@ -3691,7 +2813,6 @@
     }
   ],
   "measure_all_measured": "All measured",
-  "measure_blocked": "Measuring blocked · {reason}",
   "measure_frames_action": "Measure frames",
   "measure_metric_fwhm": "FWHM",
   "measure_metric_hfr": "HFR",
@@ -3700,63 +2821,28 @@
   "measure_metric_background": "Background",
   "measure_metric_snr": "SNR",
   "measure_not_reported": "Not reported",
-  "review_copy_location": "{location}: ",
   "review_unknown_location": "Unknown location",
   "review_close_inspector": "Close the inspector",
-  "review_in_run": "In run: {state}",
-  "review_panel_run": "Panel {n} run",
-  "review_subject": "Subject: {name}",
-  "review_library_quality": "Library quality",
-  "review_library_quality_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Library quality: {count} frame",
-        "countPlural=*": "Library quality: {count} frames"
-      }
-    }
-  ],
-  "review_clear_project_reject": "Clear Project reject",
-  "review_mark_scope_help": "Mark scope",
-  "review_mark_scope_tip": "P, X and U mark the library, in every Project. A Project reject stays in this Project.",
   "review_no_pixels": "No pixels",
   "review_tab_values": "Values",
   "review_tab_stars": "Stars",
-  "review_show_stars": "Show stars",
   "review_detected_stars": "Detected stars, {count} brightest",
   "frame_star": "Star {id}",
-  "frame_note_method": "Method",
   "frame_note_basis": "Basis",
   "frame_note_match": "Match",
   "frame_match_file_name": "File name, unverified",
-  "review_linear_data": "Linear data",
-  "review_imported_csv": "Imported CSV",
   "review_col_frame": "Frame",
-  "review_col_panel": "Panel",
-  "review_col_subject": "Subject",
   "review_col_session": "Session",
   "review_col_time": "Time",
   "review_col_exposure": "Exposure",
   "review_col_quality": "Quality",
-  "review_col_member": "In run",
   "review_no_session": "No session",
   "review_ecc_short": "Ecc.",
   "review_col_fwhm_imported": "FWHM imported",
-  "review_imported_unverified": "Imported, unverified",
-  "review_imported_unverified_sr": ", imported, unverified",
-  "review_none": "None",
   "review_col_measurement": "Measurement",
   "review_col_copy": "Copy",
   "review_current_frame": "Current frame",
   "review_frames_in_review": "Frames in this review",
-  "review_column_source": "{column} source",
-  "review_decoding_thumbnail": "Decoding thumbnail",
   "review_view_filmstrip": "Filmstrip",
   "review_frame_grid": "Frame grid",
   "review_no_pixel_data": "No pixel data for this file.",
@@ -3770,46 +2856,8 @@
   "review_tile_bottom": "Bottom",
   "review_tile_bottom_right": "Bottom right",
   "review_corners_group": "{label}, corners at 1:1",
-  "review_tile_title": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "input fwhm",
-        "input ecc",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name}: FWHM {fwhm}, eccentricity {ecc}, {count} star",
-        "countPlural=*": "{name}: FWHM {fwhm}, eccentricity {ecc}, {count} stars"
-      }
-    }
-  ],
-  "review_tile_title_ratio": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "input fwhm",
-        "input ratio",
-        "input ecc",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name}: FWHM {fwhm} (×{ratio} centre), eccentricity {ecc}, {count} star",
-        "countPlural=*": "{name}: FWHM {fwhm} (×{ratio} centre), eccentricity {ecc}, {count} stars"
-      }
-    }
-  ],
   "review_tile_label": "{name} at 1:1, FWHM {fwhm}, eccentricity {ecc}",
   "review_tile_ecc": "e {value}",
-  "review_plot_point_rejected": "{name}: {value} (Rejected)",
   "review_plots_label": "Plots across the session",
   "review_capture_order": "Capture order · {count}",
   "review_legend_measured": "measured",
@@ -3854,17 +2902,9 @@
   "review_histogram_note": "Histogram note",
   "review_note_data": "Data",
   "review_histogram_range": "Linear ADU 0–{max}",
-  "review_note_counts": "Counts",
-  "review_note_log": "Log",
   "review_note_samples": "Samples",
   "review_note_samples_value": "{count}, region shown",
-  "review_note_brighter": "Brighter",
   "review_announce_frame": "{name}: frame {index} of {total}.",
-  "review_refusal_mark": "Mark blocked",
-  "review_refusal_reject": "Reject blocked",
-  "review_refusal_clear": "Clear blocked",
-  "review_refusal_marks": "Marks blocked",
-  "review_announce_project_reject_cleared": "Project reject cleared: {what}.",
   "review_announce_compare": "Compare: {current} and {reference}",
   "review_announce_compare_none": "Compare: {current} and no reference",
   "review_no_frame": "no frame",
@@ -3934,7 +2974,6 @@
   "review_cmd_grid": "Grid view",
   "review_cmd_height": "Cycle table height",
   "review_cmd_select_all": "Select all shown frames",
-  "review_open_select": "Open Select",
   "review_reveal_path": "Reveal path",
   "review_empty_none": "No frames",
   "review_empty_picked": "No Picked frames",
@@ -3942,70 +2981,25 @@
   "review_empty_unreviewed": "No Unreviewed frames",
   "review_show_all": "Show all",
   "review_frame_position": "Frame {index} of {total}",
-  "review_cfa_title": "Mosaic plane as recorded, not debayered",
   "review_cfa": "CFA {cfa}",
   "review_corners": "Corners",
   "review_fwhm_overlay": "FWHM overlay",
   "review_ecc_overlay": "Eccentricity overlay",
   "review_zoom": "Zoom",
-  "review_pan_help": "Pan help",
-  "review_pan_tip": "Drag or arrow keys pan. Shift pans further.",
   "review_display_stretch": "Display stretch",
   "review_leave_fullscreen": "Leave fullscreen",
   "review_no_current_frame": "No current frame",
-  "review_compare_current": "Current: {name}",
-  "review_preview_of": "Preview of {name}",
   "review_reference_label": "Reference:",
   "review_compare_reference": "Compare reference",
-  "review_choose_frame": "Choose a frame",
   "review_no_reference": "No reference",
   "review_reference_of": "Reference {name}",
-  "review_draft_panel_runs_unsaved": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} panel run unsaved",
-        "countPlural=*": "{count} panel runs unsaved"
-      }
-    }
-  ],
-  "review_announce_saved_revision": "{name} saved as revision {revision}.",
-  "review_announce_runs_saved": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} run saved.",
-        "countPlural=*": "{count} runs saved."
-      }
-    }
-  ],
-  "review_announce_discarded": "Unsaved changes discarded.",
-  "review_panel_in_trash": "{name} in Trash",
-  "review_trash_help": "Not listed or counted.",
-  "review_quality_filter": "Quality filter",
-  "review_panel_filter": "Panel filter",
-  "review_all_panels": "All panels",
   "review_view": "View",
   "review_view_table": "Table",
   "review_view_grid": "Grid",
   "review_height_rows": "About 8 rows",
   "review_height_strip": "One-line strip",
   "review_height_full": "Full height",
-  "review_table_height_sr": ", table height",
   "review_select": "Select",
-  "review_select_all_shown_count": "Select all shown ({count})",
   "review_select_by_threshold_ellipsis": "Select by threshold…",
   "review_select_by_threshold": "Select by threshold",
   "review_display": "Display",
@@ -4013,13 +3007,11 @@
   "review_columns": "Columns",
   "review_auto_advance_after_mark": "Auto-advance after a mark",
   "review_show_inspector": "Show the inspector",
-  "review_threshold_prefix": "Select frames with",
   "review_threshold_metric": "Threshold metric",
   "review_direction": "Direction",
   "review_above": "above",
   "review_below": "below",
   "review_threshold_value": "Threshold value",
-  "review_threshold_value_in": "Threshold value in {unit}",
   "review_select_frames": [
     {
       "declarations": [
@@ -4036,25 +3028,6 @@
     }
   ],
   "review_add_to_selection": "Add to selection",
-  "review_not_measured_never_selected": "Not measured frames are never selected",
-  "review_count_not_measured": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} not measured",
-        "countPlural=*": "{count} not measured"
-      }
-    }
-  ],
-  "review_threshold_help": "Threshold help",
-  "review_threshold_tip": "Click a plot to set the value. Selecting never changes quality.",
-  "review_close_threshold": "Close threshold selection",
   "review_status_line": "Review status",
   "review_shown_of": [
     {
@@ -4087,90 +3060,7 @@
       }
     }
   ],
-  "review_help_named": "{name} help",
   "review_dismiss_path": "Dismiss path",
-  "review_discard": "Discard",
-  "review_save_runs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Save run",
-        "countPlural=*": "Save runs"
-      }
-    }
-  ],
-  "review_confirm_reject_title": "Reject {what} for {project}?",
-  "review_confirm_reject_description": "This Project only. Library quality stays.",
-  "review_confirm_reject_change": "Rejected · This Project: {frames}",
-  "review_confirm_out_of_totals": "Out of {project}'s totals",
-  "review_confirm_out_of_draft": "Out of the {runs} draft",
-  "review_confirm_reject_label": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Reject {count} frame",
-        "countPlural=*": "Reject {count} frames"
-      }
-    }
-  ],
-  "review_announce_rejected_for": "Rejected for {project}: {frames}.",
-  "review_about_rows": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "About {count} row",
-        "countPlural=*": "About {count} rows"
-      }
-    }
-  ],
-  "review_imports_hide_rows": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} measurement import: hide rows",
-        "countPlural=*": "{count} measurement imports: hide rows"
-      }
-    }
-  ],
-  "review_imports_review_rows": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} measurement import: review rows",
-        "countPlural=*": "{count} measurement imports: review rows"
-      }
-    }
-  ],
   "frame_cutout_observed": "Observed",
   "frame_fitted": "Fitted",
   "frame_cutout_residual": "Residual",
@@ -4178,47 +3068,28 @@
   "frame_warning_near_edge": "Near the frame edge: part of the profile may be cut off",
   "frame_no_fit": "No fit",
   "frame_cutout_label": "{kind} cutout of star {id}",
-  "frame_fit_failed": "Fit failed",
-  "frame_fit_note": "Fit note",
-  "frame_linear_source_pixels": "Linear, source pixels",
-  "frame_half_flux_radius": "Half-flux radius",
   "frame_location": "Location",
   "frame_star_location": "x {x}, y {y} px",
   "frame_psf_model": "PSF model",
-  "frame_no_model": "No model",
   "frame_clipped_profile": "Clipped profile",
   "frame_angle": "Angle",
   "frame_peak": "Peak",
   "frame_note_input": "Input",
   "frame_input_current": "SHA-256 {hash}… (current)",
   "frame_input_earlier": "SHA-256 {hash}… (earlier)",
-  "frame_note_state": "State",
   "frame_does_not_apply": "Does not apply",
-  "frame_note_units": "Units",
-  "frame_unit_none": "none",
-  "frame_note_history": "History",
-  "frame_imported_earlier": "Imported for earlier content",
   "frame_metrics_caption": "Measurements of the current frame, with their sources",
   "frame_col_metric": "Metric",
   "frame_builtin_source": "Built-in source",
   "frame_col_imported": "Imported",
   "frame_imported_source": "Imported source",
-  "frame_value_imported_sr": "{unit}, imported, unverified",
-  "frame_value_history_sr": "{unit}, history",
-  "frame_header_caption": "Header metadata",
   "importdlg_unknown_frame": "Unknown frame",
   "importdlg_blocked_no_export": "No export on a mounted volume to review.",
   "importdlg_blocked_choose": "Choose an export file to review its mapping.",
   "importdlg_blocked_unsupported": "This file cannot be imported.",
   "importdlg_blocked_no_match": "No row matches an indexed frame.",
   "importdlg_title": "Import measurements",
-  "importdlg_description_review": "Review how the export maps to frames and metrics before anything is attached.",
-  "importdlg_no_csv_title": "No CSV export on a mounted volume",
-  "importdlg_no_csv_body": "Supported: {format}. Mount the volume that holds the export, or copy it to a mounted location.",
   "importdlg_export_file": "Export file",
-  "importdlg_file_meta": "{size} · modified {date}",
-  "importdlg_unsupported_title": "This file is not a supported export",
-  "importdlg_unsupported_body": "{path} has no SubframeSelector File and FWHM columns, so nothing can be mapped. Choose a {format}.",
   "importdlg_summary": [
     {
       "declarations": [
@@ -4235,12 +3106,10 @@
       }
     }
   ],
-  "importdlg_source_note": "Source: imported · method {method} {version}, as recorded in the export. The export records no content identity, so attached values read content unverified. PlateVault records each frame's current SHA-256 only to notice later changes.",
   "importdlg_column_mapping": "Column mapping",
   "importdlg_col_csv": "CSV column",
   "importdlg_col_unit": "Unit",
   "importdlg_col_mapping": "Mapping",
-  "importdlg_no_unit": "No unit",
   "importdlg_not_imported": "Not imported",
   "importdlg_rows": "Rows",
   "importdlg_rows_matched": [
@@ -4260,7 +3129,6 @@
       }
     }
   ],
-  "importdlg_outside_view": "({count} outside this View; their values still attach to the frame)",
   "importdlg_attach_none": [
     {
       "declarations": [
@@ -4276,34 +3144,11 @@
       }
     }
   ],
-  "importdlg_changed_heading": "Needs review: content changed since PlateVault recorded it",
   "importdlg_badge_unreadable": "Needs review: cannot be read",
   "importdlg_badge_changed": "Needs review: content changed",
   "importdlg_row_n": "Row {n}",
-  "importdlg_unreadable_body": "{frame} cannot be read now (offline or access denied), so PlateVault cannot record which content these values describe. It attaches to nothing.",
-  "importdlg_changed_body_measured": "The current bytes of {frame} (sha256 {current}…) differ from the digest PlateVault recorded when it measured the frame ({recorded}…). These values may describe other content, so they attach to nothing.",
-  "importdlg_changed_body_indexed": "The current bytes of {frame} (sha256 {current}…) differ from the digest PlateVault recorded when it indexed the frame ({recorded}…). These values may describe other content, so they attach to nothing.",
   "importdlg_ambiguous": "Ambiguous",
   "importdlg_unmatched": "Unmatched",
-  "importdlg_ambiguous_body": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Its file name matches {count} indexed frame: {frames}. It attaches to none until you choose one in Review frames.",
-        "countPlural=*": "Its file name matches {count} indexed frames: {frames}. It attaches to none until you choose one in Review frames."
-      }
-    }
-  ],
-  "importdlg_unmatched_body": "No indexed frame has this path or file name. It attaches to nothing.",
-  "importdlg_does_not_title": "What the import does not do",
-  "importdlg_does_not_body": "It replaces no built-in value, excludes or restores no frame, and changes no quality decision. The Approved column is never imported.",
   "importdlg_review_mapping": "Review mapping",
   "importdlg_import_rows": [
     {
@@ -4321,10 +3166,6 @@
     }
   ],
   "importdlg_row_attached_by_you": "Attached by you",
-  "importdlg_row_ambiguous": "Ambiguous: attached to no frame",
-  "importdlg_row_changed": "Content changed: attached to no frame",
-  "importdlg_row_unreadable": "Unreadable: attached to no frame",
-  "importdlg_row_unmatched": "Unmatched: attached to no frame",
   "importdlg_attached_summary": [
     {
       "declarations": [
@@ -4340,18 +3181,7 @@
       }
     }
   ],
-  "importdlg_outside_run": "({count} to frames outside this run)",
-  "importdlg_column_unavailable": "{name} unavailable",
-  "importdlg_column_not_imported": "{name} not imported",
-  "importdlg_every_row_reviewed": "Every row is reviewed.",
-  "importdlg_attached_to": "Attached to {frame}.",
-  "importdlg_unmatched_stay": "No indexed frame has this path or file name. Its values stay unattached.",
-  "importdlg_changed_stay": "At import, {frame} had bytes that differ from the digest PlateVault recorded for it. Its values stay unattached.",
-  "importdlg_unreadable_stay": "At import, {frame} could not be read, so nothing ties these values to its content. Its values stay unattached.",
   "importdlg_attach_to": "Attach to",
-  "importdlg_choose_frame": "Choose the frame this row measured",
-  "importdlg_choose_first": "Choose the frame this row measured before attaching it.",
-  "importdlg_attach_row": "Attach row",
   "importdlg_row_not_found": "The import row was not found; open Import measurements again.",
   "importdlg_row_not_attached_unreadable": "Row not attached: the frame's bytes cannot be read now, so PlateVault cannot record which content the values describe.",
   "importdlg_row_not_attached_measured": "Row not attached: the frame's bytes differ from the digest PlateVault recorded when it measured it. Index its folder and review frames again before attaching it.",
@@ -4366,19 +3196,15 @@
   "domain_result_final_image": "Final image",
   "domain_result_linear_integration": "Linear integration",
   "domain_result_channel_product": "Channel product",
-  "domain_result_mosaic_panel": "Mosaic panel",
+  "common_mosaic_panel": "Mosaic panel",
   "domain_result_assembled_mosaic": "Assembled mosaic",
   "domain_result_other": "Other",
   "domain_quality_any": "Any quality",
   "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
   "domain_quality_usable_max_fwhm": "Usable, FWHM ≤ {arcsec}″",
   "domain_rig_unknown": "Unknown rig",
-  "domain_panel_flag_ambiguous": "Falls in more than one panel",
-  "domain_panel_flag_off_panel": "Outside every panel",
   "domain_fov_unknown": "Field of view unknown",
-  "domain_panel_pointing_inside": "Pointing inside {panel}",
   "domain_candidate_reason": "Target {target} on {rig}",
-  "domain_goal_target_both": "{hours} and {frames}",
   "domain_goal_amounts": "{inProject} in project · {captured} captured · goal {target}",
   "domain_goal_amounts_no_target": "{inProject} in project · {captured} captured",
   "domain_goal_line": "{channel} {amounts}",
@@ -4430,46 +3256,6 @@
   "domain_ratio_counted": "{counted} counted",
   "domain_subject_weakest_panel": "{percent}% · weakest {panel}",
   "domain_subject_percent": "{percent}%",
-  "domain_gate_sessions_selected": "Sessions selected",
-  "domain_gate_no_sessions": "No sessions yet.",
-  "domain_gate_no_unresolved": "No unresolved inputs",
-  "domain_gate_all_readable": "Every selected frame is readable now.",
-  "domain_gate_members_unreadable": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} member cannot be read.",
-        "countPlural=*": "{n} members cannot be read."
-      }
-    }
-  ],
-  "domain_gate_membership_saved": "Membership saved",
-  "domain_gate_revision_saved": "Revision {revision} saved.",
-  "domain_gate_unsaved_on_revision": "Unsaved changes on revision {revision}.",
-  "domain_gate_not_saved_yet": "Not saved yet.",
-  "domain_gate_new_candidates": "New candidates",
-  "domain_next_add_new_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Add {count} new session",
-        "countPlural=*": "Add {count} new sessions"
-      }
-    }
-  ],
   "domain_next_add_sessions": [
     {
       "declarations": [
@@ -4485,167 +3271,6 @@
       }
     }
   ],
-  "domain_gate_no_longer_matches": "No longer matches subject",
-  "domain_gate_members_flagged": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} member flagged",
-        "countPlural=*": "{count} members flagged"
-      }
-    }
-  ],
-  "domain_status_unresolved": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} unresolved",
-        "countPlural=*": "{count} unresolved"
-      }
-    }
-  ],
-  "domain_status_saved_revision": "Saved r{revision}",
-  "domain_status_unsaved": "Unsaved",
-  "domain_next_select_sessions": "Select sessions",
-  "domain_next_resolve_inputs": "Resolve inputs",
-  "domain_next_save_run": "Save run",
-  "domain_next_edit_selection": "Edit selection",
-  "domain_gate_calibration_matched": "Calibration matched",
-  "domain_gate_policy_off": "Calibration policy is off.",
-  "domain_gate_select_first": "Select sessions first.",
-  "domain_gate_requirements_matched": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requirement matched.",
-        "countPlural=*": "{count} requirements matched."
-      }
-    }
-  ],
-  "domain_gate_requirements_need_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requirement needs review.",
-        "countPlural=*": "{count} requirements need review."
-      }
-    }
-  ],
-  "domain_gate_master_found": "Master found in Results",
-  "domain_gate_masters_offered": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} master offered once.",
-        "countPlural=*": "{count} masters offered once."
-      }
-    }
-  ],
-  "domain_status_need_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} needs review",
-        "countPlural=*": "{count} need review"
-      }
-    }
-  ],
-  "domain_next_review_matches": "Review matches",
-  "domain_gate_revision": "Revision {revision}.",
-  "domain_gate_save_first": "Save the run first.",
-  "domain_gate_handoff_settled": "Handoff calibration is settled.",
-  "domain_gate_profile_chosen": "Application profile chosen",
-  "domain_gate_choose_profile": "Choose a profile in Prepare.",
-  "domain_status_prepared_revision": "Prepared (rev {revision})",
-  "domain_gate_all_prepared": "All inputs prepared",
-  "domain_gate_inputs_not_prepared": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} input could not be prepared.",
-        "countPlural=*": "{n} inputs could not be prepared."
-      }
-    }
-  ],
-  "domain_gate_preparation_succeeded": "Preparation succeeded",
-  "domain_gate_last_preparation_failed": "The last preparation failed.",
-  "domain_status_revision_only": "r{revision} only",
-  "domain_status_to_do": "{count} to do",
-  "domain_gate_run_prepared": "Run prepared",
-  "domain_gate_entries_at": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input path",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entry at {path}",
-        "countPlural=*": "{n} entries at {path}"
-      }
-    }
-  ],
-  "domain_gate_complete": "Complete.",
-  "domain_next_open_in_application": "Open in application",
-  "domain_next_resolve_preparation": "Resolve preparation",
-  "domain_next_watch_preparation": "Watch preparation",
-  "domain_next_review_preparation": "Review preparation",
-  "domain_next_prepare_run": "Prepare run",
-  "domain_status_awaiting_outputs": "Awaiting outputs",
-  "domain_status_accepted_of": "{accepted} of {total} accepted",
-  "domain_gate_results_folder": "Results are looked for in the Results folder.",
-  "domain_gate_prepare_first": "Prepare the run first.",
-  "domain_gate_results_accepted": "Results accepted",
-  "domain_gate_no_outputs": "No outputs found yet.",
-  "domain_next_accept_results": "Accept results",
-  "domain_next_look_for_results": "Look for results",
   "blocker_unreadable_inputs": [
     {
       "declarations": [
@@ -4662,58 +3287,9 @@
       }
     }
   ],
-  "blocker_calibration_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} calibration requirement needs review",
-        "countPlural=*": "{count} calibration requirements need review"
-      }
-    }
-  ],
-  "blocker_preparation_failed": "The last preparation failed",
-  "blocker_inputs_not_prepared": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} input could not be prepared",
-        "countPlural=*": "{n} inputs could not be prepared"
-      }
-    }
-  ],
   "domain_operation_running": "{title} is running",
   "domain_operation_paused": "{title} is paused",
   "domain_operation_interrupted": "{title} is interrupted",
-  "domain_panels_done": [
-    {
-      "declarations": [
-        "input count",
-        "input done",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{done} of {count} panel",
-        "countPlural=*": "{done} of {count} panels"
-      }
-    }
-  ],
-  "domain_next_prepare_all": "Prepare all",
   "domain_next_review_new_frames": [
     {
       "declarations": [
@@ -4730,12 +3306,7 @@
       }
     }
   ],
-  "domain_reason_candidates_unreviewed": "Candidates have Unreviewed frames.",
-  "domain_reason_step_blocker": "{step}: {message}.",
-  "domain_reason_wrap_up_next": "{step} is next.",
-  "domain_reason_wrap_up_settled": "Every step is settled; mark the Project Done.",
   "domain_reason_window_tonight": "{line}; {subject} has a window tonight.",
-  "domain_next_start_run": "Start a processing run",
   "domain_next_apply_changes": [
     {
       "declarations": [
@@ -4752,7 +3323,6 @@
     }
   ],
   "domain_next_apply_first": "Build the View",
-  "domain_reason_choose_subject_rig": "Choose a subject and a rig.",
   "fit_fits": "fits ({percent}%)",
   "fit_tiny": "tiny",
   "op_unit_files": "files",
@@ -4941,51 +3511,7 @@
   "store_refusal_message": "{title}: {reasons}.",
   "store_record_missing": "This record no longer exists in the catalog. Reload the page to see the current library.",
   "store_refused": "{label} refused",
-  "store_run_started_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input rig",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} candidate session preselected on {rig}.",
-        "countPlural=*": "{n} candidate sessions preselected on {rig}."
-      }
-    }
-  ],
-  "store_reason_rig_not_in_project": "{rig} is not one of {project}'s rigs",
-  "store_reason_project_done": "{project} is Done; Reopen it first",
   "store_reason_project_closed": "{project} is closed: duplicate it to continue",
-  "store_label_start": "Start {name}",
-  "store_saved_run_started": "Run started: {name}",
-  "store_label_start_group": "Start run group",
-  "store_reason_no_panel": "no panel is included",
-  "store_placed_on": "placed on {panel}",
-  "store_saved_group_started": "Run group started: {name}",
-  "store_group_started_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input rig",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} panel run on {rig}.",
-        "countPlural=*": "{n} panel runs on {rig}."
-      }
-    }
-  ],
-  "store_lock_trashed": "{name} is in the Project's Trash; Restore it first",
-  "store_lock_complete": "{name} is Complete; Reopen it to change its membership",
   "store_label_add_sessions": [
     {
       "declarations": [
@@ -5018,108 +3544,14 @@
       }
     }
   ],
-  "store_label_discard": "Discard changes",
-  "store_label_rename_run": "Rename run",
-  "store_label_run_setup": "Run setup",
-  "store_label_group_setup": "Group setup",
-  "store_group_setup_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Applies to {n} panel run.",
-        "countPlural=*": "Applies to {n} panel runs."
-      }
-    }
-  ],
-  "store_reason_in_trash": "{name} is in the Project's Trash",
   "store_label_move_to_trash_named": "Move {name} to Trash",
-  "store_reason_no_trashed_run": "no trashed run was chosen",
-  "store_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} run",
-        "countPlural=*": "{n} runs"
-      }
-    }
-  ],
   "domain_session_no_filter": "{night} no filter",
   "domain_session_framing": "framing {n}",
-  "domain_reason_panel_pointing": "Panel by pointing",
-  "domain_reason_panel_assigned": "Panel assigned by you",
-  "domain_reason_refresh_added": "Refresh: added",
-  "domain_reason_manual": "Manual inclusion",
   "domain_reason_changes_pending": "Changes are waiting for Apply",
   "domain_reason_goals_met": "Every goal is met",
   "domain_reason_sessions_suggested": "Matching sessions are ready to add",
   "domain_reason_view_not_built": "The View isn't built yet",
   "domain_diff_session_missing": "a session no longer in the library",
-  "domain_diff_added": "Added {sessions}",
-  "domain_diff_removed": "Removed {sessions}",
-  "domain_diff_excluded": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame excluded from the run",
-        "countPlural=*": "{n} frames excluded from the run"
-      }
-    }
-  ],
-  "domain_diff_rejected": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame rejected",
-        "countPlural=*": "{n} frames rejected"
-      }
-    }
-  ],
-  "domain_diff_restored": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame restored to the run",
-        "countPlural=*": "{n} frames restored to the run"
-      }
-    }
-  ],
-  "domain_diff_frames": "{added} frames added, {removed} removed",
-  "domain_diff_none": "No membership change; details only",
   "domain_criterion_camera": "Camera",
   "domain_criterion_dimensions": "Dimensions",
   "domain_criterion_binning": "Binning",
@@ -5179,8 +3611,6 @@
   "store_cal_already_in_library": "already in the library",
   "store_cal_import_kind_master": "Import {kind} master",
   "store_cal_restore_offer": "Restore offer",
-  "store_cal_offer_missing": "the offer is no longer recorded",
-  "store_cal_restore_master_offer": "Restore master offer",
   "indexing_pointing_from_centre": "{angle} from {name} centre",
   "indexing_pointing_outside_targets": "Outside every known Target",
   "indexing_pointing_none": "No pointing in header",
@@ -5201,7 +3631,6 @@
   "domain_naming_parent_folder": "A folder cannot be `..`",
   "domain_naming_reserved": "\"{name}\" is a reserved name",
   "domain_naming_leading_slash": "A template is relative to its location; remove the leading /",
-  "run_verify_frame_not_in_catalog": "A prepared frame is no longer in the catalog.",
   "op_trash_other_copy_refused": "Another copy was refused: {reason}",
   "op_trash_moved": "Moved to the OS Trash",
   "op_trash_summary": "{trashed} moved to the OS Trash ({bytes}); {refused} kept with a reason. Nothing was deleted permanently.",
@@ -5226,7 +3655,6 @@
   "store_cal_camera_other_model": "{camera} is not a {model}",
   "store_cal_camera_unlinked": "{master} matches by camera model again",
   "store_cal_label_add_version": "Add version to {master}",
-  "store_cal_label_also_use": "Also use for these sessions",
   "store_cal_label_camera": "Camera of {master}",
   "store_cal_label_choose": "Choose {kind} for {session}",
   "store_cal_label_confirm": "Confirm calibration",
@@ -5299,8 +3727,6 @@
     }
   ],
   "store_library_scope_detail": "Library scope: every run and Target sees this decision.",
-  "store_label_rejected_in_review": "Rejected in Review",
-  "store_label_unrejected_in_review": "Un-rejected in Review",
   "store_catalog_only_detail": "{name}. Catalog only; source headers unchanged.",
   "store_label_add_to_my_targets": "Add {name} to My targets",
   "store_label_remove_from_my_targets": "Remove {name} from My targets",
@@ -5309,7 +3735,6 @@
   "store_target_from_reference": "From the bundled reference catalogue.",
   "store_saved_added_to_my_targets": "★ {name} added to My targets",
   "store_saved_target_added": "Target added: {name}",
-  "store_reason_run_uses_it": "{name} uses it",
   "store_label_create": "Create {name}",
   "store_saved_project_created": "Project created: {name}",
   "store_saved_label_name": "{label}: {name}",
@@ -5319,7 +3744,7 @@
   "store_label_edit_subject": "Edit subject",
   "store_reason_already_subject": "{name} is already a subject",
   "store_label_remove_rig": "Remove rig",
-  "store_label_apply_named": "Apply {name}",
+  "common_apply_named": "Apply {name}",
   "store_label_archive_destination": "Archive destination",
   "store_reason_not_archive_location": "not an archive location",
   "store_label_step_done": "{step} done",
@@ -5328,44 +3753,9 @@
   "store_reason_no_confirmed_target": "the session has no confirmed Target",
   "store_reason_no_confirmed_rig": "the session has no confirmed rig",
   "store_note_adds_rig": "Also adds the rig {rig} to {project}.",
-  "store_label_reject_for_project_only": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Reject {n} frame for {name} only",
-        "countPlural=*": "Reject {n} frames for {name} only"
-      }
-    }
-  ],
-  "store_label_undo_project_reject": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Undo Project reject of {n} frame",
-        "countPlural=*": "Undo Project reject of {n} frames"
-      }
-    }
-  ],
   "store_label_default_archive_location": "Default archive location",
   "store_saved_default_archive": "Default archive: {name}",
   "store_label_moon_constraint": "Moon constraint for {band}",
-  "store_saved_filters": "Filters saved: {name}",
-  "store_saved_rig_renamed": "Rig renamed: {name}",
   "store_label_goal_template": "Goal template {name}",
   "store_saved_goal_template": "Goal template saved: {name}",
   "store_saved_goal_template_deleted": "Goal template deleted: {name}",
@@ -5377,273 +3767,21 @@
   "store_label_check_named": "Check {name}",
   "store_reason_scan_running": "a scan is running",
   "op_no_duplicates": "No duplicates.",
-  "store_label_setup_change": "Setup change",
-  "store_label_shared_setup_change": "Shared setup change",
-  "store_saved_output_folder": "Output folder: {name}",
-  "store_label_output_folder_change": "Output folder change",
-  "store_label_exception_no_kind": "Exception: no {kind}",
-  "store_label_defer_kind": "Defer {kind}",
-  "store_label_automatic_kind": "Automatic {kind}",
-  "store_label_offer": "Offer",
   "store_reason_already_answered": "Already answered",
-  "store_label_dismiss_master_offer": "Dismiss master offer",
-  "store_saved_dismissed": "Dismissed {name}",
   "store_label_add_named": "Add {name}",
-  "store_reason_unreadable_now": "Unreadable now",
   "store_reason_still_being_written": "Still being written",
-  "store_label_add_master_to_library": "Add master to the calibration library",
   "store_saved_added_to_library": "Added {name} to the calibration library",
-  "store_reason_every_input_unreadable": "Every input unreadable",
-  "store_label_prepare_named": "Prepare {name}",
-  "op_prepare_title_rev": "Prepare {name} (rev {revision})",
-  "store_label_prepare_all_named": "Prepare all {name}",
-  "store_saved_prepare_all": "Prepare all: {name}",
-  "store_prepare_all_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input revision",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} panel run into group revision {revision}.",
-        "countPlural=*": "{n} panel runs into group revision {revision}."
-      }
-    }
-  ],
-  "store_reason_profile_removed": "Profile removed",
-  "store_reason_did_not_launch": "{name} did not launch",
-  "store_reason_not_located": "{name} not located",
-  "store_reason_partial_blocked": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Partial · {n} input blocked",
-        "countPlural=*": "Partial · {n} inputs blocked"
-      }
-    }
-  ],
-  "store_reason_preparation_state": "Preparation {state}",
-  "store_label_mark_unverified": "Mark preparation unverified",
-  "store_reason_more_entries": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "and {n} more entry",
-        "countPlural=*": "and {n} more entries"
-      }
-    }
-  ],
-  "store_saved_opened_in": "Opened {name} in {app}",
-  "store_saved_opened_in_application": "Opened {name} in the application",
-  "store_opened_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input path",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entry re-verified before launch; {path}.",
-        "countPlural=*": "{n} entries re-verified before launch; {path}."
-      }
-    }
-  ],
-  "store_label_mark_unverified_many": "Mark preparations unverified",
-  "store_reason_entries_changed": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input name",
-        "input file",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name}: {n} entry changed ({file})",
-        "countPlural=*": "{name}: {n} entries changed ({file})"
-      }
-    }
-  ],
-  "store_label_open_group_folder": "Open group folder",
-  "store_group_opened_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input folder",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Group folder {folder}; {n} panel re-verified before launch.",
-        "countPlural=*": "Group folder {folder}; {n} panels re-verified before launch."
-      }
-    }
-  ],
-  "store_label_discover_results": "Discover Results",
-  "store_candidates_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} candidate",
-        "countPlural=*": "{n} candidates"
-      }
-    }
-  ],
-  "store_intermediates_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} intermediate",
-        "countPlural=*": "{n} intermediates"
-      }
-    }
-  ],
-  "store_calibration_masters_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} calibration master",
-        "countPlural=*": "{n} calibration masters"
-      }
-    }
-  ],
-  "store_saved_results_found": "Results found: {name}",
-  "store_label_attach_named": "Attach {name}",
-  "store_label_attach_result": "Attach Result",
-  "store_reason_not_full_path": "Not a full path",
-  "store_reason_unreadable_or_offline": "Unreadable or offline",
-  "store_reason_already_listed": "Already listed",
-  "store_reason_not_image": "Not an image",
-  "store_reason_run_group_only": "Run group only",
-  "store_saved_attached": "Attached {name}",
-  "store_attached_detail": "{kind}, User-linked to {name}; lineage Unknown.",
-  "store_label_inspect_named": "Inspect {name}",
-  "store_label_inspect_result": "Inspect Result",
-  "store_saved_inspected": "Inspected {name}",
-  "store_sha_recorded": "SHA-256 {hash}… recorded.",
-  "store_reason_changed_since_inspection": "Changed since inspection",
-  "store_reason_no_kind": "No kind",
-  "store_label_accept_result": "Accept Result",
-  "store_label_reject_result": "Reject Result",
-  "store_saved_accepted": "Accepted {name}",
-  "store_saved_rejected": "Rejected {name}",
-  "store_sha_short": "SHA-256 {hash}",
-  "store_label_result_kind": "Result kind",
   "store_label_clean_up_named": "Clean up {name}",
-  "simulation_label_output": "Simulated output",
-  "store_reason_prepare_first": "Prepare the run first: the application writes into the recorded Results folder",
-  "simulation_label_app_output": "Prototype: application output",
-  "simulation_saved_outputs": "Prototype: the application wrote outputs",
-  "store_proto_outputs_detail": "{files} in {folder}.",
-  "simulation_label_finished_writing": "Prototype: file finished writing",
-  "simulation_label_correction": "Simulated correction",
-  "store_reason_no_saved_member": "The run has no saved member session",
-  "store_reason_already_corrected": "This session already carries that correction",
-  "simulation_label_catalog_correction": "Prototype: catalog correction",
-  "simulation_label_change": "Simulated change",
-  "store_reason_no_prepared_source": "No readable prepared source frame",
-  "simulation_label_source_changed": "Prototype: source frame changed",
-  "op_prep_unavailable": "{reason}. Nothing was written for it.",
   "op_prep_denied": "Unreadable: read access to {path} is denied. Nothing was written for it.",
   "op_prep_not_reachable": "Not readable now: nothing is reachable at {path}. Nothing was written for it.",
-  "op_prep_not_in_selection": "Not in the reviewed selection.",
   "op_prep_source_changed": "Source changed since it was indexed: its bytes differ from the catalog fingerprint. Rescan and review it first.",
   "op_prep_destination_exists": "Destination exists: {path}. Nothing was overwritten.",
   "op_prep_write_removed": "Write permission removed at {folder}. Nothing was written.",
   "op_prep_destination_offline": "Destination offline: {folder} is on a volume that is not mounted.",
   "op_prep_reread_failed": "The entry at {path} did not re-read to the expected digest.",
-  "op_prep_patched_verified": "Patched copy verified: {patches}; original unchanged.",
   "op_prep_written_verified": "Written and re-read against its snapshot.",
   "op_prep_source_drift": "Source drift before completion: {source} no longer matches its snapshot. Not counted as prepared.",
-  "op_prep_record_missing": "The preparation record is missing; nothing was settled.",
-  "op_prep_calibration_note": "Calibration: {done} of {total} files.",
-  "op_prep_prepared": "Prepared: {prepared} of {total} entries match the reviewed membership and their source snapshots.",
-  "op_prep_failed": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Failed: no entry could be prepared; {n} input blocked. Sources are untouched.",
-        "countPlural=*": "Failed: no entry could be prepared; {n} inputs blocked. Sources are untouched."
-      }
-    }
-  ],
-  "op_prep_partial": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input prepared",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Partial: {prepared} prepared, {n} input blocked.",
-        "countPlural=*": "Partial: {prepared} prepared, {n} inputs blocked."
-      }
-    }
-  ],
-  "op_prep_partial_open_waits": "Open waits until every entry is prepared; sources are untouched.",
   "op_archive_title": "Archive {name}",
-  "op_restore_title": "Restore archived sessions of {name}",
   "op_archive_went_offline": "{name} went offline",
   "op_archive_changed": "{path} changed since the review (SHA-256 differs)",
   "op_archive_destination_volume": "The destination volume",
@@ -5660,22 +3798,6 @@
       "match": {
         "countPlural=one": "{n} session archived",
         "countPlural=*": "{n} sessions archived"
-      }
-    }
-  ],
-  "op_archive_sessions_restored": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} session restored",
-        "countPlural=*": "{n} sessions restored"
       }
     }
   ],
@@ -5696,7 +3818,6 @@
   ],
   "op_archive_hash_failed": "SHA-256 verification failed: nothing of this session moved",
   "op_archived_to": "Archived to {folder} · {frames}",
-  "op_restored_to": "Restored to {folder} · {frames}",
   "op_import_group_failed": "{done} of {total} verified · {failed} failed: {reason}",
   "op_import_group_verified": "{done} of {total} verified",
   "op_import_source_gone": "source gone",
@@ -5953,24 +4074,6 @@
     }
   ],
   "seed_trash_m31_detail": "{frames} ({session}) moved to the OS Trash. Put back plus a rescan restores them as Unusable.",
-  "seed_prep_p2_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input volume",
-        "input entries",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} input offline on {volume}; {entries} prepared.",
-        "countPlural=*": "{n} inputs offline on {volume}; {entries} prepared."
-      }
-    }
-  ],
   "project_sessions_selected": [
     {
       "declarations": [
@@ -5986,13 +4089,9 @@
       }
     }
   ],
-  "project_sessions_of": "Sessions of {name}",
+  "common_sessions_of": "Sessions of {name}",
   "session_missing_title": "This session is not in the catalog",
   "project_missing_title": "This Project is not in the catalog",
-  "run_missing_title": "This run is not in the catalog",
-  "run_step_missing_title": "This run step does not exist",
-  "run_open_current_step": "Open the current step",
-  "rungroup_missing_title": "This run group is not in the catalog",
   "target_missing_title": "This Target is not in the catalog",
   "tonight_moon_phase_new": "New Moon",
   "tonight_moon_phase_full": "Full Moon",
@@ -6082,10 +4181,6 @@
   ],
   "op_apply_linked": "Linked",
   "op_apply_swapped": "New View in place: {entries}",
-  "op_apply_title": "Apply {name}",
-  "domain_cal_group_rig_unknown": "Rig unknown · {camera}",
-  "domain_cal_group_size_unknown": "Dimensions unknown",
-  "domain_cal_group_gain_offset": "gain {gain} / offset {offset}",
   "trash_cant": "Can't trash",
   "domain_trash_linked_by": "linked by {name}",
   "trash_also_removes_links": [
@@ -6171,14 +4266,10 @@
   "targets_night_previous": "Previous night",
   "targets_night_next": "Next night",
   "targets_view": "View",
-  "targets_view_all": "All",
   "targets_view_planned": "Planned",
   "plan_move_up": "Move up",
   "plan_move_down": "Move down",
-  "run_status_complete": "Complete",
   "project_col_step": "Step",
-  "project_col_updated": "Updated",
-  "project_runs_of": "Runs of {name}",
   "calibration_used_by_runs": [
     {
       "declarations": [
@@ -6194,17 +4285,12 @@
       }
     }
   ],
-  "calibration_created": "Created",
-  "calibration_dismiss_master": "Dismiss master",
   "calibration_restore_master": "Restore master",
   "calibration_restored_master": "Restored {name}",
-  "location_footprint": "Footprint {bytes}",
-  "location_volume_use": "{volume}: {used} used · {free} free",
   "duplicates_scanned": "Scanned {date}",
   "duplicates_keep_copy": "Keep this copy",
   "duplicates_move_others": "Move others to Trash",
   "duplicates_move_all": "Move all to Trash",
-  "duplicates_change_location": "{location}: {files} · {bytes}",
   "duplicates_frames_keep_copy": [
     {
       "declarations": [
@@ -6466,7 +4552,6 @@
   "plan_ics_calendar": "PlateVault plan at {site}",
   "plan_ics_summary": "{name} observing window",
   "plan_ics_description": "Max altitude {altitude}° · Moon {moon}%, {separation}° away",
-  "duplicates_scope_help": "Library locations only; capture cards are never scanned. Keeps the copy in the earliest-registered location.",
   "plan_night_empty": "Nothing planned for {night}",
   "plan_export_summary": "{events} on {nights} · {site}",
   "plan_events_count": [
@@ -6515,7 +4600,7 @@
   "equipment_error_choose": "Choose one",
   "equipment_error_reducer": "0.2–3×",
   "equipment_error_night": "Enter a night as YYYY-MM-DD",
-  "equipment_error_number": "Enter a number",
+  "common_enter_number": "Enter a number",
   "equipment_reducer_field": "Reducer (×)",
   "equipment_source": "Source",
   "equipment_cameras": "Cameras",
@@ -6572,52 +4657,16 @@
   "onboarding_check_import": "Import your first captures",
   "onboarding_check_targets": "Confirm Targets",
   "onboarding_check_project": "Create your first Project",
-  "onboarding_check_run": "Start your first run",
-  "onboarding_dismiss_checklist": "Dismiss Getting started",
   "onboarding_walk_name": "Orientation walk",
   "onboarding_restart_walk": "Restart walk",
   "run_cal_master_changed": "master changed",
-  "run_cal_add_title": "Add {name} to the calibration library?",
-  "run_cal_add_destination": "Destination path",
-  "run_cal_add_reverifies": "Re-verifies the SHA-256 before copying",
-  "run_cal_better_match": "Better match available",
-  "run_results_inferred": "Inferred",
   "run_rename": "Rename",
-  "run_rename_ellipsis": "Rename…",
-  "run_name_label": "Run name",
-  "run_edit": "Edit run",
-  "run_col_coverage": "Coverage",
   "run_col_distance": "Distance",
   "store_reason_name_empty": "Name is empty",
-  "store_reason_run_name_taken": "{name} is already a run in this Project",
-  "store_saved_run_renamed": "Renamed {from} to {to}",
   "store_reason_sha_now": "SHA-256 now {hash}",
-  "simulation_label_better_master": "Prototype: newer compatible master",
-  "store_reason_no_master_assigned": "No master assigned yet",
   "domain_mode_symlink": "Symlinks",
-  "run_mode_semantics_symlink": "Links to the catalogue originals. Their drive stays connected during the run.",
-  "run_mode_needs_developer_mode": "symlinks need Windows Developer Mode",
   "run_cant_prepare": "Can't prepare",
   "run_use_copies": "Use copies for this run",
-  "run_view_linked": "Linked · {bytes}",
-  "run_view_copied": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input bytes",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} file copied · {bytes}",
-        "countPlural=*": "{n} files copied · {bytes}"
-      }
-    }
-  ],
-  "settings_default_run_view": "Default run view",
   "settings_default_input_mode": "Default View mode",
   "settings_developer_mode": "Windows Developer Mode",
   "settings_developer_mode_on": "On",
@@ -6638,8 +4687,6 @@
   "catalogue_frame_setup": "Setup",
   "catalogue_status_bar_desc": "The bottom bar: locations, selection, running work, issue counters and notifications, each list in a ListPopover.",
   "catalogue_palette_desc": "The command palette: places, records and registered Actions in one searchable list.",
-  "catalogue_run_step_desc": "A run's gate glyphs and its six steps in one line.",
-  "catalogue_run_step_rail_of": "Steps of {name}",
   "catalogue_walk_desc": "The modal orientation walk: a cut-out around each anchor, Back, Next and Skip. A step without an anchor is passed over.",
   "catalogue_walk_start": "Start the walk",
   "theme_picker_mode": "Mode",
@@ -6961,9 +5008,6 @@
   ],
   "ds_folder_picker_title": "Folder picker",
   "simulation_ds_folder_picker_description": "Simulated OS folder chooser. Volumes and folders, including empty ones, come from the simulated disk; offline volumes and denied folders show why.",
-  "simulation_run_writes_outputs": "The application writes outputs",
-  "simulation_this_run_title": "This run: {name}",
-  "simulation_this_run_description": "Changes the simulated application and disk for the run on screen.",
   "simulation_this_project_description": "Changes the simulated application and disk for the Project on screen.",
   "simulation_this_project_title": "This Project: {name}",
   "simulation_actions_title": "Actions",
@@ -6971,11 +5015,6 @@
   "simulation_quick_actions_detail": "One-click runs Restore run, Reopen run, marks on more than 20 frames, Pick the rest, and Home's Add to run, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
   "simulation_quick_one_click": "One-click",
   "simulation_quick_open_page": "Open page",
-  "simulation_run_finish_writing": "Files finish writing",
-  "simulation_run_better_master": "A newer compatible master arrives",
-  "simulation_run_object_correction": "Record an OBJECT correction",
-  "simulation_run_source_drift": "An outside tool rewrites a source frame",
-  "simulation_group_writes_mosaic": "The application writes the assembled mosaic",
   "ds_operation_title": "Operation",
   "ds_operation_description": "Running with progress, per-item outcomes and one settled status. Uses a real indexing run.",
   "simulation_copy_nothing": "Nothing to copy: no file or folder with files at {path}.",
@@ -7080,12 +5119,9 @@
   "simulation_rerun_wbpp": "Rerun WBPP",
   "simulation_view_file_held": "A tool holds a file in View",
   "simulation_view_file_held_detail": "Apply waits after its build until the file is released.",
-  "prototype_controls_title": "Prototype: {title}",
-  "prototype_controls_note": "Simulates changes outside PlateVault for review. Not part of the product.",
   "seed_project_cygnus_notes": "Wide HOO of the North America and Pelican region; the OSC rig adds dual-band data.",
   "seed_project_m31_notes": "Broadband first; narrowband blend later.",
   "seed_project_heart_notes": "Ha first; OIII when the Moon allows.",
-  "seed_dark_exception_reason": "Darks stacked in PixInsight",
   "seed_template_hoo_mosaic": "HOO mosaic",
   "picker_today": "Today",
   "picker_week_previous": "Previous week",
@@ -7232,80 +5268,13 @@
   "stepflow_reopen_step": "Reopen step",
   "stepflow_finish_run": "Finish run",
   "stepflow_finish_run_title": "Finish {name}?",
-  "stepflow_finish_all_panels": "Finish all panels",
-  "stepflow_finish_all_panels_title": "Finish every panel of {name}?",
   "stepflow_close_project": "Close project",
   "stepflow_close_project_title": "Close {name}?",
   "stepflow_finish_review": "Finish review",
   "stepflow_import": "Import",
   "stepflow_finished_on": "Finished {date}",
   "stepflow_finish_calibration": "Finish calibration",
-  "flow_review_locked": "Locked by a prepared run view",
-  "flow_select_one_session": "Select at least one session",
-  "flow_sessions_need_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} session needs review",
-        "countPlural=*": "{count} sessions need review"
-      }
-    }
-  ],
-  "flow_inputs_changed": "Inputs changed · Refresh",
-  "flow_panels_blocked": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} panel blocked",
-        "countPlural=*": "{count} panels blocked"
-      }
-    }
-  ],
-  "flow_group_no_live_panels": "Every panel is in the Trash",
-  "flow_resolve_calibration_first": "Resolve calibration first",
   "flow_choose_profile": "Choose a profile",
-  "flow_corrected_values": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} corrected value",
-        "countPlural=*": "{count} corrected values"
-      }
-    }
-  ],
-  "flow_files_being_written": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} file still being written",
-        "countPlural=*": "{count} files still being written"
-      }
-    }
-  ],
   "flow_confirm_target": "Confirm a Target",
   "flow_confirm_rig": "Confirm a rig",
   "flow_frames_unreviewed": [
@@ -7323,53 +5292,15 @@
       }
     }
   ],
-  "flow_finish_every_run": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Finish every run first · {count} open",
-        "countPlural=*": "Finish every run first · {count} open"
-      }
-    }
-  ],
   "flow_reason_sessions_need_review": "Matching sessions need review",
   "flow_master_old": "Old · {n} d",
   "flow_match_new": "New",
-  "flow_match_replaces": "Replaces {master}",
   "flow_match_duplicate": "Duplicate",
   "flow_match_version_of": "New version of {master}",
-  "flow_replace_other_kind": "Not a {kind} master",
-  "flow_reason_not_finished": "{name} is not Finished",
   "flow_reason_step_first": "Finish or skip {step} first",
   "flow_reason_step_settled": "{step} is finished or skipped",
   "flow_reason_step_open": "{step} is not finished or skipped",
-  "flow_reason_session_needs_review": "{name} needs review",
-  "flow_label_record_calibration": "Record calibration",
   "flow_nothing_to_clean_up": "Nothing to clean up",
-  "flow_reason_run_finished": "{name} is already Finished",
-  "flow_label_replace_master": "Replace {name}",
-  "flow_saved_master_replaced": [
-    {
-      "declarations": [
-        "input name",
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Replaced {name} · {count} run re-pointed",
-        "countPlural=*": "Replaced {name} · {count} runs re-pointed"
-      }
-    }
-  ],
   "flow_settings_master_age": "Old masters after",
   "flow_reason_whole_days": "Enter a whole number of days",
   "flow_wrapup_apply_or_discard": "Apply or discard changes",
@@ -7509,7 +5440,6 @@
   "catalogue_templates_overview": "Overview",
   "catalogue_templates_step_desc": "A step page: the step strip under the header, one step region, and the footer with Proceed fixed at the bottom. Earlier and later steps open read-only; changing step moves nothing.",
   "catalogue_templates_restart": "Restart flow",
-  "catalogue_templates_run_steps": "Run steps",
   "catalogue_templates_step_shift": "Layout shift on the last step change: {px} px",
   "catalogue_templates_settings_desc": "A Settings area: its title, setting rows, and a list section with one Add in its heading.",
   "catalogue_templates_indexing": "Indexing",
@@ -7638,26 +5568,8 @@
   "calibration_settings_saved": "Calibration settings saved",
   "calibration_unit_days": "days",
   "calibration_master_age_help": "Darks, bias and dark flats older than this read Old. Flats never age.",
-  "calibration_replace": "Replace",
   "calibration_replace_file": "Master file",
   "calibration_replace_file_help": "A FITS or XISF master of the same kind.",
-  "calibration_replace_runs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Re-points {count} open run",
-        "countPlural=*": "Re-points {count} open runs"
-      }
-    }
-  ],
-  "calibration_replace_no_runs": "No open run uses this master",
-  "calibration_replace_finished_keep": "Finished runs keep the master they recorded.",
   "calibration_import_none_imported": "No master imported",
   "calibration_import_partly": "{imported} imported · {refused} not imported",
   "calibration_import_select_files": "Select at least one file",
@@ -7715,42 +5627,19 @@
       }
     }
   ],
-  "calibration_hidden_caption": "Hidden masters and dismissed offers",
   "calibration_nothing_hidden": "Nothing hidden",
   "calibration_age": "Age",
   "calibration_age_old": "Old",
   "calibration_age_days": "{n} d",
-  "calibration_replaced_by": "Replaced by {name}",
-  "calibration_replaced_by_label": "Replaced by",
-  "calibration_offer_dismissed": "Offer dismissed",
   "calibration_hidden_on": "Hidden on",
   "calibration_hidden_masters": "Hidden masters",
   "catalogue_templates_fill_toggle": "Full-height step",
   "catalogue_templates_list_path_desc": "A list page inside an object: the path names its parents, the way a Project's sessions read Projects › the Project › Sessions. Only the title names the window tab.",
-  "catalogue_templates_search_runs": "Search runs",
-  "catalogue_templates_search_sessions": "Search sessions",
-  "catalogue_templates_wrapup_steps": "Wrap up steps",
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
   "catalogue_datatable_destination_cold": "Cold storage",
   "catalogue_datatable_columns_title": "Columns menu",
   "catalogue_datatable_columns_description": "Three columns can be hidden from the Columns menu, and two of them start hidden. The row header and the row actions always show, so the menu does not list them. The choice is kept across reloads.",
-  "issue_master_old": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} is old · in {count} unfinished run",
-        "countPlural=*": "{name} is old · in {count} unfinished runs"
-      }
-    }
-  ],
   "issue_apply_refused": "{name}: Apply refused",
   "issue_pin_drift": [
     {
@@ -7786,7 +5675,6 @@
   ],
   "store_saved_added": "Added {name}",
   "catalogue_fields_segmented_narrow": "narrow box: the options wrap onto a second line inside it",
-  "common_percent": "{value}%",
   "catalogue_fields_notes_sample": "Imaged from the back garden; flats at dusk.",
   "catalogue_fields_notes_error": "Notes over 500 characters",
   "catalogue_fields_group_caption": "Two goals with a Remove action named after each group · a hours-or-frames error · disabled.",
@@ -7799,38 +5687,6 @@
   "goal_from_template": "From template",
   "project_goals_title": "Goals",
   "project_edit": "Edit",
-  "startrun_mosaic_subject": [
-    {
-      "declarations": [
-        "input name",
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · mosaic of {count} panel",
-        "countPlural=*": "{name} · mosaic of {count} panels"
-      }
-    }
-  ],
-  "startrun_rig_ready": [
-    {
-      "declarations": [
-        "input name",
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} ready session",
-        "countPlural=*": "{name} · {count} ready sessions"
-      }
-    }
-  ],
   "projects_search": "Search Projects",
   "projects_search_placeholder": "Project or subject",
   "projects_no_match": "No Project matches",
@@ -7840,13 +5696,6 @@
   "goal_change_removed": "Removed: {line}",
   "goal_change_from_to": "{from} → {to}",
   "goal_edit_title": "Edit {channel} goal",
-  "mosaic_apply_layout": "Lay out",
-  "mosaic_col_placement": "Placement",
-  "mosaic_edit": "Edit mosaic",
-  "mosaic_exclude": "Exclude",
-  "mosaic_include": "Include",
-  "mosaic_layout_grid": "{cols} × {rows}",
-  "mosaic_no_free_slot": "no free slot",
   "project_all_rigs_added": "every rig is in the Project",
   "project_closed": "Project closed",
   "project_closed_notice": "Closed {date} · goal figures frozen",
@@ -7859,35 +5708,16 @@
   "project_darkness": "Darkness",
   "project_goals_of": "Goals of {name}",
   "project_moon": "Moon",
-  "project_reopen_project": "Reopen project",
-  "project_reopen_summary": "No file moves · goal figures read the library again",
-  "project_reopen_summary_archived": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "No file moves · {count} archived session stays archived",
-        "countPlural=*": "No file moves · {count} archived sessions stay archived"
-      }
-    }
-  ],
-  "project_restore_all": "Restore every session",
   "project_target_chosen": "Chosen: {name}",
   "project_views": "Project tabs",
   "project_window_line": "{start}–{end} · {alt}° · Moon {moon}°",
   "project_site": "Site",
   "project_apply": "Apply",
   "project_apply_first": "First Apply: builds the View",
-  "project_apply_in_project": "Apply in {name}…",
+  "project_apply_in_project_ellipsis": "Apply in {name}…",
   "project_apply_readd_view": "The folder layout changes: re-add View in your tool after Apply.",
   "project_apply_space": "Space needed",
   "project_apply_space_two_views": "{size} · room for two full Views while it runs",
-  "project_apply_title": "Apply {name}",
   "project_apply_unplaced": "Files PlateVault didn't place",
   "project_apply_unplaced_hint": "Ticked files move into the new View. The rest stay in View (previous)/.",
   "project_apply_waiting": "Waiting for a tool to release a file in View",
@@ -7949,22 +5779,18 @@
   "project_duplicate_part_groups": "Groups and their names",
   "project_duplicate_part_notes": "Notes",
   "project_duplicate_part_sessions": "Sessions",
-  "project_duplicate_part_settings": "View settings",
   "project_duplicate_parts": "Copy",
-  "project_duplicate_title": "Duplicate {name}",
+  "common_duplicate_title": "Duplicate {name}",
   "project_goal_needs_subject": "Add a subject first",
   "project_group_framing_n": "{rig} · Framing {n}",
   "project_group_kind_group": "Group",
-  "project_group_kind_panel": "Mosaic panel",
   "project_group_mark_panel": "Mark as mosaic panel",
   "project_group_missing": "a group no longer in the Project",
   "project_group_new": "New group",
   "project_group_panel_hint": "A panel's folder uses the PANEL keyword. Marking one makes the Project a mosaic.",
-  "project_group_panel_n": "Panel {n}",
   "project_group_remove": "Remove group",
   "project_group_remove_title": "Remove the group {name}?",
   "project_group_rename": "Rename",
-  "project_group_rename_title": "Rename {name}",
   "project_group_split_n": "{name} · {n}",
   "project_group_unmark_panel": "Not a mosaic panel",
   "project_groups": "Groups",
@@ -7987,7 +5813,6 @@
       }
     }
   ],
-  "project_label_duplicate": "Duplicate {name}",
   "project_label_exclude_frames": [
     {
       "declarations": [
@@ -8021,7 +5846,6 @@
     }
   ],
   "project_label_keep_previous": "Keep {name} in View (previous)",
-  "project_label_mark_panel": "Mark as mosaic panel",
   "project_label_move_previous": "Move {name} into View",
   "project_label_move_sessions": [
     {
@@ -8039,11 +5863,8 @@
       }
     }
   ],
-  "project_label_remove_group": "Remove group",
   "project_label_rename_group": "Rename group",
   "project_label_split_group": "Split {name}",
-  "project_label_trash_previous": "Move {name} to Trash",
-  "project_label_unmark_panel": "Not a mosaic panel",
   "project_label_use_unusable": [
     {
       "declarations": [
@@ -8060,7 +5881,6 @@
       }
     }
   ],
-  "project_label_view_settings": "View settings",
   "project_mosaic_of_panels": [
     {
       "declarations": [
@@ -8082,14 +5902,12 @@
   "project_output_adopt_title": "Add {name} to the calibration library?",
   "project_output_adopt_trash_copy": "Move to Trash and add",
   "project_output_empty": "Nothing in Output yet. Save finished images there, or use Copy to Output.",
-  "project_output_hidden_masters": "Hidden masters",
   "project_output_hide_offer": "Hide",
   "project_output_masters": "Masters found in Processing",
   "project_output_no_processing": "Nothing in Processing to copy",
   "project_output_of": "Output of {name}",
   "project_output_offer_again": "Offer again",
   "project_output_offline": "The Output folder's volume isn't connected",
-  "project_output_writing": "Still being written",
   "project_pending_changes": "Pending changes",
   "project_pending_changes_of": "Pending changes of {name}",
   "project_pin_changed": "{kind} file changed",
@@ -8098,7 +5916,6 @@
   "project_previous_changed": "Changed copy",
   "project_previous_move": "Move into View",
   "project_previous_title": "View (previous)",
-  "project_previous_trash": "Move to Trash",
   "project_previous_unplaced": "Not placed by PlateVault",
   "project_previous_unverified": "Copy not verified",
   "project_reason_fix_at_source": "fix it at its source, or remove the session",
@@ -8148,28 +5965,6 @@
   "project_view_no_application": "Not chosen",
   "project_view_not_built": "No View yet. The first Apply builds it.",
   "project_view_settings": "View settings",
-  "trash_empty_named_title": "Empty {name}?",
-  "trash_empty_summary": "Prepared folders go to the OS Trash · Results stay",
-  "trash_empty_summary_results": "Prepared folders and Results go to the OS Trash",
-  "trash_empty_with_results": "Empty with Results",
-  "trash_no_match": "No run matches",
-  "trash_search": "Search the Trash",
-  "trash_search_placeholder": "Run, subject or rig",
-  "trash_results_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} file",
-        "countPlural=*": "{count} files"
-      }
-    }
-  ],
   "wrapup_archive_moves": "Archive moves",
   "wrapup_cleanup_summary": "{links} links · {copies} copies · {size}",
   "wrapup_cleanup_copy": "Copy",
@@ -8177,8 +5972,6 @@
   "wrapup_cleanup_previous": "In View (previous)",
   "wrapup_cleanup_view_title": "Clean up the View",
   "wrapup_col_detail": "Detail",
-  "wrapup_col_items": "Items",
-  "wrapup_col_view": "View",
   "wrapup_files_of": "Files of {name}",
   "wrapup_group_line": [
     {
@@ -8199,7 +5992,6 @@
   "wrapup_location_default": "{name} (default)",
   "wrapup_nothing_to_archive": "Nothing to archive",
   "wrapup_nothing_to_trash": "Nothing to trash",
-  "wrapup_show_open_runs": "Runs to finish",
   "wrapup_stays_used_by": "Stays · used by {names}",
   "wrapup_steps": "Wrap up steps",
   "wrapup_trash_confirm_title": [
@@ -8218,7 +6010,6 @@
     }
   ],
   "wrapup_clean_up": "Clean up",
-  "wrapup_move_to_trash": "Move to Trash",
   "sessions_empty_needs_review": "None need review",
   "sessions_empty_needs_calibration": "None need calibration",
   "sessions_cant_trash": "Can't move to Trash",
@@ -8247,9 +6038,6 @@
   "session_rig_status": "Rig status",
   "session_project_state": "State",
   "session_project_group": "Group",
-  "session_run": "Run",
-  "session_run_step": "Step",
-  "session_run_status": "Status",
   "session_no_copies": "No copies",
   "session_integration": "Integration",
   "session_details": "Details",
@@ -8317,7 +6105,6 @@
   "calibration_link_camera": "Link camera",
   "calibration_linked_camera": "Linked camera",
   "calibration_match_by_model": "Match by camera model",
-  "calibration_move_to_trash": "Move to Trash",
   "calibration_sessions_need_again": [
     {
       "declarations": [
@@ -8339,7 +6126,7 @@
   "calibration_versions": "Versions",
   "import_match": "Match",
   "import_also_use": "Also use",
-  "import_also_use_title": "Also use for these sessions",
+  "calibration_also_use_title": "Also use for these sessions",
   "equipment_used_by_rigs": [
     {
       "declarations": [
@@ -8679,9 +6466,9 @@
   "archive_repointed_title": "Repointed the kept View of {name}",
   "output_copied": "Copied to Output as {name}",
   "output_copy_named": "Copy {name} to Output",
-  "output_label_channel": "Channel of {name}",
+  "output_label_channel": "Set the Channel of {name}",
   "output_label_hide_offer": "Hide the master offer",
-  "output_label_kind": "Kind of {name}",
+  "output_label_kind": "Set the Kind of {name}",
   "output_refused_changed": "The file changed while it was copied",
   "output_refused_exists": "Output already has {name}: choose another name",
   "output_refused_name": "Enter a file name inside Output",

@@ -442,9 +442,9 @@ function AlsoUseSection({ state, payload }: { state: PrototypeState; payload: Im
     },
   })
   return (
-    <Section title={m.import_also_use_title()}>
+    <Section title={m.calibration_also_use_title()}>
       <DataTable
-        label={m.import_also_use_title()}
+        label={m.calibration_also_use_title()}
         rows={uses}
         columns={columns}
         getRowId={id}

@@ -126,20 +126,20 @@ export function DataTableCatalogue() {
     const trashedSessions = live.filter((s) => ids.includes(s.id))
     return {
       id: "trash",
-      label: m.run_move_to_trash(),
+      label: m.common_move_to_trash(),
       kind: "destructive",
       confirm: {
-        title: m.project_run_trash_title({ name: m.session_count({ count: ids.length }) }),
+        title: m.common_trash_named_title({ name: m.session_count({ count: ids.length }) }),
         groups: trashedSessions.map((s) => ({
           label: sessionName(s),
           rows: framesOf(s).map((a): FileRow => ({ file: a.fileName, from: a.copies[0]?.path ?? "–", action: "trash", size: a.sizeBytes })),
         })),
-        confirm: { label: m.run_move_to_trash(), kind: "destructive" },
+        confirm: { label: m.common_move_to_trash(), kind: "destructive" },
       },
       run: () => {
         setTrashed((current) => [...current, ...ids])
         setSelected((current) => current.filter((id) => !ids.includes(id)))
-        note(m.run_move_to_trash(), ids.length)
+        note(m.common_move_to_trash(), ids.length)
         return { ok: true }
       },
     }

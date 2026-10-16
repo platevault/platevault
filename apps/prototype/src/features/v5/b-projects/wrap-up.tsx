@@ -202,7 +202,7 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
         title: m.wrapup_trash_confirm_title({ count: rows.length }),
         summary: formatBytes(rows.reduce((n, r) => n + r.size, 0)),
         groups: kinds.map((kind) => ({ label: say(m, OFFER_NAME[kind]), rows: offerFiles(rows.filter((r) => r.kind === kind)) })),
-        confirm: { label: m.wrapup_move_to_trash(), kind: "destructive" },
+        confirm: { label: m.common_move_to_trash(), kind: "destructive" },
       }
       const start = (): OperationId[] =>
         kinds.map((kind) =>

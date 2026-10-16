@@ -65,13 +65,13 @@ function demoActions(m: Messages, names: string[]) {
   }
   const trash: Action = {
     id: "trash",
-    label: m.run_move_to_trash(),
+    label: m.common_move_to_trash(),
     icon: Trash2,
     run: done,
     confirm: {
       title: m.run_trash_title({ name: names[0] ?? "" }),
       groups: [{ label: m.nav_sessions(), rows: [{ file: "M31_L_300s_0001.fits", from: "/Volumes/Astro-T7/Captures", action: "trash", size: 33_554_432 }] }],
-      confirm: { label: m.run_move_to_trash() },
+      confirm: { label: m.common_move_to_trash() },
     },
   }
   const destroy: Action = {

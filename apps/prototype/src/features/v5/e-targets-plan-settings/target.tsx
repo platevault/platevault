@@ -260,7 +260,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
       flush: true,
       content: (
         <BoxTable
-          label={m.target_sessions_caption({ name: target.name })}
+          label={m.common_sessions_of({ name: target.name })}
           rows={sessions}
           columns={sessionColumns}
           getRowId={(s) => s.id}

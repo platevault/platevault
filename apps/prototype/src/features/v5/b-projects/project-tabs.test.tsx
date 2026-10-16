@@ -53,12 +53,12 @@ describe("Project page on the F4 model", () => {
     const source = projects().find((p) => p.state === "open" && p.inputs.length > 0 && p.view !== null)!
     renderProject(source.id)
     expect(await screen.findByRole("table", { name: m.project_groups_of({ name: source.name }) })).toBeInTheDocument()
-    expect(within(screen.getByRole("table", { name: m.project_sessions_of({ name: source.name }) })).getAllByRole("row")).toHaveLength(source.inputs.length + 1)
+    expect(within(screen.getByRole("table", { name: m.common_sessions_of({ name: source.name }) })).getAllByRole("row")).toHaveLength(source.inputs.length + 1)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole("button", { name: m.project_noun() }))
     await user.click(await screen.findByRole("menuitem", { name: `${m.project_duplicate()}…` }))
-    const dialog = await screen.findByRole("dialog", { name: m.project_duplicate_title({ name: source.name }) })
+    const dialog = await screen.findByRole("dialog", { name: m.common_duplicate_title({ name: source.name }) })
     await user.click(within(dialog).getByRole("button", { name: m.project_duplicate() }))
     await waitFor(() => expect(projects()).toHaveLength(Object.keys(createSeed("demo").catalog.projects).length + 1))
     const copy = projects().find((p) => p.name === m.project_duplicate_name({ name: source.name }))!
@@ -72,7 +72,7 @@ describe("Project page on the F4 model", () => {
     renderProject(project.id)
     const user = userEvent.setup()
     await user.click(await screen.findByRole("button", { name: `${m.project_apply()}…` }))
-    expect(await screen.findByRole("dialog", { name: m.project_apply_title({ name: project.name }) })).toBeInTheDocument()
+    expect(await screen.findByRole("dialog", { name: m.common_apply_named({ name: project.name }) })).toBeInTheDocument()
     expect(store.getState().slices.c.apply[project.id]?.fingerprint).toBeTruthy()
   })
 

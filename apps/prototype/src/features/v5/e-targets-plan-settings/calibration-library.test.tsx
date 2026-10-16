@@ -85,7 +85,7 @@ describe("Calibration library: Hide, Show and Move to Trash", () => {
     await user.click(await screen.findByRole("rowheader", { name }))
     panel = await detailOf(name)
     expect(panel.queryByRole("button", { name: m.calibration_hide_master() })).toBeNull()
-    expect(panel.queryByRole("button", { name: m.calibration_move_to_trash() })).toBeNull()
+    expect(panel.queryByRole("button", { name: m.common_move_to_trash() })).toBeNull()
     await user.click(panel.getByRole("button", { name: m.calibration_show_master() }))
     expect(store.getState().catalog.masters[master.id]!.hiddenAt).toBeUndefined()
 
@@ -105,7 +105,7 @@ describe("Calibration library: Hide, Show and Move to Trash", () => {
     await user.click(within(row).getByRole("button", { name: m.actions_for({ name }) }))
     const menu = await screen.findByRole("menu")
     // Both confirm before they run, so their menu items read "…".
-    for (const label of [m.calibration_hide_master(), m.calibration_move_to_trash()]) {
+    for (const label of [m.calibration_hide_master(), m.common_move_to_trash()]) {
       const item = within(menu).getByRole("menuitem", { name: `${label}…` })
       expect(item.getAttribute("aria-disabled")).toBe("true")
       expect(item.textContent).toContain(m.equipment_used_by_projects({ count: projects.length }))
@@ -123,10 +123,10 @@ describe("Calibration library: Hide, Show and Move to Trash", () => {
 
     const row = (await screen.findAllByRole("row")).find((r) => within(r).queryByRole("rowheader", { name }))!
     await user.click(within(row).getByRole("button", { name: m.actions_for({ name }) }))
-    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: `${m.calibration_move_to_trash()}…` }))
-    const dialog = within(await screen.findByRole("alertdialog", { name: m.calibration_trash_master_title({ name }) }))
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: `${m.common_move_to_trash()}…` }))
+    const dialog = within(await screen.findByRole("alertdialog", { name: m.common_trash_named_title({ name }) }))
     expect(dialog.getByText(m.calibration_sessions_need_again({ count: 1, sessions: sessionLabel(m, session) }))).toBeDefined()
-    await user.click(dialog.getByRole("button", { name: m.calibration_move_to_trash() }))
+    await user.click(dialog.getByRole("button", { name: m.common_move_to_trash() }))
 
     expect(store.getState().catalog.masters[master.id]).toBeUndefined()
     expect(store.getState().catalog.sessions[session.id]!.calibration!.dark).toEqual({ state: "waiting" })

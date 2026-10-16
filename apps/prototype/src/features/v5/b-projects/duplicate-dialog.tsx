@@ -33,7 +33,7 @@ export function DuplicateProjectDialog({ project, open, onOpenChange }: { projec
     groups: m.project_duplicate_part_groups(),
     goals: m.project_duplicate_part_goals(),
     notes: m.project_duplicate_part_notes(),
-    settings: m.project_duplicate_part_settings(),
+    settings: m.project_view_settings(),
   }
   const nameError = draft.name.trim() ? undefined : m.settings_name_required()
   const label = m.project_duplicate()
@@ -47,7 +47,7 @@ export function DuplicateProjectDialog({ project, open, onOpenChange }: { projec
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={m.project_duplicate_title({ name: project.name })}
+      title={m.common_duplicate_title({ name: project.name })}
       size="sm"
       confirm={{ id: "project-duplicate", label, kind: "primary", run, unavailable: nameError ? { action: m.actions_blocked({ action: label }), reason: nameError, blockers: [] } : undefined }}
     >

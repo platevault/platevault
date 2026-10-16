@@ -1289,7 +1289,7 @@ function demoSeed(): SeedData {
   const applyCygnus: Operation = {
     id: cygnus.view!.operationId,
     kind: "apply",
-    title: msg("op_apply_title", { name: cygnus.name }),
+    title: msg("common_apply_named", { name: cygnus.name }),
     status: "succeeded",
     scope: { projectId: PROJECT.cygnus },
     progress: { done: cygEntries, total: cygEntries, unit: "entries" },

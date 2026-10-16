@@ -111,7 +111,7 @@ function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionR
   const { moved, kept } = offerFileRows(m, offer)
   return {
     id: "trash-unusable",
-    label: m.run_move_to_trash(),
+    label: m.common_move_to_trash(),
     icon: Trash2,
     kind: "destructive",
     unavailable: offer.count === 0 ? { action: m.sessions_cant_trash(), reason: m.sessions_all_kept({ count: offer.refusals.length }), blockers: offer.refusals.map((r) => ({ label: `${r.label} · ${say(m, r.reason)}`, link: r.link })) } : undefined,
@@ -119,7 +119,7 @@ function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionR
       title: m.sessions_trash_unusable_title({ count: offer.count, n: formatCount(offer.count) }),
       summary: formatBytes(offer.sizeBytes),
       groups: [{ label: m.status_unusable(), rows: moved }, ...(kept.length > 0 ? [{ label: m.sessions_kept(), rows: kept }] : [])],
-      confirm: { label: m.run_move_to_trash(), kind: "destructive" },
+      confirm: { label: m.common_move_to_trash(), kind: "destructive" },
     },
     run: () => {
       moveToOsTrash({

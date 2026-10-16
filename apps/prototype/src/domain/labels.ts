@@ -46,7 +46,7 @@ export const OUTPUT_KIND_NAME: Record<OutputKind, MessageRef> = {
   "final-image": msg("domain_result_final_image"),
   "linear-integration": msg("domain_result_linear_integration"),
   "channel-product": msg("domain_result_channel_product"),
-  "mosaic-panel": msg("domain_result_mosaic_panel"),
+  "mosaic-panel": msg("common_mosaic_panel"),
   "assembled-mosaic": msg("domain_result_assembled_mosaic"),
   other: msg("domain_result_other"),
 }

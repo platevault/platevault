@@ -323,7 +323,7 @@ function WrapUpDemo() {
   }
   const confirms: Record<WrapUpStep, Action["confirm"]> = {
     cleanup: { title: m.wrapup_cleanup_confirm_title({ count: chosen.length }), summary: formatBytes(bytes), confirm: { label: m.wrapup_cleanup_title() } },
-    trash: { title: m.catalogue_stepflow_trash_title({ count: chosen.length }), summary: m.wrapup_items_to_trash({ count: chosen.length, size: formatBytes(bytes) }), confirm: { label: m.run_move_to_trash(), kind: "destructive" } },
+    trash: { title: m.catalogue_stepflow_trash_title({ count: chosen.length }), summary: m.wrapup_items_to_trash({ count: chosen.length, size: formatBytes(bytes) }), confirm: { label: m.common_move_to_trash(), kind: "destructive" } },
     archive: { title: m.stepflow_close_project_title({ name: PROJECT }), summary: m.wrapup_sessions_to_move({ count: chosen.length }), confirm: { label: m.stepflow_close_project() } },
   }
   const terminal = current === "archive"

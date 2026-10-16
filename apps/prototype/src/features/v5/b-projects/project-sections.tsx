@@ -115,7 +115,7 @@ export function useGroupsSection(project: Project): DetailSection {
   const [draft, setDraft] = useState<GroupDraft | null>(null)
   const open = !isLocked(project)
   const held = (group: ProjectGroup) => groupInputs(project, group.id).length
-  const kind = (group: ProjectGroup) => (group.panel ? m.project_group_kind_panel() : m.project_group_kind_group())
+  const kind = (group: ProjectGroup) => (group.panel ? m.common_mosaic_panel() : m.project_group_kind_group())
   const columns: Column<ProjectGroup>[] = [
     { id: "name", header: m.newproject_field_name(), cell: (g) => g.name, sortValue: (g) => g.name, rowHeader: true, truncate: true },
     { id: "kind", header: m.project_col_kind(), cell: kind, sortValue: kind },
@@ -153,7 +153,7 @@ export function useGroupsSection(project: Project): DetailSection {
         <FormDialog
           open={draft !== null}
           onOpenChange={(next) => !next && setDraft(null)}
-          title={draft?.groupId ? m.project_group_rename_title({ name: project.groups.find((g) => g.id === draft.groupId)?.name ?? "" }) : m.project_group_new()}
+          title={draft?.groupId ? m.common_rename_title({ name: project.groups.find((g) => g.id === draft.groupId)?.name ?? "" }) : m.project_group_new()}
           size="sm"
           confirm={{
             id: "group-save",
@@ -166,7 +166,7 @@ export function useGroupsSection(project: Project): DetailSection {
           {draft ? (
             <>
               <TextField label={m.newproject_field_name()} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} error={nameError} required autoFocus />
-              {draft.groupId === null ? <SwitchField label={m.project_group_kind_panel()} description={m.project_group_panel_hint()} checked={draft.panel} onChange={(panel) => setDraft({ ...draft, panel })} /> : null}
+              {draft.groupId === null ? <SwitchField label={m.common_mosaic_panel()} description={m.project_group_panel_hint()} checked={draft.panel} onChange={(panel) => setDraft({ ...draft, panel })} /> : null}
             </>
           ) : null}
         </FormDialog>
@@ -242,7 +242,7 @@ export function useHeldSection(project: Project): DetailSection {
     flush: true,
     content: (
       <BoxTable
-        label={m.project_sessions_of({ name: project.name })}
+        label={m.common_sessions_of({ name: project.name })}
         rows={rows}
         columns={columns}
         getRowId={(r) => r.session.id}
@@ -288,7 +288,7 @@ export function useSuggestionsSection(project: Project): DetailSection {
     { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(liveAssetIds(catalog, r.session).length), sortValue: (r) => liveAssetIds(catalog, r.session).length, align: "right" },
     { id: "status", header: m.dialog_col_status(), cell: status, sortValue: status, truncate: true },
   ]
-  const addLabel = m.project_add_session()
+  const addLabel = m.session_add_to_project()
   const rowActions = (r: Suggestion): MenuItem[] => [
     { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
     ...(open

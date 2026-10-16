@@ -108,7 +108,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
     <FormDialog
       open
       onOpenChange={(next) => !next && closeApplySheet(project.id)}
-      title={m.project_apply_title({ name: project.name })}
+      title={m.common_apply_named({ name: project.name })}
       size="lg"
       confirm={{
         id: "apply",
@@ -185,7 +185,7 @@ export function useViewSections(project: Project): DetailSection[] {
       ? [
           { id: "keep", label: m.status_keep(), run: () => reviewLeftover(project.id, l.path, "keep") },
           { id: "move", label: m.project_previous_move(), run: () => reviewLeftover(project.id, l.path, "move") },
-          { id: "trash", label: m.project_previous_trash(), kind: "destructive", run: () => reviewLeftover(project.id, l.path, "trash") },
+          { id: "trash", label: m.common_move_to_trash(), kind: "destructive", run: () => reviewLeftover(project.id, l.path, "trash") },
         ]
       : []
 

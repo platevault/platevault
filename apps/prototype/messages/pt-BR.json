@@ -17,7 +17,6 @@
   "verb_retry": "Tentar de novo",
   "verb_review": "Revisar",
   "verb_stack": "Empilhar",
-  "verb_save": "Salvar",
   "common_more": "Mais",
   "common_locations": "Locais",
   "common_runs": "Execuções",
@@ -85,7 +84,6 @@
       }
     }
   ],
-  "shell_next": "Próximo: {label}",
   "shell_import": "Importar",
   "shell_search_or_jump_ellipsis": "Buscar ou ir para…",
   "shell_with_shortcut": "{label} ({shortcut})",
@@ -201,8 +199,6 @@
   "issue_location_offline": "{name} offline",
   "issue_failed": "{name} falhou",
   "issue_interrupted": "{name} interrompida",
-  "issue_to_review": "{name}: {count} para revisar",
-  "issue_blocked": "{name} bloqueada",
   "issue_master_offered": [
     {
       "declarations": [
@@ -725,25 +721,7 @@
   "home_scan": "Escanear",
   "home_everything_imported": "Tudo foi importado.",
   "home_add_captures_location": "Adicione um local de Capturas para encontrar novas capturas.",
-  "home_column_item": "Sessão ou execução",
   "home_ready_for": "Pronta para adicionar a {name}",
-  "home_clean_up_frees": "Limpar libera {bytes}",
-  "home_clean_up_links": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} link a remover",
-        "countPlural=*": "{n} links a remover"
-      }
-    }
-  ],
   "home_import_to_start": "Importe capturas para começar a organizá-las.",
   "home_nothing_to_sort": "Nada para organizar ou revisar.",
   "home_column_name": "Nome",
@@ -771,9 +749,7 @@
   "sessions_filter_needs_target": "Sem Alvo",
   "sessions_filter_needs_calibration": "Calibração pendente",
   "sessions_filter_not_in_project": "Fora de Projetos",
-  "session_object": "OBJECT {name}",
   "session_no_object": "Sem OBJECT",
-  "session_cant_confirm": "Não é possível confirmar",
   "session_target_confirmed": "Alvo confirmado: {name}",
   "session_frames_unreviewed": [
     {
@@ -791,11 +767,7 @@
       }
     }
   ],
-  "home_candidate_of": "Candidata de {name}",
-  "session_cant_add": "Não é possível adicionar",
-  "home_added_to_draft": "{session} adicionada ao rascunho de {run}",
   "home_tonight": "Esta noite",
-  "home_panel": "{name} · Painel {n}",
   "home_column_goal": "Meta",
   "session_frame_count": [
     {
@@ -818,7 +790,6 @@
   "session_label": "Sessão",
   "session_adds_subject": "Adiciona o objeto {name}, com as metas do Projeto",
   "session_adds_rig": "Adiciona o setup {name}",
-  "session_becomes_candidate": "{name} vira candidata",
   "session_add_to_project_title": "Adicionar {session} a {project}?",
   "session_no_rig": "sem setup",
   "session_no_target": "Sem Alvo",
@@ -842,23 +813,6 @@
   "sessions_column_rig": "Setup",
   "sessions_rig_needs_review": "Setup precisa de revisão",
   "sessions_column_frames": "Frames",
-  "sessions_column_projects_runs": "Projetos · execuções",
-  "sessions_no_run": "sem execução",
-  "sessions_run_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} execução",
-        "countPlural=*": "{count} execuções"
-      }
-    }
-  ],
   "sessions_no_project": "Sem Projeto",
   "sessions_light_count": [
     {
@@ -915,9 +869,7 @@
   "session_step_failed": "{step} falhou",
   "session_in_os_trash": "Na Lixeira do sistema",
   "session_target_evidence": "Evidências de Alvo de {name}",
-  "session_no_evidence": "Sem evidências",
   "session_rig_evidence": "Evidências de setup de {name}",
-  "session_reason": "Motivo",
   "session_needs_target_first": "Precisa de um Alvo antes",
   "session_none": "Nenhum",
   "session_headers": "Cabeçalhos",
@@ -1160,8 +1112,6 @@
     }
   ],
   "newproject_open_ellipsis": "Novo Projeto…",
-  "startrun_in_project_ellipsis": "Iniciar execução em {name}…",
-  "mosaic_new_in_project_ellipsis": "Novo mosaico em {name}…",
   "wrapup_project": "Encerrar {name}",
   "project_noun": "Projeto",
   "wrapup_its_volume": "O volume",
@@ -1171,10 +1121,6 @@
   "wrapup_refusal_file_exists": "Já existe outro arquivo em {path}",
   "project_target_not_added": "Não foi possível adicionar {name} como Alvo.",
   "mosaic_choose_target_first": "Escolha um Alvo primeiro.",
-  "project_gone": "Este Projeto não existe mais.",
-  "mosaic_subject_not_saved": "O objeto do mosaico não foi salvo.",
-  "project_subject_gone": "Este objeto não existe mais.",
-  "mosaic_profile_not_saved": "Grupo iniciado; perfil não salvo: {message}",
   "wrapup_offer_rejected": [
     {
       "declarations": [
@@ -1193,24 +1139,6 @@
     }
   ],
   "wrapup_offer_rejected_none": "Mover frames inutilizáveis para a Lixeira: nenhum restante",
-  "wrapup_offer_intermediates": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input size",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Mover {n} intermediário de processamento para a Lixeira ({size})",
-        "countPlural=*": "Mover {n} intermediários de processamento para a Lixeira ({size})"
-      }
-    }
-  ],
-  "wrapup_offer_intermediates_none": "Mover intermediários de processamento para a Lixeira: nenhum restante",
   "wrapup_offer_duplicates": [
     {
       "declarations": [
@@ -1229,7 +1157,6 @@
     }
   ],
   "wrapup_offer_duplicates_none": "Mover cópias duplicadas para a Lixeira: nenhuma restante",
-  "wrapup_refusal_result_input": "entrada de {name}",
   "wrapup_refusal_archive_moving": "arquivamento em andamento",
   "wrapup_refusal_outside_captures": "cópia fora de Capturas",
   "wrapup_copies": [
@@ -1247,17 +1174,12 @@
       }
     }
   ],
-  "wrapup_intermediate_of": "Intermediário de {name}",
-  "wrapup_intermediate": "Intermediário",
-  "wrapup_refusal_kept_unverifiable": "Não é possível verificar a cópia mantida na biblioteca: {path}",
-  "wrapup_master_source_duplicate": "Origem do master gerado: duplicata verificada; mantém a cópia da biblioteca {path}",
   "wrapup_copy_on": "{name} em {location}",
   "wrapup_unknown_location": "um local desconhecido",
   "wrapup_refusal_kept_copy_unverified": "cópia mantida em {name} não verificada",
   "wrapup_keeps_copy_on": "Mantém a cópia em {name}: {path}",
   "wrapup_refusal_space": "{name}: {free} livres de {size}",
   "wrapup_no_archive_location": "nenhum local de arquivo",
-  "project_nothing_to_restore": "Não há nada arquivado para restaurar",
   "project_target_label": "Alvo",
   "project_search_placeholder": "Nome ou número de catálogo",
   "project_search_subject_of": "Objeto de {names}",
@@ -1288,13 +1210,9 @@
   "projects_no_subjects": "Sem objetos",
   "projects_col_state": "Estado",
   "projects_col_goals": "Metas",
-  "projects_col_open_runs": "Execuções abertas",
-  "projects_next_for": "para {name}",
   "startrun_open_ellipsis": "Iniciar execução…",
-  "mosaic_new_ellipsis": "Novo mosaico…",
   "wrapup_action": "Encerrar",
   "trash_title": "Lixeira",
-  "trash_with_count": "Lixeira ({count})",
   "projects_count": [
     {
       "declarations": [
@@ -1310,38 +1228,15 @@
       }
     }
   ],
-  "projects_show_done": "Mostrar concluídos",
   "newproject_title": "Novo Projeto",
   "projects_empty": "Nenhum Projeto ainda",
   "projects_no_goals": "Sem metas",
   "projects_goals_met": "{met} de {total} atingidas",
   "project_back_to_projects": "Abrir Projetos",
-  "project_reopen_title": "Reabrir {name}?",
-  "project_reopen_no_file_moves": "Nenhum arquivo é movido.",
-  "project_reopen": "Reabrir",
-  "goal_bar_any": "Qualquer",
   "goal_hours": "Horas",
   "goal_frames": "Frames",
-  "goal_quality": "Qualidade",
   "goal_fwhm_max": "FWHM ≤ ″",
-  "trash_move_ellipsis": "Mover para a Lixeira…",
-  "project_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} execução",
-        "countPlural=*": "{count} execuções"
-      }
-    }
-  ],
   "startrun_title": "Iniciar execução",
-  "project_no_runs": "Nenhuma execução ainda",
   "project_unknown_subject": "Objeto desconhecido",
   "project_panels": [
     {
@@ -1358,13 +1253,6 @@
       }
     }
   ],
-  "project_run_noun_capital": "Execução",
-  "project_run_complete_title": "Concluir {name}?",
-  "project_run_trash_title": "Mover {name} para a Lixeira?",
-  "project_run_trash_description": "Restaurar a traz de volta como estava.",
-  "project_placement_ambiguous": "Ambígua",
-  "project_placement_off_panel": "Fora do painel",
-  "project_placement_no_pointing": "Sem apontamento",
   "project_col_session": "Sessão",
   "project_col_subject": "Objeto",
   "project_col_rig": "Setup",
@@ -1384,9 +1272,6 @@
     }
   ],
   "project_open_session": "Abrir sessão",
-  "project_candidates": "Candidatos",
-  "project_no_candidates": "Nenhum candidato",
-  "project_candidate_sessions_of": "Sessões candidatas de {name}",
   "project_frames_count": [
     {
       "declarations": [
@@ -1441,7 +1326,6 @@
     }
   ],
   "project_open_target": "Abrir Alvo",
-  "mosaic_make": "Criar mosaico",
   "project_remove": "Remover",
   "project_subjects": "Objetos",
   "project_subjects_count": [
@@ -1459,7 +1343,6 @@
       }
     }
   ],
-  "mosaic_new_button": "Novo mosaico",
   "project_used_by_runs": [
     {
       "declarations": [
@@ -1477,22 +1360,6 @@
   ],
   "project_subjects_of": "Objetos de {name}",
   "project_col_kind": "Tipo",
-  "project_col_centre": "Centro",
-  "mosaic_of_panels": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Mosaico de {count} painel: iniciar execução de mosaico",
-        "countPlural=*": "Mosaico de {count} painéis: iniciar execução de mosaico"
-      }
-    }
-  ],
   "project_open_in": "Abrir em {name}",
   "project_rigs": "Setups",
   "project_rigs_count": [
@@ -1518,7 +1385,6 @@
   "project_camera_osc": "OSC",
   "project_camera_mono": "Mono",
   "project_add_rig": "Adicionar setup",
-  "project_add_session": "Adicionar ao projeto",
   "project_add_suggested": [
     {
       "declarations": [
@@ -1546,28 +1412,9 @@
   "project_no_sessions": "Nenhuma sessão ainda. Adicione uma das sugestões.",
   "project_no_suggestions": "Nenhuma sessão correspondente para adicionar",
   "project_none_tonight": "Nenhuma hoje à noite",
-  "project_restore_title": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Restaurar {count} sessão?",
-        "countPlural=*": "Restaurar {count} sessões?"
-      }
-    }
-  ],
-  "project_restore_description": "De volta para onde o Arquivamento encontrou cada frame.",
-  "project_restore": "Restaurar",
-  "project_restore_nothing_now": "Nada do que foi escolhido pode ser restaurado agora.",
   "project_archived_of": "Sessões arquivadas de {name}",
   "project_col_archive_path": "Caminho do arquivo",
   "project_remove_named": "Remover {name}",
-  "project_remove_rig": "Remover setup",
   "project_remove_session": "Remover do projeto",
   "project_remove_session_summary": "Os frames saem da View no próximo Aplicar. Arquivos, a biblioteca e outros projetos não mudam.",
   "newproject_new_target": "Novo Alvo",
@@ -1593,53 +1440,7 @@
     }
   ],
   "newproject_create": "Criar Projeto",
-  "startrun_profile_none": "Nenhum",
   "startrun_profile_other": "Outro aplicativo",
-  "startrun_blocker_done": "{name} está Concluído",
-  "startrun_no_subject": "Sem objeto",
-  "startrun_not_created": "A execução não foi criada.",
-  "startrun_profile_not_saved": "Execução iniciada; perfil não salvo: {message}",
-  "startrun_profile_optional": "Perfil (opcional)",
-  "startrun_place_panels": "Posicionar painéis",
-  "trash_entries": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} entrada",
-        "countPlural=*": "{count} entradas"
-      }
-    }
-  ],
-  "trash_of_project": "Lixeira de {name}",
-  "trash_is_empty": "A Lixeira está vazia",
-  "trash_restore_title": "Restaurar {name}?",
-  "trash_restore_to_group": "{name} → seu grupo de execuções",
-  "trash_restore_to_runs": "{name} → execuções do Projeto",
-  "trash_restore_run": "Restaurar execução",
-  "trash_run_restored": "Execução {name} restaurada",
-  "trash_empty_runs_title": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Esvaziar {count} execução?",
-        "countPlural=*": "Esvaziar {count} execuções?"
-      }
-    }
-  ],
-  "trash_empty_run": "Esvaziar execução",
-  "trash_empty": "Esvaziar Lixeira",
   "wrapup_offer_rejects": "Frames inutilizáveis",
   "wrapup_offer_duplicates_label": "Duplicatas",
   "wrapup_offer_processing": [
@@ -1728,7 +1529,6 @@
       }
     }
   ],
-  "wrapup_trash_offer_description": "Somente para a Lixeira do sistema. Cada item é verificado novamente antes.",
   "wrapup_items_to_trash": [
     {
       "declarations": [
@@ -1747,9 +1547,7 @@
   ],
   "wrapup_refused": "recusado",
   "wrapup_archive_title": "Arquivar",
-  "wrapup_archive_ellipsis": "Arquivar…",
   "wrapup_archive_confirm_title": "Arquivar {name}?",
-  "wrapup_archive_description": "Cada sessão é movida inteira ou permanece.",
   "wrapup_archive_change": [
     {
       "declarations": [
@@ -1768,7 +1566,6 @@
     }
   ],
   "wrapup_archive_fallback": "arquivo",
-  "wrapup_archive_links_follow": "Os links preparados acompanham a movimentação",
   "wrapup_destination": "Destino",
   "wrapup_sessions_to_move": [
     {
@@ -1785,60 +1582,8 @@
       }
     }
   ],
-  "wrapup_sessions_stay": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} sessão permanece",
-        "countPlural=*": "{count} sessões permanecem"
-      }
-    }
-  ],
   "wrapup_used_by_other_reason": "usada por outro Projeto",
-  "mosaic_placed_by_you": "Posicionada por você",
   "mosaic_left_out": "Deixada de fora",
-  "mosaic_two_panels": "Dois painéis",
-  "mosaic_included_panel": "Painel incluído",
-  "mosaic_default_name": "Mosaico {name}",
-  "mosaic_place_on": "Posicionar em",
-  "mosaic_by_pointing": "Pelo apontamento",
-  "mosaic_leave_out": "Deixar de fora",
-  "mosaic_run": "Execução de mosaico",
-  "mosaic_start_group": "Iniciar grupo",
-  "mosaic_items_missing": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} item faltando",
-        "countPlural=*": "{count} itens faltando"
-      }
-    }
-  ],
-  "mosaic_name_placeholder": "Mosaico IC 5070",
-  "mosaic_fov_unknown": "Campo de visão desconhecido · painéis desenhados com 1°",
-  "mosaic_panels_title": "Painéis",
-  "mosaic_done_adding": "Concluir adição",
-  "mosaic_add_panels": "Adicionar painéis",
-  "mosaic_refusal_remove_panel": "Não é possível remover o Painel {n}",
-  "mosaic_in_a_run": "Em uma execução",
-  "mosaic_no_sessions_on": "Nenhuma sessão em {rig}",
-  "mosaic_this_rig": "este setup",
-  "mosaic_pick_target": "Escolha um Alvo",
-  "mosaic_sessions_to_place": "Sessões para posicionar",
-  "mosaic_layout": "Layout",
-  "mosaic_excluded_panel": "Painel excluído",
   "mosaic_field_label": "Campo do mosaico: clique em um painel para incluí-lo ou excluí-lo",
   "mosaic_add_slot": "Adicionar painel a {side} do Painel {n}",
   "mosaic_excluded": "excluído",
@@ -1871,7 +1616,6 @@
   "tonight_no_filters": "Sem filtros",
   "tonight_moon_limits": "Limites da Lua",
   "tonight_filter": "Filtro",
-  "tonight_actions": "Ações",
   "tonight_no_window": "Sem janela esta noite",
   "tonight_altitude": "Altitude",
   "tonight_window": "Janela",
@@ -1931,8 +1675,6 @@
   "targets_add_to_plan": "Adicionar ao Plano",
   "targets_remove_from_plan": "Remover do Plano",
   "target_open_project": "Abrir Projeto",
-  "plan_remove_named": "Remover {name} do Plano",
-  "plan_add_named": "Adicionar {name} ao Plano",
   "plan_list": "Lista do Plano",
   "plan_targets_count": [
     {
@@ -1949,7 +1691,6 @@
       }
     }
   ],
-  "plan_list_empty": "Lista do Plano vazia",
   "plan_show_all": "Mostrar tudo",
   "plan_dark": "Escuro",
   "plan_dark_none": "nenhum",
@@ -2043,7 +1784,6 @@
     }
   ],
   "tonight_curve_default": "Padrão {value}",
-  "tonight_curve_number_needed": "Digite um número",
   "tonight_curve_incomplete": "{band}: preencha os dois valores",
   "domain_grade_badge": "{band} {grade}",
   "domain_grade_good": "bom",
@@ -2092,7 +1832,6 @@
   "target_angular_size": "Tamanho angular",
   "target_size_unknown": "Tamanho desconhecido",
   "target_field": "Campo",
-  "target_sessions_caption": "Sessões de {name}",
   "target_channel": "Canal",
   "calibration_frames": "Frames",
   "target_add_to_title": "Adicionar {target} a {project}?",
@@ -2127,8 +1866,6 @@
   "activity_destination_session": "Sessão",
   "activity_destination_project": "Projeto",
   "activity_destination_about": "Sobre",
-  "activity_destination_run": "execução",
-  "activity_destination_trash": "Lixeira do Projeto",
   "activity_destination_page": "página",
   "activity_recorded": "Registrado",
   "activity_refused": "Recusado",
@@ -2180,13 +1917,12 @@
   "calibration_status_to_stack": "A empilhar",
   "calibration_status_stacking": "Empilhando",
   "calibration_status_importing": "Importando",
-  "calibration_step_todo": "A fazer",
   "calibration_steps_of": "Etapas de {name}",
   "calibration_raws_kept": "Mantidos",
   "calibration_keep_raws": "Manter brutos",
   "calibration_stack_again": "Empilhar de novo",
   "calibration_trash_raws": "Descartar brutos",
-  "calibration_trash_master_title": "Mover {name} para a Lixeira?",
+  "common_trash_named_title": "Mover {name} para a Lixeira?",
   "calibration_show_master": "Mostrar master",
   "calibration_process": "Processo",
   "calibration_no_raw_sessions": "Nenhuma sessão bruta",
@@ -2214,13 +1950,8 @@
   "calibration_origin_results": "Resultados da execução",
   "calibration_origin_stacked": "Empilhado",
   "calibration_origin_imported": "Importado",
-  "calibration_open_offer": "Abrir oferta",
   "calibration_used_by": "Usado por",
   "calibration_open_raw_session": "Abrir sessão bruta",
-  "calibration_offered": "Oferecido",
-  "calibration_offer_restored": "Oferta restaurada",
-  "calibration_open_run": "Abrir execução",
-  "calibration_dismissed": "Dispensados",
   "calibration_master": "Master",
   "calibration_run": "Execução",
   "calibration_masters_count": [
@@ -2284,143 +2015,24 @@
   "notice_finished": "{name} concluída",
   "notice_partial": "{name} parcial",
   "notice_canceled": "{name} cancelada",
-  "run_step_next": "Próximo",
-  "run_dismiss": "Dispensar",
   "run_profile_application": "Aplicativo",
-  "run_open_project": "Abrir o Projeto",
-  "run_in_trash": "Na Lixeira · {date}",
-  "run_open_trash": "Abrir Lixeira",
-  "run_restore": "Restaurar",
-  "run_reopen_run": "Reabrir execução",
-  "run_reopen_summary": "As etapas voltam a ser editáveis; nenhum arquivo é movido",
-  "run_reopened": "Execução {name} reaberta",
-  "run_clean_up": "Limpar",
-  "run_move_to_trash": "Mover para a Lixeira",
+  "common_move_to_trash": "Mover para a Lixeira",
   "run_trash_blocked": "Mover para a Lixeira bloqueado",
   "run_trash_title": "Mover {name} para a Lixeira?",
-  "run_trash_leaves": "Sai das listas de execuções, seletores e totais de metas",
-  "run_trash_waits_detail": "Restaurar a traz de volta como estava",
   "run_actions_for": "Ações de {name}",
   "run_remove": "Remover",
-  "run_none": "Nenhum",
   "run_col_night": "Noite",
   "run_col_channel": "Canal",
   "run_col_frames": "Quadros",
   "run_col_integration": "Integração",
-  "run_col_reason": "Motivo",
-  "run_col_state": "Estado",
   "run_col_kind": "Tipo",
-  "run_col_source": "Origem",
-  "run_select_pointing_inside_panel": "Apontamento dentro do painel",
-  "run_selection_blocked": "Alteração da seleção bloqueada",
-  "run_select_remove_from_run": "Remover da execução",
-  "run_select_add_to_run": "Adicionar à execução",
-  "run_select_frames_of": "{included} de {total}",
-  "run_select_no_longer_matches": "Não corresponde mais",
-  "run_select_in_run": "Na execução",
-  "run_select_members_only": "Só na execução",
-  "run_select_members_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} sessão na execução",
-        "countPlural=*": "{count} sessões na execução"
-      }
-    }
-  ],
-  "run_select_add_new": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Adicionar {count} novo candidato",
-        "countPlural=*": "Adicionar {count} novos candidatos"
-      }
-    }
-  ],
-  "run_select_sessions_label": "Sessões de {name}",
-  "run_select_no_candidates": "Nenhuma candidata em {rig}",
-  "run_select_revision": "Revisão {revision}",
-  "run_save_revision": "Salvar revisão {revision}",
-  "run_save_blocked": "Salvamento bloqueado",
-  "run_completed": "{name} concluída",
-  "run_clean_up_blocked": "Limpeza bloqueada",
   "run_col_size": "Tamanho",
-  "run_open_prepare": "Abrir Preparar",
-  "run_open_calibrate": "Abrir Calibrar",
   "run_cal_auto_assign": "Atribuir automaticamente",
-  "run_cal_policy_blocked": "Atribuição automática bloqueada",
-  "run_cal_off": "Desligado",
   "run_cal_no_sessions": "Nenhuma sessão",
-  "run_cal_policy_shared": "Política compartilhada por todos os painéis",
-  "run_cal_requirements": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requisito",
-        "countPlural=*": "{count} requisitos"
-      }
-    }
-  ],
-  "run_cal_no_sessions_saved": "Nenhuma sessão salva",
-  "run_cal_automatic": "Automática",
-  "run_cal_stack_from": "Empilhar de {name}",
-  "run_cal_assign_blocked": "Atribuição bloqueada",
   "run_cal_kind_dark": "dark",
   "run_cal_kind_flat": "flat",
   "run_cal_kind_bias": "bias",
-  "run_use_named": "Usar {name}",
-  "run_cal_use_automatic": "Usar automática",
-  "run_cal_no_master": "Nenhum master",
-  "run_cal_col_light_session": "Sessão de lights",
-  "run_cal_col_master": "Master",
-  "run_cal_recommended": "Recomendados",
-  "run_cal_other_masters": "Outros masters",
-  "run_cal_without_master": "Sem master",
-  "run_cal_no_calibration": "Sem calibração",
-  "run_cal_master_for": "Master para {name}",
-  "run_cal_to_review_col": "A revisar",
-  "run_cal_requirements_label": "Requisitos de calibração",
-  "run_cal_exception_title": "Exceção: {name}",
-  "run_cal_add_blocked": "Adição à biblioteca bloqueada",
-  "run_cal_masters_found": "Masters encontrados",
-  "run_cal_masters_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} master",
-        "countPlural=*": "{count} masters"
-      }
-    }
-  ],
-  "run_cal_add_to_library": "Adicionar à biblioteca",
-  "run_cal_bin": "bin {binning}",
   "run_wrap_up": "Encerramento",
-  "run_accept": "Aceitar",
-  "run_not_prepared": "Sem preparo",
   "run_files_count": [
     {
       "declarations": [
@@ -2437,274 +2049,28 @@
     }
   ],
   "run_col_file": "Arquivo",
-  "run_col_revision": "Revisão",
   "run_col_project": "Projeto",
-  "run_results_look_again_blocked": "Nova busca bloqueada",
-  "run_results_folder": "Pasta de Resultados",
-  "run_results_rescan": "Verificar de novo",
-  "run_results_ignore": "Ignorar",
-  "run_results_intermediate": "Intermediário",
-  "run_results_kind_of": "Tipo para {name}",
-  "run_results_choose_file": "Escolha um arquivo",
-  "run_results_attach": "Anexar",
-  "run_results_attach_blocked": "Anexo bloqueado",
-  "run_results_products": "Produtos",
-  "run_results_products_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} produto",
-        "countPlural=*": "{count} produtos"
-      }
-    }
-  ],
   "run_results_intermediates": "Intermediários",
-  "run_results_intermediates_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} intermediário",
-        "countPlural=*": "{count} intermediários"
-      }
-    }
-  ],
-  "run_results_inspect_again": "Inspecionar de novo",
-  "run_results_kind_missing": "Tipo?",
-  "run_results_changed": "Alterado",
-  "run_results_accept_named": "Aceitar {name}",
-  "run_results_reject_named": "Rejeitar {name}",
-  "run_results_no_products": "Nenhum produto ainda",
-  "run_results_attach_title": "Anexar um resultado",
-  "run_results_file_path": "Caminho do arquivo",
-  "run_results_channel_optional": "Canal (opcional)",
-  "run_results_channel_placeholder": "Ha",
-  "run_results_run_group": "Grupo de execuções",
   "run_read_only_because": "Somente leitura · {reason}",
-  "run_prepare_shared_title": "Perfil, modo e política compartilhados por todos os painéis",
-  "run_layout_output": "<saída>",
-  "run_layout_not_chosen": "Não escolhido",
   "run_layout_group": "Grupo",
   "run_layout_output_folder": "Pasta de saída",
-  "run_prepare_setup": "Configuração",
-  "run_prepare_inputs": "Entradas",
   "run_prepare_title": "Preparar {name}?",
-  "run_prepare_title_rev": "Preparar {name} (rev {revision})?",
-  "run_prepare_confirm": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Preparar {count} entrada",
-        "countPlural=*": "Preparar {count} entradas"
-      }
-    }
-  ],
-  "run_prepare_creates": "Cria {folder}",
   "run_profile_not_verified": "Não verificado",
   "run_profile_read_only": "Somente leitura",
-  "run_profile_evidence": "Evidência de {name}",
-  "run_opened": "{name} aberta",
   "run_open_in": "Abrir no {app}",
-  "run_unverified_since": "Não verificada desde {date}",
-  "run_entries_changed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} entrada alterada",
-        "countPlural=*": "{count} entradas alteradas"
-      }
-    }
-  ],
-  "run_partial_count": "Parcial {done}/{total}",
-  "run_lock_trashed": "Na Lixeira do Projeto",
-  "run_lock_complete": "Concluída · reabra para alterar",
   "run_parent_none": "Nenhuma pasta de saída",
-  "run_parent_missing": "{name} ausente",
   "run_parent_read_only": "{name} sem permissão de gravação",
   "run_field_target": "Alvo",
   "run_field_equipment": "Equipamento",
   "run_field_filter": "Filtro",
   "run_field_exposure": "Exposição",
   "run_field_focal_length": "Distância focal",
-  "run_mode_semantics_copy": "Cópias temporárias, removidas quando a execução é concluída.",
-  "run_check_lock": "Estado da execução",
-  "run_check_membership": "Membros salvos",
-  "run_check_profile": "Perfil de aplicativo",
-  "run_check_metadata": "Metadados corrigidos",
   "run_check_mode": "Visão da execução",
-  "run_check_destination": "Pasta da execução",
   "run_check_space": "Espaço livre",
-  "run_check_sources": "Presença das origens",
-  "run_check_entries": "Entradas",
-  "run_entry_denied": "Ilegível: acesso de leitura a {path} negado",
   "run_entry_offline": "Offline: {name} não está conectado",
   "run_entry_its_volume": "seu volume",
-  "run_entry_retired": "Aposentado: {name} foi aposentado e nunca é entrada",
-  "run_entry_its_location": "seu local",
-  "run_entry_not_found": "Não encontrado em {path} na última varredura",
-  "run_entry_frame": "Frame",
-  "run_entry_master": "Master",
-  "run_entry_to_prepare": "A preparar",
-  "run_entry_unresolved": "Membro não resolvido: não pôde ser lido quando foi selecionado",
-  "run_entry_not_readable": "Ilegível em {path}",
-  "run_mode_needs_space": "Requer {bytes} · {free} livres",
-  "run_check_requirements_to_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requisito a revisar",
-        "countPlural=*": "{count} requisitos a revisar"
-      }
-    }
-  ],
-  "run_check_patched_needs_isolated": "Cópias corrigidas requerem Cópias",
-  "run_check_folder_exists": "{name} já existe",
-  "run_check_sources_readable": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} origem legível",
-        "countPlural=*": "{count} origens legíveis"
-      }
-    }
-  ],
-  "run_check_sources_unreadable": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} origem ilegível · Parcial",
-        "countPlural=*": "{count} origens ilegíveis · Parcial"
-      }
-    }
-  ],
-  "run_check_no_frames": "Nenhum quadro incluído",
-  "run_verify_entry_missing": "A entrada na pasta da execução sumiu ou seu volume está offline.",
-  "run_verify_source_unreadable": "A origem não pode ser lida agora (offline ou ausente).",
-  "run_verify_snapshot_differs": "Alterada desde o snapshot da preparação: o SHA-256 difere.",
-  "run_verify_entry_differs": "Esta entrada não corresponde mais ao que foi preparado.",
-  "run_verify_digest_differs": "Alterada desde que foi preparada: o SHA-256 difere do digest registrado.",
-  "run_verify_entry_missing_or_differs": "Sua entrada na pasta da execução sumiu ou não corresponde mais ao que foi preparado.",
-  "run_rev": "Rev {revision}",
   "run_cleanup_volume_offline": "{name} está offline",
-  "rungroup_panels_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} painel",
-        "countPlural=*": "{count} painéis"
-      }
-    }
-  ],
-  "rungroup_in_trash": "{count} na Lixeira",
-  "rungroup_col_panel": "Painel",
-  "rungroup_col_candidates": "Candidatos",
-  "rungroup_col_nearest": "Painel mais próximo",
-  "rungroup_col_folder": "Pasta",
-  "rungroup_col_accepted": "Aceitos",
-  "rungroup_col_panel_run": "Execução do painel",
-  "rungroup_col_status": "Situação",
   "rungroup_panels_label": "Painéis de {name}",
-  "rungroup_placed_by_you": "Colocada em {panel} por você ({detail})",
-  "rungroup_to_place": "A posicionar",
-  "rungroup_place_on": "Colocar em {panel}",
-  "rungroup_save": "Salvar",
-  "rungroup_candidates_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} candidata",
-        "countPlural=*": "{count} candidatas"
-      }
-    }
-  ],
-  "rungroup_open_folder": "Abrir pasta",
-  "rungroup_setup_locked": "Configuração travada",
-  "rungroup_complete_panels": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} painel concluído",
-        "countPlural=*": "{count} painéis concluídos"
-      }
-    }
-  ],
-  "rungroup_result": "Resultado do grupo",
-  "rungroup_every_panel_complete": "Todos os painéis concluídos",
-  "rungroup_prepare_all_title": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Preparar o {count} painel de {name}?",
-        "countPlural=*": "Preparar todos os {count} painéis de {name}?"
-      }
-    }
-  ],
   "rungroup_blocked_count": [
     {
       "declarations": [
@@ -2720,54 +2086,6 @@
       }
     }
   ],
-  "rungroup_prepare_panels": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Preparar {count} painel",
-        "countPlural=*": "Preparar {count} painéis"
-      }
-    }
-  ],
-  "rungroup_panel_results": "Resultados dos painéis",
-  "rungroup_accepted_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} aceito",
-        "countPlural=*": "{count} aceitos"
-      }
-    }
-  ],
-  "rungroup_rejected_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} rejeitado",
-        "countPlural=*": "{count} rejeitados"
-      }
-    }
-  ],
-  "rungroup_open_panel_results": "Abrir Resultados de {panel}",
-  "run_mode_no_symlinks": "{name}: sem links simbólicos",
   "location_role_captures_description": "Light frames",
   "location_role_captures_add": "Adicionar local de capturas",
   "location_role_captures_picker": "Escolher pasta de capturas",
@@ -2829,10 +2147,8 @@
   "site_west": "O",
   "location_not_saved": "O registro do local não foi salvo.",
   "location_folder": "Pasta",
-  "location_change": "Alterar",
   "location_display_name": "Nome de exibição",
   "location_role": "Função",
-  "location_names_more": "{names} e mais {count}",
   "location_remap_refused": "Remapeamento recusado",
   "location_folder_unchanged": "Pasta não alterada",
   "location_remap_saved": "Remapeamento salvo",
@@ -2892,59 +2208,6 @@
   "location_volume_evidence": "Evidência do volume",
   "location_from": "De",
   "location_to": "Para",
-  "location_remap_change_move": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input path",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame vai para {path}, verificado por SHA-256",
-        "countPlural=*": "{frames} frames vão para {path}, verificados por SHA-256"
-      }
-    }
-  ],
-  "location_remap_change_differ": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input names",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame recusado, bytes diferentes: {names}",
-        "countPlural=*": "{frames} frames recusados, bytes diferentes: {names}"
-      }
-    }
-  ],
-  "location_remap_change_not_found": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input names",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame não encontrado na nova pasta: {names}",
-        "countPlural=*": "{frames} frames não encontrados na nova pasta: {names}"
-      }
-    }
-  ],
-  "location_remap_change_refused_note": "Frames recusados ficam Não encontrado aqui",
-  "location_remap_change_points": "{name} aponta para {path}",
   "location_remap_confirm": [
     {
       "declarations": [
@@ -2996,8 +2259,6 @@
       }
     }
   ],
-  "location_last_attempt": "Última tentativa {date}",
-  "location_indexed": "Indexado {date}",
   "location_frames": [
     {
       "declarations": [
@@ -3014,58 +2275,19 @@
       }
     }
   ],
-  "location_state_group": "Estado de {name}",
   "location_indexing": "Indexando",
   "location_volume_not_mounted": "{name} não montado",
-  "location_volume_missing": "Volume não montado",
   "location_locate_or_remap": "Localizar ou remapear",
   "location_retire": "Aposentar local",
   "location_choose_folder_again": "Escolher pasta de novo",
-  "location_incomplete_unread": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Escopo incompleto · {count} pasta não lida",
-        "countPlural=*": "Escopo incompleto · {count} pastas não lidas"
-      }
-    }
-  ],
-  "location_retired_copies": [
-    {
-      "declarations": [
-        "input count",
-        "input date",
-        "input copies",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Aposentado {date} · {copies} cópia",
-        "countPlural=*": "Aposentado {date} · {copies} cópias"
-      }
-    }
-  ],
-  "location_more_actions": "Mais ações para {name}",
-  "settings_actions": "Ações",
   "settings_sections": "Seções das configurações",
   "settings_back_to_session": "Voltar à sessão",
   "settings_back_to_plan": "Voltar ao Plano",
   "settings_back_to_target": "Voltar ao Alvo",
   "settings_back_to_run": "Voltar à execução",
   "settings_back_to_storage": "Voltar ao Armazenamento",
-  "settings_back_to_calibration": "Voltar à Calibração",
   "settings_back_to_project": "Voltar ao Projeto",
   "settings_go_back": "Voltar",
-  "about_no_files_touched": "Nenhum arquivo alterado",
-  "about_no_network": "Sem rede",
   "about_this_build": "Esta versão",
   "about_version": "Versão",
   "about_data": "Dados",
@@ -3121,22 +2343,6 @@
       }
     }
   ],
-  "about_count_runs": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} execução de processamento",
-        "countPlural=*": "{n} execuções de processamento"
-      }
-    }
-  ],
   "about_count_projects": [
     {
       "declarations": [
@@ -3156,7 +2362,6 @@
   "about_clock": "Relógio do PlateVault",
   "prototype_about_clock": "{date} (simulado)",
   "about_clock_system": "Este computador",
-  "about_onboarding": "Primeiros passos",
   "about_first_run_setup": "Configuração inicial",
   "about_restart_setup": "Reiniciar configuração",
   "about_simulation": "Simulação",
@@ -3165,8 +2370,6 @@
   "settings_at_defaults": "Já está no padrão",
   "settings_restore_defaults": "Restaurar padrões",
   "settings_keyboard": "Teclado",
-  "settings_shortcuts_about": "Sobre atalhos de uma tecla",
-  "settings_shortcuts_help": "?, /, [ e sequências com G. ⌘K e Ctrl+K sempre funcionam.",
   "settings_restore_title": "Restaurar o padrão da aparência?",
   "settings_edit_title": "Editar {name}",
   "settings_save": "Salvar",
@@ -3179,7 +2382,6 @@
   "location_scan_scope": "Escopo da varredura",
   "location_last_indexed": "Última indexação",
   "location_not_indexed_yet": "Ainda não indexado",
-  "location_indexed_frames": "Frames indexados",
   "location_sessions_count": [
     {
       "declarations": [
@@ -3200,11 +2402,7 @@
   "location_links_none": "Sem suporte",
   "location_unreadable_folders": "Pastas ilegíveis na última varredura",
   "settings_none": "Nenhum",
-  "location_retire_review_title": "Revisão: aposentar {name}",
   "location_label": "Local",
-  "location_root": "Raiz",
-  "location_availability_at_review": "Disponibilidade na revisão",
-  "location_copies": "Cópias",
   "location_copies_count": [
     {
       "declarations": [
@@ -3221,8 +2419,6 @@
       }
     }
   ],
-  "location_sessions_list": "{count}: {list}",
-  "location_changes": "Alterações",
   "location_copies_read_retired": [
     {
       "declarations": [
@@ -3239,32 +2435,11 @@
       }
     }
   ],
-  "location_leaves_totals": "Sai dos totais",
   "location_no_file_changes": "Nenhum arquivo alterado",
-  "location_availability_changed": "Disponibilidade mudou",
-  "location_close_review": "Fechar revisão",
-  "location_make_default_blocked": "Tornar padrão bloqueado",
-  "location_make_default_not_saved": "Tornar padrão não salvo",
   "settings_details": "Detalhes",
   "location_index_now": "Indexar agora",
   "settings_make_default": "Tornar padrão",
   "settings_edit": "Editar",
-  "location_remove_with_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Remover · {n} frame",
-        "countPlural=*": "Remover · {n} frames"
-      }
-    }
-  ],
   "settings_remove": "Remover",
   "settings_default": "Padrão",
   "settings_remove_title": "Remover {name}?",
@@ -3282,7 +2457,6 @@
   "site_twilight_nautical": "Náutica",
   "site_sun_below": "Sol −{degrees}°",
   "site_min_altitude_field": "Altura mín. (°)",
-  "site_default_about": "Sobre o local padrão",
   "site_default_help": "Os lembretes passam para o local padrão.",
   "site_save_changes_button": "Salvar alterações",
   "site_no_default": "Sem local padrão",
@@ -3291,24 +2465,6 @@
   "site_elevation": "Altitude",
   "site_min_altitude": "Altura mín.",
   "site_from_headers": "Dos cabeçalhos",
-  "site_headers_about": "Sobre coordenadas do cabeçalho",
-  "site_headers_help": "SITELAT e SITELONG sem local salvo.",
-  "site_in_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "· em {n} sessão",
-        "countPlural=*": "· em {n} sessões"
-      }
-    }
-  ],
   "site_add_as_site": "Adicionar como local",
   "settings_default_named": "Padrão: {name}",
   "site_clear_planning": "Limpar o local de planejamento",
@@ -3316,7 +2472,6 @@
   "site_make_default_title": "Tornar {name} o padrão?",
   "site_reminders_change": "Lembretes: {from} → {to}",
   "site_previous": "local anterior",
-  "settings_lookup_sesame_sources": "SIMBAD, NED, VizieR",
   "settings_lookup_simbad_only": "Só SIMBAD",
   "settings_lookup_resolved": "Resolvido por {provider}.",
   "settings_lookup_not_found": "{provider} não retornou nenhum objeto chamado {query}.",
@@ -3357,7 +2512,6 @@
     }
   ],
   "settings_lookup_online": "Buscar Alvos online",
-  "settings_lookup_online_about": "Sobre a busca online",
   "settings_lookup_online_help": "Envia nomes de Alvos ao provedor. Uma busca que falha nunca bloqueia a indexação.",
   "settings_lookup_provider": "Provedor",
   "settings_lookup_test": "Testar",
@@ -3368,7 +2522,6 @@
   "settings_lookup_coordinates": "Coordenadas",
   "settings_lookup_object_type": "Tipo de objeto",
   "settings_lookup_aliases": "Apelidos",
-  "settings_lookup_failed_title": "Busca falhou",
   "settings_lookup_off_title": "Busca online desativada",
   "setup_step_welcome": "Boas-vindas",
   "setup_step_index": "Indexar",
@@ -3495,29 +2648,19 @@
   "apps_badge_read_only": "Entradas somente leitura",
   "apps_badge_writes_unknown": "Gravação nas entradas desconhecida",
   "apps_badge_write_prone": "Grava nas entradas",
-  "apps_unsupported_corrected": "ler valores corrigidos pela configuração",
   "apps_evidence": "Evidência",
-  "apps_input_writes": "Gravação nas entradas",
-  "apps_none_recorded": "Nenhum registrado",
   "apps_corrected_values": "Valores corrigidos",
   "apps_corrected_through": "Pela configuração",
   "apps_corrected_not_through": "Não pela configuração",
   "apps_rename_note": "Renomear arquivos nunca substitui valores do cabeçalho.",
   "apps_not_located": "Nenhum aplicativo localizado",
-  "apps_locate_any": "Localizar um aplicativo",
   "apps_use_this": "Usar este aplicativo",
-  "apps_generic_description": "Abre qualquer aplicativo com seus argumentos. Não é um perfil de preparação verificado.",
   "apps_check_again": "Verificar de novo",
   "apps_launch_arguments": "Argumentos de abertura",
   "apps_launch_placeholder": "ex.: --input \"{token}\"",
   "apps_save_arguments": "Salvar argumentos",
-  "apps_back_to_task": "Voltar à tarefa",
-  "apps_controls_title": "aplicativos neste computador",
   "apps_present": "presente",
   "apps_moved_away": "removido",
-  "apps_next_launch_fails": " · próxima abertura falha",
-  "apps_move_away": "Remover",
-  "apps_put_back": "Devolver",
   "apps_fail_next_launch": "Falhar próxima abertura",
   "settings_raw_frames": "Frames brutos",
   "settings_keep_raws": "Manter frames brutos de calibração",
@@ -3530,7 +2673,6 @@
   "template_column_template": "Modelo",
   "template_copy_name": "{name} cópia",
   "template_copy_name_numbered": "{name} cópia {n}",
-  "template_duplicate_title": "Duplicar {name}",
   "template_new": "Novo modelo",
   "template_built_in": "Embutidos",
   "template_duplicate": "Duplicar",
@@ -3570,17 +2712,14 @@
   "equipment_telescope": "Telescópio",
   "equipment_filters": "Filtros",
   "equipment_no_filters_osc": "Sem filtros · OSC",
-  "equipment_rename_title": "Renomear {name}",
+  "common_rename_title": "Renomear {name}",
   "equipment_rig_name": "Nome do setup",
   "equipment_no_rigs": "Nenhum setup",
   "settings_lookup_test_heading": "Teste",
   "review_filter_all": "Todos",
   "review_picked": "Aprovado",
   "review_rejected": "Rejeitado",
-  "review_run_complete_help": "A participação se mantém. As marcações alteram a qualidade na biblioteca e as rejeições do Projeto.",
-  "review_panel_complete": "Painel completo",
-  "review_panel_complete_help": "Uma execução de painel completa mantém sua participação. As marcações alteram apenas a qualidade na biblioteca.",
-  "review_panel_n": "Painel {n}",
+  "common_panel_n": "Painel {n}",
   "review_frames_count": [
     {
       "declarations": [
@@ -3597,24 +2736,13 @@
     }
   ],
   "review_mark_announcement": "{mark}: {what}. Escopo da biblioteca.",
-  "review_mark_draft_removed": "Removido do rascunho da execução como Rejeitado.",
-  "review_mark_draft_back": "De volta ao rascunho da execução.",
-  "review_mark_draft_still_out": "Ainda fora do rascunho da execução: rejeitado neste Projeto.",
   "review_name_file": "Nome do arquivo",
   "review_name_filter_night": "Filtro, noite, número",
   "review_name_target_filter": "Alvo, filtro, exposição, número",
   "review_name_night_camera": "Noite, câmera, ganho, temperatura, número",
-  "review_quality_rejected_both": "Rejeitado · Biblioteca e este Projeto",
-  "review_quality_rejected_both_short": "Rejeitado · ambos",
-  "review_quality_rejected_library": "Rejeitado · Biblioteca",
-  "review_quality_rejected_project": "Rejeitado · Este Projeto",
   "review_quality_unreviewed_changed": "Não revisado · conteúdo alterado",
   "review_quality_unreviewed_pending": "Não revisado · verificação pendente",
-  "review_quality_rejected_project_compact": "Rejeitado · Projeto",
-  "review_quality_library_title": "Biblioteca: {word}",
   "review_member_included": "Incluído",
-  "review_member_rejected": "Fora do rascunho · Rejeitado",
-  "review_member_excluded": "Fora da execução · Inutilizável",
   "review_key_prev_next": "Frame anterior ou seguinte",
   "review_key_pick": "Aprovar",
   "review_key_reject": "Rejeitar",
@@ -3632,11 +2760,6 @@
   "review_key_escape": "Sair da tela cheia, depois limpar a seleção",
   "review_key_shortcuts": "Atalhos",
   "review_shortcuts_title": "Atalhos da revisão",
-  "review_shortcuts_description": "Tabela, tira e grade. Uma marcação vale para toda a seleção.",
-  "review_auto_advance": "Avanço automático",
-  "review_auto_advance_help": "Ajuda do avanço automático",
-  "review_auto_advance_tip": "Depois de P, X ou U, o frame seguinte passa a ser o atual.",
-  "review_all_shortcuts": "Todos os atalhos do app",
   "review_done": "Concluído",
   "measure_frames_not_measured": [
     {
@@ -3687,7 +2810,6 @@
   "measure_interrupted_restart": "Interrompido por um reinício",
   "measure_verifying_cached": "Verificando valores em cache",
   "measure_measuring": "Medindo",
-  "measure_progress_label": "Progresso da medição",
   "measure_progress_text": "{word}: {done} de {total}",
   "measure_frames_unreadable": [
     {
@@ -3705,7 +2827,6 @@
     }
   ],
   "measure_all_measured": "Tudo medido",
-  "measure_blocked": "Medição bloqueada · {reason}",
   "measure_frames_action": "Medir frames",
   "measure_metric_fwhm": "FWHM",
   "measure_metric_hfr": "HFR",
@@ -3714,63 +2835,28 @@
   "measure_metric_background": "Fundo",
   "measure_metric_snr": "SNR",
   "measure_not_reported": "Não informado",
-  "review_copy_location": "{location}: ",
   "review_unknown_location": "Local desconhecido",
   "review_close_inspector": "Fechar o inspetor",
-  "review_in_run": "Na execução: {state}",
-  "review_panel_run": "Execução do painel {n}",
-  "review_subject": "Objeto: {name}",
-  "review_library_quality": "Qualidade na biblioteca",
-  "review_library_quality_frames": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Qualidade na biblioteca: {count} frame",
-        "countPlural=*": "Qualidade na biblioteca: {count} frames"
-      }
-    }
-  ],
-  "review_clear_project_reject": "Desfazer rejeição no Projeto",
-  "review_mark_scope_help": "Escopo da marcação",
-  "review_mark_scope_tip": "P, X e U marcam a biblioteca, em todos os Projetos. Uma rejeição no Projeto vale só neste Projeto.",
   "review_no_pixels": "Sem pixels",
   "review_tab_values": "Valores",
   "review_tab_stars": "Estrelas",
-  "review_show_stars": "Mostrar estrelas",
   "review_detected_stars": "Estrelas detectadas, as {count} mais brilhantes",
   "frame_star": "Estrela {id}",
-  "frame_note_method": "Método",
   "frame_note_basis": "Base",
   "frame_note_match": "Correspondência",
   "frame_match_file_name": "Nome do arquivo, não verificado",
-  "review_linear_data": "Dados lineares",
-  "review_imported_csv": "CSV importado",
   "review_col_frame": "Frame",
-  "review_col_panel": "Painel",
-  "review_col_subject": "Objeto",
   "review_col_session": "Sessão",
   "review_col_time": "Hora",
   "review_col_exposure": "Exposição",
   "review_col_quality": "Qualidade",
-  "review_col_member": "Na execução",
   "review_no_session": "Sem sessão",
   "review_ecc_short": "Exc.",
   "review_col_fwhm_imported": "FWHM importado",
-  "review_imported_unverified": "Importado, não verificado",
-  "review_imported_unverified_sr": ", importado, não verificado",
-  "review_none": "Nenhum",
   "review_col_measurement": "Medição",
   "review_col_copy": "Cópia",
   "review_current_frame": "Frame atual",
   "review_frames_in_review": "Frames nesta revisão",
-  "review_column_source": "Origem de {column}",
-  "review_decoding_thumbnail": "Decodificando miniatura",
   "review_view_filmstrip": "Tira",
   "review_frame_grid": "Grade de frames",
   "review_no_pixel_data": "Sem dados de pixel para este arquivo.",
@@ -3784,46 +2870,8 @@
   "review_tile_bottom": "Inferior",
   "review_tile_bottom_right": "Inferior direito",
   "review_corners_group": "{label}, cantos em 1:1",
-  "review_tile_title": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "input fwhm",
-        "input ecc",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name}: FWHM {fwhm}, excentricidade {ecc}, {count} estrela",
-        "countPlural=*": "{name}: FWHM {fwhm}, excentricidade {ecc}, {count} estrelas"
-      }
-    }
-  ],
-  "review_tile_title_ratio": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "input fwhm",
-        "input ratio",
-        "input ecc",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name}: FWHM {fwhm} (×{ratio} do centro), excentricidade {ecc}, {count} estrela",
-        "countPlural=*": "{name}: FWHM {fwhm} (×{ratio} do centro), excentricidade {ecc}, {count} estrelas"
-      }
-    }
-  ],
   "review_tile_label": "{name} em 1:1, FWHM {fwhm}, excentricidade {ecc}",
   "review_tile_ecc": "e {value}",
-  "review_plot_point_rejected": "{name}: {value} (Rejeitado)",
   "review_plots_label": "Gráficos ao longo da sessão",
   "review_capture_order": "Ordem de captura · {count}",
   "review_legend_measured": "medido",
@@ -3868,17 +2916,9 @@
   "review_histogram_note": "Nota do histograma",
   "review_note_data": "Dados",
   "review_histogram_range": "ADU linear 0–{max}",
-  "review_note_counts": "Contagens",
-  "review_note_log": "Log",
   "review_note_samples": "Amostras",
   "review_note_samples_value": "{count}, região exibida",
-  "review_note_brighter": "Mais claros",
   "review_announce_frame": "{name}: frame {index} de {total}.",
-  "review_refusal_mark": "Marcação bloqueada",
-  "review_refusal_reject": "Rejeição bloqueada",
-  "review_refusal_clear": "Desfazer bloqueado",
-  "review_refusal_marks": "Marcações bloqueadas",
-  "review_announce_project_reject_cleared": "Rejeição no Projeto desfeita: {what}.",
   "review_announce_compare": "Comparar: {current} e {reference}",
   "review_announce_compare_none": "Comparar: {current} e nenhuma referência",
   "review_no_frame": "nenhum frame",
@@ -3948,7 +2988,6 @@
   "review_cmd_grid": "Visualização em grade",
   "review_cmd_height": "Alternar altura da tabela",
   "review_cmd_select_all": "Selecionar todos os frames exibidos",
-  "review_open_select": "Abrir Seleção",
   "review_reveal_path": "Revelar caminho",
   "review_empty_none": "Nenhum frame",
   "review_empty_picked": "Nenhum frame Aprovado",
@@ -3956,70 +2995,25 @@
   "review_empty_unreviewed": "Nenhum frame Não revisado",
   "review_show_all": "Mostrar todos",
   "review_frame_position": "Frame {index} de {total}",
-  "review_cfa_title": "Plano do mosaico como gravado, sem debayer",
   "review_cfa": "CFA {cfa}",
   "review_corners": "Cantos",
   "review_fwhm_overlay": "Sobreposição de FWHM",
   "review_ecc_overlay": "Sobreposição de excentricidade",
   "review_zoom": "Zoom",
-  "review_pan_help": "Ajuda do deslocamento",
-  "review_pan_tip": "Arraste ou use as setas para deslocar. Com Shift, desloca mais.",
   "review_display_stretch": "Esticamento de exibição",
   "review_leave_fullscreen": "Sair da tela cheia",
   "review_no_current_frame": "Nenhum frame atual",
-  "review_compare_current": "Atual: {name}",
-  "review_preview_of": "Prévia de {name}",
   "review_reference_label": "Referência:",
   "review_compare_reference": "Referência da comparação",
-  "review_choose_frame": "Escolha um frame",
   "review_no_reference": "Sem referência",
   "review_reference_of": "Referência {name}",
-  "review_draft_panel_runs_unsaved": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} execução de painel não salva",
-        "countPlural=*": "{count} execuções de painel não salvas"
-      }
-    }
-  ],
-  "review_announce_saved_revision": "{name} salva como revisão {revision}.",
-  "review_announce_runs_saved": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} execução salva.",
-        "countPlural=*": "{count} execuções salvas."
-      }
-    }
-  ],
-  "review_announce_discarded": "Alterações não salvas descartadas.",
-  "review_panel_in_trash": "{name} na Lixeira",
-  "review_trash_help": "Não listado nem contado.",
-  "review_quality_filter": "Filtro de qualidade",
-  "review_panel_filter": "Filtro de painel",
-  "review_all_panels": "Todos os painéis",
   "review_view": "Visualização",
   "review_view_table": "Tabela",
   "review_view_grid": "Grade",
   "review_height_rows": "Cerca de 8 linhas",
   "review_height_strip": "Faixa de uma linha",
   "review_height_full": "Altura total",
-  "review_table_height_sr": ", altura da tabela",
   "review_select": "Selecionar",
-  "review_select_all_shown_count": "Selecionar todos os exibidos ({count})",
   "review_select_by_threshold_ellipsis": "Selecionar por limite…",
   "review_select_by_threshold": "Selecionar por limite",
   "review_display": "Exibição",
@@ -4027,13 +3021,11 @@
   "review_columns": "Colunas",
   "review_auto_advance_after_mark": "Avançar automaticamente após marcar",
   "review_show_inspector": "Mostrar o inspetor",
-  "review_threshold_prefix": "Selecionar frames com",
   "review_threshold_metric": "Métrica do limite",
   "review_direction": "Direção",
   "review_above": "acima de",
   "review_below": "abaixo de",
   "review_threshold_value": "Valor do limite",
-  "review_threshold_value_in": "Valor do limite em {unit}",
   "review_select_frames": [
     {
       "declarations": [
@@ -4050,25 +3042,6 @@
     }
   ],
   "review_add_to_selection": "Adicionar à seleção",
-  "review_not_measured_never_selected": "Frames não medidos nunca são selecionados",
-  "review_count_not_measured": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} não medido",
-        "countPlural=*": "{count} não medidos"
-      }
-    }
-  ],
-  "review_threshold_help": "Ajuda do limite",
-  "review_threshold_tip": "Clique em um gráfico para definir o valor. Selecionar nunca altera a qualidade.",
-  "review_close_threshold": "Fechar seleção por limite",
   "review_status_line": "Status da revisão",
   "review_shown_of": [
     {
@@ -4101,90 +3074,7 @@
       }
     }
   ],
-  "review_help_named": "Ajuda: {name}",
   "review_dismiss_path": "Dispensar caminho",
-  "review_discard": "Descartar",
-  "review_save_runs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Salvar execução",
-        "countPlural=*": "Salvar execuções"
-      }
-    }
-  ],
-  "review_confirm_reject_title": "Rejeitar {what} em {project}?",
-  "review_confirm_reject_description": "Só neste Projeto. A qualidade na biblioteca se mantém.",
-  "review_confirm_reject_change": "Rejeitado · Este Projeto: {frames}",
-  "review_confirm_out_of_totals": "Fora dos totais de {project}",
-  "review_confirm_out_of_draft": "Fora do rascunho de {runs}",
-  "review_confirm_reject_label": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Rejeitar {count} frame",
-        "countPlural=*": "Rejeitar {count} frames"
-      }
-    }
-  ],
-  "review_announce_rejected_for": "Rejeitado em {project}: {frames}.",
-  "review_about_rows": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Cerca de {count} linha",
-        "countPlural=*": "Cerca de {count} linhas"
-      }
-    }
-  ],
-  "review_imports_hide_rows": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} importação de medições: ocultar linhas",
-        "countPlural=*": "{count} importações de medições: ocultar linhas"
-      }
-    }
-  ],
-  "review_imports_review_rows": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} importação de medições: revisar linhas",
-        "countPlural=*": "{count} importações de medições: revisar linhas"
-      }
-    }
-  ],
   "frame_cutout_observed": "Observado",
   "frame_fitted": "Ajustado",
   "frame_cutout_residual": "Resíduo",
@@ -4192,47 +3082,28 @@
   "frame_warning_near_edge": "Perto da borda do frame: parte do perfil pode estar cortada",
   "frame_no_fit": "Sem ajuste",
   "frame_cutout_label": "Recorte {kind} da estrela {id}",
-  "frame_fit_failed": "O ajuste falhou",
-  "frame_fit_note": "Nota do ajuste",
-  "frame_linear_source_pixels": "Linear, pixels de origem",
-  "frame_half_flux_radius": "Raio de meio fluxo",
   "frame_location": "Posição",
   "frame_star_location": "x {x}, y {y} px",
   "frame_psf_model": "Modelo de PSF",
-  "frame_no_model": "Sem modelo",
   "frame_clipped_profile": "Perfil cortado",
   "frame_angle": "Ângulo",
   "frame_peak": "Pico",
   "frame_note_input": "Entrada",
   "frame_input_current": "SHA-256 {hash}… (atual)",
   "frame_input_earlier": "SHA-256 {hash}… (anterior)",
-  "frame_note_state": "Estado",
   "frame_does_not_apply": "Não se aplica",
-  "frame_note_units": "Unidades",
-  "frame_unit_none": "nenhuma",
-  "frame_note_history": "Histórico",
-  "frame_imported_earlier": "Importado para um conteúdo anterior",
   "frame_metrics_caption": "Medições do frame atual, com suas origens",
   "frame_col_metric": "Métrica",
   "frame_builtin_source": "Origem integrada",
   "frame_col_imported": "Importado",
   "frame_imported_source": "Origem importada",
-  "frame_value_imported_sr": "{unit}, importado, não verificado",
-  "frame_value_history_sr": "{unit}, histórico",
-  "frame_header_caption": "Metadados do cabeçalho",
   "importdlg_unknown_frame": "Frame desconhecido",
   "importdlg_blocked_no_export": "Nenhuma exportação em um volume montado para revisar.",
   "importdlg_blocked_choose": "Escolha um arquivo de exportação para revisar o mapeamento.",
   "importdlg_blocked_unsupported": "Este arquivo não pode ser importado.",
   "importdlg_blocked_no_match": "Nenhuma linha corresponde a um frame indexado.",
   "importdlg_title": "Importar medições",
-  "importdlg_description_review": "Revise como a exportação corresponde aos frames e às métricas antes de anexar qualquer coisa.",
-  "importdlg_no_csv_title": "Nenhuma exportação CSV em um volume montado",
-  "importdlg_no_csv_body": "Compatível: {format}. Monte o volume que contém a exportação ou copie-a para um local montado.",
   "importdlg_export_file": "Arquivo de exportação",
-  "importdlg_file_meta": "{size} · modificado em {date}",
-  "importdlg_unsupported_title": "Este arquivo não é uma exportação compatível",
-  "importdlg_unsupported_body": "{path} não tem as colunas File e FWHM do SubframeSelector, então nada pode ser mapeado. Escolha um {format}.",
   "importdlg_summary": [
     {
       "declarations": [
@@ -4249,12 +3120,10 @@
       }
     }
   ],
-  "importdlg_source_note": "Origem: importado · método {method} {version}, conforme gravado na exportação. A exportação não registra a identidade do conteúdo, então os valores anexados ficam como conteúdo não verificado. O PlateVault registra o SHA-256 atual de cada frame só para perceber alterações futuras.",
   "importdlg_column_mapping": "Mapeamento de colunas",
   "importdlg_col_csv": "Coluna do CSV",
   "importdlg_col_unit": "Unidade",
   "importdlg_col_mapping": "Mapeamento",
-  "importdlg_no_unit": "Sem unidade",
   "importdlg_not_imported": "Não importado",
   "importdlg_rows": "Linhas",
   "importdlg_rows_matched": [
@@ -4274,7 +3143,6 @@
       }
     }
   ],
-  "importdlg_outside_view": "({count} fora desta visualização; seus valores ainda são anexados ao frame)",
   "importdlg_attach_none": [
     {
       "declarations": [
@@ -4290,34 +3158,11 @@
       }
     }
   ],
-  "importdlg_changed_heading": "Precisa de revisão: conteúdo alterado desde que o PlateVault o registrou",
   "importdlg_badge_unreadable": "Precisa de revisão: não pode ser lido",
   "importdlg_badge_changed": "Precisa de revisão: conteúdo alterado",
   "importdlg_row_n": "Linha {n}",
-  "importdlg_unreadable_body": "{frame} não pode ser lido agora (offline ou acesso negado), então o PlateVault não consegue registrar qual conteúdo esses valores descrevem. A linha não é anexada a nada.",
-  "importdlg_changed_body_measured": "Os bytes atuais de {frame} (sha256 {current}…) diferem do resumo que o PlateVault registrou ao medir o frame ({recorded}…). Esses valores podem descrever outro conteúdo, então não são anexados a nada.",
-  "importdlg_changed_body_indexed": "Os bytes atuais de {frame} (sha256 {current}…) diferem do resumo que o PlateVault registrou ao indexar o frame ({recorded}…). Esses valores podem descrever outro conteúdo, então não são anexados a nada.",
   "importdlg_ambiguous": "Ambíguo",
   "importdlg_unmatched": "Sem correspondência",
-  "importdlg_ambiguous_body": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "O nome do arquivo corresponde a {count} frame indexado: {frames}. A linha não é anexada a nenhum até você escolher um em Revisar frames.",
-        "countPlural=*": "O nome do arquivo corresponde a {count} frames indexados: {frames}. A linha não é anexada a nenhum até você escolher um em Revisar frames."
-      }
-    }
-  ],
-  "importdlg_unmatched_body": "Nenhum frame indexado tem este caminho ou nome de arquivo. A linha não é anexada a nada.",
-  "importdlg_does_not_title": "O que a importação não faz",
-  "importdlg_does_not_body": "Não substitui nenhum valor integrado, não exclui nem restaura frames e não altera nenhuma decisão de qualidade. A coluna Approved nunca é importada.",
   "importdlg_review_mapping": "Revisar mapeamento",
   "importdlg_import_rows": [
     {
@@ -4335,10 +3180,6 @@
     }
   ],
   "importdlg_row_attached_by_you": "Anexada por você",
-  "importdlg_row_ambiguous": "Ambígua: não anexada a nenhum frame",
-  "importdlg_row_changed": "Conteúdo alterado: não anexada a nenhum frame",
-  "importdlg_row_unreadable": "Ilegível: não anexada a nenhum frame",
-  "importdlg_row_unmatched": "Sem correspondência: não anexada a nenhum frame",
   "importdlg_attached_summary": [
     {
       "declarations": [
@@ -4354,18 +3195,7 @@
       }
     }
   ],
-  "importdlg_outside_run": "({count} a frames fora desta execução)",
-  "importdlg_column_unavailable": "{name} indisponível",
-  "importdlg_column_not_imported": "{name} não importado",
-  "importdlg_every_row_reviewed": "Todas as linhas foram revisadas.",
-  "importdlg_attached_to": "Anexada a {frame}.",
-  "importdlg_unmatched_stay": "Nenhum frame indexado tem este caminho ou nome de arquivo. Seus valores continuam sem anexar.",
-  "importdlg_changed_stay": "Na importação, {frame} tinha bytes diferentes do resumo que o PlateVault registrou para ele. Seus valores continuam sem anexar.",
-  "importdlg_unreadable_stay": "Na importação, {frame} não pôde ser lido, então nada liga esses valores ao conteúdo dele. Seus valores continuam sem anexar.",
   "importdlg_attach_to": "Anexar a",
-  "importdlg_choose_frame": "Escolha o frame que esta linha mediu",
-  "importdlg_choose_first": "Escolha o frame que esta linha mediu antes de anexá-la.",
-  "importdlg_attach_row": "Anexar linha",
   "importdlg_row_not_found": "A linha da importação não foi encontrada; abra Importar medições de novo.",
   "importdlg_row_not_attached_unreadable": "Linha não anexada: os bytes do frame não podem ser lidos agora, então o PlateVault não consegue registrar qual conteúdo os valores descrevem.",
   "importdlg_row_not_attached_measured": "Linha não anexada: os bytes do frame diferem do resumo que o PlateVault registrou ao medi-lo. Indexe a pasta dele e revise os frames de novo antes de anexá-la.",
@@ -4380,19 +3210,15 @@
   "domain_result_final_image": "Imagem final",
   "domain_result_linear_integration": "Integração linear",
   "domain_result_channel_product": "Produto de canal",
-  "domain_result_mosaic_panel": "Painel de mosaico",
+  "common_mosaic_panel": "Painel de mosaico",
   "domain_result_assembled_mosaic": "Mosaico montado",
   "domain_result_other": "Outro",
   "domain_quality_any": "Qualquer qualidade",
   "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
   "domain_quality_usable_max_fwhm": "Utilizável, FWHM ≤ {arcsec}″",
   "domain_rig_unknown": "Equipamento desconhecido",
-  "domain_panel_flag_ambiguous": "Cai em mais de um painel",
-  "domain_panel_flag_off_panel": "Fora de todos os painéis",
   "domain_fov_unknown": "Campo de visão desconhecido",
-  "domain_panel_pointing_inside": "Apontamento dentro de {panel}",
   "domain_candidate_reason": "Alvo {target} em {rig}",
-  "domain_goal_target_both": "{hours} e {frames}",
   "domain_goal_amounts": "{inProject} no projeto · {captured} capturado · meta {target}",
   "domain_goal_amounts_no_target": "{inProject} no projeto · {captured} capturado",
   "domain_goal_line": "{channel} {amounts}",
@@ -4444,46 +3270,6 @@
   "domain_ratio_counted": "{counted} contado",
   "domain_subject_weakest_panel": "{percent}% · mais atrasado: {panel}",
   "domain_subject_percent": "{percent}%",
-  "domain_gate_sessions_selected": "Sessões selecionadas",
-  "domain_gate_no_sessions": "Nenhuma sessão ainda.",
-  "domain_gate_no_unresolved": "Nenhuma entrada sem resolver",
-  "domain_gate_all_readable": "Todos os frames selecionados estão legíveis agora.",
-  "domain_gate_members_unreadable": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} membro não pode ser lido.",
-        "countPlural=*": "{n} membros não podem ser lidos."
-      }
-    }
-  ],
-  "domain_gate_membership_saved": "Composição salva",
-  "domain_gate_revision_saved": "Revisão {revision} salva.",
-  "domain_gate_unsaved_on_revision": "Alterações não salvas na revisão {revision}.",
-  "domain_gate_not_saved_yet": "Ainda não salvo.",
-  "domain_gate_new_candidates": "Novos candidatos",
-  "domain_next_add_new_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Adicionar {count} sessão nova",
-        "countPlural=*": "Adicionar {count} sessões novas"
-      }
-    }
-  ],
   "domain_next_add_sessions": [
     {
       "declarations": [
@@ -4499,167 +3285,6 @@
       }
     }
   ],
-  "domain_gate_no_longer_matches": "Não corresponde mais ao objeto",
-  "domain_gate_members_flagged": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} membro sinalizado",
-        "countPlural=*": "{count} membros sinalizados"
-      }
-    }
-  ],
-  "domain_status_unresolved": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} sem resolver",
-        "countPlural=*": "{count} sem resolver"
-      }
-    }
-  ],
-  "domain_status_saved_revision": "Salvo r{revision}",
-  "domain_status_unsaved": "Não salvo",
-  "domain_next_select_sessions": "Selecionar sessões",
-  "domain_next_resolve_inputs": "Resolver entradas",
-  "domain_next_save_run": "Salvar execução",
-  "domain_next_edit_selection": "Editar seleção",
-  "domain_gate_calibration_matched": "Calibração correspondida",
-  "domain_gate_policy_off": "A política de calibração está desligada.",
-  "domain_gate_select_first": "Selecione as sessões primeiro.",
-  "domain_gate_requirements_matched": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requisito correspondido.",
-        "countPlural=*": "{count} requisitos correspondidos."
-      }
-    }
-  ],
-  "domain_gate_requirements_need_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requisito precisa de revisão.",
-        "countPlural=*": "{count} requisitos precisam de revisão."
-      }
-    }
-  ],
-  "domain_gate_master_found": "Master encontrado nos Resultados",
-  "domain_gate_masters_offered": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} master oferecido uma vez.",
-        "countPlural=*": "{count} masters oferecidos uma vez."
-      }
-    }
-  ],
-  "domain_status_need_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} precisa de revisão",
-        "countPlural=*": "{count} precisam de revisão"
-      }
-    }
-  ],
-  "domain_next_review_matches": "Revisar correspondências",
-  "domain_gate_revision": "Revisão {revision}.",
-  "domain_gate_save_first": "Salve a execução primeiro.",
-  "domain_gate_handoff_settled": "A calibração para o aplicativo está definida.",
-  "domain_gate_profile_chosen": "Perfil de aplicativo escolhido",
-  "domain_gate_choose_profile": "Escolha um perfil em Preparar.",
-  "domain_status_prepared_revision": "Preparado (rev {revision})",
-  "domain_gate_all_prepared": "Todas as entradas preparadas",
-  "domain_gate_inputs_not_prepared": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entrada não pôde ser preparada.",
-        "countPlural=*": "{n} entradas não puderam ser preparadas."
-      }
-    }
-  ],
-  "domain_gate_preparation_succeeded": "Preparação bem-sucedida",
-  "domain_gate_last_preparation_failed": "A última preparação falhou.",
-  "domain_status_revision_only": "só r{revision}",
-  "domain_status_to_do": "{count} a fazer",
-  "domain_gate_run_prepared": "Execução preparada",
-  "domain_gate_entries_at": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input path",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entrada em {path}",
-        "countPlural=*": "{n} entradas em {path}"
-      }
-    }
-  ],
-  "domain_gate_complete": "Concluída.",
-  "domain_next_open_in_application": "Abrir no aplicativo",
-  "domain_next_resolve_preparation": "Resolver preparação",
-  "domain_next_watch_preparation": "Acompanhar preparação",
-  "domain_next_review_preparation": "Revisar preparação",
-  "domain_next_prepare_run": "Preparar execução",
-  "domain_status_awaiting_outputs": "Aguardando saídas",
-  "domain_status_accepted_of": "{accepted} de {total} aceitos",
-  "domain_gate_results_folder": "Os resultados são procurados na pasta Resultados.",
-  "domain_gate_prepare_first": "Prepare a execução primeiro.",
-  "domain_gate_results_accepted": "Resultados aceitos",
-  "domain_gate_no_outputs": "Nenhuma saída encontrada ainda.",
-  "domain_next_accept_results": "Aceitar resultados",
-  "domain_next_look_for_results": "Procurar resultados",
   "blocker_unreadable_inputs": [
     {
       "declarations": [
@@ -4676,58 +3301,9 @@
       }
     }
   ],
-  "blocker_calibration_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} requisito de calibração precisa de revisão",
-        "countPlural=*": "{count} requisitos de calibração precisam de revisão"
-      }
-    }
-  ],
-  "blocker_preparation_failed": "A última preparação falhou",
-  "blocker_inputs_not_prepared": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entrada não pôde ser preparada",
-        "countPlural=*": "{n} entradas não puderam ser preparadas"
-      }
-    }
-  ],
   "domain_operation_running": "{title} está em execução",
   "domain_operation_paused": "{title} está pausada",
   "domain_operation_interrupted": "{title} foi interrompida",
-  "domain_panels_done": [
-    {
-      "declarations": [
-        "input count",
-        "input done",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{done} de {count} painel",
-        "countPlural=*": "{done} de {count} painéis"
-      }
-    }
-  ],
-  "domain_next_prepare_all": "Preparar todos",
   "domain_next_review_new_frames": [
     {
       "declarations": [
@@ -4744,12 +3320,7 @@
       }
     }
   ],
-  "domain_reason_candidates_unreviewed": "Os candidatos têm frames Não revisados.",
-  "domain_reason_step_blocker": "{step}: {message}.",
-  "domain_reason_wrap_up_next": "A seguir: {step}.",
-  "domain_reason_wrap_up_settled": "Todas as etapas estão resolvidas; marque o Projeto como Concluído.",
   "domain_reason_window_tonight": "{line}; {subject} tem uma janela esta noite.",
-  "domain_next_start_run": "Iniciar uma execução de processamento",
   "domain_next_apply_changes": [
     {
       "declarations": [
@@ -4766,7 +3337,6 @@
     }
   ],
   "domain_next_apply_first": "Criar a View",
-  "domain_reason_choose_subject_rig": "Escolha um objeto e um equipamento.",
   "fit_fits": "cabe ({percent}%)",
   "fit_tiny": "minúsculo",
   "op_unit_files": "arquivos",
@@ -4955,51 +3525,7 @@
   "store_refusal_message": "{title}: {reasons}.",
   "store_record_missing": "Este registro não existe mais no catálogo. Recarregue a página para ver a biblioteca atual.",
   "store_refused": "Recusado: {label}",
-  "store_run_started_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input rig",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} sessão candidata pré-selecionada em {rig}.",
-        "countPlural=*": "{n} sessões candidatas pré-selecionadas em {rig}."
-      }
-    }
-  ],
-  "store_reason_rig_not_in_project": "{rig} não é um dos equipamentos de {project}",
-  "store_reason_project_done": "{project} está Concluído; reabra-o primeiro",
   "store_reason_project_closed": "{project} está fechado: duplique-o para continuar",
-  "store_label_start": "Iniciar {name}",
-  "store_saved_run_started": "Execução iniciada: {name}",
-  "store_label_start_group": "Iniciar grupo de execuções",
-  "store_reason_no_panel": "nenhum painel incluído",
-  "store_placed_on": "colocada em {panel}",
-  "store_saved_group_started": "Grupo de execuções iniciado: {name}",
-  "store_group_started_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input rig",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} execução de painel em {rig}.",
-        "countPlural=*": "{n} execuções de painel em {rig}."
-      }
-    }
-  ],
-  "store_lock_trashed": "{name} está na Lixeira do Projeto; restaure-a primeiro",
-  "store_lock_complete": "{name} está Concluída; reabra-a para alterar a composição",
   "store_label_add_sessions": [
     {
       "declarations": [
@@ -5032,108 +3558,14 @@
       }
     }
   ],
-  "store_label_discard": "Descartar alterações",
-  "store_label_rename_run": "Renomear execução",
-  "store_label_run_setup": "Configuração da execução",
-  "store_label_group_setup": "Configuração do grupo",
-  "store_group_setup_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Vale para {n} execução de painel.",
-        "countPlural=*": "Vale para {n} execuções de painel."
-      }
-    }
-  ],
-  "store_reason_in_trash": "{name} está na Lixeira do Projeto",
   "store_label_move_to_trash_named": "Mover {name} para a Lixeira",
-  "store_reason_no_trashed_run": "nenhuma execução da lixeira foi escolhida",
-  "store_runs_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} execução",
-        "countPlural=*": "{n} execuções"
-      }
-    }
-  ],
   "domain_session_no_filter": "{night} sem filtro",
   "domain_session_framing": "enquadramento {n}",
-  "domain_reason_panel_pointing": "Painel pelo apontamento",
-  "domain_reason_panel_assigned": "Painel atribuído por você",
-  "domain_reason_refresh_added": "Atualização: adicionada",
-  "domain_reason_manual": "Inclusão manual",
   "domain_reason_changes_pending": "Há alterações aguardando o Aplicar",
   "domain_reason_goals_met": "Todas as metas foram atingidas",
   "domain_reason_sessions_suggested": "Há sessões correspondentes prontas para adicionar",
   "domain_reason_view_not_built": "A View ainda não foi criada",
   "domain_diff_session_missing": "uma sessão que não está mais na biblioteca",
-  "domain_diff_added": "Adicionadas: {sessions}",
-  "domain_diff_removed": "Removidas: {sessions}",
-  "domain_diff_excluded": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame excluído da execução",
-        "countPlural=*": "{n} frames excluídos da execução"
-      }
-    }
-  ],
-  "domain_diff_rejected": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame rejeitado",
-        "countPlural=*": "{n} frames rejeitados"
-      }
-    }
-  ],
-  "domain_diff_restored": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} frame restaurado na execução",
-        "countPlural=*": "{n} frames restaurados na execução"
-      }
-    }
-  ],
-  "domain_diff_frames": "{added} frames adicionados, {removed} removidos",
-  "domain_diff_none": "Nenhuma mudança na composição; apenas detalhes",
   "domain_criterion_camera": "Câmera",
   "domain_criterion_dimensions": "Dimensões",
   "domain_criterion_binning": "Binning",
@@ -5193,8 +3625,6 @@
   "store_cal_already_in_library": "já está na biblioteca",
   "store_cal_import_kind_master": "Importar master de {kind}",
   "store_cal_restore_offer": "Restaurar oferta",
-  "store_cal_offer_missing": "a oferta não está mais registrada",
-  "store_cal_restore_master_offer": "Restaurar oferta de master",
   "indexing_pointing_from_centre": "{angle} do centro de {name}",
   "indexing_pointing_outside_targets": "Fora de todos os Alvos conhecidos",
   "indexing_pointing_none": "Sem apontamento no cabeçalho",
@@ -5215,7 +3645,6 @@
   "domain_naming_parent_folder": "Uma pasta não pode ser `..`",
   "domain_naming_reserved": "\"{name}\" é um nome reservado",
   "domain_naming_leading_slash": "Um modelo é relativo ao seu local; remova a / inicial",
-  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo.",
   "op_trash_other_copy_refused": "Outra cópia foi recusada: {reason}",
   "op_trash_moved": "Movido para a Lixeira do sistema",
   "op_trash_summary": "Para a Lixeira do sistema: {trashed} ({bytes}); mantidos com um motivo: {refused}. Nada foi excluído permanentemente.",
@@ -5240,7 +3669,6 @@
   "store_cal_camera_other_model": "{camera} não é uma {model}",
   "store_cal_camera_unlinked": "{master} volta a corresponder pelo modelo da câmera",
   "store_cal_label_add_version": "Adicionar versão a {master}",
-  "store_cal_label_also_use": "Usar também nestas sessões",
   "store_cal_label_camera": "Câmera de {master}",
   "store_cal_label_choose": "Escolher {kind} para {session}",
   "store_cal_label_confirm": "Confirmar calibração",
@@ -5313,8 +3741,6 @@
     }
   ],
   "store_library_scope_detail": "Escopo da biblioteca: todas as execuções e Alvos veem esta decisão.",
-  "store_label_rejected_in_review": "Rejeitado na Revisão",
-  "store_label_unrejected_in_review": "Rejeição desfeita na Revisão",
   "store_catalog_only_detail": "{name}. Somente o catálogo; cabeçalhos de origem inalterados.",
   "store_label_add_to_my_targets": "Adicionar {name} a Meus alvos",
   "store_label_remove_from_my_targets": "Remover {name} de Meus alvos",
@@ -5323,7 +3749,6 @@
   "store_target_from_reference": "Do catálogo de referência incluído.",
   "store_saved_added_to_my_targets": "★ {name} adicionado a Meus alvos",
   "store_saved_target_added": "Alvo adicionado: {name}",
-  "store_reason_run_uses_it": "{name} o usa",
   "store_label_create": "Criar {name}",
   "store_saved_project_created": "Projeto criado: {name}",
   "store_saved_label_name": "{label}: {name}",
@@ -5333,7 +3758,7 @@
   "store_label_edit_subject": "Editar objeto",
   "store_reason_already_subject": "{name} já é um objeto",
   "store_label_remove_rig": "Remover setup",
-  "store_label_apply_named": "Aplicar {name}",
+  "common_apply_named": "Aplicar {name}",
   "store_label_archive_destination": "Destino do arquivo",
   "store_reason_not_archive_location": "não é um local de arquivo",
   "store_label_step_done": "{step}: feito",
@@ -5342,44 +3767,9 @@
   "store_reason_no_confirmed_target": "a sessão não tem Alvo confirmado",
   "store_reason_no_confirmed_rig": "a sessão não tem setup confirmado",
   "store_note_adds_rig": "Também adiciona o setup {rig} a {project}.",
-  "store_label_reject_for_project_only": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Rejeitar {n} frame só para {name}",
-        "countPlural=*": "Rejeitar {n} frames só para {name}"
-      }
-    }
-  ],
-  "store_label_undo_project_reject": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Desfazer rejeição no Projeto de {n} frame",
-        "countPlural=*": "Desfazer rejeição no Projeto de {n} frames"
-      }
-    }
-  ],
   "store_label_default_archive_location": "Local de arquivo padrão",
   "store_saved_default_archive": "Arquivo padrão: {name}",
   "store_label_moon_constraint": "Restrição da Lua para {band}",
-  "store_saved_filters": "Filtros salvos: {name}",
-  "store_saved_rig_renamed": "Setup renomeado: {name}",
   "store_label_goal_template": "Modelo de metas {name}",
   "store_saved_goal_template": "Modelo de metas salvo: {name}",
   "store_saved_goal_template_deleted": "Modelo de metas excluído: {name}",
@@ -5391,273 +3781,21 @@
   "store_label_check_named": "Verificar {name}",
   "store_reason_scan_running": "uma varredura está em andamento",
   "op_no_duplicates": "Nenhuma duplicata.",
-  "store_label_setup_change": "Alteração de configuração",
-  "store_label_shared_setup_change": "Alteração de configuração compartilhada",
-  "store_saved_output_folder": "Pasta de saída: {name}",
-  "store_label_output_folder_change": "Alteração da pasta de saída",
-  "store_label_exception_no_kind": "Exceção: sem {kind}",
-  "store_label_defer_kind": "Adiar {kind}",
-  "store_label_automatic_kind": "{kind} automático",
-  "store_label_offer": "Oferta",
   "store_reason_already_answered": "Já respondida",
-  "store_label_dismiss_master_offer": "Dispensar oferta de master",
-  "store_saved_dismissed": "{name} dispensado",
   "store_label_add_named": "Adicionar {name}",
-  "store_reason_unreadable_now": "Ilegível agora",
   "store_reason_still_being_written": "Ainda sendo gravado",
-  "store_label_add_master_to_library": "Adicionar master à biblioteca de calibração",
   "store_saved_added_to_library": "{name} adicionado à biblioteca de calibração",
-  "store_reason_every_input_unreadable": "Todas as entradas ilegíveis",
-  "store_label_prepare_named": "Preparação de {name}",
-  "op_prepare_title_rev": "Preparação de {name} (rev {revision})",
-  "store_label_prepare_all_named": "Preparar tudo de {name}",
-  "store_saved_prepare_all": "Preparar tudo: {name}",
-  "store_prepare_all_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input revision",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} execução de painel na revisão {revision} do grupo.",
-        "countPlural=*": "{n} execuções de painel na revisão {revision} do grupo."
-      }
-    }
-  ],
-  "store_reason_profile_removed": "Perfil removido",
-  "store_reason_did_not_launch": "{name} não abriu",
-  "store_reason_not_located": "{name} não localizado",
-  "store_reason_partial_blocked": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Parcial · {n} entrada bloqueada",
-        "countPlural=*": "Parcial · {n} entradas bloqueadas"
-      }
-    }
-  ],
-  "store_reason_preparation_state": "Preparação {state}",
-  "store_label_mark_unverified": "Marcar preparação como não verificada",
-  "store_reason_more_entries": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "e mais {n} entrada",
-        "countPlural=*": "e mais {n} entradas"
-      }
-    }
-  ],
-  "store_saved_opened_in": "{name} aberto em {app}",
-  "store_saved_opened_in_application": "{name} aberto no aplicativo",
-  "store_opened_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input path",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entrada reverificada antes de abrir; {path}.",
-        "countPlural=*": "{n} entradas reverificadas antes de abrir; {path}."
-      }
-    }
-  ],
-  "store_label_mark_unverified_many": "Marcar preparações como não verificadas",
-  "store_reason_entries_changed": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input name",
-        "input file",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name}: {n} entrada alterada ({file})",
-        "countPlural=*": "{name}: {n} entradas alteradas ({file})"
-      }
-    }
-  ],
-  "store_label_open_group_folder": "Abrir pasta do grupo",
-  "store_group_opened_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input folder",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Pasta do grupo {folder}; {n} painel reverificado antes de abrir.",
-        "countPlural=*": "Pasta do grupo {folder}; {n} painéis reverificados antes de abrir."
-      }
-    }
-  ],
-  "store_label_discover_results": "Descobrir Resultados",
-  "store_candidates_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} candidato",
-        "countPlural=*": "{n} candidatos"
-      }
-    }
-  ],
-  "store_intermediates_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} intermediário",
-        "countPlural=*": "{n} intermediários"
-      }
-    }
-  ],
-  "store_calibration_masters_count": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} master de calibração",
-        "countPlural=*": "{n} masters de calibração"
-      }
-    }
-  ],
-  "store_saved_results_found": "Resultados encontrados: {name}",
-  "store_label_attach_named": "Anexar {name}",
-  "store_label_attach_result": "Anexar Resultado",
-  "store_reason_not_full_path": "Não é um caminho completo",
-  "store_reason_unreadable_or_offline": "Ilegível ou offline",
-  "store_reason_already_listed": "Já listado",
-  "store_reason_not_image": "Não é uma imagem",
-  "store_reason_run_group_only": "Somente grupo de execuções",
-  "store_saved_attached": "{name} anexado",
-  "store_attached_detail": "{kind}, vinculado pelo usuário a {name}; linhagem Desconhecida.",
-  "store_label_inspect_named": "Inspecionar {name}",
-  "store_label_inspect_result": "Inspecionar Resultado",
-  "store_saved_inspected": "{name} inspecionado",
-  "store_sha_recorded": "SHA-256 {hash}… registrado.",
-  "store_reason_changed_since_inspection": "Alterado desde a inspeção",
-  "store_reason_no_kind": "Sem tipo",
-  "store_label_accept_result": "Aceitar Resultado",
-  "store_label_reject_result": "Rejeitar Resultado",
-  "store_saved_accepted": "{name} aceito",
-  "store_saved_rejected": "{name} rejeitado",
-  "store_sha_short": "SHA-256 {hash}",
-  "store_label_result_kind": "Tipo de Resultado",
   "store_label_clean_up_named": "Limpeza de {name}",
-  "simulation_label_output": "Saída simulada",
-  "store_reason_prepare_first": "Prepare a execução primeiro: o aplicativo grava na pasta de Resultados registrada",
-  "simulation_label_app_output": "Protótipo: saída do aplicativo",
-  "simulation_saved_outputs": "Protótipo: o aplicativo gravou saídas",
-  "store_proto_outputs_detail": "{files} em {folder}.",
-  "simulation_label_finished_writing": "Protótipo: arquivo terminou de ser gravado",
-  "simulation_label_correction": "Correção simulada",
-  "store_reason_no_saved_member": "A execução não tem sessão membro salva",
-  "store_reason_already_corrected": "Esta sessão já tem essa correção",
-  "simulation_label_catalog_correction": "Protótipo: correção de catálogo",
-  "simulation_label_change": "Alteração simulada",
-  "store_reason_no_prepared_source": "Nenhum frame de origem preparado legível",
-  "simulation_label_source_changed": "Protótipo: frame de origem alterado",
-  "op_prep_unavailable": "{reason}. Nada foi gravado para ela.",
   "op_prep_denied": "Ilegível: o acesso de leitura a {path} foi negado. Nada foi gravado para ela.",
   "op_prep_not_reachable": "Ilegível agora: nada está acessível em {path}. Nada foi gravado para ela.",
-  "op_prep_not_in_selection": "Fora da seleção revisada.",
   "op_prep_source_changed": "A origem mudou desde a indexação: seus bytes diferem da impressão digital do catálogo. Faça nova varredura e revise-a primeiro.",
   "op_prep_destination_exists": "O destino existe: {path}. Nada foi sobrescrito.",
   "op_prep_write_removed": "Permissão de gravação removida em {folder}. Nada foi gravado.",
   "op_prep_destination_offline": "Destino offline: {folder} está em um volume que não está montado.",
   "op_prep_reread_failed": "A entrada em {path} não foi relida com o resumo esperado.",
-  "op_prep_patched_verified": "Cópia corrigida verificada: {patches}; original inalterado.",
   "op_prep_written_verified": "Gravada e relida em relação ao seu instantâneo.",
   "op_prep_source_drift": "Desvio da origem antes da conclusão: {source} não confere mais com o seu instantâneo. Não contada como preparada.",
-  "op_prep_record_missing": "O registro de preparação está ausente; nada foi finalizado.",
-  "op_prep_calibration_note": "Calibração: {done} de {total} arquivos.",
-  "op_prep_prepared": "Preparado: {prepared} de {total} entradas conferem com a composição revisada e com os instantâneos de origem.",
-  "op_prep_failed": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Falhou: nenhuma entrada pôde ser preparada; {n} entrada bloqueada. As origens não foram tocadas.",
-        "countPlural=*": "Falhou: nenhuma entrada pôde ser preparada; {n} entradas bloqueadas. As origens não foram tocadas."
-      }
-    }
-  ],
-  "op_prep_partial": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input prepared",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Parcial: {prepared} preparadas, {n} entrada bloqueada.",
-        "countPlural=*": "Parcial: {prepared} preparadas, {n} entradas bloqueadas."
-      }
-    }
-  ],
-  "op_prep_partial_open_waits": "Abrir aguarda até que todas as entradas estejam preparadas; as origens não foram tocadas.",
   "op_archive_title": "Arquivamento de {name}",
-  "op_restore_title": "Restauração das sessões arquivadas de {name}",
   "op_archive_went_offline": "{name} ficou offline",
   "op_archive_changed": "{path} mudou desde a revisão (o SHA-256 difere)",
   "op_archive_destination_volume": "O volume de destino",
@@ -5674,22 +3812,6 @@
       "match": {
         "countPlural=one": "{n} sessão arquivada",
         "countPlural=*": "{n} sessões arquivadas"
-      }
-    }
-  ],
-  "op_archive_sessions_restored": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} sessão restaurada",
-        "countPlural=*": "{n} sessões restauradas"
       }
     }
   ],
@@ -5710,7 +3832,6 @@
   ],
   "op_archive_hash_failed": "A verificação SHA-256 falhou: nada desta sessão foi movido",
   "op_archived_to": "Arquivado em {folder} · {frames}",
-  "op_restored_to": "Restaurado em {folder} · {frames}",
   "op_import_group_failed": "{done} de {total} verificados · {failed} com falha: {reason}",
   "op_import_group_verified": "{done} de {total} verificados",
   "op_import_source_gone": "origem sumiu",
@@ -5967,24 +4088,6 @@
     }
   ],
   "seed_trash_m31_detail": "{frames} ({session}) movidos para a Lixeira do sistema. Restaurar e fazer nova varredura os traz de volta como Inutilizáveis.",
-  "seed_prep_p2_detail": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input volume",
-        "input entries",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} entrada offline em {volume}; {entries} preparadas.",
-        "countPlural=*": "{n} entradas offline em {volume}; {entries} preparadas."
-      }
-    }
-  ],
   "project_sessions_selected": [
     {
       "declarations": [
@@ -6000,13 +4103,9 @@
       }
     }
   ],
-  "project_sessions_of": "Sessões de {name}",
+  "common_sessions_of": "Sessões de {name}",
   "session_missing_title": "Esta sessão não está no catálogo",
   "project_missing_title": "Este Projeto não está no catálogo",
-  "run_missing_title": "Esta execução não está no catálogo",
-  "run_step_missing_title": "Esta etapa da execução não existe",
-  "run_open_current_step": "Abrir a etapa atual",
-  "rungroup_missing_title": "Este grupo de execuções não está no catálogo",
   "target_missing_title": "Este Alvo não está no catálogo",
   "tonight_moon_phase_new": "Lua nova",
   "tonight_moon_phase_full": "Lua cheia",
@@ -6096,10 +4195,6 @@
   ],
   "op_apply_linked": "Link criado",
   "op_apply_swapped": "Nova View em uso: {entries}",
-  "op_apply_title": "Aplicar {name}",
-  "domain_cal_group_rig_unknown": "Setup desconhecido · {camera}",
-  "domain_cal_group_size_unknown": "Dimensões desconhecidas",
-  "domain_cal_group_gain_offset": "ganho {gain} / offset {offset}",
   "trash_cant": "Não é possível descartar",
   "domain_trash_linked_by": "vinculado por {name}",
   "trash_also_removes_links": [
@@ -6185,14 +4280,10 @@
   "targets_night_previous": "Noite anterior",
   "targets_night_next": "Próxima noite",
   "targets_view": "Visualização",
-  "targets_view_all": "Todos",
   "targets_view_planned": "Planejados",
   "plan_move_up": "Mover para cima",
   "plan_move_down": "Mover para baixo",
-  "run_status_complete": "Concluída",
   "project_col_step": "Etapa",
-  "project_col_updated": "Atualizado",
-  "project_runs_of": "Execuções de {name}",
   "calibration_used_by_runs": [
     {
       "declarations": [
@@ -6208,17 +4299,12 @@
       }
     }
   ],
-  "calibration_created": "Criado",
-  "calibration_dismiss_master": "Dispensar master",
   "calibration_restore_master": "Restaurar master",
   "calibration_restored_master": "{name} restaurado",
-  "location_footprint": "Ocupação {bytes}",
-  "location_volume_use": "{volume}: {used} usados · {free} livres",
   "duplicates_scanned": "Verificado em {date}",
   "duplicates_keep_copy": "Manter esta cópia",
   "duplicates_move_others": "Mover as outras para a Lixeira",
   "duplicates_move_all": "Mover todas para a Lixeira",
-  "duplicates_change_location": "{location}: {files} · {bytes}",
   "duplicates_frames_keep_copy": [
     {
       "declarations": [
@@ -6480,7 +4566,6 @@
   "plan_ics_calendar": "Plano do PlateVault em {site}",
   "plan_ics_summary": "Janela de observação de {name}",
   "plan_ics_description": "Altitude máx. {altitude}° · Lua {moon}%, a {separation}°",
-  "duplicates_scope_help": "Somente locais da biblioteca; cartões de captura nunca são verificados. Mantém a cópia no local registrado primeiro.",
   "plan_night_empty": "Nada planejado para {night}",
   "plan_export_summary": "{events} em {nights} · {site}",
   "plan_events_count": [
@@ -6529,7 +4614,7 @@
   "equipment_error_choose": "Escolha um",
   "equipment_error_reducer": "0,2–3×",
   "equipment_error_night": "Informe uma noite no formato AAAA-MM-DD",
-  "equipment_error_number": "Informe um número",
+  "common_enter_number": "Informe um número",
   "equipment_reducer_field": "Redutor (×)",
   "equipment_source": "Origem",
   "equipment_cameras": "Câmeras",
@@ -6586,52 +4671,16 @@
   "onboarding_check_import": "Importe suas primeiras capturas",
   "onboarding_check_targets": "Confirme os Alvos",
   "onboarding_check_project": "Crie seu primeiro Projeto",
-  "onboarding_check_run": "Inicie sua primeira execução",
-  "onboarding_dismiss_checklist": "Dispensar Primeiros passos",
   "onboarding_walk_name": "Tour de orientação",
   "onboarding_restart_walk": "Reiniciar tour",
   "run_cal_master_changed": "o master mudou",
-  "run_cal_add_title": "Adicionar {name} à biblioteca de calibração?",
-  "run_cal_add_destination": "Caminho de destino",
-  "run_cal_add_reverifies": "Verifica de novo o SHA-256 antes de copiar",
-  "run_cal_better_match": "Melhor correspondência disponível",
-  "run_results_inferred": "Inferida",
   "run_rename": "Renomear",
-  "run_rename_ellipsis": "Renomear…",
-  "run_name_label": "Nome da execução",
-  "run_edit": "Editar execução",
-  "run_col_coverage": "Cobertura",
   "run_col_distance": "Distância",
   "store_reason_name_empty": "O nome está vazio",
-  "store_reason_run_name_taken": "{name} já é uma execução neste projeto",
-  "store_saved_run_renamed": "{from} renomeada para {to}",
   "store_reason_sha_now": "SHA-256 agora {hash}",
-  "simulation_label_better_master": "Protótipo: master compatível mais novo",
-  "store_reason_no_master_assigned": "Nenhum master atribuído ainda",
   "domain_mode_symlink": "Links simbólicos",
-  "run_mode_semantics_symlink": "Links para os originais do catálogo. A unidade deles fica conectada durante a execução.",
-  "run_mode_needs_developer_mode": "links simbólicos exigem o Modo de Desenvolvedor do Windows",
   "run_cant_prepare": "Não é possível preparar",
   "run_use_copies": "Usar cópias nesta execução",
-  "run_view_linked": "Vinculado · {bytes}",
-  "run_view_copied": [
-    {
-      "declarations": [
-        "input count",
-        "input n",
-        "input bytes",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{n} arquivo copiado · {bytes}",
-        "countPlural=*": "{n} arquivos copiados · {bytes}"
-      }
-    }
-  ],
-  "settings_default_run_view": "Visão padrão da execução",
   "settings_default_input_mode": "Modo padrão da View",
   "settings_developer_mode": "Modo de Desenvolvedor do Windows",
   "settings_developer_mode_on": "Ligado",
@@ -6652,8 +4701,6 @@
   "catalogue_frame_setup": "Configuração",
   "catalogue_status_bar_desc": "A barra inferior: locais, seleção, trabalho em andamento, contadores de problemas e notificações, cada lista num ListPopover.",
   "catalogue_palette_desc": "A paleta de comandos: lugares, registros e Ações registradas numa só lista pesquisável.",
-  "catalogue_run_step_desc": "Os glifos de etapa de uma execução e as suas seis etapas numa linha.",
-  "catalogue_run_step_rail_of": "Etapas de {name}",
   "catalogue_walk_desc": "O tour de orientação modal: um recorte em volta de cada âncora, Voltar, Próximo e Pular. Uma etapa sem âncora é ignorada.",
   "catalogue_walk_start": "Iniciar o tour",
   "theme_picker_mode": "Modo",
@@ -6975,9 +5022,6 @@
   ],
   "ds_folder_picker_title": "Seletor de pastas",
   "simulation_ds_folder_picker_description": "Seletor de pastas do sistema simulado. Volumes e pastas, inclusive vazios, vêm do disco simulado; volumes offline e pastas negadas mostram o motivo.",
-  "simulation_run_writes_outputs": "O aplicativo grava saídas",
-  "simulation_this_run_title": "Esta execução: {name}",
-  "simulation_this_run_description": "Muda o aplicativo e o disco simulados da execução na tela.",
   "simulation_this_project_description": "Muda o aplicativo e o disco simulados do projeto na tela.",
   "simulation_this_project_title": "Este projeto: {name}",
   "simulation_actions_title": "Ações",
@@ -6985,11 +5029,6 @@
   "simulation_quick_actions_detail": "Um clique executa Restaurar execução, Reabrir execução, marcações em mais de 20 frames, Aprovar o resto e, no Início, Adicionar à execução, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém.",
   "simulation_quick_one_click": "Um clique",
   "simulation_quick_open_page": "Abrir página",
-  "simulation_run_finish_writing": "Os arquivos terminam de ser gravados",
-  "simulation_run_better_master": "Chega um master compatível mais novo",
-  "simulation_run_object_correction": "Registrar uma correção de OBJECT",
-  "simulation_run_source_drift": "Uma ferramenta externa regrava um frame de origem",
-  "simulation_group_writes_mosaic": "O aplicativo grava o mosaico montado",
   "ds_operation_title": "Operação",
   "ds_operation_description": "Em andamento com progresso, resultados por item e um status final. Usa uma indexação real.",
   "simulation_copy_nothing": "Nada para copiar: não há arquivo nem pasta com arquivos em {path}.",
@@ -7094,12 +5133,9 @@
   "simulation_rerun_wbpp": "Rodar o WBPP de novo",
   "simulation_view_file_held": "Uma ferramenta segura um arquivo na View",
   "simulation_view_file_held_detail": "O Aplicar espera após a montagem até o arquivo ser liberado.",
-  "prototype_controls_title": "Protótipo: {title}",
-  "prototype_controls_note": "Simula mudanças fora do PlateVault para revisão. Não faz parte do produto.",
   "seed_project_cygnus_notes": "HOO amplo da região da América do Norte e do Pelicano; o equipamento OSC acrescenta dados dual-band.",
   "seed_project_m31_notes": "Banda larga primeiro; mistura com banda estreita depois.",
   "seed_project_heart_notes": "Ha primeiro; OIII quando a Lua permitir.",
-  "seed_dark_exception_reason": "Darks empilhados no PixInsight",
   "seed_template_hoo_mosaic": "Mosaico HOO",
   "picker_today": "Hoje",
   "picker_week_previous": "Semana anterior",
@@ -7246,80 +5282,13 @@
   "stepflow_reopen_step": "Reabrir etapa",
   "stepflow_finish_run": "Concluir execução",
   "stepflow_finish_run_title": "Concluir {name}?",
-  "stepflow_finish_all_panels": "Concluir todos os painéis",
-  "stepflow_finish_all_panels_title": "Concluir todos os painéis de {name}?",
   "stepflow_close_project": "Fechar projeto",
   "stepflow_close_project_title": "Fechar {name}?",
   "stepflow_finish_review": "Concluir revisão",
   "stepflow_import": "Importar",
   "stepflow_finished_on": "Concluído em {date}",
   "stepflow_finish_calibration": "Concluir calibração",
-  "flow_review_locked": "Bloqueado por uma visão de execução preparada",
-  "flow_select_one_session": "Selecione pelo menos uma sessão",
-  "flow_sessions_need_review": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} sessão precisa de revisão",
-        "countPlural=*": "{count} sessões precisam de revisão"
-      }
-    }
-  ],
-  "flow_inputs_changed": "Entradas alteradas · Atualizar",
-  "flow_panels_blocked": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} painel bloqueado",
-        "countPlural=*": "{count} painéis bloqueados"
-      }
-    }
-  ],
-  "flow_group_no_live_panels": "Todos os painéis estão na Lixeira",
-  "flow_resolve_calibration_first": "Resolva a calibração primeiro",
   "flow_choose_profile": "Escolha um perfil",
-  "flow_corrected_values": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} valor corrigido",
-        "countPlural=*": "{count} valores corrigidos"
-      }
-    }
-  ],
-  "flow_files_being_written": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} arquivo ainda sendo gravado",
-        "countPlural=*": "{count} arquivos ainda sendo gravados"
-      }
-    }
-  ],
   "flow_confirm_target": "Confirme um Alvo",
   "flow_confirm_rig": "Confirme um setup",
   "flow_frames_unreviewed": [
@@ -7337,53 +5306,15 @@
       }
     }
   ],
-  "flow_finish_every_run": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Conclua todas as execuções primeiro · {count} aberta",
-        "countPlural=*": "Conclua todas as execuções primeiro · {count} abertas"
-      }
-    }
-  ],
   "flow_reason_sessions_need_review": "Sessões correspondentes precisam de revisão",
   "flow_master_old": "Antigo · {n} d",
   "flow_match_new": "Novo",
-  "flow_match_replaces": "Substitui {master}",
   "flow_match_duplicate": "Duplicado",
   "flow_match_version_of": "Nova versão de {master}",
-  "flow_replace_other_kind": "Não é um master de {kind}",
-  "flow_reason_not_finished": "{name} não está Concluída",
   "flow_reason_step_first": "Conclua ou pule {step} primeiro",
   "flow_reason_step_settled": "{step} já foi concluída ou pulada",
   "flow_reason_step_open": "{step} não foi concluída nem pulada",
-  "flow_reason_session_needs_review": "{name} precisa de revisão",
-  "flow_label_record_calibration": "Registrar calibração",
   "flow_nothing_to_clean_up": "Nada para limpar",
-  "flow_reason_run_finished": "{name} já está Concluída",
-  "flow_label_replace_master": "Substituir {name}",
-  "flow_saved_master_replaced": [
-    {
-      "declarations": [
-        "input name",
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} substituído · {count} execução reapontada",
-        "countPlural=*": "{name} substituído · {count} execuções reapontadas"
-      }
-    }
-  ],
   "flow_settings_master_age": "Masters antigos após",
   "flow_reason_whole_days": "Informe um número inteiro de dias",
   "flow_wrapup_apply_or_discard": "Aplicar ou descartar alterações",
@@ -7523,7 +5454,6 @@
   "catalogue_templates_overview": "Visão geral",
   "catalogue_templates_step_desc": "Uma página de etapas: a faixa de etapas sob o cabeçalho, uma região da etapa e o rodapé com Prosseguir fixo embaixo. Etapas anteriores e posteriores abrem somente leitura; mudar de etapa não move nada.",
   "catalogue_templates_restart": "Reiniciar fluxo",
-  "catalogue_templates_run_steps": "Etapas da execução",
   "catalogue_templates_step_shift": "Deslocamento do layout na última mudança de etapa: {px} px",
   "catalogue_templates_settings_desc": "Uma área de Configurações: o título, linhas de configuração e uma seção de lista com um Adicionar no cabeçalho.",
   "catalogue_templates_indexing": "Indexação",
@@ -7652,26 +5582,8 @@
   "calibration_settings_saved": "Configurações de calibração salvas",
   "calibration_unit_days": "dias",
   "calibration_master_age_help": "Darks, bias e dark flats mais antigos que isso aparecem como Antigo. Flats não envelhecem.",
-  "calibration_replace": "Substituir",
   "calibration_replace_file": "Arquivo master",
   "calibration_replace_file_help": "Um master FITS ou XISF do mesmo tipo.",
-  "calibration_replace_runs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Reaponta {count} execução aberta",
-        "countPlural=*": "Reaponta {count} execuções abertas"
-      }
-    }
-  ],
-  "calibration_replace_no_runs": "Nenhuma execução aberta usa este master",
-  "calibration_replace_finished_keep": "Execuções concluídas mantêm o master que registraram.",
   "calibration_import_none_imported": "Nenhum master importado",
   "calibration_import_partly": "{imported} importados · {refused} não importados",
   "calibration_import_select_files": "Selecione pelo menos um arquivo",
@@ -7729,42 +5641,19 @@
       }
     }
   ],
-  "calibration_hidden_caption": "Masters ocultos e ofertas dispensadas",
   "calibration_nothing_hidden": "Nada oculto",
   "calibration_age": "Idade",
   "calibration_age_old": "Antigo",
   "calibration_age_days": "{n} d",
-  "calibration_replaced_by": "Substituído por {name}",
-  "calibration_replaced_by_label": "Substituído por",
-  "calibration_offer_dismissed": "Oferta dispensada",
   "calibration_hidden_on": "Oculto em",
   "calibration_hidden_masters": "Masters ocultos",
   "catalogue_templates_fill_toggle": "Etapa em altura total",
   "catalogue_templates_list_path_desc": "Uma página de lista dentro de um objeto: o caminho mostra os pais, como as sessões de um Projeto mostram Projetos › o Projeto › Sessões. Só o título dá nome à aba da janela.",
-  "catalogue_templates_search_runs": "Buscar execuções",
-  "catalogue_templates_search_sessions": "Pesquisar sessões",
-  "catalogue_templates_wrapup_steps": "Etapas do encerramento",
   "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
   "catalogue_datatable_destination_nas": "NAS de arquivo",
   "catalogue_datatable_destination_cold": "Armazenamento frio",
   "catalogue_datatable_columns_title": "Menu Colunas",
   "catalogue_datatable_columns_description": "Três colunas podem ser ocultadas pelo menu Colunas, e duas delas começam ocultas. O cabeçalho da linha e as ações da linha sempre aparecem, então o menu não as lista. A escolha é mantida entre recarregamentos.",
-  "issue_master_old": [
-    {
-      "declarations": [
-        "input count",
-        "input name",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} está antigo · em {count} execução não concluída",
-        "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
-      }
-    }
-  ],
   "issue_apply_refused": "{name}: Aplicar recusado",
   "issue_pin_drift": [
     {
@@ -7800,7 +5689,6 @@
   ],
   "store_saved_added": "{name} adicionado",
   "catalogue_fields_segmented_narrow": "caixa estreita: as opções passam para uma segunda linha dentro dela",
-  "common_percent": "{value}%",
   "catalogue_fields_notes_sample": "Imagens do quintal; flats ao entardecer.",
   "catalogue_fields_notes_error": "Notas com mais de 500 caracteres",
   "catalogue_fields_group_caption": "Duas metas com uma ação Remover nomeada pelo grupo · um erro de horas ou frames · desativado.",
@@ -7813,38 +5701,6 @@
   "goal_from_template": "Do modelo",
   "project_goals_title": "Metas",
   "project_edit": "Editar",
-  "startrun_mosaic_subject": [
-    {
-      "declarations": [
-        "input name",
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · mosaico de {count} painel",
-        "countPlural=*": "{name} · mosaico de {count} painéis"
-      }
-    }
-  ],
-  "startrun_rig_ready": [
-    {
-      "declarations": [
-        "input name",
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{name} · {count} sessão pronta",
-        "countPlural=*": "{name} · {count} sessões prontas"
-      }
-    }
-  ],
   "projects_search": "Buscar Projetos",
   "projects_search_placeholder": "Projeto ou objeto",
   "projects_no_match": "Nenhum Projeto corresponde",
@@ -7854,13 +5710,6 @@
   "goal_change_removed": "Removida: {line}",
   "goal_change_from_to": "{from} → {to}",
   "goal_edit_title": "Editar meta de {channel}",
-  "mosaic_apply_layout": "Distribuir",
-  "mosaic_col_placement": "Posição",
-  "mosaic_edit": "Editar mosaico",
-  "mosaic_exclude": "Excluir",
-  "mosaic_include": "Incluir",
-  "mosaic_layout_grid": "{cols} × {rows}",
-  "mosaic_no_free_slot": "nenhuma posição livre",
   "project_all_rigs_added": "todo setup já está no Projeto",
   "project_closed": "Projeto fechado",
   "project_closed_notice": "Fechado em {date} · números das metas congelados",
@@ -7873,35 +5722,16 @@
   "project_darkness": "Escuridão",
   "project_goals_of": "Metas de {name}",
   "project_moon": "Lua",
-  "project_reopen_project": "Reabrir projeto",
-  "project_reopen_summary": "Nenhum arquivo é movido · as metas voltam a ler a biblioteca",
-  "project_reopen_summary_archived": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Nenhum arquivo é movido · {count} sessão arquivada continua arquivada",
-        "countPlural=*": "Nenhum arquivo é movido · {count} sessões arquivadas continuam arquivadas"
-      }
-    }
-  ],
-  "project_restore_all": "Restaurar todas as sessões",
   "project_target_chosen": "Escolhido: {name}",
   "project_views": "Abas do projeto",
   "project_window_line": "{start}–{end} · {alt}° · Lua {moon}°",
   "project_site": "Local",
   "project_apply": "Aplicar",
   "project_apply_first": "Primeiro Aplicar: cria a View",
-  "project_apply_in_project": "Aplicar em {name}…",
+  "project_apply_in_project_ellipsis": "Aplicar em {name}…",
   "project_apply_readd_view": "A estrutura de pastas muda: adicione a View de novo na sua ferramenta depois de Aplicar.",
   "project_apply_space": "Espaço necessário",
   "project_apply_space_two_views": "{size} · espaço para duas Views completas durante a execução",
-  "project_apply_title": "Aplicar {name}",
   "project_apply_unplaced": "Arquivos que o PlateVault não colocou",
   "project_apply_unplaced_hint": "Os arquivos marcados vão para a nova View. Os demais ficam em View (previous)/.",
   "project_apply_waiting": "Aguardando uma ferramenta liberar um arquivo da View",
@@ -7963,22 +5793,18 @@
   "project_duplicate_part_groups": "Grupos e seus nomes",
   "project_duplicate_part_notes": "Notas",
   "project_duplicate_part_sessions": "Sessões",
-  "project_duplicate_part_settings": "Configurações da View",
   "project_duplicate_parts": "Copiar",
-  "project_duplicate_title": "Duplicar {name}",
+  "common_duplicate_title": "Duplicar {name}",
   "project_goal_needs_subject": "Adicione um objeto primeiro",
   "project_group_framing_n": "{rig} · Enquadramento {n}",
   "project_group_kind_group": "Grupo",
-  "project_group_kind_panel": "Painel de mosaico",
   "project_group_mark_panel": "Marcar como painel de mosaico",
   "project_group_missing": "um grupo que não está mais no projeto",
   "project_group_new": "Novo grupo",
   "project_group_panel_hint": "A pasta de um painel usa a palavra-chave PANEL. Marcar um painel torna o projeto um mosaico.",
-  "project_group_panel_n": "Painel {n}",
   "project_group_remove": "Remover grupo",
   "project_group_remove_title": "Remover o grupo {name}?",
   "project_group_rename": "Renomear",
-  "project_group_rename_title": "Renomear {name}",
   "project_group_split_n": "{name} · {n}",
   "project_group_unmark_panel": "Não é painel de mosaico",
   "project_groups": "Grupos",
@@ -8001,7 +5827,6 @@
       }
     }
   ],
-  "project_label_duplicate": "Duplicar {name}",
   "project_label_exclude_frames": [
     {
       "declarations": [
@@ -8035,7 +5860,6 @@
     }
   ],
   "project_label_keep_previous": "Manter {name} em View (previous)",
-  "project_label_mark_panel": "Marcar como painel de mosaico",
   "project_label_move_previous": "Mover {name} para a View",
   "project_label_move_sessions": [
     {
@@ -8053,11 +5877,8 @@
       }
     }
   ],
-  "project_label_remove_group": "Remover grupo",
   "project_label_rename_group": "Renomear grupo",
   "project_label_split_group": "Separar {name}",
-  "project_label_trash_previous": "Mover {name} para a Lixeira",
-  "project_label_unmark_panel": "Não é painel de mosaico",
   "project_label_use_unusable": [
     {
       "declarations": [
@@ -8074,7 +5895,6 @@
       }
     }
   ],
-  "project_label_view_settings": "Configurações da View",
   "project_mosaic_of_panels": [
     {
       "declarations": [
@@ -8096,14 +5916,12 @@
   "project_output_adopt_title": "Adicionar {name} à biblioteca de calibração?",
   "project_output_adopt_trash_copy": "Mover para a Lixeira e adicionar",
   "project_output_empty": "Nada em Output ainda. Salve lá as imagens finalizadas ou use Copiar para Output.",
-  "project_output_hidden_masters": "Masters ocultos",
   "project_output_hide_offer": "Ocultar",
   "project_output_masters": "Masters encontrados em Processing",
   "project_output_no_processing": "Nada em Processing para copiar",
   "project_output_of": "Output de {name}",
   "project_output_offer_again": "Oferecer de novo",
   "project_output_offline": "O volume da pasta Output não está conectado",
-  "project_output_writing": "Ainda sendo gravado",
   "project_pending_changes": "Alterações pendentes",
   "project_pending_changes_of": "Alterações pendentes de {name}",
   "project_pin_changed": "Arquivo de {kind} alterado",
@@ -8112,7 +5930,6 @@
   "project_previous_changed": "Cópia alterada",
   "project_previous_move": "Mover para a View",
   "project_previous_title": "View (previous)",
-  "project_previous_trash": "Mover para a Lixeira",
   "project_previous_unplaced": "Não colocado pelo PlateVault",
   "project_previous_unverified": "Cópia não verificada",
   "project_reason_fix_at_source": "corrija na origem ou remova a sessão",
@@ -8162,28 +5979,6 @@
   "project_view_no_application": "Não escolhido",
   "project_view_not_built": "Nenhuma View ainda. O primeiro Aplicar a cria.",
   "project_view_settings": "Configurações da View",
-  "trash_empty_named_title": "Esvaziar {name}?",
-  "trash_empty_summary": "As pastas preparadas vão para a Lixeira do sistema · os Resultados ficam",
-  "trash_empty_summary_results": "As pastas preparadas e os Resultados vão para a Lixeira do sistema",
-  "trash_empty_with_results": "Esvaziar com Resultados",
-  "trash_no_match": "Nenhuma execução corresponde",
-  "trash_search": "Buscar na Lixeira",
-  "trash_search_placeholder": "Execução, objeto ou setup",
-  "trash_results_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} arquivo",
-        "countPlural=*": "{count} arquivos"
-      }
-    }
-  ],
   "wrapup_archive_moves": "Movimentos do arquivamento",
   "wrapup_cleanup_summary": "{links} links · {copies} cópias · {size}",
   "wrapup_cleanup_copy": "Cópia",
@@ -8191,8 +5986,6 @@
   "wrapup_cleanup_previous": "Em View (previous)",
   "wrapup_cleanup_view_title": "Limpar a View",
   "wrapup_col_detail": "Detalhe",
-  "wrapup_col_items": "Itens",
-  "wrapup_col_view": "Vista",
   "wrapup_files_of": "Arquivos de {name}",
   "wrapup_group_line": [
     {
@@ -8213,7 +6006,6 @@
   "wrapup_location_default": "{name} (padrão)",
   "wrapup_nothing_to_archive": "Nada para arquivar",
   "wrapup_nothing_to_trash": "Nada para a Lixeira",
-  "wrapup_show_open_runs": "Execuções a concluir",
   "wrapup_stays_used_by": "Fica · usada por {names}",
   "wrapup_steps": "Etapas da finalização",
   "wrapup_trash_confirm_title": [
@@ -8232,7 +6024,6 @@
     }
   ],
   "wrapup_clean_up": "Limpar",
-  "wrapup_move_to_trash": "Mover para a Lixeira",
   "sessions_empty_needs_review": "Nenhuma precisa de revisão",
   "sessions_empty_needs_calibration": "Todas com calibração definida",
   "sessions_cant_trash": "Não é possível mover para a Lixeira",
@@ -8261,9 +6052,6 @@
   "session_rig_status": "Situação do setup",
   "session_project_state": "Estado",
   "session_project_group": "Grupo",
-  "session_run": "Execução",
-  "session_run_step": "Etapa",
-  "session_run_status": "Situação",
   "session_no_copies": "Sem cópias",
   "session_integration": "Integração",
   "session_details": "Detalhes",
@@ -8331,7 +6119,6 @@
   "calibration_link_camera": "Vincular câmera",
   "calibration_linked_camera": "Câmera vinculada",
   "calibration_match_by_model": "Corresponder pelo modelo da câmera",
-  "calibration_move_to_trash": "Mover para a Lixeira",
   "calibration_sessions_need_again": [
     {
       "declarations": [
@@ -8353,7 +6140,7 @@
   "calibration_versions": "Versões",
   "import_match": "Correspondência",
   "import_also_use": "Usar também",
-  "import_also_use_title": "Usar também nestas sessões",
+  "calibration_also_use_title": "Usar também nestas sessões",
   "equipment_used_by_rigs": [
     {
       "declarations": [
@@ -8693,9 +6480,9 @@
   "archive_repointed_title": "View mantida de {name} reapontada",
   "output_copied": "Copiado para Output como {name}",
   "output_copy_named": "Copiar {name} para Output",
-  "output_label_channel": "Canal de {name}",
+  "output_label_channel": "Definir o canal de {name}",
   "output_label_hide_offer": "Ocultar a oferta do master",
-  "output_label_kind": "Tipo de {name}",
+  "output_label_kind": "Definir o tipo de {name}",
   "output_refused_changed": "O arquivo mudou durante a cópia",
   "output_refused_exists": "O Output já tem {name}: escolha outro nome",
   "output_refused_name": "Informe um nome de arquivo dentro de Output",

@@ -227,7 +227,7 @@ export function addRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevisi
 
 /** Removing a rig changes suggestions only: sessions on it the Project holds stay held (PRJ-FR-02). */
 export function removeRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevision: number): CommitResult {
-  return editProject(projectId, msg("project_remove_rig"), expectRevision, (p) => ({ ...p, rigIds: p.rigIds.filter((id) => id !== rigId) }))
+  return editProject(projectId, msg("store_label_remove_rig"), expectRevision, (p) => ({ ...p, rigIds: p.rigIds.filter((id) => id !== rigId) }))
 }
 
 /** Replace the goal rows; goals stay editable while the Project is open and never block anything (PRJ-FR-04). */
@@ -238,7 +238,7 @@ export function setGoals(projectId: ProjectId, goals: Goal[], expectRevision: nu
 /** Apply a template: its values are copied in for every subject (per panel in a mosaic) and replace the current goals (D-W30); its conditions replace each subject's (C7). */
 export function applyGoalTemplate(projectId: ProjectId, templateId: GoalTemplateId, expectRevision: number): CommitResult {
   const template = goalTemplate(templateId)
-  return editProject(projectId, template ? msg("store_label_apply_named", { name: template.name }) : msg("goal_apply_template"), expectRevision, (p) => ({
+  return editProject(projectId, template ? msg("common_apply_named", { name: template.name }) : msg("goal_apply_template"), expectRevision, (p) => ({
     ...p,
     subjects: withTemplateConditions(p.subjects, template),
     goals: template ? p.subjects.flatMap((s) => goalsFromValues(template.values, s.id, panelIds(p))) : p.goals,
@@ -265,7 +265,7 @@ export function setProjectArchiveLocation(projectId: ProjectId, locationId: Loca
 export function setProjectSettings(projectId: ProjectId, patch: Partial<ProjectSettings>): CommitResult {
   const project = current(projectId)
   if (!isProject(project)) return project
-  const label = msg("project_label_view_settings")
+  const label = msg("project_view_settings")
   if (patch.processingParent !== undefined && project.folderPath && patch.processingParent !== project.settings.processingParent) {
     return refuse(msg("store_refused", { label }), [msg("project_reason_folder_fixed", { path: project.folderPath })], projectHref(projectId))
   }
@@ -379,7 +379,7 @@ export function renameGroup(projectId: ProjectId, groupId: ProjectGroupId, name:
 export function setGroupPanel(projectId: ProjectId, groupId: ProjectGroupId, panel: boolean): CommitResult {
   const project = current(projectId)
   if (!isProject(project)) return project
-  return editProject(projectId, panel ? msg("project_label_mark_panel") : msg("project_label_unmark_panel"), project.revision, (p) => {
+  return editProject(projectId, panel ? msg("project_group_mark_panel") : msg("project_group_unmark_panel"), project.revision, (p) => {
     const was = p.groups.find((g) => g.id === groupId)
     if (!was || was.panel === panel) return p
     const groups = p.groups.map((g) => (g.id === groupId ? { ...g, panel } : g))
@@ -417,7 +417,7 @@ export function splitGroup(projectId: ProjectId, groupId: ProjectGroupId, sessio
 export function removeGroup(projectId: ProjectId, groupId: ProjectGroupId): CommitResult {
   const project = current(projectId)
   if (!isProject(project)) return project
-  const label = msg("project_label_remove_group")
+  const label = msg("project_group_remove")
   const holding = project.inputs.filter((i) => i.groupId === groupId).length
   if (holding > 0) return closedRefusal(project, label) ?? refuse(msg("store_refused", { label }), [msg("project_reason_group_holds", { count: holding })], projectHref(projectId))
   return editProject(projectId, label, project.revision, (p) => ({ ...p, groups: p.groups.filter((g) => g.id !== groupId), goals: p.goals.filter((g) => g.groupId !== groupId) }))
@@ -476,7 +476,7 @@ export interface DuplicateChoice {
 export function duplicateProject(projectId: ProjectId, choice: DuplicateChoice): { result: CommitResult; projectId: ProjectId | null } {
   const source = store.getState().catalog.projects[projectId]
   if (!source) return { result: MISSING, projectId: null }
-  const label = msg("project_label_duplicate", { name: source.name })
+  const label = msg("common_duplicate_title", { name: source.name })
   const name = choice.name.trim()
   if (!name) return { result: refuse(msg("store_refused", { label }), [msg("store_reason_name_empty")], projectHref(projectId)), projectId: null }
   const id = freshId("prj", name)

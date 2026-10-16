@@ -6,14 +6,11 @@
 dup-value	plan_show_all,review_show_all,sessions_show_all
 # 'Wrap up' is a stage name (pt-BR noun 'Encerramento') and an action (verb 'Encerrar').
 dup-value	run_wrap_up,wrapup_action
-# pt-BR gender follows the noun: panel (painel, m.) vs session (sessão, f.).
-dup-value	mosaic_left_out,run_metadata_hint_excluded
 # pt-BR differs by position: mid-sentence possessive vs sentence-initial article.
 dup-value	run_entry_its_volume,wrapup_its_volume
 # 'Measure frames' is a button (pt-BR verb 'Medir frames') and an operation title (noun 'Medição de frames').
 dup-value	measure_frames_action,op_measure_title
 # actions_* belong to the L2 action components (actions.tsx, row-actions.tsx); the feature copies go when W3 moves those pages onto RowActions and useAction (W8: patterns own their keys).
-dup-value	actions_blocked,calibration_action_blocked
 dup-value	actions_for,run_actions_for
 # pt-BR differs by position: a sentence-initial toggle label ('Sem local de observação') vs a mid-sentence fragment ('nenhum local de observação').
 dup-value	project_no_site,simulation_no_site

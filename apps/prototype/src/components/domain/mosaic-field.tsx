@@ -159,7 +159,7 @@ export function MosaicField({ panels, slots = [], field, pointings = [], dropOn 
             key={p.id}
             role="checkbox"
             aria-checked={p.include}
-            aria-label={m.review_panel_n({ n: p.n })}
+            aria-label={m.common_panel_n({ n: p.n })}
             tabIndex={0}
             transform={`rotate(${-p.rotationDeg} ${c.x} ${c.y})`}
             className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-ring"
