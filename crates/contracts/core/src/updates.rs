@@ -30,6 +30,37 @@ pub enum UpdatePhase {
     InstallOnQuit,
 }
 
+/// Why the last update step failed. The UI words it in the user's language;
+/// the English detail goes to the log only.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "code", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+pub enum UpdateFailure {
+    /// The update server could not be reached or answered with an error, or
+    /// the download stalled, ran out of time or was larger than an update can
+    /// be.
+    Network,
+    /// The update information is malformed, has nothing for this platform, or
+    /// points at a file that is not this platform's package.
+    Manifest,
+    /// The update's signature is missing, does not verify, or was made for
+    /// another version.
+    Signature,
+    /// The new macOS app is not signed by the identity of the installed one.
+    Identity,
+    /// Permission to install was refused or not given.
+    Permission,
+    /// The install step failed.
+    Install,
+    /// The update's files could not be written or read.
+    FileSystem,
+    /// This copy cannot update itself: no release package installed it, or
+    /// no update endpoint is configured.
+    Unsupported,
+    /// The install failed and the previous macOS app could not be put back.
+    /// It was kept at `kept_at` instead of being deleted.
+    PreviousAppNotRestored { kept_at: String },
+}
+
 /// The update state the UI shows.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -40,7 +71,7 @@ pub struct UpdateStatus {
     /// The release notes, when the release has any.
     pub body: Option<String>,
     /// Why the last step failed, in the `*-failed` phases.
-    pub error: Option<String>,
+    pub error: Option<UpdateFailure>,
 }
 
 impl UpdateStatus {

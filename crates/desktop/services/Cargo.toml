@@ -37,14 +37,18 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 
-# The macOS update unpacks the `.app.tar.gz`. The swap's tests run on every
-# Unix, so other Unix targets get the two crates for tests only.
+# The macOS update unpacks the `.app.tar.gz` and exchanges the bundles with
+# rustix's `renameat_with(EXCHANGE)`, as platevault_core does for its links.
+# The swap's tests run on every Unix, so other Unix targets get the three
+# crates for tests only.
 [target.'cfg(target_os = "macos")'.dependencies]
 flate2 = "1.1.9"
+rustix = { version = "1.1", features = ["fs"] }
 tar = "0.4.46"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
 flate2 = "1.1.9"
+rustix = { version = "1.1", features = ["fs"] }
 tar = "0.4.46"
 
 [dev-dependencies]

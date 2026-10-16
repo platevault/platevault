@@ -76,18 +76,36 @@ fn signature_unreadable(bundle: &Path, details: &str) -> UpdateError {
 mod tests {
     //! Against the real `codesign`, with throwaway ad-hoc signed bundles: an
     //! ad-hoc signature still carries the identifier a requirement names.
+    //!
+    //! No certificate-signed bundle can be made here: `codesign` refuses an
+    //! untrusted self-signed identity, and trusting one needs an
+    //! administrator prompt. Apple's own `/usr/bin/true` and `/usr/bin/false`
+    //! stand in for certificate-signed code.
 
+    use std::io::Cursor;
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+
     use super::{CodeSigning, Codesign, Identity};
+    use crate::update::install::bundle::install_bundle;
+    use crate::update::UpdateError;
+
+    /// The designated requirement of Apple's `/usr/bin/true`.
+    const TRUE_REQUIREMENT: &str = r#"identifier "com.apple.true" and anchor apple"#;
 
     /// A minimal `.app` running `/usr/bin/true`, signed ad hoc as
-    /// `identifier` when one is given.
+    /// `identifier` when one is given. Its `Contents/Resources/marker` holds
+    /// the identifier, to tell bundles apart after a swap.
     fn bundle(dir: &Path, identifier: Option<&str>) -> PathBuf {
         let app = dir.join("Probe.app");
         let macos = app.join("Contents/MacOS");
         std::fs::create_dir_all(&macos).expect("bundle dirs");
+        std::fs::create_dir_all(app.join("Contents/Resources")).expect("resources");
+        std::fs::write(app.join("Contents/Resources/marker"), identifier.unwrap_or("unsigned"))
+            .expect("marker");
         std::fs::copy("/usr/bin/true", macos.join("probe")).expect("executable");
         std::fs::write(
             app.join("Contents/Info.plist"),
@@ -145,5 +163,84 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let app = bundle(dir.path(), Some("dev.example.a"));
         assert!(!Codesign.satisfies(&app, r#"identifier "dev.example.b""#).expect("verify"));
+    }
+
+    /// `app` as the `.app.tar.gz` a release ships.
+    fn archive(app: &Path) -> Cursor<Vec<u8>> {
+        let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
+        builder.append_dir_all("Probe.app", app).expect("archive the bundle");
+        Cursor::new(builder.into_inner().expect("tar").finish().expect("gzip"))
+    }
+
+    fn marker(app: &Path) -> String {
+        std::fs::read_to_string(app.join("Contents/Resources/marker")).expect("marker")
+    }
+
+    #[test]
+    fn certificate_signed_code_reads_as_its_designated_requirement() {
+        assert_eq!(
+            Codesign.identity(Path::new("/usr/bin/true")).expect("identity"),
+            Identity::Designated(TRUE_REQUIREMENT.to_owned())
+        );
+    }
+
+    #[test]
+    fn certificate_signed_code_satisfies_its_own_requirement_and_no_other() {
+        assert!(Codesign.satisfies(Path::new("/usr/bin/true"), TRUE_REQUIREMENT).expect("verify"));
+        assert!(!Codesign
+            .satisfies(Path::new("/usr/bin/false"), TRUE_REQUIREMENT)
+            .expect("verify"));
+    }
+
+    #[test]
+    fn an_ad_hoc_bundle_does_not_satisfy_a_certificate_requirement() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let app = bundle(dir.path(), Some("com.apple.true"));
+        assert!(!Codesign.satisfies(&app, TRUE_REQUIREMENT).expect("verify"));
+    }
+
+    /// The whole macOS install in a temp dir: real `codesign`, the unpack, and
+    /// the swap. The installed copy is ad hoc, so no requirement is checked.
+    #[test]
+    fn an_ad_hoc_install_takes_the_update_through_the_real_swap() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let applications = dir.path().join("Applications");
+        std::fs::create_dir(&applications).expect("Applications");
+        let installed = bundle(&applications, Some("dev.example.installed"));
+        let release = tempfile::tempdir().expect("release");
+        let update = bundle(release.path(), Some("dev.example.update"));
+
+        install_bundle(&installed, archive(&update), &Codesign).expect("install");
+
+        assert_eq!(marker(&installed), "dev.example.update");
+        assert!(
+            Codesign.satisfies(&installed, r#"identifier "dev.example.update""#).expect("verify"),
+            "the swapped-in bundle keeps a valid signature"
+        );
+        assert_eq!(std::fs::read_dir(&applications).expect("dir").count(), 1, "no backup is left");
+    }
+
+    /// The designated-requirement check against certificate-signed installed
+    /// code (Apple's `/usr/bin/true`, see the module note): an update signed
+    /// by anyone else is refused before the swap, and the installed code stays.
+    #[test]
+    fn an_update_without_the_installed_certificate_identity_is_refused() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let installed = dir.path().join("PlateVault.app");
+        std::fs::copy("/usr/bin/true", &installed).expect("installed code");
+        let release = tempfile::tempdir().expect("release");
+        let update = bundle(release.path(), Some("com.apple.true"));
+
+        let error = install_bundle(&installed, archive(&update), &Codesign).expect_err("refused");
+
+        assert!(
+            matches!(&error, UpdateError::Identity(message) if message.contains(TRUE_REQUIREMENT)),
+            "{error}"
+        );
+        assert_eq!(
+            std::fs::read(&installed).expect("installed"),
+            std::fs::read("/usr/bin/true").expect("true"),
+            "the installed code is untouched"
+        );
     }
 }

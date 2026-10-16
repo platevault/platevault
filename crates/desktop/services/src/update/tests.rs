@@ -6,7 +6,7 @@
 //! and host. Payloads are signed with throwaway minisign keys.
 
 use std::collections::VecDeque;
-use std::io::Cursor;
+use std::io::{Cursor, Read as _};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -19,10 +19,11 @@ use serde_json::json;
 
 use super::http::{BoxFuture, ChunkSink, Source};
 use super::install::{InstallMode, Installed, Installer};
-use super::signature::{Staged, TrustedKey};
+use super::manifest::Release;
+use super::signature::{self, Payload, Staged, TrustedKey};
 use super::{
-    manifest, Package, Parts, Platform, QuitDecision, UpdateError, UpdateHost, UpdatePhase,
-    UpdatePort, Updater, UpdaterConfig,
+    manifest, Package, Parts, Platform, QuitDecision, UpdateError, UpdateFailure, UpdateHost,
+    UpdatePhase, UpdatePort, Updater, UpdaterConfig,
 };
 
 const RUNNING: &str = "0.6.0";
@@ -174,15 +175,35 @@ impl FakeInstaller {
 }
 
 impl Installer for Arc<FakeInstaller> {
-    fn install(&self, staged: &Staged, mode: InstallMode) -> Result<Installed, UpdateError> {
-        let payload = std::fs::read(staged.file()).expect("staged payload");
-        self.calls.lock().expect("calls").push((mode, payload));
+    fn install(
+        &self,
+        mut payload: Payload<'_>,
+        mode: InstallMode,
+    ) -> Result<Installed, UpdateError> {
+        let mut bytes = Vec::new();
+        payload.reader().read_to_end(&mut bytes).expect("staged payload");
+        self.calls.lock().expect("calls").push((mode, bytes));
         let gate = self.gate.lock().expect("gate").take();
         if let Some(gate) = gate {
             let _ = gate.recv();
         }
         self.results.lock().expect("results").pop_front().unwrap_or(Ok(Installed::Relaunch))
     }
+}
+
+/// `bytes` staged for `package` as a download would stage it: signed with a
+/// throwaway key and verified.
+pub(super) async fn stage(package: Package, bytes: &[u8]) -> Staged {
+    let signer = Signer::new();
+    let release = Release {
+        version_text: RELEASE.to_owned(),
+        notes: None,
+        url: Url::parse(PAYLOAD_URL).expect("url"),
+        signature: signer.sign(bytes),
+    };
+    let source = FakeSource::new(None, bytes);
+    let key = TrustedKey::from_config(&signer.public_key()).expect("key");
+    signature::download_verified(&source, &release, package, &key).await.expect("staged")
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -300,8 +321,28 @@ async fn a_manifest_without_this_platform_fails_the_check() {
     rig.updater.check().await;
     let status = rig.updater.current_status();
     assert_eq!(status.phase, UpdatePhase::CheckFailed);
-    let error = status.error.expect("error");
-    assert!(error.contains("linux-x86_64-appimage or linux-x86_64"), "{error}");
+    assert_eq!(status.error, Some(UpdateFailure::Manifest), "a code, not an English sentence");
+    let detail = rig.updater.error_text().expect("detail");
+    assert!(detail.contains("linux-x86_64-appimage or linux-x86_64"), "{detail}");
+}
+
+#[tokio::test]
+async fn a_payload_url_that_is_not_https_fails_the_check() {
+    let signer = Signer::new();
+    let signature = signer.sign(b"new AppImage");
+    let source = FakeSource::new(
+        Some(manifest_json(
+            RELEASE,
+            &[("linux-x86_64-appimage", "http://example.test/PlateVault.AppImage", &signature)],
+        )),
+        b"new AppImage",
+    );
+    let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
+    rig.updater.check().await;
+    assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::Manifest));
+    let detail = rig.updater.error_text().expect("detail");
+    assert!(detail.contains("is not an HTTPS URL"), "{detail}");
+    assert_eq!(source.downloads(), 0);
 }
 
 #[test]
@@ -399,8 +440,9 @@ async fn download_with(
 fn assert_refused(rig: &Rig, installer: &FakeInstaller, expected: &str) {
     let status = rig.updater.current_status();
     assert_eq!(status.phase, UpdatePhase::DownloadFailed);
-    let error = status.error.expect("error");
-    assert!(error.contains(expected), "{error}");
+    assert_eq!(status.error, Some(UpdateFailure::Signature));
+    let detail = rig.updater.error_text().expect("detail");
+    assert!(detail.contains(expected), "{detail}");
     assert!(installer.calls().is_empty(), "nothing unverified reaches the installer");
     assert!(rig.host_calls().is_empty(), "no relaunch or exit");
 }
@@ -439,10 +481,23 @@ async fn a_signature_made_for_another_version_is_refused() {
     assert_refused(&rig, &installer, "signed for version 0.5.0");
 }
 
+/// The rollback `latest.json` alone cannot stop: an older release's payload
+/// and signature, which name no version, announced as a newer release.
 #[tokio::test]
-async fn a_signature_without_a_signed_version_is_accepted() {
+async fn a_signature_without_a_signed_version_is_refused() {
     let signer = Signer::new();
-    let signature = signer.sign_with_comment(b"new AppImage", "timestamp:1760000000\tfile:update");
+    let signature = signer.sign_with_comment(b"old AppImage", "timestamp:1760000000\tfile:update");
+    let (rig, installer) = download_with(&signer, b"old AppImage", &signature).await;
+    assert_refused(&rig, &installer, "does not name the version it was signed for");
+}
+
+#[tokio::test]
+async fn a_signed_version_with_a_leading_v_matches() {
+    let signer = Signer::new();
+    let signature = signer.sign_with_comment(
+        b"new AppImage",
+        &format!("timestamp:1760000000\tfile:update\tversion:v{RELEASE}"),
+    );
     let (rig, installer) = download_with(&signer, b"new AppImage", &signature).await;
     assert_eq!(installer.calls().len(), 1);
     assert_eq!(rig.host_calls(), vec![HostCall::Relaunch]);
@@ -451,7 +506,7 @@ async fn a_signature_without_a_signed_version_is_accepted() {
 #[tokio::test]
 async fn a_trusted_comment_changed_after_signing_is_refused() {
     let signer = Signer::new();
-    let signature = signer.sign_with_comment(b"new AppImage", "timestamp:1760000000\tfile:update");
+    let signature = signer.sign(b"new AppImage");
     let decoded = String::from_utf8(
         base64::engine::general_purpose::STANDARD.decode(&signature).expect("base64"),
     )
@@ -467,6 +522,94 @@ async fn a_signature_that_is_not_minisign_is_refused() {
     let (rig, installer) =
         download_with(&signer, b"new AppImage", &base64("not a signature")).await;
     assert_refused(&rig, &installer, "not a minisign signature");
+}
+
+/// The legacy `Ed` form signs the payload itself rather than its digest;
+/// `tauri build` never writes it, and the manifest gate rejects it too.
+#[tokio::test]
+async fn a_legacy_minisign_signature_is_refused() {
+    let signer = Signer::new();
+    let engine = base64::engine::general_purpose::STANDARD;
+    let text = String::from_utf8(engine.decode(signer.sign(b"new AppImage")).expect("base64"))
+        .expect("utf8");
+    let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
+    let mut signature = engine.decode(&lines[1]).expect("signature line");
+    assert_eq!(&signature[..2], b"ED");
+    signature[1] = b'd';
+    lines[1] = engine.encode(signature);
+    let legacy = base64(&(lines.join("\n") + "\n"));
+    let (rig, installer) = download_with(&signer, b"new AppImage", &legacy).await;
+    assert_refused(&rig, &installer, "legacy minisign signature");
+}
+
+#[tokio::test]
+async fn a_staged_payload_changed_on_disk_fails_its_second_check() {
+    let staged = stage(Package::AppImage, b"new AppImage").await;
+    assert!(staged.reverify().is_ok(), "untouched, it verifies again");
+    std::fs::write(staged.file(), b"swapped AppImage").expect("tamper");
+    let error = staged.reverify().err().expect("tampered");
+    assert!(
+        matches!(&error, UpdateError::Signature(message) if message.contains("changed after it was downloaded")),
+        "{error}"
+    );
+}
+
+/// An installer that counts its calls, swaps the staged file the way
+/// same-user malware could while a retry waits, and fails.
+#[derive(Default)]
+struct TamperingInstaller {
+    calls: AtomicUsize,
+}
+
+impl Installer for Arc<TamperingInstaller> {
+    fn install(&self, payload: Payload<'_>, _mode: InstallMode) -> Result<Installed, UpdateError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        std::fs::write(payload.path(), b"swapped AppImage").expect("tamper");
+        Err(UpdateError::Install("denied".to_owned()))
+    }
+}
+
+#[tokio::test]
+async fn a_retry_after_the_staged_payload_changed_installs_nothing() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = Arc::new(TamperingInstaller::default());
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+    rig.updater.install_now().await;
+    assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::Install));
+
+    rig.updater.install_now().await;
+
+    assert_eq!(installer.calls.load(Ordering::SeqCst), 1, "the changed payload never reached it");
+    assert_eq!(rig.phase(), UpdatePhase::InstallFailed);
+    assert_eq!(rig.updater.current_status().error, Some(UpdateFailure::Signature));
+    assert!(rig.host_calls().is_empty(), "no relaunch or exit");
+}
+
+#[cfg(unix)]
+#[test]
+fn stale_payload_dirs_are_removed_and_nothing_else() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let payload = temp.path().join("platevault-update-payload-old");
+    std::fs::create_dir(&payload).expect("payload dir");
+    std::fs::write(payload.join("update-setup.exe"), b"MZ").expect("installer");
+    let kept_app = temp.path().join("platevault-update-app-kept");
+    std::fs::create_dir(&kept_app).expect("kept app dir");
+    let other = temp.path().join("someone-else");
+    std::fs::create_dir(&other).expect("other dir");
+    let link = temp.path().join("platevault-update-payload-link");
+    std::os::unix::fs::symlink(&other, &link).expect("symlink");
+
+    signature::remove_stale_payloads_in(temp.path(), std::time::SystemTime::now());
+    assert!(payload.exists(), "a fresh payload stays: an installer may still read it");
+
+    let in_two_days = std::time::SystemTime::now() + Duration::from_hours(48);
+    signature::remove_stale_payloads_in(temp.path(), in_two_days);
+    assert!(!payload.exists(), "a day-old payload goes");
+    assert!(kept_app.exists(), "a previous app the swap kept is never touched");
+    assert!(other.exists());
+    assert!(std::fs::symlink_metadata(&link).is_ok(), "a symlink is neither followed nor removed");
 }
 
 // ── Install now, install on quit, and the quit gate ────────────────────────
@@ -501,13 +644,59 @@ async fn a_failed_install_keeps_the_verified_payload_for_a_retry() {
     rig.updater.install_now().await;
     let status = rig.updater.current_status();
     assert_eq!(status.phase, UpdatePhase::InstallFailed);
-    assert_eq!(status.error.as_deref(), Some("disk full"));
+    assert_eq!(status.error, Some(UpdateFailure::Install));
+    assert_eq!(rig.updater.error_text().as_deref(), Some("disk full"));
     assert!(rig.host_calls().is_empty(), "no relaunch after a failed install");
 
     rig.updater.install_now().await;
     assert_eq!(source.downloads(), 1, "the retry reuses the verified payload");
     assert_eq!(installer.calls().len(), 2);
     assert_eq!(rig.host_calls(), vec![HostCall::Relaunch]);
+}
+
+/// Start Install now with an installer that blocks until the returned sender
+/// sends or drops and then answers `result`, and wait until it runs.
+async fn install_now_blocked(
+    result: Result<Installed, UpdateError>,
+) -> (Rig, mpsc::Sender<()>, tokio::task::JoinHandle<()>) {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let (installer, release_install) = FakeInstaller::blocked();
+    installer.results.lock().expect("results").push_back(result);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+    let updater = rig.updater.clone();
+    let install = tokio::spawn(async move { updater.install_now().await });
+    let started = std::time::Instant::now();
+    while installer.calls().is_empty() {
+        assert!(started.elapsed() < WAIT, "the install started");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    (rig, release_install, install)
+}
+
+#[tokio::test]
+async fn a_quit_during_install_now_exits_once_a_failed_install_is_over() {
+    let (rig, release_install, install) =
+        install_now_blocked(Err(UpdateError::Install("disk full".to_owned()))).await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer, "held mid-install");
+    assert!(rig.host.recv_timeout(Duration::from_millis(100)).is_err(), "no exit mid-install");
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(rig.host_calls(), vec![HostCall::Exit], "the held quit is not lost");
+}
+
+#[tokio::test]
+async fn a_quit_during_install_now_exits_instead_of_relaunching() {
+    let (rig, release_install, install) = install_now_blocked(Ok(Installed::Relaunch)).await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(rig.host_calls(), vec![HostCall::Exit], "the user asked to quit");
 }
 
 #[tokio::test]
@@ -528,7 +717,12 @@ async fn nothing_installs_from_a_build_without_a_package() {
 
     let status = rig.updater.current_status();
     assert_eq!(status.phase, UpdatePhase::DownloadFailed);
-    assert!(status.error.expect("error").contains("not installed from a release package"));
+    assert_eq!(status.error, Some(UpdateFailure::Unsupported));
+    assert!(rig
+        .updater
+        .error_text()
+        .expect("detail")
+        .contains("not installed from a release package"));
     assert_eq!(source.downloads(), 0);
     assert!(installer.calls().is_empty(), "nothing reaches the installer");
 }
@@ -676,6 +870,64 @@ async fn the_status_feed_starts_with_the_current_status() {
     let mut feed = rig.updater.status();
     let first = feed.next().await.expect("status");
     assert_eq!(first.phase, UpdatePhase::Available);
+}
+
+// ── What the UI is told ─────────────────────────────────────────────────────
+
+#[test]
+fn every_error_reaches_the_ui_as_a_code() {
+    let io = |kind| UpdateError::Io(std::io::Error::from(kind));
+    let cases = [
+        (UpdateError::Config(String::new()), UpdateFailure::Unsupported),
+        (UpdateError::Unsupported(String::new()), UpdateFailure::Unsupported),
+        (UpdateError::Network(String::new()), UpdateFailure::Network),
+        (UpdateError::Manifest(String::new()), UpdateFailure::Manifest),
+        (UpdateError::Signature(String::new()), UpdateFailure::Signature),
+        (UpdateError::Identity(String::new()), UpdateFailure::Identity),
+        (UpdateError::Permission(String::new()), UpdateFailure::Permission),
+        (UpdateError::Install(String::new()), UpdateFailure::Install),
+        (io(std::io::ErrorKind::PermissionDenied), UpdateFailure::Permission),
+        (io(std::io::ErrorKind::StorageFull), UpdateFailure::FileSystem),
+    ];
+    for (error, failure) in cases {
+        assert_eq!(error.failure(), failure, "{error:?}");
+    }
+}
+
+#[test]
+fn a_previous_app_that_was_not_put_back_is_named_to_the_ui() {
+    let error = UpdateError::PreviousAppNotRestored {
+        kept: std::path::PathBuf::from("/Applications/PlateVault (previous version).app"),
+        cause: Box::new(UpdateError::Install("disk full".to_owned())),
+    };
+    assert_eq!(
+        error.failure(),
+        UpdateFailure::PreviousAppNotRestored {
+            kept_at: "/Applications/PlateVault (previous version).app".to_owned()
+        }
+    );
+    assert_eq!(
+        error.to_string(),
+        "disk full; the previous app could not be put back and is kept at /Applications/PlateVault (previous version).app"
+    );
+}
+
+#[test]
+fn the_status_serializes_its_failure_as_a_tagged_code() {
+    let status = super::UpdateStatus {
+        error: Some(UpdateFailure::PreviousAppNotRestored { kept_at: "/tmp/x.app".to_owned() }),
+        ..super::UpdateStatus::idle()
+    };
+    assert_eq!(
+        serde_json::to_value(&status).expect("json")["error"],
+        json!({ "code": "previous-app-not-restored", "keptAt": "/tmp/x.app" })
+    );
+    let network =
+        super::UpdateStatus { error: Some(UpdateFailure::Network), ..super::UpdateStatus::idle() };
+    assert_eq!(
+        serde_json::to_value(&network).expect("json")["error"],
+        json!({ "code": "network" })
+    );
 }
 
 // ── Configuration ───────────────────────────────────────────────────────────
@@ -854,7 +1106,8 @@ mod bundle {
         assert_eq!(marker(&installed), "old");
         let status = rig.updater.current_status();
         assert_eq!(status.phase, UpdatePhase::InstallFailed);
-        assert!(status.error.expect("error").contains("not signed by the identity"));
+        assert_eq!(status.error, Some(crate::update::UpdateFailure::Identity));
+        assert!(rig.updater.error_text().expect("detail").contains("not signed by the identity"));
         assert!(rig.host_calls().is_empty(), "no relaunch");
     }
 
@@ -899,14 +1152,15 @@ mod bundle {
         header.set_mode(0o644);
         header.set_cksum();
         archive.append_data(&mut header, "README", &b"new"[..]).expect("entry");
-        let path = dir.path().join("update.app.tar.gz");
-        std::fs::write(&path, archive.into_inner().expect("tar").finish().expect("gzip"))
-            .expect("archive");
+        let archive = archive.into_inner().expect("tar").finish().expect("gzip");
 
         let signing = FakeSigning::new(Identity::AdHoc, "never asked");
-        let error = crate::update::install::install_bundle(&installed, &path, &signing)
+        let error = crate::update::install::install_bundle(&installed, &archive[..], &signing)
             .expect_err("refused");
-        assert!(error.to_string().contains("exactly one app bundle"), "{error}");
+        assert!(
+            matches!(&error, crate::update::UpdateError::Manifest(message) if message.contains("exactly one app bundle")),
+            "{error}"
+        );
         assert_eq!(marker(&installed), "old");
     }
 }

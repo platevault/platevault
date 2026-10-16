@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { Btn } from '@/ui';
 import { m } from '@/lib/i18n';
+import type { UpdateFailure } from '@/bindings/index';
 import {
   canInstall,
   checkForUpdate,
@@ -18,10 +19,40 @@ import {
   type UpdateState,
 } from '@/data/updateSubscription';
 
+/**
+ * Why the last step failed, in the user's language. The backend sends a code;
+ * its English detail stays in the log.
+ */
+export function updateFailureMessage(failure: UpdateFailure | null): string {
+  switch (failure?.code) {
+    case undefined:
+      return m.update_error_unknown();
+    case 'network':
+      return m.update_error_network();
+    case 'manifest':
+      return m.update_error_manifest();
+    case 'signature':
+      return m.update_error_signature();
+    case 'identity':
+      return m.update_error_identity();
+    case 'permission':
+      return m.update_error_permission();
+    case 'install':
+      return m.update_error_install();
+    case 'file-system':
+      return m.update_error_file_system();
+    case 'unsupported':
+      return m.update_error_unsupported();
+    case 'previous-app-not-restored':
+      return m.update_error_previous_app_not_restored({
+        path: failure.keptAt,
+      });
+  }
+}
+
 /** The status line for `state`. */
 export function updateStatusMessage(state: UpdateState): string {
   const version = state.version ?? '';
-  const message = state.error ?? '';
   switch (state.phase) {
     case 'idle':
       return m.settings_advanced_updates_not_checked();
@@ -30,17 +61,23 @@ export function updateStatusMessage(state: UpdateState): string {
     case 'checking':
       return m.settings_advanced_updates_checking();
     case 'check-failed':
-      return m.settings_advanced_updates_checkfailed({ message });
+      return m.settings_advanced_updates_checkfailed({
+        message: updateFailureMessage(state.error),
+      });
     case 'available':
       return m.settings_advanced_updates_available({ version });
     case 'downloading':
       return m.settings_advanced_updates_downloading({ version });
     case 'download-failed':
-      return m.settings_advanced_updates_downloadfailed({ message });
+      return m.settings_advanced_updates_downloadfailed({
+        message: updateFailureMessage(state.error),
+      });
     case 'installing':
       return m.settings_advanced_updates_installing({ version });
     case 'install-failed':
-      return m.settings_advanced_updates_installfailed({ message });
+      return m.settings_advanced_updates_installfailed({
+        message: updateFailureMessage(state.error),
+      });
     case 'install-on-quit':
       return m.settings_advanced_updates_queued({ version });
   }

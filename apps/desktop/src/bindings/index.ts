@@ -10657,6 +10657,46 @@ export type UpdateCleanupPolicy = {
 	autoOnCompletion: boolean,
 };
 
+/**
+ *  Why the last update step failed. The UI words it in the user's language;
+ *  the English detail goes to the log only.
+ */
+export type UpdateFailure = 
+/**
+ *  The update server could not be reached or answered with an error, or
+ *  the download stalled, ran out of time or was larger than an update can
+ *  be.
+ */
+{ code: "network" } | 
+/**
+ *  The update information is malformed, has nothing for this platform, or
+ *  points at a file that is not this platform's package.
+ */
+{ code: "manifest" } | 
+/**
+ *  The update's signature is missing, does not verify, or was made for
+ *  another version.
+ */
+{ code: "signature" } | 
+/**  The new macOS app is not signed by the identity of the installed one. */
+{ code: "identity" } | 
+/**  Permission to install was refused or not given. */
+{ code: "permission" } | 
+/**  The install step failed. */
+{ code: "install" } | 
+/**  The update's files could not be written or read. */
+{ code: "file-system" } | 
+/**
+ *  This copy cannot update itself: no release package installed it, or
+ *  no update endpoint is configured.
+ */
+{ code: "unsupported" } | 
+/**
+ *  The install failed and the previous macOS app could not be put back.
+ *  It was kept at `kept_at` instead of being deleted.
+ */
+{ code: "previous-app-not-restored"; keptAt: string };
+
 export type UpdateFilter = {
 	id: string,
 	name: string,
@@ -10716,7 +10756,7 @@ export type UpdateStatus = {
 	/**  The release notes, when the release has any. */
 	body: string | null,
 	/**  Why the last step failed, in the `*-failed` phases. */
-	error: string | null,
+	error: UpdateFailure | null,
 };
 
 export type UpdateTelescope = {

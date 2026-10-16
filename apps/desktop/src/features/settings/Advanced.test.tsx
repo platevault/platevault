@@ -281,16 +281,34 @@ describe('Advanced — Software Update section', () => {
   it('shows a distinct check-failed state with a retry action, not "up to date" (#873)', async () => {
     mockGetUpdateSnapshot.mockReturnValue({
       phase: 'check-failed',
-      error: 'network unreachable',
+      error: { code: 'network' },
     });
     render(<Advanced save={vi.fn()} />);
 
     const status = await screen.findByTestId('update-status');
-    expect(status).toHaveTextContent(/couldn't check/i);
+    expect(status).toHaveTextContent(
+      "Couldn't check for updates: the connection to the update server failed.",
+    );
     expect(status).not.toHaveTextContent(/latest version/i);
 
     fireEvent.click(await screen.findByTestId('update-retry-btn'));
     expect(mockCheckForUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('says where it kept a previous app it could not put back', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'install-failed',
+      version: '0.7.0',
+      error: {
+        code: 'previous-app-not-restored',
+        keptAt: '/Applications/PlateVault (previous version).app',
+      },
+    });
+    render(<Advanced save={vi.fn()} />);
+
+    expect(await screen.findByTestId('update-status')).toHaveTextContent(
+      "Could not install update: the previous version couldn't be put back. It's saved at /Applications/PlateVault (previous version).app.",
+    );
   });
 
   it('offers Install now and Install on quit for an available update, without starting either', async () => {

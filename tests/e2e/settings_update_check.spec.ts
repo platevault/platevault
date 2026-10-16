@@ -93,14 +93,15 @@ test.describe('Journey 17 · Software update check (mock-mode, spec 051)', () =>
   }) => {
     seedUpdateState(page, {
       phase: 'check-failed',
-      error: 'network unreachable',
+      error: { code: 'network' },
     });
 
     await page.goto('/#/settings/advanced');
 
-    // Status reads the check-failed message including the error detail.
+    // Status reads the check-failed message with the catalogue's wording
+    // for the failure code.
     await expect(page.getByTestId('update-status')).toHaveText(
-      "Couldn't check for updates: network unreachable",
+      "Couldn't check for updates: the connection to the update server failed.",
     );
 
     // "Check again" retry button is visible.

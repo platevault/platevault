@@ -35,11 +35,12 @@ mod tests;
 use std::fmt;
 use std::future::Future;
 use std::io;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-pub use contracts_core::updates::{UpdatePhase, UpdateStatus};
+pub use contracts_core::updates::{UpdateFailure, UpdatePhase, UpdateStatus};
 use reqwest::Url;
 use semver::Version;
 use tokio::sync::watch;
@@ -192,7 +193,8 @@ pub trait UpdatePort: Send + Sync {
     fn install_on_quit(&self) -> impl Future<Output = ()> + Send;
 }
 
-/// Why an update step failed.
+/// Why an update step failed. The message is English detail for the log;
+/// the UI shows [`Self::failure`].
 #[derive(Debug)]
 pub enum UpdateError {
     /// The host configuration is unusable.
@@ -204,8 +206,42 @@ pub enum UpdateError {
     /// The new macOS bundle does not satisfy the installed app's designated
     /// requirement.
     Identity(String),
+    /// The OS refused an install step its permission, or the user did not
+    /// give it.
+    Permission(String),
     Install(String),
+    /// This copy cannot install updates.
+    Unsupported(String),
+    /// `cause` failed the install, and the previous app could not be put
+    /// back: it is at `kept`.
+    PreviousAppNotRestored {
+        kept: PathBuf,
+        cause: Box<Self>,
+    },
     Io(io::Error),
+}
+
+impl UpdateError {
+    /// What the UI shows for this error.
+    #[must_use]
+    pub fn failure(&self) -> UpdateFailure {
+        match self {
+            Self::Config(_) | Self::Unsupported(_) => UpdateFailure::Unsupported,
+            Self::Network(_) => UpdateFailure::Network,
+            Self::Manifest(_) => UpdateFailure::Manifest,
+            Self::Signature(_) => UpdateFailure::Signature,
+            Self::Identity(_) => UpdateFailure::Identity,
+            Self::Permission(_) => UpdateFailure::Permission,
+            Self::Install(_) => UpdateFailure::Install,
+            Self::PreviousAppNotRestored { kept, .. } => {
+                UpdateFailure::PreviousAppNotRestored { kept_at: kept.display().to_string() }
+            }
+            Self::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                UpdateFailure::Permission
+            }
+            Self::Io(_) => UpdateFailure::FileSystem,
+        }
+    }
 }
 
 impl fmt::Display for UpdateError {
@@ -216,7 +252,14 @@ impl fmt::Display for UpdateError {
             | Self::Manifest(message)
             | Self::Signature(message)
             | Self::Identity(message)
-            | Self::Install(message) => f.write_str(message),
+            | Self::Permission(message)
+            | Self::Install(message)
+            | Self::Unsupported(message) => f.write_str(message),
+            Self::PreviousAppNotRestored { kept, cause } => write!(
+                f,
+                "{cause}; the previous app could not be put back and is kept at {}",
+                kept.display()
+            ),
             Self::Io(error) => error.fmt(f),
         }
     }
@@ -256,7 +299,7 @@ enum State {
     Idle,
     Checking,
     UpToDate,
-    CheckFailed(String),
+    CheckFailed(UpdateError),
     /// Found by the last check; `staged` once [`UpdatePort::download`] ran.
     Available {
         release: Release,
@@ -267,17 +310,17 @@ enum State {
     },
     DownloadFailed {
         release: Release,
-        error: String,
+        error: UpdateError,
     },
     Installing {
         release: Release,
-        on_quit: bool,
+        run: Run,
     },
     /// The verified payload stays staged, so a retry installs it again.
     InstallFailed {
         release: Release,
         staged: Arc<Staged>,
-        error: String,
+        error: UpdateError,
     },
     InstallOnQuit {
         release: Release,
@@ -285,6 +328,16 @@ enum State {
     },
     /// The install is over and the host is exiting or relaunching.
     Exiting,
+}
+
+/// Which install is running, which decides what follows it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Run {
+    /// The user chose Install now. `quit_held` once a quit arrived while it
+    /// runs: the app then exits when it is over, whether it worked or not.
+    Now { quit_held: bool },
+    /// The install the first quit started.
+    AtQuit,
 }
 
 impl State {
@@ -314,7 +367,7 @@ impl State {
             phase,
             version: release.map(|release| release.version_text.clone()),
             body: release.and_then(|release| release.notes.clone()),
-            error: error.cloned(),
+            error: error.map(UpdateError::failure),
         })
     }
 
@@ -346,7 +399,7 @@ impl Intent {
     fn staged(self, release: Release, staged: Arc<Staged>) -> State {
         match self {
             Self::Stage => State::Available { release, staged: Some(staged) },
-            Self::InstallNow => State::Installing { release, on_quit: false },
+            Self::InstallNow => State::Installing { release, run: Run::Now { quit_held: false } },
             Self::InstallOnQuit => State::InstallOnQuit { release, staged },
         }
     }
@@ -411,9 +464,14 @@ impl Updater {
 
     /// The check at app start: runs once per process, and only when
     /// `automatic` ("Check for updates automatically") is on. With it off,
-    /// nothing contacts the update endpoint until the user checks.
+    /// nothing contacts the update endpoint until the user checks. Either
+    /// way, it first removes payloads earlier runs left in the temp dir.
     pub async fn check_on_startup(&self, automatic: bool) {
-        if self.inner.startup_checked.swap(true, Ordering::SeqCst) || !automatic {
+        if self.inner.startup_checked.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let _ = tokio::task::spawn_blocking(signature::remove_stale_payloads).await;
+        if !automatic {
             return;
         }
         self.check().await;
@@ -422,22 +480,28 @@ impl Updater {
     /// Decide a quit. With an install on quit staged, the quit is held while
     /// the install runs on its own thread, and [`UpdateHost::exit`] follows
     /// once it is over or after [`QUIT_INSTALL_CEILING`]. A quit while an
-    /// install runs is held too, so the app is never stopped half-installed.
-    /// Nothing is persisted, so after a failed install the next launch's
-    /// check offers the update again.
+    /// install runs is held too, so the app is never stopped half-installed;
+    /// once an Install now it held is over, the app exits instead of
+    /// relaunching, whether the install worked or not. Nothing is persisted,
+    /// so after a failed install the next launch's check offers the update
+    /// again.
     #[must_use = "a deferred quit must be prevented"]
     pub fn on_quit_requested(&self) -> QuitDecision {
         let mut state = self.lock();
-        match &*state {
+        match &mut *state {
             State::InstallOnQuit { release, staged } => {
                 let staged = Arc::clone(staged);
                 let release = release.clone();
-                self.set(&mut state, State::Installing { release, on_quit: true });
+                self.set(&mut state, State::Installing { release, run: Run::AtQuit });
                 drop(state);
                 self.spawn_install_on_quit(staged);
                 QuitDecision::Defer
             }
-            State::Installing { .. } => QuitDecision::Defer,
+            State::Installing { run: Run::Now { quit_held }, .. } => {
+                *quit_held = true;
+                QuitDecision::Defer
+            }
+            State::Installing { run: Run::AtQuit, .. } => QuitDecision::Defer,
             _ => QuitDecision::Proceed,
         }
     }
@@ -529,7 +593,7 @@ impl Updater {
                     )
                     .await
                 }
-                None => Err(UpdateError::Install(
+                None => Err(UpdateError::Unsupported(
                     "this copy of PlateVault was not installed from a release package, so it cannot update itself"
                         .to_owned(),
                 )),
@@ -543,7 +607,6 @@ impl Updater {
                 }
                 Err(error) => {
                     tracing::warn!(version = %release.version_text, %error, "update download failed");
-                    let error = error.to_string();
                     self.set(&mut state, State::DownloadFailed { release, error });
                     return false;
                 }
@@ -561,28 +624,49 @@ impl Updater {
         let inner = Arc::clone(&self.inner);
         let payload = Arc::clone(&staged);
         let installed = tokio::task::spawn_blocking(move || {
-            inner.installer.install(&payload, InstallMode::Now)
+            inner.installer.install(payload.reverify()?, InstallMode::Now)
         })
         .await
         .unwrap_or_else(|error| {
             Err(UpdateError::Install(format!("the install task failed: {error}")))
         });
+        self.after_install_now(release, staged, installed);
+    }
+
+    /// Relaunch or exit once Install now is over, or keep `staged` for a
+    /// retry after a failure. A quit held during the install wins over both:
+    /// the next launch runs the new version, or offers the update again.
+    fn after_install_now(
+        &self,
+        release: Release,
+        staged: Arc<Staged>,
+        installed: Result<Installed, UpdateError>,
+    ) {
         let mut state = self.lock();
-        match installed {
+        let quit_held =
+            matches!(*state, State::Installing { run: Run::Now { quit_held: true }, .. });
+        match &installed {
             Ok(installed) => {
-                tracing::info!(version = %release.version_text, ?installed, "update installed");
-                *state = State::Exiting;
-                drop(state);
-                match installed {
-                    Installed::Relaunch => self.inner.host.relaunch(),
-                    Installed::Handoff => self.inner.host.exit(),
-                }
+                tracing::info!(version = %release.version_text, ?installed, quit_held, "update installed");
             }
             Err(error) => {
-                tracing::warn!(version = %release.version_text, %error, "update install failed");
-                let error = error.to_string();
-                self.set(&mut state, State::InstallFailed { release, staged, error });
+                tracing::warn!(version = %release.version_text, %error, quit_held, "update install failed");
             }
+        }
+        let relaunch = match installed {
+            Ok(installed) => installed == Installed::Relaunch && !quit_held,
+            Err(_) if quit_held => false,
+            Err(error) => {
+                self.set(&mut state, State::InstallFailed { release, staged, error });
+                return;
+            }
+        };
+        *state = State::Exiting;
+        drop(state);
+        if relaunch {
+            self.inner.host.relaunch();
+        } else {
+            self.inner.host.exit();
         }
     }
 
@@ -592,7 +676,10 @@ impl Updater {
         let installing = self.clone();
         let install = std::thread::Builder::new().name("update-install-on-quit".to_owned()).spawn(
             move || {
-                if let Err(error) = installing.inner.installer.install(&staged, InstallMode::OnQuit) {
+                let installed = staged
+                    .reverify()
+                    .and_then(|payload| installing.inner.installer.install(payload, InstallMode::OnQuit));
+                if let Err(error) = installed {
                     tracing::warn!(%error, "update install at quit failed; the next launch offers the update again");
                 }
                 installing.exit_after_quit_install();
@@ -621,13 +708,24 @@ impl Updater {
     /// End the install at quit and exit, once: `true` for the caller that did.
     fn exit_after_quit_install(&self) -> bool {
         let mut state = self.lock();
-        if !matches!(*state, State::Installing { on_quit: true, .. }) {
+        if !matches!(*state, State::Installing { run: Run::AtQuit, .. }) {
             return false;
         }
         *state = State::Exiting;
         drop(state);
         self.inner.host.exit();
         true
+    }
+
+    /// The English detail of the failure the current state shows.
+    #[cfg(test)]
+    fn error_text(&self) -> Option<String> {
+        match &*self.lock() {
+            State::CheckFailed(error)
+            | State::DownloadFailed { error, .. }
+            | State::InstallFailed { error, .. } => Some(error.to_string()),
+            _ => None,
+        }
     }
 }
 
@@ -646,7 +744,7 @@ impl UpdatePort for Updater {
                 State::Available { release, staged: None }
             }
             Ok(None) => State::UpToDate,
-            Err(error) => State::CheckFailed(error.to_string()),
+            Err(error) => State::CheckFailed(error),
         };
         self.set(&mut self.lock(), next);
     }

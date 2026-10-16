@@ -1488,6 +1488,7 @@ dependencies = [
  "platevault_core",
  "platevault_pixels",
  "reqwest",
+ "rustix",
  "semver",
  "serde",
  "serde_json",
