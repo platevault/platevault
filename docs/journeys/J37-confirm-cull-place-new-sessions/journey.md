@@ -27,13 +27,13 @@ After import, the user resolves Target and rig associations, reviews new session
 
   | Session | Frames | Target | Rig | OBJECT | Pointing |
   | --- | --- | --- | --- | --- | --- |
-  | 12, 18, 24, 26, 28 and 30 Sep (J19) | 24, 55, 20, 35, 56, 48 | NGC 7000: 24 and 26 Sep Confirmed, the rest Associated (J19/S10) | `RedCat` Confirmed (J19/S10) | as J19/P2, P3 | as J19/P2, P3 |
-  | other camera (J19) | 40 | NGC 7000 Associated | `Esprit` Confirmed (J19/S11) | NGC 7000 | within NGC 7000's footprint |
+  | 12, 18, 24, 26, 28 and 30 Sep (J19) | 24, 55, 20, 35, 56, 48 | NGC 7000 Confirmed: 24 and 26 Sep at J19/S10, the rest at their intake after J31 (P3) | `RedCat` Confirmed (J19/S10) | as J19/P2, P3 | as J19/P2, P3 |
+  | other camera (J19) | 40 | NGC 7000 Confirmed at its intake after J31 (P3) | `Esprit` Confirmed (J19/S11) | NGC 7000 | within NGC 7000's footprint |
   | `2 Oct Ha` (J31/S6, S8) | 35 | NGC 7000 Confirmed in the Import preview, prefilled from its pointing (J31/S3, S6) | `RedCat` Associated from its optics keywords (G3) | `NGC 7000` | within NGC 7000's footprint |
   | `2 Oct OIII` (J31/S5a, S6) | 6 | NGC 7000 Confirmed in the Import preview (J31/S5a) | Needs review: no TELESCOP or FOCALLEN | none | none |
   | `4 Oct Ha` (J31/S9) | 12 | none: Unclassified at import, its frames under `unclassified/Ha/2026-10-04/light/` in `Astro-T7 captures` | `RedCat` Associated from its optics keywords (G3) | `NGC7000` | none |
 
-- P3: Every frame in `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` reads Unreviewed. J19 left every frame of its sessions Unreviewed (J19 SC6); after J31, the user finished the intake review of the six J19 sessions and the other-camera session, so those seven are Ready. Among `2 Oct Ha`, `Light_Ha_0005.fits`, `Light_Ha_0017.fits` and `Light_Ha_0023.fits` are clouded (J31/P2).
+- P3: Every frame in `2 Oct Ha`, `2 Oct OIII` and `4 Oct Ha` reads Unreviewed. J19 left every frame of its sessions Unreviewed (J19 SC6), and it left the Targets of 12, 18, 28 and 30 Sep and the other-camera session associated by pointing (J19 SC4). After J31, the user took the seven J19 sessions through intake (LIB-FR-20). At the Target step of the five associated sessions they confirmed the NGC 7000 Target that the pointing preselected, and they finished each review. So all seven read NGC 7000 Confirmed and are Ready. Among `2 Oct Ha`, `Light_Ha_0005.fits`, `Light_Ha_0017.fits` and `Light_Ha_0023.fits` are clouded (J31/P2).
 - P4: No location is offline or unreadable, no work has failed or been interrupted, and no frame or pinned calibration assignment has drifted.
 - P5: A manifest (relative path, size, SHA-256) of every file under the three registered locations, recorded outside PlateVault before S1.
 
@@ -71,12 +71,12 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Expect (negative):** Confirming changes no frame count, header or file, and no move is offered. No frame changes before the bulk confirmation is accepted. `2 Oct OIII` joins no Project.
 - **Trace:** LIB-FR-05, LIB-FR-20, LIB-FR-23, PRJ-FR-09 · PIX-FR-14, PIX-AC-21 · D-W78, D-W104, D-W105, D-W118
 
-### S5 — Confirm the pointing association of a session indexed in place {#S5}
+### S5 — Read the pointing evidence of a session indexed in place {#S5}
 
-- **Do:** Open `30 Sep`. Read its Target and Rig boxes and its Project membership. Confirm the preselected NGC 7000 Target.
-- **Expect:** Before confirming, the Target box reads NGC 7000 Associated. Its evidence lists the pointing as `<angle> from NGC 7000 centre`, and the header line shows `OBJECT NGC 7000` as a label. The Rig box reads `RedCat` Confirmed (J19/S10). The Target picker preselects NGC 7000 from the pointing. The session is not held by a Project. After confirming, the Target box reads NGC 7000 Confirmed.
-- **Expect (negative):** Confirming an Associated Target changes no filter count and no Project suggestion. No evidence list names OBJECT. No mismatch warning appears, because the pointing lies within NGC 7000's footprint. The session's 48 frames stay at their J19 paths, and no move is offered.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 (association uses pointing within the Target's footprint and the user's confirmation only), §Round 6 (Confirming a Target the pointing disagrees with shows a mismatch warning) · HARNESS-V5-IA.md §Screens S12 · LIB-FR-05
+- **Do:** Open `30 Sep`. Read its Target and Rig boxes and its Project membership.
+- **Expect:** The Target box reads NGC 7000 Confirmed (P3) next to its original evidence, which lists the pointing as `<angle> from NGC 7000 centre`, and the header line shows `OBJECT NGC 7000` as a label. The Rig box reads `RedCat` Confirmed (J19/S10). The session is Ready and not held by a Project, and Sessions' Not in any Project filter lists it.
+- **Expect (negative):** Reading the session changes no filter count and no Project suggestion. No evidence list names OBJECT. No mismatch warning appears, because the pointing lies within NGC 7000's footprint. The session's 48 frames stay at their J19 paths, and no move is offered.
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 5 (association uses pointing within the Target's footprint and the user's confirmation only), §Round 6 (Confirming a Target the pointing disagrees with shows a mismatch warning) · HARNESS-V5-IA.md §Screens S12 · LIB-FR-05, LIB-FR-17, LIB-FR-20
 
 ### S6 — Cull the new night's frames with library marks {#S6}
 
@@ -147,7 +147,7 @@ After import, the user resolves Target and rig associations, reviews new session
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist. Behavior follows the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 6, `apps/prototype/` on ui-harness-v5 @ b5e813a5; the prototype at 4f470775 does not yet implement Round 6) and specs 064, 065 and 067. No implementation has been validated against it.
-- G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2). P1 and P3 also add the calibration choices and intake reviews the user made after J31, which no step here walks. No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
+- G2: Unresolved implementation qualification: P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2). P1 and P3 also add the calibration choices, Target confirmations and intake reviews the user made after J31, which no step here walks. Because P3 confirms every J19 Target, this journey's counts hold whatever the answer to J19 G11. No seeded-catalog builder exists that could reach P2 directly. Blocks readiness.
 - G3: Unresolved implementation qualification: P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05). The v5 design does not state the equipment-matching rule for a session whose TELESCOP and FOCALLEN match an existing rig. Blocks readiness.
 - G4: Out of scope for this journey, covered elsewhere: reopening a Ready session's Review and its labelled pending changes on open Projects (J22), moving Unusable frames to Trash during Wrap up (J44, J34), status-bar counters opening their owning pages (J38), Home's Open work and Next action (J32), creating rigs and filter lists (J15), first Apply and later View changes (J21, J24, J25), and a failed catalog write while confirming (J19/S11).
 - G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled. Blocks readiness until covered by a step or a journey.
