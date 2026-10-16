@@ -46,9 +46,9 @@ Done means:
 ### S1a — Meet the Windows Developer Mode refusal {#S1a}
 
 - **Do:** On the Windows lane with Developer Mode off, choose Symlinks and click **Apply…**. Read the refusal, choose **Open Windows settings**, enable Developer Mode, return to PlateVault and choose **Check again**.
-- **Expect:** Apply is refused with "Can't apply · symlinks need Windows Developer Mode ▸" and offers **Open Windows settings**, **Check again** and **Use copies for this Project**. After enabling Developer Mode, the refusal clears. On macOS there is no Developer Mode check.
+- **Expect:** Apply is refused with "Can't apply · symlinks need Windows Developer Mode ▸" and offers **Open Windows settings** and **Check again**. The Project's application is Siril, whose `Processing/Siril/` sets are symlinks in either mode, so the refusal offers no **Use copies for this Project** (provisional, PREP-FR-17). After enabling Developer Mode, the refusal clears. On macOS there is no Developer Mode check.
 - **Expect (negative):** The refused Apply creates no Project folder or View and does not switch the mode to Copies. The Settings default stays Symlinks.
-- **Trace:** PREP-FR-15 · D-W81, D-W98, D-W100
+- **Trace:** PREP-FR-15, PREP-FR-17 · PREP-AC-08 · D-W81, D-W98, D-W99, D-W100
 
 ### S4 — Choose a parent with an unrelated Project folder {#S4}
 
@@ -200,7 +200,7 @@ Done means:
 - G9: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S17 now makes revision 2 with "Reject for this Project only" on one 28 Sep frame, whose library quality stays Usable, as in J22/S11b.
 - G10: (dissolved 2026-10-15): D-W94 removes runs and their saved and prepared revisions. A library rejection becomes a labelled pending change on every open Project that holds the frame (D-W100, VSEL-FR-12), so there is no other run's revision to define.
 - G11: Unresolved implementation qualification: the Windows file-handle fixture of P8 does not exist in the rebuilt application yet, and S15, S15a and S16 depend on it. Blocks readiness.
-- G12: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W100's rule that the first Apply builds the View with no separate Start processing (S8, S9), the "Use copies for this Project" refusal copy of PREP-FR-15 (S1a), D-W95's "re-add View in your tool" layout note (S14), and D-W108's exposure part that ends every light folder name, `Ha_300s` (S8, S17). If the owner changes one, the steps that cite it change.
+- G12: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W100's rule that the first Apply builds the View with no separate Start processing (S8, S9), the "Use copies for this Project" refusal copy of PREP-FR-15 and the Siril refusal that omits it (PREP-FR-17, S1a), D-W95's "re-add View in your tool" layout note (S14), and D-W108's exposure part that ends every light folder name, `Ha_300s` (S8, S17). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S4, S6, S7, S8, S9, S10, S12, S13, S14, S15, +S17 · behavior-change
