@@ -406,9 +406,12 @@ async fn an_unanswered_notification_carries_the_offer_only_until_the_timeout() {
     assert_eq!(change, offer("0.7.0", OfferChannel::InApp));
     assert!(start.elapsed() >= PERSISTENT_OFFER_TIMEOUT, "handed over after {:?}", start.elapsed());
     assert_eq!(system.withdrawn(), 0, "the notification was taken away");
-    // Still outstanding: withdrawn when the phase leaves available.
+    // Still outstanding: withdrawn when the phase leaves available, which
+    // publishes the in-app offer again after the withdrawal. A yield loop
+    // would never let the paused clock reach a timeout.
     port.publish(UpdatePhase::Checking, "0.7.0");
-    until("the withdrawal", || system.withdrawn() == 1).await;
+    assert_eq!(next_offer(&mut feed, OFFER_DEADLINE).await, offer("0.7.0", OfferChannel::InApp));
+    assert_eq!(system.withdrawn(), 1);
 }
 
 #[tokio::test(start_paused = true)]

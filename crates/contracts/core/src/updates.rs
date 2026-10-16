@@ -88,21 +88,21 @@ impl UpdateStatus {
 #[serde(rename_all = "kebab-case")]
 pub enum OfferChannel {
     /// A system notification with both buttons is outstanding that stays on
-    /// screen until the user answers it, for at most five minutes: on macOS,
-    /// the Alert notification style, unless it was presented while the app
-    /// was frontmost, which shows it as a banner. A Focus may send even an
-    /// alert unseen to Notification Center, which the app cannot read, so
-    /// after that time the in-app notice offers the update too. Elsewhere
-    /// the notification is only a heads-up beside the in-app notice.
+    /// screen until the user answers it, for a bounded time: on macOS, the
+    /// Alert notification style, unless it was presented while the app was
+    /// frontmost, which shows it as a banner. A Focus may send even an alert
+    /// unseen to Notification Center, which the app cannot read, so after
+    /// that time the in-app notice offers the update too. Elsewhere the
+    /// notification is only a heads-up beside the in-app notice.
     System,
     /// The in-app notice carries them: the notification is a heads-up that
     /// may leave the screen unanswered (a macOS banner, including any
     /// notification presented while the app is frontmost, a Windows toast, a
     /// freedesktop notification), a notification that stays on screen went
-    /// unanswered for five minutes, notification permission was denied, the
-    /// notification system shows no buttons, the notification could not be
-    /// shown or was not accepted in time, or the user answered or closed it,
-    /// or it was withdrawn.
+    /// unanswered for that bounded time, notification permission was
+    /// denied, the notification system shows no buttons, the notification
+    /// could not be shown or was not accepted in time, or the user answered
+    /// or closed it, or it was withdrawn.
     InApp,
 }
 
