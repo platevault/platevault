@@ -115,6 +115,10 @@ jobs:
       contents: write # tauri-action publishes the release and uploads bundles
       id-token: write # OIDC identity that signs the attestation
       attestations: write # publish the attestation to this repo
+      # The SignPath connector reads this job's details and downloads its
+      # artifacts with the job token (the action's github-token input needs
+      # actions: read and contents: read). Unused while Windows signing is off.
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -365,6 +369,18 @@ jobs:
       # passes --no-binary-patching so the bundler packs the signed copies as
       # they are. The installers also ship the package's other bin targets,
       # such as platevault-library, which the bundler packs unstamped.
+      #
+      # This copies Tauri CLI 2.12.2's bundler (the version pnpm-lock.yaml
+      # pins): the marker, the NSS and MSI codes, and get_binaries' rule for
+      # which bin targets it packs. Check all three again on any
+      # @tauri-apps/cli bump. The check after signing fails on an executable
+      # in either installer that SignPath did not sign, so a changed bin rule
+      # stops the release rather than shipping an unsigned file.
+      #
+      # The command is the one tauri-action runs on the other legs, `tauri
+      # build` in apps/desktop with no extra arguments, with --no-bundle
+      # added. The signing keys in tauri-action's env only write updater
+      # signatures, which come later here.
       - name: Build the Windows app for signing
         id: windows-app
         if: runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true'
@@ -427,10 +443,15 @@ jobs:
       # Every request waits for an approver to approve it in SignPath, signed in
       # with MFA. The action's default wait, 600 s, gives the approver ten
       # minutes. 3600 s gives an hour for each of the two requests a release
-      # makes, well inside GitHub's six-hour job limit.
+      # makes. This job sets no timeout-minutes, so GitHub's six-hour job limit
+      # applies, and the workflow's concurrency group never cancels a run in
+      # progress (cancel-in-progress: false).
+      #
+      # The pin is the commit the v2 and v2.3 tags point at: the action's 2.3.0
+      # in SignPath's changelog.
       - name: Sign the app executables (SignPath)
         if: runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3.0
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -447,16 +468,20 @@ jobs:
       # bundler from stamping the app again. --no-sign stops it from writing
       # updater signatures, which signing the installers would make stale; they
       # are written once the installers are final.
+      #
+      # Every file sent to SignPath must come back signed by SignPath
+      # Foundation, or the unsigned copy left in the target directory would be
+      # packed. A signature from any other certificate fails here, a SignPath
+      # test-signing certificate included.
       - name: Bundle the installers around the signed executables
         if: runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true'
         shell: pwsh
         env:
           RELEASE_DIR: ${{ steps.windows-app.outputs.release_dir }}
           MAIN_BINARY: ${{ steps.windows-app.outputs.main_binary }}
+          AUTHENTICODE_SIGNER: &authenticode-signer SignPath Foundation
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          # Every file sent to SignPath must come back validly signed, or the
-          # unsigned copy left in the target directory would be packed.
           $submitted = (Resolve-Path app-to-sign).Path
           foreach ($file in Get-ChildItem -Recurse -File app-to-sign) {
             $relative = [System.IO.Path]::GetRelativePath($submitted, $file.FullName)
@@ -465,8 +490,9 @@ jobs:
               throw "SignPath returned no $signed. The app artifact configuration must keep each file at its path."
             }
             $signature = Get-AuthenticodeSignature -LiteralPath $signed
-            if ($signature.Status -ne 'Valid') {
-              throw "$signed is not validly signed: $($signature.Status) $($signature.StatusMessage)"
+            $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
+            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
+              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
             }
           }
 
@@ -497,7 +523,7 @@ jobs:
 
       - name: Sign the installers (SignPath)
         if: runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3.0
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -509,15 +535,30 @@ jobs:
           wait-for-completion-timeout-in-seconds: 3600 # an hour to approve, as for the request above
           output-artifact-directory: installers-signed
 
-      # Fails the leg unless SignPath signed both installers and each installer
-      # carries the signed executables byte for byte, so that what a user
-      # installs is what SignPath signed. 7-Zip reads the NSIS installer's
-      # files; its exit code 1 is a warning, such as data after the installer's
-      # end, which the signature is. An administrative install (msiexec /a)
-      # unpacks the MSI's files without installing anything.
+      # Fails the leg unless SignPath Foundation signed both installers and the
+      # executables inside them match what SignPath signed, both ways round:
+      # each installer carries every signed copy meant for it, byte for byte,
+      # and every PE file (executable or DLL) found in an installer is one of
+      # those copies or a third-party file the list below names, with the
+      # reason it ships without this project's signature. A bin target,
+      # sidecar or resource added later fails here until it is signed or listed.
+      #
+      # 7-Zip unpacks the NSIS installer's files and, with -tCompound, the
+      # MSI's streams, which hold its custom action DLLs. Without -tCompound,
+      # 7-Zip opens the MSI's app.cab instead. Its exit code 1 is a warning,
+      # such as data after the installer's end, which the signature is. An
+      # administrative install (msiexec /a) unpacks the files the MSI
+      # installs, without installing anything.
+      #
+      # Not covered: the uninstall.exe the NSIS installer writes into the
+      # install folder. NSIS builds it from setup.exe's own stub while it
+      # installs, so it is in no installer to check, and it stays unsigned
+      # (docs/development/code-signing.md, "Known limits").
       - name: Check the signed installers
         if: runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true'
         shell: pwsh
+        env:
+          AUTHENTICODE_SIGNER: *authenticode-signer
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           foreach ($installer in Get-ChildItem -File installers-to-sign) {
@@ -526,24 +567,32 @@ jobs:
               throw "SignPath returned no $signed. The installer artifact configuration must keep each file at the artifact root."
             }
             $signature = Get-AuthenticodeSignature -LiteralPath $signed
-            if ($signature.Status -ne 'Valid') {
-              throw "$signed is not validly signed: $($signature.Status) $($signature.StatusMessage)"
+            $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
+            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
+              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
             }
           }
 
-          $setup = Get-Item installers-signed/*-setup.exe
-          & {
-            $PSNativeCommandUseErrorActionPreference = $false
-            7z x $setup.FullName "-o$PWD\unpacked\nsis" -y | Out-Null
+          function Expand-With7Zip([string] $archive, [string] $destination, [string[]] $options = @()) {
+            & {
+              $PSNativeCommandUseErrorActionPreference = $false
+              7z x @options $archive "-o$destination" -y | Out-Null
+            }
+            if ($LASTEXITCODE -gt 1) { throw "7-Zip could not unpack ${archive}: exit code $LASTEXITCODE" }
           }
-          if ($LASTEXITCODE -gt 1) { throw "7-Zip could not unpack $($setup.Name): exit code $LASTEXITCODE" }
+          $setup = Get-Item installers-signed/*-setup.exe
           $msi = Get-Item installers-signed/*.msi
+          Expand-With7Zip $setup.FullName "$PWD\unpacked\nsis"
+          Expand-With7Zip $msi.FullName "$PWD\unpacked\msi-streams" -options '-tCompound'
           $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$PWD\unpacked\msi`""
           if ($admin.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($admin.ExitCode)" }
 
+          # Signed copies meant for each installer, and the unpacked trees each
+          # installer's PE files are searched in.
+          $signedFor = @{}
           foreach ($bundle in 'nsis', 'msi') {
-            $expected = @(Get-ChildItem -File "app-signed/$bundle") + @(Get-ChildItem -File -Filter '*.exe' app-signed)
-            foreach ($file in $expected) {
+            $signedFor[$bundle] = @(Get-ChildItem -File "app-signed/$bundle") + @(Get-ChildItem -File -Filter '*.exe' app-signed)
+            foreach ($file in $signedFor[$bundle]) {
               $packed = @(Get-ChildItem -Recurse -File -Filter $file.Name "unpacked/$bundle")
               if ($packed.Count -ne 1) {
                 throw "expected one $($file.Name) in the $bundle installer, found $($packed.Count)"
@@ -553,6 +602,63 @@ jobs:
               }
               "the $bundle installer carries the signed $($file.Name)"
             }
+          }
+          $trees = [ordered]@{ nsis = 'nsis'; msi = 'msi'; 'msi-streams' = 'msi' }
+
+          # Third-party code in the installers. SignPath Foundation signs only
+          # files built from this repository, so these keep their own
+          # signatures, if any. Paths are relative to unpacked/.
+          $nsisPlugin = 'NSIS plugin: third-party code that setup.exe extracts to a temporary folder and loads while it runs; not installed'
+          $wixAction = 'WiX custom action: third-party code that msiexec runs while it installs; not installed'
+          $thirdParty = [ordered]@{
+            'nsis/$PLUGINSDIR/nsDialogs.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/NSISdl.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/StartMenu.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/System.dll' = $nsisPlugin
+            'msi-streams/Binary.WixUIWixca' = $wixAction
+          }
+
+          function Test-PortableExecutable([string] $path) {
+            $stream = [System.IO.File]::OpenRead($path)
+            try {
+              $reader = [System.IO.BinaryReader]::new($stream)
+              if ($stream.Length -lt 64 -or $reader.ReadUInt16() -ne 0x5A4D) { return $false }
+              $stream.Position = 0x3C
+              $header = [long]$reader.ReadUInt32()
+              if ($header + 4 -gt $stream.Length) { return $false }
+              $stream.Position = $header
+              return $reader.ReadUInt32() -eq 0x00004550
+            } finally {
+              $stream.Dispose()
+            }
+          }
+
+          $unpacked = (Resolve-Path unpacked).Path
+          $unexpected = @()
+          $listed = @()
+          foreach ($tree in $trees.Keys) {
+            $signedHashes = @($signedFor[$trees[$tree]] | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName).Hash })
+            foreach ($file in Get-ChildItem -Recurse -File "unpacked/$tree") {
+              if (-not (Test-PortableExecutable $file.FullName)) { continue }
+              $relative = [System.IO.Path]::GetRelativePath($unpacked, $file.FullName).Replace('\', '/')
+              if ((Get-FileHash -LiteralPath $file.FullName).Hash -in $signedHashes) {
+                "signed by SignPath: $relative"
+              } elseif ($thirdParty.Contains($relative)) {
+                $listed += $relative
+                $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+                $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+                "third-party: $relative ($($thirdParty[$relative])); Authenticode $($signature.Status), signed by $signer"
+              } else {
+                $unexpected += $relative
+              }
+            }
+          }
+          foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) {
+            "::warning::$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
+          }
+          if ($unexpected) {
+            throw "these executables in the installers were not signed by SignPath and are not on the third-party list: $($unexpected -join ', ')"
           }
 
       # minisign over the final bytes, which SignPath just rewrote: the same
