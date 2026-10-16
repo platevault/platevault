@@ -658,14 +658,14 @@ struct Held {
 }
 
 impl Held {
-    async fn read(conn: &mut SqliteConnection, project_id: Uuid) -> Result<Self> {
-        let project = project_id.to_string();
+    /// Every group of the Project in position order, sessions not filled in.
+    async fn groups(conn: &mut SqliteConnection, project: &str) -> Result<Vec<BasisGroup>> {
         let mut groups = Vec::new();
         for row in sqlx::query(
             "SELECT id, name, panel, rig_id, origin, optics, framing, position \
              FROM project_groups WHERE project_id = ?1 ORDER BY position, id",
         )
-        .bind(&project)
+        .bind(project)
         .fetch_all(&mut *conn)
         .await?
         {
@@ -686,6 +686,12 @@ impl Held {
                 sessions: Vec::new(),
             });
         }
+        Ok(groups)
+    }
+
+    async fn read(conn: &mut SqliteConnection, project_id: Uuid) -> Result<Self> {
+        let project = project_id.to_string();
+        let groups = Self::groups(conn, &project).await?;
         let mut sessions: BTreeMap<Uuid, Vec<HeldSession>> = BTreeMap::new();
         for row in sqlx::query(
             "SELECT ps.session_id, ps.group_id, ps.placement, ps.target_id, s.capture_key \

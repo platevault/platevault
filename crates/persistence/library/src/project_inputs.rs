@@ -57,7 +57,7 @@ pub struct NewGroup {
 
 /// One whole session to add to `group_id`, at the admission basis the user
 /// saw (`None` takes the current one).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionAdd {
     pub session_id: Uuid,
     pub group_id: Uuid,
@@ -1087,6 +1087,49 @@ impl FrameChanges {
         };
         list.push(key);
     }
+
+    /// The held frames of `session` whose placement moved from `basis`.
+    fn of(
+        session: Uuid,
+        held: &[ProjectCapture],
+        basis: &[BasisCapture],
+        live: &BTreeMap<Uuid, Asset>,
+    ) -> Self {
+        let mut frames = Self::default();
+        for capture in held.iter().filter(|capture| capture.session_id == session) {
+            let Some(was) = basis.iter().find(|was| was.capture_key == capture.capture_key) else {
+                continue;
+            };
+            let now = capture.inclusion.admits(live_quality(&live_of(capture, live)));
+            if now != was.included {
+                frames.record(capture.capture_key, now, capture.inclusion != was.inclusion);
+            }
+        }
+        frames
+    }
+
+    /// Each non-empty list as the change it makes, by source.
+    fn push_into(
+        self,
+        session_id: Uuid,
+        own: &mut Vec<PendingChange>,
+        library: &mut Vec<PendingChange>,
+    ) {
+        if !self.included.is_empty() {
+            own.push(PendingChange::FramesIncluded { session_id, capture_keys: self.included });
+        }
+        if !self.excluded.is_empty() {
+            own.push(PendingChange::FramesExcluded { session_id, capture_keys: self.excluded });
+        }
+        if !self.rejected.is_empty() {
+            library
+                .push(PendingChange::LibraryRejected { session_id, capture_keys: self.rejected });
+        }
+        if !self.restored.is_empty() {
+            library
+                .push(PendingChange::LibraryRestored { session_id, capture_keys: self.restored });
+        }
+    }
 }
 
 async fn pending_changes(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<PendingChange>> {
@@ -1127,33 +1170,7 @@ async fn changes_against(
     if keywords != applied.keywords {
         own.push(PendingChange::KeywordsChanged { from: applied.keywords.clone(), to: keywords });
     }
-    for group in &desired.groups {
-        match applied.groups.iter().find(|applied| applied.id == group.id) {
-            None => {
-                own.push(PendingChange::GroupAdded { group_id: group.id, name: group.name.clone() })
-            }
-            Some(applied) => {
-                if applied.name != group.name {
-                    own.push(PendingChange::GroupRenamed {
-                        group_id: group.id,
-                        from: applied.name.clone(),
-                        to: group.name.clone(),
-                    });
-                }
-                if applied.panel != group.panel {
-                    own.push(PendingChange::GroupPanelChanged {
-                        group_id: group.id,
-                        panel: group.panel,
-                    });
-                }
-            }
-        }
-    }
-    for group in &applied.groups {
-        if desired.groups.iter().all(|desired| desired.id != group.id) {
-            own.push(PendingChange::GroupRemoved { group_id: group.id, name: group.name.clone() });
-        }
-    }
+    own.extend(group_changes(desired, applied));
     let applied_sessions: BTreeMap<Uuid, (Uuid, &[BasisCapture])> = applied
         .groups
         .iter()
@@ -1181,32 +1198,11 @@ async fn changes_against(
                 to_group: member.group_id,
             });
         }
-        let mut frames = FrameChanges::default();
-        for capture in desired.captures.iter().filter(|c| c.session_id == member.session_id) {
-            let Some(was) = captures.iter().find(|was| was.capture_key == capture.capture_key)
-            else {
-                continue;
-            };
-            let now = capture.inclusion.admits(live_quality(&live_of(capture, &live)));
-            if now != was.included {
-                frames.record(capture.capture_key, now, capture.inclusion != was.inclusion);
-            }
-        }
-        let session_id = member.session_id;
-        if !frames.included.is_empty() {
-            own.push(PendingChange::FramesIncluded { session_id, capture_keys: frames.included });
-        }
-        if !frames.excluded.is_empty() {
-            own.push(PendingChange::FramesExcluded { session_id, capture_keys: frames.excluded });
-        }
-        if !frames.rejected.is_empty() {
-            library
-                .push(PendingChange::LibraryRejected { session_id, capture_keys: frames.rejected });
-        }
-        if !frames.restored.is_empty() {
-            library
-                .push(PendingChange::LibraryRestored { session_id, capture_keys: frames.restored });
-        }
+        FrameChanges::of(member.session_id, &desired.captures, captures, &live).push_into(
+            member.session_id,
+            &mut own,
+            &mut library,
+        );
     }
     for (session_id, (group, _)) in &applied_sessions {
         if desired.sessions.iter().all(|member| member.session_id != *session_id) {
@@ -1224,6 +1220,33 @@ async fn changes_against(
     }
     own.extend(library);
     Ok(own)
+}
+
+/// The groups the Project added, renamed, marked or unmarked, and removed.
+fn group_changes(desired: &ProjectDesired, applied: &ProjectBasis) -> Vec<PendingChange> {
+    let mut own = Vec::new();
+    for group in &desired.groups {
+        let Some(was) = applied.groups.iter().find(|was| was.id == group.id) else {
+            own.push(PendingChange::GroupAdded { group_id: group.id, name: group.name.clone() });
+            continue;
+        };
+        if was.name != group.name {
+            own.push(PendingChange::GroupRenamed {
+                group_id: group.id,
+                from: was.name.clone(),
+                to: group.name.clone(),
+            });
+        }
+        if was.panel != group.panel {
+            own.push(PendingChange::GroupPanelChanged { group_id: group.id, panel: group.panel });
+        }
+    }
+    for group in &applied.groups {
+        if desired.groups.iter().all(|held| held.id != group.id) {
+            own.push(PendingChange::GroupRemoved { group_id: group.id, name: group.name.clone() });
+        }
+    }
+    own
 }
 
 /// A held session the Library replaced or no longer has Ready.
@@ -1550,7 +1573,7 @@ async fn suggestions(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<Projec
 /// Ready sessions it doesn't hold whose confirmed Target is a subject and
 /// whose confirmed rig is on its rig list, with their live frames. An open
 /// Project only; settled or not.
-pub(super) async fn suggested(
+pub async fn suggested(
     conn: &mut SqliteConnection,
     id: Uuid,
 ) -> Result<Vec<(ProjectCandidate, SessionAdmission)>> {
@@ -1578,7 +1601,7 @@ pub(super) async fn suggested(
 }
 
 /// A held capture with where the Project holds it.
-pub(super) struct HeldCapture {
+pub struct HeldCapture {
     pub capture: ProjectCapture,
     pub group_id: Uuid,
     /// The Project subject its goals count it toward: its session's
@@ -1589,10 +1612,7 @@ pub(super) struct HeldCapture {
 }
 
 /// Every capture the Project holds, with its group and subject.
-pub(super) async fn held_captures(
-    conn: &mut SqliteConnection,
-    id: Uuid,
-) -> Result<Vec<HeldCapture>> {
+pub async fn held_captures(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<HeldCapture>> {
     let project = id.to_string();
     let mut places: BTreeMap<Uuid, (Uuid, Option<Uuid>)> = BTreeMap::new();
     for row in sqlx::query(

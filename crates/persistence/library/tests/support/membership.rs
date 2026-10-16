@@ -69,20 +69,19 @@ pub async fn add_at(
 ) -> Result<ProjectDesired, LibraryError> {
     let desired = catalog.project_desired(project).await.unwrap();
     let mut groups = Vec::new();
-    let group_id = match desired.groups.iter().find(|group| group.rig_id == rig) {
-        Some(group) => group.id,
-        None => {
-            let id = Uuid::new_v4();
-            groups.push(NewGroup {
-                id,
-                rig_id: rig,
-                name: GroupName::new(&format!("Rig {}", desired.groups.len() + 1)).unwrap(),
-                origin: GroupOrigin::Framing,
-                optics: OpticsSignature::new(None, Some(250.0), None).unwrap(),
-                framing: None,
-            });
-            id
-        }
+    let group_id = if let Some(group) = desired.groups.iter().find(|group| group.rig_id == rig) {
+        group.id
+    } else {
+        let id = Uuid::new_v4();
+        groups.push(NewGroup {
+            id,
+            rig_id: rig,
+            name: GroupName::new(&format!("Rig {}", desired.groups.len() + 1)).unwrap(),
+            origin: GroupOrigin::Framing,
+            optics: OpticsSignature::new(None, Some(250.0), None).unwrap(),
+            framing: None,
+        });
+        id
     };
     let adds = [SessionAdd {
         session_id: session,

@@ -101,36 +101,35 @@ pub fn place_sessions(
                 .find(fits)
                 .map(|group| (group.id, SessionPlacement::FramingUnknown)),
         };
-        let (group_id, placement) = match joined {
-            Some(joined) => joined,
-            None => {
-                let rig_groups = candidates.iter().filter(|c| c.rig_id == session.rig_id).count();
-                let name = automatic_name(&names, &session.rig_name, rig_groups)?;
-                let group = NewGroup {
-                    id: Uuid::new_v4(),
-                    rig_id: session.rig_id,
-                    name: name.clone(),
-                    origin: GroupOrigin::Framing,
-                    optics: session.optics.clone(),
-                    framing: session.framing,
-                };
-                candidates.push(Candidate {
-                    id: group.id,
-                    rig_id: group.rig_id,
-                    origin: group.origin,
-                    optics: group.optics.clone(),
-                    framing: group.framing,
-                });
-                names.push(name);
-                let placement = if session.framing.is_some() {
-                    SessionPlacement::Framing
-                } else {
-                    SessionPlacement::FramingUnknown
-                };
-                let id = group.id;
-                plan.groups.push(group);
-                (id, placement)
-            }
+        let (group_id, placement) = if let Some(joined) = joined {
+            joined
+        } else {
+            let rig_groups = candidates.iter().filter(|c| c.rig_id == session.rig_id).count();
+            let name = automatic_name(&names, &session.rig_name, rig_groups)?;
+            let group = NewGroup {
+                id: Uuid::new_v4(),
+                rig_id: session.rig_id,
+                name: name.clone(),
+                origin: GroupOrigin::Framing,
+                optics: session.optics.clone(),
+                framing: session.framing,
+            };
+            candidates.push(Candidate {
+                id: group.id,
+                rig_id: group.rig_id,
+                origin: group.origin,
+                optics: group.optics.clone(),
+                framing: group.framing,
+            });
+            names.push(name);
+            let placement = if session.framing.is_some() {
+                SessionPlacement::Framing
+            } else {
+                SessionPlacement::FramingUnknown
+            };
+            let id = group.id;
+            plan.groups.push(group);
+            (id, placement)
         };
         plan.adds.push(SessionAdd {
             session_id: session.session_id,

@@ -134,6 +134,7 @@ pub struct Indexed {
     pub galaxies: Project,
 }
 
+#[allow(clippy::cognitive_complexity, reason = "one fixture building every new-sessions group")]
 pub async fn indexed() -> Indexed {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("Astro-T7/Captures");

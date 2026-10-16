@@ -475,7 +475,7 @@ pub async fn require_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Re
 }
 
 /// The revision a write of Project `id` commits, after checking `expected`.
-pub(super) async fn next_project_revision(
+pub async fn next_project_revision(
     conn: &mut SqliteConnection,
     id: Uuid,
     expected: Revision,
@@ -485,11 +485,7 @@ pub(super) async fn next_project_revision(
     Ok(current + 1)
 }
 
-pub(super) async fn commit_revision(
-    conn: &mut SqliteConnection,
-    id: Uuid,
-    next: Revision,
-) -> Result<()> {
+pub async fn commit_revision(conn: &mut SqliteConnection, id: Uuid, next: Revision) -> Result<()> {
     sqlx::query("UPDATE projects SET revision = ?2, updated_at = ?3 WHERE id = ?1")
         .bind(id.to_string())
         .bind(db_revision(next)?)

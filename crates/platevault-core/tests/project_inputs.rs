@@ -636,6 +636,7 @@ async fn each_project_counts_its_own_sessions_and_the_target_counts_them_once() 
 /// Library rejection, a reassigned calibration and a reopened review read as
 /// the Library's, which it can't. A Closed Project takes none of them.
 #[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one scenario from the first Apply to Close")]
 async fn edits_never_touch_the_view_and_read_as_pending_changes_by_source() {
     let world = world().await;
     let ha = world.admissible(HA[0]).await;
@@ -647,7 +648,10 @@ async fn edits_never_touch_the_view_and_read_as_pending_changes_by_source() {
     world.apply().await;
     let tree = World::tree(&world.view());
     let installed = world.catalog().apply_inputs(world.project).await.unwrap().installed.unwrap();
-    assert!(world.catalog().project_pending_changes(world.project).await.unwrap().is_empty());
+    assert_eq!(
+        world.catalog().project_pending_changes(world.project).await.unwrap(),
+        Vec::<PendingChange>::new()
+    );
 
     let state = desired(&world).await;
     let (excluded, rejected) = (added.captures[0].capture_key, added.captures[1].capture_key);
@@ -764,7 +768,10 @@ async fn edits_never_touch_the_view_and_read_as_pending_changes_by_source() {
         world.catalog().project_pending_changes(world.project).await.unwrap().is_empty(),
         "a Closed Project takes no pending change"
     );
-    assert!(world.catalog().project_suggestions(world.project).await.unwrap().is_empty());
+    assert_eq!(
+        world.catalog().project_suggestions(world.project).await.unwrap(),
+        Vec::<ProjectSuggestion>::new()
+    );
     let revision = desired(&world).await.revision;
     let error = world
         .catalog()
@@ -816,6 +823,7 @@ async fn discard(world: &World, revision: Revision) -> Result<ProjectDesired, Li
 /// reassigned) stay pending, and a second Discard finds nothing of the
 /// Project's own.
 #[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one scenario: every own edit, then one discard")]
 async fn discard_reverts_only_the_projects_own_edits() {
     let world = world().await;
     let ha = world.admissible(HA[0]).await;

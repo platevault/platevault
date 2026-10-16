@@ -774,6 +774,7 @@ async fn mosaic_subject_panels_by_centre_and_rotation_unknown_rotation_allowed()
 /// changes no source file, no library quality decision and no session record
 /// or membership; refusals write no Project row either.
 #[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one scenario over every Project write")]
 async fn project_write_changes_no_file_quality_or_membership() {
     let world = world().await;
     let catalog = &world.catalog;

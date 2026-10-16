@@ -115,7 +115,7 @@ impl Evidence<'_> {
 /// Project groups its sessions by framing with the margins the night was
 /// split with (PRJ-FR-31, LIB-FR-04). The anchor's field sets the centre
 /// margin.
-pub(crate) fn framing_offset(
+pub fn framing_offset(
     anchor: &FramingEvidence,
     other: &FramingEvidence,
     margins: &FramingMargins,
