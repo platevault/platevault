@@ -485,8 +485,8 @@
       "owner": "064-library-inventory",
       "journeyStep": "J18/S1, J18/S2, J18/S3, J18/S4, J18/S5",
       "spec": "064-library-inventory LIB-FR-01, LIB-FR-21, LIB-FR-27, LIB-AC-35; D-W117",
-      "action": "Leave first-run setup by finishing it, by Set up later and by Index later; step through the walk with Next and Back, or close it with Skip or Escape; relaunch; replay the walk from Settings › Help.",
-      "expect": "Each way out of setup hands over to Home and opens the walk once at its first stop. The walk has one stop per source-list entry, in source-list order, with Home's stop last. After it is finished or skipped it never opens by itself again, and Settings › Help replays it from its first stop.",
+      "action": "Leave first-run setup by finishing it, by Set up later and by Index later; step through the walk, or close it before its last stop; relaunch; replay the walk from Settings › Help. The controls Next, Back, Skip and Escape are provisional (D-W117).",
+      "expect": "Each way out of setup hands over to Home and opens the walk once at its first stop. The walk has one stop per main navigation entry, in navigation order, with Home's stop last: provisionally Projects, Targets, Sessions, Calibration, Import, Activity and Settings, then Home. After it is finished or skipped it never opens by itself again, and Settings › Help replays it from its first stop.",
       "negative": "The walk creates, changes or removes no location, session, Project or Target, and no demo or sample record exists."
     },
     {
