@@ -19,7 +19,7 @@ import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/paraglide/messages';
 import { Banner, Table } from '@/ui';
 import { FileInspector } from './FileInspector';
-import { basename, formatExposureSeconds } from './inboxDetailHelpers';
+import { formatExposureSeconds, wireBasename } from './inboxDetailHelpers';
 import {
   head as detailHead,
   muted as detailMuted,
@@ -61,7 +61,7 @@ export function InboxFilesColumn({ fileMetadata }: InboxFilesColumnProps) {
   // built lazily on open).
   const metadataRows = (fileMetadata ?? []).map((f, rowIdx) => {
     const missingAttrs = f.missingPathAttributes ?? [];
-    const fileName = basename(f.relativeFilePath);
+    const fileName = wireBasename(f.relativeFilePath);
     const needsAttention = f.overrideStale || missingAttrs.length > 0;
     const isInspected = inspectedIdx === rowIdx;
     return {
