@@ -1121,3 +1121,172 @@ async fn destination_offline_before_indexing_interrupts_until_indexed() {
         "the type the user set is recorded"
     );
 }
+
+// ── Import review: sessions split by framing (LIB-FR-04/24, LIB-AC-31) ───────
+
+/// The fixture's 4×4 pixels at 3.76 µm behind 250 mm: the field diagonal the
+/// centre margin is a share of, in degrees.
+fn diagonal_deg() -> f64 {
+    4.0 * (206.264_806 * 3.76 / 250.0) * std::f64::consts::SQRT_2 / 3600.0
+}
+
+/// A pointed NGC 7000 light `minute` after 19:00 UTC on 14 October, its centre
+/// `offset` (a share of the field diagonal) north of the first framing.
+fn framed_light(path: &Path, minute: u32, offset: f64, sky_angle: f64, exposure: u32) {
+    let cards = [
+        ("IMAGETYP", "'LIGHT'".to_owned()),
+        ("FILTER", "'Ha'".into()),
+        ("EXPTIME", exposure.to_string()),
+        ("GAIN", "100".into()),
+        ("DATE-OBS", format!("'2026-10-14T{:02}:{:02}:00'", 19 + minute / 60, minute % 60)),
+        ("INSTRUME", CAMERA.into()),
+        ("TELESCOP", TELESCOPE.into()),
+        ("OBJECT", "'NGC7000'".into()),
+        ("FOCALLEN", "250".into()),
+        ("XPIXSZ", "3.76".into()),
+        ("RA", "314.68".into()),
+        ("DEC", format!("{:.9}", 44.31 + offset * diagonal_deg())),
+        ("ROTATANG", "12.4".into()),
+        ("OBJCTROT", format!("{sky_angle:.1}")),
+    ];
+    let cards: Vec<(&str, &str)> =
+        cards.iter().map(|(key, value)| (*key, value.as_str())).collect();
+    frame(path, &cards);
+}
+
+/// LIB-AC-31's night on the card, scaled down to keep the import suite fast
+/// (the grouping tests use its full 25/15/20): 5 lights before a meridian flip,
+/// 3 after it at the same framing, and 4 pointing 12 % of the field away.
+fn flip_night(card: &Path) {
+    for index in 0..12_u32 {
+        let (minute, offset, sky_angle) = match index {
+            0..5 => (index, 0.006, 12.4),
+            5..8 => (index + 5, -0.004, 192.4),
+            _ => (index + 10, 0.12, 12.4),
+        };
+        framed_light(
+            &card.join(format!("lights/NGC7000_Ha_{index:03}.fits")),
+            minute,
+            offset,
+            sky_angle,
+            300,
+        );
+    }
+}
+
+fn session_sizes(operation: &ImportOperation) -> Vec<(Option<u32>, usize, bool)> {
+    operation
+        .sessions
+        .iter()
+        .map(|session| (session.framing, session.items.len(), session.merged))
+        .collect()
+}
+
+#[tokio::test]
+async fn review_shows_the_framing_split_and_merges_and_resplits_before_anything_is_written() {
+    let fixture = Fixture::new().await;
+    flip_night(&fixture.card);
+    for index in 0..2_u32 {
+        let path = fixture.card.join(format!("short/NGC7000_Ha_120s_{index}.fits"));
+        framed_light(&path, 130 + index, 0.0, 12.4, 120);
+    }
+    let library = &fixture.library;
+
+    let preview = fixture.preview().await;
+
+    let long: Vec<&ImportSession> =
+        preview.sessions.iter().filter(|s| s.exposure_seconds == Some(300.0)).collect();
+    let (first, second) = (long[0], long[1]);
+    assert_eq!(long.len(), 2, "the flip does not split; the shifted framing does");
+    assert_eq!((first.framing, first.items.len()), (Some(1), 8));
+    assert_eq!((second.framing, second.items.len()), (Some(2), 4), "\"· framing 2\"");
+    assert_eq!(first.key, second.key);
+    assert_eq!(first.filter.as_deref(), Some("Ha"));
+    assert_eq!(first.object.as_deref(), Some("NGC7000"));
+    assert_eq!(first.night.map(|night| night.to_string()).as_deref(), Some("2026-10-14"));
+    let short = preview.sessions.iter().find(|s| s.exposure_seconds == Some(120.0)).unwrap();
+    assert_eq!(short.items.len(), 2, "exposure still splits");
+
+    let refused = library
+        .merge_import_sessions(preview.id, preview.revision, &[first.items[0], short.items[0]])
+        .await;
+    assert!(
+        matches!(refused, Err(LibraryError::InvalidInput(_))),
+        "sessions of two exposures never merge: {refused:?}"
+    );
+    let merged = library
+        .merge_import_sessions(preview.id, preview.revision, &[first.items[0], second.items[2]])
+        .await
+        .unwrap();
+    let merged_long: Vec<_> =
+        merged.sessions.iter().filter(|s| s.exposure_seconds == Some(300.0)).collect();
+    assert_eq!(merged_long.len(), 1, "the review shows one session");
+    assert_eq!((merged_long[0].items.len(), merged_long[0].merged), (12, true));
+    assert!(merged.revision > preview.revision);
+    let stale = library.resplit_import_session(preview.id, preview.revision, first.items[0]).await;
+    assert!(matches!(stale, Err(LibraryError::Conflict { .. })), "{stale:?}");
+
+    let resplit =
+        library.resplit_import_session(merged.id, merged.revision, second.items[0]).await.unwrap();
+    assert_eq!(session_sizes(&resplit), session_sizes(&preview), "the two sessions return");
+    let nothing =
+        library.resplit_import_session(resplit.id, resplit.revision, first.items[0]).await;
+    assert!(matches!(nothing, Err(LibraryError::InvalidInput(_))), "{nothing:?}");
+
+    assert!(files_below(&fixture.captures).is_empty(), "nothing is written before Start");
+    let sessions = library.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
+    assert!(sessions.is_empty(), "no session exists before the import is confirmed");
+}
+
+async fn light_sessions(fixture: &Fixture) -> Vec<Session> {
+    let mut sessions: Vec<Session> = fixture
+        .library
+        .catalog()
+        .list_sessions(&SessionQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|summary| summary.session)
+        .collect();
+    sessions.sort_by_key(|session| session.framing.as_ref().map(|framing| framing.ordinal));
+    sessions
+}
+
+#[tokio::test]
+async fn intake_creates_the_sessions_review_showed() {
+    let fixture = Fixture::new().await;
+    flip_night(&fixture.card);
+    let preview = fixture.preview().await;
+
+    let done = fixture.run(&preview, ImportMode::Copy, &fixture.trash()).await;
+
+    assert_eq!(done.state, ImportState::Settled);
+    let sessions = light_sessions(&fixture).await;
+    let shape: Vec<(Option<u32>, usize)> = sessions
+        .iter()
+        .map(|session| (session.framing.as_ref().map(|f| f.ordinal), session.asset_ids.len()))
+        .collect();
+    assert_eq!(shape, [(Some(1), 8), (Some(2), 4)], "one session per framing (LIB-AC-31)");
+}
+
+#[tokio::test]
+async fn a_merge_made_in_review_sets_the_session_intake_creates() {
+    let fixture = Fixture::new().await;
+    flip_night(&fixture.card);
+    let preview = fixture.preview().await;
+    let seqs: Vec<u32> = preview.sessions.iter().map(|session| session.items[0]).collect();
+    let merged =
+        fixture.library.merge_import_sessions(preview.id, preview.revision, &seqs).await.unwrap();
+
+    let done = fixture.run(&merged, ImportMode::Copy, &fixture.trash()).await;
+
+    assert_eq!(done.state, ImportState::Settled);
+    let sessions = light_sessions(&fixture).await;
+    assert_eq!(sessions.len(), 1, "the merged session, not the split");
+    assert_eq!(sessions[0].asset_ids.len(), 12);
+    let framing = sessions[0].framing.as_ref().unwrap();
+    assert!(framing.label.is_some(), "the merge is recorded on the frames");
+    let assets = fixture.library.catalog().location_assets(fixture.captures_id).await.unwrap();
+    assert!(assets.iter().all(|asset| asset.effective.framing_label == framing.label));
+    assert!(assets.iter().all(|asset| asset.observed.framing_label.is_none()));
+}

@@ -1295,6 +1295,7 @@ mod tests {
                     asset_ids: assets.iter().map(|asset| asset.id).collect(),
                     provisional: Vec::new(),
                     date_basis: None,
+                    framing: None,
                 }],
             })
             .await

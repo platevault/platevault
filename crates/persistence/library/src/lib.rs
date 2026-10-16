@@ -27,8 +27,8 @@ use platevault_model::{
     NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind,
     RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview, RetireSession,
     Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
-    ScanState, Session, SessionCandidate, SessionLineage, TargetCandidate, TargetCone,
-    TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
+    ScanState, Session, SessionCandidate, SessionFraming, SessionLineage, TargetCandidate,
+    TargetCone, TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -195,6 +195,8 @@ pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 // The F4 admission contract (only Ready, calibration-settled sessions join a
 // Project); its `require_admission` runs inside membership-add transactions.
 mod admission;
+// Intake reads the F4 workflow settings' framing margins.
+mod workflow_settings;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -453,6 +455,7 @@ struct SessionRow {
 struct PriorSession {
     key: CaptureKey,
     members: BTreeSet<Uuid>,
+    framing: Option<SessionFraming>,
 }
 
 #[derive(Default)]
@@ -4242,7 +4245,10 @@ where
         let row = load_session_row(conn, *id).await?;
         let members = current_members(conn, *id).await?;
         closure.extend(members.iter().copied());
-        prior.insert(*id, PriorSession { key: row.session.key, members });
+        prior.insert(
+            *id,
+            PriorSession { key: row.session.key, members, framing: row.session.framing },
+        );
     }
     let closure_assets = load_assets(conn, &closure).await?;
     let result = checked_grouping(grouping(&closure_assets), &closure)?;
@@ -4253,12 +4259,22 @@ where
     commit_plan(conn, plan, &context, cause).await
 }
 
-/// Every input asset must belong to exactly one candidate and nothing else.
+/// Every input asset must belong to exactly one candidate and nothing else,
+/// and a candidate's framing is anchored at one of its own assets.
 fn checked_grouping(result: GroupingResult, expected: &BTreeSet<Uuid>) -> Result<GroupingResult> {
     let mut seen = BTreeSet::new();
     for candidate in &result.sessions {
         if candidate.key.0.is_empty() || candidate.asset_ids.is_empty() {
             return Err(LibraryError::InvalidInput("grouping returned an empty session".into()));
+        }
+        if let Some(framing) = &candidate.framing {
+            framing.validate()?;
+            if !candidate.asset_ids.contains(&framing.anchor_asset_id) {
+                return Err(LibraryError::InvalidInput(format!(
+                    "grouping anchored a framing at asset {} outside its session",
+                    framing.anchor_asset_id
+                )));
+            }
         }
         for id in &candidate.asset_ids {
             if !expected.contains(id) || !seen.insert(*id) {
@@ -4276,6 +4292,8 @@ fn checked_grouping(result: GroupingResult, expected: &BTreeSet<Uuid>) -> Result
 
 /// Keep a session id only when identical capture evidence adds previously
 /// ungrouped assets; every other membership change creates successor records.
+/// Sessions of one key are told apart by their framing, so a kept session is
+/// the one whose members the candidate holds.
 fn plan_grouping(
     prior: &BTreeMap<Uuid, PriorSession>,
     old_session_of: &HashMap<Uuid, Uuid>,
@@ -4320,12 +4338,17 @@ async fn commit_plan(
     cause: Cause,
 ) -> Result<Option<SessionLineage>> {
     for (id, candidate, _) in &plan.kept {
-        sqlx::query("UPDATE sessions SET provisional = ?1, date_basis = ?2 WHERE id = ?3")
-            .bind(to_json(&candidate.provisional)?)
-            .bind(candidate.date_basis.as_deref())
-            .bind(id.to_string())
-            .execute(&mut *conn)
-            .await?;
+        // The framing's ordinal follows its anchor's capture order, which an
+        // earlier framing arriving later moves on.
+        sqlx::query(
+            "UPDATE sessions SET provisional = ?1, date_basis = ?2, framing = ?3 WHERE id = ?4",
+        )
+        .bind(to_json(&candidate.provisional)?)
+        .bind(candidate.date_basis.as_deref())
+        .bind(candidate.framing.as_ref().map(to_json).transpose()?)
+        .bind(id.to_string())
+        .execute(&mut *conn)
+        .await?;
     }
     let grew = plan.kept.iter().any(|(_, _, added)| !added.is_empty());
     if plan.created.is_empty() && plan.superseded.is_empty() && !grew {
@@ -4345,7 +4368,7 @@ async fn commit_plan(
         for asset in &members {
             if let Some(old) = context.old_session_of.get(asset) {
                 successor |= plan.superseded.contains(old);
-                if context.prior.get(old).is_some_and(|prior| prior.key != candidate.key) {
+                if context.prior.get(old).is_some_and(|prior| moved_by(prior, candidate)) {
                     moved.insert(*asset);
                 }
             }
@@ -4380,6 +4403,13 @@ async fn commit_plan(
     };
     insert_lineage(conn, &lineage, cause, &created_at).await?;
     Ok(Some(lineage))
+}
+
+/// An asset moved when its capture key or its framing's anchor changed.
+fn moved_by(prior: &PriorSession, candidate: &SessionCandidate) -> bool {
+    let anchor = |framing: Option<&SessionFraming>| framing.map(|framing| framing.anchor_asset_id);
+    prior.key != candidate.key
+        || anchor(prior.framing.as_ref()) != anchor(candidate.framing.as_ref())
 }
 
 struct Inheritance<'a> {
@@ -4497,13 +4527,14 @@ async fn insert_session(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO sessions (id, capture_key, grouping_revision, decision_revision, \
-         provisional, date_basis, created_at) VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6)",
+         provisional, date_basis, framing, created_at) VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7)",
     )
     .bind(id.to_string())
     .bind(candidate.key.0.as_str())
     .bind(db_revision(grouping_revision)?)
     .bind(to_json(&candidate.provisional)?)
     .bind(candidate.date_basis.as_deref())
+    .bind(candidate.framing.as_ref().map(to_json).transpose()?)
     .bind(created_at)
     .execute(&mut *conn)
     .await?;
@@ -4636,7 +4667,7 @@ async fn current_member_assets(
 async fn load_session_row(conn: &mut SqliteConnection, id: Uuid) -> Result<SessionRow> {
     let row = sqlx::query(
         "SELECT id, capture_key, grouping_revision, decision_revision, provisional, date_basis, \
-         superseded_by FROM sessions WHERE id = ?1",
+         framing, superseded_by FROM sessions WHERE id = ?1",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
@@ -4659,6 +4690,11 @@ async fn load_session_row(conn: &mut SqliteConnection, id: Uuid) -> Result<Sessi
             asset_ids,
             provisional: from_json(&row.try_get::<String, _>("provisional")?)?,
             date_basis: row.try_get("date_basis")?,
+            framing: row
+                .try_get::<Option<String>, _>("framing")?
+                .as_deref()
+                .map(from_json)
+                .transpose()?,
         },
         superseded_by: row.try_get("superseded_by")?,
     })
@@ -7428,6 +7464,7 @@ mod tests {
                                 asset_ids,
                                 provisional: Vec::new(),
                                 date_basis: None,
+                                framing: None,
                             })
                             .collect(),
                     }

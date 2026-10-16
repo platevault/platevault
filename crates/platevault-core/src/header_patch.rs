@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crate::{CaptureMetadata, CorrectedField};
+use crate::{CaptureMetadata, CorrectedField, FRAMING_LABEL_FIELD};
 
 const BLOCK: usize = 2880;
 const CARD: usize = 80;
@@ -68,7 +68,8 @@ impl Card {
 }
 
 /// Every capture field whose confirmed catalog value differs from the value
-/// the header holds, with the keywords a patch writes for it.
+/// the header holds, with the keywords a patch writes for it. The framing
+/// label is a grouping decision no header holds, so it is never one.
 #[must_use]
 pub fn corrected_fields(
     observed: &CaptureMetadata,
@@ -81,7 +82,10 @@ pub fn corrected_fields(
     };
     effective
         .iter()
-        .filter(|(field, value)| field.as_str() != "raw" && observed.get(*field) != Some(*value))
+        .filter(|(field, value)| {
+            !matches!(field.as_str(), "raw" | FRAMING_LABEL_FIELD)
+                && observed.get(*field) != Some(*value)
+        })
         .map(|(field, value)| CorrectedField {
             field: field.clone(),
             keywords: keyword_entry(field)

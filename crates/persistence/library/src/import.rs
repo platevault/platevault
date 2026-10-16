@@ -36,6 +36,8 @@ struct StoredDetail {
     size_bytes: u64,
     image_type: Option<String>,
     excluded: bool,
+    #[serde(default)]
+    framing_label: Option<String>,
     role: Option<LocationRole>,
     fallbacks: Vec<NamingFallback>,
     rig: Option<ImportRig>,
@@ -502,6 +504,7 @@ fn detail_of(record: &ImportItemRecord) -> StoredDetail {
         size_bytes: item.size_bytes,
         image_type: item.image_type.clone(),
         excluded: item.excluded,
+        framing_label: item.framing_label.clone(),
         role: item.role,
         fallbacks: item.fallbacks.clone(),
         rig: item.rig.clone(),
@@ -654,6 +657,7 @@ fn item_from_row(row: &SqliteRow) -> Result<ImportItemRecord> {
             classification: frame_type_of(row.try_get("classification")?)?,
             user_type: frame_type_of(row.try_get("user_type")?)?,
             excluded: detail.excluded,
+            framing_label: detail.framing_label,
             role: detail.role,
             destination_location_id: row
                 .try_get::<Option<String>, _>("destination_location_id")?

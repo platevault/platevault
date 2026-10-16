@@ -1156,6 +1156,7 @@ mod tests {
                 asset_ids: ids,
                 provisional: Vec::new(),
                 date_basis: Some("date-loc-noon".into()),
+                framing: None,
             }],
         }
     }

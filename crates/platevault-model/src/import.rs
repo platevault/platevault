@@ -11,11 +11,12 @@
 //! the execution all decide from the same recorded evidence.
 
 use serde::{Deserialize, Serialize};
+use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    Availability, CaptureMetadata, EntryEvidence, FileIdentity, ItemReason, LocationRole,
-    NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
+    Availability, CaptureKey, CaptureMetadata, EntryEvidence, FileIdentity, ItemReason,
+    LocationRole, NamingFallback, NamingFrameType, NativePath, ObservationFingerprint, Revision,
 };
 
 /// A source folder saved under a name, for Import new.
@@ -189,6 +190,11 @@ pub struct ImportItem {
     pub classification: Option<NamingFrameType>,
     /// The frame type the user set; it overrides the header.
     pub user_type: Option<NamingFrameType>,
+    /// The framing label a merge in import review gave the light: lights with
+    /// one label form one session. Indexing records it as the frame's
+    /// [`crate::FRAMING_LABEL_FIELD`] correction (LIB-FR-24, D-W107).
+    #[serde(default)]
+    pub framing_label: Option<String>,
     pub excluded: bool,
     pub role: Option<LocationRole>,
     pub destination_location_id: Option<Uuid>,
@@ -345,6 +351,30 @@ pub struct ImportSummary {
     pub uncertain: u64,
 }
 
+/// One session the import's lights form at intake, as import review shows it
+/// before the import is confirmed (LIB-FR-04, LIB-FR-24, D-W107): a night's
+/// lights of one capture key split by framing, merged or re-split by the user.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportSession {
+    pub key: CaptureKey,
+    /// The items, in capture order; the first stands for the session in a
+    /// merge or re-split.
+    pub items: Vec<u32>,
+    /// 1 for the night's first framing of the key, 2 for "framing 2", and so
+    /// on; `None` for lights without pointing, which stay in one session.
+    pub framing: Option<u32>,
+    /// The user merged it: its items carry one framing label.
+    pub merged: bool,
+    /// What a default name shows: OBJECT, FILTER, the exposure and the night
+    /// of its first item.
+    pub object: Option<String>,
+    pub filter: Option<String>,
+    pub exposure_seconds: Option<f64>,
+    #[serde(default, with = "crate::iso_date::option")]
+    pub night: Option<Date>,
+}
+
 /// An import as Import shows it: the preview before it starts, then its
 /// progress and outcomes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -363,6 +393,9 @@ pub struct ImportOperation {
     pub items: Vec<ImportItem>,
     pub destinations: Vec<ImportDestination>,
     pub summary: ImportSummary,
+    /// The sessions the import's lights form; merge and re-split change them
+    /// until the import starts.
+    pub sessions: Vec<ImportSession>,
     pub created_at: String,
     pub updated_at: String,
     pub settled_at: Option<String>,
