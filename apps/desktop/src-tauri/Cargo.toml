@@ -88,6 +88,11 @@ platevault_notify_macos = { path = "../../../crates/platevault-notify-macos" }
 # helpers). Only dev-dependencies pull it in so release builds stay clean.
 tauri = { workspace = true, features = ["test"] }
 tempfile = { workspace = true }
+# `tests/backend_journeys.rs` diverts OS trash through the executor's
+# headless double (`FakeTrashGuard`): the Shell trash blocks forever on a CI
+# runner with no interactive desktop. Dev-only, so no shipping build can reach
+# it.
+fs_executor = { path = "../../../crates/fs/executor", features = ["e2e-trash-fake"] }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries MUST NOT enable this.
