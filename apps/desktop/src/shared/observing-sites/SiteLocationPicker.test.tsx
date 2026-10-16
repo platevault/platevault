@@ -221,6 +221,8 @@ describe('SiteLocationPicker', () => {
 
     expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
     expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    // Focus lands on the notice, not the page body (the map never mounted).
+    expect(screen.getByText(/map unavailable/i)).toHaveFocus();
   });
 
   it('degrades gracefully when tiles fail to load (offline / provider outage)', () => {
@@ -251,6 +253,8 @@ describe('SiteLocationPicker', () => {
     // At threshold — degrade to unavailable notice.
     expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
     expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    // The notice replaced the focused map; focus moves to it, not the body.
+    expect(screen.getByText(/map unavailable/i)).toHaveFocus();
   });
 
   it('does not degrade when a tileload resets the error count', () => {

@@ -118,6 +118,11 @@ function newSiteId(): string {
 export function ObservingSites() {
   const { sites, defaultSiteId, activeSiteId } = useObservingState();
   const [form, setForm] = useState<SiteForm | null>(null);
+  // Bumped on every Add/Edit so SiteMapSection remounts with the map hidden.
+  // Edit and "+ Add site" stay clickable while a form is open, and form.id
+  // stays null for Add→Add, so the form itself cannot serve as the key
+  // (astro-plan-pil2e: no tile request for a site without a Show map click).
+  const [formOpenCount, setFormOpenCount] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -140,11 +145,13 @@ export function ObservingSites() {
 
   const startAdd = () => {
     setForm(emptyForm());
+    setFormOpenCount((n) => n + 1);
     setFormError(null);
   };
 
   const startEdit = (site: ObserverSite) => {
     setForm(formFromSite(site));
+    setFormOpenCount((n) => n + 1);
     setFormError(null);
   };
 
@@ -412,6 +419,7 @@ export function ObservingSites() {
           onSave={handleSubmit}
         >
           <SiteMapSection
+            key={formOpenCount}
             latitudeDeg={parsedCoord(form.latitudeDegText)}
             longitudeDeg={parsedCoord(form.longitudeDegText)}
             onPick={(lat, lon) =>

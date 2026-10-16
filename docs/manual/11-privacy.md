@@ -109,8 +109,9 @@ button in place of the map.
   `b.tile.openstreetmap.org` and `c.tile.openstreetmap.org`, over HTTPS.
 - **When:** only after you click **Show map**, and only while that step or
   form stays open. Opening the step or the form sends nothing. The choice is
-  not remembered: each time you open the step or a form, the map is hidden
-  again until you click **Show map**.
+  not remembered. The map is hidden again until you click **Show map** each
+  time you open the step or a form. This includes switching an open form to
+  another site with **Edit** or **+ Add site**.
 - **What is sent:** requests for the map tiles on display, along with your IP
   address and the standard headers of the app's built-in web view. Each tile
   covers a known patch of the world, so the tiles requested reveal the area

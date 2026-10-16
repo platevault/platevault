@@ -87,6 +87,7 @@ export function SiteLocationPicker({
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const onPickRef = useRef(onPick);
+  const unavailableRef = useRef<HTMLParagraphElement | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
   // Keep callback ref current without triggering map re-init effects.
@@ -192,9 +193,19 @@ export function SiteLocationPicker({
     }
   }, [latitudeDeg, longitudeDeg]);
 
+  // The picker only mounts after "Show map", and the notice replaces either
+  // the focused map container (tile failures) or a map that never mounted
+  // (Leaflet threw). Move focus to the notice so keyboard and screen-reader
+  // users are not dropped to the page body.
+  useEffect(() => {
+    if (unavailable) unavailableRef.current?.focus({ preventScroll: true });
+  }, [unavailable]);
+
   if (unavailable) {
     return (
       <p
+        ref={unavailableRef}
+        tabIndex={-1}
         className="pv-step-site__map-unavailable"
         data-testid="site-location-picker"
       >
