@@ -178,7 +178,8 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     if (mode === "set") setSelected(new Set())
     else if (mode === "toggle") {
       setSelected((prev) => {
-        const next = new Set(prev.size === 0 && current ? [current.asset.id] : prev)
+        // ⌘-click on another frame starts from the current one; Space on the current frame ticks it.
+        const next = new Set(prev.size === 0 && current && current.asset.id !== id ? [current.asset.id] : prev)
         if (next.has(id)) next.delete(id)
         else next.add(id)
         return next
@@ -326,7 +327,8 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     setReadout(null)
   }, [current?.asset.id])
 
-  // The current row stays in view; while focus is on a row it follows the current frame.
+  // The current row stays in view; while focus is on a row it follows the current frame. The other way round,
+  // a frame row that takes focus (the list's Home, End, Page Up and Page Down, P-KBD1) becomes the current frame.
   useEffect(() => {
     if (view !== "table" || !current) return
     const row = document.querySelector<HTMLElement>(`[data-workspace-list] tr[aria-current="true"]`)
@@ -337,6 +339,10 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
 
   const latest = {
     step,
+    follow: (id: string) => {
+      const frame = ordered.find((f) => f.asset.id === id)
+      if (frame && frame !== current) select(frame.asset.id)
+    },
     mark: (value: QualityValue, always = false) => runner.run(markAction(value, targets, always)),
     selectAll,
     toggleGrid,
@@ -443,7 +449,12 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
       action()
       consume()
     }
+    function onFocusIn(event: FocusEvent) {
+      const row = event.target instanceof HTMLElement && event.target.matches("[data-workspace-list] tbody tr[data-row]") ? event.target : null
+      if (row?.dataset.row) handlers.current.follow(row.dataset.row)
+    }
     window.addEventListener("keydown", onKeyDown, true)
+    window.addEventListener("focusin", onFocusIn)
     const h = () => handlers.current
     // Getters: the palette reads each label at render, in the chosen language.
     registerReviewCommands([
@@ -464,6 +475,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     ])
     return () => {
       window.removeEventListener("keydown", onKeyDown, true)
+      window.removeEventListener("focusin", onFocusIn)
       registerReviewCommands(null)
     }
   }, [])

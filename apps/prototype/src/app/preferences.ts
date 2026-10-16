@@ -28,7 +28,7 @@ interface Preferences {
   /** Dark or light, from the resolved theme. */
   scheme: ThemeScheme
   locale: Locale
-  /** ?, /, [ and G-sequences. Modifier shortcuts such as ⌘K stay on. */
+  /** ?, /, [, G-sequences and Space on a table row (P-KBD1). Modifier shortcuts such as ⌘K stay on. */
   singleKeyShortcuts: boolean
 }
 
