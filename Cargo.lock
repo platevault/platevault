@@ -181,7 +181,6 @@ dependencies = [
  "persistence_core",
  "serde_json",
  "sqlx",
- "tempfile",
 ]
 
 [[package]]

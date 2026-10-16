@@ -88,9 +88,6 @@ platevault_notify_macos = { path = "../../../crates/platevault-notify-macos" }
 # helpers). Only dev-dependencies pull it in so release builds stay clean.
 tauri = { workspace = true, features = ["test"] }
 tempfile = { workspace = true }
-# Audit-export error mapping tests need to construct the filesystem-owned
-# unfinished-file value; this feature is unavailable to release builds.
-fs_pathsafe = { path = "../../../crates/fs/pathsafe", features = ["test-fixture"] }
 # `tests/backend_journeys.rs` diverts OS trash through the executor's
 # headless double (`FakeTrashGuard`): the Shell trash blocks forever on a CI
 # runner with no interactive desktop. Dev-only, so no shipping build can reach

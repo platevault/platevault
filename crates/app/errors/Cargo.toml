@@ -20,5 +20,6 @@ fs_pathsafe = { path = "../../fs/pathsafe" }
 workspace = true
 
 [dev-dependencies]
+# The mapping test constructs the filesystem-owned unfinished-file value; the
+# `test-fixture` feature keeps that constructor out of release builds.
 fs_pathsafe = { path = "../../fs/pathsafe", features = ["test-fixture"] }
-tempfile.workspace = true

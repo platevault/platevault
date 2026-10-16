@@ -701,22 +701,19 @@ mod tests {
     /// from a plain I/O error and the canonical path reaches the details.
     #[test]
     fn an_unfinished_export_carries_its_code_and_canonical_path() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let canonical_parent = temp.path().canonicalize().expect("canonical parent");
-        let path = canonical_parent.join("log.json");
         let file = fs_pathsafe::export_dest::UnfinishedFile::for_test(
-            path.clone(),
+            std::path::PathBuf::from("/private/tmp/real/log.json"),
             std::io::Error::other("write failed"),
             true,
         );
         let err = ContractError::from(LogError::UnfinishedExport(file));
 
         assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
-        assert!(err.message.contains(path.to_str().expect("utf-8 temp path")));
+        assert!(err.message.contains("/private/tmp/real/log.json"), "{}", err.message);
         assert_eq!(
             err.details,
             contracts_core::JsonAny::from(serde_json::json!({
-                "path": path.to_string_lossy()
+                "path": "/private/tmp/real/log.json"
             }))
         );
     }
