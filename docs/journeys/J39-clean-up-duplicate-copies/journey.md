@@ -134,7 +134,7 @@ The user finds byte-identical extra copies through Sessions' Duplicates filter a
 - G4: (dissolved 2026-10-12): answered by Round 6 "The keeper is the copy in the earliest-registered location"; S2 now asserts it with a fixture where the oldest file (the `Spare` copy of N-1, P2) is in the last-registered location and is not the keeper.
 - G5: Out of scope for this journey: a copy whose bytes change between the scan and the move (D-W74 rehashes each copy before it moves), a copy on an offline volume, and a scan canceled from the status bar. Each needs fault injection or pacing. Blocks readiness until covered by a step or a journey.
 - G6: No separate duplicate-copy keeper choice is specified for the Duplicates review; removal and the kept-copy rule are specified for the Project's Wrap up Trash offer by PRJ-FR-15 and STO-FR-16.
-- G7: (dissolved 2026-10-16): answered by the owner's answer of 2026-10-15/16 (D-W116): when copies tie for the kept copy in the same earliest-registered location, the copy PlateVault catalogued first is preselected, and nothing is removed without review. S6a and SC8 now assert it with copies whose files are older than the originals.
+- G7: (dissolved 2026-10-16): answered by the owner's answer of 2026-10-15/16 (D-W116). When copies in the same earliest-registered location tie for the kept copy, the copy PlateVault catalogued first is preselected. Nothing is removed without review. S6a and SC8 now assert it with copies whose files are older than the originals.
 
 ## Delta log
 

@@ -54,7 +54,7 @@ folder is added in place. Done means:
 - P5: An SMB share that macOS has already mounted at `/Volumes/astro-share` holds `incoming/` with 20 NGC 7000 OIII 300 s RedCat lights from the night of 2026-10-05, with OBJECT `NGC 7000` and pointing within NGC 7000's footprint. Removing a file on this share deletes it immediately; the share has no OS Trash.
 - P6: `Astro-T7/Archive-2025/` is an organized folder of 2025 light sessions outside every registered location.
 - P7: Manifests (relative path, size, SHA-256) of `Card-1`, `Card-2`, `Card-4`, `astro-share/incoming`, `Archive-2025` and both destination locations, recorded outside PlateVault before S1. No file on `Card-2`, `Card-4`, `astro-share/incoming` or `Archive-2025` is byte-identical to a library frame or to another of these files.
-- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06, with OBJECT `NGC 7000`, one ROTATANG throughout and pointing within NGC 7000's footprint: 16 at one framing, 8 more at the same framing after a meridian flip, and then 10 whose centre sits 12 % of the field away from it.
+- P8: Removable volume `Card-4` supports the OS Trash and is not connected before S10a. In an ASIAIR layout it holds 34 NGC 7000 Ha 300 s RedCat lights from the night of 2026-10-06. They have OBJECT `NGC 7000`, one ROTATANG throughout and pointing within NGC 7000's footprint. The first 16 share one framing, 8 more keep it after a meridian flip, and the last 10 have their centre 12 % of the field away.
 
 ## Steps
 
@@ -212,7 +212,7 @@ folder is added in place. Done means:
 - SC7: At S12, 100% of imported destination files match their source's SHA-256, and 0 files were permanently deleted or overwritten.
 - SC8: Card-1 reads ASIAIR (S1) and Card-2 reads USB device (S9). 0 duplicate-copies issues are raised after S6, S8, S9, S10 or S11, and 0 duplicates warnings name a `Card-1` file.
 - SC9: The 4 imported light sessions land with the Target their preview showed: 3 with NGC 7000 Confirmed (`2 Oct Ha` and `5 Oct OIII` prefilled from pointing, `2 Oct OIII` changed at S5a) and 1 with no Target under `unclassified/` (`4 Oct Ha`, S9). 0 Targets and 0 folders come from OBJECT, and 0 files move after an import (S12).
-- SC10: At S10a the preview lists exactly 2 sessions of 24 and 10 lights, the merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts.
+- SC10: At S10a the preview lists exactly 2 sessions, of 24 and 10 lights. The merge shows 1 session of 34, the re-split restores the 2 sessions, and 0 bytes are written before the import starts.
 
 ## Known gaps
 

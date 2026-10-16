@@ -115,7 +115,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 
 - **Do:** On the Sessions step, exclude one frame of the 18 Sep session. Open **Apply…** and read it. For the leftovers in `View (previous)/`, choose keep for the user note and Trash for the changed copy, then confirm Apply.
 - **Expect:**
-  - Before anything else, the sheet lists the two files `View (previous)/` still holds from S7a, the changed copy and the unticked user note, each with keep, move and Trash, and Apply is disabled until both are reviewed. It also lists the `.Info.txt` in the View with its tick box (VSEL-FR-20).
+  - Before anything else, the sheet lists the two files `View (previous)/` still holds from S7a: the changed copy and the unticked user note. Each offers keep, move and Trash, and Apply stays disabled until both are reviewed. It also lists the `.Info.txt` in the View with its tick box (VSEL-FR-20).
   - After the review, the changed copy is in the OS Trash and Apply is enabled. Apply swaps in a View without the excluded frame.
   - The note stays in `View (previous)/`, and no `View (previous 2)/` or other numbered folder exists.
 - **Expect (negative):** No leftover is deleted or moved before the user chooses for it, and Apply does not start while one is unreviewed. The kept note's bytes are unchanged.

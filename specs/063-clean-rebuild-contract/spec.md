@@ -251,7 +251,7 @@ The stage model runs across the feature specs (D-W1, D-W94, D-W101):
 - Existing input-mode and platform scope remains intact. A delivery slice does not redefine release scope.
 - Pixel review and scientific measurement are read-only; the product does not produce calibrated, registered, integrated, or stretched output images.
 - Optional future capabilities listed in the product flow remain deferred.
-- The rebuild starts from a fresh catalog. There is no catalog migration and no requirement to read or upgrade an earlier catalog. (D-W115)
+- The rebuild starts from a fresh catalog, with no catalog migration and no requirement to read or upgrade an earlier catalog. (D-W115)
 
 ## Scoped decisions before feature approval
 
