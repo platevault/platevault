@@ -9,6 +9,7 @@
   only exists on Windows, so the end-to-end case for it runs there; elsewhere
   the classifier still sees that exit code directly.
 #>
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot '..' 'e2e-shard-attempt.ps1'
 . $script
@@ -58,21 +59,29 @@ $pwsh = [System.Environment]::ProcessPath
 $work = Join-Path ([System.IO.Path]::GetTempPath()) "e2e-shard-attempt-tests-$PID"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
-function Invoke-Attempt([int]$Attempt, [string]$FakeBody) {
-  $fake = Join-Path $work 'fake.ps1'
-  Set-Content -LiteralPath $fake -Value $FakeBody -Encoding utf8
+# Runs the script around $Command with a fresh GITHUB_OUTPUT. Class is the
+# last `class=` written (GitHub keeps the last value of a repeated key);
+# Classes lists every write in order.
+function Invoke-Wrapped([int]$Attempt, [string[]]$Command) {
   $outputFile = Join-Path $work 'github_output'
   Set-Content -LiteralPath $outputFile -Value '' -Encoding utf8
   $previous = $env:GITHUB_OUTPUT
   $env:GITHUB_OUTPUT = $outputFile
   try {
-    $lines = & $script -Attempt $Attempt -- $pwsh -NoProfile -NonInteractive -File $fake
+    $lines = & $script -Attempt $Attempt -- @Command
     $code = $LASTEXITCODE
   } finally {
     $env:GITHUB_OUTPUT = $previous
   }
-  $class = (Get-Content -LiteralPath $outputFile | Where-Object { $_ -like 'class=*' }) -replace '^class=', ''
-  [pscustomobject]@{ Code = $code; Class = "$class"; Text = ($lines -join "`n") }
+  $classes = @(Get-Content -LiteralPath $outputFile | Where-Object { $_ -like 'class=*' } | ForEach-Object { $_ -replace '^class=', '' })
+  $class = if ($classes.Count -gt 0) { $classes[-1] } else { '' }
+  [pscustomobject]@{ Code = $code; Class = $class; Classes = ($classes -join ','); Text = ($lines -join "`n") }
+}
+
+function Invoke-Attempt([int]$Attempt, [string]$FakeBody) {
+  $fake = Join-Path $work 'fake.ps1'
+  Set-Content -LiteralPath $fake -Value $FakeBody -Encoding utf8
+  Invoke-Wrapped $Attempt @($pwsh, '-NoProfile', '-NonInteractive', '-File', $fake)
 }
 
 $r = Invoke-Attempt 1 'exit 3'
@@ -95,6 +104,14 @@ Assert-Equal 'nextest error on stderr: captured and classed as suite failure' 's
 $r = Invoke-Attempt 1 "'    Starting 2 tests across 1 binary'; exit 0"
 Assert-Equal 'passing shard: class' 'passed' $r.Class
 Assert-Equal 'passing shard: exit 0' 0 $r.Code
+Assert-Equal 'passing shard: incomplete is written first, then replaced' 'incomplete,passed' $r.Classes
+
+# The command prints GITHUB_OUTPUT while it runs: if the script died at that
+# point, the workflow would read `incomplete`, never the no-class '' that
+# means the shell never started.
+$r = Invoke-Attempt 1 "'    Starting 2 tests across 1 binary'; Get-Content -LiteralPath `$env:GITHUB_OUTPUT; exit 100"
+Assert-Equal 'mid-run: class is already incomplete while tests run' $true ($r.Text -match '(?m)^class=incomplete$')
+Assert-Equal 'mid-run: final class replaces incomplete' 'suite-failure' $r.Class
 
 if ($IsWindows) {
   $r = Invoke-Attempt 1 'exit -1073741502'
@@ -105,9 +122,10 @@ if ($IsWindows) {
   Write-Output 'skip: real STATUS_DLL_INIT_FAILED exit code (Windows only)'
 }
 
-$missing = & $script -- definitely-not-a-real-command-gl5q
-Assert-Equal 'missing executable: exit 1' 1 $LASTEXITCODE
-Assert-Equal 'missing executable: says so' $true (($missing -join "`n") -match 'is not an executable on PATH')
+$r = Invoke-Wrapped 1 @('definitely-not-a-real-command-gl5q')
+Assert-Equal 'missing executable: exit 1' 1 $r.Code
+Assert-Equal 'missing executable: class' 'suite-failure' $r.Class
+Assert-Equal 'missing executable: says so' $true ($r.Text -match 'is not an executable on PATH')
 
 Remove-Item -Recurse -Force -LiteralPath $work
 if ($failures -gt 0) {

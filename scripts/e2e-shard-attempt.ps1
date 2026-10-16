@@ -24,7 +24,9 @@
 
   It writes `class=<value>` to GITHUB_OUTPUT, so the workflow can re-run a
   runner failure once and keep a suite failure red, and it exits with the
-  command's exit code.
+  command's exit code. It writes `class=incomplete` before the command
+  starts, so an attempt whose script dies mid-run is never mistaken for one
+  whose shell never started (no class at all); the final class replaces it.
 
 .PARAMETER Attempt
   1 for the first attempt, 2 for the re-run. It changes only the annotation:
@@ -44,6 +46,7 @@ param(
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$Command
 )
+Set-StrictMode -Version Latest
 
 # STATUS_DLL_INIT_FAILED as an unsigned 32-bit exit code. A PowerShell hex
 # literal would parse 0xC0000142 as a negative Int32, so spell it in decimal.
@@ -102,6 +105,7 @@ if (-not (Get-Command -Name $Command[0] -CommandType Application -ErrorAction Si
 $ErrorActionPreference = 'Continue'
 $output = [System.Collections.Generic.List[string]]::new()
 $global:LASTEXITCODE = 0
+Write-ShardClass 'incomplete'
 & $Command[0] @($Command | Select-Object -Skip 1) 2>&1 | ForEach-Object {
   $line = "$_"
   Write-Output $line
@@ -119,7 +123,7 @@ switch ($result.Class) {
     if ($Attempt -eq 1) {
       Write-Output "::warning title=Runner failure (not a test failure)::Shard attempt 1 exited ${shown}: $($result.Reason). The runner could not start the suite; re-running the shard once."
     } else {
-      Write-Output "::error title=Runner failure (not a test failure)::Shard attempt 2 exited ${shown}: $($result.Reason), and attempt 1 also failed before any test ran. The runner is broken, not the code under test: re-run the job."
+      Write-Output "::error title=Runner failure (not a test failure)::Shard attempt 2 exited ${shown}: $($result.Reason), and attempt 1 also failed before any test ran. Most likely the runner is broken: re-run the job. If it repeats on fresh runners, suspect the build, since a broken binary can fail DLL initialisation too."
     }
   }
   'suite-failure' {

@@ -1200,11 +1200,13 @@ jobs:
       #
       # So attempt 1 may fail without failing the job. The step runs under
       # pwsh through scripts/e2e-shard-attempt.ps1, which classifies the end
-      # as passed / runner-failure / suite-failure and writes `class`. A
-      # runner failure, or a step whose shell died before writing any class,
-      # re-runs the shard once; a suite failure fails the job without a
-      # re-run, so real test failures stay red. Keep the two nextest
-      # invocations identical.
+      # as passed / runner-failure / suite-failure and writes `class`. It
+      # writes `class=incomplete` before the suite starts, so no class at all
+      # means the step's shell never reached the script. A runner failure, or
+      # no class, re-runs the shard once; a suite failure or an incomplete
+      # attempt (the script died mid-run) fails the job without a re-run, so
+      # real test failures stay red. Keep the two nextest invocations
+      # identical.
       - name: Self-test the shard failure classifier
         if: matrix.shard == 1
         shell: pwsh
@@ -1258,7 +1260,11 @@ jobs:
         env:
           FIRST_CLASS: ${{ steps.e2e.outputs.class }}
         run: |
-          echo "::error::Shard ${{ matrix.shard }}/3 attempt 1 ended as ${FIRST_CLASS}: a real failure, not re-run. See the 'Run E2E' step output."
+          if [ "${FIRST_CLASS}" = "incomplete" ]; then
+            echo "::error::Shard ${{ matrix.shard }}/3 attempt 1 died after starting the suite, before it could classify the result. Not re-run: a crash during the suite may be a real failure. See the 'Run E2E' step output."
+          else
+            echo "::error::Shard ${{ matrix.shard }}/3 attempt 1 ended as ${FIRST_CLASS}: a real failure, not re-run. See the 'Run E2E' step output."
+          fi
           exit 1
 
   # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
