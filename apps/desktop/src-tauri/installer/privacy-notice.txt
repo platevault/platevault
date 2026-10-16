@@ -11,7 +11,7 @@ Each time PlateVault starts, it asks github.com whether a newer release exists. 
 PlateVault can look up a target at simbad.cds.unistra.fr and cds.unistra.fr. It does this when you type in a target search box, apply an Inbox plan, or view an Inbox target suggestion. It sends the text you typed, a target name or a sky position, and CDS sees your IP address. To turn this off, switch off Online SIMBAD resolution. The switch is in the Configuration step of first-run setup and in Settings > Target Resolution.
 
 3. Observing-site map (OpenStreetMap)
-The observing-site map loads map tiles from tile.openstreetmap.org while it is on screen. It appears in the Observing Site step of first-run setup and in the observing-site form. OpenStreetMap sees your IP address. Once you enter coordinates, the tiles also show roughly where your site is. The full statement below says how to keep the map off screen.
+The Observing Site step of first-run setup and the observing-site form can show a map from tile.openstreetmap.org. The map stays hidden until you click Show map; you can type your coordinates instead. Once it is shown, OpenStreetMap sees your IP address, and if you have entered coordinates the tiles show roughly where your site is.
 
 During installation
 If Microsoft Edge WebView2 is missing, this installer downloads Microsoft's WebView2 installer and runs it. PlateVault's own code does not contact Microsoft.

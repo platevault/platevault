@@ -10,8 +10,11 @@
   installer/nsis-hooks.nsh does the same for the NSIS setup.exe. Keep
   privacy-notice.txt in step with docs/manual/11-privacy.md.
 
-  Tauri adds its own strings (TauriLanguage, LaunchApp and the rest) to this
-  file at build time, so it lists only the ones PlateVault changes.
+  At build time Tauri appends its own default strings (LaunchApp,
+  DowngradeErrorMessage and the rest) to this file. It skips any default
+  whose Id attribute, written as Id="...", appears anywhere in this file,
+  comments included. So this file lists only the strings PlateVault changes,
+  and its comments never quote a Tauri string id in that form.
 -->
 <WixLocalization Culture="en-us" xmlns="http://schemas.microsoft.com/wix/2006/localization">
   <String Id="LicenseAgreementDlgTitle">{\WixUI_Font_Title}Privacy notice</String>
