@@ -152,8 +152,10 @@ ignore = [
   # thirtyfour never calls those: its driver manager reads entries by index and
   # writes only the driver binary itself (thirtyfour 0.37.4 src/manager/download.rs:664-687).
   # The fix is zip >= 9, and thirtyfour 0.37.8 (latest, 2026-10-12) still requires zip ^8.
+  # `allow` limits each ignore to the audited thirtyfour release: any other crate
+  # that depends on zip, or a thirtyfour update, fails the check until reviewed.
   # Remove these when thirtyfour accepts zip >= 9.
-  { id = "RUSTSEC-2026-0367", reason = "zip SUID/SGID bits kept by extract(); dev-only via thirtyfour, which never calls extract()" },
-  { id = "RUSTSEC-2026-0368", reason = "zip extract() symlink targets outside the destination; dev-only via thirtyfour, which never calls extract()" },
-  { id = "RUSTSEC-2026-0369", reason = "zip extract() applies Unix permissions through symlinks; dev-only via thirtyfour, which never calls extract()" },
+  { id = "RUSTSEC-2026-0367", allow = ["thirtyfour@0.37.4"], reason = "zip SUID/SGID bits kept by extract(); dev-only via thirtyfour, which never calls extract()" },
+  { id = "RUSTSEC-2026-0368", allow = ["thirtyfour@0.37.4"], reason = "zip extract() symlink targets outside the destination; dev-only via thirtyfour, which never calls extract()" },
+  { id = "RUSTSEC-2026-0369", allow = ["thirtyfour@0.37.4"], reason = "zip extract() applies Unix permissions through symlinks; dev-only via thirtyfour, which never calls extract()" },
 ]
