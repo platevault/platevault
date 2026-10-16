@@ -26,6 +26,15 @@ jobs:
         cache: pnpm
     - name: Install JS dependencies
       run: pnpm install --frozen-lockfile
+    - name: 'Rehearsal U2: a skipped subjects step'
+      id: subjects
+      if: github.event_name == 'never'
+      shell: bash
+      run: echo 'paths=never' >> "$GITHUB_OUTPUT"
+    - name: 'Rehearsal U2: Attest build provenance condition'
+      if: ${{ steps.subjects.outputs.paths != '' }}
+      shell: bash
+      run: echo '::error::the attest condition ran although the subjects step was skipped'; exit 1
     - name: 'Rehearsal: trust a throwaway code-signing certificate'
       shell: pwsh
       run: |
@@ -105,10 +114,9 @@ jobs:
       env:
         RELEASE_DIR: ${{ steps.windows-app.outputs.release_dir }}
         MAIN_BINARY: ${{ steps.windows-app.outputs.main_binary }}
+        AUTHENTICODE_SIGNER: PlateVault signing rehearsal
       run: |
         $PSNativeCommandUseErrorActionPreference = $true
-        # Every file sent to SignPath must come back validly signed, or the
-        # unsigned copy left in the target directory would be packed.
         $submitted = (Resolve-Path app-to-sign).Path
         foreach ($file in Get-ChildItem -Recurse -File app-to-sign) {
           $relative = [System.IO.Path]::GetRelativePath($submitted, $file.FullName)
@@ -117,8 +125,9 @@ jobs:
             throw "SignPath returned no $signed. The app artifact configuration must keep each file at its path."
           }
           $signature = Get-AuthenticodeSignature -LiteralPath $signed
-          if ($signature.Status -ne 'Valid') {
-            throw "$signed is not validly signed: $($signature.Status) $($signature.StatusMessage)"
+          $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
+          if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
+            throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
           }
         }
 
@@ -156,6 +165,8 @@ jobs:
         }
     - name: Check the signed installers
       shell: pwsh
+      env:
+        AUTHENTICODE_SIGNER: PlateVault signing rehearsal
       run: |
         $PSNativeCommandUseErrorActionPreference = $true
         foreach ($installer in Get-ChildItem -File installers-to-sign) {
@@ -164,24 +175,32 @@ jobs:
             throw "SignPath returned no $signed. The installer artifact configuration must keep each file at the artifact root."
           }
           $signature = Get-AuthenticodeSignature -LiteralPath $signed
-          if ($signature.Status -ne 'Valid') {
-            throw "$signed is not validly signed: $($signature.Status) $($signature.StatusMessage)"
+          $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
+          if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
+            throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
           }
         }
 
-        $setup = Get-Item installers-signed/*-setup.exe
-        & {
-          $PSNativeCommandUseErrorActionPreference = $false
-          7z x $setup.FullName "-o$PWD\unpacked\nsis" -y | Out-Null
+        function Expand-With7Zip([string] $archive, [string] $destination) {
+          & {
+            $PSNativeCommandUseErrorActionPreference = $false
+            7z x $archive "-o$destination" -y | Out-Null
+          }
+          if ($LASTEXITCODE -gt 1) { throw "7-Zip could not unpack ${archive}: exit code $LASTEXITCODE" }
         }
-        if ($LASTEXITCODE -gt 1) { throw "7-Zip could not unpack $($setup.Name): exit code $LASTEXITCODE" }
+        $setup = Get-Item installers-signed/*-setup.exe
         $msi = Get-Item installers-signed/*.msi
+        Expand-With7Zip $setup.FullName "$PWD\unpacked\nsis"
+        Expand-With7Zip $msi.FullName "$PWD\unpacked\msi-streams"
         $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$PWD\unpacked\msi`""
         if ($admin.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($admin.ExitCode)" }
 
+        # Signed copies meant for each installer, and the unpacked trees each
+        # installer's PE files are searched in.
+        $signedFor = @{}
         foreach ($bundle in 'nsis', 'msi') {
-          $expected = @(Get-ChildItem -File "app-signed/$bundle") + @(Get-ChildItem -File -Filter '*.exe' app-signed)
-          foreach ($file in $expected) {
+          $signedFor[$bundle] = @(Get-ChildItem -File "app-signed/$bundle") + @(Get-ChildItem -File -Filter '*.exe' app-signed)
+          foreach ($file in $signedFor[$bundle]) {
             $packed = @(Get-ChildItem -Recurse -File -Filter $file.Name "unpacked/$bundle")
             if ($packed.Count -ne 1) {
               throw "expected one $($file.Name) in the $bundle installer, found $($packed.Count)"
@@ -192,6 +211,185 @@ jobs:
             "the $bundle installer carries the signed $($file.Name)"
           }
         }
+        $trees = [ordered]@{ nsis = 'nsis'; msi = 'msi'; 'msi-streams' = 'msi' }
+
+        # Third-party code in the installers. SignPath Foundation signs only
+        # files built from this repository, so these keep their own
+        # signatures, if any. Paths are relative to unpacked/.
+        $nsisPlugin = 'NSIS plugin: third-party code that setup.exe extracts to a temporary folder and loads while it runs; not installed'
+        $wixAction = 'WiX custom action: third-party code that msiexec runs while it installs; not installed'
+        $thirdParty = [ordered]@{
+          'nsis/$PLUGINSDIR/nsDialogs.dll' = $nsisPlugin
+          'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = $nsisPlugin
+          'nsis/$PLUGINSDIR/NSISdl.dll' = $nsisPlugin
+          'nsis/$PLUGINSDIR/StartMenu.dll' = $nsisPlugin
+          'nsis/$PLUGINSDIR/System.dll' = $nsisPlugin
+          'msi-streams/Binary.WixUIWixca' = $wixAction
+        }
+
+        function Test-PortableExecutable([string] $path) {
+          $stream = [System.IO.File]::OpenRead($path)
+          try {
+            $reader = [System.IO.BinaryReader]::new($stream)
+            if ($stream.Length -lt 64 -or $reader.ReadUInt16() -ne 0x5A4D) { return $false }
+            $stream.Position = 0x3C
+            $header = [long]$reader.ReadUInt32()
+            if ($header + 4 -gt $stream.Length) { return $false }
+            $stream.Position = $header
+            return $reader.ReadUInt32() -eq 0x00004550
+          } finally {
+            $stream.Dispose()
+          }
+        }
+
+        $unpacked = (Resolve-Path unpacked).Path
+        $unexpected = @()
+        $listed = @()
+        foreach ($tree in $trees.Keys) {
+          $signedHashes = @($signedFor[$trees[$tree]] | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName).Hash })
+          foreach ($file in Get-ChildItem -Recurse -File "unpacked/$tree") {
+            if (-not (Test-PortableExecutable $file.FullName)) { continue }
+            $relative = [System.IO.Path]::GetRelativePath($unpacked, $file.FullName).Replace('\', '/')
+            if ((Get-FileHash -LiteralPath $file.FullName).Hash -in $signedHashes) {
+              "signed by SignPath: $relative"
+            } elseif ($thirdParty.Contains($relative)) {
+              $listed += $relative
+              $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+              $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+              "third-party: $relative ($($thirdParty[$relative])); Authenticode $($signature.Status), signed by $signer"
+            } else {
+              $unexpected += $relative
+            }
+          }
+        }
+        foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) {
+          "::warning::$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
+        }
+        if ($unexpected) {
+          throw "these executables in the installers were not signed by SignPath and are not on the third-party list: $($unexpected -join ', ')"
+        }
+    - name: 'Rehearsal: the check fails on a foreign signer and on an unsent executable'
+      shell: pwsh
+      env:
+        CHECK_SCRIPT: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($installer in Get-ChildItem -File installers-to-sign) {
+            $signed = Join-Path installers-signed $installer.Name
+            if (-not (Test-Path -LiteralPath $signed -PathType Leaf)) {
+              throw "SignPath returned no $signed. The installer artifact configuration must keep each file at the artifact root."
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $signed
+            $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
+            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
+              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
+            }
+          }
+
+          function Expand-With7Zip([string] $archive, [string] $destination) {
+            & {
+              $PSNativeCommandUseErrorActionPreference = $false
+              7z x $archive "-o$destination" -y | Out-Null
+            }
+            if ($LASTEXITCODE -gt 1) { throw "7-Zip could not unpack ${archive}: exit code $LASTEXITCODE" }
+          }
+          $setup = Get-Item installers-signed/*-setup.exe
+          $msi = Get-Item installers-signed/*.msi
+          Expand-With7Zip $setup.FullName "$PWD\unpacked\nsis"
+          Expand-With7Zip $msi.FullName "$PWD\unpacked\msi-streams"
+          $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$PWD\unpacked\msi`""
+          if ($admin.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($admin.ExitCode)" }
+
+          # Signed copies meant for each installer, and the unpacked trees each
+          # installer's PE files are searched in.
+          $signedFor = @{}
+          foreach ($bundle in 'nsis', 'msi') {
+            $signedFor[$bundle] = @(Get-ChildItem -File "app-signed/$bundle") + @(Get-ChildItem -File -Filter '*.exe' app-signed)
+            foreach ($file in $signedFor[$bundle]) {
+              $packed = @(Get-ChildItem -Recurse -File -Filter $file.Name "unpacked/$bundle")
+              if ($packed.Count -ne 1) {
+                throw "expected one $($file.Name) in the $bundle installer, found $($packed.Count)"
+              }
+              if ((Get-FileHash -LiteralPath $packed[0].FullName).Hash -ne (Get-FileHash -LiteralPath $file.FullName).Hash) {
+                throw "the $bundle installer's $($file.Name) is not the copy SignPath signed"
+              }
+              "the $bundle installer carries the signed $($file.Name)"
+            }
+          }
+          $trees = [ordered]@{ nsis = 'nsis'; msi = 'msi'; 'msi-streams' = 'msi' }
+
+          # Third-party code in the installers. SignPath Foundation signs only
+          # files built from this repository, so these keep their own
+          # signatures, if any. Paths are relative to unpacked/.
+          $nsisPlugin = 'NSIS plugin: third-party code that setup.exe extracts to a temporary folder and loads while it runs; not installed'
+          $wixAction = 'WiX custom action: third-party code that msiexec runs while it installs; not installed'
+          $thirdParty = [ordered]@{
+            'nsis/$PLUGINSDIR/nsDialogs.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/NSISdl.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/StartMenu.dll' = $nsisPlugin
+            'nsis/$PLUGINSDIR/System.dll' = $nsisPlugin
+            'msi-streams/Binary.WixUIWixca' = $wixAction
+          }
+
+          function Test-PortableExecutable([string] $path) {
+            $stream = [System.IO.File]::OpenRead($path)
+            try {
+              $reader = [System.IO.BinaryReader]::new($stream)
+              if ($stream.Length -lt 64 -or $reader.ReadUInt16() -ne 0x5A4D) { return $false }
+              $stream.Position = 0x3C
+              $header = [long]$reader.ReadUInt32()
+              if ($header + 4 -gt $stream.Length) { return $false }
+              $stream.Position = $header
+              return $reader.ReadUInt32() -eq 0x00004550
+            } finally {
+              $stream.Dispose()
+            }
+          }
+
+          $unpacked = (Resolve-Path unpacked).Path
+          $unexpected = @()
+          $listed = @()
+          foreach ($tree in $trees.Keys) {
+            $signedHashes = @($signedFor[$trees[$tree]] | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName).Hash })
+            foreach ($file in Get-ChildItem -Recurse -File "unpacked/$tree") {
+              if (-not (Test-PortableExecutable $file.FullName)) { continue }
+              $relative = [System.IO.Path]::GetRelativePath($unpacked, $file.FullName).Replace('\', '/')
+              if ((Get-FileHash -LiteralPath $file.FullName).Hash -in $signedHashes) {
+                "signed by SignPath: $relative"
+              } elseif ($thirdParty.Contains($relative)) {
+                $listed += $relative
+                $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+                $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+                "third-party: $relative ($($thirdParty[$relative])); Authenticode $($signature.Status), signed by $signer"
+              } else {
+                $unexpected += $relative
+              }
+            }
+          }
+          foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) {
+            "::warning::$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
+          }
+          if ($unexpected) {
+            throw "these executables in the installers were not signed by SignPath and are not on the third-party list: $($unexpected -join ', ')"
+          }
+      run: |
+        $script = Join-Path $env:RUNNER_TEMP 'check.ps1'
+        Set-Content -LiteralPath $script -Value $env:CHECK_SCRIPT
+        function Invoke-Check([string] $dir, [string] $signer) {
+          New-Item -ItemType Directory -Path $dir | Out-Null
+          Copy-Item -Recurse installers-to-sign, installers-signed, app-signed -Destination $dir
+          if ($dir -eq 'neg-unsent') { Remove-Item -LiteralPath "$dir/app-signed/platevault-library.exe" }
+          $env:AUTHENTICODE_SIGNER = $signer
+          Push-Location $dir
+          try { $output = & pwsh -NoProfile -File $script 2>&1 | Out-String; $code = $LASTEXITCODE } finally { Pop-Location }
+          "== $dir (exit $code)"; $output
+          [pscustomobject]@{ Code = $code; Output = $output }
+        }
+        $foreign = Invoke-Check neg-signer 'SignPath Foundation' | Select-Object -Last 1
+        if ($foreign.Code -eq 0 -or $foreign.Output -notmatch 'must carry a valid signature by SignPath Foundation') { throw 'the check accepted a signature not made by SignPath Foundation' }
+        $unsent = Invoke-Check neg-unsent 'PlateVault signing rehearsal' | Select-Object -Last 1
+        if ($unsent.Code -eq 0 -or $unsent.Output -notmatch '(?s)not on the third-party list: .*platevault-library\.exe') { throw 'the check accepted an executable SignPath did not sign' }
+        'both negative cases failed as they should'
     - name: Sign the signed installers for the updater
       shell: pwsh
       run: |
@@ -201,19 +399,3 @@ jobs:
         foreach ($installer in Get-ChildItem -File installers-signed | Where-Object Extension -In '.exe', '.msi') {
           pnpm --dir apps/desktop exec tauri signer sign --app-version $version $installer.FullName
         }
-    - name: 'Rehearsal: show results'
-      shell: pwsh
-      run: |
-        Get-ChildItem -Recurse -File app-to-sign, app-signed, installers-to-sign, installers-signed | Format-Table -AutoSize Length, FullName
-        foreach ($sig in Get-ChildItem installers-signed -Filter '*.sig') { "== $($sig.Name)"; [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content -Raw $sig.FullName))) }
-        foreach ($f in Get-ChildItem -Recurse -File app-signed, installers-signed -Include *.exe, *.msi) { $s = Get-AuthenticodeSignature -LiteralPath $f.FullName; "$($f.Name): $($s.Status) $($s.SignerCertificate.Subject)" }
-        foreach ($f in Get-ChildItem -Recurse -File unpacked -Include desktop_shell.exe) { $t = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($f.FullName)); "$($f.FullName): NSS=$($t.Contains('__TAURI_BUNDLE_TYPE_VAR_NSS')) MSI=$($t.Contains('__TAURI_BUNDLE_TYPE_VAR_MSI')) UNK=$($t.Contains('__TAURI_BUNDLE_TYPE_VAR_UNK'))" }
-        Get-ChildItem -Recurse -File unpacked | Select-Object -First 60 | Format-Table -AutoSize Length, FullName
-    - name: 'Rehearsal: keep the evidence'
-      uses: actions/upload-artifact@v4
-      with:
-        name: signing-rehearsal
-        path: |
-          installers-signed/
-          app-signed/
-        retention-days: 3
