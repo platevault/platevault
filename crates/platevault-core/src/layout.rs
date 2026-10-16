@@ -136,6 +136,18 @@ pub(crate) fn token(label: &str, raw: &str, limit: usize) -> Result<String, Libr
     Ok(capped(token, limit, &digest_suffix(raw)))
 }
 
+/// [`token`] that always ends with the suffix from `raw`'s digest: the
+/// deterministic name of a value whose plain token another value took.
+///
+/// # Errors
+/// As [`token`].
+pub(crate) fn token_suffixed(label: &str, raw: &str, limit: usize) -> Result<String, LibraryError> {
+    let suffix = digest_suffix(raw);
+    let plain = token(label, raw, limit)?;
+    let room = limit.saturating_sub(component_len(&suffix));
+    Ok(capped(&plain, room, "") + &suffix)
+}
+
 /// `-` and the first eight hex digits of `text`'s SHA-256.
 fn digest_suffix(text: &str) -> String {
     format!("-{}", &hex::encode(Sha256::digest(text.as_bytes()))[..8])

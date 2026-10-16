@@ -161,6 +161,9 @@ impl Library {
         crate::results::register(&library).await;
         // PV-STO (071, U29): running Clean up / Empty Trash guard (RES-FR-07, RES-FR-10).
         crate::storage::register_cleanup(&library).await;
+        // APPLY (069, F4): restore the old View or finish installing the new
+        // one for every Apply an earlier run left unsettled.
+        crate::apply::reconcile(&library).await;
         Ok(library)
     }
 

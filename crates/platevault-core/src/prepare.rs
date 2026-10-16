@@ -2066,7 +2066,8 @@ fn link_or_clone(
             }
         }
         PreparedEntryKind::Clone => {
-            clone_file(&source, path).map_err(|error| occupied_or_failed(path, &error))?;
+            transfer::clone_file(&source, path)
+                .map_err(|error| occupied_or_failed(path, &error))?;
             let clone = crate::inventory::probe_fingerprint(path)
                 .map_err(|error| changed(error.to_string()))?;
             // Any failure from here removes the clone while its name still
@@ -2108,42 +2109,6 @@ fn finish_clone(
         .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
     verify_entry(PreparedEntryKind::Clone, snapshot, Some(&entry), header_changes)?;
     Ok(entry)
-}
-
-#[cfg(target_os = "macos")]
-fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
-    let folder = path.parent().unwrap_or(path);
-    let name = path.file_name().ok_or_else(|| std::io::Error::other("no file name"))?;
-    let source = fs::File::open(source)?;
-    let folder = fs::File::open(folder)?;
-    rustix::fs::fclonefileat(&source, &folder, name, rustix::fs::CloneFlags::NOFOLLOW)?;
-    fs::File::open(path)?.sync_all()
-}
-
-#[cfg(target_os = "linux")]
-fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::MetadataExt;
-    let source = fs::File::open(source)?;
-    let out = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
-    if let Err(error) = rustix::fs::ioctl_ficlone(&out, &source) {
-        // Remove only the empty file this clone created, while it is ours.
-        let ours = out.metadata()?;
-        if fs::symlink_metadata(path)
-            .is_ok_and(|now| now.dev() == ours.dev() && now.ino() == ours.ino())
-        {
-            let _ = fs::remove_file(path);
-        }
-        return Err(error.into());
-    }
-    out.sync_all()
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "this platform makes no verified clone",
-    ))
 }
 
 /// D19 for one entry: the source against its snapshot, then the entry as

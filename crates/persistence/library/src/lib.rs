@@ -204,6 +204,10 @@ mod admission;
 // One PlateVault operation per Project: Apply, Copy to Output and Wrap up
 // reserve the Project before any file effect (PREP-FR-19).
 mod project_operations;
+// Apply's catalog side: its inputs, manifest, journal, foreign files and
+// leftovers (project_view.sql).
+mod project_view;
+pub use project_view::{ApplyInputs, ApplyReservation, ApplyReserved, SourcePath};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

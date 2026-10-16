@@ -75,6 +75,8 @@ mod project_lifecycle;
 pub use project_lifecycle::*;
 mod project_output;
 pub use project_output::*;
+mod project_apply;
+pub use project_apply::*;
 
 time::serde::format_description!(pub(crate) iso_date, Date, "[year]-[month]-[day]");
 
@@ -163,6 +165,12 @@ pub enum LibraryError {
     PersistenceFailure(String),
     #[error("no verified byte proof: {0}")]
     NoByteProof(String),
+    /// Symlinks can't be made where the View goes: on Windows, Developer
+    /// Mode (the unprivileged symlink right) is off. Apply in Symlinks mode
+    /// refuses and offers Copies for this Project; no other link kind is
+    /// tried (PREP-FR-15, PREP-AC-08).
+    #[error("symlinks unavailable: {0}")]
+    SymlinksUnavailable(String),
     #[error("operation canceled")]
     Canceled,
     #[error("{error}")]
@@ -222,6 +230,7 @@ impl LibraryError {
             Self::ProviderUnavailable(_) => ("provider_unavailable", RetryAction::Retry),
             Self::PersistenceFailure(_) => ("persistence_failure", RetryAction::Retry),
             Self::NoByteProof(_) => ("no_byte_proof", RetryAction::Review),
+            Self::SymlinksUnavailable(_) => ("symlinks_unavailable", RetryAction::Review),
             Self::Canceled => ("canceled", RetryAction::None),
             Self::Context { .. } => unreachable!("context handled before variant mapping"),
         };

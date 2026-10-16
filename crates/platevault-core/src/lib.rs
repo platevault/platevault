@@ -3,6 +3,7 @@
 
 //! Local-first library records and lossless application contracts.
 
+pub mod apply;
 pub mod calendar;
 pub mod calibration;
 pub mod calibration_inputs;

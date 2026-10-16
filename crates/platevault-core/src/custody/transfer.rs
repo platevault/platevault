@@ -56,7 +56,7 @@ fn layout(destination: &TransferDestination) -> Result<(PathBuf, PathBuf, PathBu
 
 /// Prove `root` is a real folder and create the missing folders of `relative`
 /// below it, one level at a time, never following a link.
-fn ensure_folder(root: &Path, relative: &Path) -> Result<PathBuf, ItemReason> {
+pub(crate) fn ensure_folder(root: &Path, relative: &Path) -> Result<PathBuf, ItemReason> {
     let root_metadata = real_folder(root)?;
     let mut current = root.to_path_buf();
     for part in relative.components() {
@@ -297,4 +297,75 @@ pub(crate) fn sync_folder(folder: &Path) -> std::io::Result<()> {
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) const fn sync_folder(_folder: &Path) -> std::io::Result<()> {
     Ok(())
+}
+
+/// Make `path` a copy-on-write clone of `source`: APFS `clonefile` on macOS,
+/// the `FICLONE` reflink on Linux. Nothing is copied when the volume or the
+/// platform can't clone; the error says so and `path` stays free.
+#[cfg(target_os = "macos")]
+pub(crate) fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
+    let folder = path.parent().unwrap_or(path);
+    let name = path.file_name().ok_or_else(|| std::io::Error::other("no file name"))?;
+    let source = fs::File::open(source)?;
+    let folder = fs::File::open(folder)?;
+    rustix::fs::fclonefileat(&source, &folder, name, rustix::fs::CloneFlags::NOFOLLOW)?;
+    fs::File::open(path)?.sync_all()
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn clone_file(source: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    let source = fs::File::open(source)?;
+    let out = fs::OpenOptions::new().write(true).create_new(true).open(path)?;
+    if let Err(error) = rustix::fs::ioctl_ficlone(&out, &source) {
+        // Remove only the empty file this clone created, while it is ours.
+        let ours = out.metadata()?;
+        if fs::symlink_metadata(path)
+            .is_ok_and(|now| now.dev() == ours.dev() && now.ino() == ours.ino())
+        {
+            let _ = fs::remove_file(path);
+        }
+        return Err(error.into());
+    }
+    out.sync_all()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "this platform makes no verified clone",
+    ))
+}
+
+/// Rename `from` to `to` on one volume without ever replacing what is at
+/// `to`: `renameat2(RENAME_NOREPLACE)` on Linux and `renamex_np(RENAME_EXCL)`
+/// on macOS. Where the volume lacks those, a folder is renamed only while
+/// `to` is free (Windows refuses a folder rename onto an existing name by
+/// itself) and a file goes through a no-replace link or move.
+///
+/// # Errors
+/// `AlreadyExists` when `to` is taken; the platform's rename error.
+pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> std::io::Result<()> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        use rustix::fs::{renameat_with, RenameFlags, CWD};
+        use rustix::io::Errno;
+        match renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE) {
+            Ok(()) => return Ok(()),
+            Err(Errno::INVAL | Errno::NOTSUP | Errno::NOSYS) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    match fs::symlink_metadata(to) {
+        Ok(_) => return Err(std::io::ErrorKind::AlreadyExists.into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    if fs::symlink_metadata(from)?.is_dir() {
+        return fs::rename(from, to);
+    }
+    let mut moving = tempfile::TempPath::try_from_path(from)?;
+    moving.disable_cleanup(true);
+    moving.persist_noclobber(to).map_err(|failure| failure.error)
 }
