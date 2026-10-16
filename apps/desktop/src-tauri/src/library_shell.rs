@@ -74,8 +74,8 @@ pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 /// Every startup failure: a refused bridge address, invalid provider
 /// configuration, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
-/// cannot be read when the notifier attaches, a removal notice window that
-/// Windows refuses, or the Tauri runtime itself.
+/// cannot be read when the notifier attaches, or the Tauri runtime itself.
+/// A removal notice window that Windows refuses is logged, not returned.
 #[expect(clippy::too_many_lines, reason = "the handler list holds one labelled block per feature")]
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;

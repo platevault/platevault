@@ -431,8 +431,9 @@ fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<Fold
 /// `stamp`; empty for the root itself), while the root still carries
 /// `stamp` and every folder from the root down to it is a real folder on
 /// the root's volume, checked without following links before the read and
-/// after it: a folder, or one above it, swapped for a link or junction is
-/// never read through. `None` when a check failed.
+/// after it. A folder, or one above it, swapped for a link or junction
+/// before the read is not read, and a read taken through one swapped while
+/// it ran is discarded. `None` when a check failed.
 fn read_real_folder<T>(
     root: &Path,
     stamp: RootStamp,
@@ -451,15 +452,16 @@ fn read_real_folder<T>(
 }
 
 /// Whether `relative`, a folder below `root` (whose stamp is `stamp`), opens
-/// for listing, by [`read_real_folder`]'s checks: no link is followed.
+/// for listing, by [`read_real_folder`]'s checks: what a link swapped in
+/// reaches does not count.
 pub(crate) fn opens(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
     read_real_folder(root, stamp, relative, |folder| fs::read_dir(folder).is_ok()) == Some(true)
 }
 
 /// Whether `relative`, a folder below `root` (whose stamp is `stamp`), can
 /// now be listed in full: it opens, and every entry is read and `stat`ed (or
-/// was removed meanwhile). [`read_real_folder`] checks it, so a folder
-/// swapped for a link is never listed.
+/// was removed meanwhile). [`read_real_folder`] checks it, so a listing read
+/// through a folder swapped for a link is discarded.
 pub(crate) fn lists_fully(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
     let listed = read_real_folder(root, stamp, relative, |folder| {
         fs::read_dir(folder).is_ok_and(|entries| {
