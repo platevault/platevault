@@ -149,12 +149,14 @@ impl Source for Arc<FakeSource> {
     }
 }
 
-/// The OS installer: records each call and its payload, answers from a queue
-/// (default `Relaunch`), and blocks while a gate is set.
+/// The OS installer: records each call, its payload and its administrator
+/// prompt, answers from a queue (default `Relaunch`), and blocks while a gate
+/// is set.
 #[derive(Default)]
 struct FakeInstaller {
     results: Mutex<VecDeque<Result<Installed, UpdateError>>>,
     calls: Mutex<Vec<(InstallMode, Vec<u8>)>>,
+    prompts: Mutex<Vec<String>>,
     gate: Mutex<Option<mpsc::Receiver<()>>>,
 }
 
@@ -172,6 +174,10 @@ impl FakeInstaller {
     fn calls(&self) -> Vec<(InstallMode, Vec<u8>)> {
         self.calls.lock().expect("calls").clone()
     }
+
+    fn prompts(&self) -> Vec<String> {
+        self.prompts.lock().expect("prompts").clone()
+    }
 }
 
 impl Installer for Arc<FakeInstaller> {
@@ -179,10 +185,12 @@ impl Installer for Arc<FakeInstaller> {
         &self,
         mut payload: Payload<'_>,
         mode: InstallMode,
+        admin_prompt: &str,
     ) -> Result<Installed, UpdateError> {
         let mut bytes = Vec::new();
         payload.reader().read_to_end(&mut bytes).expect("staged payload");
         self.calls.lock().expect("calls").push((mode, bytes));
+        self.prompts.lock().expect("prompts").push(admin_prompt.to_owned());
         let gate = self.gate.lock().expect("gate").take();
         if let Some(gate) = gate {
             let _ = gate.recv();
@@ -206,10 +214,11 @@ pub(super) async fn stage(package: Package, bytes: &[u8]) -> Staged {
     signature::download_verified(&source, &release, package, &key).await.expect("staged")
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum HostCall {
     Relaunch,
     Exit,
+    Notify { title: String, body: String },
 }
 
 struct FakeHost(Mutex<mpsc::Sender<HostCall>>);
@@ -221,6 +230,11 @@ impl UpdateHost for FakeHost {
 
     fn exit(&self) {
         let _ = self.0.lock().expect("host").send(HostCall::Exit);
+    }
+
+    fn notify(&self, title: &str, body: &str) {
+        let call = HostCall::Notify { title: title.to_owned(), body: body.to_owned() };
+        let _ = self.0.lock().expect("host").send(call);
     }
 }
 
@@ -555,17 +569,57 @@ async fn a_staged_payload_changed_on_disk_fails_its_second_check() {
     );
 }
 
-/// An installer that counts its calls, swaps the staged file the way
-/// same-user malware could while a retry waits, and fails.
+/// On Windows the handle `reverify` opened keeps every writer out for as
+/// long as it, or the duplicate an installer inherits, is open, so the MSI
+/// the Windows Installer service reads after UAC is the one that verified
+/// (astro-plan-ryj83).
+#[cfg(windows)]
+#[tokio::test]
+async fn a_verified_payload_cannot_be_changed_while_its_handle_is_open() {
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    let staged = stage(Package::Msi, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1an msi").await;
+    let mut payload = staged.reverify().expect("verified");
+    let inherited = payload.reader().try_clone().expect("the installer's duplicate");
+
+    let write = std::fs::OpenOptions::new().write(true).open(staged.file());
+    assert_eq!(write.err().and_then(|error| error.raw_os_error()), Some(ERROR_SHARING_VIOLATION));
+    let moved = staged.file().with_extension("moved");
+    assert!(std::fs::rename(staged.file(), &moved).is_err(), "nor can it be renamed away");
+    let mut read = Vec::new();
+    std::fs::File::open(staged.file())
+        .expect("readers still may")
+        .read_to_end(&mut read)
+        .expect("read");
+
+    drop(payload);
+    let write = std::fs::OpenOptions::new().write(true).open(staged.file());
+    assert_eq!(
+        write.err().and_then(|error| error.raw_os_error()),
+        Some(ERROR_SHARING_VIOLATION),
+        "the duplicate the installer holds keeps the lock"
+    );
+    drop(inherited);
+    std::fs::OpenOptions::new().write(true).open(staged.file()).expect("unlocked once all close");
+}
+
+/// An installer that counts its calls, fails, and then swaps the staged file
+/// the way same-user malware could while a retry waits.
 #[derive(Default)]
 struct TamperingInstaller {
     calls: AtomicUsize,
 }
 
 impl Installer for Arc<TamperingInstaller> {
-    fn install(&self, payload: Payload<'_>, _mode: InstallMode) -> Result<Installed, UpdateError> {
+    fn install(
+        &self,
+        payload: Payload<'_>,
+        _mode: InstallMode,
+        _admin_prompt: &str,
+    ) -> Result<Installed, UpdateError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        std::fs::write(payload.path(), b"swapped AppImage").expect("tamper");
+        let path = payload.path().to_owned();
+        drop(payload);
+        std::fs::write(path, b"swapped AppImage").expect("tamper");
         Err(UpdateError::Install("denied".to_owned()))
     }
 }
@@ -828,6 +882,133 @@ async fn a_failed_install_at_quit_still_exits() {
     assert_eq!(rig.next_host_call(), HostCall::Exit);
 }
 
+// ── What the updater says outside the webview (dwwup, gffqm) ────────────────
+
+const KEPT: &str = "/Applications/PlateVault (previous version).app";
+
+fn previous_app_not_restored() -> UpdateError {
+    UpdateError::PreviousAppNotRestored {
+        kept: std::path::PathBuf::from(KEPT),
+        cause: Box::new(UpdateError::Install("the move back failed".to_owned())),
+    }
+}
+
+fn kept_notice_en_gb() -> HostCall {
+    HostCall::Notify {
+        title: "Update not installed".to_owned(),
+        body: format!(
+            "Could not install update: the previous version couldn't be put back. It's saved at {KEPT}."
+        ),
+    }
+}
+
+#[tokio::test]
+async fn an_install_at_quit_that_kept_the_previous_app_says_where_before_exiting() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = FakeInstaller::answering(vec![Err(previous_app_not_restored())]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+    rig.updater.install_on_quit().await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+
+    assert_eq!(rig.next_host_call(), kept_notice_en_gb(), "the notice comes first");
+    assert_eq!(rig.next_host_call(), HostCall::Exit);
+}
+
+#[tokio::test]
+async fn a_quit_held_during_install_now_says_where_the_previous_app_was_kept() {
+    let (rig, release_install, install) =
+        install_now_blocked(Err(previous_app_not_restored())).await;
+    rig.updater.set_locale("pt-BR");
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(
+        rig.host_calls(),
+        vec![
+            HostCall::Notify {
+                title: "Atualização não instalada".to_owned(),
+                body: format!(
+                    "Não foi possível instalar a atualização: não foi possível restaurar a versão anterior. Ela está salva em {KEPT}."
+                ),
+            },
+            HostCall::Exit,
+        ]
+    );
+}
+
+/// Without a quit, the window stays and shows the kept path itself.
+#[tokio::test]
+async fn install_now_without_a_quit_shows_the_kept_path_in_the_app_instead() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = FakeInstaller::answering(vec![Err(previous_app_not_restored())]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+
+    rig.updater.install_now().await;
+
+    assert!(rig.host_calls().is_empty(), "no notification, relaunch or exit");
+    assert_eq!(
+        rig.updater.current_status().error,
+        Some(UpdateFailure::PreviousAppNotRestored { kept_at: KEPT.to_owned() })
+    );
+}
+
+#[tokio::test]
+async fn any_other_failed_install_at_quit_exits_without_a_notice() {
+    let (rig, release_install, install) =
+        install_now_blocked(Err(UpdateError::Permission("cancelled".to_owned()))).await;
+
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    release_install.send(()).expect("release the install");
+    install.await.expect("install task");
+
+    assert_eq!(rig.host_calls(), vec![HostCall::Exit], "the installed app is as it was");
+}
+
+#[tokio::test]
+async fn each_install_asks_for_administrator_rights_in_the_active_language() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let installer = FakeInstaller::answering(vec![Err(UpdateError::Install("denied".to_owned()))]);
+    let rig = Rig::new(&signer, &source, Box::new(Arc::clone(&installer)));
+    rig.updater.check().await;
+    rig.updater.install_now().await;
+
+    rig.updater.set_locale("pt-BR");
+    assert_eq!(rig.updater.locale().tag, "pt-BR");
+    rig.updater.install_on_quit().await;
+    assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
+    assert_eq!(rig.next_host_call(), HostCall::Exit);
+
+    assert_eq!(
+        installer.prompts(),
+        [
+            format!(
+                "PlateVault needs an administrator's name and password to install update {RELEASE}."
+            ),
+            format!(
+                "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização {RELEASE}."
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_locale_that_is_not_shipped_speaks_the_base_language() {
+    let signer = Signer::new();
+    let source = FakeSource::release(&signer, b"new AppImage");
+    let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
+    rig.updater.set_locale("pt-BR");
+    rig.updater.set_locale("de-DE");
+    assert_eq!(rig.updater.locale().tag, "en-GB");
+}
+
 #[tokio::test]
 async fn install_now_after_install_on_quit_installs_at_once() {
     let signer = Signer::new();
@@ -938,6 +1119,7 @@ struct NoHost;
 impl UpdateHost for NoHost {
     fn relaunch(&self) {}
     fn exit(&self) {}
+    fn notify(&self, _title: &str, _body: &str) {}
 }
 
 fn config(endpoint: &str, public_key: String) -> UpdaterConfig {
@@ -1143,8 +1325,8 @@ mod bundle {
         }
     }
 
-    #[test]
-    fn an_archive_without_an_app_bundle_is_refused() {
+    #[tokio::test]
+    async fn an_archive_without_an_app_bundle_is_refused() {
         let dir = tempfile::tempdir().expect("tempdir");
         let installed = installed_app(dir.path());
         let mut archive = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
@@ -1154,10 +1336,16 @@ mod bundle {
         header.set_cksum();
         archive.append_data(&mut header, "README", &b"new"[..]).expect("entry");
         let archive = archive.into_inner().expect("tar").finish().expect("gzip");
+        let staged = super::stage(Package::App, &archive).await;
 
         let signing = FakeSigning::new(Identity::AdHoc, "never asked");
-        let error = crate::update::install::install_bundle(&installed, &archive[..], &signing)
-            .expect_err("refused");
+        let error = crate::update::install::install_bundle(
+            &installed,
+            &mut staged.reverify().expect("verified"),
+            &signing,
+            "",
+        )
+        .expect_err("refused");
         assert!(
             matches!(&error, crate::update::UpdateError::Manifest(message) if message.contains("exactly one app bundle")),
             "{error}"

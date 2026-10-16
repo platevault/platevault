@@ -76,16 +76,10 @@ pub fn fill(template: &str, values: &[(&str, &str)]) -> String {
                 .find(|(name, _)| *name == &after[..close])
                 .map(|(_, value)| (*value, &after[close + 1..]))
         });
-        match named {
-            Some((value, remainder)) => {
-                filled.push_str(value);
-                rest = remainder;
-            }
-            None => {
-                filled.push('{');
-                rest = after;
-            }
-        }
+        // An unnamed brace is kept as text, and the scan goes on after it.
+        let (text, remainder) = named.unwrap_or(("{", after));
+        filled.push_str(text);
+        rest = remainder;
     }
     filled.push_str(rest);
     filled

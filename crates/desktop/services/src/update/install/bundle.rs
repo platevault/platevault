@@ -19,17 +19,22 @@
 //! never stands empty, and moved with a restore elsewhere. A previous app
 //! that could not be put back is kept, never deleted.
 //!
+//! An app the user may not rename is installed by [`PrivilegedInstall`], a
+//! root script that checks again, on its own copy, everything the user
+//! context checked (astro-plan-ryj83), under a prompt worded by the app
+//! (astro-plan-dwwup).
+//!
 //! Compiled on every Unix for tests; only macOS installs through it.
 
+use std::ffi::OsString;
 use std::fs;
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
 
 #[cfg(test)]
 use super::{InstallMode, Installed, Installer};
-#[cfg(test)]
 use crate::update::signature::Payload;
 use crate::update::UpdateError;
 
@@ -54,12 +59,15 @@ pub trait CodeSigning: Send + Sync {
     fn satisfies(&self, bundle: &Path, requirement: &str) -> Result<bool, UpdateError>;
 }
 
-/// Install the `.app.tar.gz` read from `archive` over the app bundle this
-/// process runs from.
+/// Install the `.app.tar.gz` `payload` over the app bundle this process runs
+/// from, asking for administrator rights with `admin_prompt` if it must.
 #[cfg(target_os = "macos")]
-pub(super) fn install_running_app(archive: &mut fs::File) -> Result<super::Installed, UpdateError> {
+pub(super) fn install_running_app(
+    payload: &mut Payload<'_>,
+    admin_prompt: &str,
+) -> Result<super::Installed, UpdateError> {
     let installed = running_app_bundle()?;
-    install_bundle(&installed, archive, &super::codesign::Codesign)?;
+    install_bundle(&installed, payload, &super::codesign::Codesign, admin_prompt)?;
     Ok(super::Installed::Relaunch)
 }
 
@@ -80,35 +88,39 @@ fn running_app_bundle() -> Result<PathBuf, UpdateError> {
         })
 }
 
-/// Replace `installed` with the bundle in the `.app.tar.gz` read from
-/// `archive`, once the new bundle passes the identity check against
-/// `installed`. Whenever this fails, `installed` is left as it was, except
-/// when the previous app could not be put back after a failed move: it is
-/// then kept where [`UpdateError::PreviousAppNotRestored`] says.
+/// Replace `installed` with the bundle in the `.app.tar.gz` `payload`, once
+/// the new bundle passes the identity check against `installed`. An app this
+/// user may not rename goes through [`PrivilegedInstall`], whose
+/// authorization dialog says `admin_prompt`. Whenever this fails, `installed`
+/// is left as it was, except when the previous app could not be put back
+/// after a failed move: it is then kept where
+/// [`UpdateError::PreviousAppNotRestored`] says.
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 pub fn install_bundle(
     installed: &Path,
-    archive: impl Read,
+    payload: &mut Payload<'_>,
     signing: &dyn CodeSigning,
+    admin_prompt: &str,
 ) -> Result<(), UpdateError> {
     let identity = signing.identity(installed)?;
     let staging = staging_dir(installed)?;
-    tar::Archive::new(GzDecoder::new(archive)).unpack(staging.path())?;
+    tar::Archive::new(GzDecoder::new(payload.reader())).unpack(staging.path())?;
     let update = single_bundle(staging.path())?;
-    match &identity {
-        Identity::Designated(requirement) => {
-            if !signing.satisfies(&update, requirement)? {
-                return Err(UpdateError::Identity(format!(
-                    "the update is not signed by the identity of the installed app ({requirement})"
-                )));
-            }
-        }
-        Identity::AdHoc | Identity::Unsigned => tracing::info!(
-            ?identity,
-            "the installed app has no stable code-signing identity; skipping the designated-requirement check"
-        ),
-    }
+    check_identity(signing, &update, &identity)?;
     let backup = staging.path().join("previous.app");
-    if let Err(error) = swap(installed, &update, &backup) {
+    // Only a permission error, which neither the exchange nor the moves get
+    // past, needs the administrator.
+    let swapped = match swap(installed, &update, &backup) {
+        Ok(()) => Ok(()),
+        #[cfg(target_os = "macos")]
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            tracing::debug!(%error, "this user cannot move the app; asking for administrator rights");
+            PrivilegedInstall::new(installed, payload, &update, &identity)
+                .and_then(|install| install.run(admin_prompt))
+        }
+        Err(error) => Err(error.into()),
+    };
+    if let Err(error) = swapped {
         let home = std::env::home_dir();
         return Err(
             match keep_backup_if_not_restored(installed, staging, &backup, home.as_deref()) {
@@ -124,6 +136,30 @@ pub fn install_bundle(
     {
         // A fresh modification date makes Launch Services re-read the bundle.
         let _ = std::process::Command::new("/usr/bin/touch").arg(installed).status();
+    }
+    Ok(())
+}
+
+/// Refuse an `update` that does not satisfy the designated requirement of an
+/// installed app signed as `identity`; one without a stable identity pins
+/// nothing.
+fn check_identity(
+    signing: &dyn CodeSigning,
+    update: &Path,
+    identity: &Identity,
+) -> Result<(), UpdateError> {
+    match identity {
+        Identity::Designated(requirement) => {
+            if !signing.satisfies(update, requirement)? {
+                return Err(UpdateError::Identity(format!(
+                    "the update is not signed by the identity of the installed app ({requirement})"
+                )));
+            }
+        }
+        Identity::AdHoc | Identity::Unsigned => tracing::info!(
+            ?identity,
+            "the installed app has no stable code-signing identity; skipping the designated-requirement check"
+        ),
     }
     Ok(())
 }
@@ -174,25 +210,17 @@ fn single_bundle(dir: &Path) -> Result<PathBuf, UpdateError> {
 /// Put `update` at `installed`. Where the file system can, the two are
 /// exchanged in one step and the previous app ends up at `update`; elsewhere
 /// `installed` moves to `backup` first and comes back if the second move
-/// fails. An app the user cannot rename is swapped with administrator rights.
-fn swap(installed: &Path, update: &Path, backup: &Path) -> Result<(), UpdateError> {
+/// fails.
+fn swap(installed: &Path, update: &Path, backup: &Path) -> io::Result<()> {
     // File systems report a missing exchange differently (`ENOTSUP` on HFS+,
-    // `EINVAL` elsewhere), so anything but a permission error, which needs the
-    // privileged swap, gets the fallback.
-    let moved = match exchange(installed, update) {
+    // `EINVAL` elsewhere), so anything but a permission error, which the
+    // moves would hit too, gets the fallback.
+    match exchange(installed, update) {
         Err(error) if error.kind() != io::ErrorKind::PermissionDenied => {
             tracing::debug!(%error, "cannot exchange the app bundles; moving them instead");
             replace(installed, update, backup)
         }
         other => other,
-    };
-    match moved {
-        Ok(()) => Ok(()),
-        #[cfg(target_os = "macos")]
-        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
-            privileged_swap(installed, update, backup)
-        }
-        Err(error) => Err(error.into()),
     }
 }
 
@@ -218,32 +246,77 @@ fn replace(installed: &Path, update: &Path, backup: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// The swap with administrator rights, for an app the user may not rename.
-/// macOS shows its own authorization prompt.
+/// `AppleScript`'s "User canceled" error: the authorization prompt was
+/// dismissed.
 #[cfg(target_os = "macos")]
-fn privileged_swap(installed: &Path, update: &Path, backup: &Path) -> Result<(), UpdateError> {
-    use std::os::unix::fs::MetadataExt as _;
+const USER_CANCELED: i32 = -128;
+/// [`PRIVILEGED_INSTALL`]'s exit statuses besides 0 and 1.
+#[cfg(target_os = "macos")]
+const PAYLOAD_CHANGED: i32 = 65;
+#[cfg(target_os = "macos")]
+const IDENTITY_REFUSED: i32 = 66;
+#[cfg(target_os = "macos")]
+const KEPT_NEXT_TO_APP: i32 = 67;
+#[cfg(target_os = "macos")]
+const KEPT_IN_WORK_DIR: i32 = 68;
+/// What [`PRIVILEGED_INSTALL`] writes before the path of a previous app it
+/// left in its own directory ([`KEPT_IN_WORK_DIR`]).
+#[cfg(target_os = "macos")]
+const KEPT_MARKER: &str = "kept:";
 
-    let owner = fs::symlink_metadata(installed)?;
-    let command = privileged_swap_command(installed, update, backup, (owner.uid(), owner.gid()));
-    let script =
-        format!("do shell script {} with administrator privileges", applescript_string(&command));
-    let output = std::process::Command::new("/usr/bin/osascript").arg("-e").arg(script).output()?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    // AppleScript's "User canceled" error.
-    if stderr.contains("(-128)") {
-        return Err(UpdateError::Permission(
-            "the administrator prompt to move the update into place was cancelled".to_owned(),
-        ));
-    }
-    Err(UpdateError::Install(format!(
-        "the update could not be moved into place with administrator rights: {}",
-        stderr.trim()
-    )))
-}
+/// The root shell script of a [`PrivilegedInstall`], after the assignments
+/// [`PrivilegedInstall::command`] puts in front of it.
+///
+/// By the time the user has typed a password, another process of theirs may
+/// have changed anything they can write: the staged archive, the tree the
+/// user context unpacked, or a directory on the way to either. So root works
+/// in a directory only it can enter, made with `mktemp -d` next to the
+/// installed app (so on its volume, for the exchange), and from there checks
+/// everything again:
+///
+/// 1. It enters the installed app's directory and the archive's directory with
+///    `cd -P` and refuses either when `pwd -P` is not the path the app
+///    resolved, so no component is a symbolic link; the app and the archive
+///    must not be links either.
+/// 2. It copies the archive into its directory and checks the copy against
+///    the SHA-256 of the bytes the app verified (`PAYLOAD_CHANGED`, 65).
+/// 3. It unpacks its copy, and for a certificate-signed installed app checks
+///    the bundle against its designated requirement with `codesign` as root
+///    (`IDENTITY_REFUSED`, 66).
+/// 4. It gives the bundle to the installed app's owner, then swaps it in as
+///    [`swap`] does, by paths relative to its directory, whose parent no one
+///    but root can change.
+///
+/// Leaving, it removes its directory, which then holds the previous app,
+/// unless the previous app could not be put back after a failed move: it is
+/// then kept next to the installed app (`KEPT_NEXT_TO_APP`, 67) or, failing
+/// that, left in the directory, which is opened to the user and named on
+/// standard error (`KEPT_IN_WORK_DIR`, 68).
+#[cfg(target_os = "macos")]
+const PRIVILEGED_INSTALL: &str = r#"cd -P -- "$parent" && [ "$(pwd -P)" = "$parent" ] && [ -d "$name" ] && [ ! -L "$name" ] || exit 1
+work=$(/usr/bin/mktemp -d .platevault-update.XXXXXXXX) && cd -P -- "$work" || exit 1
+trap 'cd -P .. && /bin/rm -rf -- "$work"' EXIT
+(cd -P -- "$archive_dir" && [ "$(pwd -P)" = "$archive_dir" ] && [ -f "$archive" ] && [ ! -L "$archive" ] && exec /bin/cat -- "$archive") > update.app.tar.gz || exit 1
+digest=$(/usr/bin/shasum -a 256 < update.app.tar.gz) || exit 1
+[ "$digest" = "$sha256  -" ] || exit 65
+/bin/mkdir unpacked && /usr/bin/tar -x --no-same-owner -z -f update.app.tar.gz -C unpacked || exit 1
+[ -d "unpacked/$bundle" ] && [ ! -L "unpacked/$bundle" ] || exit 1
+[ -z "$requirement" ] || /usr/bin/codesign --verify --deep --strict --test-requirement "=$requirement" "unpacked/$bundle" || exit 66
+/usr/sbin/chown -hR "$owner" "unpacked/$bundle" || exit 1
+case "$(/usr/bin/osascript -l JavaScript -e "$swap" "unpacked/$bundle" "../$name" 2>/dev/null)" in
+swapped) ;;
+failed)
+  /bin/mv -f "../$name" previous.app || exit 1
+  if ! /bin/mv -f "unpacked/$bundle" "../$name"; then
+    /bin/mv -f previous.app "../$name" && exit 1
+    [ ! -e "../$kept" ] && [ ! -L "../$kept" ] && /bin/mv previous.app "../$kept" && exit 67
+    trap - EXIT
+    /bin/chmod 755 .
+    printf 'kept:%s/%s/previous.app' "$parent" "$work" >&2
+    exit 68
+  fi;;
+*) exit 1;;
+esac"#;
 
 /// Exchanges the two paths it is given like [`exchange`], for the privileged
 /// swap: the shell has no command for it, but `osascript` running this
@@ -256,26 +329,181 @@ const SWAP_JXA: &str = r#"function run(argv) {
   return $.renamex_np(argv[0], argv[1], 2) === 0 ? "swapped" : "failed";
 }"#;
 
-/// The shell command the privileged swap runs as root. It first gives
-/// `update` to the owner of `installed` (`uid`:`gid`), so a standard user's
-/// update does not leave an admin-installed app writable by that user. Then it
-/// makes the same swap as [`swap`]: the exchange, and where the file system
-/// cannot exchange, the moves, deleting the previous app only once the new
-/// one is in place. The moves run only once the exchange is known not to have
-/// happened, since after one they would put the previous app back.
+/// The install with administrator rights, for an app this user may not
+/// rename: [`PRIVILEGED_INSTALL`] as root under `do shell script ... with
+/// administrator privileges`, where macOS shows its own authorization
+/// prompt.
 #[cfg(target_os = "macos")]
-fn privileged_swap_command(
-    installed: &Path,
-    update: &Path,
-    backup: &Path,
-    (uid, gid): (u32, u32),
-) -> String {
-    let swap = sh_quote(SWAP_JXA);
-    let installed = sh_quote(&installed.to_string_lossy());
-    let update = sh_quote(&update.to_string_lossy());
-    let backup = sh_quote(&backup.to_string_lossy());
+#[derive(Debug)]
+struct PrivilegedInstall {
+    /// The installed app's directory, with every link resolved, and the app's
+    /// name there.
+    parent: PathBuf,
+    name: OsString,
+    /// The installed app's owner, which the update is given.
+    owner: (u32, u32),
+    /// The verified `.app.tar.gz`'s directory, with every link resolved, its
+    /// name there and the SHA-256 of its verified bytes.
+    archive_dir: PathBuf,
+    archive: OsString,
+    sha256: String,
+    /// The app bundle's name in the archive.
+    bundle: OsString,
+    /// The installed app's designated requirement; `None` when it is ad-hoc
+    /// signed or unsigned, as in [`install_bundle`].
+    requirement: Option<String>,
+    /// The name a previous app that cannot be put back is kept under, next to
+    /// the installed app.
+    kept: OsString,
+}
+
+#[cfg(target_os = "macos")]
+impl PrivilegedInstall {
+    /// The privileged install of `payload`'s bundle, unpacked by the user
+    /// context at `update`, over `installed`, signed as `identity`.
+    fn new(
+        installed: &Path,
+        payload: &Payload<'_>,
+        update: &Path,
+        identity: &Identity,
+    ) -> Result<Self, UpdateError> {
+        Self::of(installed, payload.path(), payload.sha256(), update, identity)
+    }
+
+    /// [`Self::new`] for the archive at `archive` whose verified bytes hash
+    /// to `sha256`.
+    fn of(
+        installed: &Path,
+        archive: &Path,
+        sha256: &str,
+        update: &Path,
+        identity: &Identity,
+    ) -> Result<Self, UpdateError> {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let owner = fs::symlink_metadata(installed)?;
+        let (parent, name) = resolved_location(installed)?;
+        let (archive_dir, archive) = resolved_location(archive)?;
+        let bundle = update.file_name().ok_or_else(|| {
+            UpdateError::Install(format!("{} has no file name", update.display()))
+        })?;
+        Ok(Self {
+            parent,
+            name,
+            owner: (owner.uid(), owner.gid()),
+            archive_dir,
+            archive,
+            sha256: sha256.to_owned(),
+            bundle: bundle.to_os_string(),
+            requirement: match identity {
+                Identity::Designated(requirement) => Some(requirement.clone()),
+                Identity::AdHoc | Identity::Unsigned => None,
+            },
+            kept: previous_version_name(installed),
+        })
+    }
+
+    /// Run the install as root once the user authorized it in a dialog that
+    /// says `prompt`.
+    fn run(&self, prompt: &str) -> Result<(), UpdateError> {
+        let output = std::process::Command::new("/usr/bin/osascript")
+            .arg("-e")
+            .arg(administrator_script(&self.command(), prompt))
+            .output()?;
+        if output.status.success() {
+            return Ok(());
+        }
+        Err(self.failure(String::from_utf8_lossy(&output.stderr).trim()))
+    }
+
+    /// The shell command that runs as root: each value as a quoted
+    /// assignment, then [`PRIVILEGED_INSTALL`].
+    fn command(&self) -> String {
+        self.command_with_swap(SWAP_JXA)
+    }
+
+    /// [`Self::command`] with `swap` as the exchange's script, which tests
+    /// replace to reach the fallback moves on APFS.
+    fn command_with_swap(&self, swap: &str) -> String {
+        let text = |value: &OsString| sh_quote(&value.to_string_lossy());
+        let path = |value: &Path| sh_quote(&value.to_string_lossy());
+        let (uid, gid) = self.owner;
+        format!(
+            "parent={} name={} owner={uid}:{gid} archive_dir={} archive={} sha256={} bundle={} requirement={} kept={} swap={}\n{PRIVILEGED_INSTALL}",
+            path(&self.parent),
+            text(&self.name),
+            path(&self.archive_dir),
+            text(&self.archive),
+            sh_quote(&self.sha256),
+            text(&self.bundle),
+            sh_quote(self.requirement.as_deref().unwrap_or_default()),
+            text(&self.kept),
+            sh_quote(swap),
+        )
+    }
+
+    /// The error a failed run's `osascript` `message` stands for.
+    /// `AppleScript` ends it with the shell's exit status, or with
+    /// [`USER_CANCELED`], in parentheses: `0:40: execution error: … (65)`.
+    fn failure(&self, message: &str) -> UpdateError {
+        let status = message
+            .rsplit_once('(')
+            .and_then(|(_, status)| status.strip_suffix(')'))
+            .and_then(|status| status.parse::<i32>().ok());
+        let not_restored = |kept: PathBuf| UpdateError::PreviousAppNotRestored {
+            kept,
+            cause: Box::new(UpdateError::Install(
+                "the update could not be moved into place with administrator rights".to_owned(),
+            )),
+        };
+        match status {
+            Some(USER_CANCELED) => UpdateError::Permission(
+                "the administrator prompt to move the update into place was cancelled".to_owned(),
+            ),
+            Some(PAYLOAD_CHANGED) => UpdateError::Signature(
+                "the update changed before it could be installed with administrator rights"
+                    .to_owned(),
+            ),
+            Some(IDENTITY_REFUSED) => UpdateError::Identity(format!(
+                "the update is not signed by the identity of the installed app ({})",
+                self.requirement.as_deref().unwrap_or_default()
+            )),
+            Some(KEPT_NEXT_TO_APP) => not_restored(self.parent.join(&self.kept)),
+            // The script names the directory it made; should the message not
+            // parse, the installed app's directory is where it is.
+            Some(KEPT_IN_WORK_DIR) => not_restored(
+                message
+                    .split_once(KEPT_MARKER)
+                    .and_then(|(_, rest)| rest.rsplit_once(" ("))
+                    .map_or_else(|| self.parent.clone(), |(kept, _)| PathBuf::from(kept)),
+            ),
+            _ => UpdateError::Install(format!(
+                "the update could not be moved into place with administrator rights: {message}"
+            )),
+        }
+    }
+}
+
+/// `path`'s directory with every symbolic link resolved, and its name there:
+/// the root script refuses a directory it does not find at that path.
+#[cfg(target_os = "macos")]
+fn resolved_location(path: &Path) -> Result<(PathBuf, OsString), UpdateError> {
+    match (path.parent(), path.file_name()) {
+        (Some(dir), Some(name)) => Ok((fs::canonicalize(dir)?, name.to_os_string())),
+        _ => Err(UpdateError::Install(format!("{} has no directory", path.display()))),
+    }
+}
+
+/// The `AppleScript` that runs `command` as root once the user authorized it
+/// in a dialog that says `prompt`. `osascript` runs it in a process of its
+/// own, so without the prompt macOS would say that "osascript" wants to make
+/// changes (astro-plan-dwwup).
+#[cfg(target_os = "macos")]
+fn administrator_script(command: &str, prompt: &str) -> String {
     format!(
-        "/usr/sbin/chown -hR {uid}:{gid} {update} && case \"$(/usr/bin/osascript -l JavaScript -e {swap} {update} {installed} 2>/dev/null)\" in swapped) /bin/rm -rf {update};; failed) /bin/mv -f {installed} {backup} && {{ /bin/mv -f {update} {installed} || {{ /bin/mv -f {backup} {installed}; exit 1; }}; }} && /bin/rm -rf {backup};; *) exit 1;; esac"
+        "do shell script {} with prompt {} with administrator privileges",
+        applescript_string(command),
+        applescript_string(prompt)
     )
 }
 
@@ -291,11 +519,23 @@ fn applescript_string(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', r"\\").replace('"', "\\\""))
 }
 
+/// `<name> (previous version).app`: what a previous app that could not be put
+/// back is called where it is kept.
+fn previous_version_name(installed: &Path) -> OsString {
+    let mut name = installed.file_stem().unwrap_or_default().to_os_string();
+    name.push(" (previous version)");
+    if let Some(extension) = installed.extension() {
+        name.push(".");
+        name.push(extension);
+    }
+    name
+}
+
 /// After a failed swap, where the previous app is if it never made it back to
 /// `installed`. `backup` is then the only copy left, inside `staging`, which
 /// is deleted on drop and sits in the system temp dir that macOS empties on
 /// its own. So it moves next to `installed`, or to `fallback_dir` (the home
-/// folder) when that is not writable, as `<name> (previous version).app`. If
+/// folder) when that is not writable, under [`previous_version_name`]. If
 /// neither works, `staging` is kept rather than deleted.
 fn keep_backup_if_not_restored(
     installed: &Path,
@@ -306,12 +546,7 @@ fn keep_backup_if_not_restored(
     if fs::symlink_metadata(installed).is_ok() || fs::symlink_metadata(backup).is_err() {
         return None;
     }
-    let mut name = installed.file_stem().unwrap_or_default().to_os_string();
-    name.push(" (previous version)");
-    if let Some(extension) = installed.extension() {
-        name.push(".");
-        name.push(extension);
-    }
+    let name = previous_version_name(installed);
     let kept = [installed.parent(), fallback_dir]
         .into_iter()
         .flatten()
@@ -340,8 +575,9 @@ impl<C: CodeSigning> Installer for BundleInstaller<C> {
         &self,
         mut payload: Payload<'_>,
         _mode: InstallMode,
+        admin_prompt: &str,
     ) -> Result<Installed, UpdateError> {
-        install_bundle(&self.installed, payload.reader(), &self.signing)?;
+        install_bundle(&self.installed, &mut payload, &self.signing, admin_prompt)?;
         Ok(Installed::Relaunch)
     }
 }
@@ -350,16 +586,13 @@ impl<C: CodeSigning> Installer for BundleInstaller<C> {
 mod tests {
     //! The swap, ported from `tauri-plugin-updater` 2.13.3's tests
     //! (`replace_bundle_*`, `swap_bundle_*`, `privileged_install_*`,
-    //! `keep*_backup_*`), with the ownership step this port adds.
+    //! `keep*_backup_*`), with the ownership step this port adds and the
+    //! privileged install's own checks (astro-plan-ryj83).
 
     use std::fs;
     use std::os::unix::fs::MetadataExt as _;
     use std::path::{Path, PathBuf};
-    #[cfg(target_os = "macos")]
-    use std::process::Command;
 
-    #[cfg(target_os = "macos")]
-    use super::{applescript_string, privileged_swap_command};
     use super::{exchange, keep_backup_if_not_restored, replace, staging_dir_among, swap};
 
     /// A bundle directory at `path` holding a `version` file.
@@ -427,10 +660,7 @@ mod tests {
 
         let error = swap(&installed, &dir.path().join("missing"), &backup).expect_err("missing");
 
-        assert!(
-            matches!(&error, crate::update::UpdateError::Io(io) if io.kind() == std::io::ErrorKind::NotFound),
-            "{error}"
-        );
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound, "{error}");
         assert_eq!(version(&installed), "old");
         assert!(!backup.exists());
     }
@@ -509,113 +739,328 @@ mod tests {
         assert!(matches!(error, crate::update::UpdateError::Install(_)), "{error}");
     }
 
-    /// A directory whose name `sh` and `AppleScript` would both misread
-    /// unquoted.
+    /// The privileged install's tests run its root script as this user,
+    /// through `sh` and through `osascript` minus `with administrator
+    /// privileges`, so no prompt appears. What they cannot show is root's own
+    /// view: the ownership change and the authorization dialog.
     #[cfg(target_os = "macos")]
-    fn hostile_dir() -> tempfile::TempDir {
-        tempfile::Builder::new()
-            .prefix("it's \"a\" \\ $(touch pwned) `dir`\n")
-            .tempdir()
-            .expect("tempdir")
-    }
+    mod privileged {
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::process::Command;
 
-    /// Stage the privileged swap in `dir` and return its command.
-    #[cfg(target_os = "macos")]
-    fn stage_privileged_swap(dir: &Path, backup: &Path) -> String {
-        let installed = dir.join("Bob's \"App\".app");
-        let update = dir.join("update");
-        bundle(&installed, "old");
-        bundle(&update, "new");
-        privileged_swap_command(&installed, &update, backup, owner(&installed))
-    }
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use sha2::{Digest as _, Sha256};
 
-    #[cfg(target_os = "macos")]
-    fn assert_privileged_swap_moved(dir: &Path) {
-        let installed = dir.join("Bob's \"App\".app");
-        assert_eq!(version(&installed), "new");
-        assert!(!dir.join("update").exists(), "the previous app is deleted");
-        assert!(!dir.join("backup").exists());
-        assert!(!dir.join("pwned").exists(), "no path was run as a command");
-    }
+        use super::super::super::codesign::probe_bundle;
+        use super::super::{administrator_script, applescript_string, Identity, PrivilegedInstall};
+        use super::{bundle, owner, version};
+        use crate::update::UpdateError;
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn the_privileged_swap_quotes_every_path() {
-        let dir = hostile_dir();
-        let command = stage_privileged_swap(dir.path(), &dir.path().join("backup"));
+        /// Names `sh` and `AppleScript` would both misread unquoted.
+        const INSTALLED: &str = "Bob's \"App\".app";
+        const UPDATE: &str = "New 'one' $(touch pwned).app";
+        const HOSTILE_PROMPT: &str = "PlateVault's \"update\" \\ 0.7.0 $(touch pwned)";
 
-        let status = Command::new("/bin/sh")
-            .arg("-c")
-            .arg(&command)
-            .current_dir(dir.path())
-            .status()
-            .expect("sh");
-
-        assert!(status.success());
-        assert_privileged_swap_moved(dir.path());
-    }
-
-    /// The command as it is handed to `AppleScript`, only without `with
-    /// administrator privileges`, so it runs without a prompt.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn the_privileged_swap_script_quotes_every_path() {
-        let dir = hostile_dir();
-        let command = stage_privileged_swap(dir.path(), &dir.path().join("backup"));
-
-        let output = Command::new("/usr/bin/osascript")
-            .arg("-e")
-            .arg(format!("do shell script {}", applescript_string(&command)))
-            .current_dir(dir.path())
-            .output()
-            .expect("osascript");
-
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-        assert_privileged_swap_moved(dir.path());
-    }
-
-    /// On APFS the privileged swap exchanges the bundles and never touches the
-    /// backup: one in a directory that does not exist must not matter.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn the_privileged_swap_exchanges_the_bundles_on_apfs() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        if !is_apfs(dir.path()) {
-            return;
+        /// A directory whose name `sh` and `AppleScript` would both misread
+        /// unquoted.
+        fn hostile_dir() -> tempfile::TempDir {
+            tempfile::Builder::new()
+                .prefix("it's \"a\" \\ $(touch pwned) `dir`\n")
+                .tempdir()
+                .expect("tempdir")
         }
-        let command = stage_privileged_swap(dir.path(), &dir.path().join("missing").join("backup"));
 
-        let status = Command::new("/bin/sh").arg("-c").arg(&command).status().expect("sh");
+        /// `app` as a `.app.tar.gz` holding it as `name`.
+        fn archive_of(app: &Path, name: &str) -> Vec<u8> {
+            let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
+            builder.append_dir_all(name, app).expect("archive the bundle");
+            builder.into_inner().expect("tar").finish().expect("gzip")
+        }
 
-        assert!(status.success());
-        assert_privileged_swap_moved(dir.path());
-    }
+        fn sha256(bytes: &[u8]) -> String {
+            format!("{:x}", Sha256::digest(bytes))
+        }
 
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn the_privileged_swap_hands_the_update_to_the_installed_apps_owner() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let (installed, update) = (dir.path().join("App.app"), dir.path().join("update"));
-        bundle(&installed, "old");
-        bundle(&update, "new");
-        let (uid, gid) = owner(&installed);
+        /// A privileged install in `dir` as the user context leaves it: an
+        /// installed app, and the verified archive of `update` (as `name`) in
+        /// a directory of its own.
+        fn stage_with(
+            dir: &Path,
+            update: &Path,
+            name: &str,
+            identity: &Identity,
+        ) -> (PathBuf, PathBuf, PrivilegedInstall) {
+            let installed = dir.join(INSTALLED);
+            bundle(&installed, "old");
+            let payload = dir.join("payload");
+            fs::create_dir(&payload).expect("payload dir");
+            let archive = payload.join("update.app.tar.gz");
+            let bytes = archive_of(update, name);
+            fs::write(&archive, &bytes).expect("archive");
+            // The user context's unpacked copy only lends its name.
+            let unpacked = dir.join("staging").join(name);
+            let install =
+                PrivilegedInstall::of(&installed, &archive, &sha256(&bytes), &unpacked, identity)
+                    .expect("privileged install");
+            (installed, archive, install)
+        }
 
-        let command =
-            privileged_swap_command(&installed, &update, &dir.path().join("backup"), (uid, gid));
+        /// [`stage_with`] for an unsigned update at version `new`.
+        fn stage(dir: &Path) -> (PathBuf, PathBuf, PrivilegedInstall) {
+            let source = tempfile::tempdir().expect("source");
+            let update = source.path().join("update.app");
+            bundle(&update, "new");
+            stage_with(dir, &update, UPDATE, &Identity::AdHoc)
+        }
 
-        assert!(
-            command.starts_with(&format!(
-                "/usr/sbin/chown -hR {uid}:{gid} '{}' && ",
-                update.display()
-            )),
-            "{command}"
-        );
-        // Run unprivileged, the chown can only hand the update to its own
-        // owner, which proves the command runs, not the ownership change.
-        let status = Command::new("/bin/sh").arg("-c").arg(&command).status().expect("sh");
-        assert!(status.success());
-        assert_eq!(owner(&installed), (uid, gid));
-        assert_eq!(version(&installed), "new");
+        /// Run `command` as root would, only as this user.
+        fn run(command: &str) -> Option<i32> {
+            Command::new("/bin/sh").arg("-c").arg(command).status().expect("sh").code()
+        }
+
+        /// The names left in `dir`, sorted.
+        fn entries(dir: &Path) -> Vec<String> {
+            let mut names: Vec<String> = fs::read_dir(dir)
+                .expect("dir")
+                .map(|entry| entry.expect("entry").file_name().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            names
+        }
+
+        /// The update is installed, and root's directory, holding the
+        /// previous app, is gone with nothing run as a command.
+        fn assert_installed(dir: &Path, installed: &Path) {
+            assert_eq!(version(installed), "new");
+            assert_eq!(entries(dir), [INSTALLED, "payload"], "only the app and the payload stay");
+        }
+
+        /// The refusal left the installed app and the directory as they were.
+        fn assert_refused(dir: &Path, installed: &Path) {
+            assert_eq!(version(installed), "old");
+            assert_eq!(entries(dir), [INSTALLED, "payload"], "root's directory is gone");
+        }
+
+        #[test]
+        fn the_root_script_quotes_every_value_and_swaps_in_the_update() {
+            let dir = hostile_dir();
+            let (installed, _, install) = stage(dir.path());
+
+            assert_eq!(run(&install.command()), Some(0));
+
+            assert_installed(dir.path(), &installed);
+        }
+
+        /// The script as it reaches `AppleScript`, prompt included, only
+        /// without `with administrator privileges`.
+        #[test]
+        fn the_administrator_script_quotes_the_command_and_the_prompt() {
+            let dir = hostile_dir();
+            let (installed, _, install) = stage(dir.path());
+            let script = administrator_script(&install.command(), HOSTILE_PROMPT);
+            assert!(
+                script.ends_with(&format!(
+                    " with prompt {} with administrator privileges",
+                    applescript_string(HOSTILE_PROMPT)
+                )),
+                "{script}"
+            );
+            let unprivileged =
+                script.strip_suffix(" with administrator privileges").expect("the admin clause");
+
+            let output = Command::new("/usr/bin/osascript")
+                .arg("-e")
+                .arg(unprivileged)
+                .current_dir(dir.path())
+                .output()
+                .expect("osascript");
+
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            assert_installed(dir.path(), &installed);
+        }
+
+        /// The whole script, `with administrator privileges` and all,
+        /// compiles: `osacompile` checks it without running it.
+        #[test]
+        fn the_administrator_script_compiles_as_written() {
+            let dir = hostile_dir();
+            let (_, _, install) = stage(dir.path());
+            let compiled = tempfile::tempdir().expect("out");
+
+            let output = Command::new("/usr/bin/osacompile")
+                .arg("-e")
+                .arg(administrator_script(&install.command(), HOSTILE_PROMPT))
+                .arg("-o")
+                .arg(compiled.path().join("install.scpt"))
+                .output()
+                .expect("osacompile");
+
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        }
+
+        /// The re-review's case: another process of the user's swaps the
+        /// staged archive while the password dialog is open. Root's copy no
+        /// longer has the digest the app verified.
+        #[test]
+        fn an_archive_swapped_after_the_check_is_refused() {
+            let dir = hostile_dir();
+            let (installed, archive, install) = stage(dir.path());
+            let source = tempfile::tempdir().expect("source");
+            let evil = source.path().join("evil.app");
+            bundle(&evil, "evil");
+            fs::write(&archive, archive_of(&evil, UPDATE)).expect("swap the archive");
+
+            let status = run(&install.command());
+
+            assert_eq!(status, Some(65));
+            assert_refused(dir.path(), &installed);
+            let message = "0:1: execution error: The command exited with a non-zero status. (65)";
+            assert!(matches!(install.failure(message), UpdateError::Signature(_)));
+        }
+
+        #[test]
+        fn an_archive_directory_swapped_for_a_link_is_refused() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let elsewhere = tempfile::tempdir().expect("elsewhere");
+            let moved = elsewhere.path().join("payload");
+            fs::rename(dir.path().join("payload"), &moved).expect("move the payload away");
+            std::os::unix::fs::symlink(&moved, dir.path().join("payload")).expect("link");
+
+            assert_eq!(run(&install.command()), Some(1));
+
+            assert_eq!(version(&installed), "old");
+            assert_eq!(entries(dir.path()), [INSTALLED, "payload"]);
+        }
+
+        #[test]
+        fn an_archive_swapped_for_a_link_is_refused() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, archive, install) = stage(dir.path());
+            let elsewhere = tempfile::tempdir().expect("elsewhere");
+            let moved = elsewhere.path().join("update.app.tar.gz");
+            fs::rename(&archive, &moved).expect("move the archive away");
+            std::os::unix::fs::symlink(&moved, &archive).expect("link");
+
+            assert_eq!(run(&install.command()), Some(1));
+
+            assert_refused(dir.path(), &installed);
+        }
+
+        /// The app resolves both directories' links up front; a link that
+        /// appears on the installed app's path afterwards is refused.
+        #[test]
+        fn a_linked_component_of_the_installed_apps_path_is_refused() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, mut install) = stage(dir.path());
+            let link = tempfile::tempdir().expect("link dir");
+            let through_link = link.path().join("app-dir");
+            std::os::unix::fs::symlink(&install.parent, &through_link).expect("link");
+            install.parent = through_link;
+
+            assert_eq!(run(&install.command()), Some(1));
+
+            assert_refused(dir.path(), &installed);
+        }
+
+        #[test]
+        fn an_installed_app_that_is_a_link_is_refused() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let elsewhere = tempfile::tempdir().expect("elsewhere");
+            let moved = elsewhere.path().join(INSTALLED);
+            fs::rename(&installed, &moved).expect("move the app away");
+            std::os::unix::fs::symlink(&moved, &installed).expect("link");
+
+            assert_eq!(run(&install.command()), Some(1));
+
+            assert_eq!(version(&moved), "old");
+            assert!(fs::symlink_metadata(&installed).expect("link").is_symlink());
+        }
+
+        /// Root checks the designated requirement again on its own copy:
+        /// a real ad-hoc signature for the identifier passes, another
+        /// identifier is refused (66), and the installed app stays.
+        #[test]
+        fn root_checks_the_designated_requirement_on_its_own_copy() {
+            let source = tempfile::tempdir().expect("source");
+            let update = probe_bundle(source.path(), Some("dev.example.update"));
+
+            let dir = tempfile::tempdir().expect("tempdir");
+            let satisfied = Identity::Designated(r#"identifier "dev.example.update""#.to_owned());
+            let (installed, _, install) = stage_with(dir.path(), &update, "Probe.app", &satisfied);
+            assert!(install.command().contains(r#"requirement='identifier "dev.example.update"'"#));
+            assert_eq!(run(&install.command()), Some(0));
+            assert!(installed.join("Contents/MacOS/probe").exists(), "the probe is installed");
+
+            let dir = tempfile::tempdir().expect("tempdir");
+            let other = Identity::Designated(r#"identifier "dev.example.other""#.to_owned());
+            let (installed, _, install) = stage_with(dir.path(), &update, "Probe.app", &other);
+            assert_eq!(run(&install.command()), Some(66));
+            assert_refused(dir.path(), &installed);
+            let message = "0:1: execution error: The command exited with a non-zero status. (66)";
+            assert!(matches!(
+                install.failure(message),
+                UpdateError::Identity(detail) if detail.contains("dev.example.other")
+            ));
+        }
+
+        /// Run unprivileged, the `chown` can only hand the update to its own
+        /// owner, which proves the step runs, not the ownership change.
+        #[test]
+        fn the_update_is_handed_to_the_installed_apps_owner() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let (uid, gid) = owner(&installed);
+            assert!(install.command().contains(&format!(" owner={uid}:{gid} ")));
+            assert!(install.command().contains(r#"/usr/sbin/chown -hR "$owner""#));
+
+            assert_eq!(run(&install.command()), Some(0));
+
+            assert_eq!(owner(&installed), (uid, gid));
+            assert_installed(dir.path(), &installed);
+        }
+
+        /// Where the file system cannot exchange, the script moves the
+        /// previous app out, the update in, and deletes the previous app.
+        #[test]
+        fn without_the_exchange_the_moves_install_the_update() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let no_exchange = r#"function run(argv) { return "failed"; }"#;
+
+            assert_eq!(run(&install.command_with_swap(no_exchange)), Some(0));
+
+            assert_installed(dir.path(), &installed);
+        }
+
+        #[test]
+        fn each_failure_status_maps_to_its_error() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            let failure =
+                |status: &str| install.failure(&format!("0:1: execution error: boom ({status})"));
+
+            assert!(matches!(failure("-128"), UpdateError::Permission(_)));
+            assert!(matches!(failure("65"), UpdateError::Signature(_)));
+            assert!(matches!(failure("66"), UpdateError::Identity(_)));
+            assert!(matches!(failure("1"), UpdateError::Install(_)));
+            assert!(matches!(
+                failure("67"),
+                UpdateError::PreviousAppNotRestored { kept, .. }
+                    if kept == install.parent.join("Bob's \"App\" (previous version).app")
+            ));
+            let work = install.parent.join(".platevault-update.abc/previous.app");
+            let kept_in_work =
+                install.failure(&format!("0:65: execution error: kept:{} (68)", work.display()));
+            assert!(matches!(
+                kept_in_work,
+                UpdateError::PreviousAppNotRestored { kept, .. } if kept == work
+            ));
+            assert_eq!(version(&installed), "old", "mapping runs nothing");
+        }
     }
 
     #[test]

@@ -23,13 +23,26 @@ use crate::update::UpdateError;
 /// Where Windows is when `%SystemRoot%` is unset.
 const DEFAULT_SYSTEM_ROOT: &str = r"C:\Windows";
 
+/// Start the installer for `payload`, which then needs this process to exit.
+///
+/// The installer gets a duplicate of the handle [`Staged::reverify`] opened
+/// as its standard input, which it ignores but holds until it exits. That
+/// handle shares reads only, so nothing can write, delete or rename the file
+/// between the check and the install: the Windows Installer service reads the
+/// MSI after the UAC prompt and after this process is gone (astro-plan-ryj83).
+/// No elevated step of the app's own runs before `msiexec` to check the MSI,
+/// since starting one would mean a second, unexplained UAC prompt.
+///
+/// [`Staged::reverify`]: crate::update::signature::Staged::reverify
 #[cfg(windows)]
 pub(super) fn launch_installer(
-    payload: &Payload<'_>,
+    payload: &mut Payload<'_>,
     package: Package,
     mode: InstallMode,
 ) -> Result<Installed, UpdateError> {
+    let lock = payload.reader().try_clone()?;
     installer_command(package, payload.path(), mode, std::env::var_os("SYSTEMROOT"))
+        .stdin(lock)
         .spawn()
         .map_err(|error| {
             UpdateError::Install(format!(

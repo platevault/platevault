@@ -14,7 +14,7 @@ use serde::Deserialize;
 use crate::locale::{self, ShippedLocale};
 
 /// The updater's text in one locale.
-pub(crate) struct Wording {
+pub struct Wording {
     locale: &'static ShippedLocale,
     messages: Messages,
 }
@@ -38,7 +38,7 @@ struct Messages {
 
 /// An OS notification's text.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct Notice {
+pub struct Notice {
     pub title: String,
     pub body: String,
 }
@@ -50,24 +50,24 @@ impl Wording {
     /// # Errors
     ///
     /// The locale's catalogue lacks one of the updater's messages.
-    pub(crate) fn in_locale(tag: &str) -> Result<Self, String> {
+    pub fn in_locale(tag: &str) -> Result<Self, String> {
         let locale = locale::shipped_or_base(tag);
         Ok(Self { locale, messages: locale.messages()? })
     }
 
     /// The locale this wording is in.
-    pub(crate) const fn locale(&self) -> &'static ShippedLocale {
+    pub const fn locale(&self) -> &'static ShippedLocale {
         self.locale
     }
 
     /// The administrator prompt for installing `version`.
-    pub(crate) fn admin_prompt(&self, version: &str) -> String {
+    pub fn admin_prompt(&self, version: &str) -> String {
         locale::fill(&self.messages.admin_prompt, &[("version", version)])
     }
 
     /// The notification for an install that left the previous app at `kept`:
     /// the line the UI shows for the same failure.
-    pub(crate) fn previous_app_kept(&self, kept: &Path) -> Notice {
+    pub fn previous_app_kept(&self, kept: &Path) -> Notice {
         let reason = locale::fill(
             &self.messages.previous_app_not_restored,
             &[("path", &kept.display().to_string())],

@@ -21,16 +21,21 @@
 //! The payload is hashed while it streams to its staging file, so a large
 //! bundle never sits in memory, and a [`Staged`] payload exists only once its
 //! signature has verified. [`Staged::reverify`] checks it again right before
-//! an installer reads it.
+//! an installer reads it. An installer that hands the file to a process with
+//! more rights than the user's re-checks it there (astro-plan-ryj83): on Unix
+//! against the SHA-256 of the bytes `reverify` verified, and on Windows the
+//! handle `reverify` opened keeps every writer out until the installer exits.
 
 use std::fs::{self, File};
-use std::io::{Read as _, Seek as _, Write as _};
+use std::io::{self, Read as _, Seek as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
 use base64::Engine as _;
 use minisign_verify::{PublicKey, Signature, StreamVerifier};
+#[cfg(unix)]
+use sha2::{Digest as _, Sha256};
 
 use super::http::Source;
 use super::manifest::Release;
@@ -71,7 +76,7 @@ pub struct Staged {
 
 impl Staged {
     /// The verified payload file.
-    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    #[cfg_attr(all(target_os = "linux", not(test)), allow(dead_code))]
     pub fn file(&self) -> &Path {
         &self.file
     }
@@ -82,8 +87,10 @@ impl Staged {
     /// installer reads it, and installers that run in this process read the
     /// returned handle rather than the path.
     pub fn reverify(&self) -> Result<Payload<'_>, UpdateError> {
-        let mut file = File::open(&self.file)?;
+        let mut file = open_payload(&self.file)?;
         let mut verifier = stream_verifier(&self.key, &self.signature)?;
+        #[cfg(unix)]
+        let mut digest = Sha256::new();
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
             let read = file.read(&mut buffer)?;
@@ -91,6 +98,8 @@ impl Staged {
                 break;
             }
             verifier.update(&buffer[..read]);
+            #[cfg(unix)]
+            digest.update(&buffer[..read]);
         }
         verifier.finalize().map_err(|_| {
             UpdateError::Signature(
@@ -98,7 +107,12 @@ impl Staged {
             )
         })?;
         file.rewind()?;
-        Ok(Payload { staged: self, file })
+        Ok(Payload {
+            staged: self,
+            file,
+            #[cfg(unix)]
+            sha256: format!("{:x}", digest.finalize()),
+        })
     }
 
     /// Leave the staging directory in place for an installer that reads the
@@ -124,23 +138,36 @@ impl Drop for Staged {
 /// A staged payload that verified against its signature again just now,
 /// open for the installer.
 pub struct Payload<'a> {
-    // Read by the installers that run in another process: Windows and Linux.
-    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    // Read by the installers that hand the path to another process: Windows
+    // and macOS. The Linux packages travel on standard input.
+    #[cfg_attr(all(target_os = "linux", not(test)), allow(dead_code))]
     staged: &'a Staged,
     file: File,
+    /// SHA-256 of exactly the bytes [`Staged::reverify`] verified, lowercase
+    /// hex.
+    #[cfg(unix)]
+    sha256: String,
 }
 
 impl Payload<'_> {
     /// The payload's path, for an installer that runs in another process.
-    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    #[cfg_attr(all(target_os = "linux", not(test)), allow(dead_code))]
     pub fn path(&self) -> &Path {
         self.staged.file()
     }
 
     /// The verified file, positioned at its start, for an installer that runs
-    /// in this process.
+    /// in this process or hands the open file to one it starts.
     pub fn reader(&mut self) -> &mut File {
         &mut self.file
+    }
+
+    /// The SHA-256 of the bytes that verified, for a privileged step that
+    /// copies the payload where only it can write and must check the copy:
+    /// the file stays writable by the user, so the copy may differ.
+    #[cfg(unix)]
+    pub fn sha256(&self) -> &str {
+        &self.sha256
     }
 
     /// See [`Staged::keep`].
@@ -148,6 +175,29 @@ impl Payload<'_> {
     pub fn keep(&self) {
         self.staged.keep();
     }
+}
+
+/// Open the staged payload to verify it for an install. Windows opens it
+/// sharing reads only (`FILE_SHARE_READ`): while this handle, or a duplicate
+/// an installer inherits, is open, nothing can open the file for writing,
+/// delete it or rename it, and the open fails while anything already holds it
+/// for writing. So the bytes it verified are the bytes the installer reads,
+/// even the Windows Installer service, which reads the MSI after the UAC
+/// prompt and after this process has exited.
+#[cfg(windows)]
+fn open_payload(path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+
+    const FILE_SHARE_READ: u32 = 0x1;
+    fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(path)
+}
+
+/// Open the staged payload to verify it for an install. Unix has no lock
+/// that keeps another process of the same user from writing it, so a
+/// privileged step checks its own copy against [`Payload::sha256`].
+#[cfg(not(windows))]
+fn open_payload(path: &Path) -> io::Result<File> {
+    File::open(path)
 }
 
 /// Download `release` for `package` from `source` into a fresh staging
