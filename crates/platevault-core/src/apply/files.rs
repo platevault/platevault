@@ -6,12 +6,13 @@
 //!
 //! Every entry is made from an original whose bytes were just snapshotted,
 //! never from an entry of the current or previous View: a symlink to the
-//! original, a clone or a verified copy of it, or a hard link to this build's
-//! own copy. Nothing here replaces an existing entry or follows a link. Old
-//! entries leave `View (previous)/` only once proven: a link that is still
-//! the one `PlateVault` placed and points at its original, a copy that still
-//! holds the bytes `PlateVault` placed while its original still holds them
-//! too. Everything else stays, named, for the user's review.
+//! original, or a clone or verified copy of it. Nothing is ever hard-linked,
+//! so each Copies entry is its own file (D-W81, 063 FR-005). Nothing here
+//! replaces an existing entry or follows a link. Old entries leave
+//! `View (previous)/` only once proven: a link that is still the one
+//! `PlateVault` placed and points at its original, a copy that still holds
+//! the bytes `PlateVault` placed while its original still holds them too.
+//! Everything else stays, named, for the user's review.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -129,14 +130,11 @@ pub struct Placing {
     pub snapshot: EntryEvidence,
     pub building: PathBuf,
     pub operation: Uuid,
-    /// For a hard link: the earlier own copy's path and identity.
-    pub earlier: Option<(PathBuf, FileIdentity)>,
 }
 
 /// Write one entry below `View (building)/` and prove it against the
 /// snapshot: a symlink must point at the original, a clone or copy must hold
-/// the snapshot's bytes, a hard link must be the earlier own copy. A hard
-/// link the volume refuses becomes a copy of its own.
+/// the snapshot's bytes.
 pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
     let entry = &placing.entry;
     let path = placing.building.join(&entry.path);
@@ -159,26 +157,6 @@ pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
                 ));
             }
             Ok(Written { placement: EntryPlacement::Symlink, identity: link.fingerprint.identity })
-        }
-        EntryPlacement::Hardlink { of } => {
-            if let Some((earlier, identity)) = &placing.earlier {
-                if fs::hard_link(earlier, &path).is_ok() {
-                    let linked = crate::inventory::probe_fingerprint(&path).map_err(|error| {
-                        reason(ReasonCode::DestinationChanged, error.to_string())
-                    })?;
-                    if !same_identity(&linked.identity, identity) {
-                        return Err(reason(
-                            ReasonCode::DestinationChanged,
-                            format!("{} is not this build's own copy", path.display()),
-                        ));
-                    }
-                    return Ok(Written {
-                        placement: EntryPlacement::Hardlink { of },
-                        identity: linked.identity,
-                    });
-                }
-            }
-            copy(placing, &original, &path)
         }
         EntryPlacement::Copy | EntryPlacement::Clone => copy(placing, &original, &path),
     }
@@ -518,9 +496,7 @@ pub fn retire(
         let original = sources.get(&source_id(entry));
         let verdict = match entry.placement {
             EntryPlacement::Symlink => old_link(&path, entry, original),
-            EntryPlacement::Copy | EntryPlacement::Clone | EntryPlacement::Hardlink { .. } => {
-                old_copy(&path, entry, original)
-            }
+            EntryPlacement::Copy | EntryPlacement::Clone => old_copy(&path, entry, original),
         };
         match verdict {
             Ok(()) => {

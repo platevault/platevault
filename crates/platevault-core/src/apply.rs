@@ -981,29 +981,19 @@ impl Run<'_> {
             return Ok(report);
         }
 
-        let mut written: BTreeMap<u32, (PathBuf, FileIdentity)> = BTreeMap::new();
         for entry in plan.entries {
             if self.control.canceled() {
                 return self.cancel().await;
             }
             let Some(snapshot) = self.snapshots.get(&entry.source_id).cloned() else { continue };
-            let earlier = match entry.placement {
-                EntryPlacement::Hardlink { of } => written.get(&of).cloned(),
-                _ => None,
-            };
             let placing = files::Placing {
                 entry: entry.clone(),
                 snapshot: snapshot.clone(),
                 building: self.building(),
                 operation: self.journal.operation_id,
-                earlier,
             };
             match blocking(move || Ok(files::place(&placing))).await? {
                 Ok(made) => {
-                    written.insert(
-                        entry.seq,
-                        (self.building().join(&entry.path), made.identity.clone()),
-                    );
                     self.built.push(ManifestEntry {
                         seq: entry.seq,
                         path: NativePath::from_path(&entry.path),

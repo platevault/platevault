@@ -189,16 +189,15 @@ impl EntrySource {
     }
 }
 
-/// How an entry is placed. A hard link only ever joins another entry of the
-/// same build that is this build's own copy of the same source; an original
-/// is never hard-linked (D-W98).
+/// How an entry is placed. Every Copies entry is its own file made from the
+/// original, a clone or a copy; nothing is ever hard-linked, to an original
+/// or between the View's own copies (D-W81, 063 FR-005).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EntryPlacement {
     Symlink,
     Copy,
     Clone,
-    Hardlink { of: u32 },
 }
 
 impl EntryPlacement {
@@ -248,15 +247,15 @@ pub struct ViewManifest {
 
 impl ViewManifest {
     /// A valid basis; each seq and path once; every placement fits the mode;
-    /// a hard link joins an earlier own copy of the same source; a patch only
-    /// on a Copy or Clone; a light entry places a copy of an included capture.
+    /// a patch only on a Copy or Clone; a light entry places a copy of an
+    /// included capture.
     ///
     /// # Errors
     /// `InvalidInput` naming the entry.
     pub fn validate(&self) -> Result<(), LibraryError> {
         self.basis.validate()?;
         let included = self.basis.included_captures();
-        let mut placed: BTreeMap<u32, &ManifestEntry> = BTreeMap::new();
+        let mut seqs = BTreeSet::new();
         let mut paths = BTreeSet::new();
         for entry in &self.entries {
             let seq = entry.seq;
@@ -271,22 +270,8 @@ impl ViewManifest {
             if !entry.placement.fits(self.basis.mode) {
                 return Err(invalid(format!("entry {seq}: Symlinks mode places only links")));
             }
-            match entry.placement {
-                EntryPlacement::Hardlink { of } => {
-                    let own = placed.get(&of).is_some_and(|copy| {
-                        matches!(copy.placement, EntryPlacement::Copy | EntryPlacement::Clone)
-                            && copy.source == entry.source
-                    });
-                    if !own {
-                        return Err(invalid(format!(
-                            "entry {seq}: a hard link joins an earlier own copy of its source"
-                        )));
-                    }
-                }
-                EntryPlacement::Symlink if !entry.header_patch.is_empty() => {
-                    return Err(invalid(format!("entry {seq}: only a copy carries a patch")));
-                }
-                _ => {}
+            if entry.placement == EntryPlacement::Symlink && !entry.header_patch.is_empty() {
+                return Err(invalid(format!("entry {seq}: only a copy carries a patch")));
             }
             if let EntrySource::Light { capture_key, asset_id } = entry.source {
                 if !included.get(&capture_key).is_some_and(|copies| copies.contains(&asset_id)) {
@@ -295,7 +280,7 @@ impl ViewManifest {
                     )));
                 }
             }
-            if placed.insert(seq, entry).is_some() {
+            if !seqs.insert(seq) {
                 return Err(invalid(format!("entry {seq} is listed twice")));
             }
         }

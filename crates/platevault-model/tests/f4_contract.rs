@@ -693,11 +693,13 @@ fn the_applied_basis_holds_each_session_and_capture_once_with_settled_calibratio
     assert!(twice.validate().is_err(), "a session sits in one group");
 }
 
+/// D-W81, 063 FR-005: every Copies entry is its own file, so no placement
+/// is a hard link, to an original or between the View's own copies.
 #[test]
-fn a_manifest_places_each_path_once_in_its_mode_and_hardlinks_only_its_own_copies() {
+fn a_manifest_places_each_path_once_in_its_mode_and_never_as_a_hard_link() {
     let copies = manifest(vec![
         light_entry(0, "NIGHT_2026-10-14/Lights/Ha/a.fits", EntryPlacement::Copy),
-        light_entry(1, "NIGHT_2026-10-15/Lights/Ha/a.fits", EntryPlacement::Hardlink { of: 0 }),
+        light_entry(1, "NIGHT_2026-10-15/Lights/Ha/a.fits", EntryPlacement::Clone),
     ]);
     copies.validate().unwrap();
     round_trip(&copies);
@@ -712,17 +714,17 @@ fn a_manifest_places_each_path_once_in_its_mode_and_hardlinks_only_its_own_copie
     ]);
     assert!(clash.validate().is_err(), "a path is placed once");
 
-    let dangling = manifest(vec![light_entry(
-        0,
-        "NIGHT_2026-10-14/Lights/Ha/a.fits",
-        EntryPlacement::Hardlink { of: 0 },
-    )]);
-    assert!(dangling.validate().is_err(), "a hard link names an earlier own copy");
-
-    let mut foreign = copies.clone();
-    foreign.entries[1].source =
-        EntrySource::Master { kind: InputKind::Dark, master_id: id(900), revision: 1 };
-    assert!(foreign.validate().is_err(), "a hard link carries its copy's source");
+    let hard_link = serde_json::json!({"kind": "hardlink", "of": 0});
+    assert!(
+        serde_json::from_value::<EntryPlacement>(hard_link.clone()).is_err(),
+        "no placement is a hard link"
+    );
+    let mut linked = serde_json::to_value(&copies).unwrap();
+    linked["entries"][1]["placement"] = hard_link;
+    assert!(
+        serde_json::from_value::<ViewManifest>(linked).is_err(),
+        "a manifest holding a hard-link entry is refused"
+    );
 
     let mut unheld = copies;
     unheld.entries[0].source = EntrySource::Light { capture_key: id(99), asset_id: id(99) };

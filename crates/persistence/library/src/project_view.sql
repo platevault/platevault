@@ -85,15 +85,15 @@ WHEN OLD.state IN ('building', 'installed', 'previous')
 BEGIN SELECT RAISE(ABORT, 'only a retired or discarded View record is removed'); END;
 
 -- One placed entry (`ManifestEntry` JSON). A light names its capture and the
--- copy placed; a calibration entry its raw frame or master version.
+-- copy placed; a calibration entry its raw frame or master version. Nothing
+-- is a hard link: each Copies entry is its own file (D-W81, 063 FR-005).
 CREATE TABLE IF NOT EXISTS view_manifest_entries (
     project_id TEXT NOT NULL,
     generation INTEGER NOT NULL,
     seq INTEGER NOT NULL CHECK (seq >= 0),
     path_key BLOB NOT NULL,
     input TEXT NOT NULL CHECK (input IN ('light', 'flat', 'dark', 'bias')),
-    placement TEXT NOT NULL CHECK (placement IN ('symlink', 'copy', 'clone', 'hardlink')),
-    linked_seq INTEGER,
+    placement TEXT NOT NULL CHECK (placement IN ('symlink', 'copy', 'clone')),
     capture_key TEXT,
     asset_id TEXT REFERENCES assets (id),
     master_id TEXT REFERENCES adopted_masters (id),
@@ -103,13 +103,9 @@ CREATE TABLE IF NOT EXISTS view_manifest_entries (
     PRIMARY KEY (project_id, generation, seq),
     UNIQUE (project_id, generation, path_key),
     FOREIGN KEY (project_id, generation) REFERENCES view_manifests (project_id, generation),
-    FOREIGN KEY (project_id, generation, linked_seq)
-        REFERENCES view_manifest_entries (project_id, generation, seq),
     CHECK ((asset_id IS NULL) <> (master_id IS NULL)),
     CHECK ((input = 'light') = (capture_key IS NOT NULL)),
     CHECK (input <> 'light' OR asset_id IS NOT NULL),
-    CHECK ((placement = 'hardlink') = (linked_seq IS NOT NULL)),
-    CHECK (linked_seq IS NULL OR linked_seq < seq),
     CHECK (json_extract(entry, '$.seq') = seq),
     CHECK (json_extract(entry, '$.sourceSha256') = source_sha256),
     CHECK (json_extract(entry, '$.placement.kind') = placement)
@@ -140,25 +136,13 @@ WHEN (SELECT state FROM view_manifests
     IN ('installed', 'previous')
 BEGIN SELECT RAISE(ABORT, 'a View''s entries are fixed once built'); END;
 
--- Symlinks mode places only links; Copies mode copies, clones and hard links.
+-- Symlinks mode places only links; Copies mode copies and clones.
 CREATE TRIGGER IF NOT EXISTS view_manifest_entries_mode
 BEFORE INSERT ON view_manifest_entries
 WHEN ((SELECT mode FROM view_manifests
     WHERE project_id = NEW.project_id AND generation = NEW.generation) = 'symlinks')
     <> (NEW.placement = 'symlink')
 BEGIN SELECT RAISE(ABORT, 'Symlinks mode places only links, and Copies mode none'); END;
-
--- A hard link joins this build's own copy of the same source, never an
--- original (D-W98).
-CREATE TRIGGER IF NOT EXISTS view_manifest_entries_hardlink_own_copy
-BEFORE INSERT ON view_manifest_entries
-WHEN NEW.linked_seq IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM view_manifest_entries e
-    WHERE e.project_id = NEW.project_id AND e.generation = NEW.generation
-        AND e.seq = NEW.linked_seq AND e.placement IN ('copy', 'clone')
-        AND e.asset_id IS NEW.asset_id AND e.master_id IS NEW.master_id
-)
-BEGIN SELECT RAISE(ABORT, 'a hard link joins this build''s own copy of its source'); END;
 
 -- An input's entry basename, fixed for life (PREP-FR-19, D-W114): a newcomer
 -- whose name clashes takes a suffix, and the existing entry keeps its name.
