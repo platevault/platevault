@@ -17,10 +17,12 @@ use std::future::Future;
 use std::time::Duration;
 
 use audit::bus::EventBus;
+use audit::event_bus::EventEnvelope;
 use domain_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
 use persistence_core::Database;
 use persistence_lifecycle::repositories::first_run as first_run_repo;
 use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
+use tokio::sync::broadcast;
 
 /// Provision an isolated in-memory SQLite DB with all migrations applied and a
 /// repository/event-bus wired to it. Real backend, no mocks.
@@ -118,6 +120,10 @@ where
 /// Replaces fixed `sleep(300 ms)` / `sleep(200 ms)` waits that followed
 /// `apply_plan()` or `resume_plan()` calls and were fragile under parallel
 /// nextest runs on loaded CI runners.
+///
+/// Not a barrier for plan-level `plan_apply_events` rows: the executor commits
+/// the plan state before it appends the matching audit row, so use
+/// [`wait_plan_event`] before reading those.
 pub async fn wait_plan_terminal(pool: &sqlx::SqlitePool, plan_id: &str) {
     poll_until(
         || async {
@@ -166,4 +172,39 @@ pub async fn wait_item_state(pool: &sqlx::SqlitePool, item_id: &str, expected: &
         &format!("plan item {item_id} never reached '{expected}' state"),
     )
     .await;
+}
+
+/// Wait until `topic` is published for `plan_id` on `events`.
+///
+/// Take `events` with `bus.subscribe()` BEFORE the call that starts or resumes
+/// the run, so the publish cannot land before the subscription exists.
+///
+/// Use this, not [`wait_plan_terminal`], before reading plan-level
+/// `plan_apply_events` rows. `plan_apply::terminal` commits the plan's new state
+/// first and appends the plan-level audit row in a separate, later write, which
+/// the constitution allows: audit rows are Tier 2 and may lag plan state (§II,
+/// §V). `plan.applying.paused` and `plan.applying.completed` are published only
+/// after that append, so returning from here orders the caller's read after the
+/// write instead of racing it (astro-plan-5gll9).
+///
+/// Panics if the receiver closes or lags past the event, or if the event is not
+/// published within 10 s.
+pub async fn wait_plan_event(
+    events: &mut broadcast::Receiver<EventEnvelope<serde_json::Value>>,
+    topic: &str,
+    plan_id: &str,
+) {
+    let published = async {
+        loop {
+            let envelope = events.recv().await.unwrap_or_else(|e| {
+                panic!("event receiver failed before {topic} for plan {plan_id}: {e}")
+            });
+            if envelope.topic == topic && envelope.payload["planId"] == plan_id {
+                return;
+            }
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(10), published)
+        .await
+        .unwrap_or_else(|_| panic!("{topic} was not published for plan {plan_id} within 10 s"));
 }
