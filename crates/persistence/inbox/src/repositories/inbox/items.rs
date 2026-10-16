@@ -359,8 +359,11 @@ async fn delete_unconfirmed_master_item_conn(
 ///   `classified`, with no plan linking it;
 /// - another master row of the same root has this row's path with some `/`
 ///   written as `\`: the row a later scan stored under the file's own text;
-/// - it has evidence, and none of that evidence is a master. Classify read the
-///   file at this row's path and found a frame that is not a master.
+/// - it has evidence, and every evidence row is a frame classify read and
+///   classified (`unclassified = 0`) that is not a master. An unclassified
+///   row proves nothing: classify writes one for a file whose header it could
+///   not read, as the scan keeps an old row whose file it could not read. The
+///   row then stays, and confirm's own guards decide.
 ///
 /// Its children and the source groups left at its path go as in
 /// [`delete_unconfirmed_master_rows_conn`].
@@ -386,7 +389,7 @@ pub async fn delete_stale_old_text_master_conn(
                SELECT 1 FROM inbox_classification_evidence ev WHERE ev.inbox_item_id = ?1)
            AND NOT EXISTS (
                SELECT 1 FROM inbox_classification_evidence ev
-               WHERE ev.inbox_item_id = ?1 AND ev.is_master <> 0)
+               WHERE ev.inbox_item_id = ?1 AND (ev.is_master <> 0 OR ev.unclassified <> 0))
          RETURNING root_id, relative_path",
     )
     .bind(inbox_item_id)

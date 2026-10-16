@@ -40,10 +40,12 @@
 //! unconfirmed with no scan in between. [`retire_stale_master`] closes that
 //! gap: `confirm` calls it before planning, so such a row is deleted rather
 //! than confirmed again. Its verdict comes from the database alone: the scan
-//! stored the row's current text beside it, and classify found that the old
-//! path names a frame that is not a master. Checking at the one step that
-//! plans covers every way a link goes away (cancel, discard, a failed apply,
-//! the startup repair sweep) and does not race the plan listener.
+//! stored the row's current text beside it, and classify read the file at the
+//! old path and classified it as a frame that is not a master (an unclassified
+//! file, such as one it could not read, proves nothing). Checking at the one
+//! step that plans covers every way a link goes away (cancel, discard, a
+//! failed apply, the startup repair sweep) and does not race the plan
+//! listener.
 //!
 //! On Windows the wire text never contains `\`, so nothing is ever found.
 #![allow(clippy::doc_markdown)]

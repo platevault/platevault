@@ -473,6 +473,111 @@ async fn a_real_nested_master_beside_a_backslash_master_is_planned() {
     assert_eq!(links, 1);
 }
 
+/// The real nested master `a/b.fits` beside the root-level master `a\b.fits`,
+/// as in [`a_real_nested_master_beside_a_backslash_master_is_planned`], whose
+/// header classify can no longer read when it is classified again. Its
+/// evidence is then unclassified and not a master, which proves nothing about
+/// the file: confirm refuses through its own guards, and the row stays with
+/// its classification and override.
+#[tokio::test]
+async fn a_nested_master_classify_cannot_read_is_kept_by_confirm() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(root, "a\\b.fits", "DARK", Some(30));
+    write_fits(&root.join("a"), "b.fits", "DARK", Some(30));
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    for (id, kind) in [("root-1", "inbox"), ("dest-cal", "calibration")] {
+        sqlx::query(
+            "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+             VALUES (?, ?, ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+        )
+        .bind(id)
+        .bind(root.to_str().unwrap())
+        .bind(kind)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    scan(&pool, root).await;
+    let nested_id: String = sqlx::query_scalar(
+        "SELECT id FROM inbox_items WHERE is_master_item = 1 AND relative_path = 'a/b.fits'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("the scan stores the nested master");
+    repo::set_overrides(&pool, &nested_id, "a/b.fits", None, Some("OIII"), None, None)
+        .await
+        .unwrap();
+
+    // The nested file's header can no longer be read.
+    std::fs::write(root.join("a").join("b.fits"), b"not a FITS header").unwrap();
+    let classified = classify(
+        &pool,
+        ClassifyRequest {
+            inbox_item_id: nested_id.clone(),
+            root_absolute_path: root.to_path_buf(),
+            force_rescan: true,
+        },
+    )
+    .await
+    .expect("classify the nested master again");
+    let evidence: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT relative_file_path, unclassified, is_master FROM inbox_classification_evidence \
+         WHERE inbox_item_id = ?",
+    )
+    .bind(&nested_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(evidence, [("a/b.fits".to_owned(), 1, 0)], "classify could not read the file");
+
+    let bus = EventBus::with_pool(pool.clone());
+    let err = confirm(
+        &pool,
+        &bus,
+        ConfirmRequest {
+            inbox_item_id: nested_id.clone(),
+            content_signature: classified.content_signature,
+            destructive_destination: None,
+            root_absolute_path: root.to_path_buf(),
+            root_id: None,
+            chosen_attribution: None,
+        },
+    )
+    .await
+    .expect_err("an unclassified master is not confirmable");
+    assert_ne!(
+        err.code,
+        ErrorCode::InboxItemNotFound,
+        "confirm refuses; it does not remove the row"
+    );
+
+    let kept: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_items WHERE id = ?")
+        .bind(&nested_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(kept, 1, "the nested master's row stays");
+    let classifications: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM inbox_classifications WHERE inbox_item_id = ?")
+            .bind(&nested_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(classifications, 1, "its classification stays");
+    let overrides: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM inbox_file_overrides WHERE relative_file_path = 'a/b.fits'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(overrides, 1, "its override stays");
+}
+
 /// A master row: path, id, state, master type, filter and exposure.
 type MasterRow = (String, String, String, Option<String>, Option<String>, Option<f64>);
 
