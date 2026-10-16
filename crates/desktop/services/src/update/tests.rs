@@ -255,6 +255,7 @@ impl Rig {
             installer,
             host: Box::new(FakeHost(Mutex::new(calls))),
             quit_install_ceiling,
+            wording: super::wording::Wording::in_locale("en-GB").expect("en-GB wording"),
         });
         Self { updater, host }
     }
