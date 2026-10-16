@@ -25,6 +25,7 @@ struct ReconcileTally {
     newly_missing: u32,
     recovered: u32,
     size_backfilled: u32,
+    unknown: u32,
 }
 
 /// spec 048 US5 (FR-024/025, PATH B): emit `calibration_match.source_missing`
@@ -209,6 +210,11 @@ async fn apply_missing_outcome(
 /// `detection.follow_symlinks` is off. In those cases NO frame state is
 /// written: an un-walkable root is not evidence that any frame was deleted.
 /// Database errors otherwise.
+///
+/// When only part of the root is unreadable, the pass still succeeds. A frame
+/// at or below an unreadable path keeps its record, emits no event and is
+/// counted in `unknown`; the response marks the scan `incomplete` and lists
+/// the paths.
 pub async fn run_reconcile(
     pool: &SqlitePool,
     bus: &audit::bus::EventBus,
@@ -267,7 +273,20 @@ pub async fn run_reconcile(
             FrameOutcome::Missing => {
                 apply_missing_outcome(pool, bus, row, was_missing, &reason, &mut tally).await?;
             }
+            // No evidence either way: the record, its events and its session
+            // membership stay exactly as they were.
+            FrameOutcome::Unknown => tally.unknown += 1,
         }
+    }
+
+    let incomplete = !report.unreadable_paths.is_empty();
+    if incomplete {
+        tracing::warn!(
+            root_id = %req.root_id,
+            unreadable_paths = report.unreadable_paths.len(),
+            unknown_frames = tally.unknown,
+            "reconcile could not read part of the root; frames there were left unchanged"
+        );
     }
 
     Ok(InventoryReconcileRunResponse {
@@ -276,6 +295,9 @@ pub async fn run_reconcile(
         newly_missing: tally.newly_missing,
         recovered: tally.recovered,
         size_backfilled: tally.size_backfilled,
+        unknown: tally.unknown,
+        incomplete,
+        unreadable_paths: report.unreadable_paths,
         progress_pct: 100,
     })
 }

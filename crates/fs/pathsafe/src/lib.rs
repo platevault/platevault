@@ -74,9 +74,10 @@ pub fn is_link_or_junction_metadata(meta: &Metadata) -> bool {
     false
 }
 
-/// Why a root cannot be walked by [`real_files_under`] / [`real_dirs_under`].
+/// Why a root cannot be walked by [`real_files_under_reporting`] /
+/// [`real_dirs_under`].
 ///
-/// Callers need this because both walkers return an empty list for a root they
+/// Callers need this because both walkers return no files for a root they
 /// refuse to descend, which is indistinguishable from a genuinely empty root.
 /// Treating the two as the same thing lets an unmounted drive read as "every
 /// file was deleted".
@@ -108,7 +109,7 @@ impl std::fmt::Display for RootUnavailable {
 /// Check that `root` is a directory the link-aware walkers will actually
 /// descend, under the same `follow_symlinks` rule they apply.
 ///
-/// This is the availability precondition for [`real_files_under`] and
+/// This is the availability precondition for [`real_files_under_reporting`] and
 /// [`real_dirs_under`]: it must be checked with the same `follow_symlinks`
 /// value, because a symlinked root is walkable with `true` and gated with
 /// `false`. Note that `Path::is_dir()` alone is not a substitute — it follows
@@ -187,38 +188,63 @@ pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
     dirs
 }
 
-/// Recursively collect every real (non-link) **file** under `root`.
+/// Recursively collect every real (non-link) **file** under `root`, together
+/// with the paths whose state the walk could not observe.
 ///
 /// Mirrors [`real_dirs_under`]'s gating: a symlinked/junction directory is
 /// never descended into, and a symlinked file is never yielded, unless
-/// `follow_symlinks` is `true`. Used by the raw-frame reconcile walker to
-/// enumerate on-disk frames without ever following a link (spec 048 R6).
-#[must_use]
-pub fn real_files_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
-    real_files_under_reporting(root, follow_symlinks).0
-}
-
-/// [`real_files_under`], additionally returning the directories whose
-/// `read_dir` failed.
+/// `follow_symlinks` is `true`. A root that is itself a link while
+/// `follow_symlinks` is off yields nothing; check [`probe_root`] first.
 ///
-/// Both walkers skip an unreadable directory rather than aborting, which makes
-/// "no files here" ambiguous between empty and unreadable. Callers that must
-/// not read a permission-denied subtree as deletion need the second list;
-/// treat it as unknown state, never as absence.
+/// The walk skips what it cannot read rather than aborting, which makes "no
+/// file here" ambiguous between absent and unreadable. Each path in the
+/// second list is unknown, together with everything below it; treat it as
+/// unknown state, never as absence. It is one of:
+///
+/// - a directory whose `read_dir` failed;
+/// - a directory whose listing failed part-way, so entries may be missing;
+/// - an entry whose metadata could not be read, which may be a file or a
+///   directory. A directory with read but no search permission (mode 644 on
+///   Unix) lists its names but fails this for every entry;
+/// - `root` itself when its metadata cannot be read, for example a network
+///   share that went stale after [`probe_root`] passed.
 ///
 /// When `follow_symlinks` is on, directories are deduplicated by their
 /// canonical path so a link pointing at an ancestor terminates instead of
-/// re-entering the subtree forever.
+/// re-entering the subtree forever, and a link whose target cannot be read
+/// (dangling, or on an unmounted drive) is unknown.
 #[must_use]
 pub fn real_files_under_reporting(
     root: &Path,
     follow_symlinks: bool,
 ) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    walk_files(root, follow_symlinks, |dir| {
+        fs::read_dir(dir).map(|entries| entries.map(|entry| entry.map(|entry| entry.path())))
+    })
+}
+
+/// The walk behind [`real_files_under_reporting`], with directory listing
+/// passed in so a test can fail a listing part-way.
+fn walk_files<Entries>(
+    root: &Path,
+    follow_symlinks: bool,
+    list: impl Fn(&Path) -> io::Result<Entries>,
+) -> (Vec<PathBuf>, Vec<PathBuf>)
+where
+    Entries: Iterator<Item = io::Result<PathBuf>>,
+{
     let mut files = Vec::new();
     let mut unreadable = Vec::new();
 
-    if !follow_symlinks && is_link_or_junction(root) {
-        return (files, unreadable);
+    if !follow_symlinks {
+        match fs::symlink_metadata(root) {
+            Ok(meta) if is_link_or_junction_metadata(&meta) => return (files, unreadable),
+            Ok(_) => {}
+            Err(_) => {
+                unreadable.push(root.to_path_buf());
+                return (files, unreadable);
+            }
+        }
     }
 
     let mut visited = std::collections::HashSet::new();
@@ -229,24 +255,54 @@ pub fn real_files_under_reporting(
         {
             continue;
         }
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let Ok(entries) = list(&dir) else {
             unreadable.push(dir);
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !follow_symlinks && is_link_or_junction(&path) {
-                continue;
-            }
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.is_file() {
-                files.push(path);
+        for entry in entries {
+            // A listing error leaves the rest of `dir` unseen. Stop reading
+            // it: a platform may repeat the same error forever.
+            let Ok(path) = entry else {
+                unreadable.push(dir);
+                break;
+            };
+            match walk_kind(&path, follow_symlinks) {
+                Ok(WalkKind::Dir) => stack.push(path),
+                Ok(WalkKind::File) => files.push(path),
+                Ok(WalkKind::Skip) => {}
+                Err(_) => unreadable.push(path),
             }
         }
     }
 
     (files, unreadable)
+}
+
+/// What a file walk does with one listed entry.
+enum WalkKind {
+    Dir,
+    File,
+    /// A gated link, or neither a file nor a directory.
+    Skip,
+}
+
+/// Classify `path` from its own metadata, or from its target's when it is a
+/// link and `follow_symlinks` is on.
+fn walk_kind(path: &Path, follow_symlinks: bool) -> io::Result<WalkKind> {
+    let mut meta = fs::symlink_metadata(path)?;
+    if is_link_or_junction_metadata(&meta) {
+        if !follow_symlinks {
+            return Ok(WalkKind::Skip);
+        }
+        meta = fs::metadata(path)?;
+    }
+    Ok(if meta.is_dir() {
+        WalkKind::Dir
+    } else if meta.is_file() {
+        WalkKind::File
+    } else {
+        WalkKind::Skip
+    })
 }
 
 /// Create a symlink from `source` to `destination`, pointing at a **file**
@@ -277,7 +333,15 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
 
 // ── Wire-path helpers ─────────────────────────────────────────────────────────
 
-/// Convert `path` to a forward-slash UTF-8 string for wire and contract fields.
+/// Convert `path` to the UTF-8 text wire and contract fields carry, with `/`
+/// as the separator.
+///
+/// Only Windows needs a conversion: there `\` is a separator and never part
+/// of a name, so it becomes `/` without loss. On macOS and Linux `/` is
+/// already the separator and `\` is an ordinary name character, so the text
+/// is kept as it is. A file named `a\b.fits` and the nested `a/b.fits` keep
+/// distinct wire text, and `root.join(wire)` names the entry the text came
+/// from on every platform (bd `astro-plan-3pvvc`).
 ///
 /// Uses `camino::Utf8Path` for a lossless conversion when the path is valid
 /// UTF-8, falling back to `to_string_lossy` (which replaces invalid sequences
@@ -285,18 +349,21 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
 /// in production all paths pass the non-UTF-8 skip at the `read_dir` boundary
 /// before reaching this function.
 ///
-/// This is the canonical single home for `replace('\\', "/")` on a `Path`
-/// so the wire format (`relative_file_path` contract field) cannot drift
-/// between scan, classify, and confirm (bd `astro-plan-kyo7.88`).
+/// This is the canonical single home for the separator rule on a `Path` so
+/// the wire format (`relative_file_path` contract field) cannot drift between
+/// scan, classify, and confirm (bd `astro-plan-kyo7.88`).
 #[must_use]
 pub fn wire_path(path: &Path) -> String {
-    Utf8Path::from_path(path).map_or_else(
-        || path.to_string_lossy().replace('\\', "/"),
-        |u| u.as_str().replace('\\', "/"),
-    )
+    let text =
+        Utf8Path::from_path(path).map_or_else(|| path.to_string_lossy(), |u| u.as_str().into());
+    if cfg!(windows) {
+        text.replace('\\', "/")
+    } else {
+        text.into_owned()
+    }
 }
 
-/// Compute the forward-slash UTF-8 path of `path` relative to `root`.
+/// Compute the [`wire_path`] of `path` relative to `root`.
 ///
 /// Strips the `root` prefix via `strip_prefix`; falls back to `wire_path(path)`
 /// if `path` does not start with `root`. Callers must ensure `path` is a
@@ -305,6 +372,23 @@ pub fn wire_path(path: &Path) -> String {
 pub fn relative_wire_path(root: &Path, path: &Path) -> String {
     let rel = path.strip_prefix(root).unwrap_or(path);
     wire_path(rel)
+}
+
+/// The last name in `wire`, the text a [`wire_path`] call produced: what
+/// follows its last separator, or all of it when it has none.
+///
+/// The separators follow [`wire_path`]. On macOS and Linux only `/`
+/// separates, so `folder/a\b.fits` names `a\b.fits`. On Windows `\` never
+/// belongs to a name, so it separates as well; wire text holds none, but text
+/// written into a wire column without passing [`wire_path`] still splits
+/// there (bd `astro-plan-3pvvc`).
+///
+/// Use it on wire text only. A native path splits by its own platform's
+/// rules (`Path::file_name`).
+#[must_use]
+pub fn wire_file_name(wire: &str) -> &str {
+    let last = if cfg!(windows) { wire.rfind(['/', '\\']) } else { wire.rfind('/') };
+    last.map_or(wire, |idx| &wire[idx + 1..])
 }
 
 #[cfg(test)]
@@ -390,15 +474,114 @@ mod tests {
         assert_eq!(unreadable, vec![locked]);
     }
 
+    /// Regression (astro-plan-5r71): a directory with read but no search
+    /// permission lists its names while every entry's stat fails. The walk
+    /// skipped such entries silently, so they read as absent.
+    #[cfg(unix)]
     #[test]
-    fn real_files_under_finds_nested_files() {
+    fn real_files_under_reporting_names_entries_it_cannot_stat() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let listable = dir.path().join("listable");
+        std::fs::create_dir_all(&listable).unwrap();
+        std::fs::write(listable.join("hidden.fits"), b"data").unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+        std::fs::set_permissions(&listable, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let enforced = std::fs::symlink_metadata(listable.join("hidden.fits")).is_err();
+        let (files, unreadable) = real_files_under_reporting(dir.path(), false);
+        std::fs::set_permissions(&listable, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        if !enforced {
+            eprintln!("skipping: this environment can stat below a mode-644 directory (root?)");
+            return;
+        }
+        assert_eq!(files, vec![dir.path().join("top.fits")]);
+        assert_eq!(unreadable, vec![listable.join("hidden.fits")]);
+    }
+
+    /// A root that cannot be stat'd (here: its parent has no search
+    /// permission) was answered as a gated link, so the walk returned nothing
+    /// and every frame below it read as absent. It must be reported instead.
+    #[cfg(unix)]
+    #[test]
+    fn real_files_under_reporting_names_a_root_it_cannot_stat() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let parent = dir.path().join("share");
+        let root = parent.join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("frame.fits"), b"data").unwrap();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let enforced = std::fs::symlink_metadata(&root).is_err();
+        let walked = real_files_under_reporting(&root, false);
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        if !enforced {
+            eprintln!("skipping: this environment can stat below a mode-644 directory (root?)");
+            return;
+        }
+        assert_eq!(walked, (Vec::new(), vec![root]));
+    }
+
+    /// A listing that fails part-way may have hidden any entry of that
+    /// directory, so the directory itself is unknown; what it did list and
+    /// its readable siblings still count.
+    #[test]
+    fn listing_error_part_way_reports_the_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let partial = dir.path().join("partial");
+        std::fs::create_dir_all(&partial).unwrap();
+        std::fs::write(partial.join("seen.fits"), b"data").unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+
+        let (mut files, unreadable) = walk_files(dir.path(), false, |listed: &Path| {
+            let mut entries: Vec<io::Result<PathBuf>> =
+                fs::read_dir(listed)?.map(|entry| entry.map(|entry| entry.path())).collect();
+            if listed == partial {
+                entries.push(Err(io::Error::other("readdir failed")));
+                entries.push(Ok(partial.join("never-reached.fits")));
+            }
+            Ok(entries.into_iter())
+        });
+        files.sort();
+
+        assert_eq!(files, vec![partial.join("seen.fits"), dir.path().join("top.fits")]);
+        assert_eq!(unreadable, vec![partial]);
+    }
+
+    /// A listed entry whose metadata cannot be read is unknown, never
+    /// absent; here it vanished between the listing and the stat.
+    #[test]
+    fn entry_whose_stat_fails_is_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+        let vanished = dir.path().join("vanished.fits");
+
+        let (files, unreadable) = walk_files(dir.path(), false, |listed: &Path| {
+            let mut entries: Vec<io::Result<PathBuf>> =
+                fs::read_dir(listed)?.map(|entry| entry.map(|entry| entry.path())).collect();
+            entries.push(Ok(vanished.clone()));
+            Ok(entries.into_iter())
+        });
+
+        assert_eq!(files, vec![dir.path().join("top.fits")]);
+        assert_eq!(unreadable, vec![vanished]);
+    }
+
+    #[test]
+    fn real_files_under_reporting_finds_nested_files() {
         let dir = tempfile::tempdir().unwrap();
         let nested = dir.path().join("sub");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(nested.join("frame.fits"), b"data").unwrap();
         std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
 
-        let mut files = real_files_under(dir.path(), false);
+        let (mut files, unreadable) = real_files_under_reporting(dir.path(), false);
+        assert_eq!(unreadable, Vec::<PathBuf>::new(), "the whole tree is readable");
         files.sort();
         assert_eq!(files.len(), 2);
         assert!(files.contains(&nested.join("frame.fits")));
@@ -439,8 +622,9 @@ mod tests {
         let dirs = real_dirs_under(&scan_root, false);
         assert!(!dirs.contains(&link_path));
 
-        let files = real_files_under(&scan_root, false);
+        let (files, unreadable) = real_files_under_reporting(&scan_root, false);
         assert!(files.is_empty(), "must not see files behind an un-enabled symlink");
+        assert_eq!(unreadable, Vec::<PathBuf>::new(), "a gated link is skipped, not unknown");
     }
 
     #[cfg(unix)]
@@ -499,7 +683,77 @@ mod tests {
         let dirs = real_dirs_under(&scan_root, false);
         assert!(!dirs.contains(&junction_path));
 
-        let files = real_files_under(&scan_root, false);
+        let (files, unreadable) = real_files_under_reporting(&scan_root, false);
         assert!(files.is_empty(), "must not see files behind an un-enabled junction");
+        assert_eq!(unreadable, Vec::<PathBuf>::new(), "a gated junction is skipped, not unknown");
+    }
+
+    #[test]
+    fn wire_path_separates_nested_components_with_a_slash() {
+        let nested = Path::new("a").join("b").join("c.fits");
+        assert_eq!(wire_path(&nested), "a/b/c.fits");
+
+        let root = Path::new("inbox");
+        assert_eq!(relative_wire_path(root, &root.join(&nested)), "a/b/c.fits");
+    }
+
+    /// On macOS and Linux `\` is an ordinary name character: a file named
+    /// `a\b.fits` and the nested `a/b.fits` are different files, so they must
+    /// get different wire text, and joining the wire text back onto the root
+    /// must name the file or folder it came from (bd `astro-plan-3pvvc`).
+    #[cfg(unix)]
+    #[test]
+    fn wire_path_keeps_a_unix_backslash_name_apart_from_a_nested_path() {
+        let root = Path::new("/inbox");
+        let cases = [
+            (root.join("a\\b.fits"), "a\\b.fits"),
+            (root.join("a").join("b.fits"), "a/b.fits"),
+            (root.join("c\\d").join("x.fits"), "c\\d/x.fits"),
+            (root.join("c").join("d").join("x.fits"), "c/d/x.fits"),
+        ];
+
+        for (path, expected) in &cases {
+            let wire = relative_wire_path(root, path);
+            assert_eq!(wire, *expected);
+            assert_eq!(&root.join(&wire), path, "{wire} must join back onto its own path");
+            assert_eq!(wire_path(Path::new(&wire)), wire, "{wire} must survive a round trip");
+        }
+    }
+
+    /// Windows refuses `\` in a name, so there it is only ever a separator and
+    /// becomes `/` on the wire.
+    #[cfg(windows)]
+    #[test]
+    fn wire_path_turns_windows_separators_into_slashes() {
+        assert_eq!(wire_path(Path::new(r"a\b.fits")), "a/b.fits");
+        assert_eq!(wire_path(Path::new(r"a\b/c.fits")), "a/b/c.fits");
+        assert_eq!(
+            relative_wire_path(Path::new(r"C:\inbox"), Path::new(r"C:\inbox\a\b.fits")),
+            "a/b.fits"
+        );
+    }
+
+    #[test]
+    fn wire_file_name_is_the_text_after_the_last_slash() {
+        assert_eq!(wire_file_name("masters/darks/300/master.xisf"), "master.xisf");
+        assert_eq!(wire_file_name("master.xisf"), "master.xisf");
+        assert_eq!(wire_file_name(""), "");
+    }
+
+    /// On macOS and Linux a `\` in wire text is part of a name.
+    #[cfg(unix)]
+    #[test]
+    fn wire_file_name_keeps_a_unix_backslash_in_the_name() {
+        assert_eq!(wire_file_name("folder/a\\b.fits"), "a\\b.fits");
+        assert_eq!(wire_file_name("a\\b.fits"), "a\\b.fits");
+        assert_eq!(wire_file_name("c\\d/x.fits"), "x.fits");
+    }
+
+    /// On Windows a `\` only ever separates.
+    #[cfg(windows)]
+    #[test]
+    fn wire_file_name_splits_on_a_windows_backslash() {
+        assert_eq!(wire_file_name(r"folder\a\b.fits"), "b.fits");
+        assert_eq!(wire_file_name(r"c\d/x.fits"), "x.fits");
     }
 }

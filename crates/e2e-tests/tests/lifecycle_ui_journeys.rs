@@ -133,7 +133,7 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
         // `targetIds` is populated only by the 30 s-interval ingest-resolution
         // drain, so this needs DRAIN_BACKED_TIMEOUT rather than the 30 s
         // UI_TIMEOUT — a 30 s wait on a 30 s-period task is a coin flip
-        // (#1205). Same latent race as `ingestion_sessions_search`; it had not
+        // (#1205). Same latent race `ingestion_sessions_search` hit; it had not
         // been observed failing here yet, but the mechanism is identical.
         .invoke_until("sessions_list", json!({}), DRAIN_BACKED_TIMEOUT, |v: &serde_json::Value| {
             v.as_array().is_some_and(|arr| {

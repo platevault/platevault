@@ -2,7 +2,7 @@
 
 A theme is **one `[data-theme="name"]` block that overrides only the ~30 raw
 palette tokens** (ink1–4, rule/rule2, bg/surface/bg3/surface-raised, accent
-set, status set, hover/selected, shadow-sm). Never redeclare semantic
+set, status set, hover/selected, shadow-sm, shadow-inset). Never redeclare semantic
 aliases, the type scale, spacing, radius, or layout — those are
 theme-invariant and resolve at use-site. Add the name to the theme registry
 with `enabled: true`, grouped by family (warm/cool) and mode (light/dark).

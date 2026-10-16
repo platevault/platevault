@@ -14,7 +14,7 @@ pub mod frame_watcher;
 pub mod library_notifier;
 pub mod library_shell;
 pub mod resolve_cache;
-pub mod update_exit_gate;
+pub mod updater;
 pub mod watcher;
 
 mod bootstrap;
@@ -47,44 +47,6 @@ pub const MAIN_WINDOW_LABEL: &str = "main";
 // `specta_builder()`/`base_builder()` to live in the crate-root textual
 // scope. `tests/bindings.rs` depends on `desktop_shell::specta_builder`.
 include!("bootstrap/specta.rs");
-
-/// Build the signed auto-update plugin.
-///
-/// Split out of [`build_app`] rather than inlined: the `dev-tools` override
-/// below is ~30 lines of conditional wiring, and folding it into the builder
-/// chain pushed that function past the line ceiling. Keeping it here also puts
-/// the whole override in one readable place.
-///
-/// `PV_E2E_VERSION_OVERRIDE` spoofs a lower "current" version so an e2e run can
-/// exercise the "update available" path against a fixture endpoint without
-/// modifying the real release binary or its embedded version. It is gated
-/// behind `dev-tools` at compile time, so release binaries ignore the env var
-/// entirely — the code is absent, not merely inactive.
-fn build_updater_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry, tauri_plugin_updater::Config> {
-    #[cfg(not(feature = "dev-tools"))]
-    let b = tauri_plugin_updater::Builder::new();
-    #[cfg(feature = "dev-tools")]
-    let mut b = tauri_plugin_updater::Builder::new();
-    #[cfg(feature = "dev-tools")]
-    if let Ok(override_ver) = std::env::var("PV_E2E_VERSION_OVERRIDE") {
-        match override_ver.parse::<semver::Version>() {
-            Ok(fake_ver) => {
-                b = b.default_version_comparator(move |_current, remote| remote.version > fake_ver);
-                tracing::info!(
-                    PV_E2E_VERSION_OVERRIDE = %override_ver,
-                    "updater version override active"
-                );
-            }
-            Err(_) => {
-                tracing::warn!(
-                    PV_E2E_VERSION_OVERRIDE = %override_ver,
-                    "invalid semver in PV_E2E_VERSION_OVERRIDE — using real version"
-                );
-            }
-        }
-    }
-    b.build()
-}
 
 /// Build the Tauri MCP bridge plugin (@hypothesi tauri-plugin-mcp-bridge), or
 /// `None` when the runtime has not opted in.
@@ -248,16 +210,6 @@ pub fn build_app() -> tauri::App {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        // Spec 051 US10 (T056): signed auto-update plugin. `updater:default` +
-        // `process:default` (for the relaunch-to-apply step) are granted in
-        // `capabilities/default.json`. `plugins.updater.pubkey` in
-        // `tauri.conf.json` is the real minisign key (spec 051 SC-009/T059/
-        // T060, #762) — the check/download/verify/install flow itself is
-        // frontend-driven (`updateSubscription.ts`, astro-plan-mkkgi) and
-        // only downloads on the user's Install click. The one Rust-side hook
-        // is the install-on-quit gate in `run_app` (`update_exit_gate`).
-        .plugin(build_updater_plugin())
-        .plugin(tauri_plugin_process::init())
         // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
         // required here — this app already installs a global `tracing`
         // subscriber (`desktop_services::Services::start` in `main.rs`, right
@@ -311,8 +263,8 @@ pub fn build_app() -> tauri::App {
             }
             // Quit (T034): the app's own item, not `PredefinedMenuItem::quit`,
             // whose macOS `terminate:` and Windows `PostQuitMessage` never
-            // reach `ExitRequested`. `app.exit(0)` does, so an armed
-            // "Install on quit" (`update_exit_gate`) can install first.
+            // reach `ExitRequested`. `app.exit(0)` does, so a staged
+            // "Install on quit" (`updater::on_run_event`) can install first.
             if event.id() == MENU_ID_QUIT {
                 app.exit(0);
             }
@@ -462,12 +414,13 @@ pub fn run_app(
     let boot_services = Arc::clone(&services);
     std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir, boot_services)));
 
-    // astro-plan-mkkgi: an armed "Install on quit" defers the first quit to the
-    // main window, which installs the staged update and then exits.
-    update_exit_gate::register(app.handle(), exit_data_dir.clone());
+    // astro-plan-5wcib: the services-crate updater. A staged "Install on quit"
+    // holds the first quit while it installs, then exits. astro-plan-c72oo:
+    // its offer goes out as a system notification under the app's identity.
+    updater::register(app.handle(), services.notifier().clone(), services.identity());
 
     app.run(move |handle, event| {
-        update_exit_gate::on_run_event(handle, &event);
+        updater::on_run_event(handle, &event);
         // `RunEvent::Exit` is the final, non-cancellable event-loop hook — it
         // fires on graceful shutdown but never on SIGKILL/crash/power loss, so
         // a present marker at next boot reliably means "exited cleanly".

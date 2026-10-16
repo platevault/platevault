@@ -46,6 +46,15 @@ impl<T> Latest<T> {
         receiver.mark_changed();
         Self { receiver }
     }
+
+    /// The value now, without consuming it as the next change.
+    #[must_use]
+    pub fn current(&self) -> T
+    where
+        T: Clone,
+    {
+        self.receiver.borrow().clone()
+    }
 }
 
 impl<T: Clone + Send + Sync> Feed for Latest<T> {

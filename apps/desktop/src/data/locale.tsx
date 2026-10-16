@@ -281,12 +281,15 @@ export async function hydrateLocaleFromSettings(): Promise<Locale | undefined> {
 }
 
 /**
- * Relabels the native application menu in `locale` (astro-plan-bw4s6).
- * No-ops outside Tauri; on any IPC failure the menu keeps its previous labels.
- * `./nativeMenu` is imported lazily: it pulls in the whole message catalogue,
- * which this module otherwise never loads.
+ * Sends `locale` to the Rust shell, for the text it shows outside the
+ * webview: the native menu's labels (astro-plan-bw4s6) and the updater's
+ * administrator prompt and notification (astro-plan-dwwup, astro-plan-gffqm).
+ * No-ops outside Tauri; on an IPC failure the menu keeps its previous labels
+ * and the updater its previous language. `./nativeMenu` is imported lazily:
+ * it pulls in the whole message catalogue, which this module otherwise never
+ * loads.
  */
-async function sendNativeMenuLabels(locale: Locale): Promise<void> {
+async function sendLocaleToShell(locale: Locale): Promise<void> {
   try {
     const { isTauri } = await importTauriCore();
     if (!isTauri()) return;
@@ -296,9 +299,15 @@ async function sendNativeMenuLabels(locale: Locale): Promise<void> {
       importIpc(),
       import('./nativeMenu'),
     ]);
-    unwrap(await commands.nativeMenuSetLabels(nativeMenuLabels(locale)));
+    const sends = [
+      async () =>
+        unwrap(await commands.nativeMenuSetLabels(nativeMenuLabels(locale))),
+      async () => unwrap(await commands.updateSetLocale(locale)),
+    ];
+    // Settled independently, so one refusal never skips the other send.
+    await Promise.allSettled(sends.map((send) => send()));
   } catch {
-    // Best-effort — a stale menu label never blocks or reverts the UI change.
+    // Best-effort — a stale label or language never blocks or reverts the UI change.
   }
 }
 
@@ -315,9 +324,9 @@ const LocaleContext = createContext<LocaleContextValue | undefined>(undefined);
  * change (research D2 — Paraglide messages are plain function calls, so
  * nothing updates without a re-render). Hydrates from the settings DB once
  * on mount; the effect is safe to run more than once (idempotent DB read)
- * and cancels its own state update if unmounted first. The native menu
- * follows the active locale too: its labels are sent on mount and on every
- * change.
+ * and cancels its own state update if unmounted first. The Rust shell
+ * follows the active locale too (native menu, updater): it is sent on mount
+ * and on every change.
  */
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() =>
@@ -335,7 +344,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void sendNativeMenuLabels(locale);
+    void sendLocaleToShell(locale);
   }, [locale]);
 
   const changeLocale = useCallback((next: Locale) => {

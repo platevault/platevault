@@ -7,13 +7,14 @@
 //! while preserving identical runtime behavior.
 
 use super::{
-    apply_repo, audit_item_cancelled, deterministic_entity_id, finalize_archive_lifecycle,
-    finalize_calibration_master_archive, finalize_calibration_master_restore,
-    finalize_prepared_lifecycle, finalize_project_create_manifest, finalize_restore_lifecycle,
-    finalize_view_generation, finalize_view_regeneration, finalize_view_removal, json, new_id,
-    AuditLogEntry, EntityType, EventBus, OpEventEmitter, OperationEventType, OperationStatus,
-    Outcome, PlanApplyingCompleted, PlanApplyingPaused, Severity, Source, SqlitePool,
-    TerminalCounts, Timestamp, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED,
+    append_plan_transition, apply_repo, audit_item_cancelled, deterministic_entity_id,
+    finalize_archive_lifecycle, finalize_calibration_master_archive,
+    finalize_calibration_master_restore, finalize_prepared_lifecycle,
+    finalize_project_create_manifest, finalize_restore_lifecycle, finalize_view_generation,
+    finalize_view_regeneration, finalize_view_removal, json, ActiveRunGuard, AuditLogEntry,
+    EntityType, EventBus, OpEventEmitter, OperationEventType, OperationStatus, Outcome,
+    PlanApplyingCompleted, PlanApplyingPaused, Severity, Source, SqlitePool, TerminalCounts,
+    Timestamp, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED,
 };
 
 use super::apply::cumulative_counts;
@@ -57,9 +58,16 @@ fn report_unwritten_state(
 
 /// Handle `ApplyOutcome::Completed`: finalize origin-specific side-effects,
 /// persist the terminal state, emit audit + bus + long-op events.
+///
+/// `run_guard` is the run's path claim; it is released just before the
+/// terminal state is written (see [`ActiveRunGuard`]).
 #[expect(
     clippy::cognitive_complexity,
     reason = "terminal-state dispatch over plan origin and per-origin finalizer set"
+)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the run's identity, origin, sink, counters and claim are independent inputs"
 )]
 pub(super) async fn handle_completed(
     pool: &SqlitePool,
@@ -70,6 +78,7 @@ pub(super) async fn handle_completed(
     plan_project_id: Option<&str>,
     op_emitter: Option<&OpEventEmitter>,
     counts: TerminalCounts,
+    run_guard: ActiveRunGuard,
 ) {
     let at = Timestamp::now_iso();
 
@@ -146,6 +155,10 @@ pub(super) async fn handle_completed(
         }
     }
 
+    // The finalizers above were the last work under the claim. Release it
+    // before the plan reads finished, so a plan over the same paths that
+    // reacts to the terminal state is not refused as overlapping.
+    drop(run_guard);
     if let Err(e) = apply_repo::complete_run(
         pool,
         plan_id,
@@ -162,19 +175,7 @@ pub(super) async fn handle_completed(
         return;
     }
 
-    let _ = apply_repo::append_event(
-        pool,
-        &new_id(),
-        run_id,
-        plan_id,
-        None,
-        "applying",
-        &terminal,
-        &at,
-        None,
-        None,
-    )
-    .await;
+    append_plan_transition(pool, plan_id, run_id, "applying", &terminal, &at).await;
 
     let _ = bus
         .publish(
@@ -220,6 +221,9 @@ pub(super) async fn handle_completed(
 
 /// Handle `ApplyOutcome::Cancelled`: batch-cancel pending items, sweep orphans,
 /// persist terminal state, emit events.
+///
+/// `run_guard` is the run's path claim; it is released just before the
+/// terminal state is written (see [`ActiveRunGuard`]).
 pub(super) async fn handle_cancelled(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -227,6 +231,7 @@ pub(super) async fn handle_cancelled(
     run_id: &str,
     op_emitter: Option<&OpEventEmitter>,
     counts: TerminalCounts,
+    run_guard: ActiveRunGuard,
 ) {
     let at = Timestamp::now_iso();
 
@@ -249,6 +254,9 @@ pub(super) async fn handle_cancelled(
     // Fetch cumulative counters AFTER batch-cancel so cancelled items are counted.
     let counts = cumulative_counts(pool, plan_id, &counts).await;
 
+    // The item cancels above were the last work under the claim. Release it
+    // before the plan reads cancelled, as `handle_completed` does.
+    drop(run_guard);
     if let Err(e) = apply_repo::complete_run(
         pool,
         plan_id,
@@ -265,19 +273,7 @@ pub(super) async fn handle_cancelled(
         return;
     }
 
-    let _ = apply_repo::append_event(
-        pool,
-        &new_id(),
-        run_id,
-        plan_id,
-        None,
-        "applying",
-        "cancelled",
-        &at,
-        None,
-        None,
-    )
-    .await;
+    append_plan_transition(pool, plan_id, run_id, "applying", "cancelled", &at).await;
 
     let _ = bus
         .publish(
@@ -324,6 +320,9 @@ pub(super) async fn handle_cancelled(
 /// `applying`, which `sweep_crashed_applying_plans` and
 /// `list_crash_interrupted_plans` classify at the next boot, and the long-op
 /// event carries the failure instead of a pause.
+///
+/// `run_guard` is the run's path claim; it is released as soon as the handler
+/// starts, before it reads what the pause records (see [`ActiveRunGuard`]).
 pub(super) async fn handle_paused(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -332,7 +331,21 @@ pub(super) async fn handle_paused(
     reason: &str,
     op_emitter: Option<&OpEventEmitter>,
     counts: TerminalCounts,
+    run_guard: ActiveRunGuard,
 ) {
+    // Release the claim first, before this handler reads anything. The
+    // executor has stopped, so a skip landing from here on must be refused
+    // (`run.not_found`) rather than accepted: a skip accepted between
+    // `list_pending_items` and `pause_run` below would make the pause record
+    // one item too many still to run (astro-plan-ajy4v). `resume_plan`
+    // (lifecycle.rs, R-Concur-1) and `cancel_plan` (GF-5) also require that a
+    // paused plan holds no `ActiveRun`, and both react to the paused plan row
+    // or the `plan.applying.paused` event: holding the claim across the pause
+    // write made such a resume fail with `plan.invalid_state` ("already has an
+    // active apply run") and such a cancel signal a cancellation token no
+    // executor was left to observe. This handler performs no filesystem work,
+    // so the claim has nothing left to protect.
+    drop(run_guard);
     let at = Timestamp::now_iso();
     let counts = cumulative_counts(pool, plan_id, &counts).await;
 
@@ -381,19 +394,7 @@ pub(super) async fn handle_paused(
         return;
     }
 
-    let _ = apply_repo::append_event(
-        pool,
-        &new_id(),
-        run_id,
-        plan_id,
-        None,
-        "applying",
-        "paused",
-        &at,
-        None,
-        None,
-    )
-    .await;
+    append_plan_transition(pool, plan_id, run_id, "applying", "paused", &at).await;
 
     if let Some(emitter) = op_emitter.as_ref() {
         let handle = emitter.handle(OperationStatus::Running);

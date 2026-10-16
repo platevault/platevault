@@ -14,6 +14,7 @@
 
 mod support;
 
+use audit::event_bus::TOPIC_PLAN_APPLYING_COMPLETED;
 use fs_executor::failure::FailureCode;
 use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
@@ -694,7 +695,9 @@ async fn full_review_to_apply_audit_round_trip() {
     assert_eq!(approve_resp.new_state, "approved");
     assert_ne!(approve_resp.approval_token, "");
 
-    // 4. Apply via use-case layer.
+    // 4. Apply via use-case layer, subscribed first so the completion event cannot
+    //    be published before the subscription exists.
+    let mut bus_events = bus.subscribe();
     let apply_resp = app_core::plan_apply::apply_plan(
         db.pool(),
         &bus,
@@ -706,8 +709,9 @@ async fn full_review_to_apply_audit_round_trip() {
     .expect("apply_plan");
     assert_eq!(apply_resp.new_state, "applying");
 
-    // Wait for background executor task.
-    support::wait_plan_terminal(db.pool(), &plan_id).await;
+    // Wait for the background executor task. The terminal audit row is appended
+    // after the terminal state commits, so wait for `plan.applying.completed`.
+    support::wait_plan_event(&mut bus_events, TOPIC_PLAN_APPLYING_COMPLETED, &plan_id).await;
 
     // 5. FS side effect.
     assert!(!src.exists(), "source should be moved");
@@ -808,6 +812,7 @@ async fn channel_free_apply_moves_file_after_explicit_approval() {
         .expect("approve_plan")
         .approval_token;
 
+    let mut bus_events = bus.subscribe();
     let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, &approval_token, None)
         .await
         .expect("channel-free apply of an approved plan");
@@ -815,7 +820,9 @@ async fn channel_free_apply_moves_file_after_explicit_approval() {
     assert_eq!(resp.new_state, "applying");
     assert!(!resp.run_id.is_empty(), "run_id should be non-empty");
 
-    support::wait_plan_terminal(db.pool(), &plan_id).await;
+    // The terminal audit row asserted below is appended after the terminal state
+    // commits, so wait for `plan.applying.completed` rather than the plan state.
+    support::wait_plan_event(&mut bus_events, TOPIC_PLAN_APPLYING_COMPLETED, &plan_id).await;
 
     // FS side effect: real move to the archive destination (never a silent
     // overwrite — constitution §II).

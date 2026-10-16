@@ -20,19 +20,11 @@
  * parameterised add/edit form, not a per-pane clone.
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
 import { ConfirmModal } from '@/components';
 import { m } from '@/lib/i18n';
-
-// Leaflet is ~240 KB raw. Lazy-load so it splits to its own chunk and only
-// loads when the add/edit form mounts for the first time.
-const SiteLocationPicker = lazy(() =>
-  import('@/shared/observing-sites/SiteLocationPicker').then((mod) => ({
-    default: mod.SiteLocationPicker,
-  })),
-);
 
 /** Parsed coordinate for the map pin, or `null` when blank/invalid mid-edit. */
 function parsedCoord(text: string): number | null {
@@ -47,6 +39,7 @@ import {
   useObservingState,
   saveSites,
 } from '@/shared/observing-sites/site-store';
+import { SiteMapSection } from '@/shared/observing-sites/SiteMapSection';
 import type {
   ObserverSite,
   Twilight,
@@ -125,6 +118,11 @@ function newSiteId(): string {
 export function ObservingSites() {
   const { sites, defaultSiteId, activeSiteId } = useObservingState();
   const [form, setForm] = useState<SiteForm | null>(null);
+  // Bumped on every Add/Edit so SiteMapSection remounts with the map hidden.
+  // Edit and "+ Add site" stay clickable while a form is open, and form.id
+  // stays null for Add→Add, so the form itself cannot serve as the key
+  // (astro-plan-pil2e: no tile request for a site without a Show map click).
+  const [formOpenCount, setFormOpenCount] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -147,11 +145,13 @@ export function ObservingSites() {
 
   const startAdd = () => {
     setForm(emptyForm());
+    setFormOpenCount((n) => n + 1);
     setFormError(null);
   };
 
   const startEdit = (site: ObserverSite) => {
     setForm(formFromSite(site));
+    setFormOpenCount((n) => n + 1);
     setFormError(null);
   };
 
@@ -418,30 +418,18 @@ export function ObservingSites() {
           onCancel={() => setForm(null)}
           onSave={handleSubmit}
         >
-          <div className="pv-step-site__map-section">
-            <span className="pv-field-label">{m.setup_site_map_label()}</span>
-            <Suspense
-              fallback={
-                <div
-                  className="pv-step-site__map"
-                  role="status"
-                  aria-label={m.setup_site_map_label()}
-                />
-              }
-            >
-              <SiteLocationPicker
-                latitudeDeg={parsedCoord(form.latitudeDegText)}
-                longitudeDeg={parsedCoord(form.longitudeDegText)}
-                onPick={(lat, lon) =>
-                  setForm({
-                    ...form,
-                    latitudeDegText: lat.toFixed(5),
-                    longitudeDegText: lon.toFixed(5),
-                  })
-                }
-              />
-            </Suspense>
-          </div>
+          <SiteMapSection
+            key={formOpenCount}
+            latitudeDeg={parsedCoord(form.latitudeDegText)}
+            longitudeDeg={parsedCoord(form.longitudeDegText)}
+            onPick={(lat, lon) =>
+              setForm({
+                ...form,
+                latitudeDegText: lat.toFixed(5),
+                longitudeDegText: lon.toFixed(5),
+              })
+            }
+          />
           <div className="pv-stack-1">
             <label className="pv-field-label" htmlFor="observing-site-name">
               {m.settings_observing_sites_field_name()}

@@ -42,6 +42,7 @@ pub mod source_view_verify;
 pub mod status;
 pub mod targets;
 pub mod tools;
+pub mod updates;
 
 // ── Re-exported domain-owned stored types (spec 042 T254) ─────────────────
 //

@@ -1,13 +1,13 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 4
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [onboarding, locations, indexing, home, sessions, targets, planning, status-bar, issues, calibration-process, duplicates, equipment]
+surfaces: [onboarding, locations, indexing, home, sessions, targets, planning, status-bar, issues, calibration, duplicates, equipment]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 072-observing-plans, D01, D08, D11, D15, D18, D-W7, D-W12, D-W17, D-W33, D-W35, D-W37, D-W39, D-W43, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-a-first-use-and-indexing, HARNESS-V5-IA.md#source-list, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S11, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HIGH-LEVEL-DESIGN.md#glossary, P-SB3, P-STO2, P-PLAN2, P-CAL3, apps/prototype/src/features/t1/setup/setup-pages.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-equipment.tsx @4f470775, apps/prototype/src/domain/indexing.ts @4f470775, apps/prototype/messages/en-GB.json @4f470775]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 068-calibration-inputs, 072-observing-plans, D01, D08, D11, D15, D18, D-W89, D-W12, D-W17, D-W96, D-W95, D-W43, D-W94, D-W101, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/068-calibration-inputs/spec.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-a-first-use-and-indexing, HARNESS-V5-IA.md#source-list, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S11, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HIGH-LEVEL-DESIGN.md#glossary, P-SB3, P-STO2, P-PLAN2, P-CAL3, apps/prototype/src/features/t1/setup/setup-pages.tsx, apps/prototype/src/features/t1/settings/locations-page.tsx, apps/prototype/src/features/v5/e-targets-plan-settings/settings-equipment.tsx @4f470775, apps/prototype/src/domain/indexing.ts @4f470775, apps/prototype/messages/en-GB.json @4f470775]
 ---
 
 ## Goal
@@ -15,16 +15,18 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 07
 The user registers folders that already hold captures and calibration frames,
 indexes them where they are, inspects sessions and the evidence behind each
 Target and rig association, and names and completes the rigs that indexing
-detected. No Project, processing application, account, network connection,
+detected. Calibration is matched at ingestion and pinned on eligible sessions;
+a match outside its window is only suggested until the user confirms it, and an
+unsettled session never delays indexing or Import. No Project, processing application, account, network connection,
 workspace root, or file reorganization is required. After onboarding the app
 opens on Home, the control-panel dashboard. Done means:
 
 - Sessions lists the seven fixture light sessions as separate metadata-homogeneous sessions.
 - A session whose pointing lies within a Target's footprint reads that Target as Associated. A session without such pointing reads Needs a Target instead of a guess, and the Needs a Target filter lists it. OBJECT shows only as a label.
-- Raw calibration frames wait as calibration processes awaiting Stack, and no light session holds them.
+- Raw calibration frames wait as calibration processes awaiting Stack. Indexing also matches calibration to the light sessions: compatible raw sets are pinned, a match outside its window is only suggested, and the user confirms the 26 Sep flats suggestion, which settles that session's calibration (LIB-FR-23, CAL-FR-02, CAL-FR-04, CAL-FR-05).
 - Indexing detects one rig per camera and telescope pair. The user renames them `RedCat` and `Esprit` and adds their missing pixel size in Settings › Equipment, so each has a field of view.
 - An unreadable or offline location reads as uncertain rather than Missing, in the status bar and in Settings › Locations.
-- Every file in the registered folders is byte-identical to the pre-run manifest.
+- Every file in the registered folders is byte-identical to the pre-index manifest.
 
 ## Preconditions
 
@@ -50,8 +52,8 @@ opens on Home, the control-panel dashboard. Done means:
 ### S1 — Read the Welcome and Locations steps {#S1}
 
 - **Do:** Launch PlateVault. On Welcome, click **Set up locations**, then read the Locations step without adding anything.
-- **Expect:** Onboarding shows three steps, Welcome, Locations and Index, and opens on Welcome. Welcome lists what PlateVault does and what it never does, including `Needs an account or a network connection`. On Locations, Captures is marked Required. Calibration and Results are marked Optional, and each offers **Set up later**. **Continue** is unavailable and names Captures as the missing role: `Add a capture location to continue. Captures is the only required role.`
-- **Expect (negative):** No step asks for a processing application, a Project, a processing-run folder, a workspace root, or an account.
+- **Expect:** Onboarding shows three steps, Welcome, Locations and Index, and opens on Welcome. Welcome lists what PlateVault does and what it never does, including `Needs an account or a network connection`. On Locations, Captures is marked Required. Calibration and Results are marked Optional, and each offers **Set up later**. **Continue** is unavailable and names Captures as the missing role: `Add a capture location to continue. Captures is the only required role.` Calibration is optional because compatible masters can be imported later; raw calibration indexed in a registered location is matched at ingestion (LIB-FR-01, LIB-FR-23).
+- **Expect (negative):** No step asks for a processing application, a Project, a workspace root, or an account.
 - **Trace:** flow A1 · LIB-FR-01 · root FR-001, FR-015 · D18 · HARNESS-V5-IA.md §Screens (onboarding kept at its v4 path, `src/features/t1/setup/setup-pages.tsx`)
 
 ### S2 — Add the first capture location {#S2}
@@ -70,7 +72,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S4 — Configure the optional roles {#S4}
 
 - **Do:** Click **Add calibration location**, choose `Astro-T7/Calibration` and enter the display name `Astro-T7 calibration`. Leave Results unset and continue.
-- **Expect:** Onboarding continues to its Index step. Results reads as not set.
+- **Expect:** Onboarding continues to its Index step. Results reads as not set, and the registered Calibration location lets indexing match its raw sets to eligible light sessions.
 - **Expect (negative):** The unset Results role is not shown as an error, warning, or failed setup.
 - **Trace:** flow A2 · LIB-FR-01 · LIB-AC-01
 
@@ -89,9 +91,9 @@ opens on Home, the control-panel dashboard. Done means:
 ### S6 — Browse while indexing runs {#S6}
 
 - **Do:** Before indexing finishes, click **Open library**. The orientation walk opens on its own after setup (J18/S1); skip or finish it (J18/S2, S3). Read Home, the source list and the status bar, then open Sessions.
-- **Expect:** Home opens, not the Targets list. Its header offers **Plan tonight**, **New Project** and **Import**. Its boxes are Projects, which reads `No Projects`, Sessions, Tonight, Goals and Work. Home shows the Getting started checklist (J18/S6). Work lists the indexing operation with its progress. The source list offers Home, Projects, Targets, Sessions and Calibration, with Activity and Settings in its footer, and the toolbar offers Import. The status bar shows the indexing operation as running work with a mini progress bar. Its ⛔ errors counter opens a popout that lists `Astro-T7 calibration unreadable`, with its action leading to Settings › Locations. In Sessions, the sessions read so far can be inspected. Totals name the locations they cover and read Provisional.
-- **Expect (negative):** Home shows no issues strip or top line. The source list has no Storage or Plan entry. No total implies that unscanned folders or data outside the registered locations are included. No screen asks for an account or a network connection.
-- **Trace:** flow A4 · LIB-FR-03, LIB-FR-10 · LIB-AC-07, LIB-AC-09 · PRJ-FR-17 · D-W7, D-W39 · HARNESS-V5-IA.md §Source list, §Screens S1, §Round 2b (Status bar) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip, Navigation, P-STO2, P-PLAN2), §Round 6 "Onboarding: walk plus checklist" · J18/G4 (the page setup hands over to) · G5
+- **Expect:** Home opens, not the Targets list. It shows Pending ingestions, Pending work, Open work, Status, Tonight and the calendar, with no tabs and no header buttons. Open work reads **No Projects in progress.**, Home shows no setup checklist (J18/S6), and Status lists the indexing operation with its progress. The source list offers Home, Projects, Targets, Sessions and Calibration, with Activity and Settings in its footer, and the toolbar offers Import. The status bar shows the indexing operation as running work with a mini progress bar. Its ⛔ errors counter reads 1 and opens Settings › Locations filtered to the `Astro-T7 calibration` row, which names the access failure. In Sessions, the sessions read so far can be inspected. Totals name the locations they cover and read Provisional.
+- **Expect (negative):** Home shows no issues strip, summary line or alerts list, and no counter opens a list of issues. The source list has no Storage or Plan entry. No total implies that unscanned folders or data outside the registered locations are included. No screen asks for an account or a network connection.
+- **Trace:** flow A4 · LIB-FR-03, LIB-FR-10 · LIB-AC-07, LIB-AC-09 · PRJ-FR-17 · D-W89, D-W92 · HARNESS-V5-IA.md §Source list, §Screens S1, §Round 2b (Status bar) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip, Navigation, P-STO2, P-PLAN2), §Round 6 "Onboarding: walk plus checklist" · J18/G4 (the page setup hands over to) · G5
 
 ### S6a — Read planning before any site exists {#S6a}
 
@@ -110,9 +112,9 @@ opens on Home, the control-panel dashboard. Done means:
 ### S7a — Find the raw calibration frames {#S7a}
 
 - **Do:** After indexing completes, open the Calibration library, then Sessions. Open the status bar's ℹ info counter.
-- **Expect:** The Calibration library lists one calibration process for each raw calibration session in P4. Each reads `Calibration → stack`, with the steps Stack, Detect, Import, Register and Raws, and Stack reads To do. The ℹ popout lists `<n> to stack`, where n is the number of those processes, and its action leads to the Calibration library. Sessions lists no calibration session.
+- **Expect:** The Calibration library lists one calibration process for each raw calibration session in P4. Each reads `Calibration → stack`, with the steps Stack, Detect, Import, Register and Raws, and Stack reads To do. The ℹ counter's menu names `Calibration · <n>` (`<n> to stack`), where n is the number of those processes, and that entry opens the Calibration library filtered to them. Sessions lists no calibration session. Indexing also matches calibration to the light sessions (LIB-FR-23, CAL-FR-02, CAL-FR-04, CAL-FR-19 to CAL-FR-21). The raw darks and bias are pinned to the six RedCat sessions, the Ha flats to the 18 Sep session and the OIII flats to the 30 Sep session, each taken the same night as those lights. Flats taken outside the default same-or-next-night window are only suggested (CAL-FR-20): the OIII flats, taken on 30 Sep, for 12, 24 and 26 Sep, and the Ha flats, taken on 18 Sep, for 28 Sep. The other-camera session's darks, flats and bias read not found, because no raw set in P4 comes from its camera or optical train. So only 18 and 30 Sep are settled. 26 Sep's calibration stays unsettled until the user confirms its suggestion (S10a), and indexing never waits for it (LIB-FR-24). Sessions' **Needs calibration** filter lists every session whose calibration isn't settled, Ready or not (LIB-FR-17), so it lists the five unsettled sessions while their frames are Unreviewed.
 - **Expect (negative):** No process starts Stack by itself. No tool is launched, and no master or stacking folder is written. No raw frame goes to the OS Trash (P5 still matches). No master made from P4's raw frames is listed.
-- **Trace:** CAL · HARNESS-V5-IA.md §Screens S12, S14, §Round 2b (P-CAL3: Routing, Issues `calibration-waiting`) · HARNESS-V5-FEEDBACK-R1.md §Round 1b (P-CAL3)
+- **Trace:** LIB-FR-23, LIB-FR-24, LIB-FR-26 · CAL-FR-02, CAL-FR-09, CAL-FR-19 to CAL-FR-23 · D-W101, D-W102, D-W103, D-W104, D-W105
 
 ### S8 — Inspect the resulting sessions {#S8}
 
@@ -132,35 +134,42 @@ opens on Home, the control-panel dashboard. Done means:
 - **Expect (negative):** No evidence list names OBJECT as Target evidence. No OBJECT label agrees with, conflicts with, preselects or settles a Target. 24 Sep is not assigned a guessed Target. No `Cygnus field` Target exists, and no OBJECT supplies coordinates.
 - **Trace:** flow A3 · LIB-FR-05 · LIB-AC-03 · D01, D11 · HARNESS-V5-IA.md §Screens S12 (session detail) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (OBJECT is a label, never evidence), §Round 6 "Rigs: detection plus manual add" · HIGH-LEVEL-DESIGN.md §10 Glossary (OBJECT) · messages indexing_train_detected @ 4f470775
 
-### S9a — Read the new-session filters, Home's Sessions box and the status bar {#S9a}
+### S9a — Read the new-session filters, Home's Pending work and the status bar {#S9a}
 
-- **Do:** In Sessions, read the filter counts, then choose the **Needs a Target** filter, then **Not in any Project**. Open Home and read its Sessions box. Open the status bar's ⚠ and ℹ counters.
+- **Do:** In Sessions, read the filter counts, then choose the **Needs a Target** filter, then **Not in any Project**. Open Home and read its Pending work section. Choose the status bar's ⚠ counter, then its ℹ counter.
 - **Expect:**
-  - The filters read All 7, Needs a Target 1, Not in any Project 6 and Trashed 0.
-  - **Needs a Target** lists exactly 24 Sep, and its row offers **Choose Target**.
-  - **Not in any Project** lists exactly 12 Sep, 18 Sep, 26 Sep, 28 Sep, 30 Sep and the other-camera session. Each row reads `No Project` and offers **Add to Project**. Its menu reads `No open Project` and offers **Create Project…**.
-  - Home's Sessions box shows the same sessions under Needs a Target (1) and Not in any Project (6). Unreviewed and Ready to add read `None`.
-  - The ⚠ popout lists `1 needs a Target`, which leads to Sessions filtered to Needs a Target.
-  - The ℹ popout lists `6 not in a Project`, which leads to Sessions filtered to Not in any Project, beside the S7a calibration processes waiting to stack.
-- **Expect (negative):** Neither filter assigns a session to a Project or a processing run. No session is a candidate of any Project, because no Project exists. Home shows no issues strip or top line.
-- **Trace:** cross-flow "Missing OBJECT" · LIB-FR-17 · LIB-AC-18 · PRJ-FR-19 · PRJ-AC-20 · D-W33, D-W43 · HARNESS-V5-IA.md §Screens S1 (Sessions box), S12 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip)
+  - The filters read All 7, Needs calibration 5 and Trashed 0. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17). The Needs a Target, Needs review and Not in any Project counts aren't asserted here, because they depend on G11.
+  - **Needs a Target** lists 24 Sep, which has no Target, and its row offers **Choose Target**. Whether it also lists the sessions whose Target is associated by pointing is G11's question.
+  - **Not in any Project** doesn't list 24 Sep. Each row it lists reads `No Project` and offers **Add to Project**, and its menu reads `No open Project` and offers **Create Project…**. Which sessions it lists depends on G11.
+  - Home's Pending work reports the same counts as the Sessions filters, with 24 Sep among the sessions needing a Target and the five S7a sessions as needing calibration.
+  - The ⚠ counter opens Sessions filtered to the rows its warnings affect, 24 Sep among them.
+  - The ℹ counter opens a menu naming `Calibration · <n>` for the S7a processes waiting to stack. Whether it also names `Sessions · <n>` for sessions not in a Project depends on G11.
+- **Expect (negative):** Neither filter assigns a session to a Project. No session is suggested to any Project, because no Project exists. Home shows no Sessions box, issues strip or summary line, and no counter opens a list of issues.
+- **Trace:** cross-flow "Missing OBJECT" · LIB-FR-17 · LIB-AC-18 · PRJ-FR-17, PRJ-FR-19 · PRJ-AC-20 · D-W33, D-W43, D-W78, D-W89, D-W92, D-W105 · HARNESS-V5-IA.md §Screens S12 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip)
 
 ### S9b — Name and complete the detected rigs {#S9b}
 
-- **Do:** Open Settings › Equipment and read its rigs. On the rig detected from the RedCat lights choose **Rename**, enter `RedCat` and save. Rename the rig detected from the other-camera lights to `Esprit` the same way. Then choose **Edit optics** on each rig, enter the pixel size 3.76 µm and save. Reopen the 30 Sep session detail.
+- **Do:** Open Settings › Equipment and read its rigs. On the rig detected from the RedCat lights choose **Rename**, enter `RedCat` and save. Rename the rig detected from the other-camera lights to `Esprit` the same way. Then choose **Edit…** on each rig's camera record, enter the pixel size 3.76 µm and save. Reopen the 30 Sep session detail.
 - **Expect:**
   - Before any change, Settings › Equipment lists exactly two rigs, each named from its TELESCOP and INSTRUME values. One has telescope `RedCat 51`, camera `ZWO ASI2600MM Pro` (Mono, 6248 × 4176) and 250 mm. The other has `Esprit 100`, `ZWO ASI533MC Pro` (OSC, 3008 × 3008) and 550 mm. Each reads `Field of view unknown`, because no light carries a pixel size.
-  - After the renames the rigs read `RedCat` and `Esprit`. After Edit optics, `RedCat`'s field of view reads about 5.4° × 3.6° and `Esprit`'s about 1.2° × 1.2°.
+  - After the renames the rigs read `RedCat` and `Esprit`, each still with one rig version, because a rename changes no component (PLAN-EQ-FR-07). After the camera edits, `RedCat`'s field of view reads about 5.4° × 3.6° and `Esprit`'s about 1.2° × 1.2°.
   - 30 Sep's rig evidence now names `RedCat`, still Associated and not Confirmed.
 - **Expect (negative):** Renaming and editing change no source byte (P5), no folder name and no session's Target, frame count or association status. No third rig appears, and 28 Sep's rig evidence still reads Needs review. No session's rig reads Confirmed before S10.
-- **Trace:** LIB-FR-05 · PLAN-EQ-FR-02, PLAN-EQ-FR-05 · D11 · HARNESS-V5-IA.md §Screens S16 (Equipment) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" (renaming and editing detected ones) · settings-equipment.tsx (Rename, Edit optics), indexing.ts trainFor, messages equipment_rename, equipment_edit_optics, domain_fov_unknown @ 4f470775
+- **Trace:** LIB-FR-05 · PLAN-EQ-FR-01, PLAN-EQ-FR-02, PLAN-EQ-FR-05, PLAN-EQ-FR-07 · D11, D-W87, D-W104 · HARNESS-V5-IA.md §Screens S16 (Equipment) · HARNESS-V5-FEEDBACK-R1.md §Round 6 "Rigs: detection plus manual add" (renaming and editing detected ones) · settings-equipment.tsx (Rename, Edit optics), indexing.ts trainFor, messages equipment_rename, equipment_edit_optics, domain_fov_unknown @ 4f470775
 
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
 - **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep.
-- **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label, and 28 Sep's rig no longer reads Needs review. Each of the six sessions reads rig `RedCat` Confirmed. A grouping revision created by a confirmation keeps the previous session identity traceable. **Needs a Target** now reads 0 with `None need a Target`, and **Not in any Project** lists all seven. The status bar's ⚠ counter disappears.
+- **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label. Each of the six sessions reads rig `RedCat` Confirmed, including 28 Sep, whose rig read Needs review before. **Needs a Target** lists neither 24 nor 26 Sep, **Not in any Project** lists both, and 24 Sep's row carries no Needs a Target warning. Whether 12, 18, 28 and 30 Sep and the other-camera session, whose Target is still associated by pointing, read Needs a Target or Not in any Project depends on G11.
 - **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label.
 - **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs)
+
+### S10a — Confirm the suggested flats for 26 Sep {#S10a}
+
+- **Do:** Open the 26 Sep session's details and read its darks, flats and bias. On flats, confirm the suggested OIII flats.
+- **Expect:** Before the confirmation, darks and bias read pinned, and flats read suggested with the OIII flats' capture date, 30 Sep, and their evidence. After it, flats read pinned to the OIII flats, so the 26 Sep session's calibration is settled. Each kind offers **Reassign…**. **Needs calibration** then lists 4 sessions, without 26 Sep.
+- **Expect (negative):** Indexing never confirmed the suggestion by itself. Confirming changes no source byte (P5), no file in `Astro-T7/Calibration` and no other session's calibration.
+- **Trace:** LIB-FR-17, LIB-FR-23 · CAL-FR-05, CAL-FR-20 · D-W102, D-W105
 
 ### S11 — See a failed catalog write {#S11}
 
@@ -191,10 +200,10 @@ opens on Home, the control-panel dashboard. Done means:
 
 ### S15 — Take Cold-1 offline {#S15}
 
-- **Do:** Eject `Cold-1`. Read the status bar, then open Settings › Locations.
-- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ popout lists `Cold-1 captures offline`, with its action leading to Settings › Locations. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
+- **Do:** Eject `Cold-1`. Read the status bar, open its ⚠ counter and choose `Settings › Locations · 1` in its menu.
+- **Expect:** The status bar's locations count reads `2 of 3 online`. Its ⚠ counter opens a menu naming `Sessions · <n>` and `Settings › Locations · 1`. n counts the session warnings: 4 for the sessions still in Needs calibration after S10a (12, 24 and 28 Sep and the other-camera session), plus any Needs a Target warnings that G11 leaves open. `Settings › Locations · 1` opens Settings › Locations filtered to the `Cold-1 captures` row. In Settings › Locations, the `Cold-1 captures` row reads Offline, and each `Astro-T7` row shows its disk use: the bytes PlateVault catalogues in that location, plus the free space of the `Astro-T7` volume. The 12 Sep session stays listed with its last-observed metadata and an Offline state. Its metadata is marked as last observed rather than currently verified.
 - **Expect (negative):** No 12 Sep frame reads Missing and the session is not removed.
-- **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07 · LIB-AC-05 · D11 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
+- **Trace:** flow A3, cross-flow "Location offline" · LIB-FR-07, LIB-FR-17 · LIB-AC-05 · 063 FR-032 · D11, D-W92 · HARNESS-V5-IA.md §Round 2b (Status bar, Left: locations online) · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, P-STO2), §Round 6 "Disk use per location"
 
 ## Success criteria
 
@@ -202,10 +211,10 @@ opens on Home, the control-panel dashboard. Done means:
 - SC2: The S14 manifest equals P5 for 100% of files.
 - SC3: Zero frames read Missing at S5, S12, and S15. 18 Sep reads 55 frames again after S13.
 - SC4: After S10, 24 Sep and 26 Sep read NGC 7000 Confirmed, and 12, 18, 28 and 30 Sep and the other-camera session read NGC 7000 Associated. The six RedCat sessions read rig `RedCat` Confirmed, and their source headers equal P5 (S10, S14).
-- SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed.
+- SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed. Indexing pinned the raw darks and bias on the six RedCat sessions, the Ha flats on 18 Sep and the OIII flats on 30 Sep, so 2 sessions are settled and 5 are not, 26 Sep among them with the OIII flats suggested. After S10a the 26 Sep session's flats are pinned, its calibration is settled, and **Needs calibration** lists 4 sessions.
 - SC6: At the end, 0 frames read Usable (S8).
 - SC7: A failing catalog write never reads Saved (S11).
-- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs a Target 1, Not in any Project 6 and Trashed 0, and the ⚠ popout lists exactly `1 needs a Target`. After S10, **Needs a Target** lists 0 sessions.
+- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs calibration 5 and Trashed 0, Needs a Target lists 24 Sep, and Home's Pending work reports the same counts as the filters. After S10, **Needs a Target** lists neither 24 nor 26 Sep. G11 leaves the other counts open.
 - SC9: With no saved site, 0 windows and 0 Img time values are computed (S6a).
 - SC10: 0 Targets are taken from an OBJECT label: no evidence list names OBJECT at S9, and 24 Sep's picker opens with no Target chosen at S10.
 - SC11: At S15 the status bar reads `2 of 3 online`, and 0 duplicate-copies issues are raised after indexing (S8).
@@ -213,7 +222,7 @@ opens on Home, the control-panel dashboard. Done means:
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs, the defaults that the authorized autonomous run set in decisions D01, D08, D11, D15, and D18, and the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, `apps/prototype/` on ui-harness-v5 @ b5e813a5, and HARNESS-V5-FEEDBACK-R1.md Round 6 @ 4f470775). No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows specs 064, 068 and 072, the defaults that the authorized autonomous run set in decisions D01, D08, D11, D15, and D18, D-W94 and D-W101 to D-W105 in the F4 workflow decisions, and the harness v5 design (HARNESS-V5-IA.md and HARNESS-V5-FEEDBACK-R1.md through Round 5, `apps/prototype/` on ui-harness-v5 @ b5e813a5, and HARNESS-V5-FEEDBACK-R1.md Round 6 @ 4f470775). No implementation has been validated against them.
 - G2: (dissolved 2026-10-12): answered by Round 6 "Rigs: detection plus manual add"; S9 and S9b now assert that indexing detects one rig per camera and telescope pair, which the user renames `RedCat` and `Esprit` and completes with Edit optics before S10 and S11 confirm them. The unanswered locate/remap remainder moves unchanged to G9.
 - G3: Unresolved implementation qualification: no fault-injection mechanism exists yet for the S11 catalog-write failure (P6). Blocks readiness.
 - G5: Unresolved implementation qualification: S6 needs indexing to run long enough to observe. Fixture sizing or a slow volume is unspecified. Blocks readiness.
@@ -221,6 +230,7 @@ opens on Home, the control-panel dashboard. Done means:
 - G7: Out of scope for this journey: the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes. Release-build verification evidence is required. Blocks readiness until it exists.
 - G9: Unresolved implementation qualification (carried from G2 unchanged): same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
 - G10: Unresolved product question: Round 6 defines My targets as "yours plus favourites", while HARNESS-V5-IA.md S10 says "the ★ favourites plus open-Project subjects". Neither says whether a Target that only has indexed sessions (NGC 7000 at S6a, associated by pointing, with no ★ and no Project) is "yours". S6a keeps the IA reading: My targets holds no Target, and NGC 7000's search result is added on a click. Blocks readiness.
+- G11: Unresolved product question, open with the owner: does a Target associated by agreeing pointing evidence count as confirmed for Needs a Target, Not in any Project and Ready? The v5 design assumes it does: `sessionTargetId` and `sessionReadiness` in the prototype's `src/domain/derive.ts` treat an associated Target as settled. LIB-FR-17 and LIB-FR-20 say "confirmed Target", and the F4 backend contract computes readiness from `SessionIntake.target_confirmed`, so they need an explicit confirmation. S9a and S10 therefore assert only what holds under either answer and leave the Needs a Target, Needs review and Not in any Project counts open, as SC8 does. J14, J20, J28 and J35 assume the design's answer and depend on it too. Blocks readiness.
 
 ## Delta log
 
@@ -236,3 +246,9 @@ opens on Home, the control-panel dashboard. Done means:
   Indexing detects the rigs; new S9b renames them `RedCat` and `Esprit` and adds their pixel size with Edit optics (P2 now names the optics headers and has no XPIXSZ). The orientation walk opens after setup and Home shows the Getting started checklist (J18).
   Targets opens on My targets with a toggle to Browse catalogues, and disk use per location is the catalogued bytes plus the volume's free space.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Rigs: detection plus manual add", "Onboarding: walk plus checklist", "Targets opens on My targets", "Clicking a result", "Disk use per location" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6F (intent-gated)
+- **Δ5** 2026-10-15 · S1, S4, S6, S7a, S9a, S9b, S10, +S10a, S15 · behavior-change
+  Indexing matches calibration to light sessions and pins it, a match outside its window is only suggested, and an unsettled session never delays indexing or Import. S10a confirms the flats suggested for 26 Sep, which settles its calibration. Raw calibration still waits as calibration processes awaiting Stack. Pixel size is entered on the camera record, and renaming a rig starts no rig version. Home shows Pending ingestions, Pending work and Open work instead of boxes, header buttons or a checklist, S9a reads Pending work and every Sessions filter, and each status bar counter opens its owning page instead of a list of issues.
+  Evidence: D-W78, D-W89, D-W92, D-W101 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-17, LIB-FR-23, LIB-FR-24, 065 PRJ-FR-17, 068 CAL-FR-02, CAL-FR-04, CAL-FR-05, CAL-FR-20 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-16 · S7a, S9a, S10a · behavior-change
+  Needs calibration lists every session whose calibration isn't settled, Ready or not, so it reads 5 at S9a and 4 after S10a. S7a names each session's calibration after indexing: 18 and 30 Sep are settled, the flats of 12, 24, 26 and 28 Sep are only suggested, and the other-camera session finds no calibration.
+  Evidence: LIB-FR-17 as corrected in PR #1804 (commit 8660e090), CAL-FR-20, CAL-FR-21, D-W105, D-W114 · by: EncodeOwnerAnswers2 (intent-gated)

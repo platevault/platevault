@@ -136,6 +136,11 @@ pub struct ScannedInboxItem {
     /// Each entry becomes its own `inbox_items` row. The remaining non-master
     /// FITS/XISF files are grouped into the folder-level row.
     pub masters: Vec<ScannedMasterFile>,
+    /// FITS/XISF files in this folder whose header this scan could not read,
+    /// so whether they are masters is unknown. They are not in `masters`, and
+    /// they are no proof that a file is not a master either (bd
+    /// astro-plan-3pvvc): the next scan that reads them decides.
+    pub unread_files: Vec<PathBuf>,
 }
 
 impl ScannedInboxItem {
@@ -208,18 +213,25 @@ fn is_xisf_extension(ext: &str) -> bool {
 
 // ── Master detection at scan time ─────────────────────────────────────────────
 
-/// Attempt to extract metadata and detect whether `path` is a calibration
-/// master.  Called only for FITS/XISF files in leaf folders.
-///
-/// Returns `Some(ScannedMasterFile)` when the file is identified as a master.
-/// Returns `None` when not a master or metadata is unreadable.
-fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<ScannedMasterFile> {
+/// What the scan learned from one FITS/XISF file's header.
+enum MasterRead {
+    /// The file is a calibration master.
+    Master(ScannedMasterFile),
+    /// The header was read, and it is not a master.
+    NotMaster,
+    /// The header could not be read, so whether it is a master is unknown.
+    Unread,
+}
+
+/// Extract metadata and detect whether `path` is a calibration master.
+/// Called only for FITS/XISF files in leaf folders.
+fn read_master(abs_path: &Path, rel_path: &str, ext: &str) -> MasterRead {
     // Cached extract (F0): memoized by (path, mtime, size). Unsupported
     // extensions and headers in which no keyword is readable surface as `Err`
     // here, so such a file is declined outright rather than path-inferred. A
     // readable header that merely lacks `IMAGETYP` still reaches
     // `detect_master` below and may be classified from its path.
-    let bundle = cached_extract(abs_path).ok()?;
+    let Ok(bundle) = cached_extract(abs_path) else { return MasterRead::Unread };
 
     let image_typ_raw = bundle.image_typ.as_deref();
     let stack_count = bundle.stack_count;
@@ -227,17 +239,17 @@ fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<Scann
 
     let detect_input = DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path };
 
-    let detection = detect_master(&detect_input)?;
+    let Some(detection) = detect_master(&detect_input) else { return MasterRead::NotMaster };
 
     if !detection.is_master {
-        return None;
+        return MasterRead::NotMaster;
     }
 
     let format = file_format_from_ext(ext);
     let filter = bundle.filter.clone();
     let exposure_s = bundle.exposure.as_deref().and_then(|v| v.parse::<f64>().ok());
 
-    Some(ScannedMasterFile {
+    MasterRead::Master(ScannedMasterFile {
         abs_path: abs_path.to_owned(),
         relative_path: rel_path.to_owned(),
         format,
@@ -247,10 +259,10 @@ fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<Scann
     })
 }
 
-/// Compute the root-relative path as a forward-slash UTF-8 string for the wire.
+/// Compute the root-relative path as a `/`-separated UTF-8 string for the wire.
 ///
 /// Delegates to `fs_pathsafe::relative_wire_path` (canonical single home
-/// for the backslash→slash normalization, bd astro-plan-kyo7.88).
+/// for the wire separator rule, bd astro-plan-kyo7.88 and astro-plan-3pvvc).
 fn relative_utf8(root: &Path, path: &Path) -> String {
     fs_pathsafe::relative_wire_path(root, path)
 }
@@ -286,6 +298,9 @@ pub struct ScanOutput {
     pub items: Vec<ScannedInboxItem>,
     /// Per-directory access errors collected during the phase-1 walk.
     pub warnings: Vec<ScanWarning>,
+    /// Rows an earlier scan stored under the old backslash text that this scan
+    /// proves stale; pass them to [`crate::legacy_rows::retire`].
+    pub legacy_rows: crate::legacy_rows::LegacyRows,
 }
 
 /// Leaf-folder inventory collected by the pure directory walk (phase 1).
@@ -343,11 +358,8 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     let mut leaf_dirs: Vec<LeafDir> = Vec::new();
     let mut warnings: Vec<ScanWarning> = Vec::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
-    collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings, &mut visited)?;
-
-    if leaf_dirs.is_empty() {
-        return Ok(ScanOutput { items: vec![], warnings });
-    }
+    let mut bare_dirs: HashSet<PathBuf> = HashSet::new();
+    collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings, &mut visited, &mut bare_dirs)?;
 
     // Phase 2: process per-file I/O.
     //
@@ -390,7 +402,8 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     // Sort by relative_path for deterministic output.
     items.sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
-    Ok(ScanOutput { items, warnings })
+    let legacy_rows = crate::legacy_rows::find(root, &items, &bare_dirs);
+    Ok(ScanOutput { items, warnings, legacy_rows })
 }
 
 /// Compute the [`ScannedInboxItem`] for one leaf directory.
@@ -416,22 +429,20 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
     let format = folder_format(&leaf.fits_files, &leaf.xisf_files, &leaf.video_files);
 
     // Master detection: FITS-lane folders only.
-    let masters: Vec<ScannedMasterFile> = if lane == Lane::Fits {
-        all_image_files
-            .iter()
-            .filter_map(|abs_path| {
-                let ext = abs_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_ascii_lowercase();
-                let rel = relative_utf8(root, abs_path);
-                try_detect_master(abs_path, &rel, &ext)
-            })
-            .collect()
-    } else {
-        vec![]
-    };
+    let mut masters: Vec<ScannedMasterFile> = Vec::new();
+    let mut unread_files: Vec<PathBuf> = Vec::new();
+    if lane == Lane::Fits {
+        for abs_path in &all_image_files {
+            let ext =
+                abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            let rel = relative_utf8(root, abs_path);
+            match read_master(abs_path, &rel, &ext) {
+                MasterRead::Master(master) => masters.push(master),
+                MasterRead::NotMaster => {}
+                MasterRead::Unread => unread_files.push((*abs_path).clone()),
+            }
+        }
+    }
 
     ScannedInboxItem {
         folder_path: leaf.dir_path.clone(),
@@ -443,6 +454,7 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
         lane,
         format,
         masters,
+        unread_files,
     }
 }
 
@@ -462,17 +474,26 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
 /// to an ancestor re-enters the same real directory once per link component the
 /// OS allows, duplicating every frame inside it; the same key shape as
 /// `fs_pathsafe::real_files_under_reporting`.
+///
+/// Returns whether `dir` is bare: the walk read every entry of it and found
+/// no image or video file directly inside, so no item stands for it. It may
+/// hold subfolders and other files. A link it skipped, or an entry it could
+/// not read, may be such a file, so `dir` is then not bare; neither is a
+/// directory already entered under another path. The bare directories below
+/// `dir` are added to `bare_dirs`, which tells a folder where nothing is to
+/// classify from one the walk could not read (bd astro-plan-3pvvc).
 fn collect_leaf_dirs(
     dir: &Path,
     options: &ScanOptions,
     leaf_dirs: &mut Vec<LeafDir>,
     warnings: &mut Vec<ScanWarning>,
     visited: &mut HashSet<PathBuf>,
-) -> Result<(), String> {
+    bare_dirs: &mut HashSet<PathBuf>,
+) -> Result<bool, String> {
     if options.follow_symlinks
         && !visited.insert(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()))
     {
-        return Ok(());
+        return Ok(false);
     }
 
     let read_dir = std::fs::read_dir(dir)
@@ -482,8 +503,13 @@ fn collect_leaf_dirs(
     let mut xisf_files: Vec<PathBuf> = Vec::new();
     let mut video_files: Vec<PathBuf> = Vec::new();
     let mut subdirs: Vec<PathBuf> = Vec::new();
+    let mut read_whole = true;
 
-    for entry in read_dir.flatten() {
+    for entry in read_dir {
+        let Ok(entry) = entry else {
+            read_whole = false;
+            continue;
+        };
         let path = entry.path();
 
         // OS scan boundary: `read_dir` yields `std::path::PathBuf`, which can be
@@ -499,7 +525,10 @@ fn collect_leaf_dirs(
             continue;
         }
 
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            read_whole = false;
+            continue;
+        };
         // Reparse-aware check (symlink + Windows junction) shared with
         // fs_inventory/fs_executor — see `fs_pathsafe` (duplication-and-
         // abstraction audit T1-a).
@@ -507,6 +536,7 @@ fn collect_leaf_dirs(
 
         if is_link && !options.follow_symlinks {
             // Constitution §I: skip symlinks/junctions unless explicitly enabled.
+            read_whole = false;
             continue;
         }
 
@@ -525,7 +555,8 @@ fn collect_leaf_dirs(
         }
     }
 
-    if !fits_files.is_empty() || !xisf_files.is_empty() || !video_files.is_empty() {
+    let has_files = !fits_files.is_empty() || !xisf_files.is_empty() || !video_files.is_empty();
+    if has_files {
         leaf_dirs.push(LeafDir { dir_path: dir.to_owned(), fits_files, xisf_files, video_files });
     }
 
@@ -533,12 +564,16 @@ fn collect_leaf_dirs(
     // A read failure on a subdir is non-fatal: record it in warnings and
     // continue so partial results reach the caller instead of nothing.
     for subdir in subdirs {
-        if let Err(reason) = collect_leaf_dirs(&subdir, options, leaf_dirs, warnings, visited) {
-            warnings.push(ScanWarning { path: subdir, reason });
+        match collect_leaf_dirs(&subdir, options, leaf_dirs, warnings, visited, bare_dirs) {
+            Ok(true) => {
+                bare_dirs.insert(subdir);
+            }
+            Ok(false) => {}
+            Err(reason) => warnings.push(ScanWarning { path: subdir, reason }),
         }
     }
 
-    Ok(())
+    Ok(read_whole && !has_files)
 }
 
 #[cfg(test)]
@@ -927,6 +962,446 @@ mod tests {
         let master = items[0].masters.first().expect("path inference must still detect a master");
         assert_eq!(master.detection.frame_type, FrameType::Dark);
         assert!(!master.detection.stack_count_evidence, "no header integration count present");
+    }
+
+    /// On macOS and Linux `\` is an ordinary name character. A file named
+    /// `a\b.fits` beside the folder `a` holding `b.fits`, and a folder named
+    /// `c\d` beside the nested `c/d`, must reach scan and classification under
+    /// distinct wire paths, each joining back onto the root as the entry it
+    /// came from (bd astro-plan-3pvvc).
+    #[cfg(unix)]
+    #[test]
+    fn backslash_names_stay_apart_from_nested_paths_through_scan_and_classify() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let nested_dir = root.join("a");
+        fs::create_dir_all(&nested_dir).unwrap();
+        // An integration count makes each file a master, so scan reports its path.
+        write_realistic_fits(root, "a\\b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        write_realistic_fits(&nested_dir, "b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        for folder in [root.join("c\\d"), root.join("c").join("d")] {
+            fs::create_dir_all(&folder).unwrap();
+            write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        }
+
+        let items = scan_root(root, &ScanOptions::default()).unwrap().items;
+        let folders: Vec<&str> = items.iter().map(|item| item.relative_path.as_str()).collect();
+        assert_eq!(folders, ["", "a", "c/d", "c\\d"]);
+        for item in &items {
+            assert_eq!(root.join(&item.relative_path), item.folder_path, "{}", item.relative_path);
+        }
+
+        let masters: Vec<&ScannedMasterFile> =
+            items.iter().flat_map(|item| &item.masters).collect();
+        let master_paths: Vec<&str> = masters.iter().map(|m| m.relative_path.as_str()).collect();
+        assert_eq!(master_paths, ["a\\b.fits", "a/b.fits"]);
+        for master in &masters {
+            assert_eq!(
+                root.join(&master.relative_path),
+                master.abs_path,
+                "{}",
+                master.relative_path
+            );
+        }
+
+        let norm_table = v1_normalization_table();
+        let files: Vec<&PathBuf> = items.iter().flat_map(|item| &item.fits_files).collect();
+        let classified: Vec<String> = files
+            .iter()
+            .map(|file| crate::classify::classify_one_file(file, root, &norm_table).relative_path)
+            .collect();
+        assert_eq!(classified, ["a\\b.fits", "a/b.fits", "c/d/x.fits", "c\\d/x.fits"]);
+        for (relative_path, file) in classified.iter().zip(files) {
+            assert_eq!(&root.join(relative_path), file, "{relative_path} must name its own file");
+        }
+    }
+
+    /// An earlier scan stored a macOS or Linux name containing `\` with the
+    /// `\` turned into `/` (bd astro-plan-3pvvc). The next scan lists the old
+    /// rows that name nothing, or that would make a master row classify a
+    /// different frame. It leaves out a nested entry's own row, and any old
+    /// text whose path runs through a link, which may be a drive that is not
+    /// mounted. A nested master's own row is listed for a refresh of its
+    /// master fields when a master with the backslash text is beside it. The
+    /// old texts of the frames in the folders are listed as master rows when
+    /// they name a path outside the root (`/v/x.fits`, `./w/x.fits`,
+    /// `../z/x.fits`) or a frame that is not a master (`t/u/x.fits`).
+    /// Deleting the listed rows is covered by `persistence_inbox`'s
+    /// `deleting_unconfirmed_old_rows_*` tests and by `desktop_shell`'s
+    /// `inbox_scan_legacy_rows` test.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_rows_stored_under_the_old_backslash_text() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let folder = |relative: &str| {
+            let dir = relative.split('/').fold(root.to_path_buf(), |dir, name| dir.join(name));
+            fs::create_dir_all(&dir).unwrap();
+            dir
+        };
+        let master = Some(("STACKCNT", 30));
+        // Folders: `c\d` has no nested twin and `t\u` has one. The old text of
+        // `\v`, `.\w` and `..\z` has an empty, `.` or `..` name. `g\h`'s old
+        // text runs through `g`, a link to a drive that is not mounted.
+        for name in ["c\\d", "t\\u", "t/u", "\\v", ".\\w", "..\\z", "g\\h"] {
+            write_realistic_fits(&folder(name), "x.fits", Some("LIGHT"), None);
+        }
+        std::os::unix::fs::symlink(root.join("unmounted-drive"), root.join("g")).unwrap();
+        // Masters at the root: nothing nested for `n\o`, a frame that is not a
+        // master at `a/b.fits`, a master at `k/m.fits`.
+        for name in ["a\\b.fits", "k\\m.fits", "n\\o.fits"] {
+            write_realistic_fits(root, name, Some("DARK"), master);
+        }
+        write_realistic_fits(&folder("a"), "b.fits", Some("LIGHT"), None);
+        write_realistic_fits(&folder("k"), "m.fits", Some("DARK"), master);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: ["../z", "./w", "/v", "c/d"].map(str::to_owned).to_vec(),
+                masters: [
+                    "../z/x.fits",
+                    "./w/x.fits",
+                    "/v/x.fits",
+                    "a/b.fits",
+                    "n/o.fits",
+                    "t/u/x.fits"
+                ]
+                .map(str::to_owned)
+                .to_vec(),
+                masters_to_refresh: vec!["k/m.fits".to_owned()],
+                ..Default::default()
+            }
+        );
+    }
+
+    /// A backslash name next to a regular file named after its first part:
+    /// the master `a\b.fits` beside the file `a`, and the folder `c\d` beside
+    /// the file `c`. The old text `a/b.fits` and `c/d` runs through a file,
+    /// so nothing can be there, and both old rows are listed.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_old_rows_whose_path_runs_through_a_file() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        write_realistic_fits(root, "a\\b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        write_file(root, "a", b"a regular file");
+        let folder = root.join("c\\d");
+        fs::create_dir_all(&folder).unwrap();
+        write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        write_file(root, "c", b"another regular file");
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: vec!["c/d".to_owned()],
+                masters: vec!["a/b.fits".to_owned()],
+                ..Default::default()
+            }
+        );
+    }
+
+    /// A backslash folder name next to something that is not a folder at its
+    /// old text: the folder `c\d` beside the regular file `d` in the folder
+    /// `c`, and the folder `g\h.fits` beside the master `h.fits` in the
+    /// folder `g`. A folder row stored for `c/d` or `g/h.fits` could only plan
+    /// sources below a file, so both are listed; deleting the `g/h.fits`
+    /// folder rows keeps the master row stored there. Kept: `e/f`, where a
+    /// link sits (a link is never proof of anything).
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_an_old_folder_row_whose_path_names_a_file() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        for name in ["c\\d", "e\\f", "g\\h.fits"] {
+            let folder = root.join(name);
+            fs::create_dir_all(&folder).unwrap();
+            write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        }
+        fs::create_dir_all(root.join("c")).unwrap();
+        write_file(&root.join("c"), "d", b"a regular file");
+        fs::create_dir_all(root.join("e")).unwrap();
+        std::os::unix::fs::symlink(root.join("c").join("d"), root.join("e").join("f")).unwrap();
+        fs::create_dir_all(root.join("g")).unwrap();
+        write_realistic_fits(&root.join("g"), "h.fits", Some("DARK"), Some(("STACKCNT", 30)));
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: ["c/d", "g/h.fits"].map(str::to_owned).to_vec(),
+                ..Default::default()
+            }
+        );
+    }
+
+    /// A backslash folder name next to a folder at its old text that holds no
+    /// frame directly. Listed, as rows whose items name files that are not
+    /// there: `c/d`, an empty folder beside `c\d`, and `e/f` beside `e\f`,
+    /// which holds only the folder `g` with a frame (the scan stores `e/f/g`).
+    /// Kept: `h/i`, which holds only a link to a frame (a link the scan skips
+    /// may be such a file), and `k/l`, which the scan cannot read (when the
+    /// test does not run as root).
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_an_old_folder_row_whose_path_names_a_bare_folder() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        for name in ["c\\d", "e\\f", "h\\i", "k\\l"] {
+            let folder = root.join(name);
+            fs::create_dir_all(&folder).unwrap();
+            write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        }
+        fs::create_dir_all(root.join("c").join("d")).unwrap();
+        let deep = root.join("e").join("f").join("g");
+        fs::create_dir_all(&deep).unwrap();
+        write_realistic_fits(&deep, "x.fits", Some("LIGHT"), None);
+        fs::create_dir_all(root.join("h").join("i")).unwrap();
+        std::os::unix::fs::symlink(deep.join("x.fits"), root.join("h").join("i").join("x.fits"))
+            .unwrap();
+        let locked = root.join("k").join("l");
+        fs::create_dir_all(&locked).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let locked_is_unreadable = fs::read_dir(&locked).is_err();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let mut folders = vec!["c/d".to_owned(), "e/f".to_owned()];
+        if !locked_is_unreadable {
+            // As root the folder is read, and it is empty.
+            folders.push("k/l".to_owned());
+        }
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows { folders, ..Default::default() }
+        );
+    }
+
+    /// A backslash folder with no image or video file directly inside: the
+    /// scan stores nothing for it, but the old row of its old text may still
+    /// be there. Listed: `c/d` for the empty folder `c\d`, in a root that holds
+    /// no leaf folder at all; in a second root, `e/f` for `e\f`, which holds
+    /// only the folder `g` with a frame (the old text `e/f/g` of the stored
+    /// `e\f/g` is listed too), and `k/l` for the empty `k\l` beside an empty
+    /// folder `k/l`. Kept: `h/i`, the own row of the folder `h/i` with a frame
+    /// beside the empty `h\i`.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_the_old_row_of_a_bare_backslash_folder() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("c\\d")).unwrap();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert!(scanned.items.is_empty(), "no leaf folder");
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: vec!["c/d".to_owned()],
+                ..Default::default()
+            }
+        );
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let deep = root.join("e\\f").join("g");
+        fs::create_dir_all(&deep).unwrap();
+        write_realistic_fits(&deep, "x.fits", Some("LIGHT"), None);
+        for name in ["h\\i", "k\\l"] {
+            fs::create_dir_all(root.join(name)).unwrap();
+        }
+        let nested = root.join("h").join("i");
+        fs::create_dir_all(&nested).unwrap();
+        write_realistic_fits(&nested, "x.fits", Some("LIGHT"), None);
+        fs::create_dir_all(root.join("k").join("l")).unwrap();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: ["e/f", "e/f/g", "k/l"].map(str::to_owned).to_vec(),
+                ..Default::default()
+            }
+        );
+    }
+
+    /// The old scan read `a\b.fits`, `c\d.fits` and `e\f.fits` as masters and
+    /// filled the rows at their old text, which the nested masters `a/b.fits`,
+    /// `c/d.fits` and `e/f.fits` share, from them. This scan cannot read
+    /// `a\b.fits` (its bytes are not a header), reads `c\d.fits` as a frame
+    /// that is not a master, and reads `e\f.fits` as a master. All three
+    /// nested masters' rows are listed for a refresh.
+    #[cfg(unix)]
+    #[test]
+    fn scan_refreshes_a_shared_master_row_whatever_it_reads_in_the_backslash_file() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let master = Some(("STACKCNT", 30));
+        write_file(root, "a\\b.fits", b"not a FITS header");
+        write_realistic_fits(root, "c\\d.fits", Some("LIGHT"), None);
+        write_realistic_fits(root, "e\\f.fits", Some("DARK"), master);
+        for (dir, name) in [("a", "b.fits"), ("c", "d.fits"), ("e", "f.fits")] {
+            let dir = root.join(dir);
+            fs::create_dir_all(&dir).unwrap();
+            write_realistic_fits(&dir, name, Some("DARK"), master);
+        }
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                masters_to_refresh: ["a/b.fits", "c/d.fits", "e/f.fits"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                ..Default::default()
+            }
+        );
+    }
+
+    /// The old scan read `a\b.fits` as a master and stored its master row at
+    /// `a/b.fits`. This scan reads it as a light frame, and the nested
+    /// `a/b.fits` too, so a master row there would plan that light frame as a
+    /// master: `a/b.fits` is listed. So is `/c.fits`, the old text of the light
+    /// frame `\c.fits`, which names a path outside the root. Kept: `d/e.fits`,
+    /// the old text of the light frame `d\e.fits`, where nothing is. A master
+    /// row there cannot be classified, and the scan looks there only for a
+    /// file it reads as a master.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_the_old_master_row_of_a_backslash_file_that_is_no_longer_a_master() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        for name in ["a\\b.fits", "\\c.fits", "d\\e.fits"] {
+            write_realistic_fits(root, name, Some("LIGHT"), None);
+        }
+        let nested = root.join("a");
+        fs::create_dir_all(&nested).unwrap();
+        write_realistic_fits(&nested, "b.fits", Some("LIGHT"), None);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                masters: ["/c.fits", "a/b.fits"].map(str::to_owned).to_vec(),
+                ..Default::default()
+            }
+        );
+    }
+
+    /// On Windows `\` is a separator, so no wire text holds one and nothing
+    /// has old text: a bare nested folder `c\d`, a nested master `a\b.fits`
+    /// and a nested light frame `a\x.fits` list nothing. Without the
+    /// `cfg!(windows)` guard in `legacy_rows::old_text_under`, the walk's own
+    /// paths would give the old texts `c/d`, `a/b.fits` and `a/x.fits`, and
+    /// the rows of the real folder `c/d` and of the masters there would be
+    /// retired or rewritten.
+    #[cfg(windows)]
+    #[test]
+    fn scan_lists_no_old_rows_on_windows() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("c").join("d")).unwrap();
+        let folder = root.join("a");
+        fs::create_dir_all(&folder).unwrap();
+        write_realistic_fits(&folder, "b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(scanned.items.len(), 1, "the folder `a` is stored");
+        assert_eq!(scanned.legacy_rows, crate::legacy_rows::LegacyRows::default());
+    }
+
+    /// A readable master `a\b.fits` beside the nested `a/b.fits` whose header
+    /// this scan cannot read: its bytes are not a header, or (when the test
+    /// does not run as root) it cannot be opened, as for the nested `n/o.fits`
+    /// beside `n\o.fits`. Whether the nested file is a master is unknown, so
+    /// the old rows `a/b.fits` and `n/o.fits`, which may be those masters' own,
+    /// are kept for a later scan to decide.
+    #[cfg(unix)]
+    #[test]
+    fn scan_keeps_an_old_master_row_whose_nested_file_it_cannot_read() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let master = Some(("STACKCNT", 30));
+        write_realistic_fits(root, "a\\b.fits", Some("DARK"), master);
+        write_realistic_fits(root, "n\\o.fits", Some("DARK"), master);
+        fs::create_dir_all(root.join("a")).unwrap();
+        write_file(&root.join("a"), "b.fits", b"not a FITS header");
+        let locked = root.join("n").join("o.fits");
+        fs::create_dir_all(root.join("n")).unwrap();
+        write_realistic_fits(&root.join("n"), "o.fits", Some("LIGHT"), None);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let locked_is_unreadable = fs::File::open(&locked).is_err();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let unread: Vec<String> = scanned
+            .items
+            .iter()
+            .flat_map(|item| &item.unread_files)
+            .map(|file| relative_utf8(root, file))
+            .collect();
+        let expected: &[&str] =
+            if locked_is_unreadable { &["a/b.fits", "n/o.fits"] } else { &["a/b.fits"] };
+        assert_eq!(unread, expected, "the scan reports the headers it could not read");
+        if locked_is_unreadable {
+            assert_eq!(scanned.legacy_rows, crate::legacy_rows::LegacyRows::default());
+        } else {
+            assert_eq!(
+                scanned.legacy_rows.masters,
+                ["n/o.fits"],
+                "running as root, the light frame at n/o.fits is read"
+            );
+        }
+    }
+
+    /// A master file whose name holds a backslash beside a folder at its old
+    /// text. A master row names a file, so every such old row is listed:
+    /// - `a/b.fits`, a folder holding a light frame, which this scan stores:
+    ///   the row is listed as one whose path names a stored folder, so the
+    ///   folder's groups stay;
+    /// - `c/d.fits`, an empty folder, and `g/h.fits`, a folder holding only a
+    ///   subfolder with a light frame: this scan stores neither, so the rows
+    ///   are listed as plain stale masters, which go with their groups.
+    ///
+    /// Kept: `e/f.fits`, where a link to a folder sits.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_an_old_master_row_whose_path_names_a_folder() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let master = Some(("STACKCNT", 30));
+        for name in ["a\\b.fits", "c\\d.fits", "e\\f.fits", "g\\h.fits"] {
+            write_realistic_fits(root, name, Some("DARK"), master);
+        }
+        let nested = root.join("a").join("b.fits");
+        fs::create_dir_all(&nested).unwrap();
+        write_realistic_fits(&nested, "x.fits", Some("LIGHT"), None);
+        fs::create_dir_all(root.join("c").join("d.fits")).unwrap();
+        fs::create_dir_all(root.join("e")).unwrap();
+        std::os::unix::fs::symlink(root.join("c").join("d.fits"), root.join("e").join("f.fits"))
+            .unwrap();
+        let deep = root.join("g").join("h.fits").join("sub");
+        fs::create_dir_all(&deep).unwrap();
+        write_realistic_fits(&deep, "x.fits", Some("LIGHT"), None);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                masters: ["c/d.fits", "g/h.fits"].map(str::to_owned).to_vec(),
+                masters_at_folders: vec!["a/b.fits".to_owned()],
+                ..Default::default()
+            }
+        );
     }
 
     /// Constitution §I regression: a symlinked subdirectory reachable from the

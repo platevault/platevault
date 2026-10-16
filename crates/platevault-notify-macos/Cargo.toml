@@ -6,24 +6,35 @@ license.workspace = true
 
 # Spec 072 R13: the macOS UNUserNotificationCenter FFI behind a safe API. The
 # notification plugin's desktop permission API always reports Granted and
-# discards delivery errors, so reminders read the framework directly. This is
-# the one crate whose lint table allows `unsafe`, and only at the FFI call
-# sites; the application crates keep the workspace `forbid`.
+# discards delivery errors, so reminders read the framework directly. The
+# update offer (astro-plan-c72oo) adds categories with action buttons and the
+# process's one center delegate. This is the one crate whose lint table allows
+# `unsafe`, and only at the FFI call sites and the delegate class; the
+# application crates keep the workspace `forbid`.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6.2"
 objc2 = "0.6.4"
 objc2-foundation = { version = "0.3.2", default-features = false, features = [
     "std",
+    "NSArray",
     "NSBundle",
+    "NSEnumerator",
     "NSError",
+    "NSObject",
+    "NSProcessInfo",
+    "NSSet",
     "NSString",
 ] }
 objc2-user-notifications = { version = "0.3.2", default-features = false, features = [
     "std",
     "bitflags",
     "block2",
+    "UNNotification",
+    "UNNotificationAction",
+    "UNNotificationCategory",
     "UNNotificationContent",
     "UNNotificationRequest",
+    "UNNotificationResponse",
     "UNNotificationSettings",
     "UNNotificationTrigger",
     "UNUserNotificationCenter",

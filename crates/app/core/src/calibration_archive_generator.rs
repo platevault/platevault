@@ -59,11 +59,6 @@ use domain_core::ids::new_id;
 const ARCHIVE_ORIGIN: &str = "calibration_master_archive";
 const RESTORE_ORIGIN: &str = "calibration_master_restore";
 
-/// Take the tail of a relative path (the file name) for display.
-fn file_name(path: &str) -> &str {
-    path.rsplit(['/', '\\']).next().unwrap_or(path)
-}
-
 /// Materialise a reviewable single-master archive plan (#886).
 ///
 /// # Errors
@@ -129,12 +124,13 @@ pub async fn generate(
     }
 
     let plan_id = new_id();
-    let resolved_title = title
-        .map_or_else(|| format!("Archive master: {}", file_name(&relative_path)), str::to_owned);
+    let file_name = fs_pathsafe::wire_file_name(&relative_path);
+    let resolved_title =
+        title.map_or_else(|| format!("Archive master: {file_name}"), str::to_owned);
 
     let item = CleanupPlanItem {
         id: format!("{plan_id}-item-0"),
-        name: file_name(&relative_path).to_owned(),
+        name: file_name.to_owned(),
         action: "archive".to_owned(),
         // Real library root id (unlike the project generator's project-id
         // convention) — per-source protection overrides key on roots
@@ -220,10 +216,10 @@ pub async fn list_archived(pool: &SqlitePool) -> Result<Vec<ArchiveEntry>, Contr
         };
         entries.push(ArchiveEntry {
             id: r.id,
-            name: r
-                .frame_relative_path
-                .as_deref()
-                .map_or_else(|| format!("{} master", r.kind), |p| file_name(p).to_owned()),
+            name: r.frame_relative_path.as_deref().map_or_else(
+                || format!("{} master", r.kind),
+                |p| fs_pathsafe::wire_file_name(p).to_owned(),
+            ),
             entity_type: "master".to_owned(),
             archived_at: r.archived_at,
             reason: r.plan_title,
@@ -418,5 +414,28 @@ mod tests {
         seed_master(&db, "m8", "dark", "root-1", "masters/masterDark.xisf").await;
         let entries = list_archived(db.pool()).await.unwrap();
         assert!(entries.is_empty());
+    }
+
+    /// bd astro-plan-3pvvc: on macOS and Linux a `\` in a stored path is part
+    /// of the file's name, so the plan title, the plan item and the archive
+    /// list all name the whole file.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_backslash_in_the_master_file_name_is_kept() {
+        let db = setup().await;
+        seed_master(&db, "m9", "dark", "root-1", "masters/a\\b.xisf").await;
+        let resp = generate(db.pool(), "m9", None, false).await.unwrap();
+
+        let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
+        assert_eq!(plan.title, "Archive master: a\\b.xisf");
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        assert_eq!(items[0].name, "a\\b.xisf");
+
+        plans_repo::update_plan_state(db.pool(), &resp.plan_id, "applied").await.unwrap();
+        q_calibration::set_master_archived(db.pool(), "m9", &resp.plan_id, "2026-06-04T00:00:00Z")
+            .await
+            .unwrap();
+        let entries = list_archived(db.pool()).await.unwrap();
+        assert_eq!(entries[0].name, "a\\b.xisf");
     }
 }

@@ -57,11 +57,16 @@ fn a_symlink_cycle_terminates_when_following_is_enabled() {
     let root = dir.path().to_path_buf();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(fs_pathsafe::real_files_under(&root, true));
+        let _ = tx.send(fs_pathsafe::real_files_under_reporting(&root, true));
     });
 
-    let files = rx
+    let (files, unreadable) = rx
         .recv_timeout(std::time::Duration::from_secs(20))
         .expect("the cycle-following walk must terminate");
     assert_eq!(files, vec![deep.join("frame.fits")]);
+    assert_eq!(
+        unreadable,
+        Vec::<std::path::PathBuf>::new(),
+        "every folder in the cycle is readable"
+    );
 }

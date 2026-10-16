@@ -11,6 +11,12 @@ path = "src/lib.rs"
 camino = { workspace = true }
 path-clean = { workspace = true }
 safe-filename = { path = "../../safe-filename" }
+# The export's no-replace final step (`persist_noclobber`).
+tempfile.workspace = true
+
+# Classifies the errno of a volume without no-replace rename or hard links.
+[target.'cfg(unix)'.dependencies]
+rustix = "1.1"
 
 [features]
 # Enables `test_support` for crates that build containment fixtures in their own
@@ -19,7 +25,6 @@ test-fixture = []
 
 [dev-dependencies]
 proptest.workspace = true
-tempfile.workspace = true
 
 [lints]
 workspace = true

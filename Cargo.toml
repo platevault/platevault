@@ -104,9 +104,10 @@ specta = { version = "2.0.0-rc.25", features = [
   "serde_json",
 ] }
 specta-typescript = "0.0.12"
-# 2.12 is the floor tauri-plugin-updater 2.13 requires. `tauri build` refuses
-# to bundle when this crate and the `@tauri-apps/api` npm package in
-# apps/desktop/package.json differ on major.minor, so bump them together.
+# 2.12 is the floor tauri-plugin-mcp-bridge 0.13 requires (below). `tauri
+# build` refuses to bundle when this crate and the `@tauri-apps/api` npm
+# package in apps/desktop/package.json differ on major.minor, so bump them
+# together.
 tauri = { version = "2.12", default-features = false, features = ["wry"] }
 tauri-build = { version = "2.6", features = [] }
 tauri-plugin-dialog = "2"
@@ -127,11 +128,6 @@ tauri-plugin-mcp-bridge = "0.13.1"
 tauri-plugin-single-instance = "2.4.2"
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-log = "2.8.0"
-tauri-plugin-updater = "2.13.3"
-# Needed by the updater's relaunch-to-apply step (`process:default`
-# capability); matches the `@tauri-apps/plugin-process` npm version already
-# pinned in `apps/desktop/package.json`.
-tauri-plugin-process = "2.3.1"
 tauri-plugin-prevent-default = "5.0.2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "1", features = ["uuid1"] }

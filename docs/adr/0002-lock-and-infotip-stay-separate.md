@@ -74,9 +74,11 @@ Two consequences follow, both asserted in `Lock.test.tsx` and `InfoTip.test.tsx`
 - A merged component would need a decorative mode reachable by every caller.
   A caller reaching for it on help text silently drops that text from assistive
   technology, with no visual symptom — the failure mode this decision avoids.
-- `Tooltip` remains the single shared implementation. Neither component
-  duplicates the other's CSS: `Lock` styles nothing, `InfoTip` owns
-  `.pv-info-tip`, and popup styling is `.pv-tooltip`.
+- `Tooltip` remains the single shared implementation. Each glyph owns its own
+  vanilla-extract style beside it: `Lock.css.ts` and `InfoTip.css.ts`. The two
+  share no class, and both draw keyboard focus with the same `focusRing` token,
+  so their focus indicators stay consistent. Popup styling is `.pv-tooltip` in
+  `Tooltip.css.ts`.
 - Reversing this needs a new ADR and a Components-page tooltip section
   specifying the merged role, focus behaviour, and decorative-mode rule.
 

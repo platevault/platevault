@@ -43,12 +43,13 @@ pub enum ReconcileOutcome {
     Unknown,
 }
 
-/// One directory walk's result: the real files found, plus the directories whose
-/// contents could not be read.
+/// One directory walk's result: the real files found, plus the paths the walk
+/// could not read (a directory it could not list in full, or an entry whose
+/// metadata it could not read).
 ///
-/// An unreadable directory is skipped rather than aborting the walk, so its
-/// paths are reported separately — `reconcile` needs them to tell an absent file
-/// apart from an unobservable one.
+/// An unreadable path is skipped rather than aborting the walk, so it is
+/// reported separately — `reconcile` needs it to tell an absent file apart
+/// from an unobservable one.
 #[derive(Debug, Default)]
 pub struct DirListing {
     pub files: Vec<PathBuf>,
@@ -72,8 +73,9 @@ pub struct ReconcileReport {
     pub existing: Vec<(RelativePath, ReconcileOutcome)>,
     /// Files found on disk that are not yet in the DB.
     pub new_files: Vec<NewDetection>,
-    /// Directories the walk could not read. The caller surfaces these; every row
-    /// beneath one is reported `Unknown` rather than `Gone`.
+    /// Paths the walk could not read, usually directories. The caller surfaces
+    /// these; every row at or beneath one is reported `Unknown` rather than
+    /// `Gone`.
     pub unreadable_dirs: Vec<PathBuf>,
 }
 

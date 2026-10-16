@@ -30,6 +30,31 @@
 #     rule check-db-boundary.sh applies. Comment lines are stripped, so a doc
 #     comment naming a function does not disguise it as live.
 #
+# Method coverage is zero, and that is intentional (astro-plan-d1bg). Every
+# `pub fn` inside an `impl` block is indented, so the column-0 rule above
+# checks no method in the workspace, and a dead method passes this gate
+# unseen. Five consuming builders were found dead by hand in 2026-07:
+# ContractError::with_field_error and ::with_recovery_action (since wired up
+# in #1397), Confidence::with_evidence and two audit-record builders (since
+# deleted). They hid a capability that never reached users, which is the cost
+# of this limit.
+#
+# The ways to close it were weighed once; do not re-run the comparison:
+#   - Grep indented `pub fn` too: trait impls and receiver-dispatched methods
+#     share names across types, so a name grep reports them falsely and the
+#     baseline turns into a suppression list.
+#   - cargo-workspace-unused-pub (SCIP via rust-analyzer), run on this
+#     workspace: 285 findings, 270 of them test functions (it has no notion of
+#     #[test], so ~95% false positives), and it reports methods only, so it
+#     missed 30 of the 40 names this script's baseline held then. Not usable
+#     as a gate. The 10 names both tools flagged were the highest-confidence
+#     baseline entries.
+#   - Restrict method detection to inherent impls on workspace-owned types:
+#     closer to sound, but still a name grep.
+# A semantic index (SCIP or rust-analyzer) that filters #[test] and trait-impl
+# methods is the only sound fix. Revisit when one is cheap enough to run as a
+# gate; until then this script covers free functions and nothing else.
+#
 # The baseline (dead-callers-baseline.txt) lists names already dead when the
 # guard landed. It is a shrink-only ratchet: names may be removed as the debt is
 # wired up or deleted, but a name that is not in the baseline fails the build.

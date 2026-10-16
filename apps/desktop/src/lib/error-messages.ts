@@ -173,6 +173,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'database.error': m.err_database_error,
   'serialise.error': m.err_serialise_error,
   'io.error': m.err_io_error,
+  // Path-free fallback; errMessage names details.path when the backend sends it.
+  'export.unfinished_file': m.err_export_unfinished_file,
   // Per-frame inventory (spec 048).
   'root.unavailable': m.err_root_unavailable,
   'hash.mismatch': m.err_hash_mismatch,

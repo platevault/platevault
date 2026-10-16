@@ -9,8 +9,8 @@
 //! component the cleanup, archive, restore, and source-view-removal flows
 //! all render for review + apply (constitution principle II: reviewable
 //! filesystem mutation, never silent). Every existing real-UI journey that
-//! touches a plan (`journeys.rs::cleanup_plan_review`,
-//! `archive_journeys.rs::setup_archived_project`) drives `plans.approve` /
+//! touches a plan (`cleanup_protection_gate_journey.rs`, and before #1227
+//! the IPC-only cleanup and archive journeys) drives `plans.approve` /
 //! `plans.apply.direct` directly over the invoke bridge and never opens this
 //! overlay's DOM — so its own gates (`plan-review-approve-apply`,
 //! `plan-review-confirm-destructive`, `plan-review-empty-reason`) had zero
@@ -60,7 +60,7 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
 /// Real project, unprotected (a real user opts a project out of the
 /// safe-by-default `"protected"` level via Settings before a first cleanup —
 /// `source.protection.set` mirrors that, same convention as
-/// `journeys.rs::cleanup_plan_review`). Returns `(project_id, project_dir)`;
+/// `backend_journeys.rs::cleanup_plan_review`). Returns `(project_id, project_dir)`;
 /// the caller must hold `project_dir` alive for as long as it needs the real
 /// fixture file on disk.
 async fn create_unprotected_project(
