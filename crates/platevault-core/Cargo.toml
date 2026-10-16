@@ -13,13 +13,19 @@ metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
 metadata_xisf = { path = "../metadata/xisf" }
 fs_pathsafe = { path = "../fs/pathsafe" }
+# The Output watcher reuses the folder watcher (RAII guard, overflow flag,
+# rescan signal) and the stable-size rule (spec 070 RES-FR-01, F4 OUTPUT).
+fs_inventory = { path = "../fs/inventory" }
+workflow_artifacts = { path = "../workflow/artifacts" }
+camino.workspace = true
+tracing.workspace = true
 patterns = { path = "../patterns" }
 safe-filename = { path = "../safe-filename" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 sqlx.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["time"] }
 uuid = { workspace = true, features = ["v5"] }
 time.workspace = true
 sha2.workspace = true

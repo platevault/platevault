@@ -175,6 +175,12 @@ pub use results::{
     DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
     VerifiedAcceptance, VerifiedProduct,
 };
+// A Project's `Output/`, Copy to Output and the Processing master offer's
+// hand-off (spec 070, F4).
+mod project_output;
+pub use project_output::{
+    OutputBasis, OutputCopy, OutputFolder, OutputPanel, OutputScan, OutputScanRecord, ScannedOutput,
+};
 mod cleanup;
 pub use cleanup::{
     CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, RunCleanupDraft,

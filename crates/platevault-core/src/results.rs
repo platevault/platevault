@@ -38,27 +38,23 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use metadata_core::MetadataExtractor;
-use metadata_fits::FitsExtractor;
-use metadata_xisf::XisfExtractor;
 use persistence_library::{
     DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
     VerifiedAcceptance, VerifiedProduct,
 };
 use uuid::Uuid;
 
-use crate::calibration::Rules;
 use crate::custody::observe_entry;
 use crate::inventory;
 use crate::library::{blocking, Library};
+use crate::project_output::master_classification;
 use crate::run_lifecycle::{BlockersFuture, RunOperationGuard};
 use crate::view_selection::ViewDetail;
 use crate::{
-    AcceptOutcome, AcceptRefusal, AcceptResult, Availability, CalibrationRules, CaptureMetadata,
-    EntryKind, GroupPreparation, InputVerification, ItemReason, LibraryError, NativePath, NewView,
-    ObservationFingerprint, PreparationRevision, PreparationState, ProductInput, ProfileKind,
-    ReasonCode, ResultInputOffer, ResultKind, ResultOwner, ResultRecord, ResultState,
-    ResultsListing, RevisionAttribution, View,
+    AcceptOutcome, AcceptRefusal, AcceptResult, Availability, EntryKind, GroupPreparation,
+    InputVerification, ItemReason, LibraryError, NativePath, NewView, ObservationFingerprint,
+    PreparationRevision, PreparationState, ProductInput, ProfileKind, ReasonCode, ResultInputOffer,
+    ResultKind, ResultOwner, ResultRecord, ResultState, ResultsListing, RevisionAttribution, View,
 };
 
 /// A file modified this recently may still be being written: it reads
@@ -284,19 +280,6 @@ fn header_text(path: &Path) -> Option<String> {
         _ => return None,
     };
     Some(String::from_utf8_lossy(&bytes).into_owned())
-}
-
-/// The capture metadata the header adapters read, for master detection.
-fn header_metadata(path: &Path) -> Option<CaptureMetadata> {
-    let extension = path.extension()?.to_string_lossy().to_ascii_lowercase();
-    let raw = if FitsExtractor.supports_extension(&extension) {
-        FitsExtractor.extract(path)
-    } else if XisfExtractor.supports_extension(&extension) {
-        XisfExtractor.extract(path)
-    } else {
-        return None;
-    };
-    raw.ok().flatten().map(|raw| CaptureMetadata::from(&raw))
 }
 
 fn log_text(path: &Path) -> Option<String> {
@@ -600,9 +583,8 @@ fn pending(path: &Path, fingerprint: ObservationFingerprint) -> ScannedResult {
 /// A generated calibration master by the CAL classification of its header
 /// and name (CAL-FR-06): only a master, never a raw calibration frame.
 fn detect_master(path: &Path, relative: &Path) -> Option<DetectedMaster> {
-    let observed = header_metadata(path).unwrap_or_default();
-    let classification = Rules.classify(&observed, &NativePath::from_path(relative))?;
-    classification.master.is_some().then_some(DetectedMaster { classification, observed })
+    master_classification(path, relative)
+        .map(|(classification, observed)| DetectedMaster { classification, observed })
 }
 
 /// The rehash of an accepted product against its acceptance digest, with
