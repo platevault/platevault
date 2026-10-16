@@ -444,7 +444,10 @@ async fn an_unreadable_catalog_keeps_the_location_online_and_is_read_again() {
     frame(&root.join("2026-10-15/Ha_002.fits"));
     let counts = count_is(&watch, location.id, 1).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
-    assert_eq!((watchers(&watch), walks(&watch)), (1, 2));
+    assert_eq!(walks(&watch), 2);
+    // The new folder restarted the watcher; the old one closes off the
+    // runtime.
+    watchers_are(&watch, 1).await;
     hide_assets(&mut catalog, false).await;
 }
 
