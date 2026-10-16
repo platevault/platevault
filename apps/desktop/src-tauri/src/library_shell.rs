@@ -11,8 +11,8 @@
 //! clock is attached before any command runs. [`CaptureWatch`] counts new
 //! captures in every online Captures location (a start-up walk and a live
 //! folder watcher each) and is stopped in the exit step. On Windows the
-//! removal notices of each watched removable volume reach it, so the drive
-//! can eject, and they end after it stops. The one window is
+//! removal notices of each watched volume that is not a network share reach
+//! it, so the drive can eject, and they end after it stops. The one window is
 //! labelled `library`, so it holds `capabilities/library.json` (plus the dev
 //! bridge grant with `dev-tools`) and none of the legacy `default.json`.
 //! Nothing from the legacy composition root runs here: no `AppState`, legacy
@@ -355,8 +355,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     ));
     app.manage(library);
     app.manage(captures);
-    // Windows ejects a removable Captures drive only once discovery's watcher
-    // lets go of it (astro-plan-ef440).
+    // Windows ejects a Captures drive only once discovery's watcher lets go
+    // of it (astro-plan-ef440).
     #[cfg(windows)]
     let mut eject = Some(crate::eject::EjectNotices::start(app.handle())?);
     app.run(move |handle, event| {
