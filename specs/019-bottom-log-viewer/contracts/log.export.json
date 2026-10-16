@@ -89,17 +89,45 @@
   "required": ["request", "response"],
   "$defs": {
     "Error": {
-      "type": "object",
-      "required": ["code", "message"],
-      "additionalProperties": false,
-      "properties": {
-        "code": {
-          "type": "string",
-          "enum": ["path.write.denied", "path.parent.missing", "range.invalid", "format.unsupported"]
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["code", "message"],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": ["path.write.denied", "path.parent.missing", "range.invalid", "format.unsupported", "database.error", "serialise.error", "io.error"],
+              "description": "The first four codes reject the request. database.error, serialise.error and io.error report a failure reading the log or writing the file."
+            },
+            "message": { "type": "string" },
+            "details": { "type": "object", "additionalProperties": true }
+          }
         },
-        "message": { "type": "string" },
-        "details": { "type": "object", "additionalProperties": true }
-      }
+        {
+          "type": "object",
+          "required": ["code", "message", "details"],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "export.unfinished_file",
+              "description": "The write failed part-way and left the export's own incomplete file at the destination."
+            },
+            "message": { "type": "string" },
+            "details": {
+              "type": "object",
+              "required": ["path"],
+              "additionalProperties": true,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "The absolute path of the incomplete file left at the destination."
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
