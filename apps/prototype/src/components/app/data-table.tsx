@@ -467,7 +467,6 @@ export function DataTable<T>({
 
   useLayoutEffect(() => {
     shownOrder.current = { now: shownIds, before: shownOrder.current.now }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the order changes with its key.
   }, [shownKey])
 
   // When the current row goes (an action removed it, a filter hid it), the next row takes its place, else
