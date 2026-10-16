@@ -1,6 +1,6 @@
 /**
  * Built-in measurement during frame review (PIX-FR-01, PIX-AC-01, PIX-AC-10).
- * One "measure" operation per review, started only by the explicit Review
+ * One "measure" operation per session review, started only by the explicit Review
  * frames control (J22 S1): opening or browsing Frames never measures
  * (PIX-AC-06). It first re-hashes frames with cached values ("Verifying"),
  * restores an earlier record when the bytes match it again, then measures the
@@ -10,7 +10,7 @@
  * does not wait for it (D09).
  */
 import { simulateMeasurement } from "@/domain/measurement"
-import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, RunId } from "@/domain/types"
+import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, SessionId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { joinRefs, m, msg } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
@@ -18,7 +18,8 @@ import { type OperationHandler, isSettled, patchOperation, resumeOperation, sett
 import { currentFile, pixelScaleFor, sessionRef } from "@/domain/membership"
 
 export interface MeasurePayload {
-  runId: RunId
+  /** The session under review: one review, and its frame-review state, per session (slice D). */
+  sessionId: SessionId
   verify: AssetId[]
   queue: AssetId[]
   /** Frames that could not be read when their turn came (offline, unreadable, absent). */
@@ -33,10 +34,10 @@ export interface MeasurePayload {
 const VERIFY_BATCH = 24
 const MEASURE_BATCH = 3
 
-/** Latest measure operation of a run, settled or not. */
-export function latestMeasureOp(state: PrototypeState, runId: RunId): Operation | undefined {
+/** Latest measure operation of a session's review, settled or not. */
+export function latestMeasureOp(state: PrototypeState, sessionId: SessionId): Operation | undefined {
   return Object.values(state.operations)
-    .filter((op) => op.kind === "measure" && (op.payload as unknown as MeasurePayload).runId === runId)
+    .filter((op) => op.kind === "measure" && (op.payload as unknown as MeasurePayload).sessionId === sessionId)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     .at(-1)
 }
@@ -98,9 +99,9 @@ export function historyEntry(record: FrameMeasurement): MeasurementRecord | null
  * paused review resumes instead of starting a second one. Returns the
  * operation id, or null when nothing needs work.
  */
-export function startMeasurement(runId: RunId, assetIds: AssetId[]): OperationId | null {
+export function startMeasurement(sessionId: SessionId, assetIds: AssetId[]): OperationId | null {
   const state = store.getState()
-  const existing = latestMeasureOp(state, runId)
+  const existing = latestMeasureOp(state, sessionId)
   if (existing && !isSettled(existing.status)) {
     if (existing.status !== "running") resumeOperation(existing.id)
     return existing.id
@@ -120,11 +121,11 @@ export function startMeasurement(runId: RunId, assetIds: AssetId[]): OperationId
   }
   const total = verify.length + queue.length
   if (total === 0) return null
-  const items: OperationItem[] = Object.entries(perSession).map(([sessionId, ids]) => {
-    const session = catalog.sessions[sessionId]
-    return { id: sessionId, label: session ? sessionRef(session) : msg("op_measure_no_session"), path: null, status: "pending", phase: null, detail: msg("sessions_import_progress", { done: 0, total: ids.length }) }
+  const items: OperationItem[] = Object.entries(perSession).map(([key, ids]) => {
+    const session = catalog.sessions[key]
+    return { id: key, label: session ? sessionRef(session) : msg("op_measure_no_session"), path: null, status: "pending", phase: null, detail: msg("sessions_import_progress", { done: 0, total: ids.length }) }
   })
-  const payload: MeasurePayload = { runId, verify, queue, skipped: [], measured: 0, reused: 0, total, perSession }
+  const payload: MeasurePayload = { sessionId, verify, queue, skipped: [], measured: 0, reused: 0, total, perSession }
   return startOperation({
     kind: "measure",
     title: msg("op_measure_title"),
@@ -203,7 +204,7 @@ export const measureHandler: OperationHandler = {
       }
     } else {
       // Selected work first: the current frame jumps the queue (PIX-FR-01).
-      const active = state.slices.d.frames[payload.runId]?.activeAssetId
+      const active = state.slices.d.frames[payload.sessionId]?.activeAssetId
       const index = active ? payload.queue.indexOf(active) : -1
       if (index > 0) payload.queue.unshift(...payload.queue.splice(index, 1))
       for (const id of payload.queue.splice(0, MEASURE_BATCH)) {

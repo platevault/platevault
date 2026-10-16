@@ -1,37 +1,24 @@
 /**
- * Slice C: S5 Run (Select, Calibrate, Prepare, Results, Done) and S7 Run
- * group. Screen-local state: Select's browsing filter and the Prepare
- * review choices (link type and the corrected-metadata decisions, D15) per
- * run or run group. Durable outcomes live in the catalog. Registers the
- * "prepare" operation handler (`src/features/v5/c-runs/operations.ts`);
- * Clean up uses the foundation trash engine.
+ * Slice C: the Project's View step and its Apply sheet (VSEL-FR-14,
+ * PREP-FR-06). Screen-local state: the Apply sheet open on a Project, which
+ * holds the fingerprint of the plan it shows and the files PlateVault didn't
+ * place that the user ticked to move into the new View. Apply hands that
+ * sheet to `startApply` (store/actions/project-view.ts), which refuses it
+ * when anything changed after it opened. The "apply" operation handler is
+ * the store's (`PROJECT_VIEW_HANDLERS`); durable outcomes live in the
+ * catalog.
  */
-import type { RunId } from "@/domain/types"
-import { cOperationHandlers } from "@/features/v5/c-runs/operations"
-import type { PrepareChoices } from "@/features/v5/c-runs/model"
+import type { ProjectId } from "@/domain/types"
+import type { ApplySheet } from "@/store/actions/project-view"
 import type { SliceDefinition } from "./index"
 
-/** Select's browsing scope (spec 066 tools): filters and the order never change the selected ids (VSEL-FR-06). */
-export interface SelectFilter {
-  channel: string | null
-  selectedOnly: boolean
-  night?: string | null
-  exposureS?: number | null
-  rigId?: string | null
-  quality?: "unreviewed" | "usable" | "unusable" | null
-  order?: "night" | "distance" | "coverage"
-}
-
 export interface CState {
-  /** Select: candidate list scope per run, so filters never change the selected ids (VSEL-FR-06). */
-  selectFilter: Record<RunId, SelectFilter>
-  /** Prepare review choices, keyed by run id (or group id for Prepare all). */
-  prepare: Record<string, PrepareChoices>
+  /** The open Apply sheet, by Project; absent while it is closed. */
+  apply: Record<ProjectId, ApplySheet>
 }
 
 export const cSlice: SliceDefinition<CState> = {
   id: "c",
-  version: 2,
-  initial: () => ({ selectFilter: {}, prepare: {} }),
-  operations: cOperationHandlers,
+  version: 3,
+  initial: () => ({ apply: {} }),
 }

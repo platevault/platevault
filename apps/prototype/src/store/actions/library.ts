@@ -3,59 +3,52 @@
  * (P/X/U, library-wide, P-REJ2; D-W54), Confirm Target and Confirm rig
  * (LIB-FR-05), File into Target for a session imported as Unclassified
  * (P-IMP2) and ★ favourites (D-W60). Catalog only, except File into Target,
- * which moves the session's frames: source headers never change. A session
- * whose frames an unfinished run's prepared view holds keeps its marks (C10).
+ * which moves the session's frames: source headers never change. A Project
+ * reads these writes as pending changes from the Library on its next Apply
+ * (VSEL-FR-12); a Closed Project reads its Close snapshot and never changes.
  */
-import { latestRevision, liveAssetIds, reviewLockGate, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
+import { calibrateSessions } from "@/domain/calibration"
+import { liveAssetIds, sessionNamingValues, unreviewedAssetIds } from "@/domain/derive"
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
-import { confirmedEvidence, isUnder } from "@/domain/indexing"
+import { capturedRigVersionId, confirmedEvidence, isUnder } from "@/domain/indexing"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
-import { memberState, rejectInContent, sessionRef, unrejectInContent } from "@/domain/membership"
+import { sessionRef } from "@/domain/membership"
 import { namingTemplate, type NamingValues, resolveNamingTemplate } from "@/domain/templates"
-import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, RunId, Session, SessionId, Target, TargetId } from "@/domain/types"
+import type { Asset, AssetCopy, AssetId, Catalog, CatalogCorrection, IsoDateTime, Location, OpticalTrainId, QualityValue, Session, SessionId, Target, TargetId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
-import { updateRunDraft } from "./runs"
-import { freshId, MISSING, recordSaved, refuse, refuseWithGate } from "./shared"
+import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
 const QUALITY_NAME: Record<QualityValue, MessageRef> = { usable: msg("status_usable"), unusable: msg("status_unusable"), unreviewed: msg("status_unreviewed") }
 
 /**
  * Library quality (P, X, U; PIX-FR-13), the one quality level (P-REJ2). It
  * binds the current bytes and clears Changed content or pending
- * verification. The mark is library-wide (round 6): X takes the frames out of
- * every open run's draft with the reason "Rejected", and P or U restores
- * them (D-W54); saved revisions never change, so a run not yet prepared
- * reads "Inputs changed". Refused for frames of a session an unfinished
- * run's prepared view holds (C10).
+ * verification. The mark is library-wide (round 6): an open Project that
+ * holds the frame shows the change as pending from the Library until its
+ * next Apply (VSEL-FR-12, D-W54).
  */
 export function markFrames(assetIds: AssetId[], value: QualityValue, href: string): CommitResult {
   if (assetIds.length === 0) return { ok: true }
   const at = nowIso()
   const count = assetIds.length
   const label = msg("store_label_mark_frames", { count, n: formatCount(count), quality: QUALITY_NAME[value] })
-  const state = store.getState()
-  const sessionIds = new Set(assetIds.flatMap((id) => state.catalog.assets[id]?.sessionId ?? []))
-  for (const sessionId of sessionIds) {
-    const locked = reviewLockGate(state, sessionId)
-    if (locked) return refuseWithGate(label, locked, href)
-  }
-  const result = commit(label, (s) =>
-    withCatalog(s, (c) => {
-      const assets = { ...c.assets }
-      for (const id of assetIds) {
-        const asset = assets[id]
-        if (asset) assets[id] = { ...asset, quality: { value, decidedAt: value === "unreviewed" ? null : at, basisSha256: value === "unreviewed" ? null : asset.sha256 } }
-      }
-      return { ...c, assets }
-    }),
+  const result = commit(
+    label,
+    (s) =>
+      withCatalog(s, (c) => {
+        const assets = { ...c.assets }
+        for (const id of assetIds) {
+          const asset = assets[id]
+          if (asset) assets[id] = { ...asset, quality: { value, decidedAt: value === "unreviewed" ? null : at, basisSha256: value === "unreviewed" ? null : asset.sha256 } }
+        }
+        return { ...c, assets }
+      }),
     { href },
   )
-  if (!result.ok) return result
-  recordSaved(msg("store_saved_frames_marked", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), msg("store_library_scope_detail"), href)
-  const drafts = Object.keys(store.getState().catalog.runs).map((runId) => applyToDraft(runId, assetIds, value === "unusable"))
-  return drafts.find((r) => !r.ok) ?? result
+  if (result.ok) recordSaved(msg("store_saved_frames_marked", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), msg("store_library_scope_detail"), href)
+  return result
 }
 
 /** Mark rest usable (C10): every frame of the session still without a decision becomes Usable, so its review can finish. */
@@ -64,19 +57,6 @@ export function markRestUsable(sessionId: SessionId): CommitResult {
   const session = catalog.sessions[sessionId]
   if (!session) return MISSING
   return markFrames(unreviewedAssetIds(catalog, session), "usable", `/sessions/${sessionId}?step=review`)
-}
-
-function applyToDraft(runId: RunId, assetIds: AssetId[], reject: boolean): CommitResult {
-  const { catalog } = store.getState()
-  const run = catalog.runs[runId]
-  if (!run || run.completion === "complete" || run.trashedAt) return { ok: true }
-  const content = run.draft ?? latestRevision(run)
-  if (!content) return { ok: true }
-  // A frame P or U restores only when the library no longer rejects it (D-W54).
-  const ids = reject ? assetIds : assetIds.filter((id) => catalog.assets[id]?.quality.value !== "unusable")
-  const touches = reject ? ids.some((id) => memberState(content, id) !== null && memberState(content, id) !== "rejected") : ids.some((id) => content.rejected.includes(id))
-  if (!touches) return { ok: true }
-  return updateRunDraft(runId, reject ? msg("store_label_rejected_in_review") : msg("store_label_unrejected_in_review"), (c, s) => (reject ? rejectInContent(c, ids) : unrejectInContent(s.disk, s.catalog, c, ids)))
 }
 
 function correction(session: Session, field: CatalogCorrection["field"], observed: string | null, corrected: string): CatalogCorrection[] {
@@ -174,7 +154,7 @@ function filingRefusal(state: PrototypeState, move: FilingMove): MessageRef | nu
 /**
  * File into Target (P-IMP2): one reviewed move of a session imported as
  * Unclassified into `{target}/…`, confirming the Target as Confirm Target
- * does. Every frame moves or none does; prepared links follow (STO-FR-06).
+ * does. Every frame moves or none does; View links to them follow (STO-FR-06).
  */
 export function fileIntoTarget(sessionId: SessionId, targetId: TargetId, expectRevision: number): CommitResult {
   const state = store.getState()
@@ -211,7 +191,13 @@ export function fileIntoTarget(sessionId: SessionId, targetId: TargetId, expectR
   return result
 }
 
-/** Confirm rig (Confirm equipment, LIB-FR-05): a detected rig becomes a manual record (D11). */
+/**
+ * Confirm rig (Confirm equipment, LIB-FR-05): a detected rig becomes a
+ * manual record (D11), and the session records the rig version it was
+ * captured with (LIB-FR-26): kept when it already belongs to this rig, else
+ * the version in effect on its night. Matching then runs (CAL-FR-02): kinds
+ * still waiting or suggested take their best match, pins and Nos stay.
+ */
 export function confirmRig(sessionId: SessionId, rigId: OpticalTrainId, expectRevision: number): CommitResult {
   const { catalog } = store.getState()
   const session = catalog.sessions[sessionId]
@@ -225,14 +211,16 @@ export function confirmRig(sessionId: SessionId, rigId: OpticalTrainId, expectRe
       withCatalog(s, (c) => {
         const current = c.sessions[sessionId]!
         const previous = current.equipment.value ? (c.opticalTrains[current.equipment.value]?.name ?? null) : null
-        const next: Session = {
+        const confirmed: Session = {
           ...current,
           equipment: { value: rigId, status: "confirmed", evidence: confirmedEvidence(current.equipment.evidence, msg("session_confirm_rig"), verbatim(rig.name)), confirmedAt: at },
           corrections: [...current.corrections, ...correction(current, "equipment", previous, rig.name)],
         }
         const record = c.opticalTrains[rigId]!
         const opticalTrains = record.source === "detected" ? { ...c.opticalTrains, [rigId]: { ...record, source: "manual" as const } } : c.opticalTrains
-        return { ...c, opticalTrains, sessions: { ...c.sessions, [sessionId]: next } }
+        const withRig: Catalog = { ...c, opticalTrains }
+        const next: Session = { ...confirmed, rigVersionId: capturedRigVersionId(withRig, confirmed) }
+        return calibrateSessions({ ...withRig, sessions: { ...c.sessions, [sessionId]: next } }, s.disk, s.settings, at)
       }),
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )

@@ -60,7 +60,7 @@ export interface DuplicateCleanUp {
 /** Move the chosen duplicate copies to the OS Trash; returns the operation id. */
 export function cleanUpDuplicates(cleanUps: DuplicateCleanUp[]): OperationId {
   const items = cleanUps.flatMap((c) => c.paths.map((path) => ({ path, assetId: c.assetId })))
-  return moveToOsTrash({ kind: "duplicate-copies", title: msg("duplicates_trash_title"), projectId: null, runIds: [], items, unit: "files", href: DUPLICATES_HREF })
+  return moveToOsTrash({ kind: "duplicate-copies", title: msg("duplicates_trash_title"), projectId: null, items, unit: "files", href: DUPLICATES_HREF })
 }
 
 export const STORAGE_HANDLERS: OperationHandler[] = [duplicateScanStep]

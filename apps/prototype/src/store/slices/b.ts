@@ -1,26 +1,21 @@
 /**
- * Slice B: S2 Projects list, S3 Project (with its Wrap up stage and the
- * mosaic editor), S4 New Project, S8 Trash. Screen-local state, plus the
- * "archive" operation handler (Archive at Wrap up and Restore after Reopen,
- * STO-FR-13, D-W69). The handler closes a Project whose Close project
- * transfer succeeds (`closingOnSuccess`, §5.5, F2). Wrap up's step state
- * comes from `wrapUpFlowState` (U11), so the slice keeps only the archive
- * origins.
+ * Slice B: S2 Projects list, S3 Project (with its Wrap up stage), S4 New
+ * Project, S8 Trash. It registers the "archive" operation handler
+ * (`archiveHandler`, store/actions/archive.ts; Archive at Wrap up and
+ * Sessions › Archive…, STO-FR-13), composed with `closingOnSuccess` so a
+ * Project whose Close project transfer succeeds closes then (§5.5, F2).
+ * There is no Restore. Wrap up's step state comes from `wrapUpFlowState`
+ * (domain/project-view.ts), so the slice holds no state of its own.
  */
-import { archiveHandler } from "@/features/v5/b-projects/actions"
-import type { ArchiveOrigins } from "@/domain/archive"
+import { archiveHandler } from "@/store/actions/archive"
 import { closingOnSuccess } from "@/store/actions/projects"
 import type { SliceDefinition } from "./index"
 
-export interface BState {
-  /** Where each archived frame came from, so Restore puts it back (D-W69). */
-  archiveOrigins: ArchiveOrigins
-}
+export type BState = Record<string, never>
 
 export const bSlice: SliceDefinition<BState> = {
   id: "b",
-  // Saved v3 state still loads: the fields dropped here (showDone, approvals, skippedOffers) are ignored.
-  version: 3,
-  initial: () => ({ archiveOrigins: {} }),
+  version: 4,
+  initial: () => ({}),
   operations: [closingOnSuccess(archiveHandler)],
 }

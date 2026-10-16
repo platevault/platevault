@@ -55,6 +55,7 @@ import { formatCount } from "@/lib/format"
 import { joinRefs, m, type MessageRef, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store } from "@/store/core"
 import type { OperationHandler } from "@/store/operations"
+import { keywordRefusals } from "./settings"
 import { closedRefusal, freshId, MISSING, recordSaved, refuse, refuseWithGate } from "./shared"
 
 const projectHref = (id: ProjectId) => `/projects/${id}`
@@ -268,6 +269,8 @@ export function setProjectSettings(projectId: ProjectId, patch: Partial<ProjectS
   if (patch.processingParent !== undefined && project.folderPath && patch.processingParent !== project.settings.processingParent) {
     return refuse(msg("store_refused", { label }), [msg("project_reason_folder_fixed", { path: project.folderPath })], projectHref(projectId))
   }
+  const keywordReasons = patch.keywords ? keywordRefusals(patch.keywords) : []
+  if (keywordReasons.length > 0) return refuse(msg("store_refused", { label }), keywordReasons, projectHref(projectId))
   return editProject(projectId, label, project.revision, (p) => ({ ...p, settings: { ...p.settings, ...patch } }))
 }
 
