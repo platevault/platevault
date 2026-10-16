@@ -135,11 +135,15 @@ impl ExportDestination {
     /// `renameatx_np` with `RENAME_EXCL`, Windows `MoveFileExW` without
     /// `MOVEFILE_REPLACE_EXISTING`), or a hard link followed by removing the
     /// temporary name where the volume rejects that rename. A Unix volume
-    /// with neither (exFAT on macOS, some FUSE mounts) gets the destination
-    /// claimed with `create_new` and the bytes copied in: still never a
-    /// replacement, but the copy is visible while it is written. If the
-    /// process dies during that copy, a truncated file remains at the
-    /// destination name, and a retry to that name is refused as existing.
+    /// that answers the no-replace rename as unsupported gets the hard link
+    /// tried as well. One with neither (exFAT on macOS, some FUSE mounts) gets
+    /// the destination claimed with `create_new` and the bytes copied in:
+    /// still never a replacement, but the copy is visible while it is written.
+    /// If the process dies during that copy, a truncated file remains at the
+    /// destination name; if the copy fails, the export's own file stays there
+    /// emptied, because removing it by name could remove an entry another
+    /// process put there. Either way a retry to that name is refused as
+    /// existing.
     ///
     /// The temporary file is removed on every path, a panic in `write`
     /// included.
@@ -168,7 +172,7 @@ impl ExportDestination {
         write(temp.as_file_mut()).and_then(|()| temp.as_file().sync_all())?;
         let bytes = temp.as_file().metadata().map_or(0, |m| m.len());
         before_install(&self.final_path);
-        install(temp, &self.final_path)?;
+        settle_install(temp.persist_noclobber(&self.final_path), &self.final_path)?;
         Ok(bytes)
     }
 
@@ -188,32 +192,18 @@ impl ExportDestination {
     }
 }
 
-/// Moves `temp` onto `final_path` unless an entry holds that name at that
-/// moment.
-#[cfg(unix)]
-fn install(temp: NamedTempFile, final_path: &Path) -> Result<(), ExportWriteError> {
-    let temp_path = temp.path().to_path_buf();
-    match temp.persist_noclobber(final_path) {
-        Ok(installed) => {
-            // The hard-link route ignores a failed removal of the temporary
-            // name, which would stay behind as a second link to the export.
-            remove_if_names(&temp_path, &installed);
-            Ok(())
-        }
-        Err(mut failed) if lacks_no_replace_primitives(&failed.error) => {
-            copy_into_new(failed.file.as_file_mut(), final_path)
-        }
-        Err(failed) => Err(refusal_or_io(failed.error, final_path)),
-    }
-}
-
-/// Moves `temp` onto `final_path` unless an entry holds that name at that
-/// moment. `MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` works on every
-/// Windows volume, FAT32 and exFAT included, and leaves no second name.
-#[cfg(not(unix))]
-fn install(temp: NamedTempFile, final_path: &Path) -> Result<(), ExportWriteError> {
-    match temp.persist_noclobber(final_path) {
+/// Turns the outcome of the no-replace persist into the export's result.
+/// `MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` works on every Windows
+/// volume, FAT32 and exFAT included, so only a Unix volume can lack the
+/// primitive and move on to `link_or_copy`.
+fn settle_install(
+    persisted: Result<File, tempfile::PersistError>,
+    final_path: &Path,
+) -> Result<(), ExportWriteError> {
+    match persisted {
         Ok(_) => Ok(()),
+        #[cfg(unix)]
+        Err(failed) if is_unsupported(&failed.error) => link_or_copy(failed.file, final_path),
         Err(failed) => Err(refusal_or_io(failed.error, final_path)),
     }
 }
@@ -229,14 +219,14 @@ fn refusal_or_io(error: io::Error, final_path: &Path) -> ExportWriteError {
     }
 }
 
-/// Whether `persist_noclobber` failed because the volume offers neither a
-/// no-replace rename nor hard links. It reports the hard link's error after a
-/// rename the volume rejects as `EINVAL`, and the rename's error otherwise:
-/// macOS exFAT answers `RENAME_EXCL` with `ENOTSUP`, Linux reports a volume
-/// without hard links as `EPERM`, and a FUSE server lacking either operation
-/// answers `ENOSYS`.
+/// Whether an install step failed because the volume does not offer it.
+/// `persist_noclobber` reports the rename's error, or the hard link's after a
+/// rename the volume rejects as `EINVAL` or `ENOSYS`: macOS exFAT answers
+/// `RENAME_EXCL` and `link` with `ENOTSUP`, Linux reports a volume without
+/// hard links as `EPERM`, and a FUSE server lacking an operation answers
+/// `ENOSYS`.
 #[cfg(unix)]
-fn lacks_no_replace_primitives(error: &io::Error) -> bool {
+fn is_unsupported(error: &io::Error) -> bool {
     use rustix::io::Errno;
 
     Errno::from_io_error(error).is_some_and(|errno| {
@@ -244,16 +234,38 @@ fn lacks_no_replace_primitives(error: &io::Error) -> bool {
     })
 }
 
+/// Publishes `temp` at `final_path` with a hard link, which fails on any
+/// entry already there, and falls back to [`copy_into_new`] where the volume
+/// has no hard links. tempfile tries the link itself only after `EINVAL` or
+/// `ENOSYS` from the rename, so a volume that answers it with `ENOTSUP` gets
+/// the link here. Dropping `temp` removes the temporary name.
+#[cfg(unix)]
+fn link_or_copy(mut temp: NamedTempFile, final_path: &Path) -> Result<(), ExportWriteError> {
+    match std::fs::hard_link(temp.path(), final_path) {
+        Ok(()) => Ok(()),
+        Err(e) if is_unsupported(&e) => copy_into_new(temp.as_file_mut(), final_path, |_| {}),
+        Err(e) => Err(refusal_or_io(e, final_path)),
+    }
+}
+
 /// Claims `final_path` with `create_new`, which fails on any entry already
 /// there, and copies the synced temporary file into it.
 ///
 /// Only for a Unix volume that offers neither a no-replace rename nor hard
 /// links: nothing at the name is ever replaced, but unlike a rename a reader
-/// can see the copy while it is written. A copy that fails part-way is removed
-/// while the name still holds it. If the process dies during the copy, a
-/// truncated file remains at the destination name.
+/// can see the copy while it is written. If the process dies during the copy,
+/// a truncated file remains at the destination name.
+///
+/// A copy that fails part-way is emptied through its own handle and left at
+/// the name. Removing it would go by name, and between any check of the name
+/// and the removal another process can put its own entry there.
+/// `before_cleanup` runs right before that cleanup; tests race it through it.
 #[cfg(unix)]
-fn copy_into_new(temp: &mut File, final_path: &Path) -> Result<(), ExportWriteError> {
+fn copy_into_new(
+    temp: &mut File,
+    final_path: &Path,
+    before_cleanup: impl FnOnce(&Path),
+) -> Result<(), ExportWriteError> {
     use std::io::{Seek, SeekFrom};
 
     let mut out = File::options()
@@ -266,23 +278,11 @@ fn copy_into_new(temp: &mut File, final_path: &Path) -> Result<(), ExportWriteEr
         .and_then(|_| io::copy(temp, &mut out))
         .and_then(|_| out.sync_all());
     if let Err(e) = copied {
-        remove_if_names(final_path, &out);
+        before_cleanup(final_path);
+        let _ = out.set_len(0);
         return Err(e.into());
     }
     Ok(())
-}
-
-/// Removes `path` only while it still names `file`, so an entry another
-/// process put at that name is left alone.
-#[cfg(unix)]
-fn remove_if_names(path: &Path, file: &File) {
-    use std::os::unix::fs::MetadataExt;
-
-    if let (Ok(named), Ok(held)) = (path.symlink_metadata(), file.metadata()) {
-        if (named.dev(), named.ino()) == (held.dev(), held.ino()) {
-            let _ = std::fs::remove_file(path);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -604,12 +604,12 @@ mod tests {
         temp.write_all(b"export").expect("write temp");
 
         let free = dir.join("free.json");
-        copy_into_new(&mut temp, &free).expect("copy into a free name");
+        copy_into_new(&mut temp, &free, |_| {}).expect("copy into a free name");
         assert_eq!(std::fs::read(&free).expect("read"), b"export");
 
         let taken = dir.join("taken.json");
         std::fs::write(&taken, b"user data").expect("seed");
-        let err = copy_into_new(&mut temp, &taken).expect_err("taken name refused");
+        let err = copy_into_new(&mut temp, &taken, |_| {}).expect_err("taken name refused");
         assert!(
             matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
             "{err:?}"
@@ -617,66 +617,121 @@ mod tests {
         assert_eq!(std::fs::read(&taken).expect("read"), b"user data");
     }
 
-    /// A copy that fails after the name is claimed removes the file it
-    /// created. A write-only temporary file makes the copy's read fail with
-    /// `EBADF` once `create_new` has succeeded.
+    /// A copy that fails after the name is claimed empties the file it created
+    /// and leaves it at the name. A write-only temporary file makes the copy's
+    /// read fail with `EBADF` once `create_new` has succeeded.
     #[cfg(unix)]
     #[test]
-    fn a_failed_copy_removes_the_file_it_claimed() {
+    fn a_failed_copy_leaves_only_its_own_file_emptied() {
         let (_guard, dir) = tempdir();
         let temp_path = dir.join("temp");
         let mut temp = File::options().write(true).create_new(true).open(&temp_path).expect("temp");
         temp.write_all(b"export").expect("write temp");
         let dest = dir.join("out.json");
 
-        let err = copy_into_new(&mut temp, &dest).expect_err("copy fails");
+        let err = copy_into_new(&mut temp, &dest, |_| {}).expect_err("copy fails");
 
         let ebadf = rustix::io::Errno::BADF.raw_os_error();
         assert!(
             matches!(&err, ExportWriteError::Io(e) if e.raw_os_error() == Some(ebadf)),
             "{err:?}"
         );
-        assert!(dest.symlink_metadata().is_err(), "the claimed name is removed");
-        let left: Vec<PathBuf> =
+        let left = dest.symlink_metadata().expect("the claimed file stays");
+        assert!(left.is_file() && left.len() == 0, "{left:?}");
+        let mut names: Vec<PathBuf> =
             std::fs::read_dir(&dir).expect("read dir").map(|e| e.expect("entry").path()).collect();
-        assert_eq!(left, [temp_path]);
+        names.sort();
+        assert_eq!(names, [dest, temp_path]);
     }
 
-    /// The cleanup removes a name only while it holds the file the export
-    /// created; an entry another process swapped in under that name stays.
+    /// An entry another process swaps in under the name just before a failed
+    /// copy's cleanup acts is kept: the cleanup never removes by name.
     #[cfg(unix)]
     #[test]
-    fn cleanup_leaves_an_entry_swapped_in_under_the_name() {
+    fn a_failed_copy_keeps_an_entry_swapped_in_just_before_its_cleanup() {
         let (_guard, dir) = tempdir();
+        let temp_path = dir.join("temp");
+        let mut temp = File::options().write(true).create_new(true).open(&temp_path).expect("temp");
+        temp.write_all(b"export").expect("write temp");
         let dest = dir.join("out.json");
-        let ours = File::options().write(true).create_new(true).open(&dest).expect("claim");
         let theirs = dir.join("theirs");
-        std::fs::write(&theirs, b"another process").expect("seed");
-        std::fs::rename(&theirs, &dest).expect("swap another inode in under the name");
 
-        remove_if_names(&dest, &ours);
+        let err = copy_into_new(&mut temp, &dest, |final_path| {
+            std::fs::write(&theirs, b"another process").expect("seed");
+            std::fs::rename(&theirs, final_path).expect("swap another inode in");
+        })
+        .expect_err("copy fails");
 
+        assert!(matches!(err, ExportWriteError::Io(_)), "{err:?}");
         assert_eq!(std::fs::read(&dest).expect("still there"), b"another process");
     }
 
-    /// Pins which `persist_noclobber` failures take the copy fallback: only a
-    /// volume lacking the primitives, never a taken name, a permission or
-    /// argument error, or a cross-device move.
+    /// tempfile tries a hard link itself only after `EINVAL` or `ENOSYS` from
+    /// the no-replace rename. A volume that answers it with `ENOTSUP` but has
+    /// hard links still gets the atomic link, not the visible copy. Needs the
+    /// temp dir on a volume with hard links; exFAT takes the copy instead.
     #[cfg(unix)]
     #[test]
-    fn only_a_missing_primitive_routes_to_the_copy_fallback() {
+    fn an_unsupported_no_replace_rename_publishes_by_hard_link_before_copying() {
+        use std::os::unix::fs::MetadataExt;
+
+        let (_guard, dir) = tempdir();
+        let mut temp = tempfile::Builder::new().tempfile_in(&dir).expect("temp");
+        temp.write_all(b"export").expect("write temp");
+        let temp_path = temp.path().to_path_buf();
+        let ino = temp.as_file().metadata().expect("temp metadata").ino();
+        let dest = dir.join("out.json");
+        let enotsup = io::Error::from_raw_os_error(rustix::io::Errno::NOTSUP.raw_os_error());
+
+        settle_install(Err(tempfile::PersistError { error: enotsup, file: temp }), &dest)
+            .expect("installed");
+
+        assert_eq!(dest.symlink_metadata().expect("installed").ino(), ino, "linked, not copied");
+        assert_eq!(std::fs::read(&dest).expect("read"), b"export");
+        assert!(temp_path.symlink_metadata().is_err(), "the temporary name is removed");
+    }
+
+    /// The hard link refuses a taken name like every other route.
+    #[cfg(unix)]
+    #[test]
+    fn an_unsupported_no_replace_rename_onto_a_taken_name_is_refused() {
+        let (_guard, dir) = tempdir();
+        let mut temp = tempfile::Builder::new().tempfile_in(&dir).expect("temp");
+        temp.write_all(b"export").expect("write temp");
+        let temp_path = temp.path().to_path_buf();
+        let dest = dir.join("out.json");
+        std::fs::write(&dest, b"user data").expect("seed");
+        let enotsup = io::Error::from_raw_os_error(rustix::io::Errno::NOTSUP.raw_os_error());
+
+        let err = settle_install(Err(tempfile::PersistError { error: enotsup, file: temp }), &dest)
+            .expect_err("taken name refused");
+
+        assert!(
+            matches!(err, ExportWriteError::Rejected(DestinationRejected::AlreadyExists)),
+            "{err:?}"
+        );
+        assert_eq!(std::fs::read(&dest).expect("read"), b"user data");
+        assert!(temp_path.symlink_metadata().is_err(), "the temporary name is removed");
+    }
+
+    /// Pins which failures move on to the next install route (no-replace
+    /// rename, then hard link, then copy): only an operation the volume lacks,
+    /// never a taken name, a permission or argument error, or a cross-device
+    /// move.
+    #[cfg(unix)]
+    #[test]
+    fn only_an_unsupported_operation_moves_on_to_the_next_route() {
         use rustix::io::Errno;
 
-        let routed = |errno: Errno| {
-            lacks_no_replace_primitives(&io::Error::from_raw_os_error(errno.raw_os_error()))
-        };
+        let moves_on =
+            |errno: Errno| is_unsupported(&io::Error::from_raw_os_error(errno.raw_os_error()));
         for errno in [Errno::NOTSUP, Errno::OPNOTSUPP, Errno::NOSYS, Errno::PERM] {
-            assert!(routed(errno), "{errno:?} takes the copy fallback");
+            assert!(moves_on(errno), "{errno:?} moves on to the next route");
         }
         for errno in [Errno::EXIST, Errno::ACCESS, Errno::INVAL, Errno::XDEV] {
-            assert!(!routed(errno), "{errno:?} is reported, not copied around");
+            assert!(!moves_on(errno), "{errno:?} is reported");
         }
-        assert!(!lacks_no_replace_primitives(&io::Error::other("not an OS error")));
+        assert!(!is_unsupported(&io::Error::other("not an OS error")));
     }
 
     #[cfg(windows)]
