@@ -838,21 +838,27 @@ jobs:
           # history; the action manages the cache key automatically.
           manifest-path: Cargo.toml
 
-  # Perf regression gate (GF-6/C-9): checks that sqlx_stmts counts for the
-  # inbox hot-path scenarios (scan_root, classify_source_groups) did not
-  # increase relative to scripts/perf-baseline.json.
+  # Perf regression gate (GF-6/C-9): checks that the sqlx_stmts count of every
+  # perf-bench scenario did not increase relative to scripts/perf-baseline.json.
   #
-  # Gating logic: ci-affected-crates.sh maps changed files to crate names.
-  # The gate runs only when the output contains app_core_inbox, persistence_inbox,
-  # or fs_inventory — the crates that implement the measured hot paths.  Any
-  # change to Cargo.lock or Cargo.toml triggers the full workspace, which also
-  # captures these crates, so the grep catches that path too.  Skipped when
-  # none of those crates are affected (docs-only, frontend-only, etc.).
+  # Gating logic: ci-affected-crates.sh maps changed files to the changed
+  # workspace members plus their reverse-dependency closure. perf-bench depends
+  # on every crate its scenarios measure, so the closure contains `perf-bench`
+  # whenever a change can move a measured count; the trigger follows
+  # perf-bench's own dependency graph, not a hand-kept crate list.
+  # The gate also runs when the script cannot scope the change: the `ALL`
+  # sentinel (a rust-relevant file outside every member, e.g. the root
+  # Cargo.toml) and the empty result of an active Rust lane whose files map to
+  # no member (Cargo.lock, scripts/** — which holds the baseline and this
+  # check — this workflow, assets/seed/**). Those are the two cases the Rust
+  # tests step also treats as "run everything".
+  # Skipped when the closure stops short of perf-bench (a desktop_shell- or
+  # e2e_tests-only change); the job-level `if:` already skips non-Rust PRs.
   #
   # Linux-only: the sqlx_stmts counter is deterministic so the result is
   # OS-agnostic; running on one platform avoids redundant compilation on all 3.
   perf-gate:
-    name: Perf baseline (inbox hot paths)
+    name: Perf baseline (perf-bench scenarios)
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
@@ -861,7 +867,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.0
       - uses: Swatinem/rust-cache@v2
 
-      # Scope gate: only run when a change touches the measured crates.
+      # Scope gate: only run when a change can affect a measured scenario.
       # CHANGED_FILES uses the same CSV-then-newline pattern as the Rust tests step.
       - name: Check affected crates
         id: affected
@@ -870,12 +876,16 @@ jobs:
         run: |
           set -euo pipefail
           args=$(printf '%s' "$CHANGED_FILES" | tr ',' '\n' | bash scripts/ci-affected-crates.sh)
-          if printf '%s' "$args" | grep -qE 'app_core_inbox|persistence_inbox|fs_inventory'; then
+          scoped=$(printf '%s' "$args" | tr -d '[:space:]')
+          if [ "$scoped" = "ALL" ] || [ -z "$scoped" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "Affected crates include inbox/fs_inventory — running perf gate."
+            echo "Change is not scoped to workspace members — running perf gate."
+          elif printf '%s\n' "$args" | grep -qE '(^| )-p perf-bench( |$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "perf-bench is in the affected closure — running perf gate."
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "No inbox or fs_inventory crates affected — perf gate skipped."
+            echo "No crate perf-bench measures is affected — perf gate skipped."
           fi
 
       - name: Perf baseline ratchet

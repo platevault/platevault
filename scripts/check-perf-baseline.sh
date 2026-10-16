@@ -38,17 +38,14 @@
 #
 # Requires: jq, cargo (--generate only).
 #
-# CI gate: run only when ci-affected-crates.sh output contains
-# app_core_inbox, persistence_inbox, or fs-inventory (see .github/workflows/ci.yml).
-#
-# COVERAGE GAP (astro-plan-9l04): three scenarios added for spec 007 T033,
-# spec 025 T045, and spec 048 T043a measure crates the trigger list above does
-# NOT name — app_core (reconcile + plan-apply progress), app_core_calibration
-# (suggest), fs_executor, and persistence_plans. A change confined to any of
-# those skips this gate entirely, so their statement budgets are only enforced
-# when an inbox/fs_inventory crate happens to be co-affected. Widening the
-# trigger grep is a CI-policy change and was deliberately left out of that
-# bead; the full harness takes ~23s locally, so cost is not the blocker.
+# CI gate (.github/workflows/ci.yml `perf-gate`): runs when the reverse-
+# dependency closure from ci-affected-crates.sh contains perf-bench, i.e. when
+# a change touches any crate a scenario measures, and whenever that script
+# cannot scope the change (`ALL`, or the empty result of a force_full trigger
+# such as Cargo.lock or scripts/**). The trigger follows perf-bench's own
+# dependencies, so a new scenario on a new crate is gated once perf-bench
+# depends on that crate (astro-plan-3tek; before it, a hand-kept inbox/
+# fs_inventory list left the reconcile and plan-apply budgets unenforced).
 
 set -euo pipefail
 
