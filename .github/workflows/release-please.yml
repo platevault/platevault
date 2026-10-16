@@ -387,6 +387,9 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
+          # Hand-copied marker logic below was reviewed against the CLI version
+          # locked for this importer. Refuse a CLI bump until those codes and
+          # the bundled executable selection rule have been checked again.
           $lockfile = Get-Content pnpm-lock.yaml -Raw
           $cli = [regex]::Match($lockfile, "(?ms)^  apps/desktop:\r?\n.*?^      '@tauri-apps/cli':\r?\n        specifier: [^\r\n]+\r?\n        version: ([^\r\n(]+)")
           $checkedVersion = '2.12.2'
@@ -621,9 +624,10 @@ jobs:
 
           # Third-party identities, paths relative to unpacked/. Pin the
           # unsigned NSIS plugins by SHA-256; their byte identities change on
-          # tool updates and must be reviewed before refreshing these pins.
-          # WixUIWixca is signed: require a valid signature and its named
-          # publisher, which survives routine WiX payload and cert renewals.
+          # tool updates. Each pin below records source/version and the passing
+          # Windows rehearsal run that printed it; review before refreshing.
+          # WixUIWixca instead requires a valid signature from its named
+          # publisher, which survives routine payload and signing-cert updates.
           $nsisPlugin = 'NSIS plugin: third-party code extracted and loaded while setup runs; not installed'
           $wixAction = 'WiX custom action: third-party code msiexec runs while installing; not installed'
           $thirdParty = [ordered]@{
