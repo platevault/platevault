@@ -561,8 +561,15 @@ impl<K: Clone + Eq + Hash> Handle for Handler<K> {
 /// tests send as Windows sends them; only a real device removal is left out.
 #[cfg(test)]
 mod tests {
+    use std::os::windows::io::{FromRawHandle, OwnedHandle};
     use std::time::Instant;
 
+    use windows_sys::Win32::Foundation::LUID;
+    use windows_sys::Win32::Security::{
+        AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_BACKUP_NAME,
+        SE_PRIVILEGE_REMOVED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
     use windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW;
 
     use super::*;
@@ -633,6 +640,62 @@ mod tests {
             .status()
             .expect("icacls invocation failed");
         assert!(status.success(), "icacls {args:?} failed");
+    }
+
+    /// Remove the backup privilege from this process's token. An elevated
+    /// token, as a CI runner's, can hold it enabled, and a backup-semantics
+    /// open then overrides the access list for every read right, as no
+    /// application without it can. The removal lasts for the process; no
+    /// test here needs the privilege.
+    fn drop_backup_privilege() {
+        let mut token = ptr::null_mut();
+        // SAFETY: the current-process pseudo-handle needs no closing, and
+        // `token` outlives the call.
+        #[allow(unsafe_code)]
+        let opened = unsafe {
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &raw mut token)
+        };
+        assert_ne!(opened, 0, "OpenProcessToken: {}", io::Error::last_os_error());
+        // SAFETY: `token` is a handle this call opened and nothing else owns.
+        #[allow(unsafe_code)]
+        let token = unsafe { OwnedHandle::from_raw_handle(token) };
+        let mut luid = LUID::default();
+        // SAFETY: `SE_BACKUP_NAME` is a terminated string, and `luid`
+        // outlives the call.
+        #[allow(unsafe_code)]
+        let found = unsafe { LookupPrivilegeValueW(ptr::null(), SE_BACKUP_NAME, &raw mut luid) };
+        assert_ne!(found, 0, "LookupPrivilegeValueW: {}", io::Error::last_os_error());
+        let removal = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES { Luid: luid, Attributes: SE_PRIVILEGE_REMOVED }],
+        };
+        // SAFETY: `token` is open with `TOKEN_ADJUST_PRIVILEGES`, and
+        // `removal` outlives the call, which returns no previous state. A
+        // token without the privilege succeeds with nothing to remove.
+        #[allow(unsafe_code)]
+        let adjusted = unsafe {
+            AdjustTokenPrivileges(
+                token.as_raw_handle(),
+                0,
+                &raw const removal,
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )
+        };
+        assert_ne!(adjusted, 0, "AdjustTokenPrivileges: {}", io::Error::last_os_error());
+    }
+
+    /// What `icacls` reads on `path` and `whoami /priv` reports for this
+    /// process's user, for a failed check of an access list.
+    fn access_report(path: &Path) -> String {
+        let run = |program: &str, args: &[&str]| {
+            std::process::Command::new(program).args(args).output().map_or_else(
+                |error| format!("{program}: {error}"),
+                |output| String::from_utf8_lossy(&output.stdout).into_owned(),
+            )
+        };
+        format!("{}\n{}", run("icacls", &[path.to_str().unwrap()]), run("whoami", &["/priv"]))
     }
 
     /// Put a directory junction to `target` at `link`, with the `mklink /J`
@@ -820,7 +883,9 @@ mod tests {
 
     /// A root folder that denies its extended attributes to everyone, a
     /// right `GENERIC_READ` asks for, registers all the same: the root opens
-    /// with only the rights the registration needs.
+    /// with only the rights the registration needs. The test runs without
+    /// the backup privilege, as an application does, so the deny entry
+    /// holds for a backup-semantics open.
     #[test]
     fn a_root_denying_rights_the_registration_does_not_need_registers() {
         /// Lifts the deny entry when dropped, so a failing test still lets
@@ -831,6 +896,7 @@ mod tests {
                 deny_everyone(self.0, None);
             }
         }
+        drop_backup_privilege();
         let dir = tempfile::tempdir().unwrap();
         let card = dir.path().join("card");
         std::fs::create_dir(&card).unwrap();
@@ -841,7 +907,7 @@ mod tests {
             .read(true)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
             .open(&card);
-        assert!(generic_read.is_err(), "the deny entry does not take");
+        assert!(generic_read.is_err(), "the deny entry does not take:\n{}", access_report(&card));
         let (notices, _reports) = retrying();
         let window = notices.roots.window;
 

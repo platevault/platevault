@@ -30,6 +30,11 @@ windows-sys = { version = "0.61.2", features = [
 [dev-dependencies]
 tempfile = { workspace = true }
 
+# Test builds only: a test drops the backup privilege from its own process
+# token (`Win32_Security`, and `Win32_System_Threading` for the token).
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_System_Threading"] }
+
 # The workspace table with `unsafe_code` at `deny` instead of `forbid`, so the
 # FFI call sites can allow it one at a time. Keep the rest in step with the
 # workspace `[workspace.lints]`.

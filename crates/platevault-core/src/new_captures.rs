@@ -662,6 +662,12 @@ impl Watched {
     /// Returns whether an event named the root, and the paths below it that
     /// events named, once each; a walk in flight also keeps those to check
     /// again after it. Touches no file system.
+    ///
+    /// Each path is rebuilt from its components, as a walk builds the paths
+    /// it counts: a name's identity is its native spelling
+    /// ([`Watched::identity`]), and a path `Path` holds equal can be spelled
+    /// apart (`/` for `\` on Windows, a `.` step), which would make a second
+    /// name of one the count holds.
     fn take_events(&mut self) -> (bool, HashSet<PathBuf>) {
         let mut root_touched = false;
         let mut touched = HashSet::new();
@@ -679,7 +685,9 @@ impl Watched {
         }
         self.rescan |= rescan;
         for path in named {
-            let Some(relative) = self.relative(&path).map(Path::to_path_buf) else {
+            let Some(relative) =
+                self.relative(&path).map(|relative| relative.components().collect::<PathBuf>())
+            else {
                 continue;
             };
             if relative.as_os_str().is_empty() {

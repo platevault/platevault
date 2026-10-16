@@ -1412,6 +1412,27 @@ async fn a_watched_folder_moved_out_of_the_location_restarts_the_watcher() {
     assert_eq!(walks(&watch), 2);
 }
 
+/// An event that spells a counted frame's path another way `Path` holds
+/// equal (here a `.` step; on Windows `/` for `\` as well) names that frame:
+/// once it is gone, it leaves the count.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_event_spelling_a_counted_path_apart_names_the_same_frame() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("night").join("Ha_001.fits"));
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    let watch = probed_without_sweeps(&fx.library, &probe);
+    count_is(&watch, location.id, 1).await;
+
+    fs::remove_file(root.join("night").join("Ha_001.fits")).unwrap();
+    let spelled = root.join("night").join(".").join("Ha_001.fits");
+    events.try_send(named(spelled, ArtifactEventKind::Modified)).unwrap();
+    count_is(&watch, location.id, 0).await;
+}
+
 /// The OS refused to watch a folder that did not open as the watcher
 /// started, and it opens by the time the walk lists it: the watcher starts
 /// again at once, not at the next sweep, so the count is not published as
