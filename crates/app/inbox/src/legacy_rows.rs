@@ -16,14 +16,17 @@
 //! When a file is there, a folder row's items would plan sources below
 //! something that is not a folder; that file may be a real master, as
 //! `g/h.fits` beside the folder `g\h.fits`, and then only the folder's rows
-//! go. [`find`] lists the old rows a scan proves stale, and [`retire`]
-//! deletes them.
+//! go. When a folder the scan read whole is there with no frame directly
+//! inside (it is empty, or holds only subfolders), a folder row's items name
+//! files that are not there. [`find`] lists the old rows a scan proves stale,
+//! and [`retire`] deletes them.
 //!
 //! An old row is kept when this scan stores the same text itself (a nested
 //! folder or master really is there, and the row is its own), or when
-//! something the scan could not account for is at the nested path: an
-//! unreadable folder, a file whose header it could not read, a link on the
-//! way there or at the path (a dangling one may be an unmounted drive). Only
+//! something the scan could not account for is at the nested path: a folder
+//! it could not read whole (unreadable, or holding an entry it skipped, such
+//! as a link), a file whose header it could not read, a link on the way there
+//! or at the path (a dangling one may be an unmounted drive). Only
 //! unconfirmed rows are deleted: still `pending_classification` or
 //! `classified`, with no plan linking them; a folder is kept whole when any
 //! of its items is not. A folder's rows never include a master row, so
@@ -88,8 +91,9 @@ pub struct LegacyRows {
 /// List the rows the old scan stored for the entries in `items` under `root`
 /// that this scan proves stale, and the kept master rows whose master fields
 /// it must rewrite. Stats only the nested paths of entries whose text
-/// contains `\`.
-pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
+/// contains `\`. `bare_dirs` are the folders the scan read whole and found no
+/// image or video file directly in.
+pub(crate) fn find(root: &Path, items: &[ScannedInboxItem], bare_dirs: &[PathBuf]) -> LegacyRows {
     let folders: HashSet<&str> = items.iter().map(|item| item.relative_path.as_str()).collect();
     let masters: HashSet<&str> =
         items.iter().flat_map(|item| &item.masters).map(|m| m.relative_path.as_str()).collect();
@@ -111,7 +115,13 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
         if folders.contains(old.as_str()) {
             continue;
         }
-        if never_current(&old) || matches!(look_up(root, &old), Entry::Absent | Entry::Other) {
+        let stale = never_current(&old)
+            || match look_up(root, &old) {
+                Entry::Absent | Entry::Other => true,
+                Entry::Folder => bare_dirs.contains(&root.join(&old)),
+                Entry::Unknown => false,
+            };
+        if stale {
             rows.folders.push(old);
         }
     }

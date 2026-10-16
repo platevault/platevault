@@ -358,7 +358,8 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     let mut leaf_dirs: Vec<LeafDir> = Vec::new();
     let mut warnings: Vec<ScanWarning> = Vec::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
-    collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings, &mut visited)?;
+    let mut bare_dirs: Vec<PathBuf> = Vec::new();
+    collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings, &mut visited, &mut bare_dirs)?;
 
     if leaf_dirs.is_empty() {
         return Ok(ScanOutput { warnings, ..ScanOutput::default() });
@@ -405,7 +406,7 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     // Sort by relative_path for deterministic output.
     items.sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
-    let legacy_rows = crate::legacy_rows::find(root, &items);
+    let legacy_rows = crate::legacy_rows::find(root, &items, &bare_dirs);
     Ok(ScanOutput { items, warnings, legacy_rows })
 }
 
@@ -477,17 +478,26 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
 /// to an ancestor re-enters the same real directory once per link component the
 /// OS allows, duplicating every frame inside it; the same key shape as
 /// `fs_pathsafe::real_files_under_reporting`.
+///
+/// Returns whether `dir` is bare: the walk read every entry of it and found
+/// no image or video file directly inside, so no item stands for it. A link
+/// it skipped, or an entry it could not read, may be such a file, so `dir` is
+/// then not bare; neither is a directory already entered under another path.
+/// The bare directories below `dir` are pushed to `bare_dirs`, which tells
+/// a folder where nothing is to classify from one the walk could not read
+/// (bd astro-plan-3pvvc).
 fn collect_leaf_dirs(
     dir: &Path,
     options: &ScanOptions,
     leaf_dirs: &mut Vec<LeafDir>,
     warnings: &mut Vec<ScanWarning>,
     visited: &mut HashSet<PathBuf>,
-) -> Result<(), String> {
+    bare_dirs: &mut Vec<PathBuf>,
+) -> Result<bool, String> {
     if options.follow_symlinks
         && !visited.insert(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()))
     {
-        return Ok(());
+        return Ok(false);
     }
 
     let read_dir = std::fs::read_dir(dir)
@@ -497,8 +507,13 @@ fn collect_leaf_dirs(
     let mut xisf_files: Vec<PathBuf> = Vec::new();
     let mut video_files: Vec<PathBuf> = Vec::new();
     let mut subdirs: Vec<PathBuf> = Vec::new();
+    let mut read_whole = true;
 
-    for entry in read_dir.flatten() {
+    for entry in read_dir {
+        let Ok(entry) = entry else {
+            read_whole = false;
+            continue;
+        };
         let path = entry.path();
 
         // OS scan boundary: `read_dir` yields `std::path::PathBuf`, which can be
@@ -514,7 +529,10 @@ fn collect_leaf_dirs(
             continue;
         }
 
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            read_whole = false;
+            continue;
+        };
         // Reparse-aware check (symlink + Windows junction) shared with
         // fs_inventory/fs_executor — see `fs_pathsafe` (duplication-and-
         // abstraction audit T1-a).
@@ -522,6 +540,7 @@ fn collect_leaf_dirs(
 
         if is_link && !options.follow_symlinks {
             // Constitution §I: skip symlinks/junctions unless explicitly enabled.
+            read_whole = false;
             continue;
         }
 
@@ -540,7 +559,8 @@ fn collect_leaf_dirs(
         }
     }
 
-    if !fits_files.is_empty() || !xisf_files.is_empty() || !video_files.is_empty() {
+    let has_files = !fits_files.is_empty() || !xisf_files.is_empty() || !video_files.is_empty();
+    if has_files {
         leaf_dirs.push(LeafDir { dir_path: dir.to_owned(), fits_files, xisf_files, video_files });
     }
 
@@ -548,12 +568,14 @@ fn collect_leaf_dirs(
     // A read failure on a subdir is non-fatal: record it in warnings and
     // continue so partial results reach the caller instead of nothing.
     for subdir in subdirs {
-        if let Err(reason) = collect_leaf_dirs(&subdir, options, leaf_dirs, warnings, visited) {
-            warnings.push(ScanWarning { path: subdir, reason });
+        match collect_leaf_dirs(&subdir, options, leaf_dirs, warnings, visited, bare_dirs) {
+            Ok(true) => bare_dirs.push(subdir),
+            Ok(false) => {}
+            Err(reason) => warnings.push(ScanWarning { path: subdir, reason }),
         }
     }
 
-    Ok(())
+    Ok(read_whole && !has_files)
 }
 
 #[cfg(test)]
@@ -1102,6 +1124,51 @@ mod tests {
                 folders: ["c/d", "g/h.fits"].map(str::to_owned).to_vec(),
                 ..Default::default()
             }
+        );
+    }
+
+    /// A backslash folder name next to a folder at its old text that holds no
+    /// frame directly. Listed, as rows whose items name files that are not
+    /// there: `c/d`, an empty folder beside `c\d`, and `e/f` beside `e\f`,
+    /// which holds only the folder `g` with a frame (the scan stores `e/f/g`).
+    /// Kept: `h/i`, which holds only a link to a frame (a link the scan skips
+    /// may be such a file), and `k/l`, which the scan cannot read (when the
+    /// test does not run as root).
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_an_old_folder_row_whose_path_names_a_bare_folder() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        for name in ["c\\d", "e\\f", "h\\i", "k\\l"] {
+            let folder = root.join(name);
+            fs::create_dir_all(&folder).unwrap();
+            write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        }
+        fs::create_dir_all(root.join("c").join("d")).unwrap();
+        let deep = root.join("e").join("f").join("g");
+        fs::create_dir_all(&deep).unwrap();
+        write_realistic_fits(&deep, "x.fits", Some("LIGHT"), None);
+        fs::create_dir_all(root.join("h").join("i")).unwrap();
+        std::os::unix::fs::symlink(deep.join("x.fits"), root.join("h").join("i").join("x.fits"))
+            .unwrap();
+        let locked = root.join("k").join("l");
+        fs::create_dir_all(&locked).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        let locked_is_unreadable = fs::read_dir(&locked).is_err();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let mut folders = vec!["c/d".to_owned(), "e/f".to_owned()];
+        if !locked_is_unreadable {
+            // As root the folder is read, and it is empty.
+            folders.push("k/l".to_owned());
+        }
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows { folders, ..Default::default() }
         );
     }
 

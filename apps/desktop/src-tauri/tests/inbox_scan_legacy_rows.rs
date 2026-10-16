@@ -578,6 +578,54 @@ async fn a_nested_master_classify_cannot_read_is_kept_by_confirm() {
     assert_eq!(overrides, 1, "its override stays");
 }
 
+/// The folder `c\d` beside a folder `d` in `c` that holds no frame directly,
+/// only the folder `e` with one. The old scan stored `c\d` under `c/d` with a
+/// classified sub-item and an override for `c/d/x.fits`, a file that is not
+/// there, so confirming the sub-item would plan a missing source. The scan
+/// reads `c/d` whole, deletes the old folder's rows, and stores its own groups.
+#[tokio::test]
+async fn an_old_folder_row_at_a_folder_with_no_frames_goes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(&root.join("c\\d"), "x.fits", "LIGHT", None);
+    write_fits(&root.join("c").join("d").join("e"), "x.fits", "LIGHT", None);
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_old_folder(&pool, "old-cd", "old-cd-light", "c/d").await;
+
+    scan(&pool, root).await;
+
+    let items: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM inbox_items").fetch_one(&pool).await.unwrap();
+    assert_eq!(items, 0, "the old folder's sub-item goes");
+    let groups: Vec<String> =
+        sqlx::query_scalar("SELECT relative_path FROM inbox_source_groups ORDER BY relative_path")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(groups, ["c/d/e", "c\\d"], "the old folder's group goes; the scan's are stored");
+    let overrides: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_file_overrides")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(overrides, 0, "the old folder's override goes with its group");
+    let classified: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_classifications")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(classified, 0, "the old sub-item's classification goes with it");
+}
+
 /// A master row: path, id, state, master type, filter and exposure.
 type MasterRow = (String, String, String, Option<String>, Option<String>, Option<f64>);
 
