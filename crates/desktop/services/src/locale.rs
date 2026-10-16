@@ -45,6 +45,36 @@ pub fn shipped_or_base(tag: &str) -> &'static ShippedLocale {
     SHIPPED_LOCALES.iter().find(|locale| locale.tag == tag).unwrap_or_else(base)
 }
 
+/// The single locale selected for text the backend displays outside the webview.
+#[derive(Clone, Debug)]
+pub struct ActiveLocale(std::sync::Arc<std::sync::RwLock<&'static ShippedLocale>>);
+
+impl Default for ActiveLocale {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ActiveLocale {
+    /// Start with the base locale used by the webview when no locale is known.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(std::sync::Arc::new(std::sync::RwLock::new(base())))
+    }
+
+    /// Select the shipped locale named by `tag`, falling back to the base.
+    pub fn set_locale(&self, tag: &str) -> &'static ShippedLocale {
+        let locale = shipped_or_base(tag);
+        *self.0.write().unwrap_or_else(std::sync::PoisonError::into_inner) = locale;
+        locale
+    }
+
+    /// Read the currently selected locale.
+    #[must_use]
+    pub fn get(&self) -> &'static ShippedLocale {
+        *self.0.read().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
 impl ShippedLocale {
     /// The messages `T` names from this locale's catalogue: `T` is a struct
     /// whose fields carry `#[serde(rename = "<message key>")]`. Every other

@@ -412,13 +412,17 @@ pub fn run_app(
     let exit_data_dir = data_dir.clone();
     let services = Arc::new(services);
     let boot_services = Arc::clone(&services);
-    app.manage(Arc::clone(&services));
     std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir, boot_services)));
 
     // astro-plan-5wcib: the services-crate updater. A staged "Install on quit"
     // holds the first quit while it installs, then exits. astro-plan-c72oo:
     // its offer goes out as a system notification under the app's identity.
-    updater::register(app.handle(), services.notifier().clone(), services.identity());
+    updater::register(
+        app.handle(),
+        services.notifier().clone(),
+        services.active_locale().clone(),
+        services.identity(),
+    );
 
     app.run(move |handle, event| {
         updater::on_run_event(handle, &event);
@@ -602,10 +606,10 @@ async fn boot(
             None
         });
     let saved_locale_tag = saved_locale.as_ref().and_then(serde_json::Value::as_str);
+    services
+        .active_locale()
+        .set_locale(saved_locale_tag.unwrap_or_else(|| desktop_services::locale::base().tag));
     install_native_menu(&app, saved_locale_tag);
-    if let Some(services) = app.try_state::<Arc<desktop_services::Services>>() {
-        services.notifier().set_locale(saved_locale_tag.unwrap_or("en-GB"));
-    }
 
     // kyo7.28: back up the database before applying migrations to an existing,
     // behind-schema file.  Skip for fresh databases (no migration table yet)

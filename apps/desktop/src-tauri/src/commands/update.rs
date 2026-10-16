@@ -119,11 +119,8 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri injects arguments by value
 pub fn update_set_locale(app: AppHandle, locale: String) -> Result<(), ContractError> {
-    if let Some(updater) = app.try_state::<Updater>() {
-        updater.set_locale(&locale);
-    }
     if let Some(services) = app.try_state::<Arc<desktop_services::Services>>() {
-        services.notifier().set_locale(&locale);
+        services.active_locale().set_locale(&locale);
     }
     Ok(())
 }

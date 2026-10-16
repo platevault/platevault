@@ -906,10 +906,10 @@ export const commands = {
 	updateInstallOnQuit: () => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("update_install_on_quit")),
 	/**
 	 *  `update.set_locale` — the webview's active locale, sent at startup and on
-	 *  every locale change, for the text the updater shows outside the webview:
-	 *  the macOS administrator prompt and the notification an install at quit
-	 *  raises. A tag that is not a shipped locale means the base locale. Without
-	 *  an updater there is nothing to tell, which is not an error.
+	 *  every locale change, for text the updater and desktop notifications show
+	 *  outside the webview: update notices and OS completion notices. A tag that is
+	 *  not a shipped locale means the base locale. Without an updater or services
+	 *  there is nothing to tell, which is not an error.
 	 * 
 	 *  # Errors
 	 * 

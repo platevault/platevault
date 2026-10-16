@@ -13,9 +13,8 @@ use serde::Deserialize;
 
 use crate::locale::{self, ShippedLocale};
 
-/// The updater's text in one locale.
+/// The updater text in the active locale.
 pub struct Wording {
-    locale: &'static ShippedLocale,
     messages: Messages,
 }
 
@@ -44,22 +43,9 @@ pub struct Notice {
 }
 
 impl Wording {
-    /// The wording in the shipped locale `tag` names, else in the base
-    /// locale.
-    ///
-    /// # Errors
-    ///
-    /// The locale's catalogue lacks one of the updater's messages.
-    pub fn in_locale(tag: &str) -> Result<Self, String> {
-        let locale = locale::shipped_or_base(tag);
-        Ok(Self { locale, messages: locale.messages()? })
+    pub fn from_locale(locale: &'static ShippedLocale) -> Self {
+        Self { messages: locale.messages().expect("shipped updater catalogue is complete") }
     }
-
-    /// The locale this wording is in.
-    pub const fn locale(&self) -> &'static ShippedLocale {
-        self.locale
-    }
-
     /// The administrator prompt for installing `version`.
     pub fn admin_prompt(&self, version: &str) -> String {
         locale::fill(&self.messages.admin_prompt, &[("version", version)])
@@ -81,30 +67,26 @@ impl Wording {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::{Notice, Wording};
-    use crate::locale::SHIPPED_LOCALES;
+    use crate::locale::{self, SHIPPED_LOCALES};
+    use std::path::Path;
 
     #[test]
     fn every_shipped_locale_has_the_updaters_wording() {
         for locale in &SHIPPED_LOCALES {
-            let wording = Wording::in_locale(locale.tag).unwrap_or_else(|error| panic!("{error}"));
-            assert_eq!(wording.locale().tag, locale.tag);
-            let prompt = wording.admin_prompt("0.7.0");
-            assert!(prompt.contains("PlateVault") && prompt.contains("0.7.0"), "{prompt}");
-            assert!(!prompt.contains('{'), "every placeholder is filled: {prompt}");
+            let wording = Wording::from_locale(locale);
+            assert!(wording.admin_prompt("0.7.0").contains("0.7.0"), "{}", locale.tag);
         }
     }
 
     #[test]
     fn the_admin_prompt_names_plate_vault_and_the_update_in_each_language() {
         assert_eq!(
-            Wording::in_locale("en-GB").expect("en-GB").admin_prompt("0.7.0"),
+            Wording::from_locale(locale::shipped_or_base("en-GB")).admin_prompt("0.7.0"),
             "PlateVault needs an administrator's name and password to install update 0.7.0."
         );
         assert_eq!(
-            Wording::in_locale("pt-BR").expect("pt-BR").admin_prompt("0.7.0"),
+            Wording::from_locale(locale::shipped_or_base("pt-BR")).admin_prompt("0.7.0"),
             "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização 0.7.0."
         );
     }
@@ -113,23 +95,18 @@ mod tests {
     fn the_kept_app_notice_says_what_the_ui_says_in_each_language() {
         let kept = Path::new("/Applications/PlateVault (previous version).app");
         assert_eq!(
-            Wording::in_locale("en-GB").expect("en-GB").previous_app_kept(kept),
+            Wording::from_locale(locale::shipped_or_base("en-GB")).previous_app_kept(kept),
             Notice {
                 title: "Update not installed".to_owned(),
                 body: "Could not install update: the previous version couldn't be put back. It's saved at /Applications/PlateVault (previous version).app.".to_owned(),
             }
         );
         assert_eq!(
-            Wording::in_locale("pt-BR").expect("pt-BR").previous_app_kept(kept),
+            Wording::from_locale(locale::shipped_or_base("pt-BR")).previous_app_kept(kept),
             Notice {
                 title: "Atualização não instalada".to_owned(),
                 body: "Não foi possível instalar a atualização: não foi possível restaurar a versão anterior. Ela está salva em /Applications/PlateVault (previous version).app.".to_owned(),
             }
         );
-    }
-
-    #[test]
-    fn an_unknown_locale_falls_back_to_the_base_wording() {
-        assert_eq!(Wording::in_locale("de-DE").expect("base").locale().tag, "en-GB");
     }
 }

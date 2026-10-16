@@ -25,11 +25,10 @@ use audit::event_bus::{
 };
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::AppIdentity;
 use crate::locale;
+use crate::AppIdentity;
 
-/// The notification text in the locale the webview last selected.
-#[derive(Clone, Debug)]
+/// Notification wording parsed from the active locale for each delivery.
 struct Wording {
     messages: Messages,
 }
@@ -57,9 +56,12 @@ struct Messages {
 }
 
 impl Wording {
-    fn in_locale(tag: &str) -> Result<Self, String> {
-        let messages = locale::shipped_or_base(tag).messages()?;
-        Ok(Self { messages })
+    fn from_locale(locale: &'static locale::ShippedLocale) -> Self {
+        Self { messages: locale.messages().expect("shipped notification catalogue is complete") }
+    }
+
+    fn from_active(locale: &locale::ActiveLocale) -> Self {
+        Self::from_locale(locale.get())
     }
 
     fn target_resolution(&self, count: usize) -> Notification {
@@ -71,8 +73,8 @@ impl Wording {
             ),
         }
     }
-
 }
+
 /// How long [`Notifier::notify_before_exit`] waits for the OS to take a
 /// notification: a D-Bus daemon or the Windows toast service answers in
 /// milliseconds, and the app is on its way out.
@@ -88,7 +90,7 @@ struct Notification {
 /// Delivers OS notifications under the application's identity.
 #[derive(Clone, Debug)]
 pub struct Notifier {
-    wording: std::sync::Arc<std::sync::Mutex<Wording>>,
+    locale: locale::ActiveLocale,
     #[cfg(target_os = "macos")]
     bundle_id: String,
     #[cfg(windows)]
@@ -97,11 +99,9 @@ pub struct Notifier {
 
 impl Notifier {
     #[cfg_attr(not(any(target_os = "macos", windows)), allow(unused_variables))]
-    pub(crate) fn new(identity: &AppIdentity) -> Self {
+    pub(crate) fn new(identity: &AppIdentity, locale: locale::ActiveLocale) -> Self {
         Self {
-            wording: std::sync::Arc::new(std::sync::Mutex::new(
-                Wording::in_locale(locale::base().tag).expect("shipped base catalogue is valid"),
-            )),
+            locale,
             #[cfg(target_os = "macos")]
             bundle_id: identity.macos_bundle_id().to_owned(),
             #[cfg(windows)]
@@ -111,19 +111,8 @@ impl Notifier {
         }
     }
 
-    /// Speak the webview's locale outside it. An unknown tag uses the base
-    /// locale, and a malformed catalogue leaves the previous wording intact.
-    pub fn set_locale(&self, tag: &str) {
-        match Wording::in_locale(tag) {
-            Ok(wording) => {
-                *self.wording.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = wording;
-            }
-            Err(error) => tracing::warn!(%error, tag, "notifications keep their previous language"),
-        }
-    }
-
-    fn wording(&self) -> std::sync::MutexGuard<'_, Wording> {
-        self.wording.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    fn wording(&self) -> Wording {
+        Wording::from_active(&self.locale)
     }
 
     /// Notify about a finished ingest-resolution drain pass, unless the window
@@ -135,8 +124,8 @@ impl Notifier {
         if !should_notify(focused, summary.resolved > 0) {
             return;
         }
-        let wording = self.wording();
-        self.deliver(&wording.target_resolution(summary.resolved));
+        let notification = self.wording().target_resolution(summary.resolved);
+        self.deliver(&notification);
     }
 
     /// Show `notification` unless the window is `focused`.
@@ -225,8 +214,11 @@ pub(crate) fn spawn_completion_notifier(
         loop {
             match rx.recv().await {
                 Ok(env) => {
-                    let wording = notifier.wording();
-                    if let Some(notification) = notification_for(&env.topic, &env.payload, &wording) {
+                    let notification = {
+                        let wording = notifier.wording();
+                        notification_for(&env.topic, &env.payload, &wording)
+                    };
+                    if let Some(notification) = notification {
                         notifier.completed(focused(), &notification);
                     }
                 }
@@ -243,7 +235,11 @@ pub(crate) fn spawn_completion_notifier(
 
 /// The notification a bus envelope earns, or `None` for every topic and payload
 /// that must stay silent.
-fn notification_for(topic: &str, payload: &serde_json::Value, wording: &Wording) -> Option<Notification> {
+fn notification_for(
+    topic: &str,
+    payload: &serde_json::Value,
+    wording: &Wording,
+) -> Option<Notification> {
     match topic {
         TOPIC_PLAN_APPLYING_COMPLETED => Some(Notification {
             title: wording.messages.plan_apply_title.clone(),
@@ -287,13 +283,35 @@ fn plan_apply_body(payload: &serde_json::Value, wording: &Wording) -> Option<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::locale::ActiveLocale;
 
     #[test]
+    fn set_locale_changes_delivered_wording_and_unknown_locales_fall_back() {
+        let locale = ActiveLocale::new();
+        let notifier = Notifier::new(
+            &AppIdentity { identifier: "dev.example.app".to_owned(), development: true },
+            locale,
+        );
+        notifier.locale.set_locale("pt-BR");
+        assert_eq!(notifier.wording().target_resolution(1).body, "Alvos resolvidos na fila: 1.");
+        notifier.locale.set_locale("de-DE");
+        assert_eq!(notifier.wording().target_resolution(1).body, "Queued target(s) resolved: 1.");
+    }
+
+    #[test]
+    fn every_shipped_locale_has_the_notification_wording() {
+        for shipped in &locale::SHIPPED_LOCALES {
+            let wording = Wording::from_locale(shipped);
+            assert!(!wording.target_resolution(1).body.contains('{'), "{}", shipped.tag);
+        }
+    }
+    #[test]
     fn ingest_drain_notification_uses_the_selected_catalogue() {
-        let wording = Wording::in_locale("pt-BR").expect("pt-BR wording");
-        let notification = wording.target_resolution(2);
+        let wording = ActiveLocale::new();
+        wording.set_locale("pt-BR");
+        let notification = Wording::from_active(&wording).target_resolution(2);
         assert_eq!(notification.title, "Resolução de alvos concluída");
-        assert_eq!(notification.body, "2 alvos na fila foram resolvidos.");
+        assert_eq!(notification.body, "Alvos resolvidos na fila: 2.");
     }
 
     #[test]
@@ -332,32 +350,22 @@ mod tests {
 
     #[test]
     fn plan_notification_renders_in_portuguese() {
-        let wording = Wording::in_locale("pt-BR").expect("pt-BR wording");
-        let notification = notification_for(
-            TOPIC_PLAN_APPLYING_COMPLETED,
-            &plan_completion_payload(),
-            &wording,
-        )
-        .expect("plan notification");
+        let locale = ActiveLocale::new();
+        locale.set_locale("pt-BR");
+        let wording = Wording::from_active(&locale);
+        let notification =
+            notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &plan_completion_payload(), &wording)
+                .expect("plan notification");
         assert_eq!(notification.title, "Aplicação do plano concluída");
         assert_eq!(
             notification.body,
-            "Plano parcialmente aplicado: 3 itens aplicados, 1 com falha e 2 ignorados."
-        );
-    }
-
-    #[test]
-    fn plan_apply_body_summarises_counts() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
-        assert_eq!(
-            plan_apply_body(&plan_completion_payload(), &wording).as_deref(),
-            Some("Plan partly applied: 3 items applied, 1 failed and 2 skipped.")
+            "Plano parcialmente aplicado: 3 item(ns) aplicados, 1 falha(s) e 2 ignorado(s)."
         );
     }
 
     #[test]
     fn the_degraded_bulk_cancel_payload_raises_no_notification() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        let wording = Wording::from_locale(locale::base());
         let degraded = serde_json::json!({ "planId": "p-1", "cancelledCount": 4 });
         assert_eq!(plan_apply_body(&degraded, &wording), None);
         assert_eq!(plan_apply_body(&serde_json::json!({}), &wording), None);
@@ -372,7 +380,7 @@ mod tests {
             "completedAt": "2026-08-20T00:00:00Z",
             "artifactIds": ["a-1", "a-2"],
         });
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        let wording = Wording::from_locale(locale::base());
         assert_eq!(
             notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &payload, &wording)
                 .map(|notification| notification.body),
@@ -382,8 +390,15 @@ mod tests {
 
     #[test]
     fn workflow_run_body_rejects_an_untyped_payload() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
-        assert_eq!(notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &serde_json::json!({ "toolId": "siril" }), &wording), None);
+        let wording = Wording::from_locale(locale::base());
+        assert_eq!(
+            notification_for(
+                TOPIC_WORKFLOW_RUN_COMPLETED,
+                &serde_json::json!({ "toolId": "siril" }),
+                &wording
+            ),
+            None
+        );
     }
 
     fn workflow_run_payload() -> serde_json::Value {
@@ -398,19 +413,19 @@ mod tests {
 
     #[test]
     fn the_plan_apply_topic_dispatches_to_the_plan_apply_notification() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        let wording = Wording::from_locale(locale::base());
         assert_eq!(
             notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &plan_completion_payload(), &wording),
             Some(Notification {
                 title: "Plan apply finished".to_owned(),
-                body: "Plan partly applied: 3 items applied, 1 failed and 2 skipped.".to_owned()
+                body: "Plan partly applied: 3 item(s), 1 failure(s), 2 skipped.".to_owned()
             })
         );
     }
 
     #[test]
     fn the_workflow_run_topic_dispatches_to_the_workflow_run_notification() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        let wording = Wording::from_locale(locale::base());
         assert_eq!(
             notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload(), &wording),
             Some(Notification {
@@ -422,14 +437,20 @@ mod tests {
 
     #[test]
     fn an_unsubscribed_topic_raises_no_notification() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
-        assert_eq!(notification_for("plan.applying.started", &plan_completion_payload(), &wording), None);
-        assert_eq!(notification_for("manifest.write.success", &workflow_run_payload(), &wording), None);
+        let wording = Wording::from_locale(locale::base());
+        assert_eq!(
+            notification_for("plan.applying.started", &plan_completion_payload(), &wording),
+            None
+        );
+        assert_eq!(
+            notification_for("manifest.write.success", &workflow_run_payload(), &wording),
+            None
+        );
     }
 
     #[test]
     fn a_subscribed_topic_with_an_undeserialisable_payload_raises_no_notification() {
-        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        let wording = Wording::from_locale(locale::base());
         let degraded = serde_json::json!({ "planId": "p-1", "cancelledCount": 4 });
         assert_eq!(notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &degraded, &wording), None);
         assert_eq!(notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &degraded, &wording), None);

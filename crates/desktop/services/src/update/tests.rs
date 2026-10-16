@@ -25,6 +25,7 @@ use super::{
     manifest, Package, Parts, Platform, QuitDecision, UpdateError, UpdateFailure, UpdateHost,
     UpdatePhase, UpdatePort, Updater, UpdaterConfig,
 };
+use crate::locale::ActiveLocale;
 
 const RUNNING: &str = "0.6.0";
 const RELEASE: &str = "0.7.0";
@@ -250,6 +251,7 @@ fn test_platform(package: Option<Package>) -> Platform {
 
 struct Rig {
     updater: Updater,
+    locale: ActiveLocale,
     host: mpsc::Receiver<HostCall>,
 }
 
@@ -278,6 +280,7 @@ impl Rig {
         notify_delay: Duration,
     ) -> Self {
         let (calls, host) = mpsc::channel();
+        let locale = ActiveLocale::new();
         let updater = Updater::assemble(Parts {
             current_version: Version::parse(RUNNING).expect("version"),
             endpoints: vec![Url::parse("https://example.test/latest.json").expect("url")],
@@ -287,9 +290,9 @@ impl Rig {
             installer,
             host: Box::new(FakeHost { calls: Mutex::new(calls), notify_delay }),
             quit_install_ceiling,
-            wording: super::wording::Wording::in_locale("en-GB").expect("en-GB wording"),
+            locale: locale.clone(),
         });
-        Self { updater, host }
+        Self { updater, locale, host }
     }
 
     fn phase(&self) -> UpdatePhase {
@@ -934,7 +937,7 @@ async fn the_watchdog_waits_for_the_notice_of_a_kept_previous_app() {
 async fn a_quit_held_during_install_now_says_where_the_previous_app_was_kept() {
     let (rig, release_install, install) =
         install_now_blocked(Err(previous_app_not_restored())).await;
-    rig.updater.set_locale("pt-BR");
+    rig.locale.set_locale("pt-BR");
 
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
     release_install.send(()).expect("release the install");
@@ -993,8 +996,8 @@ async fn each_install_asks_for_administrator_rights_in_the_active_language() {
     rig.updater.check().await;
     rig.updater.install_now().await;
 
-    rig.updater.set_locale("pt-BR");
-    assert_eq!(rig.updater.locale().tag, "pt-BR");
+    rig.locale.set_locale("pt-BR");
+    assert_eq!(rig.locale.get().tag, "pt-BR");
     rig.updater.install_on_quit().await;
     assert_eq!(rig.updater.on_quit_requested(), QuitDecision::Defer);
     assert_eq!(rig.next_host_call(), HostCall::Exit);
@@ -1017,9 +1020,9 @@ fn a_locale_that_is_not_shipped_speaks_the_base_language() {
     let signer = Signer::new();
     let source = FakeSource::release(&signer, b"new AppImage");
     let rig = Rig::new(&signer, &source, Box::new(FakeInstaller::answering(vec![])));
-    rig.updater.set_locale("pt-BR");
-    rig.updater.set_locale("de-DE");
-    assert_eq!(rig.updater.locale().tag, "en-GB");
+    rig.locale.set_locale("pt-BR");
+    rig.locale.set_locale("de-DE");
+    assert_eq!(rig.locale.get().tag, "en-GB");
 }
 
 #[tokio::test]
@@ -1146,19 +1149,25 @@ fn config(endpoint: &str, public_key: String) -> UpdaterConfig {
 
 #[test]
 fn an_endpoint_that_is_not_https_is_rejected() {
-    let error =
-        Updater::new(config("http://example.test/latest.json", Signer::new().public_key()), NoHost)
-            .err()
-            .expect("rejected");
+    let error = Updater::new(
+        config("http://example.test/latest.json", Signer::new().public_key()),
+        NoHost,
+        ActiveLocale::new(),
+    )
+    .err()
+    .expect("rejected");
     assert!(matches!(error, UpdateError::Config(_)), "{error}");
 }
 
 #[test]
 fn a_public_key_that_is_not_minisign_is_rejected() {
-    let error =
-        Updater::new(config("https://example.test/latest.json", base64("not a key")), NoHost)
-            .err()
-            .expect("rejected");
+    let error = Updater::new(
+        config("https://example.test/latest.json", base64("not a key")),
+        NoHost,
+        ActiveLocale::new(),
+    )
+    .err()
+    .expect("rejected");
     assert!(matches!(error, UpdateError::Config(_)), "{error}");
 }
 
