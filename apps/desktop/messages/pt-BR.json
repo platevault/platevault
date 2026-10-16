@@ -1584,6 +1584,7 @@
   "update_error_manifest": "as informações de atualização no servidor são inválidas.",
   "update_error_signature": "a assinatura não foi confirmada, então a atualização não foi usada.",
   "update_error_identity": "ela não foi assinada pelo mesmo desenvolvedor desta cópia do PlateVault.",
+  "update_error_app_replaced": "o aplicativo PlateVault foi movido ou substituído depois de ser aberto. Reinicie o PlateVault e tente novamente.",
   "update_error_permission": "a permissão para instalá-la não foi concedida.",
   "update_error_install": "o instalador parou com um erro.",
   "update_error_file_system": "não foi possível gravar ou ler os arquivos da atualização.",

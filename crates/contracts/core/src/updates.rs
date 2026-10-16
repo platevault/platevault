@@ -47,6 +47,9 @@ pub enum UpdateFailure {
     Signature,
     /// The new macOS app is not signed by the identity of the installed one.
     Identity,
+    /// The macOS app was moved or replaced after it was launched, so nothing
+    /// was installed; a restart launches what is there now.
+    AppReplaced,
     /// Permission to install was refused or not given.
     Permission,
     /// The install step failed.

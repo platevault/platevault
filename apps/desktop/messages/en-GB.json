@@ -1644,6 +1644,7 @@
   "update_error_manifest": "the update information on the server is invalid.",
   "update_error_signature": "its signature didn't verify, so it wasn't used.",
   "update_error_identity": "it isn't signed by the same developer as this copy of PlateVault.",
+  "update_error_app_replaced": "the PlateVault app was moved or replaced after it was opened. Restart PlateVault, then try again.",
   "update_error_permission": "permission to install it wasn't given.",
   "update_error_install": "the installer stopped with an error.",
   "update_error_file_system": "its files couldn't be written or read.",

@@ -28,7 +28,7 @@ use std::fs::File;
 use std::io::{Read as _, Seek as _};
 
 #[cfg(all(test, unix))]
-pub use self::bundle::{install_bundle, BundleInstaller, CodeSigning, Identity};
+pub use self::bundle::{install_bundle, BundleInstaller, CodeSigning, Identity, LaunchedBundle};
 use super::signature::Payload;
 use super::{Package, UpdateError};
 
@@ -66,14 +66,45 @@ pub trait Installer: Send + Sync {
     ) -> Result<Installed, UpdateError>;
 }
 
+/// The app this process was launched from, read at startup. The macOS
+/// install replaces that app or nothing (astro-plan-uyguq); elsewhere it
+/// holds nothing.
+#[derive(Clone, Debug)]
+pub struct LaunchedApp {
+    /// The bundle holding the running executable, or the English detail of
+    /// why there is none, which a macOS install then fails with.
+    #[cfg(target_os = "macos")]
+    bundle: Result<bundle::LaunchedBundle, String>,
+}
+
+impl LaunchedApp {
+    /// Read where this process was launched from. Call it first at startup:
+    /// the app an update replaces must still be the one this read found.
+    #[must_use]
+    pub fn record() -> Self {
+        Self {
+            #[cfg(target_os = "macos")]
+            bundle: bundle::LaunchedBundle::running().map_err(|error| error.to_string()),
+        }
+    }
+
+    /// The launched bundle a macOS install replaces.
+    #[cfg(target_os = "macos")]
+    fn bundle(&self) -> Result<&bundle::LaunchedBundle, UpdateError> {
+        self.bundle.as_ref().map_err(|reason| UpdateError::Install(reason.clone()))
+    }
+}
+
 /// The installer for the package this copy was installed from.
 pub struct OsInstaller {
     package: Option<Package>,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    launched: LaunchedApp,
 }
 
 impl OsInstaller {
-    pub const fn new(package: Option<Package>) -> Self {
-        Self { package }
+    pub const fn new(package: Option<Package>, launched: LaunchedApp) -> Self {
+        Self { package, launched }
     }
 }
 
@@ -96,7 +127,9 @@ impl Installer for OsInstaller {
             #[cfg(windows)]
             Package::Nsis | Package::Msi => windows::launch_installer(&mut payload, package, mode),
             #[cfg(target_os = "macos")]
-            Package::App => bundle::install_running_app(&mut payload, admin_prompt),
+            Package::App => {
+                bundle::install_launched_app(self.launched.bundle()?, &mut payload, admin_prompt)
+            }
             #[cfg(target_os = "linux")]
             Package::AppImage => linux::replace_appimage(payload.reader()),
             #[cfg(target_os = "linux")]
@@ -139,7 +172,7 @@ fn check_format(file: &mut File, package: Package) -> Result<(), UpdateError> {
 mod tests {
     use std::io::{Read as _, Write as _};
 
-    use super::{check_format, InstallMode, Installer as _, OsInstaller};
+    use super::{check_format, InstallMode, Installer as _, LaunchedApp, OsInstaller};
     use crate::update::{Package, UpdateError};
 
     const PACKAGES: [(Package, &[u8]); 6] = [
@@ -197,7 +230,7 @@ mod tests {
     #[tokio::test]
     async fn a_build_without_a_package_cannot_install() {
         let staged = staged(Package::AppImage, b"\x7fELF").await;
-        let error = OsInstaller::new(None)
+        let error = OsInstaller::new(None, LaunchedApp::record())
             .install(staged.reverify().expect("verified"), InstallMode::Now, "")
             .expect_err("no package");
         assert!(matches!(error, UpdateError::Unsupported(_)), "{error}");
@@ -208,7 +241,7 @@ mod tests {
         let foreign = if cfg!(windows) { Package::Deb } else { Package::Msi };
         let bytes = PACKAGES.iter().find(|(package, _)| *package == foreign).expect("bytes").1;
         let staged = staged(foreign, bytes).await;
-        let error = OsInstaller::new(Some(foreign))
+        let error = OsInstaller::new(Some(foreign), LaunchedApp::record())
             .install(staged.reverify().expect("verified"), InstallMode::Now, "")
             .expect_err("foreign package");
         assert!(
@@ -217,14 +250,14 @@ mod tests {
         );
     }
 
-    /// A test binary is not inside an `.app`, so the macOS install refuses to
-    /// guess what to replace.
+    /// A test binary is not inside an `.app`, so its launch record says so,
+    /// and the macOS install refuses to guess what to replace.
     #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn the_macos_install_needs_to_run_from_an_app_bundle() {
         let bytes = PACKAGES[0].1;
         let staged = staged(Package::App, bytes).await;
-        let error = OsInstaller::new(Some(Package::App))
+        let error = OsInstaller::new(Some(Package::App), LaunchedApp::record())
             .install(staged.reverify().expect("verified"), InstallMode::Now, "")
             .expect_err("not in a bundle");
         assert!(

@@ -14,6 +14,17 @@
 //! satisfies. The check is skipped for it, which is what lets ad-hoc installs
 //! move to the self-signed identity once (astro-plan-sl25q).
 //!
+//! The app replaced is the one this process was launched from
+//! (astro-plan-uyguq): [`LaunchedBundle`] reads its device and inode at
+//! launch, and the install goes ahead only while the app at that path still
+//! has them, so a bundle swapped in after launch is refused, not pinned as it
+//! is. That pin names the bundle directory, not what it holds, and the
+//! identity is read from whatever the bundle holds when the install starts.
+//! An app that reads as ad-hoc signed or unsigned then remains a residual
+//! risk, whether it was launched like that or a process of the user's
+//! rewrote the files inside it in place, which keeps the directory's device
+//! and inode: its update is held to no identity, only to the minisign check.
+//!
 //! The swap is the one `tauri-plugin-updater` 2.13.3 made: the two bundles are
 //! exchanged in one step where the file system can (APFS), so the app path
 //! never stands empty, and moved with a restore elsewhere. A previous app
@@ -59,50 +70,73 @@ pub trait CodeSigning: Send + Sync {
     fn satisfies(&self, bundle: &Path, requirement: &str) -> Result<bool, UpdateError>;
 }
 
-/// Install the `.app.tar.gz` `payload` over the app bundle this process runs
-/// from, asking for administrator rights with `admin_prompt` if it must.
+/// Install the `.app.tar.gz` `payload` over `launched`, the app bundle this
+/// process was launched from, asking for administrator rights with
+/// `admin_prompt` if it must.
 #[cfg(target_os = "macos")]
-pub(super) fn install_running_app(
+pub(super) fn install_launched_app(
+    launched: &LaunchedBundle,
     payload: &mut Payload<'_>,
     admin_prompt: &str,
 ) -> Result<super::Installed, UpdateError> {
-    let installed = running_app_bundle()?;
-    install_bundle(&installed, payload, &super::codesign::Codesign, admin_prompt)?;
+    install_bundle(launched, payload, &super::codesign::Codesign, admin_prompt)?;
     Ok(super::Installed::Relaunch)
 }
 
-/// The `.app` directory holding this executable (`X.app/Contents/MacOS/x`).
-#[cfg(target_os = "macos")]
-fn running_app_bundle() -> Result<PathBuf, UpdateError> {
-    let executable = std::env::current_exe()?;
-    executable
-        .ancestors()
-        .nth(3)
-        .filter(|bundle| bundle.extension().is_some_and(|extension| extension == "app"))
-        .map(Path::to_path_buf)
-        .ok_or_else(|| {
-            UpdateError::Install(format!(
-                "{} is not inside an app bundle, so it cannot update itself",
-                executable.display()
-            ))
-        })
+/// An app bundle this process was launched from, and the device and inode it
+/// had then: the install replaces that entry or nothing (astro-plan-uyguq).
+#[derive(Clone, Debug)]
+pub struct LaunchedBundle {
+    path: PathBuf,
+    id: (u64, u64),
 }
 
-/// Replace `installed` with the bundle in the `.app.tar.gz` `payload`, once
-/// the new bundle passes the identity check against `installed`. An app this
-/// user may not rename goes through [`PrivilegedInstall`], whose
-/// authorization dialog says `admin_prompt`. Whenever this fails, `installed`
-/// is left as it was, except when the previous app could not be put back
-/// after a failed move: it is then kept where
-/// [`UpdateError::PreviousAppNotRestored`] says.
+impl LaunchedBundle {
+    /// The `.app` directory holding this executable (`X.app/Contents/MacOS/x`),
+    /// as it is now: read at launch. The bundle is found from the
+    /// executable's path by name alone, made absolute so it names the same
+    /// place whatever the working directory is by the time of the install.
+    #[cfg(target_os = "macos")]
+    pub(super) fn running() -> Result<Self, UpdateError> {
+        let executable = std::path::absolute(std::env::current_exe()?)?;
+        let bundle = executable
+            .ancestors()
+            .nth(3)
+            .filter(|bundle| bundle.extension().is_some_and(|extension| extension == "app"))
+            .ok_or_else(|| {
+                UpdateError::Install(format!(
+                    "{} is not inside an app bundle, so it cannot update itself",
+                    executable.display()
+                ))
+            })?;
+        Ok(Self::at(bundle.to_path_buf())?)
+    }
+
+    /// The bundle at `path` as it is now, read as the install reads it: the
+    /// entry at `path` itself, a link if it is one ([`entry_id`]).
+    pub fn at(path: PathBuf) -> io::Result<Self> {
+        let id = entry_id(&path)?;
+        Ok(Self { path, id })
+    }
+}
+
+/// Replace the app `launched` names with the bundle in the `.app.tar.gz`
+/// `payload`, once the app at its path is found to be still the one launched
+/// and the new bundle passes the identity check against it. An app this user
+/// may not rename goes through [`PrivilegedInstall`], whose authorization
+/// dialog says `admin_prompt`. Whenever this fails, the installed app is left
+/// as it was, except when the previous app could not be put back after a
+/// failed move: it is then kept where [`UpdateError::PreviousAppNotRestored`]
+/// says.
 #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 pub fn install_bundle(
-    installed: &Path,
+    launched: &LaunchedBundle,
     payload: &mut Payload<'_>,
     signing: &dyn CodeSigning,
     admin_prompt: &str,
 ) -> Result<(), UpdateError> {
-    let (pinned, identity) = pin_and_identify(installed, signing)?;
+    let installed = launched.path.as_path();
+    let identity = identify_launched(launched, signing)?;
     let staging = staging_dir(installed)?;
     tar::Archive::new(GzDecoder::new(payload.reader())).unpack(staging.path())?;
     let update = single_bundle(staging.path())?;
@@ -115,7 +149,7 @@ pub fn install_bundle(
         #[cfg(target_os = "macos")]
         Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             tracing::debug!(%error, "this user cannot move the app; asking for administrator rights");
-            PrivilegedInstall::new(installed, pinned, payload, &update, &identity)
+            PrivilegedInstall::new(launched, payload, &update, &identity)
                 .and_then(|install| install.run(admin_prompt))
         }
         Err(error) => Err(error.into()),
@@ -140,18 +174,29 @@ pub fn install_bundle(
     Ok(())
 }
 
-/// The device and inode of the app at `installed`, then its identity, read
-/// in that order before anything else reads the app by path: the privileged
-/// install replaces the pinned entry or nothing (astro-plan-ryj83). A bundle
-/// swapped in before the pin is the one whose identity the update must
-/// match; one swapped in after it is refused by [`PrivilegedInstall::of`]
-/// and by root, whatever identity was read from it.
-fn pin_and_identify(
-    installed: &Path,
+/// The identity of the app `launched` names, read only once the entry at its
+/// path has been found to be still the one launched: its device and inode
+/// are read first, before anything else reads the app by path. A bundle
+/// swapped in after launch is refused here, whatever identity it has, and so
+/// is an empty path; one swapped in after this read is refused by
+/// [`PrivilegedInstall::of`] and by root, which replace the launched entry or
+/// nothing (astro-plan-ryj83).
+fn identify_launched(
+    launched: &LaunchedBundle,
     signing: &dyn CodeSigning,
-) -> Result<((u64, u64), Identity), UpdateError> {
-    let pinned = entry_id(installed)?;
-    Ok((pinned, signing.identity(installed)?))
+) -> Result<Identity, UpdateError> {
+    let installed = launched.path.as_path();
+    let found = match entry_id(installed) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        found => Some(found?),
+    };
+    if found != Some(launched.id) {
+        return Err(UpdateError::AppReplaced(format!(
+            "{} is no longer the app PlateVault was launched from, so nothing was installed; a restart launches what is there now",
+            installed.display()
+        )));
+    }
+    signing.identity(installed)
 }
 
 /// The device and inode of the entry at `path`, a link itself if it is one.
@@ -317,9 +362,10 @@ const COPY_SECONDS: u32 = 120;
 /// 1. It enters the installed app's directory and the archive's directory with
 ///    `cd -P` and refuses either when `pwd -P` is not the path the app
 ///    resolved, so no component is a symbolic link. The app must not be a
-///    link, and must be the entry the user context pinned before it read the
-///    app's identity: its device and inode (`$app`, `APP_CHANGED`, 69). The
-///    same `stat` reads its owner, which the update is given.
+///    link, and must be the entry this process was launched from, which the
+///    user context found there again before it read the app's identity: its
+///    device and inode (`$app`, `APP_CHANGED`, 69). The same `stat` reads
+///    its owner, which the update is given.
 /// 2. It opens the archive, refusing a link, and copies from what it opened
 ///    only if that is a regular file: at most one byte more than the
 ///    verified size, giving up after [`COPY_SECONDS`]. A link swapped in
@@ -455,8 +501,9 @@ struct PrivilegedInstall {
     /// name there.
     parent: PathBuf,
     name: OsString,
-    /// The installed app's device and inode as the user context saw it: root
-    /// replaces only that entry.
+    /// The installed app's device and inode at launch, which the user context
+    /// found again before it read the app's identity: root replaces only
+    /// that entry.
     app: (u64, u64),
     /// The verified `.app.tar.gz`'s directory, with every link resolved, its
     /// name there, and the size and SHA-256 of its verified bytes.
@@ -477,18 +524,17 @@ struct PrivilegedInstall {
 #[cfg(target_os = "macos")]
 impl PrivilegedInstall {
     /// The privileged install of `payload`'s bundle, unpacked by the user
-    /// context at `update`, over `installed`, signed as `identity`. `pinned`
-    /// is the device and inode `installed` had before its identity was read.
+    /// context at `update`, over the app `launched` names, signed as
+    /// `identity`.
     fn new(
-        installed: &Path,
-        pinned: (u64, u64),
+        launched: &LaunchedBundle,
         payload: &Payload<'_>,
         update: &Path,
         identity: &Identity,
     ) -> Result<Self, UpdateError> {
         Self::of(
-            installed,
-            pinned,
+            &launched.path,
+            launched.id,
             payload.path(),
             (payload.size(), payload.sha256()),
             update,
@@ -498,9 +544,9 @@ impl PrivilegedInstall {
 
     /// [`Self::new`] for the archive at `archive` whose verified bytes are
     /// `size` long and hash to `sha256`. Refused when `installed` is no
-    /// longer the entry `pinned` names: the identity check, the unpack and
-    /// the failed swap may have taken seconds, in which another process of
-    /// the user's could swap another bundle in.
+    /// longer the entry `pinned` names, the one launched: the identity check,
+    /// the unpack and the failed swap may have taken seconds, in which
+    /// another process of the user's could swap another bundle in.
     fn of(
         installed: &Path,
         pinned: (u64, u64),
@@ -723,10 +769,10 @@ fn keep_backup_if_not_restored(
     Some(backup.to_path_buf())
 }
 
-/// The macOS installer over an explicit installed bundle, for tests.
+/// The macOS installer over an explicit launched bundle, for tests.
 #[cfg(test)]
 pub struct BundleInstaller<C> {
-    pub installed: PathBuf,
+    pub launched: LaunchedBundle,
     pub signing: C,
 }
 
@@ -738,7 +784,7 @@ impl<C: CodeSigning> Installer for BundleInstaller<C> {
         _mode: InstallMode,
         admin_prompt: &str,
     ) -> Result<Installed, UpdateError> {
-        install_bundle(&self.installed, &mut payload, &self.signing, admin_prompt)?;
+        install_bundle(&self.launched, &mut payload, &self.signing, admin_prompt)?;
         Ok(Installed::Relaunch)
     }
 }
@@ -755,8 +801,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        exchange, keep_backup_if_not_restored, pin_and_identify, replace, staging_dir_among, swap,
-        CodeSigning, Identity,
+        exchange, identify_launched, keep_backup_if_not_restored, replace, staging_dir_among, swap,
+        CodeSigning, Identity, LaunchedBundle,
     };
     use crate::update::UpdateError;
 
@@ -808,22 +854,24 @@ mod tests {
         }
     }
 
-    /// The app is pinned before its identity is read: a bundle swapped in
-    /// during the read leaves the pin naming the app, so the privileged
-    /// install refuses the swap instead of replacing the other bundle.
+    /// The launched app is found again before its identity is read: a bundle
+    /// swapped in during the read is not what that check saw, so it passes,
+    /// and the pin the privileged install then refuses the swap by is the
+    /// launched app's.
     #[test]
-    fn the_app_is_pinned_before_its_identity_is_read() {
+    fn the_launched_app_is_found_again_before_its_identity_is_read() {
         let dir = tempfile::tempdir().expect("tempdir");
         let (installed, moved) = (dir.path().join("App.app"), dir.path().join("moved-away.app"));
         bundle(&installed, "old");
         let app = fs::symlink_metadata(&installed).expect("metadata");
+        let launched = LaunchedBundle::at(installed.clone()).expect("launch");
 
-        let (pinned, _) =
-            pin_and_identify(&installed, &SwapsWhileRead { moved_to: moved.clone() }).expect("pin");
+        identify_launched(&launched, &SwapsWhileRead { moved_to: moved.clone() })
+            .expect("the app was still the launched one before its identity was read");
 
         assert_eq!(version(&installed), "foreign", "the other bundle was swapped in");
         assert_eq!(version(&moved), "old");
-        assert_eq!(pinned, (app.dev(), app.ino()), "the pin is the app's, read before the swap");
+        assert_eq!(launched.id, (app.dev(), app.ino()), "the pin is the launched app's");
     }
 
     #[test]
