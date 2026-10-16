@@ -216,8 +216,22 @@ jobs:
               $path = 'nsis/$PLUGINSDIR/nsDialogs.dll'
               $identity = $thirdParty[$path]
               $signature = Get-AuthenticodeSignature -LiteralPath "unpacked/$path"
-              if ($signature.Status -ne 'Valid') { throw "$path must carry a valid signature by a named publisher or match reviewed SHA-256 $($identity.sha256); found $($signature.Status)" }
+              $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+              if ($signature.Status -ne 'Valid' -or $signer -cne 'Named publisher') {
+                throw "$path must carry a valid signature by a named publisher or match reviewed SHA-256 $($identity.sha256); found $($signature.Status), '$signer'"
+              }
               throw 'the unsigned PE mutation unexpectedly passed'
+            }
+            'Wrong WiX publisher' = {
+              $path = 'msi-streams/Binary.WixUIWixca'
+              $file = Get-Item "unpacked/$path"
+              $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+              $identity = $thirdParty[$path]
+              $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+              $issuer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $true) } else { 'nobody' }
+              $wrongPublisher = 'Wrong publisher'
+              if ($signature.Status -ne 'Valid' -or $signer -cne $wrongPublisher -or $issuer -cne $identity.issuer) { throw "$path must carry a valid Authenticode signature by $wrongPublisher issued by $($identity.issuer); found $($signature.Status), '$signer' issued by '$issuer'" }
+              throw 'the wrong publisher mutation unexpectedly passed'
             }
             'WiX issuer' = {
               $file = Get-Item unpacked/msi-streams/Binary.WixUIWixca
@@ -236,6 +250,7 @@ jobs:
               'CLI lockfile version' { if ($message -notmatch 'Tauri CLI 2\.12\.2.*resolves 2\.12\.2-rehearsal') { throw "wrong CLI mutation failure: $message" } }
               'NSIS hash pin' { if ($message -notmatch 'SHA-256 .* did not match the reviewed pin') { throw "wrong hash mutation failure: $message" } }
               'Unsigned third-party PE' { if ($message -notmatch 'must carry a valid signature by a named publisher or match reviewed SHA-256.*found NotSigned') { throw "wrong unsigned-PE mutation failure: $message" } }
+              'Wrong WiX publisher' { if ($message -notmatch 'by Wrong publisher issued by') { throw "wrong publisher mutation failure: $message" } }
               'WiX issuer' { if ($message -notmatch 'issued by Unexpected CA') { throw "wrong issuer mutation failure: $message" } }
             }
             "ok: $case -> $message"
