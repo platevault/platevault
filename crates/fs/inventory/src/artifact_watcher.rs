@@ -221,9 +221,13 @@ const fn brings_folder(kind: EventKind) -> bool {
 }
 
 /// Whether `kind` may change who can list a folder: its permissions, owner
-/// or access list changed (inotify `IN_ATTRIB`, `FSEvents` inode metadata or
-/// owner changes). Its timestamps and extended attributes do not. Windows
-/// reports no metadata kind: see [`folder_rescans`].
+/// or access list changed. A timestamp or extended-attribute change named as
+/// such (`WriteTime`, `AccessTime`, `Extended`) does not. inotify
+/// (`IN_ATTRIB`) and `FSEvents` (inode metadata) report every metadata
+/// change as `Metadata(Any)`, a folder's new times (`utimes`) included, so
+/// such a change rescans too: a copy tool that sets a folder's times costs a
+/// rescan of its location, in exchange for never missing an access change.
+/// Windows reports no metadata kind: see [`folder_rescans`].
 const fn changes_access(kind: EventKind) -> bool {
     matches!(
         kind,
@@ -579,9 +583,10 @@ mod tests {
     }
 
     /// A folder whose permissions or owner changed may list other files now:
-    /// a tree watcher asks for a rescan. Its timestamps and extended
-    /// attributes change nothing a walk lists, and the artifact watcher
-    /// forwards no folder event.
+    /// a tree watcher asks for a rescan, and so does any metadata change a
+    /// backend reports only as `Metadata(Any)`, new times included. A change
+    /// named as one of its times or extended attributes changes nothing a
+    /// walk lists, and the artifact watcher forwards no folder event.
     #[test]
     fn a_folder_access_change_asks_a_tree_watcher_for_a_rescan() {
         let dir = tempfile::tempdir().unwrap();
@@ -596,7 +601,8 @@ mod tests {
             assert_eq!(forwarded(Ok(changed)), [] as [ArtifactEventKind; 0]);
             kinds == [ArtifactEventKind::NeedsRescan]
         };
-        assert!(rescans(MetadataKind::Any), "inotify IN_ATTRIB, FSEvents inode metadata");
+        assert!(rescans(MetadataKind::Any), "inotify IN_ATTRIB, FSEvents inode metadata, utimes");
+        assert!(!rescans(MetadataKind::AccessTime));
         assert!(rescans(MetadataKind::Permissions));
         assert!(rescans(MetadataKind::Ownership));
         assert!(!rescans(MetadataKind::WriteTime));

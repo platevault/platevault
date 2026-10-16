@@ -62,11 +62,15 @@ pub struct WatchRegistrationReport {
 }
 
 /// Register `paths` with `watcher`, using the symlink-safe two-mode strategy
-/// shared by both `WatcherService::start` and `start_artifact_watcher`.
+/// shared by both `WatcherService::start` (the per-project watcher) and
+/// `start_artifact_watcher`.
 ///
 /// When `follow_symlinks` is `false`, each path is walked via
 /// [`fs_pathsafe::real_dirs_under`] and every real (non-link) subdirectory is
-/// watched individually with `RecursiveMode::NonRecursive`.
+/// watched individually with `RecursiveMode::NonRecursive`. That lister
+/// leaves out a folder swapped for a link or junction while it lists, with
+/// what it found there, so no folder outside the path is watched through
+/// one.
 ///
 /// Every path is registered in one batch ([`Watcher::paths_mut`]): `FSEvents`
 /// (macOS) stops its stream once and restarts it once with every path, where
@@ -78,11 +82,18 @@ pub struct WatchRegistrationReport {
 /// per-subdirectory failures are collected in `WatchRegistrationReport::skipped`
 /// and do not abort (item d: partial start tolerance).
 ///
+/// These three behaviours came with the tree watcher (astro-plan-ef440) and
+/// hold for every caller: the one batch, the swap-checked listing, and a
+/// path that probes as a real folder yet lists no folders failing the
+/// registration instead of reporting a watch on nothing.
+///
 /// # Errors
 ///
-/// Returns an error string if a root path cannot be watched (always fatal), if
-/// any subdirectory fails when `fail_fast` is `true`, or if the batch cannot
-/// be applied. The watcher is then left unspecified: drop it.
+/// Returns an error string if a root path cannot be watched (always fatal),
+/// if a root lists no folders once it probed fine (it changed, or could not
+/// be read, meanwhile), if any subdirectory fails when `fail_fast` is
+/// `true`, or if the batch cannot be applied. The watcher is then left
+/// unspecified: drop it.
 pub fn register_watch_paths(
     watcher: &mut RecommendedWatcher,
     paths: &[Utf8PathBuf],
