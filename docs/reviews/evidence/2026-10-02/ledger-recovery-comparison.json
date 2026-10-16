@@ -2788,24 +2788,116 @@
     "control_hits": 21530
    }
   },
+  "supplementary_method": "The 28 supplementary ids, with the same four controls, decompressed and searched in every file of every carrier above and in every scratch store built from them.",
   "supplementary_totals": {
    "live_backup_copy": {
     "files": 97,
     "chunks_decoded": 147244,
     "errors": 0,
     "target_hits": 0,
-    "control_hits": 0
+    "control_hits": 25307
    },
    "remote_git_all_storage_files": {
     "files": 214,
     "chunks_decoded": 138228,
     "errors": 0,
     "target_hits": 0,
+    "control_hits": 21530
+   },
+   "pv_backup_20260826_tables": {
+    "files": 2,
+    "chunks_decoded": 114,
+    "errors": 0,
+    "target_hits": 0,
     "control_hits": 0
    },
-   "clone_platevault_claude": {
+   "clone_platevault_sol_tables": {
+    "files": 17,
+    "chunks_decoded": 8910,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "home_beads_backup_tables": {
+    "files": 2,
+    "chunks_decoded": 122,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_platevault_claude_embedded_tables": {
+    "files": 128,
+    "chunks_decoded": 125435,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 15099
+   },
+   "remote_pre_migration_snapshot": {
+    "files": 130,
+    "chunks_decoded": 119844,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 13845
+   },
+   "remote_current_snapshot": {
+    "files": 216,
+    "chunks_decoded": 138240,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 21530
+   },
+   "live_backup_scratch_store": {
+    "files": 98,
+    "chunks_decoded": 147253,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 25307
+   },
+   "clone_platevault_claude_backup": {
+    "files": 128,
+    "chunks_decoded": 123811,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 14855
+   },
+   "clone_clean_room_pv_tables": {
+    "files": 2,
+    "chunks_decoded": 5890,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_platevault_claude_embedded_original_tables_and_journal": {
     "files": 254,
     "chunks_decoded": 249228,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 29954
+   },
+   "clone_platevault_sol": {
+    "files": 15,
+    "chunks_decoded": 8939,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_clean_room_pv": {
+    "files": 3,
+    "chunks_decoded": 5924,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "pv_backup_20260826": {
+    "files": 1,
+    "chunks_decoded": 105,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "home_beads_backup": {
+    "files": 1,
+    "chunks_decoded": 113,
     "errors": 0,
     "target_hits": 0,
     "control_hits": 0
@@ -2987,7 +3079,7 @@
     "astro-plan-vi9sp",
     "astro-plan-zjf88"
    ],
-   "reason": "Outside the reviewed 183: 20 from files in the baseline tree, 8 from commit messages on non-main refs (2026-08-24..25). Also absent from all stores, histories and chunks."
+   "reason": "Outside the reviewed 183: 20 from files in the baseline tree, 8 from commit messages on non-main refs (2026-08-24..25). Absent from the current rows, the wisps table where one exists, and the full dolt_history_issues of all 12 sources, and from every decoded chunk of every copied carrier and scratch store (see supplementary_store_queries and storage_chunk_scan.supplementary_totals)."
   }
  ],
  "supplementary_outside_183": {
@@ -3194,5 +3286,101 @@
     ]
    }
   ]
+ },
+ "supplementary_store_queries": {
+  "backup-20261016": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-p0ds",
+    "astro-plan-qwvo"
+   ]
+  },
+  "remote-pre-migration-b8d4879": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": "no wisps table",
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  "remote-current-c928cda": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": "no wisps table",
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-p0ds",
+    "astro-plan-qwvo"
+   ]
+  },
+  "claude-embedded": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  "claude-backup": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  "sol-dolt": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "sol-dropped": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "sol-embedded": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "sol-backup": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "cleanroom-pv": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "pv-backup-20260826": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "home-beads-backup": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  }
  }
 }

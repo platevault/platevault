@@ -50,7 +50,8 @@ The 2026-10-02 review evidence the bead cites was never committed to any ref. It
 3. Fetched the remote `refs/dolt/data` into a new bare repository, together with the pre-migration commits `b8d4879` and `65b15c98`. Snapshots and every storage file from that history were materialised.
 4. Ran only `SELECT` queries in each scratch store: branches, log, issue counts, target ids in current rows and in `dolt_history_issues`.
 5. Decompressed every chunk of every copied archive, table file and journal and searched them for the target strings.
-6. Compared ids, statuses, comments and dependencies with the live export.
+6. Ran the 28 further bead-shaped strings from outside the 183 through steps 4 and 5 on the same 12 scratch stores and every copied carrier, with the same positive controls. None appeared.
+7. Compared ids, statuses, comments and dependencies with the live export.
 
 ## Commands run
 
@@ -92,6 +93,7 @@ Analysis, all on copies:
 python3 extract.py
 python3 classify.py
 python3 store_census.py <out.json> <scratch stores>
+python3 store_census.py --needles <supplementary needles> <out.json> <scratch stores>
 python3 darc_scan.py <needles> <out.jsonl> <copies and remote blobs>
 python3 compare_ids.py <out.json>
 python3 supplementary.py <baseline tree ids>
