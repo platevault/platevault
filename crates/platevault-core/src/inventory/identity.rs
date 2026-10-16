@@ -187,10 +187,17 @@ pub(super) fn stamp(meta: &Metadata) -> Stamp {
 
 /// A folder's identity on its mounted volume: the device and inode numbers on
 /// Unix, and on Windows the volume serial number and the 64-bit file index
-/// that `GetFileInformationByHandle` reports for a handle on the folder
-/// itself, which `Metadata` does not expose there. Same-session continuity
-/// evidence like [`Stamp`], never persisted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// (`nFileIndexHigh << 32 | nFileIndexLow`) that `GetFileInformationByHandle`
+/// reports for a handle on the folder itself, which `Metadata` does not
+/// expose there. Same-session continuity evidence like [`Stamp`], never
+/// persisted.
+///
+/// `platevault_eject_windows::FolderId`, computed in that crate's
+/// `window::folder_id`, names a Windows folder the same way, and the desktop
+/// shell copies this one into it (`apps/desktop/src-tauri/src/eject.rs`) to
+/// bind a removal notice handle to the watched root. The two must agree, or
+/// every root's handle is refused: change both together.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FolderId {
     pub volume: u64,
     pub index: u64,

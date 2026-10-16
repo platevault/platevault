@@ -46,8 +46,14 @@ pub struct Root {
 
 /// A folder's identity on its volume, as `GetFileInformationByHandle`
 /// reports it for a handle on the folder: the volume serial number and the
-/// 64-bit file index.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+/// 64-bit file index (`nFileIndexHigh << 32 | nFileIndexLow`), computed in
+/// `window::folder_id`.
+///
+/// The desktop shell fills it from `platevault_core::inventory::FolderId`,
+/// which discovery reads the same way for a watched root
+/// (`platevault-core/src/inventory/identity.rs`). The two must agree, or
+/// every root's handle is refused: change both together.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FolderId {
     pub volume: u64,
     pub index: u64,

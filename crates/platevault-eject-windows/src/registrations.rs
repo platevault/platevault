@@ -35,6 +35,14 @@ pub enum Notice {
 pub struct Registrations<K, R, N> {
     entries: HashMap<usize, Entry<K, R, N>>,
     open: fn(&R) -> io::Result<File>,
+    /// The roots, by key, whose refusal was logged and that have not
+    /// registered since: a root that stays refused (a reparse point of
+    /// another kind, such as a cloud-files folder) is logged once, not at
+    /// every retry.
+    refused: HashMap<K, R>,
+    /// How many refusals were logged.
+    #[cfg(test)]
+    logged: usize,
 }
 
 struct Entry<K, R, N> {
@@ -50,7 +58,24 @@ impl<K: Clone + Eq + Hash, R: Clone + Debug + Eq, N> Registrations<K, R, N> {
     /// No registrations yet; `open` opens a root's handle, and refuses one
     /// that is not the root's folder.
     pub fn new(open: fn(&R) -> io::Result<File>) -> Self {
-        Self { entries: HashMap::new(), open }
+        Self {
+            entries: HashMap::new(),
+            open,
+            refused: HashMap::new(),
+            #[cfg(test)]
+            logged: 0,
+        }
+    }
+
+    /// Record that `root` was refused for `key`; `true` the first time since
+    /// it last registered, so the refusal is logged once.
+    fn first_refusal(&mut self, key: &K, root: &R) -> bool {
+        let first = self.refused.insert(key.clone(), root.clone()).as_ref() != Some(root);
+        #[cfg(test)]
+        if first {
+            self.logged += 1;
+        }
+        first
     }
 
     /// Register exactly `roots`. A key that left, or now names another root,
@@ -59,13 +84,15 @@ impl<K: Clone + Eq + Hash, R: Clone + Debug + Eq, N> Registrations<K, R, N> {
     /// which registers the handle and returns the registration's id and
     /// notification. A root that cannot be opened or registered stays
     /// unregistered until a later call, which [`covers`](Self::covers) tells
-    /// the caller to make.
+    /// the caller to make; its refusal is logged once, until it registers or
+    /// its key names another root.
     pub fn follow(
         &mut self,
         roots: &HashMap<K, R>,
         mut register: impl FnMut(&File) -> io::Result<(usize, N)>,
     ) {
         self.entries.retain(|_, entry| roots.get(&entry.key) == Some(&entry.root));
+        self.refused.retain(|key, root| roots.get(key) == Some(root));
         let registered: HashSet<K> = self.entries.values().map(|entry| entry.key.clone()).collect();
         for (key, root) in roots.iter().filter(|(key, _)| !registered.contains(*key)) {
             let registration = (self.open)(root).and_then(|handle| {
@@ -73,6 +100,9 @@ impl<K: Clone + Eq + Hash, R: Clone + Debug + Eq, N> Registrations<K, R, N> {
             });
             match registration {
                 Ok((id, handle, notification)) => {
+                    if self.refused.remove(key).is_some() {
+                        tracing::info!(root = ?root, "removal notices: root registered after all");
+                    }
                     let entry = Entry {
                         key: key.clone(),
                         root: root.clone(),
@@ -81,11 +111,16 @@ impl<K: Clone + Eq + Hash, R: Clone + Debug + Eq, N> Registrations<K, R, N> {
                     };
                     self.entries.insert(id, entry);
                 }
-                Err(error) => tracing::warn!(
-                    root = ?root,
-                    %error,
-                    "removal notices: root not registered"
-                ),
+                Err(error) => {
+                    if self.first_refusal(key, root) {
+                        tracing::warn!(
+                            root = ?root,
+                            %error,
+                            "removal notices: root not registered; tried again without \
+                             logging until it registers"
+                        );
+                    }
+                }
             }
         }
     }
@@ -114,12 +149,16 @@ impl<K: Clone + Eq + Hash, R: Clone + Debug + Eq, N> Registrations<K, R, N> {
                         // A registration without its handle would miss the
                         // next request, so it ends, and the root is left
                         // uncovered for a later `follow` to register again.
-                        tracing::warn!(
-                            root = ?entry.root,
-                            %error,
-                            "removal notices: root not reopened after a refused removal"
-                        );
-                        self.entries.remove(&id).map(|entry| (entry.key, Removal::Refused))
+                        let entry = self.entries.remove(&id)?;
+                        if self.first_refusal(&entry.key, &entry.root) {
+                            tracing::warn!(
+                                root = ?entry.root,
+                                %error,
+                                "removal notices: root not reopened after a refused removal; \
+                                 tried again without logging until it registers"
+                            );
+                        }
+                        Some((entry.key, Removal::Refused))
                     }
                 }
             }
@@ -356,5 +395,54 @@ mod tests {
         std::fs::write(&root, b"").unwrap();
         assert_eq!(harness.follow(&[("card", &root)]).len(), 1);
         assert!(harness.covers(&[("card", &root)]));
+    }
+}
+
+#[cfg(test)]
+mod refusals {
+    use std::path::{Path, PathBuf};
+
+    use super::*;
+
+    /// Registrations over plain files, as in `tests`, with no notification.
+    fn registrations() -> Registrations<&'static str, PathBuf, ()> {
+        Registrations::new(|root| File::open(root))
+    }
+
+    fn follow(registrations: &mut Registrations<&'static str, PathBuf, ()>, root: &Path) {
+        let mut next = 0;
+        registrations.follow(&HashMap::from([("card", root.to_path_buf())]), |_| {
+            next += 1;
+            Ok((next, ()))
+        });
+    }
+
+    /// A root that stays refused is logged once, not at every retry; once it
+    /// registered, or its key names another root, a refusal is logged again.
+    #[test]
+    fn a_root_that_stays_refused_is_logged_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let (card, moved) = (dir.path().join("card"), dir.path().join("moved"));
+        let mut registrations = registrations();
+
+        follow(&mut registrations, &card);
+        follow(&mut registrations, &card);
+        assert_eq!(registrations.logged, 1, "logged again at a retry");
+
+        std::fs::write(&card, b"").unwrap();
+        follow(&mut registrations, &card);
+        assert!(registrations.covers(&HashMap::from([("card", card.clone())])));
+        // Refused again when a refused removal cannot reopen it, then at the
+        // retries after.
+        let id = *registrations.entries.keys().next().unwrap();
+        registrations.notice(id, Notice::QueryRemove);
+        std::fs::remove_file(&card).unwrap();
+        registrations.notice(id, Notice::QueryRemoveFailed);
+        follow(&mut registrations, &card);
+        assert_eq!(registrations.logged, 2, "a refusal after it registered is logged once");
+
+        follow(&mut registrations, &moved);
+        follow(&mut registrations, &moved);
+        assert_eq!(registrations.logged, 3, "a remapped root's refusal is logged once");
     }
 }

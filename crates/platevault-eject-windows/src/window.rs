@@ -315,7 +315,10 @@ fn information(handle: &File) -> io::Result<BY_HANDLE_FILE_INFORMATION> {
     }
 }
 
-/// The folder ID a handle's information names.
+/// The folder ID a handle's information names. It must match how
+/// `platevault_core::inventory::FolderId` is read for a watched root
+/// (`identity::folder_id`, through `winapi-util`'s `volume_serial_number`
+/// and `file_index`), since roots arrive with that ID: change both together.
 fn folder_id(info: &BY_HANDLE_FILE_INFORMATION) -> FolderId {
     FolderId {
         volume: u64::from(info.dwVolumeSerialNumber),
