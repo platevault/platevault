@@ -12,14 +12,15 @@
  * A frame with copies in several locations moves every copy, and if any
  * copy is refused the whole frame is refused (D-W57).
  */
+import type { FileRow } from "@/components/app/contracts"
 import { stepRecord } from "@/domain/calibration-process"
 import { fileAt, filesUnder, removeFile } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
-import { keptViewLinks, type TrashItem, trashBlock, viewLinks, type ViewLinks } from "@/domain/storage"
+import { keptViewLinks, type TrashBlock, type TrashItem, trashBlock, viewLinks, type ViewLinks } from "@/domain/storage"
 import type { AssetId, CalibrationProcessId, Catalog, Disk, DiskFile, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
 import { fileName, formatBytes, formatCount } from "@/lib/format"
-import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { joinRefs, type MessageRef, type Messages, msg, say, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { freshId } from "./shared"
@@ -57,7 +58,35 @@ export function folderItems(state: Pick<PrototypeState, "disk">, folder: string)
   const files = filesUnder(state.disk, folder)
   if (files.length > 0) return files.map((file) => ({ path: file.path }))
   const volume = Object.values(state.disk.volumes).find((v) => isUnder(folder, v.mountPath))
-  return volume && !volume.mounted ? [{ path: folder, refusedReason: msg("run_cleanup_volume_offline", { name: volume.name }) }] : []
+  return volume && !volume.mounted ? [{ path: folder, refusedReason: msg("issue_location_offline", { name: volume.name }) }] : []
+}
+
+/** One file a trash review names: an item, the digest the library recorded for it when the item's asset does not carry it (a master version), and why it stays, if it does. */
+export type ReviewedFile = TrashItem & { sha256?: string; refused?: TrashBlock | null }
+
+/**
+ * The exact files a move to the OS Trash takes, as the review's fold-out rows
+ * (astro-plan-6bh3p): each file's name, folder and bytes, its SHA-256 where
+ * the library recorded it (the asset's copy at that path, or the digest the
+ * caller names), and a link that only unlinks frees nothing. A file that
+ * stays reads its terse reason in its own Status cell ("Read-only",
+ * "Linked by NGC 7000 OIII deep ▸"), as the engine words its refusal.
+ */
+export function trashFileRows(m: Messages, world: Pick<PrototypeState, "catalog" | "disk">, files: readonly ReviewedFile[]): FileRow[] {
+  return files.map((reviewed) => {
+    const file = fileAt(world.disk, reviewed.path)
+    const block = reviewed.refused ?? (reviewed.refusedReason ? { reason: reviewed.refusedReason } : null)
+    const sha256 = reviewed.sha256 ?? (reviewed.assetId ? world.catalog.assets[reviewed.assetId]?.copies.find((c) => c.path === reviewed.path)?.sha256 : undefined)
+    const row: FileRow = {
+      file: fileName(reviewed.path),
+      from: reviewed.path.slice(0, reviewed.path.lastIndexOf("/")),
+      action: block ? "keep" : file?.linkTarget ? "unlink" : "trash",
+      size: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0),
+    }
+    if (sha256) row.sha256 = sha256
+    if (block) row.status = block.link ? { label: say(m, block.reason), link: block.link } : { label: say(m, block.reason) }
+    return row
+  })
 }
 
 function groupItems(items: TrashItem[]): TrashItem[][] {

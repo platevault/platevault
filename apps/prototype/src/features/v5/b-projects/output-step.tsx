@@ -26,12 +26,14 @@ import { OperationLine } from "@/components/app/operation-panel"
 import type { DetailSection } from "@/components/templates/detail-page"
 import { KIND_NAME } from "@/domain/calibration"
 import { isLocked } from "@/domain/derive"
+import { fileAt, trashRefusal } from "@/domain/disk"
 import { GOAL_CHANNELS, OUTPUT_KIND_NAME, OUTPUT_KINDS } from "@/domain/labels"
 import { copyToOutputRefusal, type OutputRow, outputRows, PROJECT_TAB_NAME, type ProcessingMaster, processingMasters, projectOperation, projectPaths } from "@/domain/project-view"
 import type { OutputKind, ProcessingMasterOffer, Project } from "@/domain/types"
 import { fileName, formatBytes, formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { adoptionCheck, adoptProcessingMaster, copyToOutput, hideMasterOffer, restoreMasterOffer, setOutputChannel, setOutputKind } from "@/store/actions/project-view"
+import { trashFileRows } from "@/store/actions/trash"
 import { type CommitResult, store, useStore } from "@/store/core"
 
 /** The image files Copy to Output's chooser lists (RES-AC-25). */
@@ -109,10 +111,11 @@ function CopyDialog({ project, onClose }: { project: Project; onClose: () => voi
   )
 }
 
-/** Add to library… for a generated master: its fixed destination, or why not; PlateVault's own copy there can go to the Trash first. */
+/** Add to library… for a generated master: its fixed destination, or why not; PlateVault's own copy there can go to the Trash first, its file folded out in the review (astro-plan-6bh3p). */
 function adoptAction(m: Messages, project: Project, master: ProcessingMaster): Action {
   const label = m.project_output_adopt()
-  const check = adoptionCheck(store.getState(), project.id, master.file.path)
+  const state = store.getState()
+  const check = adoptionCheck(state, project.id, master.file.path)
   if (check.ok)
     return {
       id: "adopt",
@@ -121,14 +124,21 @@ function adoptAction(m: Messages, project: Project, master: ProcessingMaster): A
       confirm: { title: m.project_output_adopt_title({ name: fileName(master.file.path) }), summary: check.destination, confirm: { label } },
       run: () => adoptProcessingMaster(project.id, master.file.path, check.sha256),
     }
-  if (check.ownCopy)
+  if (check.ownCopy) {
+    const own = fileAt(state.disk, check.ownCopy)
+    const refusal = trashRefusal(state.disk, check.ownCopy)
     return {
       id: "adopt",
       label,
       icon: Archive,
-      confirm: { title: m.project_output_adopt_own_copy_title(), summary: check.ownCopy, confirm: { label: m.project_output_adopt_trash_copy(), kind: "destructive" } },
+      confirm: {
+        title: m.project_output_adopt_own_copy_title(),
+        groups: own ? [{ label: m.calibration_own_copy(), rows: trashFileRows(m, state, [{ path: own.path, sha256: own.sha256, refused: refusal ? { reason: refusal } : null }]), defaultOpen: true }] : undefined,
+        confirm: { label: m.project_output_adopt_trash_copy(), kind: "destructive" },
+      },
       run: () => adoptProcessingMaster(project.id, master.file.path, master.file.sha256, { trashOwnCopy: true }),
     }
+  }
   return { id: "adopt", label, icon: Archive, unavailable: { action: m.actions_blocked({ action: label }), reason: check.reasons.map((r) => say(m, r)).join(" · "), blockers: [] }, run: () => undefined }
 }
 

@@ -24,6 +24,7 @@
 import { KIND_NAME } from "./calibration"
 import { fileAt, filesUnder } from "./disk"
 import { nightOf } from "./indexing"
+import type { TrashItem } from "./storage"
 import { headerNamingValues, namingTemplate, namingValues, type NamingValues, resolveNamingTemplate } from "./templates"
 import type {
   ApplicationProfile,
@@ -120,6 +121,11 @@ export function routeRawCalibration(catalog: Catalog, sessionIds: Iterable<Sessi
 export function rawFrameIds(catalog: Catalog, process: CalibrationProcess): string[] {
   const session = process.sessionId ? catalog.sessions[process.sessionId] : undefined
   return session ? session.assetIds.filter((id) => catalog.assets[id] && !catalog.assets[id]!.trashed) : []
+}
+
+/** What the Raws step hands to the OS Trash: every copy of every raw frame, each frame's copies together (D-W57). */
+export function rawItems(catalog: Catalog, process: CalibrationProcess): TrashItem[] {
+  return rawFrameIds(catalog, process).flatMap((assetId) => catalog.assets[assetId]!.copies.map((c) => ({ path: c.path, assetId })))
 }
 
 export type ProcessStatus = "awaiting-stack" | "stacking" | "importing" | "trashing-raws" | "failed" | "done"

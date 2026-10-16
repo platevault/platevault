@@ -5,8 +5,12 @@
  * The dialog names the exact scope: the title is the verb and object ("Move
  * 14 files to Trash?"), an optional summary line gives the totals, and each
  * group of files folds out to the files themselves: File · From · To ·
- * Size · Status, where Status carries a per-file refusal ("Read-only",
- * "Linked by NGC 7000 OIII deep ▸"). Description prose is not required.
+ * Size, then SHA-256 where a row knows it, then Status, where a file that
+ * stays reads its terse reason ("Read-only", "Linked by NGC 7000 OIII deep
+ * ▸"). Description prose is not required.
+ *
+ * `FileTable` is that fold-out on its own, for a page row that folds out
+ * the same files its review will list (Wrap up's offers, astro-plan-6bh3p).
  *
  * The footer is the shared DialogFooter (Cancel, then the action). Initial
  * focus goes to Cancel when the action is destructive, so Enter on open
@@ -132,7 +136,7 @@ function FileGroup({ group, onNavigate }: { group: ConfirmGroup; onNavigate: () 
         {line}
       </CollapsibleTrigger>
       <CollapsibleContent className="px-2 pb-2">
-        <FileTable group={group} onNavigate={onNavigate} />
+        <FileTable label={group.label} rows={group.rows} onNavigate={onNavigate} />
       </CollapsibleContent>
     </Collapsible>
   )
@@ -158,19 +162,30 @@ function actionWord(m: Messages, action: FileRow["action"]): string {
   }
 }
 
-function FileTable({ group, onNavigate }: { group: ConfirmGroup; onNavigate: () => void }) {
+export interface FileTableProps {
+  /** The table's accessible name: the group's label, or "Files of M 31 L 0001". */
+  label: string
+  rows: FileRow[]
+  /** Runs when a Status link is followed: a dialog closes itself. */
+  onNavigate?: () => void
+}
+
+/** The exact files of one group: File · From · To · Size, SHA-256 where known, and Status where a file stays or carries a note. */
+export function FileTable({ label, rows: files, onNavigate }: FileTableProps) {
   const m = useMessages()
-  const rows: IndexedRow[] = group.rows.map((row, index) => ({ ...row, key: String(index) }))
+  const rows: IndexedRow[] = files.map((row, index) => ({ ...row, key: String(index) }))
   const destination = (row: FileRow) => row.to ?? actionWord(m, row.action)
-  // Narrower than a page table's 18rem cut, so File · From · To · Size · Status fit the 42rem dialog; a cut path shows in full on hover (T2).
+  // Narrower than a page table's 18rem cut, so File · From · To · Size · SHA-256 · Status fit the 42rem dialog; a cut path or digest shows in full on hover (T2).
+  // The file name is the identity, so its cut is the widest; a destination that is only an action word ("Trash", "Stays") is never cut.
+  const moves = rows.some((row) => row.to !== undefined)
   const columns: Column<IndexedRow>[] = [
-    { id: "file", header: m.dialog_col_file(), cell: (row) => row.file, sortValue: (row) => row.file, rowHeader: true, truncate: true, className: "max-w-48" },
-    { id: "from", header: m.dialog_col_from(), cell: (row) => row.from, sortValue: (row) => row.from, truncate: true, className: "max-w-40" },
-    { id: "to", header: m.dialog_col_to(), cell: destination, sortValue: destination, truncate: true, className: "max-w-40" },
+    { id: "file", header: m.dialog_col_file(), cell: (row) => row.file, sortValue: (row) => row.file, rowHeader: true, truncate: true, className: "max-w-60" },
+    { id: "from", header: m.dialog_col_from(), cell: (row) => row.from, sortValue: (row) => row.from, truncate: true, className: "max-w-36" },
+    { id: "to", header: m.dialog_col_to(), cell: destination, sortValue: destination, ...(moves ? { truncate: true, className: "max-w-36" } : {}) },
     { id: "size", header: m.dialog_col_size(), cell: (row) => formatBytes(row.size), sortValue: (row) => row.size, align: "right" },
   ]
   if (rows.some((row) => row.sha256)) {
-    columns.push({ id: "sha256", header: m.storage_sha256(), cell: (row) => <span className="font-mono">{row.sha256 ?? "–"}</span>, sortValue: (row) => row.sha256 ?? null, truncate: true, className: "max-w-40" })
+    columns.push({ id: "sha256", header: m.storage_sha256(), cell: (row) => <span className="font-mono">{row.sha256 ?? "–"}</span>, sortValue: (row) => row.sha256 ?? null, truncate: true, className: "max-w-28" })
   }
   if (rows.some((row) => row.status)) {
     columns.push({
@@ -180,11 +195,11 @@ function FileTable({ group, onNavigate }: { group: ConfirmGroup; onNavigate: () 
       sortValue: (row) => row.status?.label ?? null,
     })
   }
-  return <DataTable label={group.label} rows={rows} columns={columns} getRowId={(row) => row.key} scroll="none" />
+  return <DataTable label={label} rows={rows} columns={columns} getRowId={(row) => row.key} scroll="none" />
 }
 
 /** A per-file refusal or note; with a link it opens the place that resolves it and closes the dialog. */
-function FileStatus({ status, onNavigate }: { status: NonNullable<FileRow["status"]>; onNavigate: () => void }) {
+function FileStatus({ status, onNavigate }: { status: NonNullable<FileRow["status"]>; onNavigate?: () => void }) {
   const { link } = status
   if (!link) return <span className="text-muted-foreground">{status.label}</span>
   return (

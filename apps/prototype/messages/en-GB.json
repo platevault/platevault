@@ -1130,8 +1130,8 @@
     }
   ],
   "wrapup_offer_duplicates_none": "Move duplicate copies to Trash: none left",
-  "wrapup_refusal_archive_moving": "archive moving",
-  "wrapup_refusal_outside_captures": "copy outside Captures",
+  "wrapup_refusal_archive_moving": "Archiving",
+  "wrapup_refusal_outside_captures": "Copy outside Captures",
   "wrapup_copies": [
     {
       "declarations": [
@@ -1149,7 +1149,7 @@
   ],
   "wrapup_copy_on": "{name} on {location}",
   "wrapup_unknown_location": "an unknown location",
-  "wrapup_refusal_kept_copy_unverified": "kept copy on {name} unverified",
+  "wrapup_refusal_kept_copy_unverified": "Kept copy on {name} unverified",
   "wrapup_keeps_copy_on": "Keeps the copy on {name}: {path}",
   "wrapup_refusal_space": "{name}: {free} free of {size}",
   "wrapup_no_archive_location": "no archive location",
@@ -1854,6 +1854,22 @@
   "calibration_keep_raws": "Keep raws",
   "calibration_stack_again": "Stack again",
   "calibration_trash_raws": "Trash raws",
+  "calibration_raws_trash_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} raw frame to Trash?",
+        "countPlural=*": "Move {n} raw frames to Trash?"
+      }
+    }
+  ],
   "common_trash_named_title": "Move {name} to Trash?",
   "calibration_process": "Process",
   "calibration_no_raw_sessions": "No raw sessions",
@@ -3530,10 +3546,7 @@
   "domain_optical_train": "Optical train",
   "domain_token_target": "Target",
   "domain_token_set_temp": "Set temperature",
-  "domain_trash_read_only": "Write permission removed; kept in place",
-  "domain_trash_no_volume": "Outside every known volume",
-  "domain_trash_unsupported": "{name} has no OS Trash; kept, nothing deleted",
-  "domain_trash_not_found": "Not found at its recorded path",
+  "domain_trash_read_only": "Read-only",
   "domain_preview_retired": "Preview unavailable: the frame is Retired. Its location was retired, so PlateVault never reads this copy again or offers it as an input.",
   "domain_preview_offline": "Preview unavailable: the frame is offline.",
   "domain_preview_unreadable": "Preview unavailable: the frame is unreadable (access denied).",
@@ -4095,7 +4108,7 @@
   "op_apply_linked": "Linked",
   "op_apply_swapped": "New View in place: {entries}",
   "trash_cant": "Can't trash",
-  "domain_trash_linked_by": "linked by {name}",
+  "domain_trash_linked_by": "Linked by {name}",
   "trash_also_removes_links": [
     {
       "declarations": [
@@ -5420,7 +5433,6 @@
   "verb_show": "Show",
   "verb_confirm": "Confirm",
   "duplicates_col_outcome": "Outcome",
-  "duplicates_cant_trash": "Can't trash · {reason}",
   "duplicates_scan_running": "Scan running",
   "duplicates_none_movable": "Every frame keeps a copy that can't go",
   "duplicates_found": "Found",
@@ -5881,7 +5893,6 @@
   "wrapup_clean_up": "Clean up",
   "sessions_empty_needs_review": "None need review",
   "sessions_empty_needs_calibration": "None need calibration",
-  "sessions_cant_trash": "Can't move to Trash",
   "sessions_all_kept": [
     {
       "declarations": [
@@ -6944,7 +6955,6 @@
   "view_phase_verifying": "Verifying every entry and its original",
   "view_pin_drift_hint": "The pin stays and nothing else is placed by itself. Reassign it on the session, or restore the file.",
   "view_previous_empty": "Nothing left in View (previous)",
-  "view_previous_trash_provisional": "Provisional: reviewed before it moves",
   "view_project_folder": "Project folder",
   "view_provisional_copy": "Provisional wording.",
   "view_refused_developer_mode": "Can't apply · symlinks need Windows Developer Mode",

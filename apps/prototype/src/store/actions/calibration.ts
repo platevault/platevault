@@ -47,7 +47,7 @@ import {
   masterStoragePath,
   processForSession,
   processRef,
-  rawFrameIds,
+  rawItems,
   sessionMasterValues,
   stackOutputFolder,
   stackRefusals,
@@ -216,9 +216,8 @@ function raws(state: PrototypeState, process: CalibrationProcess, force: "trash"
   const at = nowIso()
   if (!process.sessionId) return { state: setStep(state, process, "raws", stepRecord("skipped", at)), outcome: "done" }
   if (force === null && state.settings.keepRawCalibration) return { state: setStep(state, process, "raws", stepRecord("done", at), { raws: "kept" }), outcome: "done" }
-  const ids = rawFrameIds(state.catalog, process)
-  if (ids.length === 0) return { state: setStep(state, process, "raws", stepRecord("done", at), { raws: "trashed" }), outcome: "done" }
-  const items = ids.flatMap((assetId) => state.catalog.assets[assetId]!.copies.map((c) => ({ path: c.path, assetId })))
+  const items = rawItems(state.catalog, process)
+  if (items.length === 0) return { state: setStep(state, process, "raws", stepRecord("done", at), { raws: "trashed" }), outcome: "done" }
   const queued = queueOsTrash(state, {
     kind: "calibration-raws",
     title: msg("store_cal_trash_raws_title", { name: processRef(state.catalog, process) }),

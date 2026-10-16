@@ -1222,8 +1222,8 @@
     }
   ],
   "wrapup_offer_duplicates_none": "Mover cópias duplicadas para a Lixeira: nenhuma restante",
-  "wrapup_refusal_archive_moving": "arquivamento em andamento",
-  "wrapup_refusal_outside_captures": "cópia fora de Capturas",
+  "wrapup_refusal_archive_moving": "Arquivando",
+  "wrapup_refusal_outside_captures": "Cópia fora de Capturas",
   "wrapup_copies": [
     {
       "declarations": [
@@ -1243,7 +1243,7 @@
   ],
   "wrapup_copy_on": "{name} em {location}",
   "wrapup_unknown_location": "um local desconhecido",
-  "wrapup_refusal_kept_copy_unverified": "cópia mantida em {name} não verificada",
+  "wrapup_refusal_kept_copy_unverified": "Cópia mantida em {name} não verificada",
   "wrapup_keeps_copy_on": "Mantém a cópia em {name}: {path}",
   "wrapup_refusal_space": "{name}: {free} livres de {size}",
   "wrapup_no_archive_location": "nenhum local de arquivo",
@@ -1998,6 +1998,24 @@
   "calibration_keep_raws": "Manter brutos",
   "calibration_stack_again": "Empilhar de novo",
   "calibration_trash_raws": "Descartar brutos",
+  "calibration_raws_trash_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "Mover {n} frames brutos para a Lixeira?",
+        "count=*, countPlural=one": "Mover {n} frame bruto para a Lixeira?",
+        "count=*, countPlural=*": "Mover {n} frames brutos para a Lixeira?"
+      }
+    }
+  ],
   "common_trash_named_title": "Mover {name} para a Lixeira?",
   "calibration_process": "Processo",
   "calibration_no_raw_sessions": "Nenhuma sessão bruta",
@@ -3794,10 +3812,7 @@
   "domain_optical_train": "Trem óptico",
   "domain_token_target": "Alvo",
   "domain_token_set_temp": "Temperatura definida",
-  "domain_trash_read_only": "Permissão de gravação removida; mantido no lugar",
-  "domain_trash_no_volume": "Fora de todos os volumes conhecidos",
-  "domain_trash_unsupported": "{name} não tem Lixeira do sistema; mantido, nada foi apagado",
-  "domain_trash_not_found": "Não encontrado no caminho registrado",
+  "domain_trash_read_only": "Somente leitura",
   "domain_preview_retired": "Prévia indisponível: o frame está Aposentado. Seu local foi aposentado, então o PlateVault nunca mais lê esta cópia nem a oferece como entrada.",
   "domain_preview_offline": "Prévia indisponível: o frame está offline.",
   "domain_preview_unreadable": "Prévia indisponível: o frame está ilegível (acesso negado).",
@@ -4405,7 +4420,7 @@
   "op_apply_linked": "Link criado",
   "op_apply_swapped": "Nova View em uso: {entries}",
   "trash_cant": "Não é possível descartar",
-  "domain_trash_linked_by": "vinculado por {name}",
+  "domain_trash_linked_by": "Vinculado por {name}",
   "trash_also_removes_links": [
     {
       "declarations": [
@@ -5812,7 +5827,6 @@
   "verb_show": "Mostrar",
   "verb_confirm": "Confirmar",
   "duplicates_col_outcome": "Destino",
-  "duplicates_cant_trash": "Não vai para a Lixeira · {reason}",
   "duplicates_scan_running": "Verificação em andamento",
   "duplicates_none_movable": "Todo frame mantém uma cópia que não pode sair",
   "duplicates_found": "Encontrado",
@@ -6305,7 +6319,6 @@
   "wrapup_clean_up": "Limpar",
   "sessions_empty_needs_review": "Nenhuma precisa de revisão",
   "sessions_empty_needs_calibration": "Todas com calibração definida",
-  "sessions_cant_trash": "Não é possível mover para a Lixeira",
   "sessions_all_kept": [
     {
       "declarations": [
@@ -7448,7 +7461,6 @@
   "view_phase_verifying": "Verificando cada entrada e o seu original",
   "view_pin_drift_hint": "A escolha fixada permanece e nada mais é colocado sozinho. Reatribua na sessão ou restaure o arquivo.",
   "view_previous_empty": "Nada restou em View (previous)",
-  "view_previous_trash_provisional": "Provisório: revisado antes de mover",
   "view_project_folder": "Pasta do projeto",
   "view_provisional_copy": "Texto provisório.",
   "view_refused_developer_mode": "Não é possível aplicar · links simbólicos exigem o Modo de Desenvolvedor do Windows",

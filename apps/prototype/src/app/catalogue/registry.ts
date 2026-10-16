@@ -46,7 +46,7 @@ export const CATALOGUE: CatalogueEntry[] = [
   },
   { id: "status", components: ["StatusBadge", "Pill", "Tag", "CountBadge"], Entry: StatusCatalogue },
   { id: "previews", components: ["HoverCard", "HoverCardTrigger", "HoverCardContent", "Preview", "BlockersPreview", "UsedByPreview", "MasterPreview"], Entry: PreviewsCatalogue },
-  { id: "dialogs", components: ["ConfirmDialog", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
+  { id: "dialogs", components: ["ConfirmDialog", "FileTable", "FormDialog", "DialogFooter"], Entry: DialogsCatalogue },
   { id: "pickers", components: ["NightPicker", "SitePicker", "SiteLocationField", "TargetPicker", "DisplayMenu"], Entry: PickersCatalogue },
   {
     id: "domain",

@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { sessionsArchivePlan, type TrashOffer } from "@/domain/archive"
+import { sessionsArchivePlan, type TrashOffer, unusableFramesOffer } from "@/domain/archive"
 import { projectHref } from "@/domain/derive"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
@@ -90,15 +90,30 @@ describe("archive repoints a Closed Project's kept View (D-W111)", () => {
   })
 })
 
-describe("offerFileRows", () => {
-  it("lists each entry as a move to the Trash and each refusal as a kept row with its reason and link", () => {
+describe("offerFileRows (astro-plan-6bh3p)", () => {
+  it("lists every file the purge trashes with its folder, bytes and SHA-256, and each refusal as a kept row with its terse reason", () => {
+    const state = store.getState()
+    const offer = unusableFramesOffer(state, Object.keys(state.catalog.assets))
+    expect(offer.items.length).toBeGreaterThan(0)
+    expect(offer.refusals.length).toBeGreaterThan(0)
+    const rows = offerFileRows(m, state, offer)
+    expect(rows.moved).toHaveLength(offer.items.length)
+    offer.items.forEach((item, index) => {
+      const copy = state.catalog.assets[item.assetId!]!.copies.find((c) => c.path === item.path)!
+      expect(rows.moved[index]).toEqual({ file: item.path.slice(item.path.lastIndexOf("/") + 1), from: item.path.slice(0, item.path.lastIndexOf("/")), action: "trash", size: fileAt(state.disk, item.path)!.sizeBytes, sha256: copy.sha256 })
+    })
+    expect(rows.kept.map((r) => r.action)).toEqual(offer.refusals.map(() => "keep"))
+    expect(rows.kept.map((r) => r.status?.label)).toContain(m.domain_trash_read_only())
+  })
+
+  it("links a refusal to where it resolves", () => {
     const link = { to: "/projects/$projectId", params: { projectId: "prj_x" } }
     const offer: TrashOffer = {
       kind: "rejected-frames",
       title: "",
-      count: 1,
-      sizeBytes: 100,
-      entries: [{ key: "a", label: "a.fits", path: "/Volumes/A/M31/a.fits", detail: null, sizeBytes: 100, preselected: true }],
+      count: 0,
+      sizeBytes: 0,
+      entries: [],
       refusals: [
         { key: "b", label: "b.fits", path: "/Volumes/A/M31/b.fits", reason: msg("wrapup_refusal_archive_moving"), link },
         { key: "c", label: "c.fits", path: null, reason: msg("wrapup_refusal_outside_captures") },
@@ -106,11 +121,8 @@ describe("offerFileRows", () => {
       items: [],
       keptLinks: 0,
     }
-    const rows = offerFileRows(m, offer)
-    expect(rows.moved).toEqual([{ file: "a.fits", from: "/Volumes/A/M31", action: "trash", size: 100 }])
-    expect(rows.kept).toEqual([
-      { file: "b.fits", from: "/Volumes/A/M31", action: "trash", size: 0, status: { label: m.wrapup_refusal_archive_moving(), link } },
-      { file: "c.fits", from: "", action: "trash", size: 0, status: { label: m.wrapup_refusal_outside_captures() } },
-    ])
+    const rows = offerFileRows(m, store.getState(), offer)
+    expect(rows.moved).toEqual([])
+    expect(rows.kept).toEqual([{ file: "b.fits", from: "/Volumes/A/M31", action: "keep", size: 0, status: { label: m.wrapup_refusal_archive_moving(), link } }])
   })
 })
