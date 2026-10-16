@@ -4,10 +4,12 @@ import { numberText, panelBalanceRef, qualityBarRef, windowRuleRef } from "./lab
 import {
   BUILT_IN_GOAL_TEMPLATES,
   clampPanelBalance,
+  DEFAULT_NAMING,
   DEFAULT_PANEL_BALANCE_PCT,
   DEFAULT_SUBJECT_CONDITIONS,
   fwhmBar,
   goalMeasure,
+  NAMING_SEPARATORS,
   PANEL_BALANCE_LIMITS,
   qualityBarFor,
   resolveNamingTemplate,
@@ -130,14 +132,35 @@ describe("resolveNamingTemplate omit (Settings › Naming, wmbp9)", () => {
 })
 
 describe("validateNamingTemplate (Settings › Naming, wmbp9)", () => {
-  it("refuses literal characters no file or folder name may hold, each named once", () => {
-    expect(validateNamingTemplate("{target}/a:b*c?<x>|/light/").map((ref) => say(m, ref))).toEqual([m.domain_naming_unsafe_characters({ characters: ": * ? < > |" })])
-    expect(validateNamingTemplate('{target}\\"x"/light/').map((ref) => say(m, ref))).toEqual([m.domain_naming_unsafe_characters({ characters: '\\ "' })])
+  const words = (template: string) => validateNamingTemplate(template).map((ref) => say(m, ref))
+  const refused = (characters: string) => m.domain_naming_disallowed_characters({ characters, separators: NAMING_SEPARATORS.join(" ") })
+
+  it("refuses every literal character outside letters, digits, spaces and the whitelisted separators, each named once", () => {
+    expect(words("{target}/a:b*c?<x>|/light/")).toEqual([refused(": * ? < > |")])
+    expect(words('{target}\\"x"/light/')).toEqual([refused('\\ "')])
+    // Safe in a file name, but not a whitelisted separator.
+    expect(words("{target}+{filter}~(x)")).toEqual([refused("+ ~ ( )")])
   })
 
-  it("passes every default template, and token text inside braces is checked as a token, not as a literal", () => {
-    expect(validateNamingTemplate("{target}/{filter}/{date}/light/")).toEqual([])
-    expect(validateNamingTemplate("Darks/{camera}/{exposure}_g{gain}_o{offset}_{set_temp}/")).toEqual([])
-    expect(validateNamingTemplate("{a:b}/light/").map((ref) => say(m, ref))).toEqual([m.domain_naming_unknown_token({ token: "{a:b}" })])
+  it("accepts letters of any script, digits, spaces and every whitelisted separator", () => {
+    expect(words("Calibração 2/{target}-{filter}_{date}.v1/")).toEqual([])
+  })
+
+  it("passes every default template", () => {
+    for (const template of Object.values(DEFAULT_NAMING)) expect(words(template)).toEqual([])
+  })
+
+  it("names an unknown token once, and checks text inside braces as a token, not as a literal", () => {
+    expect(words("{bogus}/{bogus}/light/")).toEqual([m.domain_naming_unknown_token({ token: "{bogus}" })])
+    expect(words("{a:b}/light/")).toEqual([m.domain_naming_unknown_token({ token: "{a:b}" })])
+  })
+
+  it("refuses a brace without its partner, so the store cannot save one", () => {
+    expect(words("{target/light/")).toEqual([m.domain_naming_unmatched_brace()])
+    expect(words("{target}}/light/")).toEqual([m.domain_naming_unmatched_brace()])
+  })
+
+  it("refuses a parent folder, a reserved name and a leading slash", () => {
+    expect(words("/{target}/../con/")).toEqual([m.domain_naming_parent_folder(), m.domain_naming_reserved({ name: "con" }), m.domain_naming_leading_slash()])
   })
 })
