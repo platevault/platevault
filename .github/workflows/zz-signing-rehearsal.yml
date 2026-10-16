@@ -142,7 +142,7 @@ jobs:
             'nsis/$PLUGINSDIR/System.dll' = @{ reason = $nsisPlugin; sha256 = 'REPLACE_SYSTEM' }
             'msi-streams/Binary.WixUIWixca' = @{ reason = $wixAction; signer = 'WiX Toolset (.NET Foundation)' }
           }
-          foreach ($path in @('nsis/$PLUGINSDIR/nsDialogs.dll', 'nsis/$PLUGINSDIR/nsis_tauri_utils.dll', 'nsis/$PLUGINSDIR/NSISdl.dll', 'nsis/$PLUGINSDIR/StartMenu.dll', 'nsis/$PLUGINSDIR/System.dll')) { $thirdParty[$path].sha256 = (Get-FileHash -LiteralPath "unpacked/$path" -Algorithm SHA256).Hash; "PIN $path SHA256=$($thirdParty[$path].sha256)" }
+          function Test-PortableExecutable([string] $path) { $stream = [System.IO.File]::OpenRead($path); try { $reader = [System.IO.BinaryReader]::new($stream); if ($stream.Length -lt 64 -or $reader.ReadUInt16() -ne 0x5A4D) { return $false }; $stream.Position = 0x3C; $header = [long]$reader.ReadUInt32(); if ($header + 4 -gt $stream.Length) { return $false }; $stream.Position = $header; return $reader.ReadUInt32() -eq 0x00004550 } finally { $stream.Dispose() } }
           $unpacked = (Resolve-Path unpacked).Path
           $problems = @(); $listed = @(); $hashes = @{}
           foreach ($tree in $trees.Keys) {
