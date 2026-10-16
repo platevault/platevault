@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { m, say } from "@/lib/i18n"
 import { windowRef } from "./labels"
-import { deadlinePriority, defaultCriteria, nightsBetween, PRIORITY_RISE_NIGHTS, seasonWindow, shiftNight, visibleMinutes, windowProgress } from "./planning"
-import type { ObservingSite, SubjectWindow } from "./types"
+import { deadlinePriority, defaultCriteria, isLeadTime, LEAD_FLOOR_MIN, LEAD_MAX_MIN, nightsBetween, noticeNames, PRIORITY_RISE_NIGHTS, RESUME_GAP_MS, reminderCheckOf, reminderDelivery, reminderLookbackMs, seasonWindow, shiftNight, visibleMinutes, windowProgress } from "./planning"
+import { DEFAULT_REMINDER_LEAD_MIN, type ObservingSite, type ObservingWindow, type SubjectWindow } from "./types"
 
 const BACKYARD: ObservingSite = { id: "site_backyard", name: "Backyard", latitude: 52.09, longitude: 5.12, elevationM: 5, timeZone: "Europe/Amsterdam", twilight: "astronomical", minAltitudeDeg: 25 }
 const LA_PALMA: ObservingSite = { id: "site_lapalma", name: "La Palma", latitude: 28.76, longitude: -17.88, elevationM: 2300, timeZone: "Atlantic/Canary", twilight: "astronomical", minAltitudeDeg: 20 }
@@ -85,5 +85,106 @@ describe("season window pre-filled from visibility (C7)", () => {
     expect(seasonWindow({ ra: 6.024, dec: -72.081 }, BACKYARD, criteria, TONIGHT)).toBeNull()
     // Polaris from La Palma: above 20° on every dark night of the year.
     expect(seasonWindow({ ra: 37.95, dec: 89.26 }, LA_PALMA, defaultCriteria(LA_PALMA), TONIGHT)).toBeNull()
+  })
+})
+
+describe("reminder lead time (D-W88, PLAN-AC-13)", () => {
+  it("defaults to 12 hours, a lead time in range", () => {
+    expect(DEFAULT_REMINDER_LEAD_MIN).toBe(12 * 60)
+    expect(isLeadTime(DEFAULT_REMINDER_LEAD_MIN)).toBe(true)
+  })
+
+  it("is over 30 minutes and at most a week, in whole minutes", () => {
+    expect(LEAD_FLOOR_MIN).toBe(30)
+    expect(isLeadTime(30)).toBe(false)
+    expect(isLeadTime(1)).toBe(false)
+    expect(isLeadTime(31)).toBe(true)
+    expect(isLeadTime(LEAD_MAX_MIN)).toBe(true)
+    expect(isLeadTime(LEAD_MAX_MIN + 1)).toBe(false)
+    expect(isLeadTime(45.5)).toBe(false)
+  })
+})
+
+describe("reminder checks: start-up, resume and tick (PLAN-AC-15)", () => {
+  const LEAD_MS = 12 * 3_600_000
+  const at = (iso: string) => Date.parse(iso)
+  const win = (targetId: string, start: string, end: string): ObservingWindow => ({ key: `${targetId}/site_backyard/${start}`, targetId, siteId: "site_backyard", start, end, maxAltitudeDeg: 60, moonIlluminationPct: 10, moonSeparationDeg: 90 })
+  const keyOf = (w: ObservingWindow) => w.targetId
+  const ids = (windows: ObservingWindow[]) => windows.map((w) => w.targetId)
+  // PlateVault closed on the 13th at noon and starts on the 15th at 20:00Z: two windows ended while it was closed,
+  // C has started, D and E are inside the 12 h lead time, F's lead time begins on the 16th at 07:30Z.
+  const NOW = at("2026-10-15T20:00:00Z")
+  const windows = [
+    win("A", "2026-10-13T19:00:00Z", "2026-10-13T23:00:00Z"),
+    win("B", "2026-10-14T19:00:00Z", "2026-10-14T23:00:00Z"),
+    win("C", "2026-10-15T19:00:00Z", "2026-10-15T23:00:00Z"),
+    win("D", "2026-10-15T22:00:00Z", "2026-10-16T02:00:00Z"),
+    win("E", "2026-10-16T01:00:00Z", "2026-10-16T04:00:00Z"),
+    win("F", "2026-10-16T19:30:00Z", "2026-10-16T23:30:00Z"),
+  ]
+
+  it("tells start-up, resume and an ordinary tick apart", () => {
+    expect(reminderCheckOf(true, NOW - 1000, NOW)).toBe("startup")
+    expect(reminderCheckOf(false, NOW - RESUME_GAP_MS - 1, NOW)).toBe("resume")
+    expect(reminderCheckOf(false, NOW - 30_000, NOW)).toBe("tick")
+    expect(reminderCheckOf(false, null, NOW)).toBe("tick")
+  })
+
+  it("looks back to the last check, never before reminders were turned on, never after now", () => {
+    expect(reminderLookbackMs({ checkedAt: "2026-10-13T12:00:00Z", enabledAt: "2026-10-01T12:00:00Z" }, NOW)).toBe(at("2026-10-13T12:00:00Z"))
+    expect(reminderLookbackMs({ checkedAt: "2026-10-13T12:00:00Z", enabledAt: "2026-10-14T08:00:00Z" }, NOW)).toBe(at("2026-10-14T08:00:00Z"))
+    expect(reminderLookbackMs({ checkedAt: "2026-10-20T12:00:00Z", enabledAt: null }, NOW)).toBe(NOW)
+    expect(reminderLookbackMs({ checkedAt: null, enabledAt: null }, NOW)).toBe(NOW)
+  })
+
+  it("at start-up records ended windows as missed and gathers every open one, started or inside its lead time", () => {
+    const delivery = reminderDelivery(windows, keyOf, { check: "startup", nowMs: NOW, leadMs: LEAD_MS, delivered: new Set() })
+    expect(ids(delivery.missed)).toEqual(["A", "B"])
+    expect(ids(delivery.gathered)).toEqual(["C", "D", "E"])
+    expect(delivery.due).toEqual([])
+  })
+
+  it("gathers on resume the same way", () => {
+    const delivery = reminderDelivery(windows, keyOf, { check: "resume", nowMs: NOW, leadMs: LEAD_MS, delivered: new Set() })
+    expect(ids(delivery.missed)).toEqual(["A", "B"])
+    expect(ids(delivery.gathered)).toEqual(["C", "D", "E"])
+  })
+
+  it("passes over every delivered identity, so a restart notifies nothing again", () => {
+    const first = reminderDelivery(windows, keyOf, { check: "startup", nowMs: NOW, leadMs: LEAD_MS, delivered: new Set() })
+    const delivered = new Set([...first.missed, ...first.gathered].map(keyOf))
+    const again = reminderDelivery(windows, keyOf, { check: "startup", nowMs: NOW + 60_000, leadMs: LEAD_MS, delivered })
+    expect(again).toEqual({ check: "startup", missed: [], gathered: [], due: [] })
+  })
+
+  it("then delivers the next window on its own as it enters its lead time", () => {
+    const delivered = new Set(["A", "B", "C", "D", "E"])
+    const before = reminderDelivery(windows, keyOf, { check: "tick", nowMs: at("2026-10-16T07:29:00Z"), leadMs: LEAD_MS, delivered })
+    expect(before.due).toEqual([])
+    const entered = reminderDelivery(windows, keyOf, { check: "tick", nowMs: at("2026-10-16T07:31:00Z"), leadMs: LEAD_MS, delivered })
+    expect(ids(entered.due)).toEqual(["F"])
+    expect(entered.gathered).toEqual([])
+    expect(entered.missed).toEqual([])
+  })
+
+  it("on a tick never notifies a window that has started, and records nothing as missed", () => {
+    const tick = reminderDelivery(windows, keyOf, { check: "tick", nowMs: NOW, leadMs: LEAD_MS, delivered: new Set() })
+    expect(ids(tick.due)).toEqual(["D", "E"])
+    expect(tick.missed).toEqual([])
+  })
+
+  it("lets an open window take its identity before an ended one of the same identity", () => {
+    const sameNight = [win("A", "2026-10-15T18:00:00Z", "2026-10-15T19:00:00Z"), win("A", "2026-10-15T19:30:00Z", "2026-10-15T23:00:00Z")]
+    const delivery = reminderDelivery(sameNight, keyOf, { check: "startup", nowMs: NOW, leadMs: LEAD_MS, delivered: new Set() })
+    expect(delivery.gathered.map((w) => w.start)).toEqual(["2026-10-15T19:30:00Z"])
+    expect(delivery.missed).toEqual([])
+  })
+})
+
+describe("a gathered notice names at most three Targets (PLAN-AC-15)", () => {
+  it("names three, then counts the rest once each", () => {
+    expect(noticeNames(["M 31", "M 33", "NGC 7000"])).toEqual({ names: ["M 31", "M 33", "NGC 7000"], more: 0 })
+    expect(noticeNames(["M 31", "M 33", "M 31", "NGC 7000", "IC 5070"])).toEqual({ names: ["M 31", "M 33", "NGC 7000"], more: 1 })
+    expect(noticeNames(["M 31"])).toEqual({ names: ["M 31"], more: 0 })
   })
 })

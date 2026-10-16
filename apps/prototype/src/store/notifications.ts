@@ -2,7 +2,9 @@
  * Notifications (foundation-owned): the status bar's unread notifications and
  * the history popover, read from Activity, newest first. An operation reads
  * terse with its count, "Import finished · 54 frames" (`noticeText`);
- * Activity keeps the full record.
+ * Activity keeps the full record. A reminder window missed while PlateVault
+ * was closed ("reminder-missed", PLAN-AC-15) stays in Activity only: it is
+ * never a notification and never unread.
  *
  * Read state (P-SB2): `noticesRead` in the persisted state holds the ids of
  * the notices the user has seen. Opening the history marks every notice in it
@@ -70,12 +72,18 @@ export function noticeText(m: Messages, notice: Notice): string {
 
 const HISTORY = 12
 
+/** Whether an Activity entry is also a notification: everything but a missed reminder. */
+function isNotification(event: ActivityEvent): boolean {
+  return event.kind !== "reminder-missed"
+}
+
 let cached: { activity: ActivityEvent[]; notices: Notice[] } | null = null
 
 /** Recomputed only when Activity changes; a settled operation's record no longer changes. */
 function selectNotices(s: PrototypeState): Notice[] {
   if (cached?.activity === s.activity) return cached.notices
-  const notices = [...s.activity]
+  const notices = s.activity
+    .filter(isNotification)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, HISTORY)
     .map((event) => noticeOf(event, s.operations))

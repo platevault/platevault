@@ -187,6 +187,88 @@ export function plannedWindows(catalog: Catalog, site: ObservingSite, nowMs: num
   )
 }
 
+// ---------------------------------------------------------------------------
+// Reminder checks (PLAN-FR-06, PLAN-AC-15). PlateVault has no OS scheduler,
+// so reminders arrive only while it runs: a check at launch, on resume and
+// on every tick while open. Nothing is delivered while it is closed.
+// ---------------------------------------------------------------------------
+
+/** A lead time is longer than this, in minutes (D-W88), so a reminder leaves time to set up. */
+export const LEAD_FLOOR_MIN = 30
+/** The longest lead time, in minutes: a week. */
+export const LEAD_MAX_MIN = 7 * 1440
+
+/** Whether a reminder, a preset or the setting may hold `minutes`: whole minutes, over 30 and up to a week. */
+export function isLeadTime(minutes: number): boolean {
+  return Number.isInteger(minutes) && minutes > LEAD_FLOOR_MIN && minutes <= LEAD_MAX_MIN
+}
+
+/**
+ * How a check was reached: "startup", the first after launch; "resume", a
+ * check after a gap longer than `RESUME_GAP_MS` (the computer slept, or the
+ * clock moved on); "tick", an ordinary check while open, after a plan edit
+ * or on the timer.
+ */
+export type ReminderCheck = "startup" | "resume" | "tick"
+
+/** A gap between checks this long reads as a resume: an open PlateVault checks every 30 s. */
+export const RESUME_GAP_MS = 5 * 60_000
+
+export function reminderCheckOf(launch: boolean, lastCheckMs: number | null, nowMs: number): ReminderCheck {
+  if (launch) return "startup"
+  return lastCheckMs !== null && nowMs - lastCheckMs > RESUME_GAP_MS ? "resume" : "tick"
+}
+
+/** Where a startup or resume check looks back to: the last check, never before reminders were turned on, never after now. */
+export function reminderLookbackMs(reminders: Pick<ReminderSettings, "checkedAt" | "enabledAt">, nowMs: number): number {
+  const marks = [reminders.checkedAt, reminders.enabledAt].filter((iso): iso is string => iso !== null).map((iso) => Date.parse(iso))
+  return marks.length === 0 ? nowMs : Math.min(nowMs, Math.max(...marks))
+}
+
+/** What one check delivers. Every identity in it is recorded as delivered, so none is notified again. */
+export interface ReminderDelivery {
+  check: ReminderCheck
+  /** Startup or resume: windows that ended since the last check without a reminder. Activity only, never a notification. */
+  missed: ObservingWindow[]
+  /** Startup or resume: every unended window whose lead time has begun, started or not, in one notice. */
+  gathered: ObservingWindow[]
+  /** Tick: each window that has entered its lead time and not started, in its own notice. */
+  due: ObservingWindow[]
+}
+
+/**
+ * Sort one check's `windows` (in window order, each ending after the
+ * lookback) into deliveries. `keyOf` is the delivered identity
+ * (`reminderKey`): a key in `delivered`, or one this check already took, is
+ * passed over, and an open window takes its key before an ended one.
+ */
+export function reminderDelivery(
+  windows: readonly ObservingWindow[],
+  keyOf: (window: ObservingWindow) => string,
+  { check, nowMs, leadMs, delivered }: { check: ReminderCheck; nowMs: number; leadMs: number; delivered: ReadonlySet<string> },
+): ReminderDelivery {
+  const taken = new Set(delivered)
+  const take = (keep: (start: number, end: number) => boolean) =>
+    windows.filter((w) => {
+      const key = keyOf(w)
+      if (taken.has(key) || !keep(Date.parse(w.start), Date.parse(w.end))) return false
+      taken.add(key)
+      return true
+    })
+  if (check === "tick") return { check, missed: [], gathered: [], due: take((start) => nowMs >= start - leadMs && nowMs < start) }
+  const gathered = take((start, end) => nowMs >= start - leadMs && nowMs < end)
+  return { check, missed: take((_, end) => end <= nowMs), gathered, due: [] }
+}
+
+/** A notice names at most this many Targets, then "N more" (PLAN-AC-15). */
+export const NOTICE_NAME_LIMIT = 3
+
+/** The Targets a notice names, once each in window order, and how many more it covers. */
+export function noticeNames(names: readonly string[]): { names: string[]; more: number } {
+  const unique = [...new Set(names)]
+  return { names: unique.slice(0, NOTICE_NAME_LIMIT), more: Math.max(0, unique.length - NOTICE_NAME_LIMIT) }
+}
+
 /**
  * Windows for one Target at one site over the next nights, from `firstNight`
  * (the night that holds `nowMs` by default); a window must end after

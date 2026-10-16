@@ -3,12 +3,13 @@
  * calendar…, both covering every upcoming planned night, not just the one
  * shown. Each opens a FormDialog from the page header.
  *
- * - Reminders: on or off, and a lead time (a preset, or any number of
- *   minutes, hours or days; astro-plan-mv2g1). They always use the default
- *   site (PLAN-FR-06); turning them on asks the simulated OS for permission
- *   (Prototype controls › next notification answer). `ReminderScheduler`
- *   delivers each due reminder once, as a "reminder" Activity entry, so it
- *   arrives in the status bar's bell.
+ * - Reminders: on or off, and a lead time (a preset, or any whole number of
+ *   minutes, hours or days over 30 min, 12 h until the user picks another;
+ *   D-W88). They always use the default site (PLAN-FR-06); turning them on
+ *   asks the simulated OS for permission (Prototype controls › next
+ *   notification answer). `ReminderScheduler` checks while PlateVault is
+ *   open, at launch and on resume (`checkReminders`); there is no OS
+ *   scheduler, so nothing arrives while it is closed, and the dialog says so.
  * - Export calendar: the events night by night, then the .ics download; the
  *   export is saved as a snapshot (PLAN-FR-04).
  */
@@ -19,15 +20,15 @@ import type { Column } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState } from "@/components/app/feedback"
 import { NumberField, SelectField, SwitchField } from "@/components/app/fields"
-import { FormDialog } from "@/components/app/form-dialog"
+import { blockedByErrors, FormDialog } from "@/components/app/form-dialog"
 import { siteTime, siteTimeRange } from "@/components/domain/sky-lines"
 import { CalendarArrowDown } from "lucide-react"
 import { planningSite } from "@/domain/derive"
-import { calendarFile, downloadText, nightAt, plannedWindows, reminderKey, upcomingNight } from "@/domain/planning"
+import { calendarFile, downloadText, isLeadTime, LEAD_FLOOR_MIN, nightAt, plannedWindows, reminderKey, upcomingNight } from "@/domain/planning"
 import type { ObservingWindow } from "@/domain/types"
 import { formatNight } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
-import { DEFAULT_LEAD_MIN, deliverDueReminders, disableReminders, enableReminders, LEAD_TIMES_MIN, saveCalendarExport, setReminderLead } from "@/store/actions/planning"
+import { checkReminders, disableReminders, enableReminders, LEAD_TIMES_MIN, saveCalendarExport, setReminderLead } from "@/store/actions/planning"
 import { type CommitResult, nowIso, store, useStore } from "@/store/core"
 
 /** The (simulated) clock in 10-minute buckets, re-read every minute, so schedules re-derive as time moves on. */
@@ -41,21 +42,21 @@ function useClockBucket(): number {
   return Math.floor((now + offset) / 600_000)
 }
 
-/** The next reminder still to come: the first planned window whose lead time has not begun, and when it fires. */
-function useNextReminder(): { window: ObservingWindow; at: string } | null {
+/** The next reminder still to come while `open`: the first planned window whose lead time has not begun, and when it fires. */
+function useNextReminder(open: boolean): { window: ObservingWindow; at: string } | null {
   const catalog = useStore((s) => s.catalog)
   const bucket = useClockBucket()
   return useMemo(() => {
     const { reminders } = catalog
-    const site = reminders.enabled && reminders.siteId ? catalog.sites[reminders.siteId] : undefined
-    if (!site || !reminders.leadTimeMin) return null
+    const site = open && reminders.enabled && reminders.siteId ? catalog.sites[reminders.siteId] : undefined
+    if (!site) return null
     const nowMs = Date.parse(nowIso())
     const leadMs = reminders.leadTimeMin * 60_000
     const delivered = new Set(reminders.deliveredWindowKeys)
     const next = plannedWindows(catalog, site, nowMs).find((w) => Date.parse(w.start) - leadMs > nowMs && !delivered.has(reminderKey(w, site)))
     return next ? { window: next, at: new Date(Date.parse(next.start) - leadMs).toISOString() } : null
     // `bucket` re-derives the schedule as the clock moves on.
-  }, [catalog, bucket])
+  }, [open, catalog, bucket])
 }
 
 // ---------------------------------------------------------------------------
@@ -65,10 +66,8 @@ function useNextReminder(): { window: ObservingWindow; at: string } | null {
 type LeadUnit = "minutes" | "hours" | "days"
 const UNIT_MIN: Record<LeadUnit, number> = { minutes: 1, hours: 60, days: 1440 }
 const CUSTOM = "custom"
-/** The longest lead time: a week. */
-const MAX_LEAD_MIN = 7 * 1440
 
-/** "30 min before", "2 h before", "1 day before": a lead time in its largest whole unit. */
+/** "45 min before", "12 h before", "1 day before": a lead time in its largest whole unit. */
 export function leadText(m: Messages, minutes: number): string {
   if (minutes % 1440 === 0) return m.plan_lead_days({ count: minutes / 1440 })
   if (minutes % 60 === 0) return m.plan_lead_hours({ count: minutes / 60 })
@@ -94,12 +93,12 @@ function draftOf(on: boolean, lead: number): ReminderDraft {
   return { on, choice: preset ? String(lead) : CUSTOM, ...asAmount(lead) }
 }
 
-/** The lead time a draft asks for, in minutes; null while the custom amount is missing or out of range. */
+/** The lead time a draft asks for, in minutes; null while the custom amount is missing or not a lead time (`isLeadTime`: over 30 min, up to a week). */
 function draftMinutes(draft: ReminderDraft): number | null {
   if (draft.choice !== CUSTOM) return Number(draft.choice)
-  if (draft.amount === null || !Number.isInteger(draft.amount) || draft.amount < 1) return null
+  if (draft.amount === null) return null
   const minutes = draft.amount * UNIT_MIN[draft.unit]
-  return minutes <= MAX_LEAD_MIN ? minutes : null
+  return isLeadTime(minutes) ? minutes : null
 }
 
 export function RemindersDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -108,9 +107,9 @@ export function RemindersDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const sites = useStore((s) => s.catalog.sites)
   const defaultSiteId = useStore((s) => s.settings.defaultSiteId)
   const targets = useStore((s) => s.catalog.targets)
-  const next = useNextReminder()
+  const next = useNextReminder(open)
   const on = reminders.enabled && reminders.permission === "granted"
-  const lead = reminders.leadTimeMin ?? DEFAULT_LEAD_MIN
+  const lead = reminders.leadTimeMin
   const [draft, setDraft] = useState<ReminderDraft>(() => draftOf(on, lead))
   const [tried, setTried] = useState(false)
   useEffect(() => {
@@ -120,6 +119,8 @@ export function RemindersDialog({ open, onOpenChange }: { open: boolean; onOpenC
   }, [open])
 
   const minutes = draftMinutes(draft)
+  // A typed amount is checked as it is typed (PLAN-AC-13); an empty one once Save is tried.
+  const leadError = minutes === null && (tried || draft.amount !== null) ? m.plan_lead_out_of_range() : undefined
   const reminderSite = reminders.siteId ? sites[reminders.siteId] : defaultSiteId ? sites[defaultSiteId] : undefined
   const options = [...LEAD_TIMES_MIN.map((value) => ({ value: String(value), label: leadText(m, value) })), { value: CUSTOM, label: m.plan_lead_custom() }]
   const units: { value: LeadUnit; label: string }[] = [
@@ -130,25 +131,32 @@ export function RemindersDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
   function save(): CommitResult | void {
     setTried(true)
-    if (minutes === null) return { ok: false, reason: "refused", message: m.plan_lead_invalid(), reasons: [] }
+    if (minutes === null) return { ok: false, reason: "refused", message: m.plan_lead_out_of_range(), reasons: [] }
     if (!draft.on) return on ? disableReminders() : undefined
     if (!on) return enableReminders(minutes)
     if (minutes !== lead) return setReminderLead(minutes)
   }
 
+  const label = m.settings_save()
   return (
-    <FormDialog open={open} onOpenChange={onOpenChange} title={m.plan_reminders()} size="sm" confirm={{ id: "reminders-save", label: m.settings_save(), kind: "primary", run: save }}>
-      <SwitchField label={m.plan_reminders()} checked={draft.on} onChange={(checked) => setDraft((d) => ({ ...d, on: checked }))} />
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={m.plan_reminders()}
+      size="sm"
+      confirm={{ id: "reminders-save", label, kind: "primary", unavailable: blockedByErrors(label, { lead: leadError }), run: save }}
+    >
+      <SwitchField label={m.plan_reminders()} description={m.plan_reminders_while_open()} checked={draft.on} onChange={(checked) => setDraft((d) => ({ ...d, on: checked }))} />
       <SelectField label={m.plan_reminder_lead()} value={draft.choice} options={options} onChange={(choice) => setDraft((d) => ({ ...d, choice }))} />
       {draft.choice === CUSTOM ? (
         <>
           <NumberField
             label={m.plan_lead_amount()}
-            min={1}
+            min={draft.unit === "minutes" ? LEAD_FLOOR_MIN + 1 : 1}
             step={1}
             value={draft.amount}
             onChange={(amount) => setDraft((d) => ({ ...d, amount }))}
-            error={tried && minutes === null ? m.plan_lead_invalid() : undefined}
+            error={leadError}
           />
           <SelectField label={m.plan_lead_unit()} value={draft.unit} options={units} onChange={(unit) => setDraft((d) => ({ ...d, unit }))} />
         </>
@@ -166,20 +174,34 @@ export function RemindersDialog({ open, onOpenChange }: { open: boolean; onOpenC
   )
 }
 
+/** Whether this page load has run its start-up check: the first check after launch is the start-up scan (PLAN-AC-15). */
+let launched = false
+
 /**
- * Delivers due reminders while PlateVault is open: on every change of the
- * catalog or the clock, and once a minute (PLAN-AC-07: each Target, site and
- * night once). Rendered once at the app root (slice E's shell Overlay).
+ * Checks reminders while PlateVault is open (`checkReminders`): first the
+ * start-up scan, then on every change of the plans, the reminder settings or
+ * the clock, every 30 s, and when the window shows again. A gap since the
+ * last check reads as a resume. Rendered once at the app root (slice E's
+ * shell Overlay).
  */
 export function ReminderScheduler() {
-  const reminders = useStore((s) => s.catalog.reminders)
   const plans = useStore((s) => s.catalog.plans)
+  const { enabled, permission, siteId, leadTimeMin } = useStore((s) => s.catalog.reminders)
   const offset = useStore((s) => s.faults.clockOffsetMs)
   useEffect(() => {
-    deliverDueReminders()
-    const timer = window.setInterval(deliverDueReminders, 30_000)
-    return () => window.clearInterval(timer)
-  }, [reminders, plans, offset])
+    checkReminders(!launched)
+    launched = true
+    const check = () => checkReminders()
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check()
+    }
+    const timer = window.setInterval(check, 30_000)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [plans, enabled, permission, siteId, leadTimeMin, offset])
   return null
 }
 
