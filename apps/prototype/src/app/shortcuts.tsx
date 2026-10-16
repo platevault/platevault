@@ -161,7 +161,10 @@ function appShortcuts(m: Messages): Shortcut[] {
     { keys: [["⇧", "F10"]], label: m.shortcuts_context_menu() },
     ...ALL_NAV_ITEMS.map((item) => ({ keys: [["G", item.goKey === "," ? "," : item.goKey.toUpperCase()]], label: m.shortcuts_go_to({ name: item.label }) })),
     { keys: [["↑"], ["↓"]], label: m.shortcuts_move_rows() },
-    { keys: [[m.key_space()]], label: m.shortcuts_toggle_checkbox() },
+    { keys: [[m.key_home()], [m.key_end()]], label: m.shortcuts_first_last_row() },
+    { keys: [[m.key_page_up()], [m.key_page_down()]], label: m.shortcuts_page_rows() },
+    { keys: [["↩"]], label: m.shortcuts_open_row() },
+    { keys: [[m.key_space()]], label: m.shortcuts_select_row() },
     { keys: [[m.key_escape()]], label: m.shortcuts_close() },
   ]
 }

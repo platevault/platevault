@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
+import { setSingleKeyShortcuts } from "@/app/preferences"
 import { m } from "@/lib/i18n"
 import type { Action, Column, MenuItem } from "./contracts"
 import { DataTable, sortRows } from "./data-table"
@@ -371,6 +372,426 @@ describe("DataTable", () => {
     it("a table with no hideable column has no Columns menu", () => {
       render(<DataTable label="Frames" rows={ROWS} columns={COLUMNS} getRowId={(row) => row.id} />)
       expect(screen.queryByRole("button", { name: m.display_menu_columns() })).not.toBeInTheDocument()
+    })
+  })
+
+  // P-KBD1 (HARNESS-V5-FEEDBACK-R1.md): one Tab stop per table, on its current row, then that row's controls.
+  describe("keyboard (P-KBD1)", () => {
+    type User = ReturnType<typeof userEvent.setup>
+    // No sort buttons in the header: its one stop is select-all, where the table has a selection.
+    const PLAIN: Column<Frame>[] = [
+      { id: "name", header: "Name", cell: (row) => row.name, rowHeader: true, static: true },
+      { id: "size", header: "Size", cell: (row) => row.size, align: "right", static: true },
+    ]
+    const rowOf = (name: string, scope: HTMLElement = document.body) => within(scope).getByRole("rowheader", { name }).closest("tr")!
+    const checkboxOf = (name: string) => screen.getByRole("checkbox", { name: m.table_select_row({ name }) })
+    const moreOf = (name: string) => screen.getByRole("button", { name: m.actions_for({ name }) })
+    const before = () => screen.getByRole("button", { name: "Before" })
+    const after = () => screen.getByRole("button", { name: "After" })
+    const entries = (menu: HTMLElement) => within(menu).getAllByRole("menuitem").map((item) => item.textContent)
+    const menuItems = (): MenuItem[] => [
+      { id: "open", label: "Open", run: vi.fn() },
+      { id: "trash", label: "Move to Trash", kind: "destructive", run: vi.fn() },
+    ]
+
+    function Around({ children }: { children: ReactNode }) {
+      return (
+        <>
+          <button type="button">Before</button>
+          {children}
+          <button type="button">After</button>
+        </>
+      )
+    }
+
+    function Selectable({ isSelectable, items = menuItems() }: { isSelectable?: (row: Frame) => boolean; items?: MenuItem[] }) {
+      const [selected, setSelected] = useState<string[]>([])
+      return (
+        <Around>
+          <DataTable
+            label="Frames"
+            rows={ROWS}
+            columns={PLAIN}
+            getRowId={(row) => row.id}
+            rowLabel={(row) => row.name}
+            rowActions={() => items}
+            selection={{ selected, onChange: setSelected, rowLabel: (row) => row.name, isSelectable }}
+            batchActions={() => [{ id: "trash", label: "Move to Trash", run: vi.fn() }]}
+          />
+        </Around>
+      )
+    }
+
+    /** Tabs on until `element` has focus. */
+    async function tabTo(user: User, element: HTMLElement, shift = false) {
+      for (let i = 0; i < 20 && document.activeElement !== element; i++) await user.tab({ shift })
+      expect(element).toHaveFocus()
+    }
+
+    /** Opens the focused row's menu with Shift+F10 and runs its item `label` from the keyboard. */
+    async function runFromRowMenu(user: User, row: string, label: string) {
+      await user.keyboard("{Shift>}{F10}{/Shift}")
+      const menu = await screen.findByRole("menu", { name: row })
+      const item = within(menu).getByRole("menuitem", { name: label })
+      for (let i = 0; i < 10 && document.activeElement !== item; i++) await user.keyboard("{ArrowDown}")
+      expect(item).toHaveFocus()
+      await user.keyboard("{Enter}")
+    }
+
+    it("1. is one Tab stop: the current row, its checkbox and ⋯, then out; Shift+Tab walks it back", async () => {
+      const user = userEvent.setup()
+      render(<Selectable />)
+      const order = [before(), screen.getByRole("checkbox", { name: m.table_select_all({ count: 3 }) }), rowOf("Vega"), checkboxOf("Vega"), moreOf("Vega"), after()]
+      for (const element of order) {
+        await user.tab()
+        expect(element).toHaveFocus()
+      }
+      for (const element of order.slice(0, -1).reverse()) {
+        await user.tab({ shift: true })
+        expect(element).toHaveFocus()
+      }
+      // The other rows and their controls are out of the Tab order.
+      for (const name of ["Altair", "Deneb"]) {
+        for (const element of [rowOf(name), checkboxOf(name), moreOf(name)]) expect(element).toHaveAttribute("tabindex", "-1")
+      }
+    })
+
+    it("2. Tab comes back to the row focused last; a first Tab lands on the open row", async () => {
+      const user = userEvent.setup()
+      const view = render(
+        <Around>
+          <DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} onRowClick={vi.fn()} />
+        </Around>,
+      )
+      await tabTo(user, rowOf("Vega"))
+      await user.keyboard("{ArrowDown}{ArrowDown}")
+      expect(rowOf("Deneb")).toHaveFocus()
+      await user.tab()
+      expect(after()).toHaveFocus()
+      await user.tab({ shift: true })
+      expect(rowOf("Deneb")).toHaveFocus()
+      view.unmount()
+
+      render(
+        <Around>
+          <DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} activeRowId="b" onRowClick={vi.fn()} />
+        </Around>,
+      )
+      await user.tab()
+      await user.tab()
+      expect(rowOf("Altair")).toHaveFocus()
+    })
+
+    it("3. ↑/↓ move a row across groups, skip details and do not wrap; Home/End; Page Up/Down move one screen", async () => {
+      const many: Frame[] = ["a", "b", "c", "d", "e", "f"].map((id, index) => ({ id, name: `Star ${id}`, size: index < 3 ? 1 : 2 }))
+      // A 32 px row in a 100 px frame under a 32 px header: a screen holds two rows.
+      const height = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(32)
+      const frameHeight = vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(100)
+      try {
+        const user = userEvent.setup()
+        render(
+          <DataTable
+            label="Stars"
+            rows={many}
+            columns={PLAIN}
+            getRowId={(row) => row.id}
+            rowLabel={(row) => row.name}
+            groups={{ key: (row) => String(row.size), label: (key) => `Size ${key}` }}
+            expand={{ render: (row) => `Detail of ${row.name}`, defaultExpanded: ["a"] }}
+          />,
+        )
+        const star = (id: string) => rowOf(`Star ${id}`)
+        await user.tab()
+        expect(star("a")).toHaveFocus()
+        const steps: [string, string][] = [
+          ["{ArrowUp}", "a"],
+          ["{ArrowDown}", "b"],
+          ["{ArrowDown}", "c"],
+          ["{ArrowDown}", "d"],
+          ["{End}", "f"],
+          ["{ArrowDown}", "f"],
+          ["{Home}", "a"],
+          ["{PageDown}", "c"],
+          ["{PageDown}", "e"],
+          ["{PageDown}", "f"],
+          ["{PageUp}", "d"],
+          ["{PageUp}", "b"],
+        ]
+        for (const [key, id] of steps) {
+          await user.keyboard(key)
+          expect(star(id)).toHaveFocus()
+        }
+      } finally {
+        height.mockRestore()
+        frameHeight.mockRestore()
+      }
+    })
+
+    it("4. ↓ on a row's checkbox focuses the next row's, and that row becomes the Tab stop", async () => {
+      const user = userEvent.setup()
+      render(<Selectable />)
+      await tabTo(user, checkboxOf("Vega"))
+      await user.keyboard("{ArrowDown}")
+      expect(checkboxOf("Altair")).toHaveFocus()
+      expect(rowOf("Altair")).toHaveAttribute("tabindex", "0")
+      expect(rowOf("Vega")).toHaveAttribute("tabindex", "-1")
+      await user.tab({ shift: true })
+      expect(rowOf("Altair")).toHaveFocus()
+    })
+
+    it("5. Space on a row ticks it and clears it, with the batch bar and the count; a row that cannot be selected stays", async () => {
+      const user = userEvent.setup()
+      const view = render(<Selectable isSelectable={(row) => row.id !== "b"} />)
+      const live = view.container.querySelector<HTMLElement>("[aria-live=polite]")!
+      const prevented: boolean[] = []
+      const record = (event: KeyboardEvent) => event.key === " " && prevented.push(event.defaultPrevented)
+      window.addEventListener("keydown", record)
+      try {
+        await tabTo(user, rowOf("Vega"))
+        await user.keyboard(" ")
+        expect(checkboxOf("Vega")).toBeChecked()
+        expect(screen.getByRole("region", { name: m.selection_region() })).toBeInTheDocument()
+        expect(live).toHaveTextContent(m.table_selected_count({ count: 1, n: "1" }))
+        expect(rowOf("Vega")).toHaveFocus()
+        await user.keyboard(" ")
+        expect(checkboxOf("Vega")).not.toBeChecked()
+        expect(screen.queryByRole("region", { name: m.selection_region() })).not.toBeInTheDocument()
+        await user.keyboard("{ArrowDown} ")
+        expect(rowOf("Altair")).toHaveFocus()
+        expect(checkboxOf("Altair")).not.toBeChecked()
+        expect(prevented).toEqual([true, true, true])
+      } finally {
+        window.removeEventListener("keydown", record)
+      }
+    })
+
+    it("5. Space on a row follows the single-key shortcuts switch; the checkbox keeps its own Space", async () => {
+      const user = userEvent.setup()
+      setSingleKeyShortcuts(false)
+      try {
+        render(<Selectable />)
+        await tabTo(user, rowOf("Vega"))
+        await user.keyboard(" ")
+        expect(checkboxOf("Vega")).not.toBeChecked()
+        await user.tab()
+        await user.keyboard(" ")
+        expect(checkboxOf("Vega")).toBeChecked()
+      } finally {
+        setSingleKeyShortcuts(true)
+      }
+    })
+
+    it("6. Enter on a row runs onRowClick once, else the primary action, else nothing; a control keeps its Enter", async () => {
+      const user = userEvent.setup()
+      const onRowClick = vi.fn()
+      let view = render(<DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={menuItems} onRowClick={onRowClick} />)
+      await user.tab()
+      await user.keyboard("{Enter}")
+      expect(onRowClick).toHaveBeenCalledOnce()
+      expect(onRowClick).toHaveBeenCalledWith(ROWS[0])
+      await user.tab()
+      expect(moreOf("Vega")).toHaveFocus()
+      await user.keyboard("{Enter}")
+      expect(await screen.findByRole("menu")).toBeInTheDocument()
+      expect(onRowClick).toHaveBeenCalledOnce()
+      await user.keyboard("{Escape}")
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument())
+      view.unmount()
+
+      const open = vi.fn()
+      view = render(<DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} rowLabel={(row) => row.name} primaryRowAction={() => ({ id: "open", label: "Open", run: open })} />)
+      await user.tab()
+      expect(rowOf("Vega")).toHaveFocus()
+      await user.keyboard("{Enter}")
+      expect(open).toHaveBeenCalledOnce()
+      view.unmount()
+
+      const items = menuItems()
+      render(<Selectable items={items} />)
+      await tabTo(user, rowOf("Vega"))
+      await user.keyboard("{Enter}")
+      expect(checkboxOf("Vega")).not.toBeChecked()
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument()
+      for (const item of items) if ("run" in item) expect(item.run).not.toHaveBeenCalled()
+    })
+
+    it.each(["{Shift>}{F10}{/Shift}", "{ContextMenu}"])("7. %s on a row opens its menu with the ⋯ entries; Escape returns focus to the row and runs nothing", async (key) => {
+      const user = userEvent.setup()
+      const items = menuItems()
+      render(<DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={() => items} />)
+      await user.tab()
+      await user.keyboard("{ArrowDown}")
+      const row = rowOf("Altair")
+      expect(row).toHaveFocus()
+      // 8. Tab reaches the current row's ⋯, and its menu holds the same entries.
+      await user.tab()
+      expect(moreOf("Altair")).toHaveFocus()
+      await user.keyboard("{Enter}")
+      const more = entries(await screen.findByRole("menu"))
+      await user.keyboard("{Escape}")
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument())
+      expect(moreOf("Altair")).toHaveFocus()
+      await user.tab({ shift: true })
+      expect(row).toHaveFocus()
+
+      await user.keyboard(key)
+      const menu = await screen.findByRole("menu", { name: "Altair" })
+      expect(entries(menu)).toEqual(more)
+      await user.keyboard("{Escape}")
+      await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument())
+      await waitFor(() => expect(row).toHaveFocus())
+      for (const item of items) if ("run" in item) expect(item.run).not.toHaveBeenCalled()
+    })
+
+    it.each(["Escape", "Cancel"])("9. a confirm opened from the row's menu returns focus to the row on %s", async (close) => {
+      const user = userEvent.setup()
+      const remove = vi.fn()
+      const items: MenuItem[] = [{ id: "remove", label: "Remove", confirm: { title: "Remove Altair?", confirm: { label: "Remove" } }, run: remove }]
+      render(<DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={() => items} />)
+      await user.tab()
+      await user.keyboard("{ArrowDown}")
+      await runFromRowMenu(user, "Altair", "Remove…")
+      const dialog = await screen.findByRole("alertdialog", { name: "Remove Altair?" })
+      if (close === "Escape") await user.keyboard("{Escape}")
+      else {
+        await tabTo(user, within(dialog).getByRole("button", { name: m.verb_cancel() }))
+        await user.keyboard("{Enter}")
+      }
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+      await waitFor(() => expect(rowOf("Altair")).toHaveFocus())
+      expect(remove).not.toHaveBeenCalled()
+    })
+
+    /** Rows the user removes: Remove asks first unless `quick`. */
+    function Removable({ quick = false }: { quick?: boolean }) {
+      const [rows, setRows] = useState(ROWS)
+      const remove = (row: Frame): MenuItem => ({
+        id: "remove",
+        label: "Remove",
+        confirm: quick ? undefined : { title: `Remove ${row.name}?`, confirm: { label: "Remove" } },
+        run: () => {
+          setRows((current) => current.filter((other) => other.id !== row.id))
+          return { ok: true }
+        },
+      })
+      return <DataTable label="Frames" rows={rows} columns={PLAIN} getRowId={(row) => row.id} rowLabel={(row) => row.name} rowActions={(row) => [remove(row)]} />
+    }
+
+    it("10. after a confirmed action removes the focused row, focus moves to the next row, or the previous one at the end", async () => {
+      const user = userEvent.setup()
+      render(<Removable />)
+      await user.tab()
+      await user.keyboard("{ArrowDown}")
+      for (const [name, next] of [
+        ["Altair", "Deneb"],
+        ["Deneb", "Vega"],
+      ] as const) {
+        expect(rowOf(name)).toHaveFocus()
+        await runFromRowMenu(user, name, "Remove…")
+        const dialog = await screen.findByRole("alertdialog", { name: `Remove ${name}?` })
+        await tabTo(user, within(dialog).getByRole("button", { name: "Remove" }))
+        await user.keyboard("{Enter}")
+        await waitFor(() => expect(screen.queryByRole("rowheader", { name })).not.toBeInTheDocument())
+        await waitFor(() => expect(rowOf(next)).toHaveFocus())
+        expect(rowOf(next)).toHaveAttribute("tabindex", "0")
+      }
+    })
+
+    it("10. an action without a confirm that removes the row from its ⋯ also hands focus to the next row", async () => {
+      const user = userEvent.setup()
+      render(<Removable quick />)
+      await user.tab()
+      await user.tab()
+      expect(moreOf("Vega")).toHaveFocus()
+      await user.keyboard("{Enter}")
+      const item = within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Remove" })
+      await waitFor(() => expect(item).toHaveFocus())
+      await user.keyboard("{Enter}")
+      await waitFor(() => expect(rowOf("Altair")).toHaveFocus())
+    })
+
+    it("10. an action without a confirm that removes the row from its context menu hands focus to the next row", async () => {
+      const user = userEvent.setup()
+      render(<Removable quick />)
+      await user.tab()
+      await user.keyboard("{ArrowDown}")
+      await runFromRowMenu(user, "Altair", "Remove")
+      await waitFor(() => expect(screen.queryByRole("rowheader", { name: "Altair" })).not.toBeInTheDocument())
+      await waitFor(() => expect(rowOf("Deneb")).toHaveFocus())
+    })
+
+    it("11. a click on a row's checkbox makes it current: Tab out and Shift+Tab back return to that row", async () => {
+      const user = userEvent.setup()
+      render(<Selectable />)
+      await user.click(checkboxOf("Deneb"))
+      await tabTo(user, after())
+      await user.tab({ shift: true })
+      expect(moreOf("Deneb")).toHaveFocus()
+      expect(rowOf("Deneb")).toContainElement(document.activeElement as HTMLElement)
+    })
+
+    it("12. an expanded row's nested table is one stop of its own, and ↑/↓ in it leave the outer table alone", async () => {
+      const user = userEvent.setup()
+      const inner: Frame[] = [
+        { id: "x", name: "Inner x", size: 1 },
+        { id: "y", name: "Inner y", size: 1 },
+      ]
+      render(
+        <Around>
+          <DataTable
+            label="Outer"
+            rows={ROWS}
+            columns={PLAIN}
+            getRowId={(row) => row.id}
+            rowLabel={(row) => row.name}
+            expand={{ render: (row) => <DataTable label={`Inner of ${row.name}`} rows={inner} columns={PLAIN} getRowId={(r) => r.id} onRowClick={vi.fn()} scroll="none" />, defaultExpanded: ["a", "c"] }}
+          />
+        </Around>,
+      )
+      const vegaInner = screen.getByRole("table", { name: "Inner of Vega" })
+      const denebInner = screen.getByRole("table", { name: "Inner of Deneb" })
+      const order = [before(), rowOf("Vega"), screen.getByRole("button", { name: m.table_row_details({ name: "Vega" }) }), rowOf("Inner x", vegaInner), after()]
+      for (const element of order) {
+        await user.tab()
+        expect(element).toHaveFocus()
+      }
+      // The current row's detail holds the only nested stop; Deneb's nested table and disclosure are out of the order.
+      expect(rowOf("Inner x", denebInner)).toHaveAttribute("tabindex", "-1")
+      expect(screen.getByRole("button", { name: m.table_row_details({ name: "Deneb" }) })).toHaveAttribute("tabindex", "-1")
+      await user.tab({ shift: true })
+      await user.keyboard("{ArrowDown}")
+      expect(rowOf("Inner y", vegaInner)).toHaveFocus()
+      await user.keyboard("{ArrowDown}")
+      expect(rowOf("Inner y", vegaInner)).toHaveFocus()
+      expect(rowOf("Vega")).toHaveAttribute("tabindex", "0")
+    })
+
+    it("12. a field in a row keeps its arrows, Space, Home and End", async () => {
+      const user = userEvent.setup()
+      const onRowClick = vi.fn()
+      const withNote: Column<Frame>[] = [...PLAIN, { id: "note", header: "Note", static: true, cell: (row) => <input aria-label={`Note for ${row.name}`} defaultValue="" /> }]
+      render(<DataTable label="Frames" rows={ROWS} columns={withNote} getRowId={(row) => row.id} onRowClick={onRowClick} />)
+      await user.tab()
+      await user.tab()
+      const field = screen.getByRole("textbox", { name: "Note for Vega" })
+      expect(field).toHaveFocus()
+      await user.keyboard("ac{ArrowLeft}b{Home}x{End} {ArrowDown}{ArrowUp}")
+      expect(field).toHaveValue("xabc ")
+      expect(field).toHaveFocus()
+      expect(onRowClick).not.toHaveBeenCalled()
+    })
+
+    it("13. a table whose rows do not act has no focusable row", async () => {
+      const user = userEvent.setup()
+      render(
+        <Around>
+          <DataTable label="Frames" rows={ROWS} columns={PLAIN} getRowId={(row) => row.id} />
+        </Around>,
+      )
+      for (const name of ["Vega", "Altair", "Deneb"]) expect(rowOf(name)).not.toHaveAttribute("tabindex")
+      await user.tab()
+      await user.tab()
+      expect(after()).toHaveFocus()
     })
   })
 })

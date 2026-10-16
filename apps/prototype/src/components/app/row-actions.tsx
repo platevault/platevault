@@ -6,7 +6,8 @@
  * destructive actions last after one separator.
  *
  * - `RowActions`: the ⋯ (ghost `icon-sm`, named "Actions for {row}"), in the
- *   Tab order like any button.
+ *   Tab order like any button; in a DataTable, only the current row's ⋯ is
+ *   (P-KBD1).
  * - `RowContextMenu`: one row outside a DataTable. Right click, long press,
  *   Shift+F10 and the Menu key open the same items; the menu is named after
  *   its row. DataTable renders its own one-per-table context menu with

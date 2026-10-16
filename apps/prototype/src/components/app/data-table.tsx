@@ -26,9 +26,23 @@
  *   and refusals.
  * - Expand (`expand`): a disclosure in the first cell opens the row's detail
  *   in a row under it, one level deep (a nested DataTable, a KeyValueList).
- * - Keyboard: ↑/↓ move focus to the same column in the adjacent row, across
- *   groups; Tab order stays natural. Row height and cell padding follow the
- *   row tokens `--row-h` and `--row-py`.
+ * - Keyboard (P-KBD1): a table whose rows act (selection, row actions, click
+ *   to act, a primary action or expand) is one Tab stop, on its current row:
+ *   Tab then visits that row's own controls (checkbox, disclosure, links,
+ *   inline action, ⋯) and leaves the table; the other rows and their controls
+ *   are out of the Tab order. Tab comes back to the row focused last, else
+ *   the open row (`activeRowId`), else the first; a click on a row or its
+ *   control makes it current. On the row, ↑/↓ move a row (across groups,
+ *   no wrap), Home/End go to the first or last row, Page Up/Down move one
+ *   screen, Space selects it (a single-key shortcut: off with the switch),
+ *   Enter opens it (`onRowClick`, else the primary row action), and Shift+F10
+ *   or the Menu key opens its menu. On a control, ↑/↓ move to the same
+ *   column's control in the adjacent row; fields keep their keys. Closing the
+ *   row's menu or a dialog it opened returns focus to the row (the ⋯ menu to
+ *   the ⋯); when an action removes the row, focus moves to the next row, else
+ *   the previous one. An expanded row's nested table is one stop of its own.
+ *   Native table semantics stay: no grid role. Row height and cell padding
+ *   follow the row tokens `--row-h` and `--row-py`.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
@@ -47,25 +61,27 @@
  *   reloads (column-choice.ts).
  * - Click to act (opt-in `onRowClick`): a click on the row outside its
  *   controls (links, buttons, inputs, menus) runs the row's primary action,
- *   as does Enter on the focused row. Controls keep their own action.
+ *   as does Enter on the row. Controls keep their own action.
  * - Hover: a row that acts (click to act, or a primary row action) tints
  *   under the pointer; a row that does nothing on click stays still.
  */
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, X } from "lucide-react"
 import {
+  createContext,
   type FocusEvent,
   Fragment,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
+  useContext,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
-import { useMessages } from "@/app/preferences"
+import { getPreferences, useMessages } from "@/app/preferences"
 import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -86,6 +102,43 @@ import { type MenuRow, menuRowAt, openMenuFromKeyboard, RowActions } from "./row
 
 /** Controls inside a row that keep their own click; a click on them never runs `onRowClick`. */
 const ROW_CONTROLS = "a[href], button, input, select, textarea, label, summary, [role=button], [role=link], [role=checkbox], [role=switch], [role=combobox], [role=menuitem], [role=option], [contenteditable=true]"
+
+/** What takes focus in a row or its detail: the controls a column renders and the table's own (checkbox, disclosure, inline action, ⋯). */
+const ROW_FOCUSABLE = ["a[href]", "button", "input", "select", "textarea", "summary", "iframe", "[tabindex]", "[contenteditable=true]"].map((selector) => `:scope > tbody ${selector}`).join(", ")
+/** A control out of the Tab order keeps its own tabindex here ("" for none), to get it back when its row is current again. */
+const OWN_TABINDEX = "data-own-tabindex"
+
+/** False inside the detail of a row that is not its table's current row: a nested table there takes no Tab stop. */
+const InCurrentRow = createContext(true)
+
+/** Puts a row's control in the Tab order or takes it out, keeping the tabindex it had. */
+function setTabbable(control: HTMLElement, tabbable: boolean) {
+  const own = control.getAttribute(OWN_TABINDEX)
+  if (tabbable) {
+    if (own === null) return
+    if (own === "") control.removeAttribute("tabindex")
+    else control.setAttribute("tabindex", own)
+    control.removeAttribute(OWN_TABINDEX)
+    return
+  }
+  const now = control.getAttribute("tabindex")
+  if (own !== null && now === "-1") return
+  // A first pass, or a re-render that wrote the control's own tabindex again: keep that one.
+  control.setAttribute(OWN_TABINDEX, now ?? "")
+  control.setAttribute("tabindex", "-1")
+}
+
+/** The row after `id` in `order` that is still shown, else the one before it: where focus goes when its row goes (APG). */
+function successorOf(order: readonly string[], id: string, shown: (id: string) => boolean): string | null {
+  const at = order.indexOf(id)
+  if (at < 0) return null
+  return order.slice(at + 1).find(shown) ?? order.slice(0, at).reverse().find(shown) ?? null
+}
+
+/** Whether focus went nowhere: its element was removed, or nothing has it. */
+function focusLost(): boolean {
+  return document.activeElement === null || document.activeElement === document.body
+}
 
 export interface DataTableSelection<T> {
   selected: string[]
@@ -288,20 +341,65 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const m = useMessages()
   const baseId = useId()
-  // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
-  // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
-  // goes to the first control of the toolbar row. Cancel and Escape return focus to the button that opened
-  // the confirmation, or to the first control of the batch bar (or toolbar row) when that button is gone (WCAG 2.4.3).
-  const slotFirst = () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)
-  const runner = useAction({ focusAfterConfirm: slotFirst, focusAfterCancel: slotFirst })
-  const [ownSort, setOwnSort] = useState(initialSort ?? null)
-  const sort = controlledSort === undefined ? ownSort : controlledSort
-  const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
-  const [expanded, setExpanded] = useState(() => new Set(expand?.defaultExpanded ?? []))
+  const tableRef = useRef<HTMLTableElement>(null)
   const frame = useRef<HTMLDivElement>(null)
   const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
   const slot = useRef<HTMLDivElement>(null)
   const slotHadFocus = useRef(false)
+  // The rows as last committed, and the order before that, so the row after a removed one can be found.
+  const shownOrder = useRef<{ now: string[]; before: string[] }>({ now: [], before: [] })
+
+  /** This table's data rows in order, across groups; a nested table's rows are its own. */
+  const ownRows = () => Array.from(tableRef.current?.querySelectorAll<HTMLElement>(":scope > tbody > tr[data-row]") ?? [])
+  const rowElement = (id: string) => ownRows().find((row) => row.dataset.row === id) ?? null
+  /** The row, or the one that took its place when it went: the next row, else the previous one. */
+  const rowOrSuccessor = (id: string): HTMLElement | null => {
+    const present = rowElement(id)
+    if (present) return present
+    const { now, before } = shownOrder.current
+    const next = successorOf(now.includes(id) ? now : before, id, (other) => rowElement(other) !== null)
+    return next === null ? null : rowElement(next)
+  }
+
+  // One runner for the table: the batch bar, the toolbar actions, every row's ⋯ and the context menu.
+  // A confirmed batch action usually empties the selection, which takes its own trigger away; focus then
+  // goes to the first control of the toolbar row. Cancel and Escape return focus to the button that opened
+  // the confirmation, or to the first control of the batch bar (or toolbar row) when that button is gone (WCAG 2.4.3).
+  // A row's action returns focus to what ran it (the row, its ⋯ or its inline action), or when the action
+  // removed the row, to the row that took its place (P-KBD1).
+  const slotFirst = () => slot.current?.querySelector<HTMLElement>(SLOT_FOCUSABLE)
+  const origin = useRef<{ id: string; opener: HTMLElement | undefined } | null>(null)
+  const afterAction = () => {
+    const from = origin.current
+    if (from === null) return slotFirst()
+    return (from.opener?.isConnected ? from.opener : rowOrSuccessor(from.id)) ?? slotFirst()
+  }
+  const actions = useAction({ focusAfterConfirm: afterAction, focusAfterCancel: afterAction })
+  const runner: ActionRunner = {
+    ...actions,
+    run: (action, opener) => {
+      origin.current = null
+      actions.run(action, opener)
+    },
+  }
+  /** The runner for one row's actions; `opener` names what ran them when the trigger passes none (a menu item). */
+  const rowRunner = (id: string, opener: () => HTMLElement | null | undefined): ActionRunner => ({
+    ...actions,
+    run: (action, from) => {
+      const element = from ?? opener() ?? undefined
+      origin.current = { id, opener: element }
+      actions.run(action, element)
+    },
+  })
+
+  const [ownSort, setOwnSort] = useState(initialSort ?? null)
+  const sort = controlledSort === undefined ? ownSort : controlledSort
+  const [menuTarget, setMenuTarget] = useState<MenuRow | null>(null)
+  const [expanded, setExpanded] = useState(() => new Set(expand?.defaultExpanded ?? []))
+  // P-KBD1: the row focused last, while the open row stays the one it was then.
+  const [focusedRow, setFocusedRow] = useState<{ id: string; activeRowId: string | null | undefined } | null>(null)
+  const rowsHadFocus = useRef(false)
+  const inCurrentRow = useContext(InCurrentRow)
   const selectedCount = selection?.selected.length ?? 0
   const membership = selection?.membership === true
   // Members are data, not a selection to act on: the status bar does not count them.
@@ -359,6 +457,70 @@ export function DataTable<T>({
       .map((key) => ({ key, rows: byKey.get(key)! }))
   }, [sorted, groups])
 
+  // P-KBD1: a table whose rows act is one Tab stop, on its current row: the row focused last while the
+  // open row stays the same, else the open row, else the first.
+  const roving = selection !== undefined || rowActions !== undefined || onRowClick !== undefined || primaryRowAction !== undefined || expand !== undefined
+  const shownIds = bodies.flatMap((body) => body.rows.map(getRowId))
+  const shownKey = shownIds.join("\n")
+  const remembered = focusedRow !== null && focusedRow.activeRowId === activeRowId && shownIds.includes(focusedRow.id) ? focusedRow.id : null
+  const currentRowId = roving ? (remembered ?? (activeRowId != null && shownIds.includes(activeRowId) ? activeRowId : (shownIds[0] ?? null))) : null
+
+  useLayoutEffect(() => {
+    shownOrder.current = { now: shownIds, before: shownOrder.current.now }
+  }, [shownKey])
+
+  // When the current row goes (an action removed it, a filter hid it), the next row takes its place, else
+  // the previous one, and takes focus when focus went with the row (APG). A new open row from the host wins.
+  const committed = useRef<{ row: string | null; activeRowId: string | null | undefined }>({ row: null, activeRowId })
+  useLayoutEffect(() => {
+    const previous = committed.current
+    committed.current = { row: currentRowId, activeRowId }
+    if (previous.row === null || shownIds.includes(previous.row)) return
+    const next = previous.activeRowId !== activeRowId && currentRowId !== null ? rowElement(currentRowId) : rowOrSuccessor(previous.row)
+    const id = next?.dataset.row
+    if (next === null || id === undefined) return
+    if (id !== currentRowId) setFocusedRow({ id, activeRowId })
+    if (rowsHadFocus.current && focusLost()) next.focus()
+  })
+
+  // Only the current row's controls, and those of its detail, stay in the Tab order; a nested table's rows are its own.
+  useLayoutEffect(() => {
+    for (const control of tableRef.current?.querySelectorAll<HTMLElement>(ROW_FOCUSABLE) ?? []) {
+      const row = ownerRow(control)
+      const inner = control.closest("tr[data-row]")
+      if (row === null || control === row || (inner !== null && inner !== row)) continue
+      setTabbable(control, inCurrentRow && (!roving || row.dataset.row === currentRowId))
+    }
+  })
+
+  /** The data row an element in the body belongs to: its own row, or the row whose detail holds it. */
+  function ownerRow(element: Element): HTMLElement | null {
+    let row = element.closest<HTMLElement>("tr")
+    while (row !== null && row.parentElement?.parentElement !== tableRef.current) row = row.parentElement?.closest<HTMLElement>("tr") ?? null
+    if (row === null || row.parentElement?.tagName !== "TBODY") return null
+    const owner = row.hasAttribute("data-row-detail") ? row.previousElementSibling : row
+    return owner instanceof HTMLElement && owner.hasAttribute("data-row") ? owner : null
+  }
+
+  /** A click or focus on a row, or on anything in it, makes that row current (APG). */
+  function makeCurrent(target: EventTarget) {
+    const id = target instanceof Element ? ownerRow(target)?.dataset.row : undefined
+    if (id !== undefined && id !== currentRowId) setFocusedRow({ id, activeRowId })
+  }
+
+  const rowFocus = {
+    onFocus: (event: FocusEvent<HTMLTableSectionElement>) => {
+      rowsHadFocus.current = true
+      makeCurrent(event.target)
+    },
+    onBlur: (event: FocusEvent<HTMLTableSectionElement>) => {
+      // Focus that moved somewhere else; a row removed with focus in it blurs to nothing.
+      if (event.relatedTarget !== null && !tableRef.current?.contains(event.relatedTarget)) rowsHadFocus.current = false
+    },
+    // WebKit does not focus a button it clicks.
+    onPointerDown: (event: PointerEvent<HTMLTableSectionElement>) => makeCurrent(event.target),
+  }
+
   const selectable = selection ? sorted.filter((row) => selection.isSelectable?.(row) ?? true) : []
   const selectedSet = new Set(selection?.selected ?? [])
   const shownSelected = selectable.filter((row) => selectedSet.has(getRowId(row))).length
@@ -387,22 +549,41 @@ export function DataTable<T>({
     })
   }
 
+  /** The rows one screen of the frame holds (of the window, for a table that does not scroll), under the pinned header. */
+  function rowsPerPage(row: HTMLElement): number {
+    const screen = scroll === "none" ? window.innerHeight : (frame.current?.clientHeight ?? 0)
+    const header = tableRef.current?.tHead?.offsetHeight ?? 0
+    return row.offsetHeight > 0 ? Math.max(1, Math.floor((screen - header) / row.offsetHeight)) : 1
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTableSectionElement>) {
-    // A nested table (an expanded row's detail) moved focus already.
-    if (event.defaultPrevented || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return
+    // A nested table (an expanded row's detail), or the row itself, handled the key already.
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
     const target = event.target as HTMLElement
-    if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
     const row = target.closest<HTMLElement>("tr[data-row]")
-    // A focused row (click to act) moves to the adjacent row's first control, or the row itself.
-    const cell = target === row ? row.children[0] : target.closest("td, th")
-    if (!cell || !row) return
-    // Data rows of the whole table, so ↑/↓ also cross group boundaries; a nested table's rows are its own.
-    const allRows = Array.from(row.closest("table")?.querySelectorAll<HTMLElement>(":scope > tbody > tr[data-row]") ?? [])
-    const sibling = allRows[allRows.indexOf(row) + (event.key === "ArrowDown" ? 1 : -1)]
-    if (!sibling) return
+    if (!row || row.parentElement?.parentElement !== tableRef.current) return
+    // Data rows of the whole table, so the keys also cross group boundaries.
+    const rows = ownRows()
+    const at = rows.indexOf(row)
+    if (target === row) {
+      if (event.shiftKey) return
+      const page = event.key === "PageDown" || event.key === "PageUp" ? rowsPerPage(row) : 0
+      const moves: Record<string, number> = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: rows.length - 1, PageDown: at + page, PageUp: at - page }
+      const to: number | undefined = moves[event.key]
+      if (to === undefined) return
+      event.preventDefault()
+      rows[Math.min(rows.length - 1, Math.max(0, to))]?.focus()
+      return
+    }
+    // On a control, ↑/↓ move to the same column's control in the adjacent row; fields, menus and lists keep their arrows.
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+    if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
+    const cell = target.closest("td, th")
+    const sibling = rows[at + (event.key === "ArrowDown" ? 1 : -1)]
+    if (!cell || !sibling) return
     const index = Array.from(row.children).indexOf(cell)
     const focusable = "a[href], button:not([disabled]), [role=checkbox], input:not([disabled])"
-    const next = sibling.children[index]?.querySelector<HTMLElement>(focusable) ?? sibling.querySelector<HTMLElement>(focusable) ?? (onRowClick ? sibling : null)
+    const next = sibling.children[index]?.querySelector<HTMLElement>(focusable) ?? sibling.querySelector<HTMLElement>(focusable) ?? (roving ? sibling : null)
     if (next) {
       event.preventDefault()
       next.focus()
@@ -416,10 +597,19 @@ export function DataTable<T>({
     if (window.getSelection()?.isCollapsed === false) return
     onRowClick?.(row)
   }
-  const rowKey = (row: T) => (event: KeyboardEvent<HTMLTableRowElement>) => {
-    if (event.key !== "Enter" || event.target !== event.currentTarget) return
-    event.preventDefault()
-    onRowClick?.(row)
+  /** Enter on the row opens it (`onRowClick`, else its primary action); Space selects it. Its controls keep both keys. */
+  const rowKey = (row: T, id: string, primary: Action | null, canSelect: boolean, isSelected: boolean) => (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    const element = event.currentTarget
+    if (event.key === "Enter" && (onRowClick || primary)) {
+      event.preventDefault()
+      if (onRowClick) onRowClick(row)
+      else if (primary) rowRunner(id, () => element).run(primary, element)
+    } else if (event.key === " " && selection && getPreferences().singleKeyShortcuts) {
+      // A single-key shortcut (WCAG 2.1.4): the switch turns it off with the app's others.
+      event.preventDefault()
+      if (canSelect) toggleRow(id, !isSelected)
+    }
   }
 
   const hasRowActions = rowActions !== undefined || primaryRowAction !== undefined
@@ -455,7 +645,10 @@ export function DataTable<T>({
     else setMenuTarget(found)
   }
   const menuRow = menuEnabled && menuTarget !== null ? rows.find((row) => getRowId(row) === menuTarget.key) : undefined
-  const menuItems = menuRow === undefined || !rowActions ? null : <MenuItems items={rowActions(menuRow)} runner={runner} />
+  const menuItems =
+    menuRow === undefined || menuTarget === null || !rowActions ? null : <MenuItems items={rowActions(menuRow)} runner={rowRunner(menuTarget.key, () => rowElement(menuTarget.key))} />
+  // Closing the row's menu returns focus to the row, or to the row that took its place when an item removed it.
+  const menuFinalFocus = () => (menuTarget === null ? null : rowOrSuccessor(menuTarget.key)) ?? true
   const frameClass = cn(
     // The frame is the scroll container in both axes so the header row
     // stays pinned while long tables scroll inside it. Scroll padding the
@@ -488,6 +681,7 @@ export function DataTable<T>({
 
   const table = (
     <Table
+      ref={tableRef}
       onContextMenu={menuEnabled ? onContextMenu : undefined}
       onKeyDown={menuEnabled ? (event) => !event.defaultPrevented && openMenuFromKeyboard(event, "data-row-id") : undefined}
     >
@@ -563,7 +757,7 @@ export function DataTable<T>({
         </TableBody>
       ) : (
         bodies.map((body, bodyIndex) => (
-          <TableBody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
+          <TableBody key={body.key ?? "rows"} onKeyDown={onKeyDown} {...(roving ? rowFocus : {})}>
             {body.key !== null && groups ? (
               <TableRow kind="group">
                 <th scope="rowgroup" colSpan={columnCount} className="px-3 text-left text-xs font-semibold">
@@ -583,17 +777,17 @@ export function DataTable<T>({
               return (
                 <Fragment key={id}>
                   <TableRow
-                    data-row
+                    data-row={id}
                     data-row-id={menuEnabled ? id : undefined}
                     data-alt={rowIndex % 2 === 1 || undefined}
                     data-selected={isSelected || undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
                     // A row that acts (click to act, or a primary action) tints under the pointer; the others stay still.
                     interactive={onRowClick !== undefined || primary !== null}
-                    tabIndex={onRowClick ? -1 : undefined}
+                    tabIndex={roving ? (inCurrentRow && id === currentRowId ? 0 : -1) : undefined}
                     onClick={onRowClick ? rowClick(row) : undefined}
-                    onKeyDown={onRowClick ? rowKey(row) : undefined}
-                    className={cn(onRowClick && "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring", rowClassName?.(row))}
+                    onKeyDown={roving ? rowKey(row, id, primary, canSelect, isSelected) : undefined}
+                    className={cn(roving && "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring", rowClassName?.(row))}
                   >
                     {selection ? (
                       <TableCell className={cn("w-10", pinned("first"))}>
@@ -648,16 +842,16 @@ export function DataTable<T>({
                     {hasRowActions ? (
                       <TableCell className={cn("w-px text-right whitespace-nowrap", pinnedEnd())}>
                         <div className="inline-flex items-center gap-1 align-middle">
-                          {primary ? <ActionButton action={primary} size="xs" runner={runner} /> : null}
-                          {rowActions ? <RowActions name={nameOf(row)} items={rowActions(row)} runner={runner} /> : null}
+                          {primary ? <ActionButton action={primary} size="xs" runner={rowRunner(id, () => rowElement(id))} /> : null}
+                          {rowActions ? <RowActions name={nameOf(row)} items={rowActions(row)} runner={rowRunner(id, () => rowElement(id)?.querySelector<HTMLElement>("[data-row-actions]"))} /> : null}
                         </div>
                       </TableCell>
                     ) : null}
                   </TableRow>
                   {isExpanded ? (
-                    <TableRow kind="detail">
+                    <TableRow kind="detail" data-row-detail="">
                       <td id={detailId} colSpan={columnCount} className="px-3 py-2">
-                        {expand.render(row)}
+                        <InCurrentRow.Provider value={inCurrentRow && (!roving || id === currentRowId)}>{expand.render(row)}</InCurrentRow.Provider>
                       </td>
                     </TableRow>
                   ) : null}
@@ -679,7 +873,9 @@ export function DataTable<T>({
       <ContextMenuTrigger ref={frame} className={frameClass} aria-busy={busy}>
         {table}
       </ContextMenuTrigger>
-      <ContextMenuContent aria-label={menuRow === undefined ? undefined : nameOf(menuRow)}>{menuItems}</ContextMenuContent>
+      <ContextMenuContent aria-label={menuRow === undefined ? undefined : nameOf(menuRow)} finalFocus={menuFinalFocus}>
+        {menuItems}
+      </ContextMenuContent>
     </ContextMenu>
   )
   if (!hasSlot) {
