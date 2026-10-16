@@ -150,8 +150,9 @@ export const DEFAULT_GROUP_KEYWORDS: GroupKeywords = { group: "GROUP", panel: "P
 /** Wrap up steps in order (PRJ-FR-14); Close project is the last step's final action. */
 export const WRAP_UP_STEPS: WrapUpStepId[] = ["cleanup", "trash", "archive"]
 
+/** Clean up → Trash → Archive (F4): there are no runs, so the first step is "Clean up". */
 export const WRAP_UP_NAME: Record<WrapUpStepId, MessageRef> = {
-  cleanup: msg("wrapup_cleanup_title"),
+  cleanup: msg("wrapup_clean_up"),
   trash: msg("trash_title"),
   archive: msg("wrapup_archive_title"),
 }

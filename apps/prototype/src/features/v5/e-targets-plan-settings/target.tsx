@@ -8,7 +8,9 @@
  * - Sections: the chosen night at the planning site (altitude, best window,
  *   Img time, filter grades under the Moon curves, Moon and darkness), the
  *   identity, Fit on every rig, the Projects that use it with their goals
- *   and window, the library's integration per channel, and its sessions.
+ *   and window, the library's integration per channel, and its sessions; a
+ *   session with an issue offers Dismiss issue in its menu, then Restore
+ *   issue once dismissed (F7, P-ISS1).
  */
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { MapPin } from "lucide-react"
@@ -18,6 +20,7 @@ import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
@@ -35,6 +38,7 @@ import { formatDec, formatDegrees, formatNight, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { addToProjectMenu, clockRange, criteriaText, fitText, keepSearch, myTargetsAction, newProjectAction, planAction, planNight, useSkyContext } from "./parts"
 import { allRows, prioritiesByTarget, type RigFit, rowView, sessionCountsByTarget, type TargetRow, zeroReasonWord } from "./targets-model"
 
@@ -79,6 +83,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const disk = useStore((s) => s.disk)
   const duplicates = useStore(sessionDuplicateCopies)
   const curves = useStore((s) => s.settings.moonAvoidance)
+  const issueView = useIssues()
   const ctx = useSkyContext(search.night)
   const night = planNight(ctx)
   const target = catalog.targets[targetId]!
@@ -285,7 +290,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
           getRowId={(s) => s.id}
           rowLabel={(s) => formatNight(s.night, true)}
           onRowClick={openSession}
-          rowActions={(s) => [{ id: "open-session", label: m.project_open_session(), run: () => openSession(s) }]}
+          rowActions={(s) => withIssueItems(m, [{ id: "open-session", label: m.project_open_session(), run: () => openSession(s) }], rowIssues(issueView, { kind: "session", id: s.id }))}
           empty={<EmptyState icon={MapPin} title={m.run_cal_no_sessions()} action={null} />}
         />
       ),

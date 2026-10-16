@@ -148,8 +148,8 @@ export type OpenWork =
   | (Ranked & { kind: "project"; project: Project; next: NextAction | null; goals: { met: number; total: number }; sessions: number; pending: number })
   | (Ranked & { kind: "calibration"; view: ProcessView })
 
-/** A Project row's issues (F7): its own, and those of the sessions it holds (drift, a changed or missing pinned file). */
-function projectIssues(project: Project, issues: Issue[]): Issue[] {
+/** A Project row's issues (F7): its own, and those of the sessions it holds (drift, a changed or missing pinned file). Home and Projects read it. */
+export function projectIssues(project: Project, issues: Issue[]): Issue[] {
   const sessions = projectSessionIds(project)
   return [...issuesFor(issues, { kind: "project", id: project.id }), ...issues.filter((i) => i.owner.kind === "session" && sessions.has(i.owner.id))]
 }

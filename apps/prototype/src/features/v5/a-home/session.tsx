@@ -8,7 +8,9 @@
  * No; LIB-FR-23, LIB-FR-25), the Projects that hold it (an open one lists
  * the pending changes this session brings it; a Closed one keeps its Close
  * snapshot, LIB-AC-30), its frames and its header values (each with where
- * it came from).
+ * it came from). The Session ▾ menu offers Dismiss issue for the session's
+ * issues (drift, a changed pinned file) and Restore issue once dismissed
+ * (F7, P-ISS1).
  *
  * A raw calibration session is not a library session: it reads where its
  * calibration process stands (P-CAL3) and links to the Calibration library.
@@ -18,6 +20,7 @@ import { Copy, Eye, ListChecks } from "lucide-react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
+import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
@@ -41,6 +44,7 @@ import { formatCount, formatDateTime, formatDec, formatExposure, formatNight, fo
 import { type Messages, say } from "@/lib/i18n"
 import { confirmCalibration, pickCalibration, setNoCalibration } from "@/store/actions/calibration"
 import { type PrototypeState, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { typeLabel } from "./import-model"
 import { addToProjectItems } from "./parts"
 import { type SessionRow, sessionRows } from "./session-model"
@@ -93,12 +97,13 @@ function SessionDetail({ session }: { session: Session }) {
   const m = useMessages()
   const follow = useFollowLink()
   const state = useStore((s) => s)
+  const issueView = useIssues()
   const row = sessionRows(state).find((r) => r.session.id === session.id)
   if (!row) return null
   const { catalog } = state
   const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is Asset => a !== undefined)
   const review: Action = { id: "review", label: m.session_review_frames(), icon: ListChecks, kind: row.queued ? "primary" : "standard", run: () => follow(sessionIntakeEntry(catalog, session)) }
-  const menu: MenuItem[] = row.trashed ? [] : addToProjectItems(m, catalog, session.id)
+  const menu: MenuItem[] = withIssueItems(m, row.trashed ? [] : addToProjectItems(m, catalog, session.id), rowIssues(issueView, { kind: "session", id: session.id }))
   const notice: PageNotice | null = row.trashed ? { tone: "warning", title: m.session_in_os_trash() } : null
   const hours = formatHours(row.seconds)
 

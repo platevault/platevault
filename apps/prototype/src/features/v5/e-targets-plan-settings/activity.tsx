@@ -10,7 +10,10 @@
  *   place with its panel.
  * - The Entries facet filters by kind; Transfers are the imports, archive
  *   moves and OS Trash moves, since the Storage tab went (P-STO2).
- * - A row's ⋯ (and its right-click menu) opens the owning surface. The
+ * - A row's ⋯ (and its right-click menu) opens the owning surface. Work that
+ *   failed or was interrupted on no Project is an issue on its operation's
+ *   row: the menu offers Dismiss issue, then Restore issue once dismissed,
+ *   and the Issues facet is Show dismissed (F7, P-ISS1). The
  *   disclosure shows the full detail, a refusal's reasons as the store
  *   recorded them, and an operation's items.
  */
@@ -19,6 +22,7 @@ import { Activity as ActivityIcon } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
+import { type IssueFilter, issuesFacet, matchesIssueFilter, NO_ISSUES, type OwnIssues, parseIssueFilter, rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState } from "@/components/app/feedback"
@@ -31,6 +35,7 @@ import type { ActivityEvent, Operation } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { m, type Messages, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { isSettled } from "@/store/operations"
 
 type Filter = "operation" | "transfer" | "refused" | "write-failed" | "saved"
@@ -175,6 +180,10 @@ export function ActivityPage() {
   const activity = useStore((s) => s.activity)
   const operations = useStore((s) => s.operations)
   const [filter, setFilter] = useState<Filter | "">("")
+  const [issueFilter, setIssueFilter] = useState<IssueFilter | "">("")
+  const issueView = useIssues()
+  // An operation's issue is on its own entry, `act_<id>`, not on the other entries that name it.
+  const issuesOf = (r: ActivityRow): OwnIssues => (r.operation && r.id === `act_${r.operation.id}` ? rowIssues(issueView, { kind: "operation", id: r.operation.id }) : NO_ISSUES)
 
   // An operation records its entry as `act_<id>` when it settles, so its running row takes that id and keeps its place.
   const recorded = new Set(activity.map((event) => event.id))
@@ -187,7 +196,7 @@ export function ActivityPage() {
   ]
   const [openOnFirstRender] = useState(() => running.map((row) => row.id))
   const current = FILTERS.find((f) => f.value === filter)
-  const shown = current ? rows.filter(current.test) : rows
+  const shown = rows.filter((r) => (!current || current.test(r)) && matchesIssueFilter(issuesOf(r), issueFilter))
 
   const columns: Column<ActivityRow>[] = [
     { id: "what", header: m.activity_what(), rowHeader: true, truncate: true, sortValue: (r) => rowTitle(m, r), cell: (r) => rowTitle(m, r) },
@@ -197,11 +206,20 @@ export function ActivityPage() {
   ]
   const rowActions = (r: ActivityRow): MenuItem[] => {
     const href = r.event?.href
-    return href ? [{ id: "open", label: m.activity_open_destination({ name: destinationLabel(href) }), run: () => void (window.location.hash = href) }] : []
+    return withIssueItems(m, href ? [{ id: "open", label: m.activity_open_destination({ name: destinationLabel(href) }), run: () => void (window.location.hash = href) }] : [], issuesOf(r))
   }
-  const empty: Action = current
-    ? { id: "show-all", label: m.plan_show_all(), run: () => setFilter("") }
+  const filtered = current !== undefined || issueFilter !== ""
+  const empty: Action = filtered
+    ? {
+        id: "show-all",
+        label: m.plan_show_all(),
+        run: () => {
+          setFilter("")
+          setIssueFilter("")
+        },
+      }
     : { id: "go-home", label: m.shell_not_found_home(), run: () => void navigate({ to: "/" }) }
+  const emptyTitle = current ? current.empty : issueFilter === "dismissed" ? m.issues_filter_none_dismissed() : issueFilter === "with-issues" ? m.issues_none() : m.activity_empty()
 
   return (
     <ListPage
@@ -239,12 +257,16 @@ export function ActivityPage() {
                 options: FILTERS.map((f) => ({ value: f.value, label: f.label, count: rows.filter(f.test).length })),
                 value: filter,
               },
+              issuesFacet(m, rows.map(issuesOf), issueFilter),
             ],
-            onChange: (patch) => setFilter(typeof patch.entries === "string" ? (patch.entries as Filter | "") : ""),
+            onChange: (patch) => {
+              if ("entries" in patch) setFilter(typeof patch.entries === "string" ? (patch.entries as Filter | "") : "")
+              if ("issues" in patch) setIssueFilter(parseIssueFilter(patch.issues))
+            },
           },
           matchCount: shown.length,
         },
-        empty: <EmptyState icon={ActivityIcon} title={current ? current.empty : m.activity_empty()} action={<ActionButton action={empty} />} />,
+        empty: <EmptyState icon={ActivityIcon} title={emptyTitle} action={<ActionButton action={empty} />} />,
       }}
     />
   )

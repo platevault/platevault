@@ -14,6 +14,7 @@ import { useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { BoxTable } from "@/components/app/box"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
+import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import { SelectField, SwitchField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
 import { useFollowLink } from "@/components/app/links"
@@ -45,6 +46,7 @@ import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { addSessions, createGroup, moveSessions, removeGroup, removeSessions, renameGroup, setGroupPanel, splitGroup } from "@/store/actions/projects"
 import { type CommitResult, type PrototypeState, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { AddSessionsDialog } from "./add-sessions"
 import { framingLine, sessionLine, sessionSubjectName, unavailableFor as blocked } from "./parts"
 
@@ -259,7 +261,10 @@ type SplitDraft = { groupId: ProjectGroupId; sessionIds: SessionId[]; name: stri
  * the picker over Ready sessions (VSEL-FR-03). Ticked sessions move into
  * another group, split into a new group (named "<Group> · 2" first,
  * PRJ-AC-44) or leave the Project, always whole; each row's menu does the
- * same for one session. Files, the library and other Projects never change.
+ * same for one session, and offers Dismiss issue for the session's issues
+ * (Restore issue once dismissed; F7). With no sessions, the empty text
+ * points to the suggestions while there are some, else to Add sessions….
+ * Files, the library and other Projects never change.
  */
 export function useHeldSection(project: Project): DetailSection {
   const m = useMessages()
@@ -267,6 +272,8 @@ export function useHeldSection(project: Project): DetailSection {
   const catalog = useStore((s) => s.catalog)
   const rows = useStore((s) => heldRows(s, project))
   const changes = useStore((s) => pendingChanges(s, project))
+  const suggested = useStore((s) => projectSuggestions(s.catalog, project).length > 0)
+  const issueView = useIssues()
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
   const [moving, setMoving] = useState<MoveDraft | null>(null)
@@ -319,24 +326,28 @@ export function useHeldSection(project: Project): DetailSection {
 
   const rowActions = (r: HeldRow): MenuItem[] => {
     const others = project.groups.filter((g) => g.id !== r.input.groupId)
-    return [
-      { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
-      ...(open
-        ? [
-            ...(others.length > 0 ? [{ submenu: m.project_move_to_group(), items: others.map((g): MenuItem => ({ id: `move-${g.id}`, label: g.name, icon: FolderInput, run: () => moveSessions(project.id, [r.session.id], g.id) })) }] : []),
-            { id: "split", label: m.project_split_group(), icon: Split, opensDialog: true, run: () => startSplit([r.session.id]) },
-            { separator: true } as const,
-            {
-              id: "remove",
-              label: m.project_remove_session(),
-              icon: X,
-              kind: "destructive" as const,
-              confirm: { title: m.project_remove_from_title({ name: label(r), project: project.name }), summary: m.project_remove_session_summary(), confirm: { label: m.project_remove(), kind: "destructive" as const } },
-              run: () => removeSessions(project.id, [r.session.id]),
-            },
-          ]
-        : []),
-    ]
+    return withIssueItems(
+      m,
+      [
+        { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
+        ...(open
+          ? [
+              ...(others.length > 0 ? [{ submenu: m.project_move_to_group(), items: others.map((g): MenuItem => ({ id: `move-${g.id}`, label: g.name, icon: FolderInput, run: () => moveSessions(project.id, [r.session.id], g.id) })) }] : []),
+              { id: "split", label: m.project_split_group(), icon: Split, opensDialog: true, run: () => startSplit([r.session.id]) },
+              { separator: true } as const,
+              {
+                id: "remove",
+                label: m.project_remove_session(),
+                icon: X,
+                kind: "destructive" as const,
+                confirm: { title: m.project_remove_from_title({ name: label(r), project: project.name }), summary: m.project_remove_session_summary(), confirm: { label: m.project_remove(), kind: "destructive" as const } },
+                run: () => removeSessions(project.id, [r.session.id]),
+              },
+            ]
+          : []),
+      ],
+      rowIssues(issueView, { kind: "session", id: r.session.id }),
+    )
   }
 
   const none = chosen.length === 0
@@ -397,7 +408,7 @@ export function useHeldSection(project: Project): DetailSection {
           selection={open && rows.length > 0 ? { selected: chosen, onChange: setSelected, rowLabel: label } : undefined}
           rowLabel={label}
           rowActions={rowActions}
-          empty={m.project_no_sessions()}
+          empty={!open ? m.run_cal_no_sessions() : suggested ? m.project_no_sessions() : m.project_no_sessions_add()}
         />
         <AddSessionsDialog project={project} open={adding} onOpenChange={setAdding} />
         <FormDialog
