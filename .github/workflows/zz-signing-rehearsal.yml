@@ -1,0 +1,219 @@
+name: Windows signing rehearsal (throwaway, never merged)
+on:
+  push:
+    branches:
+    - chore/signing-rehearsal
+permissions:
+  contents: read
+jobs:
+  rehearse:
+    name: Rehearse Windows signing
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@1.99.0
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: release-windows-latest
+        save-if: false
+    - uses: pnpm/action-setup@v6
+      with:
+        version: 11.17.0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+    - name: Install JS dependencies
+      run: pnpm install --frozen-lockfile
+    - name: 'Rehearsal: trust a throwaway code-signing certificate'
+      shell: pwsh
+      run: |
+        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=PlateVault signing rehearsal' -CertStoreLocation Cert:\CurrentUser\My
+        foreach ($name in 'Root', 'TrustedPublisher') {
+          $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($name, 'LocalMachine')
+          $store.Open('ReadWrite'); $store.Add($cert); $store.Close()
+        }
+    - name: 'Rehearsal: throwaway updater key'
+      shell: pwsh
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        $key = Join-Path $env:RUNNER_TEMP 'rehearsal.key'
+        pnpm --dir apps/desktop exec tauri signer generate --ci --password '' --write-keys $key
+        "TAURI_SIGNING_PRIVATE_KEY=$((Get-Content -Raw $key).Trim())" | Add-Content -LiteralPath $env:GITHUB_ENV
+        'TAURI_SIGNING_PRIVATE_KEY_PASSWORD=' | Add-Content -LiteralPath $env:GITHUB_ENV
+    - name: Build the Windows app for signing
+      id: windows-app
+      shell: pwsh
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        pnpm --dir apps/desktop exec tauri build --no-bundle
+
+        # The bin targets Tauri packs into both installers: every bin of the
+        # desktop_shell package that needs no feature, with default-run as the app.
+        $metadata = cargo metadata --format-version 1 --no-deps | ConvertFrom-Json
+        $package = $metadata.packages | Where-Object name -EQ 'desktop_shell'
+        $main = $package.default_run ?? $package.name
+        $others = @($package.targets |
+          Where-Object { $_.kind -contains 'bin' -and -not $_.'required-features' -and $_.name -ne $main } |
+          ForEach-Object name)
+        $release = Join-Path $metadata.target_directory 'release'
+
+        # The bundler stamps the first marker it finds. Refuse an executable
+        # with none, or with more than one, rather than guess which counts.
+        $marker = '__TAURI_BUNDLE_TYPE_VAR_UNK'
+        $latin1 = [System.Text.Encoding]::Latin1
+        $app = $latin1.GetString([System.IO.File]::ReadAllBytes((Join-Path $release "$main.exe")))
+        $at = $app.IndexOf($marker, [System.StringComparison]::Ordinal)
+        if ($at -lt 0 -or $app.IndexOf($marker, $at + 1, [System.StringComparison]::Ordinal) -ge 0) {
+          throw "$main.exe must hold $marker exactly once"
+        }
+        $stamps = [ordered]@{ nsis = 'NSS'; msi = 'MSI' }
+        foreach ($bundle in $stamps.Keys) {
+          $dir = New-Item -ItemType Directory -Path "app-to-sign/$bundle"
+          $stamped = $app.Remove($at, $marker.Length).Insert($at, "__TAURI_BUNDLE_TYPE_VAR_$($stamps[$bundle])")
+          [System.IO.File]::WriteAllBytes((Join-Path $dir.FullName "$main.exe"), $latin1.GetBytes($stamped))
+        }
+        foreach ($bin in $others) {
+          Copy-Item -LiteralPath (Join-Path $release "$bin.exe") -Destination app-to-sign
+        }
+        Get-ChildItem -Recurse -File app-to-sign | Format-Table -AutoSize Length, FullName
+
+        "release_dir=$release" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+        "main_binary=$main" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+    - name: Upload the app executables for signing
+      id: app-artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-app-for-signing
+        path: app-to-sign/
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 1
+    - name: 'Rehearsal stand-in for SignPath: app-to-sign -> app-signed'
+      shell: pwsh
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        Copy-Item -Recurse app-to-sign app-signed
+        $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object Subject -EQ 'CN=PlateVault signing rehearsal'
+        foreach ($file in Get-ChildItem -Recurse -File app-signed) {
+          $result = Set-AuthenticodeSignature -LiteralPath $file.FullName -Certificate $cert -HashAlgorithm SHA256
+          "$($file.FullName): $($result.Status)"
+        }
+    - name: Bundle the installers around the signed executables
+      shell: pwsh
+      env:
+        RELEASE_DIR: ${{ steps.windows-app.outputs.release_dir }}
+        MAIN_BINARY: ${{ steps.windows-app.outputs.main_binary }}
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        # Every file sent to SignPath must come back validly signed, or the
+        # unsigned copy left in the target directory would be packed.
+        $submitted = (Resolve-Path app-to-sign).Path
+        foreach ($file in Get-ChildItem -Recurse -File app-to-sign) {
+          $relative = [System.IO.Path]::GetRelativePath($submitted, $file.FullName)
+          $signed = Join-Path app-signed $relative
+          if (-not (Test-Path -LiteralPath $signed -PathType Leaf)) {
+            throw "SignPath returned no $signed. The app artifact configuration must keep each file at its path."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $signed
+          if ($signature.Status -ne 'Valid') {
+            throw "$signed is not validly signed: $($signature.Status) $($signature.StatusMessage)"
+          }
+        }
+
+        Get-ChildItem -File -Filter '*.exe' app-signed | Copy-Item -Destination $env:RELEASE_DIR -Force
+        foreach ($bundle in 'nsis', 'msi') {
+          Copy-Item -LiteralPath "app-signed/$bundle/$env:MAIN_BINARY.exe" -Destination $env:RELEASE_DIR -Force
+          pnpm --dir apps/desktop exec tauri bundle --bundles $bundle --no-binary-patching --no-sign
+        }
+
+        $setup = @(Get-ChildItem -File -Filter '*-setup.exe' (Join-Path $env:RELEASE_DIR 'bundle/nsis'))
+        $msi = @(Get-ChildItem -File -Filter '*.msi' (Join-Path $env:RELEASE_DIR 'bundle/msi'))
+        if ($setup.Count -ne 1 -or $msi.Count -ne 1) {
+          throw "expected one setup.exe and one .msi, found: $((@($setup) + @($msi)).FullName -join ', ')"
+        }
+        New-Item -ItemType Directory -Path installers-to-sign | Out-Null
+        Copy-Item -LiteralPath $setup[0].FullName, $msi[0].FullName -Destination installers-to-sign
+    - name: Upload the installers for signing
+      id: installer-artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-installers-for-signing
+        path: installers-to-sign/
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 1
+    - name: 'Rehearsal stand-in for SignPath: installers-to-sign -> installers-signed'
+      shell: pwsh
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        Copy-Item -Recurse installers-to-sign installers-signed
+        $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object Subject -EQ 'CN=PlateVault signing rehearsal'
+        foreach ($file in Get-ChildItem -Recurse -File installers-signed) {
+          $result = Set-AuthenticodeSignature -LiteralPath $file.FullName -Certificate $cert -HashAlgorithm SHA256
+          "$($file.FullName): $($result.Status)"
+        }
+    - name: Check the signed installers
+      shell: pwsh
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        foreach ($installer in Get-ChildItem -File installers-to-sign) {
+          $signed = Join-Path installers-signed $installer.Name
+          if (-not (Test-Path -LiteralPath $signed -PathType Leaf)) {
+            throw "SignPath returned no $signed. The installer artifact configuration must keep each file at the artifact root."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $signed
+          if ($signature.Status -ne 'Valid') {
+            throw "$signed is not validly signed: $($signature.Status) $($signature.StatusMessage)"
+          }
+        }
+
+        $setup = Get-Item installers-signed/*-setup.exe
+        & {
+          $PSNativeCommandUseErrorActionPreference = $false
+          7z x $setup.FullName "-o$PWD\unpacked\nsis" -y | Out-Null
+        }
+        if ($LASTEXITCODE -gt 1) { throw "7-Zip could not unpack $($setup.Name): exit code $LASTEXITCODE" }
+        $msi = Get-Item installers-signed/*.msi
+        $admin = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "/a `"$($msi.FullName)`" /qn TARGETDIR=`"$PWD\unpacked\msi`""
+        if ($admin.ExitCode -ne 0) { throw "msiexec /a $($msi.Name) exited with $($admin.ExitCode)" }
+
+        foreach ($bundle in 'nsis', 'msi') {
+          $expected = @(Get-ChildItem -File "app-signed/$bundle") + @(Get-ChildItem -File -Filter '*.exe' app-signed)
+          foreach ($file in $expected) {
+            $packed = @(Get-ChildItem -Recurse -File -Filter $file.Name "unpacked/$bundle")
+            if ($packed.Count -ne 1) {
+              throw "expected one $($file.Name) in the $bundle installer, found $($packed.Count)"
+            }
+            if ((Get-FileHash -LiteralPath $packed[0].FullName).Hash -ne (Get-FileHash -LiteralPath $file.FullName).Hash) {
+              throw "the $bundle installer's $($file.Name) is not the copy SignPath signed"
+            }
+            "the $bundle installer carries the signed $($file.Name)"
+          }
+        }
+    - name: Sign the signed installers for the updater
+      shell: pwsh
+      run: |
+        $PSNativeCommandUseErrorActionPreference = $true
+        $version = (Get-Content -Raw apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+        if (-not $version) { throw 'apps/desktop/src-tauri/tauri.conf.json has no version' }
+        foreach ($installer in Get-ChildItem -File installers-signed | Where-Object Extension -In '.exe', '.msi') {
+          pnpm --dir apps/desktop exec tauri signer sign --app-version $version $installer.FullName
+        }
+    - name: 'Rehearsal: show results'
+      shell: pwsh
+      run: |
+        Get-ChildItem -Recurse -File app-to-sign, app-signed, installers-to-sign, installers-signed | Format-Table -AutoSize Length, FullName
+        foreach ($sig in Get-ChildItem installers-signed -Filter '*.sig') { "== $($sig.Name)"; [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content -Raw $sig.FullName))) }
+        foreach ($f in Get-ChildItem -Recurse -File app-signed, installers-signed -Include *.exe, *.msi) { $s = Get-AuthenticodeSignature -LiteralPath $f.FullName; "$($f.Name): $($s.Status) $($s.SignerCertificate.Subject)" }
+        foreach ($f in Get-ChildItem -Recurse -File unpacked -Include desktop_shell.exe) { $t = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($f.FullName)); "$($f.FullName): NSS=$($t.Contains('__TAURI_BUNDLE_TYPE_VAR_NSS')) MSI=$($t.Contains('__TAURI_BUNDLE_TYPE_VAR_MSI')) UNK=$($t.Contains('__TAURI_BUNDLE_TYPE_VAR_UNK'))" }
+        Get-ChildItem -Recurse -File unpacked | Select-Object -First 60 | Format-Table -AutoSize Length, FullName
+    - name: 'Rehearsal: keep the evidence'
+      uses: actions/upload-artifact@v4
+      with:
+        name: signing-rehearsal
+        path: |
+          installers-signed/
+          app-signed/
+        retention-days: 3
