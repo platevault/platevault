@@ -46,11 +46,13 @@
 //!   changes, and one whose identity could not be observed (a volume query
 //!   that failed) at the next sweep.
 //! - An OS watcher error or lost-events notice, a full event channel, a new
-//!   folder (which the watcher does not cover yet) or a path that is not
-//!   UTF-8 restarts that location's watcher and walks it again. So does a walk
-//!   that enters a folder the watcher did not find as it started (created
-//!   between its listing and its registration), and every sweep while the
-//!   watcher did not start or the OS refused a folder the walk can list.
+//!   folder (which the watcher does not cover yet), a folder whose access
+//!   changed, a folder reported removed while a folder is still at its path,
+//!   or a path that is not UTF-8 restarts that location's watcher and walks
+//!   it again. So does a walk that enters a folder the watcher did not find
+//!   as it started (created between its listing and its registration), and
+//!   every sweep while the watcher did not start or the OS refused a folder
+//!   the walk can list.
 //! - A folder no walk can list holds nothing the count holds, as a scan
 //!   leaves it out. One the OS refuses to watch too (`System Volume
 //!   Information` at the root of an NTFS drive, `lost+found` on ext4) leaves
@@ -60,7 +62,9 @@
 //! - A volume mounted inside a location is neither walked nor watched, and a
 //!   walk never lists through a folder swapped for a link or junction. Nor
 //!   does a sweep's check of a folder no walk could list in full, or of one
-//!   the OS refused to watch.
+//!   the OS refused to watch. Once such a volume is unmounted (on macOS
+//!   reported as a removal of its mount point, where a folder still is), the
+//!   folder below it is walked and watched.
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
 //! - Windows ejects a volume only once no process holds a handle on it, and

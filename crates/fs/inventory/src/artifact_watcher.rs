@@ -23,10 +23,11 @@
 //!
 //! [`start_tree_watcher`] is the same event source for a tree whose new
 //! folders must be watched too (the library's Captures locations): it never
-//! follows links and reports a folder that appears below a watched path, or
-//! whose permissions or owner change, as `NeedsRescan`. Both report an OS
-//! watcher error, an OS lost-events notice and a full channel (through the
-//! overflow flag) for a rescan.
+//! follows links and reports a folder that appears below a watched path,
+//! whose permissions or owner change, or that is reported removed while a
+//! folder is still at its path (a nested volume unmounted from it), as
+//! `NeedsRescan`. Both report an OS watcher error, an OS lost-events notice
+//! and a full channel (through the overflow flag) for a rescan.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -178,8 +179,10 @@ pub struct TreeWatch {
 /// tree for the files the new folder already holds. So is a change of a
 /// folder's permissions or owner (on Windows, a change of a folder that no
 /// longer opens), which can change what a walk lists below it while no
-/// event names the files there, and an event about a path that is not
-/// UTF-8, which cannot be forwarded. A link or junction at a
+/// event names the files there, a removal of a path a folder is still at
+/// (another folder took its place, or a nested volume was unmounted from
+/// it), and an event about a path that is not UTF-8, which cannot be
+/// forwarded. A link or junction at a
 /// path an event names is reported as that path, never followed, so a watched
 /// folder that a link replaced reaches the consumer like one that went away.
 /// The folders are listed before they are registered, in one batch; one
@@ -207,8 +210,9 @@ enum NewFolders {
     /// watched, on any volume.
     Skip,
     /// [`ArtifactEventKind::NeedsRescan`], because the folder is not watched;
-    /// so does a change of a folder's access ([`folder_rescans`]) and an
-    /// event about a path that is not UTF-8. A link or junction
+    /// so does a change of a folder's access, or a removal of a path a
+    /// folder is still at ([`folder_rescans`]), and an event about a path
+    /// that is not UTF-8. A link or junction
     /// is forwarded as its own path. Only the folders on each path's own
     /// volume are watched.
     Rescan,
@@ -238,16 +242,23 @@ const fn changes_access(kind: EventKind) -> bool {
 }
 
 /// Whether an event of `kind` naming `folder` asks a tree watcher for a
-/// rescan: the folder was brought into the tree, or who can list it may
-/// have changed.
+/// rescan: the folder was brought into the tree, who can list it may have
+/// changed, or it was reported removed yet a folder is still there.
 ///
 /// Windows reports a folder's access list change only as `Modify(Any)`,
 /// which it also reports for every entry written in the folder, so such an
 /// event rescans only once the folder no longer opens. One that opens again
 /// is found by the sweep that lists the walk's unlisted folders again.
+///
+/// A removal of a path that still holds a folder means another folder took
+/// its place: one recreated there, or, on macOS, the folder below a nested
+/// volume that was unmounted, which `FSEvents` reports as a removal of the
+/// mount point. The nested volume was never watched, so nothing watches the
+/// folder now exposed, and only a rescan brings it and its frames in.
 fn folder_rescans(folder: &std::path::Path, kind: EventKind) -> bool {
     brings_folder(kind)
         || changes_access(kind)
+        || matches!(kind, EventKind::Remove(_))
         || (matches!(kind, EventKind::Modify(ModifyKind::Any))
             && std::fs::read_dir(folder).is_err())
 }
@@ -638,6 +649,38 @@ mod tests {
         assert!(unreadable, "needs a user file permissions bind, not root");
         assert!(rescanned, "it no longer opens");
         assert_eq!(forwarded(Ok(modified)), [] as [ArtifactEventKind; 0]);
+    }
+
+    /// `FSEvents` reports a nested volume unmounted from a folder of the tree
+    /// as a removal of the mount point, which by then is the folder below it,
+    /// never watched: a tree watcher asks for a rescan. A removed path that
+    /// holds no folder any more is still forwarded as its removal, and the
+    /// artifact watcher forwards no folder event.
+    #[test]
+    fn a_removal_of_a_path_still_holding_a_folder_asks_a_tree_watcher_for_a_rescan() {
+        use notify::event::RemoveKind;
+        let dir = tempfile::tempdir().unwrap();
+        let mount_point = dir.path().join("night");
+        std::fs::create_dir(&mount_point).unwrap();
+        let gone = dir.path().join("gone");
+        let removed = |path: &std::path::Path| {
+            let event = Event::new(EventKind::Remove(RemoveKind::Folder)).add_path(path.into());
+            let mut events = Vec::new();
+            forward(Ok(event.clone()), NewFolders::Rescan, |event| {
+                events.push((event.path, event.kind));
+                true
+            });
+            (events, forwarded(Ok(event)))
+        };
+
+        let (tree, artifact) = removed(&mount_point);
+        assert_eq!(tree, [(Utf8PathBuf::new(), ArtifactEventKind::NeedsRescan)]);
+        assert_eq!(artifact, [] as [ArtifactEventKind; 0]);
+
+        let (tree, artifact) = removed(&gone);
+        let gone = Utf8PathBuf::from_path_buf(gone).unwrap();
+        assert_eq!(tree, [(gone, ArtifactEventKind::Removed)]);
+        assert_eq!(artifact, [ArtifactEventKind::Removed]);
     }
 
     #[tokio::test]
