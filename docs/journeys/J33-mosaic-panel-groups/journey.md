@@ -7,12 +7,12 @@ last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [projects, sessions, calibration, view, output, wrap-up, home]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 069-application-handoff, 070-results-reuse, D04, D19, D-W4, D-W5, D-W26, D-W29, D-W38, D-W41, D-W47, D-W51, D-W54, D-W55, D-W67, D-W72, D-W73, D-W75, specs/063-clean-rebuild-contract/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S4, HARNESS-V5-IA.md#S7, HARNESS-V5-IA.md#S8, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-CAL3, P-PREP3, apps/prototype/src/features/v5/b-projects/mosaic-editor.tsx, 064-library-inventory, 071-storage-custody, D-W93, D-W94, D-W95, D-W98, D-W99, D-W100, D-W101, D-W105, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, D-W107, D-W114]
+trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 069-application-handoff, 070-results-reuse, D04, D19, D-W98, D-W5, D-W26, D-W29, D-W95, D-W41, D-W47, D-W78, D-W101, D-W100, D-W94, specs/063-clean-rebuild-contract/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S4, HARNESS-V5-IA.md#S7, HARNESS-V5-IA.md#S8, HARNESS-V5-FEEDBACK-R1.md#b-projects-project-new-project-start-run-trash-wrap-up, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#round-7, P-CAL3, P-PREP3, apps/prototype/src/features/v5/b-projects/mosaic-editor.tsx, 064-library-inventory, 071-storage-custody, D-W93, D-W99, D-W105, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, D-W107, D-W114]
 ---
 
 ## Goal
 
-The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO` into four groups marked as mosaic panels. Each panel shows its own progress and goals on a panel map. The user applies a View built from the original captures, opens it in WBPP, and places each panel's result under `Output/Panels/` and the assembled mosaic in `Output/`. The user assembles the mosaic in PixInsight. Done means the panel groups contain 40, 30, 30 and 20 lights, the View paths use `PANEL_<name>/` and the appropriate night/filter layout, all five output files are visible as Results without acceptance or lineage, and Wrap up retains `Output/` when the Project closes.
+The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO` into four groups marked as mosaic panels. Each panel shows its own progress and goals on a panel map. The user applies a View built from the original captures, opens it in WBPP, and places each panel's result under `Output/Panels/` and the assembled mosaic in `Output/`. The user assembles the mosaic in PixInsight. Done means the panel groups contain 40, 30, 30 and 20 lights, the View paths use `PANEL_<name>/` and the appropriate night/filter layout, all six output files are visible as Results without acceptance or lineage, and Wrap up retains `Output/` when the Project closes.
 
 ## Preconditions
 
@@ -35,7 +35,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - P5: PixInsight is installed. Its WBPP profile is configured in PlateVault with recorded evidence that it reads input folders and never writes into its input files (D04).
 - P6: `Work/Processing` exists on `Astro-T7`, writable, on the same volume as `Astro-T7/Captures`. `Astro-T7` supports symbolic links. The Project's View mode is Symlinks. On the `desktop-ui` (Windows) lane, Windows Developer Mode is on.
 - P7: Two named 12 Aug frames, Q1 and Q2, whose read permission the user can remove and restore.
-- P8: Test images are kept outside PlateVault: one panel stack for each of Panels 1 to 4, `Panel4_OIII_drizzle.xisf`, `Veil_HOO_mosaic.xisf`, and `stray.xisf`. None carries input lineage. `Panel4_OIII_drizzle.xisf` is placed in Panel 2's output folder to verify that folder location, not its filename, identifies the panel.
+- P8: Test images are kept outside PlateVault: one panel stack for each of Panels 1 to 4, `Panel4_OIII_drizzle.xisf`, `Veil_HOO_mosaic.xisf`, and `stray.xisf`. None carries input lineage. `Panel4_OIII_drizzle.xisf` is named for Panel 4; S12 copies it into Panel 2's output folder to verify that folder location, not its filename, identifies the panel.
 
 
 ## Steps
@@ -52,7 +52,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S1b — Mark the framing groups as mosaic panels {#S1b}
 - **Do:** In the Project's Sessions step, mark the four groups formed by the panel framings as mosaic panels.
-- **Expect:** The Project becomes a mosaic. The groups are named `Panel 1` through `Panel 4`, using a NINA or capture name where present and otherwise numbering them. Their folder keyword will be PANEL only.
+- **Expect:** Before marking, Sessions shows the groups PlateVault formed by rig and framing: one for each panel framing (10 and 11 Aug, 12 Aug, 13 Aug and 14 Aug), a fifth group for 15 Aug, whose centre is within the framing margins of neither panel, and 17 Aug flagged Framing unknown in a `RedCat` group. After marking the four panel-framing groups, the Project becomes a mosaic. The groups are named `Panel 1` through `Panel 4`, using a NINA or capture name where present and otherwise numbering them. Their folder keyword will be PANEL only.
 - **Trace:** PRJ-FR-31, PRJ-FR-27 to PRJ-FR-29 · D-W95
 
 ### S1c — Place the ambiguous and unknown framings {#S1c}
@@ -118,9 +118,9 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - **Trace:** PRJ-FR-29, RES-FR-08 · D-W95, D-W98
 
 ### S12 — Copy the files to Output {#S12}
-- **Do:** Use Copy to Output… for the panel stacks and copy the finished mosaic into the Project's `Output/` folder.
+- **Do:** Use Copy to Output… for the four panel stacks and copy the finished mosaic into the Project's `Output/` folder. Then copy `Panel4_OIII_drizzle.xisf` into Panel 2's folder under `Output/Panels/`, and save `stray.xisf` outside `Output/`.
 - **Expect:** The four panel Results appear under `Output/Panels/`, in folders named like their panel groups. `Veil_HOO_mosaic.xisf` appears in `Output/`. Each file is a Result without acceptance or recorded input lineage.
-- **Expect (negative):** `Panel4_OIII_drizzle.xisf` placed in Panel 2's folder is listed under Panel 2; its filename does not reassign it. `stray.xisf` outside `Output/` is not listed.
+- **Expect (negative):** `Panel4_OIII_drizzle.xisf` in Panel 2's folder is listed as a sixth Result, under Panel 2; its filename does not reassign it. `stray.xisf` outside `Output/` is not listed.
 - **Trace:** RES-FR-01, RES-FR-02, RES-FR-08 · D-W93, D-W98
 
 ### S13 — Apply library-wide frame rejections {#S13}
@@ -131,7 +131,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S14 — Read the Project's Output {#S14}
 - **Do:** Open Output and read the panel Results and the finished mosaic.
-- **Expect:** The four panel stacks and the assembled mosaic appear as five Results. Panel assignment follows the containing folder; PlateVault records no input lineage. The Results remain unchanged after Apply.
+- **Expect:** The four panel stacks, `Panel4_OIII_drizzle.xisf` and the assembled mosaic appear as six Results. Panel assignment follows the containing folder; PlateVault records no input lineage. The Results remain unchanged after Apply.
 - **Trace:** RES-FR-01, RES-FR-06, RES-FR-08 · D-W93, D-W98
 
 ### S15 — Trash rejected frames through Wrap up {#S15}
@@ -145,20 +145,35 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - SC1: The Project holds exactly 7 sessions in four panel groups with 40, 30, 30 and 20 lights; 16 Aug is not a Project session (S1a, S1c).
 - SC2: The Project shows four separate panel-goal sets and a panel map; the weakest panel is visible in Project progress (S2, S2a).
 - SC3: Apply builds four `PANEL_` group folders from the originals. A refused Apply leaves the current View unchanged, and a successful Apply includes the reviewed rename (S8, S9, S10).
-- SC4: Exactly five files appear as Results, four in panel-group folders under `Output/Panels/` and one assembled mosaic in `Output/`. The filename of a file in a panel folder does not change its panel attribution; none needs acceptance or has recorded lineage (S11, S12, S14).
+- SC4: Exactly six files appear as Results: five in panel-group folders under `Output/Panels/`, the four panel stacks and `Panel4_OIII_drizzle.xisf` under Panel 2, and one assembled mosaic in `Output/`. The filename of a file in a panel folder does not change its panel attribution; none needs acceptance or has recorded lineage (S11, S12, S14).
 - SC5: Marking Q1 and Q2 Unusable creates exactly two Library-labelled pending removals; neither the marks nor Apply moves originals, and `Output/` remains unchanged (S13).
 - SC6: Wrap up moves exactly two rejected captures to the OS Trash, leaves `Output/` in place, and permanently deletes zero files (S15).
 
 ## Known gaps
 
-- G1: The rebuilt application has not been validated. Product behavior follows the current specs and D-W93 to D-W106; no implementation has been validated against them.
-- G2: The WBPP profile's capability probe and folder input remain unqualified (D04). Blocks readiness.
-- G3: The default 5 to 40% overlap rule and framing tolerances (D-W114) have not been validated against the panel fixture. The P3 geometry and the session movements in S1c are explicit fixture data, not claims about automatic assignment outside those conditions. Blocks readiness.
-- G4: Canceling Apply and a Project mixing cameras are outside this journey.
+- G1: Not validated: the rebuilt application has not been validated. Product behavior follows the current specs and D-W93 to D-W116; no implementation has been validated against them.
+- G2: Unresolved implementation qualification: the WBPP profile's capability probe and folder input remain unqualified (D04). Blocks readiness.
+- G3: Unresolved implementation qualification: the default 5 to 40% overlap rule and framing tolerances (D-W114) have not been validated against the panel fixture. The P3 geometry and the session movements in S1c are explicit fixture data, not claims about automatic assignment outside those conditions. Blocks readiness.
+- G4: Out of scope for this journey: canceling Apply, a Project mixing cameras, and reviewing what `View (previous)/` holds after the S10 and S13 swaps (J25/S7c covers that review). Blocks readiness until covered by a step or a journey.
+- G5: (dissolved 2026-10-12): answered by Round 6 "Result revision"; S11 and S14 now assert that tool evidence (a header input list) decides the revision and that, without it, the revision current when the file appeared applies, marked Inferred.
+- G6: (dissolved 2026-10-12): answered by Round 6 "Mosaic: an excluded panel keeps its goals"; S2 and S2a now assert that Panel 5 keeps its goals on the subject, shown as unmet on the Project's Goals and Home's Goals box, with no panel run, and stays includable in the mosaic editor.
+- G7: (dissolved 2026-10-15): P4 now sets the 17 Aug session to No flats (D-W105), so no master flat without optical-train evidence is needed, and S7 only reads the calibration pinned on each session (D-W101).
+- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: PRJ-FR-31's "Framing unknown" flag for a session without pointing (D-W107, S1b, S1c), and D-W99's provisional WBPP layout (S8, S10). If the owner changes one, the steps that cite it change.
 
 ## Delta log
+- **Δ2** 2026-10-12 · S1, +S1a, +S1b, +S1c, S2, S3, S5, +S5a, S7, S8 · behavior-change
+  The mosaic is laid out in the one-frame mosaic editor: the panel grid comes from the rig's field of view, panels are added and excluded, sessions are placed by pointing or by the user, and Start group creates the group with only the included panels. The New Project sheet no longer takes a mosaic, and old step 4 (resolve flagged sessions after the group exists) is retired into S1c.
+  The group reads as one run model in the Project's Runs table, a trashed panel leaves the counts until restored (S5a), and calibration assigns masters only (P4, S7).
+  Evidence: HARNESS-V5-IA.md §Screens S3, S4, S7, S8, §Round 2b foundation (structured calibration storage); HARNESS-V5-FEEDBACK-R1.md §B "Mosaic flow (one frame)", §Round 1b P-CAL3, §Round 5 "Runs read as one model"; D-W75 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J36 calibration process; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)
+- **Δ3** 2026-10-12 · S2, +S2a, S5, S8, S10, S11, S13, S14, S15 · behavior-change
+  The excluded Panel 5 keeps its unmet goals on the subject (S2, S2a). A Result's revision comes from tool evidence, else the revision current when it appeared, marked Inferred (S11, S14). X replaces Exclude from run (S13).
+  Prepare uses Independent copy, cloned on `Astro-T7` with a real footprint of `0 B extra · cloned` (S5, S8, S10, S13), and completing a panel run offers Clean up prepared copies, which frees no space (S15). G5 and G6 are dissolved.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Mosaic: an excluded panel keeps its goals", "Result revision", "Reject is library-wide by default" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); §Input modes (user, 2026-10-10) P-PREP2, "Prepared copies are cleaned up when a run is done" (@ d609ff55); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)
+- **Δ4** 2026-10-12 · S5, S8, S10, S13, S15 · behavior-change
+  Run view replaces input mode: the panels prepare as symlinks, with the footprint `Linked · 0 B`. Completing Panel 1 removes its run view and its intermediates through the OS Trash from the Complete confirmation; the other panels keep their views by unticking the offer.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3, "Intermediates cleanup stays" (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ5** 2026-10-15 · S1, S1a, S1b, S1c, S2, S2a, S3, S5, S5a, S6, S7, S8, S9, S10, S11, S12, S13, S14, S15 · behavior-change
-  Mosaic panels are Project groups, calibration is pinned on sessions, Apply builds their View, and panel and assembled Results live in `Output/`. Wrap up keeps Output and is the only route for rejected captures to the OS Trash.
+  Mosaic panels are Project groups, calibration is pinned on sessions, Apply builds their View, and panel and assembled Results live in `Output/`. Wrap up keeps Output and is the only route for rejected captures to the OS Trash. Δ2 to Δ4 above stay as the run-group journey's history. S1b names the groups before S1c, S12 places the drizzle file, and Output holds six Results; G7 is dissolved and G8 is new.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, PRJ-FR-03, PRJ-FR-31, PRJ-FR-27 to PRJ-FR-29, VSEL-FR-07, PREP-FR-06, PREP-FR-16, RES-FR-01, RES-FR-08, STO-FR-14 · by: SpecF4Writer2 (intent-gated)
 - **Δ6** 2026-10-16 · S1c · behavior-change
   Sessions split at intake by framing, so each panel group holds whole sessions and S1c moves whole sessions only. The overlap and framing defaults are settled.

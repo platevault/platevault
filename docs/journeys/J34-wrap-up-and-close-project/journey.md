@@ -5,9 +5,9 @@ version: 7
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
-surfaces: [projects, wrap-up, archive, sessions, targets, home, view-review, locations, activity, status-bar, issues]
+surfaces: [projects, wrap-up, archive, sessions, targets, home, view-review, locations, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W42, D-W43, D-W46, D-W52, D-W54, D-W57, D-W66, D-W70, D-W74, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, D-W93, D-W94, D-W96, D-W97, D-W98, D-W100, PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32, STO-FR-01, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, VSEL-FR-12, LIB-FR-18, D-W112]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, 068-calibration-inputs, 070-results-reuse, 071-storage-custody, 072-observing-plans, D19, D-W26, D-W79, D-W43, D-W97, D-W52, D-W78, D-W57, D-W96, D-W74, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-TRASH2, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S2, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, HARNESS-V5-FEEDBACK-R1.md#round-8-user-2026-10-12, D-W93, D-W94, D-W98, D-W100, PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-25, PRJ-FR-30, PRJ-FR-32, STO-FR-01, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, VSEL-FR-12, LIB-FR-18, D-W112]
 ---
 
 ## Goal
@@ -223,11 +223,12 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the harness v5 design: HARNESS-V5-IA.md S1, S2, S3, S8, S9 and S16, and HARNESS-V5-FEEDBACK-R1.md P-WRAP1, P-ARC1, Screens B and Round 5 (ui-harness-v5 @ b5e813a5), Round 6 (@ 4f470775) and Round 8 P-TRASH2. It also follows the specs, decision D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
 - G3: Out of scope for this journey: archive transfer failures, interruption and a symlink that cannot be repointed are J28's. J28 forks from S5. Blocks readiness until J28 covers them.
-- G4: Dissolved by D-W93: Result lineage and provenance are out of scope and no input-to-Result relationship is recorded.
-- G5: There is no restore of an archived session after Close; sessions stay at their archive paths (PRJ-FR-25, STO-FR-13).
+- G4: (dissolved 2026-10-15): D-W93 puts Result lineage and provenance out of scope, so no input-to-Result relationship is recorded and F-res needs no tool-recorded lineage.
+- G5: (dissolved 2026-10-15): D-W97 removes Reopen, so there is no restore of an archived session after Close; sessions stay at their archive paths (PRJ-FR-25, STO-FR-13).
 - G6: (dissolved 2026-10-15): PRJ-FR-18 gives a Project's next step no Wrap up rule, so S3 asserts that Next never reads Wrap up.
 - G7: Out of scope for this journey: approving Clean up's View removal is not exercised, because S3b skips it so that the View's symlinks remain for Archive to repoint. J27 covers View removal.
 - G8: (dissolved 2026-10-12): answered by Round 8 P-TRASH2. S4 refuses F-prep while the View of open Project `NGC 7000 Ha deep` links it. The Project's own View holds no link to its library-Unusable frames once their Library removals are applied (P3), so S6 moves no View entry.
+- G9: Rests on provisional F4 copy, pending the owner's confirmation in PR #1804: "Project closed · Duplicate ▸" (PRJ-FR-25, S11a), "Move N processing files to Trash (size)" (PRJ-FR-15, S4 to S6) and the Clean up offer with Copies ticked and Symlinks unticked (D-W97, S3b). If the owner changes them, those steps change.
 
 ## Delta log
 
@@ -243,8 +244,8 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
   P-PREP3: `NGC7000-HOO-Siril` and `26 Sep symlink check` hold symlinks (`Linked · 0 B`), so a Rejects row's size covers every offered frame, and Archive repoints the symlinks of both runs to the archived frames. Completing `NGC7000 HOO combine` unticks **Remove run view** so that Clean up runs still lists it.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 7 (user, 2026-10-12) P-PREP3 (apps/prototype/design/ on ui-harness-v5 @ 12638a7c; research RUN-VIEWS-OPTIONS.md) · by: JourneysV5.R7Prep3 (intent-gated)
 - **Δ5** 2026-10-12 · S4, S6, S11 · behavior-change
-  P-TRASH2: an Unusable frame linked by another unfinished Project's View is refused; the review names links removed with moved frames.
-  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-TRASH2 · by: R8JourneysDocs (intent-gated)
+  P-TRASH2: F-prep is refused as `Can't trash 1 · linked by Ha deep ▸`, because the view of that unfinished run links it. The Rejects review reads "Also removes 4 links in kept run views", and the move takes those links of `NGC7000-HOO-Siril` and `Ha deep v1` to the OS Trash with their frames.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 8 (user, 2026-10-12) P-TRASH2 (apps/prototype/design/ on ui-harness-v5) · by: R8JourneysDocs (intent-gated)
 - **Δ6** 2026-10-15 · S1, S2, S3, S3a, S3b, S4, S5, S6, S7, S8, S9, S9a, S10, S11, S11a, S12, S12a · behavior-change
   Wrap up opens only with no pending changes and proceeds Clean up → Trash → Archive, each step confirmed with Proceed; Close project… is Archive's Proceed. The Project's single Symlinks View replaces the run views, so the Trash offer refuses only frames another open Project's View links, and Archive repoints that View.
   Closed and Archived Projects are locked for good with no Reopen or session restore, and library or calibration changes never reach them; Duplicate… continues them.

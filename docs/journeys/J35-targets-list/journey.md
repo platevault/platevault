@@ -7,7 +7,7 @@ last_reviewed: 2026-10-06
 actors: [primary-user]
 surfaces: [targets, planning, equipment, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
+trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D17, D18, D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W95, D-W60, D-W61, D-W62, specs/072-observing-plans/spec.md, specs/065-project-goals/spec.md, HARNESS-V5-IA.md#S10, HARNESS-V5-IA.md#S3, HARNESS-V5-IA.md#S16, HARNESS-V5-FEEDBACK-R1.md#round-5, P-PLAN2, "HARNESS-V5-FEEDBACK-R1.md#round-5 Click a result to act", "HARNESS-V5-FEEDBACK-R1.md#round-5 Best tonight shows nothing", HARNESS-V5-FEEDBACK-R1.md#round-6, apps/prototype/src/features/v5/e-targets-plan-settings/targets.tsx @b5e813a5, apps/prototype/messages/en-GB.json @b5e813a5]
 ---
 
 ## Goal

@@ -1,13 +1,13 @@
 ---
 id: J43
-title: Recover from routine mistakes and failures by retrying interrupted work, changing a wrong Target, acting on a refusal, undoing marks and discarding a draft
+title: Recover from routine mistakes and failures by retrying interrupted work, changing a wrong Target, acting on a refusal and undoing marks
 version: 3
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
 surfaces: [locations, indexing, status-bar, home, activity, sessions, targets, projects, view, frame-review, wrap-up]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-SB3, D-W33, D-W37, D-W42, D-W54, D-W72, D09, apps/prototype/src/store/operations.ts, apps/prototype/src/components/app/refusal.tsx, apps/prototype/src/components/app/operation-panel.tsx, apps/prototype/src/domain/issues.ts, apps/prototype/src/domain/derive.ts, apps/prototype/src/store/actions/library.ts, apps/prototype/src/features/v5/a-home/parts.tsx, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, HIGH-LEVEL-DESIGN.md#10, docs/journeys/J11-mistake-recovery/journey.md, docs/journeys/J12-failure-refusal-handling/journey.md, specs/063-clean-rebuild-contract/spec.md#FR-029-FR-032, specs/063-clean-rebuild-contract/workflow-decisions.md#D-W93-D-W106, specs/064-library-inventory/spec.md#LIB-FR-05-LIB-FR-23, specs/065-project-goals/spec.md#PRJ-FR-08-PRJ-FR-30, specs/067-frame-review/spec.md#PIX-FR-13-PIX-FR-14-PIX-FR-18, specs/069-application-handoff/spec.md#PREP-FR-06-PREP-FR-09, D-W93, D-W94, D-W96, D-W97, D-W100, D-W105]
+trace: [HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#round-2-foundation, HARNESS-V5-IA.md#round-2b-foundation, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, P-SB3, D-W96, D-W95, D-W79, D-W78, D-W94, D09, apps/prototype/src/store/operations.ts, apps/prototype/src/components/app/refusal.tsx, apps/prototype/src/components/app/operation-panel.tsx, apps/prototype/src/domain/issues.ts, apps/prototype/src/domain/derive.ts, apps/prototype/src/store/actions/library.ts, apps/prototype/src/features/v5/a-home/parts.tsx, apps/prototype/messages/en-GB.json, ui-harness-v5@b5e813a5, HIGH-LEVEL-DESIGN.md#10, docs/journeys/J11-mistake-recovery/journey.md, docs/journeys/J12-failure-refusal-handling/journey.md, specs/063-clean-rebuild-contract/spec.md#FR-029-FR-032, specs/063-clean-rebuild-contract/workflow-decisions.md#D-W93-D-W106, specs/064-library-inventory/spec.md#LIB-FR-05-LIB-FR-23, specs/065-project-goals/spec.md#PRJ-FR-08-PRJ-FR-30, specs/067-frame-review/spec.md#PIX-FR-13-PIX-FR-14-PIX-FR-18, specs/069-application-handoff/spec.md#PREP-FR-06-PREP-FR-09, D-W93, D-W97, D-W100, D-W105]
 ---
 
 ## Goal
@@ -26,7 +26,7 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 
 - P1: Open Project `NGC 7000 HOO` holds 214 lights in five Ready sessions grouped by rig and framing, has an applied View and no pending changes, and has no measurement cached. The input manifest and session frame counts are recorded outside PlateVault before S1.
 - P2: The open Project `IC 1396 Ha` (subject IC 1396, rig `RedCat`), created through New Project as in J20, has no held sessions and no suggestions.
-- P3: After J21, outside PlateVault, `Astro-T7/Captures/2026-10-06/` was added with 10 Ha 300 s `RedCat` lights from the night of 6 Oct. Their OBJECT is `IC 1396` (the capture application's label), and their pointing lies within NGC 7000's footprint and outside IC 1396's. PlateVault has not indexed the folder.
+- P3: After J21, outside PlateVault, `Astro-T7/Captures/2026-10-06/` was added with 10 Ha 300 s `RedCat` lights from the night of 6 Oct. Their OBJECT is `IC 1396` (the capture application's label), and their pointing lies within NGC 7000's footprint and outside IC 1396's. PlateVault has not indexed the folder. The library's masters match these lights within their windows, so indexing pins the session's darks, flats and bias and its calibration is settled.
 - P4: The J19/P5 manifest, extended with the 6 Oct folder, and the catalog's session list with the frame count of each session, recorded outside PlateVault before S1.
 - P5: Two named 30 Sep frames, F-a and F-b, and three named 26 Sep frames, F-c, F-d and F-e, are Usable frames in sessions held by `NGC 7000 HOO`.
 - P6: A test helper can change one included original's bytes after Apply has captured its source snapshot, preserving its size and modification time, and can restore the P4 bytes afterward.
@@ -57,8 +57,8 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 
 ### S4 — Confirm the wrong Target {#S4}
 
-- **Do:** Open the `6 Oct` session. Read its Target box, then choose IC 1396 (as its OBJECT says) and click **Confirm Target**.
-- **Expect:** Before confirming, the Target picker preselects NGC 7000, the Target evidence lists the pointing, and OBJECT `IC 1396` appears only as a label of the session. Confirming IC 1396 is allowed: after confirming, the Target pill reads IC 1396 as confirmed, and the session's Target box shows a mismatch warning that the session's pointing disagrees with IC 1396. After the user confirms its RedCat rig, reviews all its frames and finishes review, the session becomes Ready and `IC 1396 Ha` lists it as a suggestion (1 session, 10 frames). Activity records `Target confirmed` with "IC 1396. Catalog only; source headers unchanged."
+- **Do:** Open the `6 Oct` session. Read its Target box, then choose IC 1396 (as its OBJECT says) and click **Confirm Target**. Confirm its rig as `RedCat`, mark its frames Usable with **Mark rest usable**, and choose **Finish review**.
+- **Expect:** Before confirming, the Target picker preselects NGC 7000, the Target evidence lists the pointing, and OBJECT `IC 1396` appears only as a label of the session. Confirming IC 1396 is allowed: after confirming, the Target pill reads IC 1396 as confirmed, and the session's Target box shows a mismatch warning that the session's pointing disagrees with IC 1396. After **Finish review** the session is Ready with settled calibration (P3), and `IC 1396 Ha` lists it as a suggestion (1 session, 10 frames). Activity records `Target confirmed` with "IC 1396. Catalog only; source headers unchanged."
 - **Expect (negative):** OBJECT is never listed as Target evidence and never preselects IC 1396. The mismatch warning does not block or undo the confirmation. No FITS header changes and no file moves.
 - **Trace:** LIB-FR-05 · PRJ-FR-09 · D-W96
 
@@ -90,10 +90,10 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 - **Expect (negative):** No review draft or revision is created, and no file moves or reaches the OS Trash.
 - **Trace:** root FR-029 · PIX-FR-13, PIX-FR-14, PIX-FR-18 · VSEL-FR-12
 
-### S9 — Undo a mistaken Usable mark {#S9}
+### S9 — Undo a mistaken Unusable mark {#S9}
 
-- **Do:** Select F-c, F-d and F-e in frame review and press **P**. Use the offered **Undo** action.
-- **Expect:** P marks the three frames Usable immediately. Undo restores their previous Usable quality; no unsaved Review draft appears.
+- **Do:** Select F-c, F-d and F-e in frame review and press **X**. Use the offered **Undo** action.
+- **Expect:** X marks the three frames Unusable immediately, and `NGC 7000 HOO` shows their removal as a pending change labelled with the Library source. Undo restores their previous Usable quality, and the pending change clears; no unsaved Review draft appears.
 - **Expect (negative):** Undo saves no revision and moves no file.
 - **Trace:** root FR-029 · PIX-FR-13, PIX-FR-14
 
@@ -107,7 +107,7 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
 ## Success criteria
 
 - SC1: S1 shows exactly 1 quit confirmation per quit attempt, and the rescan is still running after the first is canceled. After S3, the catalog holds exactly 1 more session than P4 (`6 Oct`, 10 frames), every other session's frame count equals P4, and 0 work issues remain.
-- SC2: After S4, `IC 1396 Ha` has 1 suggestion and `6 Oct`'s Target box shows 1 mismatch warning; after S5, it has 0 suggestions, the warning is gone, and `NGC 7000 HOO` lists `6 Oct` as a suggestion; `NGC 7000 HOO` holds 214 lights throughout.
+- SC2: After S4, `IC 1396 Ha` has 1 suggestion and `6 Oct`'s Target box shows 1 mismatch warning; after S5, it has 0 suggestions, the warning is gone, and `NGC 7000 HOO` lists `6 Oct` as a suggestion; `NGC 7000 HOO` holds 214 lights at S4 and S5.
 - SC3: S6 records one failed Apply with source drift named, leaves the current View byte-identical and preserves the pending session addition until a successful retry.
 - SC4: After S7, the Closed Project still has no Reopen or edit action, and its duplicate is open and independent.
 - SC5: After S8 and S9, F-a through F-e have their original Usable quality, no pending mark from those actions remains, and no unsaved draft exists.
@@ -127,9 +127,13 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
   - restarting during an unsaved session review (J22);
   - status-bar mechanics (J38);
   - an offline location during indexing (J19).
-- G6: Not validated. A live-product replay must verify that a Closed Project offers Duplicate… without Reopen and that the duplicated Project is independent (PRJ-FR-25, PRJ-FR-30). Blocks readiness.
+- G6: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so X makes no Review draft and there is no Discard to define (J22/G9).
+- G7: Unresolved implementation qualification: a live-product replay must verify that a Closed Project offers Duplicate… without Reopen and that the duplicated Project is independent (PRJ-FR-25, PRJ-FR-30). Blocks readiness.
 
 ## Delta log
+- **Δ2** 2026-10-12 · S1, S4, S5, S8, S9 · behavior-change
+  Quitting while the rescan runs now asks first: canceling keeps the rescan running, and confirming quits (S1). Confirming IC 1396 against the pointing is allowed, and the session's Target box shows a mismatch warning until the Target is changed to NGC 7000 (S4, S5). X's frames leave the run's draft (S8), and S9 no longer asserts what Discard alone does to them. Dissolves G3 and G4, and adds G6.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Quit asks", "Confirming a Target the pointing disagrees with", "Reject is library-wide by default" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6A (intent-gated)
 - **Δ3** 2026-10-15 · S3, S5, S6, S7, S8, S9 · behavior-change
   Target correction changes Project suggestions but not held sessions. Failed Apply preserves the current View; Closed Projects have no Reopen and continue only through Duplicate. Reversible frame marks take effect immediately and offer Undo.
   Evidence: D-W93 to D-W106 in specs/063-clean-rebuild-contract/workflow-decisions.md, PREP-AC-14, PREP-FR-06, PREP-FR-09, FR-029, PIX-FR-14, PRJ-FR-08, PRJ-FR-25, PRJ-FR-30 · by: SpecF4Writer2 (intent-gated)
