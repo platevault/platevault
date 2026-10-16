@@ -236,6 +236,7 @@ pub async fn ha_goal(world: &World, goal_frames: u64) {
     let goals = [GoalInput {
         target_id: project.subjects[0].target_id,
         panel: None,
+        group_id: None,
         goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames },
     }];
     world.catalog().set_project_goals(project.id, project.revision, &goals).await.unwrap();

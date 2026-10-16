@@ -379,29 +379,42 @@ impl GoalSpec {
     }
 }
 
-/// A goal to set, naming its subject by Target and, on a mosaic subject, its
-/// panel by number. Integration and frame-count goals of a mosaic subject name a
-/// panel; a quality bar without a panel applies to every panel.
+/// A goal to set, naming its subject by Target and, on a mosaic, its panel:
+/// a mosaic panel group of the Project by id (F4, PRJ-FR-03/29), or on a
+/// legacy mosaic subject its panel by number. A goal names at most one of
+/// the two; a quality bar without one applies to every panel.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GoalInput {
     pub target_id: Uuid,
     #[serde(default)]
     pub panel: Option<u32>,
+    /// A mosaic panel group of the Project; groups, not names, scope panel
+    /// goals.
+    #[serde(default)]
+    pub group_id: Option<Uuid>,
     #[serde(flatten)]
     pub goal: GoalSpec,
 }
 
 /// Validate goal values and refuse the same goal twice for one subject or panel.
-/// Which subjects and panels exist is checked against the Project's records.
+/// Which subjects, panels and groups exist is checked against the Project's
+/// records.
 ///
 /// # Errors
-/// `InvalidInput` for an invalid value or a repeated goal.
+/// `InvalidInput` for an invalid value, a goal naming both a panel and a
+/// group, or a repeated goal.
 pub fn validate_goals(goals: &[GoalInput]) -> Result<(), LibraryError> {
     let mut seen = BTreeSet::new();
     for item in goals {
         item.goal.validate()?;
-        if !seen.insert((item.target_id, item.panel, item.goal.identity())) {
+        if item.panel.is_some() && item.group_id.is_some() {
+            return Err(invalid(format!(
+                "a goal of Target {} names both a panel and a group",
+                item.target_id
+            )));
+        }
+        if !seen.insert((item.target_id, item.panel, item.group_id, item.goal.identity())) {
             return Err(invalid(format!(
                 "Target {} lists the {} goal {:?} twice",
                 item.target_id,
@@ -548,14 +561,17 @@ pub struct ProjectSubject {
     pub panels: Vec<SubjectPanel>,
 }
 
-/// A stored goal; its id stays across edits while its subject, panel, kind and
-/// channel (or criterion) stay.
+/// A stored goal; its id stays across edits while its subject, panel or
+/// group, kind and channel (or criterion) stay.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectGoal {
     pub id: Uuid,
     pub subject_id: Uuid,
     pub panel_id: Option<Uuid>,
+    /// The mosaic panel group the goal belongs to (F4).
+    #[serde(default)]
+    pub group_id: Option<Uuid>,
     #[serde(flatten)]
     pub goal: GoalSpec,
 }
@@ -686,14 +702,16 @@ impl GoalTally {
 #[serde(rename_all = "camelCase")]
 pub struct GoalProgress {
     pub goal: ProjectGoal,
-    /// The latest saved memberships of the Project's runs outside its Trash,
-    /// minus each run's exclusions, frames rejected for this Project, Trashed
-    /// frames, frames whose bytes changed since their run chose them and
-    /// frames a quality bar does not admit. A member stays after it stops
-    /// being a candidate (D-W45).
+    /// The frames of the Project's own sessions on the goal's subject (in
+    /// its panel group for a panel goal) that its next View places, each
+    /// content-identical frame once: the Project's exclusions, frames the
+    /// Library no longer has Usable unless explicitly included, Trashed
+    /// frames and frames a quality bar does not admit are left out. Each
+    /// Project counts its own sessions (D-W96).
     pub in_project: GoalTally,
-    /// The candidates on the goal's subject plus the members of those runs,
-    /// Trashed frames aside (D-W66, D-W72).
+    /// The frames the Project holds on the subject, placed or not, plus the
+    /// frames of its suggestions on the subject, settled or not
+    /// (provisional), Trashed frames aside (D-W66).
     pub captured: GoalTally,
     pub met: bool,
     /// The quality bars of the goal's subject or panel; a frame counts in

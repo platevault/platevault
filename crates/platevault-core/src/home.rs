@@ -11,7 +11,7 @@
 //! revision, unchanged. Everything is read from the local catalog: no
 //! account, no network and no image file. Read-only.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use persistence_library::{RunningStorage, SessionFilter, SessionQuery, SessionSummary};
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ use crate::tonight::{Tonight, TonightQuery};
 use crate::{
     ArchiveState, CleanupState, GoalProgress, GoalShortfall, HomeAction, HomeProject, ImportState,
     LibraryError, NextAction, OpenChoiceKind, PreparationState, Project, ProjectCandidate,
-    ProjectMember, ProjectQuery, ProjectState, QualityLabel, ReadyToAdd, ReviewContext,
+    ProjectQuery, ProjectState, ProjectSuggestion, QualityLabel, ReadyToAdd, ReviewContext,
     ReviewFilter, RunBlocker, RunCompletion, RunStage, RunState, RunningWork, ScanState,
     SessionAction, SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal,
     UnreviewedSession, ViewListing, ViewQuery,
@@ -118,8 +118,8 @@ impl Library {
             let next = self.next_action(&reads, &tonight).await?;
             if reads.project.state == ProjectState::Open {
                 unreviewed.extend(unreviewed_sessions(&reads));
-                let members = catalog.project_members(summary.id).await?;
-                ready_to_add.extend(ready_to_add_sessions(&reads, &members));
+                let suggestions = catalog.project_suggestions(summary.id).await?;
+                ready_to_add.extend(ready_to_add_sessions(&reads, &suggestions));
                 for (target, goal) in unmet_goals(&reads) {
                     status.entry(target).or_default().push(goal);
                 }
@@ -413,40 +413,27 @@ fn unreviewed_sessions(reads: &ProjectReads) -> Vec<UnreviewedSession> {
         .collect()
 }
 
-/// The Project's candidates that are a member of none of its runs, each
-/// offered the open runs on its subject and rig (a panel run through its run
-/// group), else a new run.
-fn ready_to_add_sessions(reads: &ProjectReads, members: &[ProjectMember]) -> Vec<ReadyToAdd> {
+/// The Project's suggestions (PRJ-FR-09, PRJ-FR-19): Ready sessions it
+/// doesn't hold, each offered as opening the Project's suggestions with what
+/// keeps it out for now. A suggestion is never added by itself.
+fn ready_to_add_sessions(
+    reads: &ProjectReads,
+    suggestions: &[ProjectSuggestion],
+) -> Vec<ReadyToAdd> {
     let project_id = reads.project.id;
-    let members: BTreeSet<Uuid> = members.iter().map(|member| member.session_id).collect();
-    reads
-        .candidates
+    suggestions
         .iter()
-        .filter(|candidate| !members.contains(&candidate.session_id))
-        .map(|candidate| {
-            let mut actions = Vec::new();
-            let open = reads.runs.iter().filter(|run| {
-                run.subject_id == candidate.subject_id
-                    && run.rig_id == candidate.rig_id
-                    && run.completion == RunCompletion::Open
-            });
-            for run in open {
-                let action = match run.group_id {
-                    Some(group_id) => SessionAction::AddToRunGroup { group_id },
-                    None => SessionAction::AddToRun { view_id: run.id },
-                };
-                if !actions.contains(&action) {
-                    actions.push(action);
-                }
-            }
-            if actions.is_empty() {
-                actions.push(SessionAction::StartRun {
-                    project_id,
-                    subject_id: candidate.subject_id,
-                    rig_id: candidate.rig_id,
-                });
-            }
-            ReadyToAdd { project_id, candidate: candidate.clone(), actions }
+        .filter_map(|suggestion| {
+            let candidate = reads
+                .candidates
+                .iter()
+                .find(|candidate| candidate.session_id == suggestion.session_id)?;
+            Some(ReadyToAdd {
+                project_id,
+                candidate: candidate.clone(),
+                blockers: suggestion.blockers.clone(),
+                actions: vec![SessionAction::OpenSuggestions { project_id }],
+            })
         })
         .collect()
 }

@@ -527,8 +527,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        BasisCapture, CopyBasis, Evaluation, FileIdentity, GroupKeywords, GroupName, NativePath,
-        PathSensitivity, PinnedFile, SettledCalibration, Verdict, VolumeIdentity,
+        BasisCapture, CaptureInclusion, CopyBasis, Evaluation, FileIdentity, GroupKeywords,
+        GroupName, InclusionBasis, NativePath, PathSensitivity, PinnedFile, SettledCalibration,
+        Verdict, VolumeIdentity,
     };
 
     fn id(n: u128) -> Uuid {
@@ -639,6 +640,7 @@ mod tests {
                         BasisCapture {
                             capture_key: id(*light),
                             included: true,
+                            inclusion: CaptureInclusion::Included { basis: InclusionBasis::Usable },
                             copies: vec![CopyBasis {
                                 asset_id: id(*light),
                                 decision_revision: 1,

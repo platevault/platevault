@@ -17,13 +17,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use platevault_model::{
-    logical_quality, ApplicableQuality, ApplyJournal, ApplyOutcome, ApplyPhase, Asset,
-    Availability, BasisCapture, BasisGroup, BasisSession, CaptureKey, CaptureMetadata, CopyBasis,
-    EntryEvidence, EntryInput, EntryName, EntryPlacement, EntrySource, ExpectedTree, FileIdentity,
-    ForeignItem, GroupKeywords, GroupName, InputKind, InputRef, LibraryError, Location,
-    ManifestEntry, ManifestState, NativePath, PreviousItem, PreviousItemReason, PreviousItemReview,
-    ProjectBasis, ProjectLifecycle, ProjectOperation, ProjectOperationKind, Revision, SettledPin,
-    ViewManifest, ViewMode, WorkflowSettings,
+    ApplyJournal, ApplyOutcome, ApplyPhase, Asset, Availability, BasisCapture, BasisGroup,
+    BasisSession, CaptureKey, CaptureMetadata, CopyBasis, EntryEvidence, EntryInput, EntryName,
+    EntryPlacement, EntrySource, ExpectedTree, FileIdentity, ForeignItem, GroupKeywords, GroupName,
+    InputKind, InputRef, LibraryError, Location, ManifestEntry, ManifestState, NativePath,
+    PreviousItem, PreviousItemReason, PreviousItemReview, ProjectBasis, ProjectLifecycle,
+    ProjectOperation, ProjectOperationKind, Revision, SettledPin, ViewManifest, ViewMode,
+    WorkflowSettings,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -34,7 +34,8 @@ use uuid::Uuid;
 
 use super::{
     admission, calibration, from_json, from_text, load_assets, load_location, now, parse_uuid,
-    path_from_key, path_key, project_operations, revision, to_json, to_text, Catalog, Result,
+    path_from_key, path_key, project_inputs, project_operations, revision, to_json, to_text,
+    Catalog, Result,
 };
 
 /// Where one original is now: its location and absolute path.
@@ -702,8 +703,8 @@ impl Held {
             .collect();
         let mut captures: BTreeMap<Uuid, Vec<BasisCapture>> = BTreeMap::new();
         for row in sqlx::query(
-            "SELECT capture_key, session_id, basis FROM project_captures WHERE project_id = ?1 \
-             ORDER BY capture_key",
+            "SELECT capture_key, session_id, inclusion, basis FROM project_captures \
+             WHERE project_id = ?1 ORDER BY capture_key",
         )
         .bind(&project)
         .fetch_all(&mut *conn)
@@ -714,30 +715,18 @@ impl Held {
             let copies = copies.remove(&capture_key).unwrap_or_default();
             let assets: Vec<&Asset> =
                 copies.iter().filter_map(|copy| live.get(&copy.asset_id)).collect();
-            let included = included(&row.try_get::<String, _>("basis")?, &assets);
+            let inclusion = project_inputs::capture_inclusion(
+                &row.try_get::<String, _>("inclusion")?,
+                &row.try_get::<String, _>("basis")?,
+            )?;
             captures.entry(session_id).or_default().push(BasisCapture {
                 capture_key,
-                included,
+                included: inclusion.admits(project_inputs::live_quality(&assets)),
+                inclusion,
                 copies,
             });
         }
         Ok(Self { groups, sessions, captures, live })
-    }
-}
-
-/// Whether a held capture enters the next build: an explicit choice holds;
-/// one added Usable leaves when the Library rejects it, one added Unusable
-/// joins when the Library restores it; a capture with no live copy never
-/// does (VSEL-FR-15, D-W109).
-fn included(basis: &str, live_copies: &[&Asset]) -> bool {
-    if live_copies.is_empty() {
-        return false;
-    }
-    let usable = logical_quality(live_copies) == ApplicableQuality::Usable;
-    match basis {
-        "explicit" => true,
-        "usable" | "unusable" => usable,
-        _ => false,
     }
 }
 
@@ -852,7 +841,7 @@ async fn read_names(
             other => {
                 return Err(LibraryError::PersistenceFailure(format!(
                     "corrupt entry input {other}"
-                )))
+                )));
             }
         };
         names.insert(input, row.try_get("basename")?);

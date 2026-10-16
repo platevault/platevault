@@ -271,6 +271,7 @@ fn integration(
     GoalInput {
         target_id: target.candidate.id,
         panel,
+        group_id: None,
         goal: GoalSpec::Integration { channel: Some(channel.into()), goal_seconds: seconds },
     }
 }
@@ -690,6 +691,7 @@ async fn mosaic_subject_panels_by_centre_and_rotation_unknown_rotation_allowed()
             GoalInput {
                 target_id: world.ngc7000.candidate.id,
                 panel: None,
+                group_id: None,
                 goal: GoalSpec::QualityBar {
                     criterion: QualityCriterion::MaxFwhmMedian { max_px: 3.5 },
                 },
@@ -798,11 +800,13 @@ async fn project_write_changes_no_file_quality_or_membership() {
         GoalInput {
             target_id: world.m81.candidate.id,
             panel: None,
+            group_id: None,
             goal: GoalSpec::FrameCount { channel: Some("L".into()), goal_frames: 120 },
         },
         GoalInput {
             target_id: world.m81.candidate.id,
             panel: None,
+            group_id: None,
             goal: GoalSpec::QualityBar { criterion: QualityCriterion::UsableOnly },
         },
     ];

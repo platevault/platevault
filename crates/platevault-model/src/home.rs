@@ -11,9 +11,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    ArchiveKind, CalibrationNeedsReview, CleanupKind, GoalProgress, GoalSpec, Microseconds,
-    NativePath, PreparationFailed, ProjectCandidate, ProjectSummary, ReviewContext, ReviewFilter,
-    RunCounters, RunStage, ScanProgress, StorageOperationKind, TrashOffer, ViewListing,
+    AdmissionBlocker, ArchiveKind, CalibrationNeedsReview, CleanupKind, GoalProgress, GoalSpec,
+    Microseconds, NativePath, PreparationFailed, ProjectCandidate, ProjectSummary, ReviewContext,
+    ReviewFilter, RunCounters, RunStage, ScanProgress, StorageOperationKind, TrashOffer,
+    ViewListing,
 };
 
 /// Home's first section (PRJ-FR-17 section 1).
@@ -112,6 +113,9 @@ pub enum SessionAction {
     AddToRunGroup { group_id: Uuid },
     /// Ready to add, with no open run on the session's subject and rig.
     StartRun { project_id: Uuid, subject_id: Uuid, rig_id: Uuid },
+    /// A session an open Project suggests: open that Project's suggestions
+    /// (PRJ-FR-19). Nothing is added until the user adds it.
+    OpenSuggestions { project_id: Uuid },
 }
 
 /// A candidate session of an open Project with Unreviewed frames in it.
@@ -125,13 +129,16 @@ pub struct UnreviewedSession {
     pub actions: Vec<SessionAction>,
 }
 
-/// A candidate of an open Project that is a member of none of its runs
-/// (PRJ-FR-19).
+/// A session an open Project suggests and doesn't hold (PRJ-FR-09,
+/// PRJ-FR-19), with what keeps it out for now, such as calibration that
+/// isn't settled ("Choose its flats first").
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadyToAdd {
     pub project_id: Uuid,
     pub candidate: ProjectCandidate,
+    #[serde(default)]
+    pub blockers: Vec<AdmissionBlocker>,
     pub actions: Vec<SessionAction>,
 }
 

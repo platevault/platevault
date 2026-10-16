@@ -1,0 +1,1227 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! A Project's inputs on the catalog's single writer (spec 065 PRJ-FR-02,
+//! PRJ-FR-05, PRJ-FR-08/09, PRJ-FR-27 to PRJ-FR-31; 066 VSEL-FR-10, VSEL-FR-12,
+//! VSEL-FR-15/16; D-W94 to D-W96, D-W100, D-W105, D-W107, D-W109). Pairs with
+//! `project_inputs.sql`.
+//!
+//! Every edit is one `BEGIN IMMEDIATE` transaction that checks the Project is
+//! open and at the expected revision, writes only Project rows and adds one
+//! to the revision. Nothing here touches the View: once it exists, an edit
+//! reads as a pending change, computed on read from the desired state and
+//! the live Library against the installed manifest's basis, never stored.
+//!
+//! A session joins only through [`Catalog::add_project_sessions`], whole,
+//! after [`admission::require_admission`] in the same transaction: Ready,
+//! settled and not drifted, on the group's rig, at the basis the user saw.
+//! Its exact logical captures and copies are recorded as they stand, so a
+//! later regroup, an availability change or a new matching session never
+//! changes what the Project holds: there is no rekey and no implicit add.
+//! Which group a new session joins and what a new group is called is core's
+//! rule; this module records the groups and placements it is given.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use platevault_model::{
+    logical_quality, AdmissionBasis, ApplicableQuality, Asset, Availability, BasisCapture,
+    CaptureInclusion, CopyBasis, ExclusionBasis, FrameChoice, FramingEvidence, GroupKeywords,
+    GroupName, GroupOrigin, InclusionBasis, LibraryError, NativePath, OpticsSignature,
+    PendingChange, ProjectBasis, ProjectCandidate, ProjectCapture, ProjectDesired, ProjectGroup,
+    ProjectLifecycle, ProjectSessionMember, ProjectSuggestion, ProjectViewSettings, Revision,
+    SessionAdmission, SessionPlacement, SessionReadiness, ViewMode,
+};
+use sqlx::sqlite::SqliteConnection;
+use sqlx::{Connection, Row};
+use uuid::Uuid;
+
+use super::projects::{candidates, commit_revision, next_project_revision};
+use super::workflow_settings::read_workflow_settings;
+use super::{
+    admission, from_json, from_text, load_assets, load_session_row, now, parse_uuid, revision,
+    scoped_members, session_filters, successors_of, to_json, to_text, CaptureView, Catalog,
+    Members, Result,
+};
+
+/// A group an edit creates: a framing group for added sessions, or the
+/// user's new or split group. It goes after the Project's last group.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NewGroup {
+    pub id: Uuid,
+    pub rig_id: Uuid,
+    pub name: GroupName,
+    pub origin: GroupOrigin,
+    pub optics: OpticsSignature,
+    pub framing: Option<FramingEvidence>,
+}
+
+/// One whole session to add to `group_id`, at the admission basis the user
+/// saw (`None` takes the current one).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SessionAdd {
+    pub session_id: Uuid,
+    pub group_id: Uuid,
+    pub placement: SessionPlacement,
+    pub expected: Option<AdmissionBasis>,
+}
+
+impl Catalog {
+    /// What Project `id` holds as its intent, read in one snapshot.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt
+    /// record.
+    pub async fn project_desired(&self, id: Uuid) -> Result<ProjectDesired> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let desired = read_desired(&mut snapshot, id).await?;
+        snapshot.rollback().await?;
+        Ok(desired)
+    }
+
+    /// Add whole sessions to Project `id` in one transaction, all or none
+    /// (PRJ-FR-08). Each session must pass the admission rule now, at its
+    /// `expected` basis, into its group on its own rig; `groups` are the new
+    /// framing groups the adds go into, and each gets a session. Each
+    /// session's live logical captures are recorded with every copy's
+    /// decision revision and observation: Usable ones included, the others
+    /// visibly excluded until the user includes them (VSEL-FR-15). A session
+    /// whose Target or rig the Project lacks adds them too (PRJ-FR-02).
+    ///
+    /// # Errors
+    /// `Conflict` for a stale Project revision, a superseded session (with
+    /// its successors) or a basis other than `expected`; `NotFound` for an
+    /// unknown Project, group or session; `InvalidInput` for a Project that
+    /// isn't open, a session listed twice or already held, a capture or copy
+    /// another held session holds, a group no add uses or a name another
+    /// group has, and every admission blocker.
+    pub async fn add_project_sessions(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        groups: &[NewGroup],
+        adds: &[SessionAdd],
+    ) -> Result<ProjectDesired> {
+        if adds.is_empty() {
+            return Err(LibraryError::InvalidInput("no session to add".into()));
+        }
+        require_distinct(adds.iter().map(|add| add.session_id), "session")?;
+        if let Some(group) =
+            groups.iter().find(|group| adds.iter().all(|add| add.group_id != group.id))
+        {
+            return Err(LibraryError::InvalidInput(format!(
+                "new group {} gets no session",
+                group.name.as_str()
+            )));
+        }
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            for group in groups {
+                insert_group(conn, id, group).await?;
+            }
+            for add in adds {
+                add_session(conn, id, add).await?;
+            }
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Remove whole sessions from Project `id` with their captures. A
+    /// framing group left empty goes with them, unless it carries goals.
+    /// Subjects and rigs stay (PRJ-FR-02).
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project or a
+    /// session it doesn't hold; `InvalidInput` for a Project that isn't open.
+    pub async fn remove_project_sessions(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        sessions: &[Uuid],
+    ) -> Result<ProjectDesired> {
+        require_distinct(sessions.iter().copied(), "session")?;
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            for session in sessions {
+                require_held(conn, id, *session).await?;
+                sqlx::query(
+                    "DELETE FROM project_sessions WHERE project_id = ?1 AND session_id = ?2",
+                )
+                .bind(id.to_string())
+                .bind(session.to_string())
+                .execute(&mut *conn)
+                .await?;
+            }
+            drop_empty_framing_groups(conn, id).await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Move held sessions into `group_id` of their own rig; the user's move
+    /// survives recomputation (PRJ-FR-27, PRJ-FR-31). A framing group left
+    /// empty goes, unless it carries goals.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project,
+    /// group or held session; `InvalidInput` for a Project that isn't open or
+    /// a group of another rig.
+    pub async fn move_project_sessions(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        sessions: &[Uuid],
+        group_id: Uuid,
+    ) -> Result<ProjectDesired> {
+        require_distinct(sessions.iter().copied(), "session")?;
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            move_sessions(conn, id, sessions, group_id).await?;
+            drop_empty_framing_groups(conn, id).await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Create a group (PRJ-FR-27) and move `sessions` into it: with sessions
+    /// of one group this is a split. The user names it when it is created.
+    ///
+    /// # Errors
+    /// As [`Catalog::move_project_sessions`], and `InvalidInput` for a name
+    /// another group of the Project has.
+    pub async fn create_project_group(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        group: &NewGroup,
+        sessions: &[Uuid],
+    ) -> Result<ProjectDesired> {
+        require_distinct(sessions.iter().copied(), "session")?;
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            insert_group(conn, id, group).await?;
+            move_sessions(conn, id, sessions, group.id).await?;
+            drop_empty_framing_groups(conn, id).await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Remove an empty group.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project or
+    /// group; `InvalidInput` for a Project that isn't open, or a group that
+    /// still holds sessions or goals.
+    pub async fn remove_project_group(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        group_id: Uuid,
+    ) -> Result<ProjectDesired> {
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            require_group(conn, id, group_id).await?;
+            let (sessions, goals): (i64, i64) = sqlx::query_as(
+                "SELECT (SELECT count(*) FROM project_sessions WHERE group_id = ?1), \
+                 (SELECT count(*) FROM project_goals WHERE group_id = ?1)",
+            )
+            .bind(group_id.to_string())
+            .fetch_one(&mut *conn)
+            .await?;
+            if sessions > 0 {
+                return Err(LibraryError::InvalidInput(format!(
+                    "group {group_id} still holds {sessions} sessions; move or remove them first"
+                )));
+            }
+            if goals > 0 {
+                return Err(LibraryError::InvalidInput(format!(
+                    "group {group_id} still has goals; remove them first"
+                )));
+            }
+            sqlx::query("DELETE FROM project_groups WHERE id = ?1")
+                .bind(group_id.to_string())
+                .execute(&mut *conn)
+                .await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Rename a group; its folder changes on the next Apply (PRJ-FR-27).
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project or
+    /// group; `InvalidInput` for a Project that isn't open or a name another
+    /// group has.
+    pub async fn rename_project_group(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        group_id: Uuid,
+        name: &GroupName,
+    ) -> Result<ProjectDesired> {
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            require_group(conn, id, group_id).await?;
+            rename(conn, id, group_id, name).await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// Mark a group a mosaic panel, or not, optionally renaming it in the
+    /// same edit (PRJ-FR-29): a panel group carries only the PANEL token and
+    /// its own goals.
+    ///
+    /// # Errors
+    /// As [`Catalog::rename_project_group`], and `InvalidInput` for unmarking
+    /// a panel group that has goals.
+    pub async fn set_project_group_panel(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        group_id: Uuid,
+        panel: bool,
+        name: Option<&GroupName>,
+    ) -> Result<ProjectDesired> {
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            require_group(conn, id, group_id).await?;
+            if !panel {
+                let goals: i64 =
+                    sqlx::query_scalar("SELECT count(*) FROM project_goals WHERE group_id = ?1")
+                        .bind(group_id.to_string())
+                        .fetch_one(&mut *conn)
+                        .await?;
+                if goals > 0 {
+                    return Err(LibraryError::InvalidInput(format!(
+                        "group {group_id} has panel goals and stays a panel; remove them first"
+                    )));
+                }
+            }
+            sqlx::query("UPDATE project_groups SET panel = ?2 WHERE id = ?1")
+                .bind(group_id.to_string())
+                .bind(i64::from(panel))
+                .execute(&mut *conn)
+                .await?;
+            if let Some(name) = name {
+                rename(conn, id, group_id, name).await?;
+            }
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// The user's choice for held frames (VSEL-FR-10, VSEL-FR-15): exclude
+    /// them from this Project, include them although the Library has them
+    /// Unusable, or follow the Library again. Files and library quality stay.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project or
+    /// a capture it doesn't hold; `InvalidInput` for a Project that isn't
+    /// open or no capture.
+    pub async fn set_project_frames(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        capture_keys: &[Uuid],
+        choice: FrameChoice,
+    ) -> Result<ProjectDesired> {
+        if capture_keys.is_empty() {
+            return Err(LibraryError::InvalidInput("no frame chosen".into()));
+        }
+        require_distinct(capture_keys.iter().copied(), "capture")?;
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            let held = read_captures(conn, id).await?;
+            let live = live_copies(conn, held.values().flatten()).await?;
+            for key in capture_keys {
+                let capture = held
+                    .values()
+                    .flatten()
+                    .find(|capture| capture.capture_key == *key)
+                    .ok_or_else(|| {
+                    LibraryError::NotFound(format!("capture {key} of project {id}"))
+                })?;
+                let quality =
+                    live_quality(&live_of(capture, &live)).unwrap_or(ApplicableQuality::Unreviewed);
+                let (inclusion, basis) =
+                    inclusion_columns(CaptureInclusion::chosen(choice, quality));
+                sqlx::query(
+                    "UPDATE project_captures SET inclusion = ?3, basis = ?4, updated_at = ?5 \
+                     WHERE project_id = ?1 AND capture_key = ?2",
+                )
+                .bind(id.to_string())
+                .bind(key.to_string())
+                .bind(inclusion)
+                .bind(basis)
+                .bind(now()?)
+                .execute(&mut *conn)
+                .await?;
+            }
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// The View step's settings (VSEL-FR-16, PREP-FR-04/06, PRJ-FR-28): input
+    /// mode, this Project's keyword names (`None` uses Settings), the
+    /// application and the processing location. A mode switch reaches the
+    /// View only through Apply.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project or
+    /// application profile; `InvalidInput` for a Project that isn't open.
+    pub async fn set_project_view_settings(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        settings: &ProjectViewSettings,
+    ) -> Result<ProjectDesired> {
+        let desired = write_txn!(self, |conn| {
+            let next = begin_edit(conn, id, expected).await?;
+            if let Some(profile) = settings.profile_id {
+                let known: bool =
+                    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM profiles WHERE id = ?1)")
+                        .bind(profile.to_string())
+                        .fetch_one(&mut *conn)
+                        .await?;
+                if !known {
+                    return Err(LibraryError::NotFound(format!("application profile {profile}")));
+                }
+            }
+            let keywords = settings.keywords.as_ref();
+            sqlx::query(
+                "UPDATE projects SET view_mode = ?2, group_keyword = ?3, panel_keyword = ?4, \
+                 profile_id = ?5, processing_parent = ?6 WHERE id = ?1",
+            )
+            .bind(id.to_string())
+            .bind(to_text(&settings.mode)?)
+            .bind(keywords.map(|keywords| keywords.group().as_str().to_owned()))
+            .bind(keywords.map(|keywords| keywords.panel().as_str().to_owned()))
+            .bind(settings.profile_id.map(|profile| profile.to_string()))
+            .bind(settings.parent.as_ref().map(to_json).transpose()?)
+            .execute(&mut *conn)
+            .await?;
+            commit_revision(conn, id, next).await?;
+            read_desired(conn, id).await?
+        });
+        Ok(desired)
+    }
+
+    /// The pending changes of Project `id` (VSEL-FR-12, D-W100, D-W109):
+    /// its desired state with the live Library against the basis of its
+    /// installed View, each labelled with its source. The Project's own
+    /// edits come first, then the Library's: frames it rejected or restored,
+    /// calibration reassigned on a held session, and held sessions it no
+    /// longer has Ready or regrouped. A Project with no View yet, or one
+    /// that isn't open, has none. Read-only.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt
+    /// record.
+    pub async fn project_pending_changes(&self, id: Uuid) -> Result<Vec<PendingChange>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let changes = pending_changes(&mut snapshot, id).await?;
+        snapshot.rollback().await?;
+        Ok(changes)
+    }
+
+    /// The Ready sessions Project `id` suggests and doesn't hold (PRJ-FR-09),
+    /// each with what keeps it out for now. A suggestion is never added by
+    /// itself; a session that needs review, a superseded or Trashed one is
+    /// not suggested, and a Project that isn't open suggests nothing.
+    /// Read-only.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt
+    /// record.
+    pub async fn project_suggestions(&self, id: Uuid) -> Result<Vec<ProjectSuggestion>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let suggestions = suggestions(&mut snapshot, id).await?;
+        snapshot.rollback().await?;
+        Ok(suggestions)
+    }
+}
+
+// ── Shared rules ─────────────────────────────────────────────────────────────
+
+/// The stored `(inclusion, basis)` columns of a capture's inclusion.
+const fn inclusion_columns(inclusion: CaptureInclusion) -> (&'static str, &'static str) {
+    match inclusion {
+        CaptureInclusion::Included { basis: InclusionBasis::Usable } => ("included", "usable"),
+        CaptureInclusion::Included { basis: InclusionBasis::Explicit } => ("included", "explicit"),
+        CaptureInclusion::Excluded { basis: ExclusionBasis::Unusable } => ("excluded", "unusable"),
+        CaptureInclusion::Excluded { basis: ExclusionBasis::User } => ("excluded", "user"),
+    }
+}
+
+/// A capture's inclusion from its stored `(inclusion, basis)` columns.
+///
+/// # Errors
+/// `PersistenceFailure` for columns `project_inputs.sql` refuses.
+pub fn capture_inclusion(inclusion: &str, basis: &str) -> Result<CaptureInclusion> {
+    match (inclusion, basis) {
+        ("included", "usable") => Ok(CaptureInclusion::Included { basis: InclusionBasis::Usable }),
+        ("included", "explicit") => {
+            Ok(CaptureInclusion::Included { basis: InclusionBasis::Explicit })
+        }
+        ("excluded", "unusable") => {
+            Ok(CaptureInclusion::Excluded { basis: ExclusionBasis::Unusable })
+        }
+        ("excluded", "user") => Ok(CaptureInclusion::Excluded { basis: ExclusionBasis::User }),
+        _ => Err(LibraryError::PersistenceFailure(format!(
+            "corrupt capture inclusion {inclusion}/{basis}"
+        ))),
+    }
+}
+
+/// A copy the Library still holds: neither Trashed nor retired.
+const fn is_live(asset: &Asset) -> bool {
+    !matches!(asset.availability, Availability::Trashed | Availability::Retired)
+}
+
+/// The logical quality of a capture's live copies; `None` with none live.
+#[must_use]
+pub fn live_quality(live: &[&Asset]) -> Option<ApplicableQuality> {
+    (!live.is_empty()).then(|| logical_quality(live))
+}
+
+fn require_distinct(ids: impl Iterator<Item = Uuid>, what: &str) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for id in ids {
+        if !seen.insert(id) {
+            return Err(LibraryError::InvalidInput(format!("{what} {id} is listed twice")));
+        }
+    }
+    Ok(())
+}
+
+/// An edit of Project `id` at `expected`: the revision it commits. A Closing,
+/// Closed or Archived Project takes no edit (PRJ-FR-25).
+async fn begin_edit(conn: &mut SqliteConnection, id: Uuid, expected: Revision) -> Result<Revision> {
+    let next = next_project_revision(conn, id, expected).await?;
+    let lifecycle = read_lifecycle(conn, id).await?;
+    if !lifecycle.is_open() {
+        return Err(LibraryError::InvalidInput(format!(
+            "project {id} is {lifecycle} and takes no edit; duplicate it to continue"
+        )));
+    }
+    Ok(next)
+}
+
+async fn read_lifecycle(conn: &mut SqliteConnection, id: Uuid) -> Result<ProjectLifecycle> {
+    let lifecycle: Option<String> =
+        sqlx::query_scalar("SELECT lifecycle FROM projects WHERE id = ?1")
+            .bind(id.to_string())
+            .fetch_optional(&mut *conn)
+            .await?;
+    from_text(&lifecycle.ok_or_else(|| LibraryError::NotFound(format!("project {id}")))?)
+}
+
+async fn require_group(conn: &mut SqliteConnection, project: Uuid, group: Uuid) -> Result<Uuid> {
+    let rig: Option<String> =
+        sqlx::query_scalar("SELECT rig_id FROM project_groups WHERE id = ?1 AND project_id = ?2")
+            .bind(group.to_string())
+            .bind(project.to_string())
+            .fetch_optional(&mut *conn)
+            .await?;
+    parse_uuid(
+        &rig.ok_or_else(|| LibraryError::NotFound(format!("group {group} of project {project}")))?,
+    )
+}
+
+/// The group a held session sits in.
+async fn require_held(conn: &mut SqliteConnection, project: Uuid, session: Uuid) -> Result<Uuid> {
+    let group: Option<String> = sqlx::query_scalar(
+        "SELECT group_id FROM project_sessions WHERE project_id = ?1 AND session_id = ?2",
+    )
+    .bind(project.to_string())
+    .bind(session.to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+    parse_uuid(&group.ok_or_else(|| {
+        LibraryError::NotFound(format!("session {session} is not in project {project}"))
+    })?)
+}
+
+/// Two groups of a Project never share a name (`project_inputs.sql`).
+async fn require_free_name(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    name: &GroupName,
+    except: Option<Uuid>,
+) -> Result<()> {
+    let taken: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM project_groups WHERE project_id = ?1 AND name_key = ?2 \
+         AND id IS NOT ?3",
+    )
+    .bind(project.to_string())
+    .bind(name.key())
+    .bind(except.map(|id| id.to_string()))
+    .fetch_optional(&mut *conn)
+    .await?;
+    match taken {
+        Some(_) => Err(LibraryError::InvalidInput(format!(
+            "another group of the Project is already named {}",
+            name.as_str()
+        ))),
+        None => Ok(()),
+    }
+}
+
+async fn insert_group(conn: &mut SqliteConnection, project: Uuid, group: &NewGroup) -> Result<()> {
+    group.optics.validate()?;
+    if let Some(framing) = &group.framing {
+        framing.validate()?;
+    }
+    require_free_name(conn, project, &group.name, None).await?;
+    sqlx::query(
+        "INSERT INTO project_groups (id, project_id, rig_id, name, name_key, panel, origin, \
+         optics, framing, position, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?7, ?8, \
+         (SELECT coalesce(max(position) + 1, 0) FROM project_groups WHERE project_id = ?2), ?9)",
+    )
+    .bind(group.id.to_string())
+    .bind(project.to_string())
+    .bind(group.rig_id.to_string())
+    .bind(group.name.as_str())
+    .bind(group.name.key())
+    .bind(to_text(&group.origin)?)
+    .bind(to_json(&group.optics)?)
+    .bind(group.framing.as_ref().map(to_json).transpose()?)
+    .bind(now()?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+async fn rename(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    group: Uuid,
+    name: &GroupName,
+) -> Result<()> {
+    require_free_name(conn, project, name, Some(group)).await?;
+    sqlx::query("UPDATE project_groups SET name = ?2, name_key = ?3 WHERE id = ?1")
+        .bind(group.to_string())
+        .bind(name.as_str())
+        .bind(name.key())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+async fn move_sessions(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    sessions: &[Uuid],
+    group: Uuid,
+) -> Result<()> {
+    let rig = require_group(conn, project, group).await?;
+    for session in sessions {
+        let from = require_held(conn, project, *session).await?;
+        let from_rig = require_group(conn, project, from).await?;
+        if from_rig != rig {
+            return Err(LibraryError::InvalidInput(format!(
+                "session {session} is on rig {from_rig}; group {group} holds rig {rig} only"
+            )));
+        }
+        sqlx::query(
+            "UPDATE project_sessions SET group_id = ?3, placement = 'user' \
+             WHERE project_id = ?1 AND session_id = ?2",
+        )
+        .bind(project.to_string())
+        .bind(session.to_string())
+        .bind(group.to_string())
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+/// A framing group exists for its sessions: once none is left it goes,
+/// unless it carries goals. A user's group stays until removed.
+async fn drop_empty_framing_groups(conn: &mut SqliteConnection, project: Uuid) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM project_groups WHERE project_id = ?1 AND origin = 'framing' \
+         AND id NOT IN (SELECT group_id FROM project_sessions WHERE project_id = ?1) \
+         AND id NOT IN (SELECT group_id FROM project_goals \
+             WHERE project_id = ?1 AND group_id IS NOT NULL)",
+    )
+    .bind(project.to_string())
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+// ── Membership add ───────────────────────────────────────────────────────────
+
+/// Add one whole session in the caller's transaction, in the order
+/// `project_inputs.sql` expects: admission, the session row with the basis
+/// it returned, captures, copies.
+async fn add_session(conn: &mut SqliteConnection, project: Uuid, add: &SessionAdd) -> Result<()> {
+    let held: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM project_sessions WHERE project_id = ?1 AND session_id = ?2)",
+    )
+    .bind(project.to_string())
+    .bind(add.session_id.to_string())
+    .fetch_one(&mut *conn)
+    .await?;
+    if held {
+        return Err(LibraryError::InvalidInput(format!(
+            "session {} is already in project {project}",
+            add.session_id
+        )));
+    }
+    let basis = admission::require_admission(
+        conn,
+        project,
+        add.group_id,
+        add.session_id,
+        add.expected.as_ref(),
+    )
+    .await?;
+    session_filters::append_target_and_rig(conn, project, add.session_id).await?;
+    sqlx::query(
+        "INSERT INTO project_sessions (project_id, session_id, group_id, placement, \
+         grouping_revision, calibration_generation, added_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    )
+    .bind(project.to_string())
+    .bind(add.session_id.to_string())
+    .bind(add.group_id.to_string())
+    .bind(to_text(&add.placement)?)
+    .bind(super::db_revision(basis.grouping_revision)?)
+    .bind(super::db_revision(basis.calibration_generation)?)
+    .bind(now()?)
+    .execute(&mut *conn)
+    .await?;
+    for capture in session_captures(conn, add.session_id).await? {
+        insert_capture(conn, project, &capture).await?;
+    }
+    Ok(())
+}
+
+/// The session's live logical captures (D16) as they stand, each with every
+/// copy's decision revision and observation.
+async fn session_captures(
+    conn: &mut SqliteConnection,
+    session_id: Uuid,
+) -> Result<Vec<ProjectCapture>> {
+    let mut row = load_session_row(conn, session_id).await?;
+    let assets = scoped_members(conn, &mut row, Members::Live).await?;
+    let view = CaptureView::read(conn, &[session_id], &assets).await?;
+    let mut captures = Vec::new();
+    for key in view.group(&assets).into_keys() {
+        let copies = view.copies_of(&key);
+        let live: Vec<&Asset> = copies.iter().copied().filter(|copy| is_live(copy)).collect();
+        let quality = live_quality(&live).unwrap_or(ApplicableQuality::Unreviewed);
+        let bases = copies
+            .iter()
+            .map(|copy| CopyBasis {
+                asset_id: copy.id,
+                decision_revision: copy.decision_revision,
+                fingerprint: copy.fingerprint.clone(),
+            })
+            .collect();
+        captures.push(ProjectCapture::new(
+            session_id,
+            bases,
+            CaptureInclusion::on_add(quality),
+            quality,
+        )?);
+    }
+    Ok(captures)
+}
+
+/// One capture and its copies; each is held once per Project.
+async fn insert_capture(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    capture: &ProjectCapture,
+) -> Result<()> {
+    let ids: Vec<String> = capture.copies.iter().map(|copy| copy.asset_id.to_string()).collect();
+    let holder: Option<String> = sqlx::query_scalar(
+        "SELECT c.session_id FROM project_capture_copies cc JOIN project_captures c \
+         ON c.project_id = cc.project_id AND c.capture_key = cc.capture_key \
+         WHERE cc.project_id = ?1 AND (cc.asset_id IN (SELECT value FROM json_each(?2)) \
+         OR cc.capture_key = ?3) LIMIT 1",
+    )
+    .bind(project.to_string())
+    .bind(to_json(&ids)?)
+    .bind(capture.capture_key.to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+    if let Some(holder) = holder {
+        return Err(LibraryError::InvalidInput(format!(
+            "capture {} is already held through session {holder}; a frame enters a Project once",
+            capture.capture_key
+        )));
+    }
+    let (inclusion, basis) = inclusion_columns(capture.inclusion);
+    sqlx::query(
+        "INSERT INTO project_captures (project_id, capture_key, session_id, inclusion, basis, \
+         quality_when_added, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    )
+    .bind(project.to_string())
+    .bind(capture.capture_key.to_string())
+    .bind(capture.session_id.to_string())
+    .bind(inclusion)
+    .bind(basis)
+    .bind(to_json(&capture.quality_when_added)?)
+    .bind(now()?)
+    .execute(&mut *conn)
+    .await?;
+    for copy in &capture.copies {
+        sqlx::query(
+            "INSERT INTO project_capture_copies (project_id, capture_key, asset_id, \
+             decision_revision, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(project.to_string())
+        .bind(capture.capture_key.to_string())
+        .bind(copy.asset_id.to_string())
+        .bind(super::db_revision(copy.decision_revision)?)
+        .bind(to_json(&copy.fingerprint)?)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+// ── Reads ────────────────────────────────────────────────────────────────────
+
+/// The desired state of Project `id` in the caller's snapshot.
+///
+/// # Errors
+/// `NotFound` for an unknown Project; `PersistenceFailure` for a corrupt
+/// record.
+pub async fn read_desired(conn: &mut SqliteConnection, id: Uuid) -> Result<ProjectDesired> {
+    let project = id.to_string();
+    let row = sqlx::query(
+        "SELECT revision, lifecycle, view_mode, group_keyword, panel_keyword, profile_id, \
+         processing_parent FROM projects WHERE id = ?1",
+    )
+    .bind(&project)
+    .fetch_optional(&mut *conn)
+    .await?
+    .ok_or_else(|| LibraryError::NotFound(format!("project {id}")))?;
+    let keywords = match (
+        row.try_get::<Option<String>, _>("group_keyword")?,
+        row.try_get::<Option<String>, _>("panel_keyword")?,
+    ) {
+        (Some(group), Some(panel)) => Some(GroupKeywords::new(&group, &panel)?),
+        _ => None,
+    };
+    let settings = ProjectViewSettings {
+        mode: from_text::<ViewMode>(&row.try_get::<String, _>("view_mode")?)?,
+        keywords,
+        profile_id: row
+            .try_get::<Option<String>, _>("profile_id")?
+            .as_deref()
+            .map(parse_uuid)
+            .transpose()?,
+        parent: row
+            .try_get::<Option<String>, _>("processing_parent")?
+            .map(|parent| from_json::<NativePath>(&parent))
+            .transpose()?,
+    };
+    let mut groups = Vec::new();
+    for group in sqlx::query(
+        "SELECT id, rig_id, name, panel, origin, optics, framing, position FROM project_groups \
+         WHERE project_id = ?1 ORDER BY position, id",
+    )
+    .bind(&project)
+    .fetch_all(&mut *conn)
+    .await?
+    {
+        groups.push(ProjectGroup {
+            id: parse_uuid(&group.try_get::<String, _>("id")?)?,
+            rig_id: parse_uuid(&group.try_get::<String, _>("rig_id")?)?,
+            name: GroupName::new(&group.try_get::<String, _>("name")?)?,
+            panel: group.try_get::<i64, _>("panel")? == 1,
+            origin: from_text(&group.try_get::<String, _>("origin")?)?,
+            optics: from_json(&group.try_get::<String, _>("optics")?)?,
+            framing: group
+                .try_get::<Option<String>, _>("framing")?
+                .map(|framing| from_json(&framing))
+                .transpose()?,
+            position: u32::try_from(group.try_get::<i64, _>("position")?)
+                .map_err(|_| LibraryError::PersistenceFailure("corrupt group position".into()))?,
+        });
+    }
+    let mut sessions = Vec::new();
+    for member in sqlx::query(
+        "SELECT session_id, group_id, placement, grouping_revision, calibration_generation, \
+         added_at FROM project_sessions WHERE project_id = ?1 ORDER BY added_at, session_id",
+    )
+    .bind(&project)
+    .fetch_all(&mut *conn)
+    .await?
+    {
+        sessions.push(ProjectSessionMember {
+            session_id: parse_uuid(&member.try_get::<String, _>("session_id")?)?,
+            group_id: parse_uuid(&member.try_get::<String, _>("group_id")?)?,
+            placement: from_text(&member.try_get::<String, _>("placement")?)?,
+            grouping_revision: revision(member.try_get("grouping_revision")?)?,
+            calibration_generation: revision(member.try_get("calibration_generation")?)?,
+            added_at: member.try_get("added_at")?,
+        });
+    }
+    let captures = read_captures(conn, id).await?.into_values().flatten().collect();
+    Ok(ProjectDesired {
+        project_id: id,
+        revision: revision(row.try_get("revision")?)?,
+        lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        settings,
+        groups,
+        sessions,
+        captures,
+    })
+}
+
+/// The Project's held captures by session, each with its copies, in
+/// capture-key order.
+async fn read_captures(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+) -> Result<BTreeMap<Uuid, Vec<ProjectCapture>>> {
+    let mut copies: BTreeMap<Uuid, Vec<CopyBasis>> = BTreeMap::new();
+    for row in sqlx::query(
+        "SELECT capture_key, asset_id, decision_revision, fingerprint FROM project_capture_copies \
+         WHERE project_id = ?1 ORDER BY capture_key, asset_id",
+    )
+    .bind(project.to_string())
+    .fetch_all(&mut *conn)
+    .await?
+    {
+        copies.entry(parse_uuid(&row.try_get::<String, _>("capture_key")?)?).or_default().push(
+            CopyBasis {
+                asset_id: parse_uuid(&row.try_get::<String, _>("asset_id")?)?,
+                decision_revision: revision(row.try_get("decision_revision")?)?,
+                fingerprint: from_json(&row.try_get::<String, _>("fingerprint")?)?,
+            },
+        );
+    }
+    let mut captures: BTreeMap<Uuid, Vec<ProjectCapture>> = BTreeMap::new();
+    for row in sqlx::query(
+        "SELECT capture_key, session_id, inclusion, basis, quality_when_added \
+         FROM project_captures WHERE project_id = ?1 ORDER BY capture_key",
+    )
+    .bind(project.to_string())
+    .fetch_all(&mut *conn)
+    .await?
+    {
+        let capture_key = parse_uuid(&row.try_get::<String, _>("capture_key")?)?;
+        let session_id = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
+        let capture = ProjectCapture {
+            capture_key,
+            session_id,
+            copies: copies.remove(&capture_key).unwrap_or_default(),
+            inclusion: capture_inclusion(
+                &row.try_get::<String, _>("inclusion")?,
+                &row.try_get::<String, _>("basis")?,
+            )?,
+            quality_when_added: from_json(&row.try_get::<String, _>("quality_when_added")?)?,
+        };
+        capture.validate().map_err(|error| {
+            LibraryError::PersistenceFailure(format!("held capture {capture_key}: {error}"))
+        })?;
+        captures.entry(session_id).or_default().push(capture);
+    }
+    Ok(captures)
+}
+
+/// Every live copy of `captures`, by asset id.
+async fn live_copies<'a>(
+    conn: &mut SqliteConnection,
+    captures: impl Iterator<Item = &'a ProjectCapture>,
+) -> Result<BTreeMap<Uuid, Asset>> {
+    let ids: BTreeSet<Uuid> =
+        captures.flat_map(|capture| capture.copies.iter().map(|copy| copy.asset_id)).collect();
+    Ok(load_assets(conn, &ids)
+        .await?
+        .into_iter()
+        .filter(is_live)
+        .map(|asset| (asset.id, asset))
+        .collect())
+}
+
+fn live_of<'a>(capture: &ProjectCapture, live: &'a BTreeMap<Uuid, Asset>) -> Vec<&'a Asset> {
+    capture.copies.iter().filter_map(|copy| live.get(&copy.asset_id)).collect()
+}
+
+// ── Pending changes ──────────────────────────────────────────────────────────
+
+/// Frames of one session whose placement differs from the applied basis,
+/// by the change they make.
+#[derive(Default)]
+struct FrameChanges {
+    included: Vec<Uuid>,
+    excluded: Vec<Uuid>,
+    rejected: Vec<Uuid>,
+    restored: Vec<Uuid>,
+}
+
+impl FrameChanges {
+    /// The capture's placement moved from the basis: the Project's own edit
+    /// when its choice differs from the one the build saw, else the
+    /// Library's (D-W109).
+    fn record(&mut self, key: Uuid, now: bool, own_edit: bool) {
+        let list = match (own_edit, now) {
+            (true, true) => &mut self.included,
+            (true, false) => &mut self.excluded,
+            (false, true) => &mut self.restored,
+            (false, false) => &mut self.rejected,
+        };
+        list.push(key);
+    }
+}
+
+async fn pending_changes(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<PendingChange>> {
+    let desired = read_desired(conn, id).await?;
+    if !desired.lifecycle.is_open() {
+        return Ok(Vec::new());
+    }
+    let basis: Option<String> = sqlx::query_scalar(
+        "SELECT basis FROM view_manifests WHERE project_id = ?1 AND state = 'installed'",
+    )
+    .bind(id.to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some(basis) = basis else { return Ok(Vec::new()) };
+    let applied: ProjectBasis = from_json(&basis)?;
+    let keywords = match &desired.settings.keywords {
+        Some(keywords) => keywords.clone(),
+        None => read_workflow_settings(conn).await?.0.keywords,
+    };
+    let mut own = Vec::new();
+    if desired.settings.mode != applied.mode {
+        own.push(PendingChange::ModeSwitched { from: applied.mode, to: desired.settings.mode });
+    }
+    if keywords != applied.keywords {
+        own.push(PendingChange::KeywordsChanged { from: applied.keywords.clone(), to: keywords });
+    }
+    for group in &desired.groups {
+        match applied.groups.iter().find(|applied| applied.id == group.id) {
+            None => {
+                own.push(PendingChange::GroupAdded { group_id: group.id, name: group.name.clone() })
+            }
+            Some(applied) => {
+                if applied.name != group.name {
+                    own.push(PendingChange::GroupRenamed {
+                        group_id: group.id,
+                        from: applied.name.clone(),
+                        to: group.name.clone(),
+                    });
+                }
+                if applied.panel != group.panel {
+                    own.push(PendingChange::GroupPanelChanged {
+                        group_id: group.id,
+                        panel: group.panel,
+                    });
+                }
+            }
+        }
+    }
+    for group in &applied.groups {
+        if desired.groups.iter().all(|desired| desired.id != group.id) {
+            own.push(PendingChange::GroupRemoved { group_id: group.id, name: group.name.clone() });
+        }
+    }
+    let applied_sessions: BTreeMap<Uuid, (Uuid, &[BasisCapture])> = applied
+        .groups
+        .iter()
+        .flat_map(|group| {
+            group
+                .sessions
+                .iter()
+                .map(|session| (session.session_id, (group.id, session.captures.as_slice())))
+        })
+        .collect();
+    let live = live_copies(conn, desired.captures.iter()).await?;
+    let mut library = Vec::new();
+    for member in &desired.sessions {
+        let Some((group, captures)) = applied_sessions.get(&member.session_id) else {
+            own.push(PendingChange::SessionAdded {
+                session_id: member.session_id,
+                group_id: member.group_id,
+            });
+            continue;
+        };
+        if *group != member.group_id {
+            own.push(PendingChange::SessionMoved {
+                session_id: member.session_id,
+                from_group: *group,
+                to_group: member.group_id,
+            });
+        }
+        let mut frames = FrameChanges::default();
+        for capture in desired.captures.iter().filter(|c| c.session_id == member.session_id) {
+            let Some(was) = captures.iter().find(|was| was.capture_key == capture.capture_key)
+            else {
+                continue;
+            };
+            let now = capture.inclusion.admits(live_quality(&live_of(capture, &live)));
+            if now != was.included {
+                frames.record(capture.capture_key, now, capture.inclusion != was.inclusion);
+            }
+        }
+        let session_id = member.session_id;
+        if !frames.included.is_empty() {
+            own.push(PendingChange::FramesIncluded { session_id, capture_keys: frames.included });
+        }
+        if !frames.excluded.is_empty() {
+            own.push(PendingChange::FramesExcluded { session_id, capture_keys: frames.excluded });
+        }
+        if !frames.rejected.is_empty() {
+            library
+                .push(PendingChange::LibraryRejected { session_id, capture_keys: frames.rejected });
+        }
+        if !frames.restored.is_empty() {
+            library
+                .push(PendingChange::LibraryRestored { session_id, capture_keys: frames.restored });
+        }
+    }
+    for (session_id, (group, _)) in &applied_sessions {
+        if desired.sessions.iter().all(|member| member.session_id != *session_id) {
+            own.push(PendingChange::SessionRemoved { session_id: *session_id, group_id: *group });
+        }
+    }
+    for session in applied.groups.iter().flat_map(|group| &group.sessions) {
+        if desired.sessions.iter().any(|member| member.session_id == session.session_id) {
+            let current = admission::read_calibration(conn, session.session_id).await?;
+            library.extend(current.changes_since(&session.calibration));
+        }
+    }
+    for member in &desired.sessions {
+        library.extend(session_change(conn, member.session_id).await?);
+    }
+    own.extend(library);
+    Ok(own)
+}
+
+/// A held session the Library replaced or no longer has Ready.
+async fn session_change(
+    conn: &mut SqliteConnection,
+    session_id: Uuid,
+) -> Result<Option<PendingChange>> {
+    let intake = admission::read_admission(conn, session_id).await?.intake;
+    if intake.superseded {
+        let row = load_session_row(conn, session_id).await?;
+        let successors = successors_of(conn, &row).await?;
+        return Ok(Some(PendingChange::SessionRegrouped { session_id, successors }));
+    }
+    let readiness = intake.readiness();
+    Ok((readiness != SessionReadiness::Ready)
+        .then_some(PendingChange::SessionNotReady { session_id, readiness }))
+}
+
+// ── Suggestions and held frames, for progress too ────────────────────────────
+
+async fn suggestions(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<ProjectSuggestion>> {
+    Ok(suggested(conn, id)
+        .await?
+        .into_iter()
+        .map(|(candidate, admission)| ProjectSuggestion {
+            session_id: candidate.session_id,
+            subject_id: candidate.subject_id,
+            rig_id: candidate.rig_id,
+            basis: AdmissionBasis {
+                grouping_revision: admission.intake.grouping_revision,
+                calibration_generation: admission.calibration.generation,
+            },
+            blockers: admission.blockers,
+        })
+        .collect())
+}
+
+/// The Project's suggestions with their admission (PRJ-FR-09): current
+/// Ready sessions it doesn't hold whose confirmed Target is a subject and
+/// whose confirmed rig is on its rig list, with their live frames. An open
+/// Project only; settled or not.
+pub(super) async fn suggested(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+) -> Result<Vec<(ProjectCandidate, SessionAdmission)>> {
+    if !read_lifecycle(conn, id).await?.is_open() {
+        return Ok(Vec::new());
+    }
+    let held: Vec<String> =
+        sqlx::query_scalar("SELECT session_id FROM project_sessions WHERE project_id = ?1")
+            .bind(id.to_string())
+            .fetch_all(&mut *conn)
+            .await?;
+    let held: BTreeSet<Uuid> = held.iter().map(|id| parse_uuid(id)).collect::<Result<_>>()?;
+    let mut suggested = Vec::new();
+    for candidate in candidates(conn, id).await? {
+        if held.contains(&candidate.session_id) {
+            continue;
+        }
+        let admission = admission::read_admission(conn, candidate.session_id).await?;
+        if admission.intake.superseded || admission.intake.readiness() != SessionReadiness::Ready {
+            continue;
+        }
+        suggested.push((candidate, admission));
+    }
+    Ok(suggested)
+}
+
+/// A held capture with where the Project holds it.
+pub(super) struct HeldCapture {
+    pub capture: ProjectCapture,
+    pub group_id: Uuid,
+    /// The Project subject of its session's confirmed Target; `None` while
+    /// that Target is no subject or unconfirmed.
+    pub subject_id: Option<Uuid>,
+}
+
+/// Every capture the Project holds, with its group and subject.
+pub(super) async fn held_captures(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+) -> Result<Vec<HeldCapture>> {
+    let project = id.to_string();
+    let mut places: BTreeMap<Uuid, (Uuid, Option<Uuid>)> = BTreeMap::new();
+    for row in sqlx::query(
+        "SELECT ps.session_id, ps.group_id, (SELECT sub.id FROM associations a \
+         JOIN project_subjects sub ON sub.project_id = ps.project_id AND sub.target_id = a.target_id \
+         WHERE a.session_id = ps.session_id AND a.kind = 'target' AND a.state = 'confirmed') \
+         AS subject_id FROM project_sessions ps WHERE ps.project_id = ?1",
+    )
+    .bind(&project)
+    .fetch_all(&mut *conn)
+    .await?
+    {
+        places.insert(
+            parse_uuid(&row.try_get::<String, _>("session_id")?)?,
+            (
+                parse_uuid(&row.try_get::<String, _>("group_id")?)?,
+                row.try_get::<Option<String>, _>("subject_id")?
+                    .as_deref()
+                    .map(parse_uuid)
+                    .transpose()?,
+            ),
+        );
+    }
+    let mut held = Vec::new();
+    for (session, captures) in read_captures(conn, id).await? {
+        let Some(&(group_id, subject_id)) = places.get(&session) else { continue };
+        held.extend(captures.into_iter().map(|capture| HeldCapture {
+            capture,
+            group_id,
+            subject_id,
+        }));
+    }
+    Ok(held)
+}

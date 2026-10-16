@@ -16,6 +16,8 @@
 
 mod framing;
 
+pub(crate) use framing::framing_offset;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use time::{Date, Duration, Month, PrimitiveDateTime, Time, UtcOffset};

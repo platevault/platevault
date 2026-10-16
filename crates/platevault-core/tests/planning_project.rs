@@ -283,7 +283,7 @@ async fn gap_names_in_project_and_captured() {
             rotation_deg: None,
         })
         .collect();
-    let goal = |target_id, panel, goal| GoalInput { target_id, panel, goal };
+    let goal = |target_id, panel, goal| GoalInput { target_id, panel, group_id: None, goal };
     let project = catalog
         .create_project(&ProjectInput {
             name: "Summer nebulae".into(),

@@ -35,7 +35,7 @@ pub const OIII_FLATS: [&str; 2] =
     ["flats/OIII/Flat_OIII_001.fits", "flats/OIII/Flat_OIII_002.fits"];
 pub const PROJECT: &str = "NGC 7000";
 
-fn meta(
+pub fn meta(
     kind: &str,
     filter: Option<&str>,
     exposure: f64,
@@ -60,7 +60,7 @@ fn meta(
     }
 }
 
-fn lights() -> Vec<(String, CaptureMetadata)> {
+pub fn lights() -> Vec<(String, CaptureMetadata)> {
     let mut frames: Vec<(String, CaptureMetadata)> = HA
         .iter()
         .map(|path| ((*path).to_owned(), meta("LIGHT", Some("Ha"), 300.0, 100.0, "2026-10-12")))
@@ -142,7 +142,7 @@ fn fits(relative: &str, metadata: &CaptureMetadata) -> Vec<u8> {
     bytes
 }
 
-async fn scan(
+pub async fn scan(
     library: &Library,
     location: &Location,
     root: &Path,
@@ -441,7 +441,7 @@ impl World {
     }
 
     /// The raw set pin of the calibration session holding `path`.
-    async fn raw_set(&self, path: &str, night: &str) -> PinState {
+    pub async fn raw_set(&self, path: &str, night: &str) -> PinState {
         let session = self.session_of(&self.calibration, path).await;
         let mut files = Vec::new();
         let mut assets = self.catalog().session(session.id).await.unwrap().assets;
@@ -510,9 +510,8 @@ impl World {
     }
 
     /// Mark the light session holding `path` Usable and reviewed, pin its
-    /// night's flats and the darks, set bias No, and hold it in the group
-    /// with every capture, as the membership writer does.
-    pub async fn hold(&self, path: &str) -> Uuid {
+    /// night's flats and the darks and set bias No: it may join a Project.
+    pub async fn admissible(&self, path: &str) -> Session {
         let session = self.session_of(&self.captures, path).await;
         self.mark(&session, Quality::Usable).await;
         let session = self.session_of(&self.captures, path).await;
@@ -539,6 +538,14 @@ impl World {
         self.pin(session.id, "flat", &self.raw_set(flats, night).await).await;
         self.pin(session.id, "dark", &self.raw_set(DARKS[0], "2026-10-12").await).await;
         self.pin(session.id, "bias", &PinState::Declined { origin: DeclineOrigin::User }).await;
+        session
+    }
+
+    /// [`Self::admissible`], then hold the session in the group with every
+    /// capture, as the membership writer does.
+    pub async fn hold(&self, path: &str) -> Uuid {
+        let session = self.admissible(path).await;
+        let id = session.id.to_string();
         self.sql(
             "INSERT INTO project_sessions (project_id, session_id, group_id, placement, \
              grouping_revision, calibration_generation, added_at) \

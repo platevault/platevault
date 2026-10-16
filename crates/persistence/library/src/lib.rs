@@ -211,8 +211,14 @@ mod project_operations;
 // leftovers (project_view.sql).
 mod project_view;
 pub use project_view::{ApplyInputs, ApplyReservation, ApplyReserved, SourcePath};
-// Intake reads the F4 workflow settings' framing margins.
+// A Project's inputs: whole-session membership through the admission rule,
+// groups, frame choices, View settings, pending changes and suggestions
+// (project_inputs.sql).
+mod project_inputs;
+pub use project_inputs::{NewGroup, SessionAdd};
+// The F4 workflow settings: read by intake and matching, saved by Settings.
 mod workflow_settings;
+pub use workflow_settings::WORKFLOW_SETTINGS_ID;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

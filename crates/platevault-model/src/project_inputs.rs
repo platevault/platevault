@@ -22,8 +22,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    comparison_key, validate_copies, ApplicableQuality, FieldOfView, InputKind, LibraryError,
-    NativePath, ObservationFingerprint, OpticsSignature, ProjectLifecycle, Revision, SettledPin,
+    comparison_key, validate_copies, AdmissionBasis, AdmissionBlocker, ApplicableQuality,
+    FieldOfView, InputKind, LibraryError, NativePath, ObservationFingerprint, OpticsSignature,
+    ProjectLifecycle, Revision, SessionFraming, SessionReadiness, SettledPin,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -214,15 +215,19 @@ pub enum GroupOrigin {
     User,
 }
 
-/// A group's framing: ICRS centre, rotation and field. A missing rotation is
-/// unknown, never zero.
+/// A group's framing: its anchor session's ICRS centre, rotations and field
+/// (D-W107). The mechanical rotator angle (ROTATANG) and the sky angle stay
+/// apart because they compare differently: ROTATANG modulo 360°, the sky
+/// angle modulo 180°. A missing angle is unknown, never zero.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FramingEvidence {
     pub ra_deg: f64,
     pub dec_deg: f64,
     #[serde(default)]
-    pub rotation_deg: Option<f64>,
+    pub rotator_deg: Option<f64>,
+    #[serde(default)]
+    pub sky_angle_deg: Option<f64>,
     #[serde(default)]
     pub field: Option<FieldOfView>,
 }
@@ -239,9 +244,12 @@ impl FramingEvidence {
         if !(dec.is_finite() && (-90.0..=90.0).contains(&dec)) {
             return Err(invalid(format!("framing decDeg {dec} must be in [-90, 90]")));
         }
-        if let Some(rotation) = self.rotation_deg {
-            if !(rotation.is_finite() && (0.0..360.0).contains(&rotation)) {
-                return Err(invalid(format!("framing rotationDeg {rotation} must be in [0, 360)")));
+        for (name, angle) in [("rotatorDeg", self.rotator_deg), ("skyAngleDeg", self.sky_angle_deg)]
+        {
+            if let Some(angle) = angle {
+                if !(angle.is_finite() && (0.0..360.0).contains(&angle)) {
+                    return Err(invalid(format!("framing {name} {angle} must be in [0, 360)")));
+                }
             }
         }
         if let Some(field) = self.field {
@@ -251,6 +259,18 @@ impl FramingEvidence {
             }
         }
         Ok(())
+    }
+}
+
+impl From<&SessionFraming> for FramingEvidence {
+    fn from(framing: &SessionFraming) -> Self {
+        Self {
+            ra_deg: framing.ra_deg,
+            dec_deg: framing.dec_deg,
+            rotator_deg: framing.rotator_deg,
+            sky_angle_deg: framing.sky_angle_deg,
+            field: framing.field,
+        }
     }
 }
 
@@ -349,6 +369,56 @@ impl CaptureInclusion {
     pub const fn is_included(self) -> bool {
         matches!(self, Self::Included { .. })
     }
+
+    /// A capture as its session joins: Usable frames are included, and
+    /// every other one starts visibly excluded until the user includes it
+    /// (VSEL-FR-15).
+    #[must_use]
+    pub fn on_add(quality: ApplicableQuality) -> Self {
+        if quality == ApplicableQuality::Usable {
+            Self::Included { basis: InclusionBasis::Usable }
+        } else {
+            Self::Excluded { basis: ExclusionBasis::Unusable }
+        }
+    }
+
+    /// The user's choice for a capture whose live quality is `quality`.
+    #[must_use]
+    pub fn chosen(choice: FrameChoice, quality: ApplicableQuality) -> Self {
+        match choice {
+            FrameChoice::Exclude => Self::Excluded { basis: ExclusionBasis::User },
+            FrameChoice::Include => Self::Included { basis: InclusionBasis::Explicit },
+            FrameChoice::FollowLibrary => Self::on_add(quality),
+        }
+    }
+
+    /// Whether the next build places the capture, with `live` its live
+    /// logical quality (`None` when no copy is live). An explicit choice
+    /// holds either way; a capture that follows the Library is in only while
+    /// it is Usable, so a later Library rejection removes it and a
+    /// restoration adds it back; a capture with no live copy is never placed
+    /// (VSEL-FR-15, D-W109).
+    #[must_use]
+    pub fn admits(self, live: Option<ApplicableQuality>) -> bool {
+        match (self, live) {
+            (_, None) | (Self::Excluded { basis: ExclusionBasis::User }, _) => false,
+            (Self::Included { basis: InclusionBasis::Explicit }, Some(_)) => true,
+            (_, Some(quality)) => quality == ApplicableQuality::Usable,
+        }
+    }
+}
+
+/// What the user chooses for held frames (VSEL-FR-10, VSEL-FR-15). Files
+/// stay on disk and library quality is untouched.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameChoice {
+    /// Exclude from this Project only.
+    Exclude,
+    /// Include whatever the Library says, Unusable frames too.
+    Include,
+    /// Follow the Library again: Usable frames in, the others out.
+    FollowLibrary,
 }
 
 /// One logical capture (D16) the Project holds, keyed by its smallest copy's
@@ -455,6 +525,21 @@ impl ProjectDesired {
     }
 }
 
+/// A Ready session a Project suggests and doesn't hold (PRJ-FR-09): its
+/// confirmed Target is one of the Project's subjects and its confirmed rig is
+/// on the Project's rig list. A suggestion is never added by itself.
+/// `blockers` names what keeps it out for now, such as calibration that isn't
+/// settled ("Choose its flats first"); with none it can be added at `basis`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSuggestion {
+    pub session_id: Uuid,
+    pub subject_id: Uuid,
+    pub rig_id: Uuid,
+    pub basis: AdmissionBasis,
+    pub blockers: Vec<AdmissionBlocker>,
+}
+
 // ── Pending changes ──────────────────────────────────────────────────────────
 
 /// Where a pending change came from (VSEL-FR-12).
@@ -519,8 +604,8 @@ pub enum PendingChange {
         from: GroupKeywords,
         to: GroupKeywords,
     },
-    /// Frames the Library rejected since the View was applied: a pending
-    /// removal.
+    /// Frames the Library rejected, or whose every copy left the Library
+    /// (Trashed), since the View was applied: a pending removal.
     LibraryRejected {
         session_id: Uuid,
         capture_keys: Vec<Uuid>,
@@ -538,6 +623,22 @@ pub enum PendingChange {
         from: SettledPin,
         to: Option<SettledPin>,
     },
+    /// A held session is no longer Ready in the Library: its review was
+    /// reopened, or its Target or rig association changed (LIB-FR-20,
+    /// VSEL-FR-12). The Project keeps it; the marks a reopened review
+    /// changes arrive as [`Self::LibraryRejected`] and
+    /// [`Self::LibraryRestored`].
+    SessionNotReady {
+        session_id: Uuid,
+        readiness: SessionReadiness,
+    },
+    /// A regroup in the Library replaced a held session. The Project keeps
+    /// the session and the exact frames it chose and never moves to the
+    /// successors by itself; the user removes it and adds a successor.
+    SessionRegrouped {
+        session_id: Uuid,
+        successors: Vec<Uuid>,
+    },
 }
 
 impl PendingChange {
@@ -546,7 +647,9 @@ impl PendingChange {
         match self {
             Self::LibraryRejected { .. }
             | Self::LibraryRestored { .. }
-            | Self::CalibrationChanged { .. } => ChangeSource::Library,
+            | Self::CalibrationChanged { .. }
+            | Self::SessionNotReady { .. }
+            | Self::SessionRegrouped { .. } => ChangeSource::Library,
             _ => ChangeSource::Project,
         }
     }

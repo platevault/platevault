@@ -170,6 +170,7 @@ async fn exposure_mismatch_warns_per_subject_and_channel() {
         goals: vec![GoalInput {
             target_id: target.candidate.id,
             panel: None,
+            group_id: None,
             goal: GoalSpec::Integration { channel: Some("Ha".into()), goal_seconds: 36_000 },
         }],
     };

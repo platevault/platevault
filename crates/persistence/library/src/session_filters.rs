@@ -4,9 +4,10 @@
 //! The Sessions filters "Needs a Target", "Not in any Project" and "Needs
 //! calibration", their counts, Create Project prefill and Add to Project
 //! (LIB-FR-17, PRJ-FR-19, D-W59). The filters are derived on read from
-//! current associations, Project subjects and rigs, run memberships and
-//! session calibration. Nothing here writes a run row; Add to Project writes
-//! only Project rows and adds one to the Project revision.
+//! current associations, the sessions Projects hold (`project_sessions`) and
+//! session calibration. Add to Project here writes only the subject and rig
+//! rows; a membership add appends them in its own transaction
+//! ([`append_target_and_rig`]).
 
 use std::collections::HashSet;
 
@@ -29,20 +30,10 @@ use super::{
 const CONFIRMED_TARGET: &str = "SELECT session_id FROM associations \
      WHERE kind = 'target' AND state = 'confirmed' AND target_id IS NOT NULL";
 
-/// Sessions in a Project: a candidate of any Project (its confirmed Target is
-/// a subject and its confirmed rig one of that Project's rigs), or selected in
-/// the latest committed revision of any run outside the Trash, as
-/// `Catalog::project_members` reads membership.
-const IN_A_PROJECT: &str = "SELECT ta.session_id FROM associations ta \
-     JOIN project_subjects ps ON ps.target_id = ta.target_id \
-     JOIN associations ea ON ea.session_id = ta.session_id AND ea.kind = 'equipment' \
-     AND ea.state = 'confirmed' \
-     JOIN project_rigs pr ON pr.project_id = ps.project_id AND pr.equipment_id = ea.equipment_id \
-     WHERE ta.kind = 'target' AND ta.state = 'confirmed' \
-     UNION SELECT c.session_id FROM views v \
-     JOIN view_revisions r ON r.view_id = v.id AND r.revision = v.revision \
-     JOIN view_session_choices c ON c.revision_row = r.id AND c.state = 'selected' \
-     WHERE v.trashed_at IS NULL";
+/// Sessions a Project holds (PRJ-FR-19): a session is in no Project until
+/// one adds it, whatever its lifecycle; matching a Project's subjects and
+/// rigs only makes it a suggestion.
+const IN_A_PROJECT: &str = "SELECT DISTINCT session_id FROM project_sessions";
 
 impl Catalog {
     /// The lengths of the "Needs a Target", "Not in any Project" and "Needs
@@ -290,8 +281,42 @@ async fn addition(
     ))
 }
 
+/// Inside a membership add (PRJ-FR-02, PRJ-FR-19): the session's confirmed
+/// Target becomes the Project's last subject unless it is one, and its
+/// confirmed rig the last rig when the Project lacks it. The caller commits
+/// the Project revision.
+pub async fn append_target_and_rig(
+    conn: &mut SqliteConnection,
+    project_id: Uuid,
+    session_id: Uuid,
+) -> Result<ProjectAddition> {
+    let basis = SessionBasis::read(conn, session_id).await?;
+    let addition = addition(conn, &basis, project_id).await?;
+    append(conn, &addition).await?;
+    Ok(addition)
+}
+
 /// Append the subject and rig the addition names and commit `next`.
 async fn apply(conn: &mut SqliteConnection, addition: &ProjectAddition, next: u64) -> Result<()> {
+    append(conn, addition).await?;
+    let project = addition.project_id.to_string();
+    let updated = sqlx::query(
+        "UPDATE projects SET revision = ?2, updated_at = ?3 WHERE id = ?1 AND revision = ?4",
+    )
+    .bind(&project)
+    .bind(db_revision(next)?)
+    .bind(now()?)
+    .bind(db_revision(addition.project_revision)?)
+    .execute(&mut *conn)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(conflict(addition.project_id, addition.project_revision));
+    }
+    Ok(())
+}
+
+/// Append the subject and rig the addition names.
+async fn append(conn: &mut SqliteConnection, addition: &ProjectAddition) -> Result<()> {
     let project = addition.project_id.to_string();
     if addition.adds_subject {
         sqlx::query(
@@ -314,18 +339,6 @@ async fn apply(conn: &mut SqliteConnection, addition: &ProjectAddition, next: u6
         .bind(rig.id.to_string())
         .execute(&mut *conn)
         .await?;
-    }
-    let updated = sqlx::query(
-        "UPDATE projects SET revision = ?2, updated_at = ?3 WHERE id = ?1 AND revision = ?4",
-    )
-    .bind(&project)
-    .bind(db_revision(next)?)
-    .bind(now()?)
-    .bind(db_revision(addition.project_revision)?)
-    .execute(&mut *conn)
-    .await?;
-    if updated.rows_affected() != 1 {
-        return Err(conflict(addition.project_id, addition.project_revision));
     }
     Ok(())
 }

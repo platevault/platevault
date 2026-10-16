@@ -47,6 +47,7 @@ pub fn ha_frames(target: Uuid, goal_frames: u64) -> GoalInput {
     GoalInput {
         target_id: target,
         panel: None,
+        group_id: None,
         goal: GoalSpec::FrameCount { channel: Some("Ha".into()), goal_frames },
     }
 }

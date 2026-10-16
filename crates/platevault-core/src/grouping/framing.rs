@@ -29,7 +29,7 @@ use target_match::{Field, Optics};
 use uuid::Uuid;
 
 use super::{capture_instant, Frame};
-use crate::{FieldOfView, FramingMargins, SessionFraming};
+use crate::{FieldOfView, FramingEvidence, FramingMargins, SessionFraming};
 
 const NO_POINTING: &str =
     "framing: no pointing (RA/DEC or a plate solve) recorded; these lights stay in one session";
@@ -88,6 +88,39 @@ impl<'a> Evidence<'a> {
         }
         Some(separation)
     }
+}
+
+impl Evidence<'_> {
+    /// A recorded framing as evidence: a session's anchor or a Project
+    /// group's.
+    fn of_record(framing: &FramingEvidence) -> Self {
+        Self {
+            centre: centre(Some(framing.ra_deg), Some(framing.dec_deg)),
+            rotator_deg: angle(framing.rotator_deg),
+            sky_angle_deg: angle(framing.sky_angle_deg),
+            field: framing.field.and_then(|field| {
+                Field::from_fov(
+                    sky::Angle::from_degrees(field.width_deg),
+                    sky::Angle::from_degrees(field.height_deg),
+                )
+                .ok()
+            }),
+            label: None,
+        }
+    }
+}
+
+/// The angular distance of `other` from the `anchor` framing when it lies
+/// within the margins, by the same rule intake splits sessions with: a
+/// Project groups its sessions by framing with the margins the night was
+/// split with (PRJ-FR-31, LIB-FR-04). The anchor's field sets the centre
+/// margin.
+pub(crate) fn framing_offset(
+    anchor: &FramingEvidence,
+    other: &FramingEvidence,
+    margins: &FramingMargins,
+) -> Option<f64> {
+    Evidence::of_record(anchor).offset(&Evidence::of_record(other), margins)
 }
 
 fn centre(ra_deg: Option<f64>, dec_deg: Option<f64>) -> Option<sky::Equatorial> {

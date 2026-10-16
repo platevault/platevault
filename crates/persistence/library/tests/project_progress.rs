@@ -71,6 +71,7 @@ fn integration(target: Uuid, channel: &str, goal_seconds: u64) -> GoalInput {
     GoalInput {
         target_id: target,
         panel: None,
+        group_id: None,
         goal: GoalSpec::Integration { channel: Some(channel.into()), goal_seconds },
     }
 }
@@ -79,12 +80,18 @@ fn frame_count(target: Uuid, channel: &str, goal_frames: u64) -> GoalInput {
     GoalInput {
         target_id: target,
         panel: None,
+        group_id: None,
         goal: GoalSpec::FrameCount { channel: Some(channel.into()), goal_frames },
     }
 }
 
 fn bar(target: Uuid, criterion: QualityCriterion) -> GoalInput {
-    GoalInput { target_id: target, panel: None, goal: GoalSpec::QualityBar { criterion } }
+    GoalInput {
+        target_id: target,
+        panel: None,
+        group_id: None,
+        goal: GoalSpec::QualityBar { criterion },
+    }
 }
 
 struct World {

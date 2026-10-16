@@ -173,6 +173,7 @@ fn basis() -> ProjectBasis {
                 captures: vec![BasisCapture {
                     capture_key: id(30),
                     included: true,
+                    inclusion: CaptureInclusion::Included { basis: InclusionBasis::Usable },
                     copies: vec![copy(30)],
                 }],
                 calibration: settled_calibration(id(20)).settled().unwrap(),

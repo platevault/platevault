@@ -23,9 +23,9 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    require_sha256, validate_copies, CopyBasis, CorrectedField, EntryEvidence, FileIdentity,
-    GroupKeywords, GroupName, InputKind, LibraryError, NativePath, ObservationFingerprint,
-    Revision, SettledCalibration, ViewMode,
+    require_sha256, validate_copies, CaptureInclusion, CopyBasis, CorrectedField, EntryEvidence,
+    FileIdentity, GroupKeywords, GroupName, InputKind, LibraryError, NativePath,
+    ObservationFingerprint, Revision, SettledCalibration, ViewMode,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -34,12 +34,17 @@ fn invalid(message: String) -> LibraryError {
 
 // ── Basis ────────────────────────────────────────────────────────────────────
 
-/// One capture of the basis, included or excluded, with its copy bases.
+/// One capture of the basis, included or excluded, with its copy bases and
+/// the Project's own choice the build saw. `included` is that choice
+/// resolved against the live Library; keeping both tells a later pending
+/// change apart: the Project's edit when the choice differs, the Library's
+/// when only the Library moved (D-W109).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisCapture {
     pub capture_key: Uuid,
     pub included: bool,
+    pub inclusion: CaptureInclusion,
     pub copies: Vec<CopyBasis>,
 }
 
