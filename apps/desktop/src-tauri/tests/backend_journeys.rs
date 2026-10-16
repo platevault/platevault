@@ -86,7 +86,10 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// The plan states `plans.apply.status` can settle in.
 const TERMINAL_PLAN_STATES: [&str; 4] = ["applied", "partially_applied", "failed", "cancelled"];
-
+/// The deprecated protection-default snapshot is process-global and unkeyed
+/// by database. The inbox-apply, cleanup, and archive journeys exercise that
+/// DB-backed path, so serialize those three and reset the snapshot via the
+/// normal settings use case before asserting migration defaults.
 // ─── Harness ────────────────────────────────────────────────────────────────
 
 /// The managed state `desktop_shell`'s `boot` gives every command, without a
@@ -146,6 +149,31 @@ impl Backend {
 
     fn watchers(&self) -> State<'_, ArtifactWatcherRegistry> {
         self.app.state::<ArtifactWatcherRegistry>()
+    }
+}
+
+/// Reset the DB-backed protection defaults while holding
+/// `PROTECTION_DEFAULTS_TEST_LOCK`. The production compatibility cache is
+/// process-global and unkeyed by database; writing each value through the
+/// normal use case invalidates it after commit. The final DB values match the
+/// migration defaults used by these journeys.
+async fn reset_protection_defaults(be: &Backend) {
+    let state = be.app.state::<AppState>();
+    for (key, away, expected) in [
+        ("defaultProtection", json!("unprotected"), json!("protected")),
+        ("blockPermanentDelete", json!(false), json!(true)),
+    ] {
+        for value in [away, expected] {
+            app_core::protection::set_global_protection_default(
+                state.repo.pool(),
+                &state.bus,
+                "global",
+                key,
+                value,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("reset protection default {key}: {error}"));
+        }
     }
 }
 
@@ -388,8 +416,7 @@ async fn first_run_resolve_create_project() {
         "a fresh DB must omit the optional completedAt field: {first_run}"
     );
     assert_eq!(
-        first_run["lastStep"],
-        "source_folders",
+        first_run["lastStep"], "source_folders",
         "a fresh DB must report the initial setup step: {first_run}"
     );
 
@@ -477,7 +504,9 @@ async fn first_run_resolve_create_project() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[allow(clippy::too_many_lines)]
 async fn ingestion_sessions_search() {
+    let _protection_defaults_lock = PROTECTION_DEFAULTS_TEST_LOCK.lock().await;
     let be = Backend::start().await;
+    reset_protection_defaults(&be).await;
 
     let root_dir = tempfile::tempdir().expect("root dir");
     let root_path = root_dir.path().to_string_lossy().into_owned();
@@ -756,6 +785,7 @@ async fn lifecycle_integrity() {
 /// Was `journeys.rs::cleanup_plan_review`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cleanup_plan_review() {
+    let _protection_defaults_lock = PROTECTION_DEFAULTS_TEST_LOCK.lock().await;
     let be = Backend::start().await;
 
     // The artifact watcher's attach-time reconciliation needs the project's
@@ -1028,11 +1058,13 @@ async fn setup_archived_project(be: &Backend, label: &str) -> (String, tempfile:
 /// interactive desktop, and the real primitive keeps its own unit coverage.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn archive_lifecycle_apply_trash_permanent_delete() {
+    let _protection_defaults_lock = PROTECTION_DEFAULTS_TEST_LOCK.lock().await;
     let _fake_trash = fs_executor::ops::trash_op::fake::FakeTrashGuard::new();
     // Process-global seam. This is the only test in this binary using it; no
     // other backend journey reaches archive trash, so tokio worker threads do
     // not race another test into this fake or the real OS trash path.
     let be = Backend::start().await;
+    reset_protection_defaults(&be).await;
 
     // ── archive.send_to_trash really removes the file ──────────────────────
     let (plan_a, dir_a) = setup_archived_project(&be, "trash").await;
