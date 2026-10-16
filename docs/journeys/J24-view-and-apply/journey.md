@@ -94,7 +94,7 @@ Done means:
 ### S8b — Refuse Apply while a pinned flat file changed {#S8b}
 
 - **Do:** Close the sheet. Outside PlateVault, overwrite the 28 Sep session's pinned master flat with its P9 variant and restore its mtime. Open the 28 Sep session in Sessions and read the **Needs calibration** filter, then open **Apply…** again. Restore the flat's P9 backup, read **Needs calibration** again and reopen **Apply…**.
-- **Expect:** The session still shows the master flat pinned and reads it as changed, with **Reassign…**, and **Needs calibration** lists it. The sheet names the changed flat with a link to reassign it on the session, and Apply is refused. After the backup is restored, **Needs calibration** no longer lists the session, the reopened sheet names no changed flat, and Apply is available.
+- **Expect:** The session still shows the master flat pinned and reads it as changed, with **Reassign…**, and **Needs calibration** lists it. The sheet names the changed flat with a link to reassign it on the session, and Apply is refused. After the backup is restored, the session leaves **Needs calibration**, the reopened sheet names no changed flat, and Apply is available.
 - **Expect (negative):** No other flat is pinned or placed by itself, and the pin is not removed. The View and `View (previous)/` stay unchanged while the flat differs, and the Project keeps the session.
 - **Trace:** VSEL-FR-14 · CAL-FR-08 · LIB-FR-17, LIB-FR-23 · VSEL-AC-35, CAL-AC-29, LIB-AC-33 · D-W113
 

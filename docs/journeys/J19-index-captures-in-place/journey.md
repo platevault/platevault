@@ -167,7 +167,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S10a — Confirm the suggested flats for 26 Sep {#S10a}
 
 - **Do:** Open the 26 Sep session's details and read its darks, flats and bias. On flats, confirm the suggested OIII flats.
-- **Expect:** Before the confirmation, darks and bias read pinned, and flats read suggested with the OIII flats' capture date, 30 Sep, and their evidence. After it, flats read pinned to the OIII flats, so the 26 Sep session's calibration is settled. Each kind offers **Reassign…**. **Needs calibration** then lists 4 sessions, no longer 26 Sep.
+- **Expect:** Before the confirmation, darks and bias read pinned, and flats read suggested with the OIII flats' capture date, 30 Sep, and their evidence. After it, flats read pinned to the OIII flats, so the 26 Sep session's calibration is settled. Each kind offers **Reassign…**. **Needs calibration** then lists 4 sessions, without 26 Sep.
 - **Expect (negative):** Indexing never confirmed the suggestion by itself. Confirming changes no source byte (P5), no file in `Astro-T7/Calibration` and no other session's calibration.
 - **Trace:** LIB-FR-17, LIB-FR-23 · CAL-FR-05, CAL-FR-20 · D-W102, D-W105
 
