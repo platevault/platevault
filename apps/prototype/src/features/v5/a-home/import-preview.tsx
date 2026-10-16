@@ -98,7 +98,7 @@ function folderOf(path: string): string {
   return path.slice(0, path.lastIndexOf("/"))
 }
 
-/** Import…'s confirm: every file it writes, by destination folder, and what Move does with the sources. */
+/** Import…'s confirm: every file it writes, by destination folder; the summary's totals say where they go, that each copy is verified, and where Move sends the sources. */
 export function importConfirm(m: Messages, plan: ImportPlan, draft: ImportDraft): ConfirmSpec {
   const count = plan.items.length
   const frames = formatCount(count)
@@ -107,9 +107,9 @@ export function importConfirm(m: Messages, plan: ImportPlan, draft: ImportDraft)
   return {
     title: move ? m.import_move_frames_title({ count, frames }) : m.import_import_frames_title({ count, frames }),
     summary: [
-      m.import_copies_into({ count, frames, size: formatBytes(plan.bytes), locations }),
+      m.import_copies_into({ size: formatBytes(plan.bytes), locations }),
       m.import_verifies_copies(),
-      ...(move ? [plan.volume ? m.import_sends_to_trash({ count, sources: frames, volume: plan.volume.name }) : m.import_sends_source_to_trash({ count, sources: frames })] : []),
+      ...(move ? [plan.volume ? m.import_sends_to_trash({ volume: plan.volume.name }) : m.import_sends_source_to_trash()] : []),
     ].join(" · "),
     groups: plan.groups.map((g) => ({
       label: `${g.location.displayName}/${g.relative}`,
@@ -148,7 +148,8 @@ function ModeSection({ plan, draft, editable }: { plan: ImportPlan; draft: Impor
           { value: "move", label: m.import_move(), disabled: !plan.move.allowed },
         ]}
         onChange={(mode) => setDraft({ mode })}
-        description={draft.mode === "move" ? m.import_move_detail() : plan.move.allowed ? m.import_copy_detail() : `${m.import_copy_detail()} · ${m.import_move_blocked({ reason: plan.move.reason ?? "" })}`}
+        // Move's consequence (sources to the OS Trash) is in Import…'s confirm; only a refused Move says why here.
+        description={plan.move.allowed ? undefined : m.import_move_blocked({ reason: plan.move.reason ?? "" })}
       />
     </Section>
   )
@@ -286,7 +287,7 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
       items={[
         { label: m.import_column_folder(), value: `${g.location.displayName}/${g.relative}` },
         { label: m.import_column_into(), value: routeLabel(m, g.route) },
-        ...(g.fallbacks.length > 0 ? [{ label: m.import_fallback(), value: m.import_fallback_used({ tokens: g.fallbacks.map((f) => `{${f}}`).join(", ") }) }] : []),
+        ...(g.fallbacks.length > 0 ? [{ label: m.import_fallback(), value: g.fallbacks.map((f) => `{${f}}`).join(", "), mono: true }] : []),
         ...(g.session && g.session.unpointed > 0
           ? [
               {
@@ -381,7 +382,7 @@ function CalibrationSection({ state, plan, draft, preview, editable }: { state: 
     { id: "state", header: m.import_column_state(), sortValue: (f) => Number(f.online), cell: (f) => <StatusBadge kind="availability" value={f.online ? "online" : "offline"} /> },
   ]
   return (
-    <Section title={m.nav_calibration()} description={m.import_calibration_description()} actions={actions.length > 0 ? <ActionBar actions={actions} /> : undefined}>
+    <Section title={m.nav_calibration()} actions={actions.length > 0 ? <ActionBar actions={actions} /> : undefined}>
       {extras.length > 0 ? (
         <DataTable
           label={m.import_added_folders()}
@@ -410,7 +411,6 @@ function CalibrationSection({ state, plan, draft, preview, editable }: { state: 
         open={adding}
         onOpenChange={(open) => !open && setAdding(false)}
         title={m.import_add_calibration_title()}
-        description={m.import_add_calibration_description()}
         initialPath={plan.sourcePath}
         chooseVerb={m.verb_add()}
         onChoose={(path) => {

@@ -134,7 +134,9 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
 /**
  * Review's notice when Projects hold the session (VSEL-FR-12, LIB-AC-30):
  * marks are never refused; open Projects get them as pending changes until
- * their next Apply, and Closed ones keep their Close snapshot.
+ * their next Apply, and Closed ones keep their Close snapshot. The notice
+ * names each group as a label and its Projects: "Pending changes: M 42 ·
+ * Close snapshot kept: Rosette".
  */
 function holdersNotice(m: Messages, state: PrototypeState, session: Session): PageNotice | null {
   const holders = projectsHolding(state.catalog, session.id)
@@ -144,7 +146,7 @@ function holdersNotice(m: Messages, state: PrototypeState, session: Session): Pa
   return {
     tone: "info",
     title: m.intake_review_held_title({ count: holders.length }),
-    detail: [...(open.length > 0 ? [m.intake_review_held_open({ names: open.join(", ") })] : []), ...(closed.length > 0 ? [m.intake_review_held_closed({ names: closed.join(", ") })] : [])].join(" "),
+    detail: [...(open.length > 0 ? [m.intake_review_held_open({ names: open.join(", ") })] : []), ...(closed.length > 0 ? [m.intake_review_held_closed({ names: closed.join(", ") })] : [])].join(" · "),
   }
 }
 

@@ -867,13 +867,12 @@
   "session_column_copies": "Copies",
   "session_column_sha": "SHA-256",
   "session_copy_path": "Copy path",
-  "session_source_of": "Source of {value}",
   "session_header_source": "Header {keyword}",
   "session_observing_night": "Observing night",
   "session_started": "Started",
   "session_ended": "Ended",
   "session_frame_type": "Frame type",
-  "session_typed_at_import": "Typed at import; the header has none",
+  "session_typed_at_import": "Typed at import",
   "session_filter": "Filter",
   "session_camera": "Camera",
   "session_telescope": "Telescope",
@@ -901,7 +900,7 @@
   "import_cant_import": "Can't import",
   "import_choose_source": "Choose a source",
   "import_move": "Move",
-  "import_verifies_copies": "Verifies each copy (SHA-256)",
+  "import_verifies_copies": "SHA-256 verified",
   "import_selected": "Selected",
   "import_new": "Import new",
   "import_all": "Import all",
@@ -915,7 +914,6 @@
   "import_choose_folder_description": "Device, folder or mounted share",
   "import_from_verb": "Import from",
   "import_column_folder": "Folder",
-  "import_fallback_used": "No value for {tokens}: its fallback is used",
   "import_fallback": "Fallback",
   "import_column_type": "Type",
   "import_type_typed": "{type} (typed)",
@@ -985,57 +983,9 @@
       }
     }
   ],
-  "import_copies_into": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "input size",
-        "input locations",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Copies {frames} frame ({size}) into {locations}",
-        "countPlural=*": "Copies {frames} frames ({size}) into {locations}"
-      }
-    }
-  ],
-  "import_sends_to_trash": [
-    {
-      "declarations": [
-        "input count",
-        "input sources",
-        "input volume",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Sends {sources} verified source on {volume} to the OS Trash",
-        "countPlural=*": "Sends {sources} verified sources on {volume} to the OS Trash"
-      }
-    }
-  ],
-  "import_sends_source_to_trash": [
-    {
-      "declarations": [
-        "input count",
-        "input sources",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Sends {sources} verified source on the source to the OS Trash",
-        "countPlural=*": "Sends {sources} verified sources on the source to the OS Trash"
-      }
-    }
-  ],
+  "import_copies_into": "{size} → {locations}",
+  "import_sends_to_trash": "Sources on {volume} → OS Trash",
+  "import_sends_source_to_trash": "Sources → OS Trash",
   "import_file_count": [
     {
       "declarations": [
@@ -1057,12 +1007,10 @@
   "import_duplicates": "Duplicates",
   "import_match_sha": "SHA-256 of a library frame",
   "import_name_taken": "Name taken",
-  "import_name_taken_detail": "holds different bytes; nothing is overwritten",
+  "import_name_taken_detail": "Different bytes",
   "import_library_frames": "Library frames · {count}",
   "import_copy_or_move": "Copy or Move",
   "import_copy": "Copy",
-  "import_copy_detail": "verified by SHA-256; the source stays",
-  "import_move_detail": "verified by SHA-256, then the source goes to the OS Trash",
   "import_imported": "Imported",
   "import_more": "Import more",
   "import_show_in_calibration": "Show in Calibration",
@@ -4608,9 +4556,6 @@
   "shell_quit_app": "Quit PlateVault",
   "onboarding_walk_sources_title": "Sources",
   "onboarding_walk_sources": "Home · Projects · Targets · Library",
-  "onboarding_walk_issues": "Everything that needs attention",
-  "onboarding_walk_next_title": "Next",
-  "onboarding_walk_next": "Next step per Project",
   "onboarding_walk_status_title": "Status",
   "onboarding_walk_status": "Work · Issues · Notifications",
   "onboarding_walk_targets": "Targets · Catalogues · Plan",
@@ -6046,20 +5991,18 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame has no RA/DEC, so it stays in this session",
-        "countPlural=*": "{count} frames have no RA/DEC, so they stay in this session"
+        "countPlural=one": "{count} frame · kept in this session",
+        "countPlural=*": "{count} frames · kept in this session"
       }
     }
   ],
   "import_in_this_import": "in this import",
   "import_add_calibration_files_ellipsis": "Add calibration files…",
   "import_reset_calibration": "Reset choices",
-  "import_calibration_description": "Import doesn't wait for calibration. A kind left for later waits in Needs calibration.",
   "import_added_folders": "Folders added to this import",
   "import_remove_folder": "Remove folder",
   "import_calibration_of_sessions": "Calibration of the new sessions",
   "import_add_calibration_title": "Add calibration files",
-  "import_add_calibration_description": "Choose a folder of darks, flats, bias or masters: its files join this import.",
   "import_needs_calibration_count": "Needs calibration · {count}",
   "session_associated_counts": "From pointing, counts as confirmed",
   "calibration_summary_suggested": "{kind} suggested",
@@ -6164,8 +6107,8 @@
       }
     }
   ],
-  "intake_review_held_open": "Open Projects get your marks as pending changes until their next Apply: {names}.",
-  "intake_review_held_closed": "Closed Projects keep their Close snapshot: {names}.",
+  "intake_review_held_open": "Pending changes: {names}",
+  "intake_review_held_closed": "Close snapshot kept: {names}",
   "home_pending_group": "{group} · {count}",
   "home_choose_calibration": "Choose calibration",
   "help_tip_marks_library": "P, X and U mark the frame in the library, so every Project reads the same mark: an open Project gets it as a pending change, a Closed one keeps its snapshot.",
