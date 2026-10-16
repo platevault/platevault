@@ -1,0 +1,21 @@
+// Hand-written vanilla-extract styles take colour from theme vars only (#1334),
+// mirroring stylelint's color-no-hex / function-disallowed-list on plain CSS.
+// The biome.json override that loads this plugin scopes it to *.css.ts and
+// excludes src/styles/themes.css.ts, the theme definition the values live in.
+//
+// The bare-regex branch covers template literals, which `string()` does not
+// reach; excluding quote and separator characters holds it to one diagnostic
+// per violation instead of one per enclosing node.
+language js
+
+or {
+  string() as $s,
+  r"[^`'\"=;]*(?:#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()[^`'\"=;]*" as $s
+} where {
+  $s <: r"[^\n]*(?:#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()[^\n]*",
+  register_diagnostic(
+    span = $s,
+    message = "Raw colour literal in a vanilla-extract style (#1334). Use a theme var from styles/themes.css.ts.",
+    severity = "error"
+  )
+}

@@ -28,13 +28,16 @@ export default {
     'function-disallowed-list': [
       'rgb', 'rgba', 'hsl', 'hsla', 'hwb', 'lab', 'lch', 'oklab', 'oklch', 'color',
     ],
+    // Named colours (`red`, `black`) are raw literals too. The rule leaves
+    // transparent, currentColor and the CSS-wide keywords alone.
+    'color-named': 'never',
   },
   ignoreFiles: ['dist/**', 'node_modules/**', '.ds-css/**'],
   overrides: [
     {
       // The generated token stylesheet is where raw colour values live.
       files: ['src/styles/tokens.css'],
-      rules: { 'color-no-hex': null, 'function-disallowed-list': null },
+      rules: { 'color-no-hex': null, 'function-disallowed-list': null, 'color-named': null },
     },
   ],
 };
