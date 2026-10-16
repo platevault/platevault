@@ -373,8 +373,9 @@ pub(crate) trait RootProbe: Send + Sync + 'static {
     /// rules ([`inventory::entry_at`]).
     fn entry(&self, root: &Path, stamp: RootStamp, relative: &Path) -> Entry;
 
-    /// The root's canonical path, every link above it resolved: `FSEvents`
-    /// names the paths below a root reached through a linked folder by it.
+    /// The root's canonical path, every link above it resolved: on macOS
+    /// `FSEvents` names the paths below a root reached through a linked
+    /// folder by it.
     ///
     /// # Errors
     /// The path could not be resolved.
@@ -690,11 +691,7 @@ impl Watched {
     /// Bring the count up to date for one path a live event named, from the
     /// entry found there now. An entry that could not be observed keeps what
     /// was counted at and below it, and the location is walked again, which
-    /// finds what is there. Below a folder no walk could list in full, a
-    /// sweep already lists that folder again and walks the location once it
-    /// lists in full ([`Run::retry_watcher`]), so such an entry asks for no
-    /// walk of its own: one per event would walk again a folder that still
-    /// cannot be listed.
+    /// finds what is there.
     fn recheck(&mut self, relative: &Path, entry: Entry) {
         let key = self.identity(relative);
         match entry {
@@ -717,16 +714,8 @@ impl Watched {
                     self.forget_below(relative);
                 }
             }
-            Entry::Unobserved => self.rescan |= !self.below_unlisted(relative),
+            Entry::Unobserved => self.rescan = true,
         }
-    }
-
-    /// Whether `relative` lies in or below a folder no walk could list in
-    /// full, the folders the OS refused to watch that no walk could list
-    /// included.
-    fn below_unlisted(&self, relative: &Path) -> bool {
-        let refused = self.live.iter().flat_map(|live| &live.unlisted);
-        self.unlisted.iter().chain(refused).any(|folder| relative.starts_with(folder))
     }
 
     /// Drop the new files below a folder that went away or was replaced.
@@ -1051,11 +1040,17 @@ impl Run {
     }
 
     /// Check on a blocking thread that `root` is `location`'s registered
-    /// folder, and resolve its canonical path when that differs. A root whose
-    /// canonical path cannot be resolved is not observed: its watcher could
-    /// not tell the events named by that path, so it is checked again at the
-    /// next sweep rather than watched without them. A root that is not
-    /// UTF-8, which is counted but not watched, is logged here once.
+    /// folder, and resolve its canonical path when that differs.
+    ///
+    /// On macOS a root whose canonical path cannot be resolved is not
+    /// observed: `FSEvents` names its events by that path, so its watcher
+    /// could not tell them, and the root is checked again at the next sweep
+    /// rather than watched without them. Elsewhere events name the watched
+    /// path itself and the canonical path is only a second prefix, while
+    /// `canonicalize` fails for good on some Windows volume drivers (`ImDisk`,
+    /// `OSFMount`; rust-lang/rust#79449): such a root is watched without it.
+    /// A root that is not UTF-8, which is counted but not watched, is logged
+    /// here once.
     async fn check_root(
         &self,
         location: &Location,
@@ -1069,9 +1064,13 @@ impl Run {
         let resolved = root.to_path_buf();
         tokio::task::spawn_blocking(move || {
             probe.validate(&checked)?;
-            let canonical = probe.canonical(&resolved).map_err(|error| {
-                RootRefusal::Unobserved(LibraryError::from_io(&resolved, &error))
-            })?;
+            let canonical = match probe.canonical(&resolved) {
+                Ok(canonical) => canonical,
+                Err(error) if cfg!(target_os = "macos") => {
+                    return Err(RootRefusal::Unobserved(LibraryError::from_io(&resolved, &error)));
+                }
+                Err(_) => return Ok(None),
+            };
             Ok((canonical != resolved).then_some(canonical))
         })
         .await
