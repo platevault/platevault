@@ -1,15 +1,16 @@
 /**
- * `/settings/applications` — Applications (PREP-FR-01, PREP-FR-02; J23 S8;
- * plan §4a, C AP1-AP7). One table of application profiles: the
- * application, whether its profile is verified, the located executable and
- * what PlateVault detects there, and its launch arguments, which every
- * application takes. A row's disclosure shows the profile's evidence. Locate
- * opens the OS chooser with the applications PlateVault detects on this
- * computer; Add application adds a generic profile. Run view holds the
- * default run view and, on Windows, the Developer Mode check symlinks need
- * (P-PREP3).
+ * `/settings/applications` — Applications (PREP-FR-01, PREP-FR-02,
+ * PREP-FR-04, PRJ-FR-28; J23 S8; plan §4a, C AP1-AP7). One table of
+ * application profiles: the application, whether its profile is verified,
+ * the located executable and what PlateVault detects there, and its launch
+ * arguments, which every application takes. A row's disclosure shows the
+ * profile's evidence. Locate opens the OS chooser with the applications
+ * PlateVault detects on this computer; Add application adds a generic
+ * profile. Project defaults hold the View mode a new Project starts with,
+ * the GROUP and PANEL folder keywords (a Project may set its own) and, on
+ * Windows, the Developer Mode check symlinks need (P-PREP3).
  */
-import { AppWindow, Plus } from "lucide-react"
+import { AppWindow, Pencil, Plus } from "lucide-react"
 import { useState } from "react"
 import { DeveloperModeStatus } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
@@ -18,14 +19,14 @@ import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { EmptyState, useSaveState } from "@/components/app/feedback"
 import { ArgumentsField, PathField, SegmentedField, SelectField, TextField } from "@/components/app/fields"
-import { FormDialog } from "@/components/app/form-dialog"
-import { SettingsSection } from "@/components/app/settings"
+import { blockedByErrors, FormDialog } from "@/components/app/form-dialog"
+import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { MODE_NAME } from "@/domain/labels"
-import type { ApplicationProfile, InputMode } from "@/domain/types"
+import type { ApplicationProfile, GroupKeywords, InputMode } from "@/domain/types"
 import { type Messages, say } from "@/lib/i18n"
-import { addApplicationProfile, checkExecutable, locateExecutable, removeApplicationProfile, setDefaultRunView, setLaunchArgs } from "@/store/actions/settings"
+import { addApplicationProfile, checkExecutable, keywordRefusals, locateExecutable, removeApplicationProfile, setDefaultInputMode, setGroupKeywords, setLaunchArgs } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 
 const ORDER = ["pixinsight-wbpp", "siril", "seti-astro", "generic"]
@@ -33,7 +34,7 @@ const ORDER = ["pixinsight-wbpp", "siril", "seti-astro", "generic"]
 /** The tokens launch arguments may use; PlateVault fills them in at launch. */
 const ARGUMENT_TOKENS = ["viewFolder"] as const
 
-const RUN_VIEWS: InputMode[] = ["symlink", "copy"]
+const INPUT_MODES: InputMode[] = ["symlink", "copy"]
 
 /** The profile's evidence and what it does not support, under its row's disclosure (D04, PREP-FR-01). */
 function ProfileDetails({ profile }: { profile: ApplicationProfile }) {
@@ -154,6 +155,28 @@ function AddApplicationDialog({ open, onClose }: { open: boolean; onClose: () =>
   )
 }
 
+/** The GROUP and PANEL keyword names every Project's View uses unless it sets its own (PRJ-FR-28). Refused inline while a name cannot name a View folder. */
+function KeywordsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const m = useMessages()
+  const current = useStore((s) => s.settings.keywords)
+  const [keywords, setKeywords] = useState<GroupKeywords>(current)
+  const [wasOpen, setWasOpen] = useState(false)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setKeywords(current)
+  }
+  const label = m.settings_save()
+  const next = { group: keywords.group.trim(), panel: keywords.panel.trim() }
+  const reasons = Object.fromEntries(keywordRefusals(next).map((reason, i) => [String(i), say(m, reason)]))
+  const confirm: Action = { id: "save-keywords", label, kind: "primary", unavailable: blockedByErrors(label, reasons), run: () => setGroupKeywords(next) }
+  return (
+    <FormDialog open={open} onOpenChange={(value) => !value && onClose()} title={m.settings_label_group_keywords()} size="sm" confirm={confirm}>
+      <TextField label={m.apps_keyword_group()} value={keywords.group} onChange={(group) => setKeywords({ ...keywords, group })} mono autoFocus />
+      <TextField label={m.apps_keyword_panel()} value={keywords.panel} onChange={(panel) => setKeywords({ ...keywords, panel })} mono />
+    </FormDialog>
+  )
+}
+
 function profileColumns(m: Messages): Column<ApplicationProfile>[] {
   return [
     { id: "application", header: m.apps_col_application(), rowHeader: true, truncate: true, sortValue: (p) => p.name, cell: (p) => p.name },
@@ -167,10 +190,12 @@ function profileColumns(m: Messages): Column<ApplicationProfile>[] {
 export function SettingsApplicationsPage() {
   const m = useMessages()
   const profiles = useStore((s) => s.catalog.profiles)
-  const view = useStore((s) => s.settings.defaultRunView)
+  const mode = useStore((s) => s.settings.defaultInputMode)
+  const keywords = useStore((s) => s.settings.keywords)
   const [locating, setLocating] = useState<ApplicationProfile | null>(null)
   const [editingArgs, setEditingArgs] = useState<ApplicationProfile | null>(null)
   const [adding, setAdding] = useState(false)
+  const [editingKeywords, setEditingKeywords] = useState(false)
   const { save, indicator } = useSaveState()
   const rows = Object.values(profiles).sort((a, b) => ORDER.indexOf(a.application) - ORDER.indexOf(b.application))
 
@@ -203,13 +228,17 @@ export function SettingsApplicationsPage() {
 
   return (
     <SettingsPage title={m.settings_applications()}>
-      <SettingsSection title={m.run_check_mode()} actions={indicator}>
+      <SettingsSection title={m.apps_project_defaults()} actions={indicator}>
         <SegmentedField
-          label={m.settings_default_run_view()}
-          value={view}
-          options={RUN_VIEWS.map((mode) => ({ value: mode, label: say(m, MODE_NAME[mode]) }))}
-          onChange={(mode) => save(() => setDefaultRunView(mode))}
+          label={m.settings_default_input_mode()}
+          value={mode}
+          options={INPUT_MODES.map((value) => ({ value, label: say(m, MODE_NAME[value]) }))}
+          onChange={(value) => save(() => setDefaultInputMode(value))}
         />
+        <SettingsRow label={m.settings_label_group_keywords()} help={m.apps_keywords_help()}>
+          <code>{`${keywords.group} · ${keywords.panel}`}</code>
+          <ActionButton action={{ id: "edit-keywords", label: m.settings_edit(), icon: Pencil, opensDialog: true, run: () => setEditingKeywords(true) }} />
+        </SettingsRow>
         <DeveloperModeStatus />
       </SettingsSection>
 
@@ -232,6 +261,7 @@ export function SettingsApplicationsPage() {
       <LocateDialog profile={locating} onClose={() => setLocating(null)} />
       <ArgumentsDialog profile={editingArgs} onClose={() => setEditingArgs(null)} />
       <AddApplicationDialog open={adding} onClose={() => setAdding(false)} />
+      <KeywordsDialog open={editingKeywords} onClose={() => setEditingKeywords(false)} />
     </SettingsPage>
   )
 }

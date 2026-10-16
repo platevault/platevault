@@ -21,7 +21,7 @@ export function AboutPage() {
   const locations = useStore((s) => Object.keys(s.catalog.locations).length)
   const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => !x.supersededBy && x.imageType === "light").length)
   const frames = useStore((s) => Object.keys(s.catalog.assets).length)
-  const runs = useStore((s) => Object.keys(s.catalog.runs).length)
+  const projects = useStore((s) => Object.keys(s.catalog.projects).length)
   const clockOffset = useStore((s) => s.faults.clockOffsetMs)
 
   return (
@@ -39,7 +39,7 @@ export function AboutPage() {
                 m.about_count_locations({ count: locations, n: formatCount(locations) }),
                 m.about_count_light_sessions({ count: sessions, n: formatCount(sessions) }),
                 m.about_count_frames({ count: frames, n: formatCount(frames) }),
-                m.about_count_runs({ count: runs, n: formatCount(runs) }),
+                m.about_count_projects({ count: projects, n: formatCount(projects) }),
               ].join(" · "),
             },
             { label: m.about_clock(), value: clockOffset ? m.prototype_about_clock({ date: formatDateTime(nowIso()) }) : m.about_clock_system() },

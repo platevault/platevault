@@ -1,19 +1,24 @@
 /**
- * Settings › Equipment writes (slice E; ngm9g, C E1-E8): cameras,
- * telescopes, reducers and filters are records; a rig selects one camera,
- * one telescope, an optional reducer and any filters by id, and editing a rig
- * never changes them. Gear not yet imaged with is added by hand ("manual",
- * Round 6). Each write is one `commit()`, so a failed write stays unsaved
- * with Retry and the saved value stays in effect.
+ * Settings › Equipment writes (slice E; ngm9g, C E1-E8, PLAN-EQ-FR-07,
+ * PLAN-EQ-FR-08): cameras, telescopes, reducers and filters are records; a
+ * rig selects one camera, one telescope, an optional reducer and any filters
+ * by id, and editing a rig never changes them. An edit to what a rig is made
+ * of starts a new dated rig version; a rename starts none. A camera's alias
+ * and its "Don't use darks" / "Don't use bias" defaults go through their own
+ * store writers. Gear not yet imaged with is added by hand ("manual", Round
+ * 6). Each write is one `commit()`, so a failed write stays unsaved with
+ * Retry and the saved value stays in effect.
  *
  * Remove follows one rule for every record: refused while anything uses it
- * (rigs use cameras, telescopes, reducers and filters; sessions, Projects
- * and masters use rigs), confirmed otherwise. Sessions keep their header
- * evidence either way.
+ * (rigs use cameras, telescopes, reducers and filters in any of their
+ * versions; sessions, Projects and masters use rigs), confirmed otherwise.
+ * Sessions keep their header evidence either way.
  */
 import { type StepLink, sessionRigId } from "@/domain/derive"
-import type { Camera, CameraId, Catalog, Filter, FilterId, OpticalTrain, OpticalTrainId, Reducer, ReducerId, Telescope, TelescopeId } from "@/domain/types"
+import { rigVersions } from "@/domain/indexing"
+import type { Camera, CameraId, Catalog, Filter, FilterId, NightDate, OpticalTrain, OpticalTrainId, Reducer, ReducerId, RigVersion, Telescope, TelescopeId } from "@/domain/types"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { addRigVersion, type RigOptics, setCameraAlias, setCameraCalibrationDefaults } from "@/store/actions/settings"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 
@@ -36,18 +41,40 @@ function aliasesAfterRename(previous: { name: string; aliases: string[] } | unde
   return [...new Set([...previous.aliases, previous.name])].filter((a) => a !== name)
 }
 
-export type CameraInput = Pick<Camera, "name" | "kind" | "widthPx" | "heightPx" | "pixelSizeUm">
+export type CameraInput = Pick<Camera, "name" | "kind" | "widthPx" | "heightPx" | "pixelSizeUm" | "physicalAlias" | "noDarks" | "noBias">
 
-/** Add a camera by hand (`id` null; it is Manual) or edit one, detected ones included. */
-export function saveCamera(id: CameraId | null, input: CameraInput): CommitResult {
-  const previous = id ? store.getState().catalog.cameras[id] : undefined
-  if (id && !previous) return MISSING
+/**
+ * Add a camera by hand (`id` null; it is Manual) or edit one, detected ones
+ * included. Refused up front, so nothing is half saved, while its alias is
+ * another camera's or missing while another camera shares its model
+ * (LIB-FR-26, PLAN-EQ-AC-10): the same rule `setCameraAlias` applies. The
+ * record is one write; a changed alias then goes through `setCameraAlias`
+ * and changed defaults through `setCameraCalibrationDefaults`, which
+ * settles its sessions (CAL-FR-22). Returns the camera's id, so a retry
+ * after a later failed write edits the camera it already added.
+ */
+export function saveCamera(id: CameraId | null, input: CameraInput): { result: CommitResult; id: CameraId } {
+  const { catalog } = store.getState()
+  const previous = id ? catalog.cameras[id] : undefined
   const cameraId = id ?? freshId("cam", input.name)
-  const camera: Camera = { id: cameraId, source: previous?.source ?? "manual", ...input, aliases: aliasesAfterRename(previous, input.name) }
+  if (id && !previous) return { result: MISSING, id: cameraId }
+  const { physicalAlias, noDarks, noBias, ...record } = input
+  const alias = physicalAlias?.trim() || null
+  const others = Object.values(catalog.cameras).filter((c) => c.id !== cameraId)
+  const taken = alias ? others.find((c) => c.physicalAlias?.toLowerCase() === alias.toLowerCase()) : undefined
+  const refusal = taken ? msg("settings_camera_alias_taken", { alias: alias!, name: taken.name }) : !alias && others.some((c) => c.name.toLowerCase() === record.name.toLowerCase()) ? msg("settings_camera_alias_needed", { name: record.name }) : null
+  if (refusal) return { result: refuse(msg("store_refused", { label: msg("settings_label_camera_alias", { name: record.name }) }), [refusal], HREF), id: cameraId }
+  const camera: Camera = { id: cameraId, source: previous?.source ?? "manual", physicalAlias: previous?.physicalAlias ?? null, noDarks: previous?.noDarks ?? false, noBias: previous?.noBias ?? false, ...record, aliases: aliasesAfterRename(previous, input.name) }
   const label = previous ? msg("settings_edit_title", { name: previous.name }) : msg("equipment_add_camera")
   const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, cameras: { ...c.cameras, [cameraId]: camera } })), { href: HREF })
-  if (result.ok) recordSaved(msg("equipment_saved_named", { name: camera.name }), null, HREF)
-  return result
+  if (!result.ok) return { result, id: cameraId }
+  recordSaved(msg("equipment_saved_named", { name: camera.name }), null, HREF)
+  if (alias !== camera.physicalAlias) {
+    const aliased = setCameraAlias(cameraId, alias)
+    if (!aliased.ok) return { result: aliased, id: cameraId }
+  }
+  if (noDarks === camera.noDarks && noBias === camera.noBias) return { result, id: cameraId }
+  return { result: setCameraCalibrationDefaults(cameraId, { noDarks, noBias }), id: cameraId }
 }
 
 export type TelescopeInput = Pick<Telescope, "name" | "focalLengthMm" | "apertureMm">
@@ -133,6 +160,10 @@ export interface RigInput {
   /** The focal length the rig uses before its reducer: the telescope's, or what the rig's headers gave it. */
   focalLengthMm: number
   filterIds: FilterId[]
+  /** A rotator: a flat with no ROTATANG reads unknown rotation on this rig, so it is only suggested (CAL-FR-20). */
+  rotator: boolean
+  /** The first night a new rig's version, or an edited rig's new version, applies to (PLAN-EQ-FR-07). */
+  from: NightDate
 }
 
 /** The reducer factor of a rig: 1 without a reducer, or with one no longer in the catalog. */
@@ -141,10 +172,13 @@ export function rigReducerFactor(catalog: Catalog, rig: Pick<OpticalTrain, "redu
 }
 
 /**
- * Add a rig by hand (`id` null; it is Manual) or change what an existing rig
- * is made of: it selects its camera, telescope, reducer and filters, and its
- * focal length follows from the telescope and the reducer's factor. The
- * records themselves never change here.
+ * Add a rig by hand (`id` null; it is Manual, its first version starting on
+ * `from`) or edit one: it selects its camera, telescope, reducer and
+ * filters, and its focal length follows from the telescope and the
+ * reducer's factor. The records themselves never change here. An edit to
+ * what the rig is made of starts a new version from `from` through
+ * `addRigVersion`, so each session keeps the version it was captured with;
+ * a rename alone starts none (PLAN-EQ-FR-07).
  */
 export function saveRig(id: OpticalTrainId | null, input: RigInput): { result: CommitResult; id: OpticalTrainId } {
   const { catalog } = store.getState()
@@ -153,11 +187,18 @@ export function saveRig(id: OpticalTrainId | null, input: RigInput): { result: C
   if (id && !previous) return { result: MISSING, id: rigId }
   const factor = rigReducerFactor(catalog, input)
   const effectiveFocalLengthMm = Math.round(input.focalLengthMm * factor * 10) / 10
-  const composition = { name: input.name, cameraId: input.cameraId, telescopeId: input.telescopeId, reducerId: input.reducerId, effectiveFocalLengthMm, filterIds: input.filterIds.filter((f) => catalog.filters[f]) }
-  const rig: OpticalTrain = previous ? { ...previous, ...composition } : { id: rigId, source: "manual", notes: "", ...composition }
+  const optics: RigOptics = { cameraId: input.cameraId, telescopeId: input.telescopeId, reducerId: input.reducerId, effectiveFocalLengthMm, filterIds: input.filterIds.filter((f) => catalog.filters[f]), rotator: input.rotator }
   const href = `${HREF}?rig=${rigId}`
-  const result = commit(previous ? msg("settings_edit_title", { name: previous.name }) : msg("project_add_rig"), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: rig } })), { href })
-  if (result.ok) recordSaved(msg("equipment_saved_named", { name: rig.name }), verbatim(`${effectiveFocalLengthMm} mm`), href)
+  if (!previous) {
+    const rig: OpticalTrain = { id: rigId, name: input.name, source: "manual", notes: "", ...optics, versionId: freshId("rv", `${rigId}|${input.from}`), versionFrom: input.from, history: [] }
+    const result = commit(msg("project_add_rig"), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: rig } })), { href })
+    if (result.ok) recordSaved(msg("equipment_saved_named", { name: rig.name }), verbatim(`${effectiveFocalLengthMm} mm`), href)
+    return { result, id: rigId }
+  }
+  const versioned = addRigVersion(rigId, input.from, optics)
+  if (!versioned.ok || input.name === previous.name) return { result: versioned, id: rigId }
+  const result = commit(msg("settings_edit_title", { name: previous.name }), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, name: input.name } } })), { href })
+  if (result.ok) recordSaved(msg("equipment_saved_named", { name: input.name }), null, href)
   return { result, id: rigId }
 }
 
@@ -178,9 +219,10 @@ export function rigLink(rig: Pick<OpticalTrain, "id">): StepLink {
   return { to: HREF, search: { rig: rig.id } }
 }
 
-function rigsWhere(catalog: Catalog, uses: (rig: OpticalTrain) => boolean): EquipmentUser[] {
+/** Rigs any of whose versions satisfy `uses`: an earlier version still names the records it was captured with (PLAN-EQ-FR-07). */
+function rigsWhere(catalog: Catalog, uses: (version: RigVersion) => boolean): EquipmentUser[] {
   return Object.values(catalog.opticalTrains)
-    .filter(uses)
+    .filter((rig) => rigVersions(rig).some(uses))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((rig) => ({ label: verbatim(rig.name), link: rigLink(rig) }))
 }

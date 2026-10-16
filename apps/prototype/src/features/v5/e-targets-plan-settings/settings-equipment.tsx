@@ -1,7 +1,8 @@
 /**
- * S16 Settings › Equipment (slice E; D-W31, PLAN-EQ-FR-01 to PLAN-EQ-FR-06;
+ * S16 Settings › Equipment (slice E; D-W31, PLAN-EQ-FR-01 to PLAN-EQ-FR-08;
  * plan §4a, C E1-E8, ngm9g). One ListSection each for Cameras, Telescopes,
- * Reducers, Filters and Rigs (equipment-records.tsx holds the others). A
+ * Reducers, Filters and Rigs (equipment-records.tsx holds the others), then
+ * the Matching thresholds (settings-matching.tsx). A
  * filter is a record: its name, the bands it passes and the FITS FILTER
  * values it matches; rigs select it in their editor, and its Rigs column
  * says which do. A rig's filters drive the Targets band strip, the
@@ -31,6 +32,7 @@ import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import { CamerasSection, RigsSection, RigsUsing, recordMenu, ReducersSection, TelescopesSection } from "./equipment-records"
 import { addFilterToRig, bandsLine, filterName, saveFilter } from "./settings-actions"
+import { MatchingSection } from "./settings-matching"
 
 /** Bands a header value most likely passes, to prefill "Add filter" from it. The user confirms them. */
 function guessBands(value: string): Band[] {
@@ -199,6 +201,7 @@ export function EquipmentSettingsPage() {
       <FiltersSection onEdit={setFilterDraft} />
       <UnknownFiltersSection onAdd={setFilterDraft} />
       <RigsSection activeRigId={search.rig ?? null} onSaved={(rig) => void navigate({ to: "/settings/equipment", search: { rig } as never, replace: true })} />
+      <MatchingSection />
       <FilterDialog draft={filterDraft} onClose={() => setFilterDraft(null)} />
     </SettingsPage>
   )

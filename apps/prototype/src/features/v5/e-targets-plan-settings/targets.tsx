@@ -522,7 +522,7 @@ export function TargetsPage() {
           empty,
           stickyFirstColumn: true,
           expand: {
-            isExpandable: (v) => panelRows(v.row).length > 0,
+            isExpandable: (v) => panelRows(catalog, v.row).length > 0,
             render: (v) => <PanelTable parent={v} ctx={ctx} inputs={inputs} />,
           },
           toolbar: {
@@ -569,7 +569,7 @@ function PanelTable({ parent, ctx, inputs }: { parent: RowView; ctx: SkyContext 
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
-  const panels = useMemo(() => panelRows(parent.row).map((row) => rowView(catalog, disk, ctx, row, inputs)), [parent, catalog, disk, ctx, inputs])
+  const panels = useMemo(() => panelRows(catalog, parent.row).map((row) => rowView(catalog, disk, ctx, row, inputs)), [parent, catalog, disk, ctx, inputs])
   const sky = (v: RowView) => (v.sky.status === "ok" ? v.sky : null)
   const columns: Column<RowView>[] = [
     { id: "panel", header: m.targets_panel(), rowHeader: true, sortValue: (v) => v.row.designation, cell: (v) => v.row.designation },

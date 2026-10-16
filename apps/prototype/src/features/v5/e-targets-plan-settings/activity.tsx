@@ -26,8 +26,8 @@ import { OperationPanel } from "@/components/app/operation-panel"
 import { CountBadge } from "@/components/app/pill"
 import { StatusBadge } from "@/components/app/status"
 import { ListPage } from "@/components/templates/list-page"
-import { STEP_NAME } from "@/domain/labels"
-import type { ActivityEvent, Operation, RunStep } from "@/domain/types"
+import { PROJECT_TAB_NAME, type ProjectTabId } from "@/domain/project-view"
+import type { ActivityEvent, Operation } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { m, type Messages, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
@@ -87,14 +87,14 @@ const SETTINGS_AREA: Record<string, () => string> = {
   about: m.activity_destination_about,
 }
 
-/** The surface an entry opens, named in its menu ("Open Equipment", "Open Calibrate"). */
+/** The surface an entry opens, named in its menu ("Open Equipment", "Open View"): a Project link names its tab (`?stage=`). */
 export function destinationLabel(href: string): string {
-  const [first = "", second, third, fourth, fifth] = href.split(/[?#]/)[0]!.split("/").filter(Boolean)
+  const [path = "", query = ""] = href.split("#")[0]!.split("?")
+  const [first = "", second] = path.split("/").filter(Boolean)
   if (first === "settings") return (second && SETTINGS_AREA[second]?.()) ?? m.nav_settings()
   if (first === "projects" && second) {
-    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_NAME ? say(m, STEP_NAME[fifth as RunStep]) : third === "runs" ? m.activity_destination_run() : m.run_results_run_group()
-    if (third === "trash") return m.activity_destination_trash()
-    return m.activity_destination_project()
+    const stage = new URLSearchParams(query).get("stage")
+    return stage && stage in PROJECT_TAB_NAME ? say(m, PROJECT_TAB_NAME[stage as ProjectTabId]) : m.activity_destination_project()
   }
   if (second && SINGLE[first]) return SINGLE[first]!()
   return SECTION[first]?.() ?? m.activity_destination_page()
@@ -128,6 +128,8 @@ function outcome(m: Messages, row: ActivityRow): { word: string; badge: ReactNod
       return { word: "saved", badge: <StatusBadge kind="save" value="saved" /> }
     case "reminder":
       return { word: "reminder", badge: <StatusBadge kind="reminders" value="enabled" label={m.plan_reminder_badge()} /> }
+    case "reminder-missed":
+      return { word: "reminder-missed", badge: <StatusBadge kind="reminders" value="disabled" label={m.activity_reminder_missed()} /> }
   }
 }
 

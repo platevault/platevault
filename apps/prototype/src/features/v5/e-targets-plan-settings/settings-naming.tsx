@@ -20,13 +20,15 @@ import { useSaveState } from "@/components/app/feedback"
 import { type TemplateToken, type TemplateValues, templateTokenProblems, TokenTemplateField, useTokenColumns } from "@/components/app/fields"
 import { SettingsSection } from "@/components/app/settings"
 import { ListSection, SettingsPage } from "@/components/templates/settings-page"
+import { newestVersion } from "@/domain/calibration"
 import { rigName, sessionNamingValues } from "@/domain/derive"
 import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, namingValues, resolveNamingTemplate, validateNamingTemplate } from "@/domain/templates"
 import type { Catalog, NamingFrameType, NamingToken } from "@/domain/types"
+import { fileName } from "@/lib/format"
 import { type Messages, m, say } from "@/lib/i18n"
 import { setNamingOmit, setNamingTemplate } from "@/store/actions/settings"
 import { type CommitResult, useStore } from "@/store/core"
-import { masterNight } from "./calibration-model"
+import { versionNight } from "./calibration-model"
 
 /** `label` is a catalogue message, worded at render. */
 const TYPES: Array<{ type: NamingFrameType; label: () => string; role: "captures" | "calibration" }> = [
@@ -60,13 +62,14 @@ function sampleValues(messages: Messages, catalog: Catalog, type: NamingFrameTyp
   if (type.startsWith("master-")) {
     const kind = type.slice("master-".length)
     const master = Object.values(catalog.masters).find((x) => x.kind === kind)
-    if (!master) return null
+    const version = master ? newestVersion(master) : undefined
+    if (!master || !version) return null
     return {
-      from: master.path.split("/").pop() ?? master.id,
+      from: fileName(version.path),
       values: namingValues({
         target: null,
         filter: master.channel,
-        night: masterNight(catalog, master),
+        night: versionNight(catalog, version),
         frameType: type,
         camera: master.cameraName,
         exposureS: master.exposureS,

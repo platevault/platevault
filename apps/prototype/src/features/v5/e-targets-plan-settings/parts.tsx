@@ -142,7 +142,7 @@ export function addToProjectMenu(m: Messages, catalog: Catalog, target: Target):
           summary: `${m.target_adds_subject({ name: target.name })} · ${copies}`,
           confirm: { label: m.target_add_to_named({ name: p.name }), kind: "primary" },
         },
-        run: () => addSubject(p.id, { targetId: target.id, mosaic: null }, p.revision),
+        run: () => addSubject(p.id, target.id, p.revision),
       }
     }),
   }
