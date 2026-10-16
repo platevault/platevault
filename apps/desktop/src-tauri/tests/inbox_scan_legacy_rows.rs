@@ -629,20 +629,12 @@ async fn an_old_folder_row_at_a_folder_with_no_frames_goes() {
 /// A master row: path, id, state, master type, filter and exposure.
 type MasterRow = (String, String, String, Option<String>, Option<String>, Option<f64>);
 
-/// The old scan read both the master `a\b.fits` and a nested master
-/// `a/b.fits` and wrote both to the one `a/b.fits` row with `INSERT OR
-/// IGNORE`, the root-level file first, so the row holds `a\b.fits`'s master
-/// type, filter and exposure. A plan made before the update links the row.
-/// The scan keeps the row as the nested master's own and rewrites those
-/// fields from the nested master, because the plan listener registers the
-/// master from them when the plan applies.
-#[tokio::test]
-async fn a_master_row_the_old_scan_shared_takes_the_nested_masters_fields() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
-    write_fits_with(root, "a\\b.fits", "DARK", Some(30), "Ha", "300.0");
-    write_fits_with(&root.join("a"), "b.fits", "FLAT", Some(30), "L", "2.5");
-
+/// A database for `root` holding the row the old scan shared between the
+/// master `a\b.fits` and a nested master `a/b.fits`: it wrote both to the one
+/// `a/b.fits` row with `INSERT OR IGNORE`, the root-level file first, so the
+/// row holds `a\b.fits`'s master type, filter and exposure (dark, Ha, 300 s).
+/// A plan made before the update links the row.
+async fn seed_shared_old_master(root: &Path) -> SqlitePool {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
     let pool = db.pool().clone();
@@ -687,6 +679,20 @@ async fn a_master_row_the_old_scan_shared_takes_the_nested_masters_fields() {
     persistence_plans::repositories::plans::insert_plan(&pool, &plan).await.unwrap();
     repo::insert_plan_link(&pool, "old-master", "plan-old").await.unwrap();
     repo::update_inbox_item_state(&pool, "old-master", "plan_open").await.unwrap();
+    pool
+}
+
+/// The row [`seed_shared_old_master`] seeds, beside both masters on disk.
+/// The scan keeps the row as the nested master's own and rewrites its master
+/// fields from the nested master, because the plan listener registers the
+/// master from them when the plan applies.
+#[tokio::test]
+async fn a_master_row_the_old_scan_shared_takes_the_nested_masters_fields() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits_with(root, "a\\b.fits", "DARK", Some(30), "Ha", "300.0");
+    write_fits_with(&root.join("a"), "b.fits", "FLAT", Some(30), "L", "2.5");
+    let pool = seed_shared_old_master(root).await;
 
     scan(&pool, root).await;
 
@@ -714,6 +720,78 @@ async fn a_master_row_the_old_scan_shared_takes_the_nested_masters_fields() {
         (frame_type.as_deref(), filter.as_deref(), *exposure),
         (Some("dark"), Some("Ha"), Some(300.0))
     );
+}
+
+/// The row [`seed_shared_old_master`] seeds, beside the nested master and a
+/// file `a\b.fits` whose header the scan can no longer read. The scan still
+/// rewrites the kept row's master fields from the nested master.
+#[tokio::test]
+async fn a_shared_master_row_takes_the_nested_masters_fields_when_the_other_file_is_unreadable() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    std::fs::write(root.join("a\\b.fits"), b"not a FITS header").unwrap();
+    write_fits_with(&root.join("a"), "b.fits", "FLAT", Some(30), "L", "2.5");
+    let pool = seed_shared_old_master(root).await;
+
+    scan(&pool, root).await;
+
+    let masters: Vec<MasterRow> = sqlx::query_as(
+        "SELECT relative_path, id, state, master_frame_type, master_filter, master_exposure_s \
+         FROM inbox_items WHERE is_master_item = 1 ORDER BY relative_path",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        masters,
+        [(
+            "a/b.fits".to_owned(),
+            "old-master".to_owned(),
+            "plan_open".to_owned(),
+            Some("flat".to_owned()),
+            Some("L".to_owned()),
+            Some(2.5)
+        )],
+        "the kept row describes the nested master"
+    );
+}
+
+/// An empty folder `c\d` is all the root holds, so the scan finds no leaf
+/// folder. The old scan stored `c\d` under `c/d` with a classified sub-item
+/// and an override for `c/d/x.fits`, a file that is not there. The scan
+/// deletes the old folder's rows.
+#[tokio::test]
+async fn an_old_folder_row_of_an_empty_backslash_folder_goes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join("c\\d")).unwrap();
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_old_folder(&pool, "old-cd", "old-cd-light", "c/d").await;
+
+    scan(&pool, root).await;
+
+    for table in
+        ["inbox_items", "inbox_source_groups", "inbox_file_overrides", "inbox_classifications"]
+    {
+        // AssertSqlSafe: `table` comes from the fixed list above.
+        let rows: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(rows, 0, "{table}: the old folder's rows go");
+    }
 }
 
 /// The folder `g\h.fits` beside the master `h.fits` in the folder `g`. The

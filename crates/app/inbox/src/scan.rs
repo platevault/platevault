@@ -358,12 +358,8 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     let mut leaf_dirs: Vec<LeafDir> = Vec::new();
     let mut warnings: Vec<ScanWarning> = Vec::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
-    let mut bare_dirs: Vec<PathBuf> = Vec::new();
+    let mut bare_dirs: HashSet<PathBuf> = HashSet::new();
     collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings, &mut visited, &mut bare_dirs)?;
-
-    if leaf_dirs.is_empty() {
-        return Ok(ScanOutput { warnings, ..ScanOutput::default() });
-    }
 
     // Phase 2: process per-file I/O.
     //
@@ -480,19 +476,19 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
 /// `fs_pathsafe::real_files_under_reporting`.
 ///
 /// Returns whether `dir` is bare: the walk read every entry of it and found
-/// no image or video file directly inside, so no item stands for it. A link
-/// it skipped, or an entry it could not read, may be such a file, so `dir` is
-/// then not bare; neither is a directory already entered under another path.
-/// The bare directories below `dir` are pushed to `bare_dirs`, which tells
-/// a folder where nothing is to classify from one the walk could not read
-/// (bd astro-plan-3pvvc).
+/// no image or video file directly inside, so no item stands for it. It may
+/// hold subfolders and other files. A link it skipped, or an entry it could
+/// not read, may be such a file, so `dir` is then not bare; neither is a
+/// directory already entered under another path. The bare directories below
+/// `dir` are added to `bare_dirs`, which tells a folder where nothing is to
+/// classify from one the walk could not read (bd astro-plan-3pvvc).
 fn collect_leaf_dirs(
     dir: &Path,
     options: &ScanOptions,
     leaf_dirs: &mut Vec<LeafDir>,
     warnings: &mut Vec<ScanWarning>,
     visited: &mut HashSet<PathBuf>,
-    bare_dirs: &mut Vec<PathBuf>,
+    bare_dirs: &mut HashSet<PathBuf>,
 ) -> Result<bool, String> {
     if options.follow_symlinks
         && !visited.insert(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()))
@@ -569,7 +565,9 @@ fn collect_leaf_dirs(
     // continue so partial results reach the caller instead of nothing.
     for subdir in subdirs {
         match collect_leaf_dirs(&subdir, options, leaf_dirs, warnings, visited, bare_dirs) {
-            Ok(true) => bare_dirs.push(subdir),
+            Ok(true) => {
+                bare_dirs.insert(subdir);
+            }
             Ok(false) => {}
             Err(reason) => warnings.push(ScanWarning { path: subdir, reason }),
         }
@@ -1169,6 +1167,87 @@ mod tests {
         assert_eq!(
             scanned.legacy_rows,
             crate::legacy_rows::LegacyRows { folders, ..Default::default() }
+        );
+    }
+
+    /// A backslash folder with no image or video file directly inside: the
+    /// scan stores nothing for it, but the old row of its old text may still
+    /// be there. Listed: `c/d` for the empty folder `c\d`, in a root that holds
+    /// no leaf folder at all; in a second root, `e/f` for `e\f`, which holds
+    /// only the folder `g` with a frame (the old text `e/f/g` of the stored
+    /// `e\f/g` is listed too), and `k/l` for the empty `k\l` beside an empty
+    /// folder `k/l`. Kept: `h/i`, the own row of the folder `h/i` with a frame
+    /// beside the empty `h\i`.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_the_old_row_of_a_bare_backslash_folder() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("c\\d")).unwrap();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert!(scanned.items.is_empty(), "no leaf folder");
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: vec!["c/d".to_owned()],
+                ..Default::default()
+            }
+        );
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let deep = root.join("e\\f").join("g");
+        fs::create_dir_all(&deep).unwrap();
+        write_realistic_fits(&deep, "x.fits", Some("LIGHT"), None);
+        for name in ["h\\i", "k\\l"] {
+            fs::create_dir_all(root.join(name)).unwrap();
+        }
+        let nested = root.join("h").join("i");
+        fs::create_dir_all(&nested).unwrap();
+        write_realistic_fits(&nested, "x.fits", Some("LIGHT"), None);
+        fs::create_dir_all(root.join("k").join("l")).unwrap();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: ["e/f", "e/f/g", "k/l"].map(str::to_owned).to_vec(),
+                ..Default::default()
+            }
+        );
+    }
+
+    /// The old scan read `a\b.fits`, `c\d.fits` and `e\f.fits` as masters and
+    /// filled the rows at their old text, which the nested masters `a/b.fits`,
+    /// `c/d.fits` and `e/f.fits` share, from them. This scan cannot read
+    /// `a\b.fits` (its bytes are not a header), reads `c\d.fits` as a frame
+    /// that is not a master, and reads `e\f.fits` as a master. All three
+    /// nested masters' rows are listed for a refresh.
+    #[cfg(unix)]
+    #[test]
+    fn scan_refreshes_a_shared_master_row_whatever_it_reads_in_the_backslash_file() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let master = Some(("STACKCNT", 30));
+        write_file(root, "a\\b.fits", b"not a FITS header");
+        write_realistic_fits(root, "c\\d.fits", Some("LIGHT"), None);
+        write_realistic_fits(root, "e\\f.fits", Some("DARK"), master);
+        for (dir, name) in [("a", "b.fits"), ("c", "d.fits"), ("e", "f.fits")] {
+            let dir = root.join(dir);
+            fs::create_dir_all(&dir).unwrap();
+            write_realistic_fits(&dir, name, Some("DARK"), master);
+        }
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                masters_to_refresh: ["a/b.fits", "c/d.fits", "e/f.fits"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                ..Default::default()
+            }
         );
     }
 

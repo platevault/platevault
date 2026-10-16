@@ -16,18 +16,20 @@
 //! When a file is there, a folder row's items would plan sources below
 //! something that is not a folder; that file may be a real master, as
 //! `g/h.fits` beside the folder `g\h.fits`, and then only the folder's rows
-//! go. When a folder the scan read whole is there with no frame directly
-//! inside (it is empty, or holds only subfolders), a folder row's items name
-//! files that are not there. [`find`] lists the old rows a scan proves stale,
-//! and [`retire`] deletes them.
+//! go. When a folder the scan read whole is there with no image or video file
+//! directly inside (it is empty, or holds only subfolders or other files), a
+//! folder row's items name files that are not there. A backslash folder with
+//! no such file is a source too: the scan stores nothing for it, but the old
+//! row of its old text may still be there. [`find`] lists the old rows a scan
+//! proves stale, and [`retire`] deletes them.
 //!
 //! An old row is kept when this scan stores the same text itself (a nested
 //! folder or master really is there, and the row is its own), or when
 //! something the scan could not account for is at the nested path: a folder
-//! it could not read whole (unreadable, or holding an entry it skipped, such
-//! as a link), a file whose header it could not read, a link on the way there
-//! or at the path (a dangling one may be an unmounted drive). Only
-//! unconfirmed rows are deleted: still `pending_classification` or
+//! it could not read whole (unreadable, or holding a link it skipped or an
+//! entry it could not read), a file whose header it could not read, a link on
+//! the way there or at the path (a dangling one may be an unmounted drive).
+//! Only unconfirmed rows are deleted: still `pending_classification` or
 //! `classified`, with no plan linking them; a folder is kept whole when any
 //! of its items is not. A folder's rows never include a master row, so
 //! deleting them never touches a master stored at the same path.
@@ -36,7 +38,9 @@
 //! old scan read both `a\b.fits` and a nested master `a/b.fits`, it wrote both
 //! to the one `a/b.fits` row with `INSERT OR IGNORE`, the root-level file
 //! first. [`LegacyRows::masters_to_refresh`] lists such rows, and the scan
-//! rewrites their master type, filter and exposure from the nested master.
+//! rewrites their master type, filter and exposure from the nested master,
+//! whatever it reads in `a\b.fits` now: still a master, a frame that is not,
+//! or a file whose header it cannot read.
 //!
 //! A master row with a plan link survives the scan, but the plan can still be
 //! discarded or fail later, which removes the link and returns the row to
@@ -44,11 +48,10 @@
 //! gap: `confirm` calls it before planning, so such a row is deleted rather
 //! than confirmed again. Its verdict comes from the database alone: the scan
 //! stored the row's current text beside it, and classify read the file at the
-//! old path and classified it as a frame that is not a master (an unclassified
-//! file, such as one it could not read, proves nothing). Checking at the one
-//! step that plans covers every way a link goes away (cancel, discard, a
-//! failed apply, the startup repair sweep) and does not race the plan
-//! listener.
+//! old path and classified it as a frame that is not a master (a file it
+//! found no frame type for proves nothing). Checking at the one step that
+//! plans covers every way a link goes away (cancel, discard, a failed apply,
+//! the startup repair sweep) and does not race the plan listener.
 //!
 //! On Windows the wire text never contains `\`, so nothing is ever found.
 #![allow(clippy::doc_markdown)]
@@ -81,19 +84,24 @@ pub struct LegacyRows {
     /// in `masters` and goes with its groups.
     pub masters_at_folders: Vec<String>,
     /// Master item paths this scan stores itself that are also the old text
-    /// of another master it stores, as `a/b.fits` is for `a\b.fits`. The row
-    /// is the nested master's own and is kept, but the old scan may have
-    /// filled its master type, filter and exposure from the other file. The
-    /// scan rewrites them from the nested master it read.
+    /// of an image file it lists, as `a/b.fits` is for `a\b.fits`. The row is
+    /// the nested master's own and is kept, but the old scan may have filled
+    /// its master type, filter and exposure from the other file, whatever
+    /// this scan reads in that file now. The scan rewrites them from the
+    /// nested master it read.
     pub masters_to_refresh: Vec<String>,
 }
 
 /// List the rows the old scan stored for the entries in `items` under `root`
-/// that this scan proves stale, and the kept master rows whose master fields
-/// it must rewrite. Stats only the nested paths of entries whose text
-/// contains `\`. `bare_dirs` are the folders the scan read whole and found no
-/// image or video file directly in.
-pub(crate) fn find(root: &Path, items: &[ScannedInboxItem], bare_dirs: &[PathBuf]) -> LegacyRows {
+/// and for the folders in `bare_dirs` that this scan proves stale, and the
+/// kept master rows whose master fields it must rewrite. Stats only the
+/// nested paths of entries whose text contains `\`. `bare_dirs` are the
+/// folders the scan read whole and found no image or video file directly in.
+pub(crate) fn find(
+    root: &Path,
+    items: &[ScannedInboxItem],
+    bare_dirs: &HashSet<PathBuf>,
+) -> LegacyRows {
     let folders: HashSet<&str> = items.iter().map(|item| item.relative_path.as_str()).collect();
     let masters: HashSet<&str> =
         items.iter().flat_map(|item| &item.masters).map(|m| m.relative_path.as_str()).collect();
@@ -111,7 +119,13 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem], bare_dirs: &[PathBuf
         .collect();
 
     let mut rows = LegacyRows::default();
-    for old in folders.iter().filter_map(|text| old_text(text)) {
+    // The folders this scan stores, and the bare ones it stores nothing for:
+    // an old row may name either under its old text.
+    let old_folders = folders
+        .iter()
+        .filter_map(|text| old_text(text))
+        .chain(bare_dirs.iter().filter_map(|dir| old_text_under(root, dir)));
+    for old in old_folders {
         if folders.contains(old.as_str()) {
             continue;
         }
@@ -127,8 +141,10 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem], bare_dirs: &[PathBuf
     }
     for old in masters.iter().filter_map(|text| old_text(text)) {
         if masters.contains(old.as_str()) {
-            rows.masters_to_refresh.push(old);
-        } else if never_current(&old) || frames.contains(&root.join(&old).as_path()) {
+            // The nested master's own row, refreshed below.
+            continue;
+        }
+        if never_current(&old) || frames.contains(&root.join(&old).as_path()) {
             rows.masters.push(old);
         } else {
             match look_up(root, &old) {
@@ -138,6 +154,19 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem], bare_dirs: &[PathBuf
                 Entry::Absent | Entry::Folder => rows.masters.push(old),
                 Entry::Other | Entry::Unknown => {}
             }
+        }
+    }
+    // The old scan may have read any image file whose text holds `\` as a
+    // master and filled the master row at its old text from it, whatever this
+    // scan reads in it now. Rewriting a kept row from its own file is always
+    // right, so every such row this scan stores is refreshed.
+    for old in items
+        .iter()
+        .flat_map(|item| item.fits_files.iter().chain(&item.xisf_files))
+        .filter_map(|file| old_text_under(root, file))
+    {
+        if masters.contains(old.as_str()) {
+            rows.masters_to_refresh.push(old);
         }
     }
     for paths in [
@@ -195,6 +224,17 @@ pub async fn retire_stale_master(pool: &SqlitePool, inbox_item_id: &str) -> DbRe
 /// the old text to the file it was set on.
 pub(crate) fn old_text(text: &str) -> Option<String> {
     text.contains('\\').then(|| text.replace('\\', "/"))
+}
+
+/// The old text of `path`, a file or folder the walk listed under `root`,
+/// when its own text holds `\`. On macOS and Linux the walk lists UTF-8 paths
+/// only, and their wire text is their own text, so this reads it without
+/// building it; on Windows `\` is a separator and nothing is found.
+fn old_text_under(root: &Path, path: &Path) -> Option<String> {
+    if cfg!(windows) {
+        return None;
+    }
+    old_text(path.strip_prefix(root).ok()?.to_str()?)
 }
 
 /// Whether `text` has an empty, `.` or `..` name. The current wire text of an

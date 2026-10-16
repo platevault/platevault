@@ -359,11 +359,17 @@ async fn delete_unconfirmed_master_item_conn(
 ///   `classified`, with no plan linking it;
 /// - another master row of the same root has this row's path with some `/`
 ///   written as `\`: the row a later scan stored under the file's own text;
-/// - it has evidence, and every evidence row is a frame classify read and
-///   classified (`unclassified = 0`) that is not a master. An unclassified
-///   row proves nothing: classify writes one for a file whose header it could
-///   not read, as the scan keeps an old row whose file it could not read. The
-///   row then stays, and confirm's own guards decide.
+/// - it has evidence, and every evidence row is a frame classify classified
+///   (`unclassified = 0`) that is not a master. Classify writes an
+///   unclassified row when it finds no frame type for a file: it could not
+///   read the header, the header has no `IMAGETYP`, or its `IMAGETYP` is not
+///   in the normalization table. None of these proves the file is not a
+///   master. This is wider than the scan's rule, which keeps an old row only
+///   for a file whose header it could not read: the evidence does not record
+///   which of the three it was, so a readable file with no known `IMAGETYP`
+///   keeps the row here too. The row then stays, and confirm's own guards
+///   decide: with no frame type its classification is `unclassified`, which
+///   confirm refuses.
 ///
 /// Its children and the source groups left at its path go as in
 /// [`delete_unconfirmed_master_rows_conn`].
