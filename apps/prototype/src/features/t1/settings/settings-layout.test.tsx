@@ -12,7 +12,7 @@ interface Row {
   name: string
 }
 
-const COLUMNS: Column<Row>[] = [{ id: "name", header: "Name", cell: (row) => row.name, rowHeader: true }]
+const COLUMNS: Column<Row>[] = [{ id: "name", header: "Name", cell: (row) => row.name, sortValue: (row) => row.name, rowHeader: true }]
 const TABLE: ListPageTable<Row> = { label: "Locations", rows: [{ id: "a", name: "Astro-T7" }], columns: COLUMNS, getRowId: (row) => row.id, toolbar: { search: { label: "Search locations", value: "", onChange: () => {} } } }
 
 /** SettingsLayout at `/settings/section`, with `section` as the open section. */
