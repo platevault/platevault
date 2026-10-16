@@ -1,15 +1,12 @@
 /**
- * Appearance pickers (foundation-owned). Settings › Appearance mounts the
- * theme picker (`ThemePicker`, `@/components/app/theme-picker`) and this
- * language picker. Choices apply at once and persist in this browser
+ * The language picker (foundation-owned), mounted by Settings › Appearance
+ * and setup beside `ThemePicker` (`@/components/app/theme-picker`). The
+ * choice applies at once and persists in this browser
  * (`src/app/preferences.ts`).
  */
 import { SegmentedField } from "@/components/app/fields"
 import { LOCALE_META, LOCALES, type Locale, needsReviewNotice } from "@/lib/i18n"
 import { setLocale, useMessages, usePreferences } from "./preferences"
-
-/** @deprecated Import `ThemePicker` from `@/components/app/theme-picker`; this re-export keeps Settings › Appearance compiling until P9 repoints it, and goes in W4. */
-export { ThemePicker } from "@/components/app/theme-picker"
 
 /**
  * One choice per shipped locale, each named in its own language. A

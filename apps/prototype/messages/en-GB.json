@@ -112,9 +112,8 @@
   "palette_single_key_on": "Single-key shortcuts: On",
   "shortcuts_title": "Keyboard shortcuts",
   "shortcuts_show": "Show keyboard shortcuts",
-  "shortcuts_description": "Shortcuts are off while you type in a field.",
   "shortcuts_single_key": "Single-key shortcuts",
-  "shortcuts_single_key_hint": "?, /, [, G sequences and Space on a table row. Turn off if you use speech input or press keys by accident; {mod}K and {escape} stay on.",
+  "shortcuts_single_key_hint": "?, /, [, G sequences and Space on a table row · {mod}K and {escape} stay on",
   "shortcuts_search": "Search or jump to anything",
   "shortcuts_focus_search": "Focus the page search or filter",
   "shortcuts_toggle_sidebar": "Collapse or expand the sidebar",
@@ -861,10 +860,7 @@
   "import_nothing_new": "Nothing new",
   "import_move_blocked": "Move: {reason}",
   "session_open_sessions": "Open Sessions",
-  "session_process_stacking": "Stacking",
-  "session_process_importing": "Importing master",
   "session_process_trashing": "Trashing raws",
-  "session_process_done": "Master registered",
   "session_open_calibration": "Open Calibration",
   "session_step_failed": "{step} failed",
   "session_in_os_trash": "In the OS Trash",
@@ -997,8 +993,7 @@
     }
   ],
   "import_copies_into": "{size} → {locations}",
-  "import_sends_to_trash": "Sources on {volume} → OS Trash",
-  "import_sends_source_to_trash": "Sources → OS Trash",
+  "import_sends_to_trash": "sources on {volume} → OS Trash",
   "import_file_count": [
     {
       "declarations": [
@@ -1753,14 +1748,13 @@
   "activity_empty_operations": "No operations",
   "activity_filter_refusals": "Refusals",
   "activity_empty_refusals": "No refusals",
-  "activity_empty_not_saved": "No not saved",
-  "activity_empty_saved": "No saved",
+  "activity_empty_not_saved": "No failed saves",
+  "activity_empty_saved": "No saves",
   "activity_destination_setup": "Setup",
   "activity_destination_target": "Target",
   "activity_destination_session": "Session",
   "activity_destination_project": "Project",
   "activity_destination_about": "About",
-  "activity_destination_page": "page",
   "activity_recorded": "Recorded",
   "activity_refused": "Refused",
   "activity_open_destination": "Open {name}",
@@ -3612,7 +3606,6 @@
       }
     }
   ],
-  "store_library_scope_detail": "Library scope: every run and Target sees this decision.",
   "store_catalog_only_detail": "{name}. Catalog only; source headers unchanged.",
   "store_label_add_to_my_targets": "Add {name} to My targets",
   "store_label_remove_from_my_targets": "Remove {name} from My targets",
@@ -4425,8 +4418,8 @@
       }
     }
   ],
-  "sessions_none_need_target": "No selected session needs a Target",
-  "sessions_none_need_rig": "No selected session needs a rig",
+  "sessions_none_need_target": "None needs a Target",
+  "sessions_none_need_rig": "None needs a rig",
   "sessions_review_duplicates": "Review duplicates",
   "session_source_used": "Used",
   "session_target_sources": "Target sources for {name}",
@@ -4593,8 +4586,6 @@
   "domain_mode_symlink": "Symlinks",
   "settings_default_input_mode": "Default View mode",
   "settings_developer_mode": "Windows Developer Mode",
-  "settings_developer_mode_on": "On",
-  "settings_developer_mode_off": "Off",
   "settings_open_windows_settings": "Open Windows settings",
   "onboarding_check_developer_mode": "Turn on Windows Developer Mode",
   "onboarding_check_apply": "Apply your first Project",
@@ -6088,7 +6079,7 @@
       }
     }
   ],
-  "sessions_no_choice_none": "Every selected session has this kind settled",
+  "sessions_no_choice_none": "Already settled",
   "sessions_set_no_title": [
     {
       "declarations": [
@@ -6104,7 +6095,6 @@
       }
     }
   ],
-  "sessions_set_no_summary": "Each counts as settled without it, and no reason is asked. Choose ▸ on a session pins one later.",
   "intake_review_held_title": [
     {
       "declarations": [

@@ -92,8 +92,8 @@ const SETTINGS_AREA: Record<string, () => string> = {
   about: m.activity_destination_about,
 }
 
-/** The surface an entry opens, named in its menu ("Open Equipment", "Open View"): a Project link names its tab (`?stage=`). */
-export function destinationLabel(href: string): string {
+/** The surface an entry opens, by name ("Equipment", "View"): a Project link names its tab (`?stage=`); null for a page with no name. */
+function destinationName(href: string): string | null {
   const [path = "", query = ""] = href.split("#")[0]!.split("?")
   const [first = "", second] = path.split("/").filter(Boolean)
   if (first === "settings") return (second && SETTINGS_AREA[second]?.()) ?? m.nav_settings()
@@ -102,7 +102,13 @@ export function destinationLabel(href: string): string {
     return stage && stage in PROJECT_TAB_NAME ? say(m, PROJECT_TAB_NAME[stage as ProjectTabId]) : m.activity_destination_project()
   }
   if (second && SINGLE[first]) return SINGLE[first]!()
-  return SECTION[first]?.() ?? m.activity_destination_page()
+  return SECTION[first]?.() ?? null
+}
+
+/** A row's Open item: "Open Equipment", "Open View", or plain Open for a page with no name. */
+export function openLabel(href: string): string {
+  const name = destinationName(href)
+  return name ? m.activity_open_destination({ name }) : m.verb_open()
 }
 
 /** A row's title: the entry's, else the running operation's. The Outcome column says how it settled, so the title does not repeat it. */
@@ -206,7 +212,7 @@ export function ActivityPage() {
   ]
   const rowActions = (r: ActivityRow): MenuItem[] => {
     const href = r.event?.href
-    return withIssueItems(m, href ? [{ id: "open", label: m.activity_open_destination({ name: destinationLabel(href) }), run: () => void (window.location.hash = href) }] : [], issuesOf(r))
+    return withIssueItems(m, href ? [{ id: "open", label: openLabel(href), run: () => void (window.location.hash = href) }] : [], issuesOf(r))
   }
   const filtered = current !== undefined || issueFilter !== ""
   const empty: Action = filtered

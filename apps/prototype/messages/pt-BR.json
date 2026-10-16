@@ -116,9 +116,8 @@
   "palette_single_key_on": "Atalhos de uma tecla: ligados",
   "shortcuts_title": "Atalhos de teclado",
   "shortcuts_show": "Mostrar atalhos de teclado",
-  "shortcuts_description": "Os atalhos ficam desligados enquanto você digita em um campo.",
   "shortcuts_single_key": "Atalhos de uma tecla",
-  "shortcuts_single_key_hint": "?, /, [, sequências com G e Espaço numa linha de tabela. Desligue se você usa entrada por voz ou pressiona teclas sem querer; {mod}K e {escape} continuam ligados.",
+  "shortcuts_single_key_hint": "?, /, [, sequências com G e Espaço numa linha de tabela · {mod}K e {escape} continuam ligados",
   "shortcuts_search": "Buscar ou ir para qualquer lugar",
   "shortcuts_focus_search": "Focar a busca ou o filtro da página",
   "shortcuts_toggle_sidebar": "Recolher ou expandir a barra lateral",
@@ -915,10 +914,7 @@
   "import_nothing_new": "Nada novo",
   "import_move_blocked": "Mover: {reason}",
   "session_open_sessions": "Abrir Sessões",
-  "session_process_stacking": "Empilhando",
-  "session_process_importing": "Importando master",
   "session_process_trashing": "Movendo brutos para a Lixeira",
-  "session_process_done": "Master registrado",
   "session_open_calibration": "Abrir Calibração",
   "session_step_failed": "{step} falhou",
   "session_in_os_trash": "Na Lixeira do sistema",
@@ -1059,8 +1055,7 @@
     }
   ],
   "import_copies_into": "{size} → {locations}",
-  "import_sends_to_trash": "Originais em {volume} → Lixeira do sistema",
-  "import_sends_source_to_trash": "Originais → Lixeira do sistema",
+  "import_sends_to_trash": "origens em {volume} → Lixeira do sistema",
   "import_file_count": [
     {
       "declarations": [
@@ -1889,14 +1884,13 @@
   "activity_empty_operations": "Nenhuma operação",
   "activity_filter_refusals": "Recusas",
   "activity_empty_refusals": "Nenhuma recusa",
-  "activity_empty_not_saved": "Nenhum não salvo",
-  "activity_empty_saved": "Nenhum salvo",
+  "activity_empty_not_saved": "Nenhuma falha ao salvar",
+  "activity_empty_saved": "Nenhum salvamento",
   "activity_destination_setup": "Configuração inicial",
   "activity_destination_target": "Alvo",
   "activity_destination_session": "Sessão",
   "activity_destination_project": "Projeto",
   "activity_destination_about": "Sobre",
-  "activity_destination_page": "página",
   "activity_recorded": "Registrado",
   "activity_refused": "Recusado",
   "activity_open_destination": "Abrir {name}",
@@ -3882,7 +3876,6 @@
       }
     }
   ],
-  "store_library_scope_detail": "Escopo da biblioteca: todas as execuções e Alvos veem esta decisão.",
   "store_catalog_only_detail": "{name}. Somente o catálogo; cabeçalhos de origem inalterados.",
   "store_label_add_to_my_targets": "Adicionar {name} a Meus alvos",
   "store_label_remove_from_my_targets": "Remover {name} de Meus alvos",
@@ -4767,8 +4760,8 @@
       }
     }
   ],
-  "sessions_none_need_target": "Nenhuma sessão selecionada precisa de Alvo",
-  "sessions_none_need_rig": "Nenhuma sessão selecionada precisa de setup",
+  "sessions_none_need_target": "Nenhuma precisa de Alvo",
+  "sessions_none_need_rig": "Nenhuma precisa de setup",
   "sessions_review_duplicates": "Revisar duplicatas",
   "session_source_used": "Em uso",
   "session_target_sources": "Origens do Alvo de {name}",
@@ -4947,8 +4940,6 @@
   "domain_mode_symlink": "Links simbólicos",
   "settings_default_input_mode": "Modo padrão da View",
   "settings_developer_mode": "Modo de Desenvolvedor do Windows",
-  "settings_developer_mode_on": "Ligado",
-  "settings_developer_mode_off": "Desligado",
   "settings_open_windows_settings": "Abrir configurações do Windows",
   "onboarding_check_developer_mode": "Ative o Modo de Desenvolvedor do Windows",
   "onboarding_check_apply": "Aplique seu primeiro Projeto",
@@ -6532,7 +6523,7 @@
       }
     }
   ],
-  "sessions_no_choice_none": "Todas as sessões selecionadas já têm este tipo resolvido",
+  "sessions_no_choice_none": "Já resolvido",
   "sessions_set_no_title": [
     {
       "declarations": [
@@ -6550,7 +6541,6 @@
       }
     }
   ],
-  "sessions_set_no_summary": "Cada uma conta como resolvida sem ele, sem pedir motivo. Escolher ▸ numa sessão fixa um depois.",
   "intake_review_held_title": [
     {
       "declarations": [

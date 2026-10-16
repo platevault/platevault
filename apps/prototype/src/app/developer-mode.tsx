@@ -5,9 +5,10 @@
  * off Windows.
  */
 import { ExternalLink, RefreshCw } from "lucide-react"
-import { Pill } from "@/components/app/pill"
+import { ActionButton } from "@/components/app/actions"
+import type { Action } from "@/components/app/contracts"
 import { SettingsRow } from "@/components/app/settings"
-import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/app/status"
 import { useStore } from "@/store/core"
 import { checkDeveloperMode, openWindowsDeveloperSettings } from "@/store/actions/settings"
 import { useMessages } from "./preferences"
@@ -15,16 +16,12 @@ import { useMessages } from "./preferences"
 /** Open Windows settings and Check again. */
 export function DeveloperModeActions() {
   const m = useMessages()
+  const open: Action = { id: "open-windows-settings", label: m.settings_open_windows_settings(), icon: ExternalLink, run: () => openWindowsDeveloperSettings() }
+  const recheck: Action = { id: "check-developer-mode", label: m.apps_check_again(), icon: RefreshCw, run: () => checkDeveloperMode() }
   return (
     <>
-      <Button size="xs" variant="outline" onClick={() => openWindowsDeveloperSettings()}>
-        <ExternalLink aria-hidden="true" data-icon="inline-start" />
-        {m.settings_open_windows_settings()}
-      </Button>
-      <Button size="xs" variant="ghost" onClick={() => checkDeveloperMode()}>
-        <RefreshCw aria-hidden="true" data-icon="inline-start" />
-        {m.apps_check_again()}
-      </Button>
+      <ActionButton action={open} />
+      <ActionButton action={recheck} />
     </>
   )
 }
@@ -36,7 +33,7 @@ export function DeveloperModeStatus() {
   if (check === "not-windows") return null
   return (
     <SettingsRow label={m.settings_developer_mode()}>
-      <Pill tone={check === "on" ? "success" : "warning"}>{check === "on" ? m.settings_developer_mode_on() : m.settings_developer_mode_off()}</Pill>
+      <StatusBadge kind="developerMode" value={check} />
       {check === "off" ? <DeveloperModeActions /> : null}
     </SettingsRow>
   )

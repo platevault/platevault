@@ -31,7 +31,7 @@ import { CalibrationChoices, calibrationChoiceRows } from "@/components/domain/c
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { DetailPage } from "@/components/templates/detail-page"
 import { CHOICE_STATE_NAME, KIND_NAME, NO_KIND_NAME, PIN_KINDS, sessionPinProblems } from "@/domain/calibration"
-import { CALIBRATION_STEP_NAME, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
+import { CALIBRATION_STEP_NAME, processForSession, processView } from "@/domain/calibration-process"
 import { findGroup, findInput, formatHours, isLocked, sessionIntakeEntry, sessionIntakeLink, type SessionReadiness, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { sessionRigVersion } from "@/domain/indexing"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
@@ -56,15 +56,6 @@ export function SessionPage() {
   return session.imageType === "light" ? <SessionDetail session={session} /> : <CalibrationSession session={session} />
 }
 
-const PROCESS_STATUS: Record<ProcessStatus, { label: (m: Messages) => string; tone: "info" | "danger" | "success" }> = {
-  "awaiting-stack": { label: (m) => m.import_route_stack(), tone: "info" },
-  stacking: { label: (m) => m.session_process_stacking(), tone: "info" },
-  importing: { label: (m) => m.session_process_importing(), tone: "info" },
-  "trashing-raws": { label: (m) => m.session_process_trashing(), tone: "info" },
-  failed: { label: (m) => m.status_failed(), tone: "danger" },
-  done: { label: (m) => m.session_process_done(), tone: "success" },
-}
-
 /** Raw calibration frames are input to a calibration process, never a library session (P-CAL3). */
 function CalibrationSession({ session }: { session: Session }) {
   const m = useMessages()
@@ -73,7 +64,6 @@ function CalibrationSession({ session }: { session: Session }) {
     const process = processForSession(s.catalog, session.id)
     return process ? processView(s.catalog, process) : null
   })
-  const status = view ? PROCESS_STATUS[view.status] : null
   const items = [
     { label: m.session_observing_night(), value: formatNight(session.night, true) },
     { label: m.session_frame_type(), value: typeLabel(m, session.imageType) },
@@ -85,7 +75,7 @@ function CalibrationSession({ session }: { session: Session }) {
     <DetailPage
       path={[{ label: m.nav_sessions(), link: { to: "/sessions" } }]}
       title={sessionLongLabel(m, session)}
-      status={status ? <Pill tone={status.tone}>{status.label(m)}</Pill> : <Pill tone="muted">{m.status_role_calibration()}</Pill>}
+      status={view ? <StatusBadge kind="process" value={view.status} /> : <StatusBadge kind="role" value="calibration" />}
       actions={[{ id: "open-calibration", label: m.session_open_calibration(), run: () => void navigate({ to: "/calibration" }) }]}
       sections={[{ id: "calibration", title: m.status_role_calibration(), content: <KeyValueList items={items} columns={2} /> }]}
     />
@@ -150,7 +140,7 @@ export function AssociatedTargetNote() {
   const m = useMessages()
   return (
     <>
-      <StatusBadge kind="association" value="associated" label={m.session_associated_counts()} /> <Pill tone="muted">{m.status_provisional()}</Pill>
+      <StatusBadge kind="association" value="associated" label={m.session_associated_counts()} /> <StatusBadge kind="rule" value="provisional" />
     </>
   )
 }

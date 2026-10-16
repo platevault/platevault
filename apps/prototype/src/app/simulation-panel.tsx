@@ -7,17 +7,16 @@
  */
 import { useParams } from "@tanstack/react-router"
 import { FlaskConical, RotateCcw } from "lucide-react"
-import { useId, useMemo, useRef, useState } from "react"
+import { type ReactNode, useId, useMemo, useRef, useState } from "react"
 import { ActionButton } from "@/components/app/actions"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { SegmentedField } from "@/components/app/fields"
+import { PathText } from "@/components/app/data"
+import { SegmentedField, SelectField, SwitchField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Switch } from "@/components/ui/switch"
 import { calibrationProcesses } from "@/domain/calibration-process"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
@@ -54,36 +53,19 @@ import {
 import { useMessages } from "./preferences"
 import { closePanel, useShellUi } from "./ui-state"
 
-/** `path` details render in monospace and truncate; prose details wrap in the body font. */
-function ToggleRow({
-  label,
-  detail,
-  path,
-  checked,
-  onChange,
-}: {
-  label: string
-  detail?: string
-  path?: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-}) {
-  const id = useId()
+/** A switch's description: its path in the data face, which wraps so the whole path stays readable at 200% text (WCAG 1.4.4), then any prose detail. */
+function switchDetail({ path, detail }: { path?: string; detail?: string }): ReactNode {
+  if (!path && !detail) return undefined
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <div className="min-w-0">
-        <Label htmlFor={id} className="font-normal">
-          {label}
-        </Label>
-        {/* Wraps instead of truncating, so the whole path stays readable at 200% text (WCAG 1.4.4). */}
-        {path ? <p className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{path}</p> : null}
-        {detail ? <p className="text-xs text-pretty text-muted-foreground">{detail}</p> : null}
-      </div>
-      {/* 24 px tall target: these rows sit close to buttons and other switches (WCAG 2.5.8). */}
-      <Switch id={id} size="lg" checked={checked} onCheckedChange={(value) => onChange(value)} />
-    </div>
+    <>
+      {path ? <PathText path={path} /> : null}
+      {detail}
+    </>
   )
 }
+
+/** Rows of SwitchFields in one bordered list. */
+const SWITCH_LIST = "divide-y rounded-md border px-3 [&>*]:py-1.5"
 
 /** The Project on screen: an external tool reruns into its `Processing/`, or holds a file in its View (prototype simulations of the application and disk). */
 function ThisProjectSection() {
@@ -103,7 +85,7 @@ function ThisProjectSection() {
           unavailable: project.view ? undefined : { action: rerun, reason: m.project_view_not_built(), blockers: [] },
         }}
       />
-      <ToggleRow label={m.simulation_view_file_held()} detail={m.simulation_view_file_held_detail()} checked={held} onChange={setViewFileHeld} />
+      <SwitchField label={m.simulation_view_file_held()} description={m.simulation_view_file_held_detail()} checked={held} onChange={setViewFileHeld} />
     </Section>
   )
 }
@@ -173,12 +155,12 @@ export function SimulationControls() {
       <ThisProjectSection />
       <QuickActionsSection />
       <Section title={m.folder_picker_volumes()} level={3} description={m.simulation_volumes_description()}>
-        <div className="divide-y rounded-md border px-3">
+        <div className={SWITCH_LIST}>
           {Object.values(volumes).map((volume) => (
-            <ToggleRow
+            <SwitchField
               key={volume.id}
               label={volume.id.includes("impostor") ? m.simulation_volume_impostor({ name: volume.name }) : volume.name}
-              path={`${volume.mountPath} · ${volume.volumeUuid} · ${volume.trash === "supported" ? m.trash_title() : m.simulation_no_trash()}`}
+              description={switchDetail({ path: `${volume.mountPath} · ${volume.volumeUuid} · ${volume.trash === "supported" ? m.trash_title() : m.simulation_no_trash()}` })}
               checked={volume.mounted}
               onChange={(mounted) => setVolumeMounted(volume.id, mounted)}
             />
@@ -190,14 +172,14 @@ export function SimulationControls() {
         <div className="space-y-2">
           <Label htmlFor={folderInput}>{m.simulation_filter_folders()}</Label>
           <Input id={folderInput} placeholder={m.simulation_filter_folders_placeholder({ example: "NGC7000" })} value={folderQuery} onChange={(e) => setFolderQuery(e.target.value)} />
-          <div className="max-h-64 divide-y overflow-y-auto rounded-md border px-3">
+          <div className={cn(SWITCH_LIST, "max-h-64 overflow-y-auto")}>
             {shownFolders.map((folder) => {
               const registered = Object.values(locations).some((l) => isUnder(folder, l.path))
               return (
-                <ToggleRow
+                <SwitchField
                   key={folder}
                   label={folder.split("/").slice(-2).join("/")}
-                  path={registered ? folder : `${folder} · ${m.simulation_not_registered()}`}
+                  description={switchDetail({ path: registered ? folder : `${folder} · ${m.simulation_not_registered()}` })}
                   checked={denied.includes(folder)}
                   onChange={(value) => setFolderAccess(folder, value)}
                 />
@@ -217,11 +199,10 @@ export function SimulationControls() {
             {arrived ? <span className="text-xs text-muted-foreground">{m.simulation_already_copied()}</span> : null}
           </div>
           {devices.map((device) => (
-            <ToggleRow
+            <SwitchField
               key={device.volume.id}
               label={m.simulation_device_connected({ name: device.volume.name })}
-              detail={device.layout ? m.simulation_device_layout({ label: device.label }) : m.simulation_generic_device()}
-              path={device.volume.mountPath}
+              description={switchDetail({ path: device.volume.mountPath, detail: device.layout ? m.simulation_device_layout({ label: device.label }) : m.simulation_generic_device() })}
               checked={device.connected}
               onChange={(on) => (on ? connectDevice(device.volume.id) : ejectDevice(device.volume.id))}
             />
@@ -368,60 +349,25 @@ export function SimulationControls() {
       </Section>
 
       <Section title={m.simulation_faults_title()} level={3}>
-        <div className="divide-y rounded-md border px-3">
-          <ToggleRow label={m.simulation_fail_catalog_write()} checked={faults.failNextCatalogWrite} onChange={(value) => setFault("failNextCatalogWrite", value)} />
-          <div className="flex items-center justify-between gap-3 py-1.5">
-            <span className="text-sm">{m.simulation_notification_answer()}</span>
-            <Select
-              items={[
-                { value: "grant", label: m.simulation_allow() },
-                { value: "deny", label: m.simulation_deny() },
-              ]}
-              value={faults.notificationResponse}
-              onValueChange={(value) => setFault("notificationResponse", value === "deny" ? "deny" : "grant")}
-            >
-              <SelectTrigger size="sm" aria-label={m.simulation_notification_answer()} className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="grant">{m.simulation_allow()}</SelectItem>
-                <SelectItem value="deny">{m.simulation_deny()}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <ToggleRow
-            label={m.simulation_fail_hash()}
-            detail={m.simulation_fail_hash_detail()}
-            checked={faults.failNextHashVerification}
-            onChange={(value) => setFault("failNextHashVerification", value)}
+        <div className={SWITCH_LIST}>
+          <SwitchField label={m.simulation_fail_catalog_write()} checked={faults.failNextCatalogWrite} onChange={(value) => setFault("failNextCatalogWrite", value)} />
+          <SelectField<"grant" | "deny">
+            label={m.simulation_notification_answer()}
+            options={[
+              { value: "grant", label: m.simulation_allow() },
+              { value: "deny", label: m.simulation_deny() },
+            ]}
+            value={faults.notificationResponse}
+            onChange={(value) => setFault("notificationResponse", value)}
           />
-          <ToggleRow
-            label={m.simulation_stale_save()}
-            detail={m.simulation_stale_save_detail()}
-            checked={faults.staleNextWrite}
-            onChange={(value) => setFault("staleNextWrite", value)}
-          />
-          <ToggleRow
-            label={m.simulation_fail_resolver()}
-            detail={m.simulation_fail_resolver_detail()}
-            checked={faults.failNextResolverLookup}
-            onChange={(value) => setFault("failNextResolverLookup", value)}
-          />
-          <ToggleRow
-            label={m.simulation_slow_index()}
-            detail={m.simulation_slow_index_detail()}
-            checked={faults.slowIndexing}
-            onChange={(value) => setFault("slowIndexing", value)}
-          />
-          <ToggleRow
-            label={m.simulation_no_site()}
-            detail={m.simulation_no_site_detail()}
-            checked={faults.noSite}
-            onChange={(value) => setFault("noSite", value)}
-          />
-          <ToggleRow
+          <SwitchField label={m.simulation_fail_hash()} description={m.simulation_fail_hash_detail()} checked={faults.failNextHashVerification} onChange={(value) => setFault("failNextHashVerification", value)} />
+          <SwitchField label={m.simulation_stale_save()} description={m.simulation_stale_save_detail()} checked={faults.staleNextWrite} onChange={(value) => setFault("staleNextWrite", value)} />
+          <SwitchField label={m.simulation_fail_resolver()} description={m.simulation_fail_resolver_detail()} checked={faults.failNextResolverLookup} onChange={(value) => setFault("failNextResolverLookup", value)} />
+          <SwitchField label={m.simulation_slow_index()} description={m.simulation_slow_index_detail()} checked={faults.slowIndexing} onChange={(value) => setFault("slowIndexing", value)} />
+          <SwitchField label={m.simulation_no_site()} description={m.simulation_no_site_detail()} checked={faults.noSite} onChange={(value) => setFault("noSite", value)} />
+          <SwitchField
             label={m.simulation_no_developer_mode()}
-            detail={faults.developerMode === "on" ? m.simulation_developer_mode_on() : m.simulation_developer_mode_off()}
+            description={faults.developerMode === "on" ? m.simulation_developer_mode_on() : m.simulation_developer_mode_off()}
             checked={faults.developerMode === "off"}
             onChange={(value) => setWindowsWithoutDeveloperMode(value)}
           />
@@ -429,12 +375,12 @@ export function SimulationControls() {
       </Section>
 
       <Section title={m.settings_applications()} level={3}>
-        <div className="divide-y rounded-md border px-3">
+        <div className={SWITCH_LIST}>
           {apps.map((app) => (
-            <ToggleRow key={app.id} label={app.name} path={app.path} detail={app.present ? m.apps_present() : m.apps_moved_away()} checked={app.present} onChange={(present) => updateApp(app.id, { present })} />
+            <SwitchField key={app.id} label={app.name} description={switchDetail({ path: app.path, detail: app.present ? m.apps_present() : m.apps_moved_away() })} checked={app.present} onChange={(present) => updateApp(app.id, { present })} />
           ))}
           {apps.map((app) => (
-            <ToggleRow key={`${app.id}-launch`} label={m.apps_fail_next_launch()} detail={app.name} checked={app.launchFails} onChange={(launchFails) => updateApp(app.id, { launchFails })} />
+            <SwitchField key={`${app.id}-launch`} label={m.apps_fail_next_launch()} description={app.name} checked={app.launchFails} onChange={(launchFails) => updateApp(app.id, { launchFails })} />
           ))}
         </div>
       </Section>

@@ -109,7 +109,7 @@ export function importConfirm(m: Messages, plan: ImportPlan, draft: ImportDraft)
     summary: [
       m.import_copies_into({ size: formatBytes(plan.bytes), locations }),
       m.import_verifies_copies(),
-      ...(move ? [plan.volume ? m.import_sends_to_trash({ volume: plan.volume.name }) : m.import_sends_source_to_trash()] : []),
+      ...(move ? [plan.volume ? m.import_sends_to_trash({ volume: plan.volume.name }) : m.op_import_sources_to_trash()] : []),
     ].join(" · "),
     groups: plan.groups.map((g) => ({
       label: `${g.location.displayName}/${g.relative}`,
@@ -211,7 +211,7 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
     if (used.length === 0) return m.import_used_for_none()
     return (
       <>
-        {m.import_used_for({ sessions: used.map((s) => usedForName(m, s)).join(", ") })} <Pill tone="muted">{m.status_provisional()}</Pill>
+        {m.import_used_for({ sessions: used.map((s) => usedForName(m, s)).join(", ") })} <StatusBadge kind="rule" value="provisional" />
       </>
     )
   }
@@ -294,7 +294,7 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
                 label: m.import_no_pointing(),
                 value: (
                   <>
-                    {m.import_no_pointing_stays({ count: g.session.unpointed })} <Pill tone="muted">{m.status_provisional()}</Pill>
+                    {m.import_no_pointing_stays({ count: g.session.unpointed })} <StatusBadge kind="rule" value="provisional" />
                   </>
                 ),
               },

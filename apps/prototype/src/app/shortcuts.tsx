@@ -15,7 +15,7 @@ import { useEffect } from "react"
 import type { Column } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
 import { SwitchField } from "@/components/app/fields"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import type { Messages } from "@/lib/i18n"
 import { ALL_NAV_ITEMS } from "./navigation"
@@ -274,7 +274,6 @@ export function ShortcutsDialog() {
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{m.shortcuts_title()}</DialogTitle>
-          <DialogDescription>{m.shortcuts_description()}</DialogDescription>
         </DialogHeader>
         <SingleKeyShortcutsField />
         <ShortcutsTable />

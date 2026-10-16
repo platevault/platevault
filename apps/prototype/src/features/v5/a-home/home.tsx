@@ -51,13 +51,13 @@ import { EmptyState } from "@/components/app/feedback"
 import { issueCopy } from "@/components/app/issue-copy"
 import { Pill } from "@/components/app/pill"
 import { UsedByPreview } from "@/components/app/previews"
-import { StatusBadge } from "@/components/app/status"
+import { StatusBadge, statusMeta } from "@/components/app/status"
 import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { GradeBadges } from "@/components/domain/grade-badges"
 import { type CalendarNight, NightCalendar } from "@/components/domain/night-calendar"
 import { siteTimeRange, siteTime } from "@/components/domain/sky-lines"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
-import { CALIBRATION_STEP_NAME, type ProcessStatus } from "@/domain/calibration-process"
+import { CALIBRATION_STEP_NAME } from "@/domain/calibration-process"
 import {
   calibrationStepLink,
   findGroup,
@@ -467,15 +467,6 @@ function addToProjectAction(m: Messages, catalog: Catalog, w: Extract<PendingWor
 
 // Open work --------------------------------------------------------------------
 
-const PROCESS_STATUS: Record<ProcessStatus, (m: Messages) => string> = {
-  "awaiting-stack": (m) => m.import_route_stack(),
-  stacking: (m) => m.session_process_stacking(),
-  importing: (m) => m.session_process_importing(),
-  "trashing-raws": (m) => m.session_process_trashing(),
-  failed: (m) => m.status_failed(),
-  done: (m) => m.session_process_done(),
-}
-
 function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
   const m = useMessages()
   const { dismissed } = useIssues()
@@ -483,7 +474,7 @@ function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
   const counting = (r: OpenWork) => r.issues.filter((issue) => !hidden.has(issue.id))
   const name = (r: OpenWork) => (r.kind === "project" ? r.project.name : say(m, r.view.name))
   const stands = (r: OpenWork): string => {
-    if (r.kind === "calibration") return PROCESS_STATUS[r.view.status](m)
+    if (r.kind === "calibration") return statusMeta("process", r.view.status).label
     return r.goals.total === 0 ? m.projects_no_goals() : m.home_goals_met({ met: r.goals.met, total: r.goals.total })
   }
   const page = (r: OpenWork): StepLink => (r.kind === "project" ? projectLink(r.project.id) : r.view.current ? calibrationStepLink(r.view.process.id, r.view.current) : { to: "/calibration" })

@@ -115,8 +115,8 @@ function noCalibrationAction(m: Messages, selected: SessionRow[], kind: PinKind,
     id: `no-${kind}`,
     label: choice,
     icon: CircleSlash,
-    unavailable: picks.length === 0 ? { action: choice, reason: m.sessions_no_choice_none({ choice }), blockers: [] } : undefined,
-    confirm: { title: m.sessions_set_no_title({ choice, count: picks.length }), summary: m.sessions_set_no_summary(), confirm: { label: choice } },
+    unavailable: picks.length === 0 ? { action: choice, reason: m.sessions_no_choice_none(), blockers: [] } : undefined,
+    confirm: { title: m.sessions_set_no_title({ choice, count: picks.length }), confirm: { label: choice } },
     run: () => {
       const result = setNoCalibration(picks)
       if (result.ok) onDone()
@@ -348,7 +348,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
       cell: (r) => (
         <>
           {`${formatCount(r.frames)} · ${formatHours(r.seconds)}`}
-          {filter === "unusable" ? <Pill tone="danger">{m.sessions_unusable_count({ count: r.unusable.length, n: formatCount(r.unusable.length) })}</Pill> : null}
+          {filter === "unusable" ? <StatusBadge kind="quality" value="unusable" label={m.sessions_unusable_count({ count: r.unusable.length, n: formatCount(r.unusable.length) })} /> : null}
         </>
       ),
     },
