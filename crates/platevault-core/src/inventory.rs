@@ -135,6 +135,34 @@ pub(crate) fn validate_location_root_in(
     Ok(observed.identity)
 }
 
+/// Why [`check_location_root`] refused a root.
+#[derive(Debug)]
+pub(crate) enum RootRefusal {
+    /// The root was observed and is not the registered folder on the
+    /// registered volume (or the registered share is not mounted there). It
+    /// stays refused until the folder at the path changes.
+    Mismatch(LibraryError),
+    /// The root or its volume could not be observed, as when a volume query
+    /// fails or times out: it may pass when checked again.
+    Unobserved(LibraryError),
+}
+
+/// [`validate_location_root`], telling a root that was observed and refused
+/// from one that could not be observed.
+///
+/// # Errors
+/// The refusal, as [`validate_location_root`] reports it.
+pub(crate) fn check_location_root(location: &Location) -> Result<(), RootRefusal> {
+    let root = location
+        .path
+        .to_path_buf()
+        .map_err(|error| RootRefusal::Mismatch(locate(error, location)))?;
+    let observed = identity::observe(&root, &OsVolumes)
+        .map_err(|error| RootRefusal::Unobserved(locate(error, location)))?;
+    identity::compare(location, &observed, &root)
+        .map_err(|error| RootRefusal::Mismatch(locate(error, location)))
+}
+
 /// Observe one file's current fingerprint: no-follow size, nanosecond mtime,
 /// remount-stable volume identity and qualified file ID. Reads no content.
 ///
@@ -275,14 +303,23 @@ pub(crate) struct Listing {
     pub(crate) frames: Vec<NativePath>,
     /// Every folder entered below the root, listed or not.
     pub(crate) folders: Vec<PathBuf>,
+    /// The folders below the root that could not be listed: what they hold
+    /// is missing from `frames`.
+    pub(crate) unlisted: Vec<PathBuf>,
 }
 
 /// Every supported frame below `root`, listed by the walker's rules (no
 /// link, junction or nested foreign volume is entered) without reading a
 /// header: the files the next scan of the location reads. A folder below
 /// the root that cannot be listed is skipped, as a scan would name it
-/// incomplete. Cancellation ends the listing with what it found; a listing
-/// canceled before it starts touches nothing.
+/// incomplete, and named in [`Listing::unlisted`]. Cancellation ends the
+/// listing with what it found; a listing canceled before it starts touches
+/// nothing.
+///
+/// As the scan's walker does, each folder is listed only while it, and every
+/// folder above it, is still the real folder found when it was queued: one
+/// swapped for a link or junction is not entered, and a listing taken while
+/// one was swapped is dropped, so no listing reaches outside the root.
 ///
 /// The root's stamp is checked before and after the listing, as a scan
 /// checks it before its final batch: a drive pulled mid-walk leaves its
@@ -301,35 +338,77 @@ pub(crate) fn frame_paths(
     }
     still_root(root, stamp)?;
     let mut listed = Listing::default();
-    let mut pending = vec![PathBuf::new()];
+    let mut pending = vec![Rc::new(Folder {
+        relative: PathBuf::new(),
+        path: root.to_path_buf(),
+        stamp: stamp.0,
+        parent: None,
+        excluded: Cell::new(false),
+    })];
     while let Some(folder) = pending.pop() {
         if canceled.load(Ordering::Acquire) {
             return Ok(listed);
         }
-        let listing = match fs::read_dir(root.join(&folder)) {
-            Ok(listing) => listing,
-            Err(error) if folder.as_os_str().is_empty() => {
+        match list_folder(&folder, &stamp.0) {
+            Ok(Some(FolderListing { frames, folders })) => {
+                listed.frames.extend(frames);
+                listed.folders.extend(folders.iter().map(|child| child.relative.clone()));
+                pending.extend(folders);
+            }
+            // Swapped for a link or junction: what is there now is not below
+            // the root, and an event names its path.
+            Ok(None) => {}
+            Err(error) if folder.parent.is_none() => {
                 return Err(LibraryError::from_io(root, &error));
             }
-            Err(_) => continue,
-        };
-        for entry in listing.flatten() {
-            let relative = folder.join(entry.file_name());
-            let Ok(meta) = fs::symlink_metadata(root.join(&relative)) else {
-                continue;
-            };
-            match classify(&meta, &relative, &stamp.0) {
-                Entry::Folder => {
-                    listed.folders.push(relative.clone());
-                    pending.push(relative);
-                }
-                Entry::Frame => listed.frames.push(NativePath::from_path(&relative)),
-                Entry::Other => {}
-            }
+            Err(_) => listed.unlisted.push(folder.relative.clone()),
         }
     }
     still_root(root, stamp)?;
     Ok(listed)
+}
+
+/// The supported frames and the real folders one folder holds, as relative
+/// paths.
+struct FolderListing {
+    frames: Vec<NativePath>,
+    folders: Vec<Rc<Folder>>,
+}
+
+/// List `folder` while it and every folder above it are still the real
+/// folders recorded: `None` when one of them changed before or during the
+/// listing.
+///
+/// # Errors
+/// The folder could not be listed.
+fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<FolderListing>> {
+    if changed_folder(folder).is_some() {
+        return Ok(None);
+    }
+    let mut listing = FolderListing { frames: Vec::new(), folders: Vec::new() };
+    for entry in fs::read_dir(&folder.path)?.flatten() {
+        let relative = folder.relative.join(entry.file_name());
+        let path = folder.path.join(entry.file_name());
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        match kind(&meta, &relative, root) {
+            Kind::Folder(stamp) => listing.folders.push(Rc::new(Folder {
+                relative,
+                path,
+                stamp,
+                parent: Some(Rc::clone(folder)),
+                excluded: Cell::new(false),
+            })),
+            Kind::File(ImageFormat::Fits | ImageFormat::Xisf) => {
+                listing.frames.push(NativePath::from_path(&relative));
+            }
+            Kind::Link | Kind::ForeignVolume | Kind::File(ImageFormat::Unsupported) => {}
+        }
+    }
+    // A listing read through a folder swapped mid-read names entries outside
+    // the root.
+    Ok(changed_folder(folder).is_none().then_some(listing))
 }
 
 /// `SourceUnavailable` unless `root` still carries `stamp`.
@@ -951,5 +1030,78 @@ fn nanos_since_epoch(time: SystemTime) -> Option<i128> {
     match time.duration_since(UNIX_EPOCH) {
         Ok(after) => i128::try_from(after.as_nanos()).ok(),
         Err(before) => i128::try_from(before.duration().as_nanos()).ok().map(|nanos| -nanos),
+    }
+}
+
+/// [`list_folder`] refuses a folder swapped for a link once it was queued, so
+/// a walk never lists outside the root through one.
+#[cfg(all(test, unix))]
+mod swapped_folders {
+    use std::os::unix::fs::symlink;
+
+    use super::*;
+
+    /// `relative` below `root`, as a walk queues it: each folder from the
+    /// root down with the stamp it has now.
+    fn queued(root: &Path, relative: &str) -> Rc<Folder> {
+        let stamp = |path: &Path| identity::stamp(&fs::symlink_metadata(path).unwrap());
+        let mut folder = Rc::new(Folder {
+            relative: PathBuf::new(),
+            path: root.to_path_buf(),
+            stamp: stamp(root),
+            parent: None,
+            excluded: Cell::new(false),
+        });
+        for part in Path::new(relative).components() {
+            let path = folder.path.join(part);
+            folder = Rc::new(Folder {
+                relative: folder.relative.join(part),
+                stamp: stamp(&path),
+                path,
+                parent: Some(folder),
+                excluded: Cell::new(false),
+            });
+        }
+        folder
+    }
+
+    fn frames(folder: &Rc<Folder>, root: &Path) -> Option<usize> {
+        let root = identity::stamp(&fs::symlink_metadata(root).unwrap());
+        list_folder(folder, &root).unwrap().map(|listing| listing.frames.len())
+    }
+
+    #[test]
+    fn a_folder_swapped_for_a_link_once_queued_is_not_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        fs::write(root.join("night/Ha_001.fits"), b"").unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("Ha_901.fits"), b"").unwrap();
+        fs::write(outside.join("Ha_902.fits"), b"").unwrap();
+        let night = queued(&root, "night");
+        assert_eq!(frames(&night, &root), Some(1));
+
+        fs::rename(root.join("night"), dir.path().join("moved")).unwrap();
+        symlink(&outside, root.join("night")).unwrap();
+        assert_eq!(frames(&night, &root), None, "nothing outside the root is listed");
+    }
+
+    /// The link points at the moved original, so the queued folder itself
+    /// still reads the same through it: only the folder above it changed.
+    #[test]
+    fn a_folder_reached_through_a_swapped_parent_is_not_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night/Ha")).unwrap();
+        fs::write(root.join("night/Ha/Ha_001.fits"), b"").unwrap();
+        let filter = queued(&root, "night/Ha");
+        assert_eq!(frames(&filter, &root), Some(1));
+
+        let moved = dir.path().join("moved");
+        fs::rename(root.join("night"), &moved).unwrap();
+        symlink(&moved, root.join("night")).unwrap();
+        assert_eq!(frames(&filter, &root), None, "listed through a link above it");
     }
 }

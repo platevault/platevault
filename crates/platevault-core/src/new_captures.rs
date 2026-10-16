@@ -35,19 +35,24 @@
 //! - Every sweep each root is `stat`ed once, without following links. A
 //!   watched root that is gone or no longer the same folder is dropped at
 //!   once, releasing its OS watch. An absent root costs that one `stat` per
-//!   sweep; a present one is checked against its registered identity, and a
-//!   root refused once is checked again only after its `stat` changes.
+//!   sweep; a present one is checked against its registered identity. A root
+//!   refused because it is not the registered folder is checked again only
+//!   after its `stat` changes, and one whose identity could not be observed
+//!   (a volume query that failed) at the next sweep.
 //! - An OS watcher error or lost-events notice, a full event channel, a new
 //!   folder (which the watcher does not cover yet) or a path that is not
 //!   UTF-8 restarts that location's watcher and walks it again. So does a walk
 //!   that enters a folder the watcher did not find as it started (created
 //!   between its listing and its registration), and every sweep while the
-//!   watcher did not start or the OS refused a folder the walk can list. A
-//!   folder the OS refuses that no walk can list either (`System Volume
-//!   Information` at the root of an NTFS drive, `lost+found` on ext4) holds
-//!   nothing the count holds: the watcher stays live, and a sweep only checks
-//!   whether the folder can be listed now.
-//! - A volume mounted inside a location is neither walked nor watched.
+//!   watcher did not start or the OS refused a folder the walk can list.
+//! - A folder no walk can list holds nothing the count holds, as a scan
+//!   leaves it out. One the OS refuses to watch too (`System Volume
+//!   Information` at the root of an NTFS drive, `lost+found` on ext4) leaves
+//!   the watcher live. Every sweep checks whether such a folder can be listed
+//!   now, and walks the location again once one can, since a folder that
+//!   becomes readable raises no event that brings its files in.
+//! - A volume mounted inside a location is neither walked nor watched, and a
+//!   walk never lists through a folder swapped for a link or junction.
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
 //! - Windows ejects a volume only once no process holds a handle on it, and
@@ -89,7 +94,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval, interval_at, Instant, MissedTickBehavior};
 use uuid::Uuid;
 
-use crate::inventory::{self, Entry, Listing, RootStamp};
+use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{blocking, Library};
 use crate::{
     LibraryError, Location, LocationLifecycle, LocationRole, NativePath, PathIdentity,
@@ -305,8 +310,9 @@ pub(crate) trait RootProbe: Send + Sync + 'static {
     /// which is qualified through a bounded OS query.
     ///
     /// # Errors
-    /// The identity check's error, as for a scan.
-    fn validate(&self, location: &Location) -> Result<(), LibraryError>;
+    /// The identity check's refusal, as for a scan, telling a mismatch from a
+    /// root that could not be observed.
+    fn validate(&self, location: &Location) -> Result<(), RootRefusal>;
 
     /// Start an OS watcher over every real folder below the root.
     ///
@@ -334,8 +340,8 @@ impl RootProbe for OsProbe {
         inventory::root_stamp(root)
     }
 
-    fn validate(&self, location: &Location) -> Result<(), LibraryError> {
-        inventory::validate_location_root(location).map(drop)
+    fn validate(&self, location: &Location) -> Result<(), RootRefusal> {
+        inventory::check_location_root(location)
     }
 
     fn watch(&self, root: &Utf8Path, capacity: usize) -> Result<TreeWatch, String> {
@@ -510,6 +516,9 @@ struct Watched {
     /// The new files: identity to relative path.
     new: HashMap<PathIdentity, PathBuf>,
     walk: Option<Walk>,
+    /// The folders the last walk could not list, relative to the root: a
+    /// sweep walks again once one of them can be listed.
+    unlisted: Vec<PathBuf>,
     /// Restart the watcher and walk again once the walk in flight ends.
     rescan: bool,
     /// Read the catalog's paths again: once the walk in flight ends, and at
@@ -567,6 +576,7 @@ impl Watched {
         if let Some(live) = &self.live {
             self.rescan |= listing.folders.iter().any(|folder| !live.folders.contains(folder));
         }
+        self.unlisted = listing.unlisted;
         let volume = &self.location.identity.volume;
         let known = &self.known;
         self.new = listing
@@ -874,27 +884,33 @@ impl Run {
     }
 
     /// At a sweep, restart a watcher that did not start or misses a folder a
-    /// walk can list, through a rescan, once no walk runs. One whose refused
-    /// folders no walk could list restarts only once one of them can be
-    /// listed. A non-UTF-8 root is never watched, so it is not retried.
+    /// walk can list, through a rescan, once no walk runs. A folder that no
+    /// walk could list, refused by the watcher or skipped by the last walk,
+    /// is listed again first: the location is rescanned once one of them can
+    /// be listed. A non-UTF-8 root is never watched, so its watcher is not
+    /// retried.
     async fn retry_watcher(&mut self, id: Uuid) {
         let Some(watched) = self.locations.get(&id) else {
             return;
         };
-        if watched.walk.is_some() || watched.root.to_str().is_none() {
+        if watched.walk.is_some() {
             return;
         }
+        let watchable = watched.root.to_str().is_some();
         let retry = match &watched.live {
-            Some(live) if live.complete && live.unlisted.is_empty() => false,
-            Some(live) if live.complete => {
-                let unlisted = live.unlisted.clone();
-                tokio::task::spawn_blocking(move || {
-                    unlisted.iter().any(|folder| std::fs::read_dir(folder).is_ok())
-                })
-                .await
-                .unwrap_or(false)
+            Some(live) if !live.complete => true,
+            None if watchable => true,
+            live => {
+                let mut unlisted: Vec<PathBuf> =
+                    watched.unlisted.iter().map(|folder| watched.root.join(folder)).collect();
+                unlisted.extend(live.iter().flat_map(|live| live.unlisted.iter().cloned()));
+                !unlisted.is_empty()
+                    && tokio::task::spawn_blocking(move || {
+                        unlisted.iter().any(|folder| std::fs::read_dir(folder).is_ok())
+                    })
+                    .await
+                    .unwrap_or(false)
             }
-            _ => true,
         };
         if let Some(watched) = self.locations.get_mut(&id).filter(|_| retry) {
             watched.rescan = true;
@@ -919,16 +935,26 @@ impl Run {
         let probe = Arc::clone(&self.probe);
         let checked = location.clone();
         let resolved = root.clone();
-        let canonical = match blocking(move || {
+        let checked = tokio::task::spawn_blocking(move || {
             probe.validate(&checked)?;
             Ok(std::fs::canonicalize(&resolved).ok().filter(|canonical| *canonical != resolved))
         })
         .await
-        {
+        .unwrap_or_else(|interrupted| {
+            Err(RootRefusal::Unobserved(LibraryError::SourceUnavailable(interrupted.to_string())))
+        });
+        let canonical = match checked {
             Ok(canonical) => canonical,
-            Err(error) => {
+            // Not checked again until the folder at the path changes.
+            Err(RootRefusal::Mismatch(error)) => {
                 tracing::info!(location = %id, %error, "new captures: root is not the registered folder");
                 self.offline.insert(id, Offline { location, refused: Some(stamp) });
+                return;
+            }
+            // Checked again at the next sweep.
+            Err(RootRefusal::Unobserved(error)) => {
+                tracing::warn!(location = %id, %error, "new captures: root could not be checked; checked again at the next sweep");
+                self.offline.insert(id, Offline { location, refused: None });
                 return;
             }
         };
@@ -946,6 +972,7 @@ impl Run {
                 known: HashSet::new(),
                 new: HashMap::new(),
                 walk: None,
+                unlisted: Vec::new(),
                 rescan: false,
                 recount: false,
                 listed: false,

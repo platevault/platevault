@@ -19,7 +19,7 @@ use super::{
     CaptureWatch, Gate, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, Watched,
     WatchedRoot, SHUTDOWN_GRACE,
 };
-use crate::inventory::{self, Entry, Listing, RootStamp};
+use crate::inventory::{self, Entry, Listing, RootRefusal, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{LibraryError, Location, LocationRole, NativePath, ScanOperation, ScanState};
 
@@ -187,6 +187,12 @@ struct Probe {
     /// A folder every watcher start reports refused, as Windows refuses
     /// `System Volume Information`.
     refused: Mutex<Option<PathBuf>>,
+    /// How many of the next validations cannot observe the root, as when a
+    /// volume query fails once.
+    unobserved: AtomicUsize,
+    /// Whether the watchers it starts deliver no event while they watch, as
+    /// when a folder becomes readable without one.
+    deaf: AtomicBool,
 }
 
 /// Take one from `counter` unless it is zero.
@@ -206,8 +212,12 @@ impl RootProbe for Probe {
         OsProbe.stamp(root)
     }
 
-    fn validate(&self, location: &Location) -> Result<(), LibraryError> {
+    fn validate(&self, location: &Location) -> Result<(), RootRefusal> {
         self.validations.fetch_add(1, Ordering::SeqCst);
+        if take_one(&self.unobserved) {
+            let error = LibraryError::IdentityConflict("volume query timed out".into());
+            return Err(RootRefusal::Unobserved(error));
+        }
         OsProbe.validate(location)
     }
 
@@ -234,6 +244,10 @@ impl RootProbe for Probe {
         };
         let refused = self.refused.lock().unwrap().clone();
         started.refused.extend(refused);
+        if self.deaf.load(Ordering::SeqCst) {
+            // The watcher still holds its folders; its events go nowhere.
+            started.events = tokio::sync::mpsc::channel(1).1;
+        }
         Ok(started)
     }
 
@@ -810,6 +824,53 @@ async fn a_refused_root_is_not_queried_again_until_it_changes() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_that_could_not_be_checked_is_checked_again_at_the_next_sweep() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    let probe = Arc::new(Probe::default());
+    // The volume query fails once, while the root itself is unchanged.
+    probe.unobserved.store(1, Ordering::SeqCst);
+    let watch = probed(&fx.library, &probe);
+
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    assert_eq!(probe.validations.load(Ordering::SeqCst), 2, "refused once, then checked again");
+}
+
+/// A folder the walk cannot list. When it becomes readable no event need
+/// bring its files in (`FSEvents` may report the change of mode, inotify
+/// reports none below a folder it could not watch), so the watchers here
+/// deliver none, and a sweep lists it again.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_the_walk_could_not_list_is_walked_once_it_can_be() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let locked = root.join("night");
+    frame(&locked.join("Ha_001.fits"));
+    let _unlock = Unlock(&locked);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(fs::read_dir(&locked).is_err(), "needs a user file permissions bind, not root");
+    let probe = Arc::new(Probe::default());
+    probe.deaf.store(true, Ordering::SeqCst);
+    let watch = probed(&fx.library, &probe);
+
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    after(&watch, sweeps, 2).await;
+    let walked = walks(&watch);
+    assert_eq!(walked, 1, "an unreadable folder is not walked again while it stays so");
+
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_released_location_touches_its_volume_no_more_until_reattached() {
     let fx = fixture().await;
     let root = fx.base.join("Captures");
@@ -1040,6 +1101,7 @@ fn counted(location: Location, root: &Path) -> Watched {
         known: HashSet::new(),
         new: HashMap::new(),
         walk: None,
+        unlisted: Vec::new(),
         rescan: false,
         recount: false,
         listed: true,
