@@ -48,7 +48,8 @@ async fn the_first_apply_builds_the_night_layout_from_symlinks_to_the_originals(
     assert_eq!(oiii.len(), 2, "{tree:#?}");
     let all: Vec<&String> = ha.iter().chain(&oiii).collect();
     assert_eq!(all.iter().filter(|name| name.as_str() == "Light_001.fits").count(), 1);
-    assert!(all.iter().any(|name| name.starts_with("Light_001-") && name.ends_with(".fits")));
+    assert!(all.iter().any(|name| name.starts_with("Light_001-")
+        && Path::new(name.as_str()).extension().is_some_and(|ext| ext == "fits")));
     assert_eq!(names(&tree, "NIGHT_2026-10-12/Flats/Ha/").len(), 2, "{tree:#?}");
     assert_eq!(names(&tree, "NIGHT_2026-10-13/Flats/OIII/").len(), 2, "{tree:#?}");
     assert_eq!(names(&tree, "Darks/"), ["Dark_300s_001.fits", "Dark_300s_002.fits"]);
@@ -342,7 +343,7 @@ async fn switching_to_copies_unlinks_old_links_without_following_them() {
 
     let report = world.apply().await;
     assert_eq!(report.outcome, Some(ApplyOutcome::Applied), "{report:#?}");
-    assert_eq!(World::tree(&world.previous()), [replaced.clone()]);
+    assert_eq!(World::tree(&world.previous()), std::slice::from_ref(&replaced));
     assert_eq!(report.leftovers.len(), 1);
     assert_eq!(report.leftovers[0].reason, PreviousItemReason::UnverifiedLink);
     for (dark, before) in DARKS.iter().zip(originals) {

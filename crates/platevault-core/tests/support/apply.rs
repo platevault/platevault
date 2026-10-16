@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Shared world for the F4 Apply tests (spec 069; astro-plan-y1zq7): Project
-//! 'NGC 7000' with one group on the RedCat, its Ha and OIII light sessions
+//! 'NGC 7000' with one group on the `RedCat`, its Ha and OIII light sessions
 //! of 12 and 13 Oct 2026 Usable, reviewed and held with their copies, each
 //! pinned to its night's raw flats and the 300 s raw darks, bias No, and the
 //! empty processing location `Work/Processing`. A third Ha session of
@@ -16,7 +16,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use persistence_library::{SessionQuery, SourceProbe};
+use persistence_library::SourceProbe;
 use platevault_core::apply::Unattended;
 use platevault_core::library::{InventoryProbe, Library};
 use platevault_core::*;

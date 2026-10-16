@@ -738,7 +738,7 @@ enum Recovered {
 }
 
 /// Put the folders of an interrupted Apply back in a state its journal can
-/// settle: an Apply that recorded NewInstalled, or whose `View/` already is
+/// settle: an Apply that recorded `NewInstalled`, or whose `View/` already is
 /// the verified build, finishes; one that moved the old View aside without
 /// installing the new one moves it back.
 fn recover_folders(
@@ -881,16 +881,32 @@ impl Run<'_> {
         format!("{count} input(s) could not be placed; the current View is unchanged")
     }
 
-    /// Snapshot, build, verify, swap and settle.
-    async fn build(
-        &mut self,
-        plan: Plan,
-        ticked: &BTreeSet<PathBuf>,
-    ) -> Result<ApplyReport, LibraryError> {
-        if let Some(report) = self.interrupted() {
-            return Ok(report);
-        }
-        // SourcesVerified: every original's identity and SHA-256 (D19).
+    /// A fresh `View (building)/`, after clearing one an earlier failed
+    /// Apply of this Project left; the files that clearing couldn't prove
+    /// its own instead.
+    async fn make_building(&self) -> Result<Result<FileIdentity, Vec<PathBuf>>, LibraryError> {
+        let building = self.building();
+        let digests = self.digests();
+        blocking(move || {
+            if fs::symlink_metadata(&building).is_ok() {
+                let kept = files::clear_building(&building, &digests);
+                if !kept.is_empty() {
+                    return Ok(Err(kept));
+                }
+            }
+            fs::create_dir(&building).map_err(|error| LibraryError::from_io(&building, &error))?;
+            Ok(Ok(observe_folder_identity(&building)?))
+        })
+        .await
+    }
+
+    /// Every original the plan places, snapshotted once: its identity and
+    /// SHA-256 against the basis it was chosen or pinned with (D19).
+    async fn snapshot_sources(
+        &self,
+        plan: &Plan,
+    ) -> Result<Result<BTreeMap<Uuid, EntryEvidence>, Vec<(PathBuf, ItemReason)>>, LibraryError>
+    {
         let mut wanted: BTreeMap<Uuid, (PathBuf, &PlanEntry)> = BTreeMap::new();
         for entry in &plan.entries {
             if let Some(path) = self
@@ -906,7 +922,7 @@ impl Run<'_> {
             .into_iter()
             .map(|(id, (path, entry))| (id, path, entry.basis.clone(), entry.sha256.clone()))
             .collect();
-        let (snapshots, failures) = blocking(move || {
+        blocking(move || {
             let mut snapshots = BTreeMap::new();
             let mut failures = Vec::new();
             for (id, path, basis, sha256) in jobs {
@@ -917,35 +933,33 @@ impl Run<'_> {
                     Err(reason) => failures.push((path, reason)),
                 }
             }
-            Ok((snapshots, failures))
+            Ok(if failures.is_empty() { Ok(snapshots) } else { Err(failures) })
         })
-        .await?;
-        if !failures.is_empty() {
-            let error = self.failed(failures);
-            return self.end(ApplyOutcome::Failed, error).await;
+        .await
+    }
+
+    /// Snapshot, build, verify, swap and settle.
+    async fn build(
+        &mut self,
+        plan: Plan,
+        ticked: &BTreeSet<PathBuf>,
+    ) -> Result<ApplyReport, LibraryError> {
+        if let Some(report) = self.interrupted() {
+            return Ok(report);
         }
-        self.snapshots = Arc::new(snapshots);
+        match self.snapshot_sources(&plan).await? {
+            Ok(snapshots) => self.snapshots = Arc::new(snapshots),
+            Err(failures) => {
+                let error = self.failed(failures);
+                return self.end(ApplyOutcome::Failed, error).await;
+            }
+        }
         self.advance(ApplyPhase::SourcesVerified, None).await?;
         if let Some(report) = self.interrupted() {
             return Ok(report);
         }
 
-        // Building: a fresh View (building)/, after clearing one an earlier
-        // failed Apply of this Project left.
-        let building = self.building();
-        let digests = self.digests();
-        let made = blocking(move || {
-            if fs::symlink_metadata(&building).is_ok() {
-                let kept = files::clear_building(&building, &digests);
-                if !kept.is_empty() {
-                    return Ok(Err(kept));
-                }
-            }
-            fs::create_dir(&building).map_err(|error| LibraryError::from_io(&building, &error))?;
-            Ok(Ok(observe_folder_identity(&building)?))
-        })
-        .await?;
-        let identity = match made {
+        let identity = match self.make_building().await? {
             Ok(identity) => identity,
             Err(kept) => {
                 let failures = kept
@@ -1116,7 +1130,7 @@ impl Run<'_> {
         self.finish_installed().await
     }
 
-    /// From NewInstalled on Apply ends Applied: commit the manifest, move
+    /// From `NewInstalled` on Apply ends Applied: commit the manifest, move
     /// the ticked foreign files and retire the old View.
     async fn finish_installed(&mut self) -> Result<ApplyReport, LibraryError> {
         let library = self.library;
@@ -1269,7 +1283,7 @@ mod tests {
         assert!(matches!(error, LibraryError::SymlinksUnavailable(_)));
         assert_eq!(error.response(None, None).kind, "symlinks_unavailable");
         assert!(error.to_string().contains("Developer Mode"));
-        assert!(check(&inputs(temp.path(), ViewMode::Copies), os).blockers.is_empty());
+        assert_eq!(check(&inputs(temp.path(), ViewMode::Copies), os).blockers, Vec::new());
         assert!(fs::read_dir(temp.path()).unwrap().next().is_none(), "nothing was built");
     }
 

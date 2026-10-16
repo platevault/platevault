@@ -148,7 +148,7 @@ impl Catalog {
 
     /// Record a verified build: its entries with the identities they were
     /// written with and the files `PlateVault` didn't place in the current
-    /// View with the user's ticks, at BuildVerified.
+    /// View with the user's ticks, at `BuildVerified`.
     ///
     /// # Errors
     /// `PersistenceFailure` for an entry the manifest refuses.
@@ -174,7 +174,7 @@ impl Catalog {
     ///
     /// # Errors
     /// `InvalidInput` for an outcome that isn't Failed or Canceled;
-    /// `PersistenceFailure` when the journal is past NewInstalled.
+    /// `PersistenceFailure` when the journal is past `NewInstalled`.
     pub async fn discard_apply(
         &self,
         journal: &ApplyJournal,
@@ -206,7 +206,7 @@ impl Catalog {
     }
 
     /// The new View is in place: the previous installed manifest becomes
-    /// previous and this one installed, at ManifestCommitted.
+    /// previous and this one installed, at `ManifestCommitted`.
     ///
     /// # Errors
     /// `PersistenceFailure` for a manifest state the schema refuses.
@@ -233,7 +233,7 @@ impl Catalog {
         Ok(())
     }
 
-    /// Record how each foreign file ended, at ForeignTransferred.
+    /// Record how each foreign file ended, at `ForeignTransferred`.
     ///
     /// # Errors
     /// `PersistenceFailure` for a state the schema refuses.
@@ -443,20 +443,25 @@ impl Catalog {
 
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
-async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Result<ApplyInputs> {
-    let project = project_id.to_string();
+/// The Project row's View settings.
+struct ProjectRow {
+    name: String,
+    lifecycle: ProjectLifecycle,
+    desired_revision: Revision,
+    mode: ViewMode,
+    keywords: GroupKeywords,
+    parent: Option<NativePath>,
+}
+
+async fn read_project(conn: &mut SqliteConnection, project_id: Uuid) -> Result<ProjectRow> {
     let row = sqlx::query(
         "SELECT name, lifecycle, revision, view_mode, group_keyword, panel_keyword, \
          processing_parent FROM projects WHERE id = ?1",
     )
-    .bind(&project)
+    .bind(project_id.to_string())
     .fetch_optional(&mut *conn)
     .await?
     .ok_or_else(|| LibraryError::NotFound(format!("project {project_id}")))?;
-    let name: String = row.try_get("name")?;
-    let lifecycle: ProjectLifecycle = from_text(&row.try_get::<String, _>("lifecycle")?)?;
-    let desired_revision = revision(row.try_get("revision")?)?;
-    let mode: ViewMode = from_text(&row.try_get::<String, _>("view_mode")?)?;
     let keywords = match (
         row.try_get::<Option<String>, _>("group_keyword")?,
         row.try_get::<Option<String>, _>("panel_keyword")?,
@@ -464,31 +469,53 @@ async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Result<Ap
         (Some(group), Some(panel)) => GroupKeywords::new(&group, &panel)?,
         _ => settings_keywords(conn).await?,
     };
-    let parent = row
-        .try_get::<Option<String>, _>("processing_parent")?
-        .map(|parent| from_json::<NativePath>(&parent))
-        .transpose()?;
+    Ok(ProjectRow {
+        name: row.try_get("name")?,
+        lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        desired_revision: revision(row.try_get("revision")?)?,
+        mode: from_text(&row.try_get::<String, _>("view_mode")?)?,
+        keywords,
+        parent: row
+            .try_get::<Option<String>, _>("processing_parent")?
+            .map(|parent| from_json::<NativePath>(&parent))
+            .transpose()?,
+    })
+}
 
+/// The basis of what the Project holds, with each session's representative
+/// light metadata and the sessions whose calibration isn't settled; every
+/// source it names goes into `relative`.
+struct HeldBasis {
+    groups: Vec<BasisGroup>,
+    metadata: BTreeMap<Uuid, CaptureMetadata>,
+    unsettled: Vec<(Uuid, Vec<InputKind>)>,
+}
+
+async fn held_basis(
+    conn: &mut SqliteConnection,
+    project_id: Uuid,
+    relative: &mut Relative,
+) -> Result<HeldBasis> {
     let mut held = Held::read(conn, project_id).await?;
-    let mut relative = Relative::new();
-    let mut metadata = BTreeMap::new();
-    let mut unsettled = Vec::new();
-    let mut groups = Vec::with_capacity(held.groups.len());
-    for (id, group_name, panel, rig_id) in std::mem::take(&mut held.groups) {
+    let mut basis =
+        HeldBasis { groups: Vec::new(), metadata: BTreeMap::new(), unsettled: Vec::new() };
+    for (id, name, panel, rig_id) in std::mem::take(&mut held.groups) {
         let mut sessions = Vec::new();
         for (session_id, night) in held.sessions.remove(&id).unwrap_or_default() {
             let calibration = admission::read_calibration(conn, session_id).await?;
             let Some(settled) = calibration.settled() else {
-                unsettled.push((session_id, calibration.unsettled_kinds()));
+                basis.unsettled.push((session_id, calibration.unsettled_kinds()));
                 continue;
             };
             let captures = held.captures.remove(&session_id).unwrap_or_default();
-            if let Some(first) = captures.iter().find(|capture| capture.included) {
-                if let Some(asset) =
-                    first.copies.iter().find_map(|copy| held.live.get(&copy.asset_id))
-                {
-                    metadata.insert(session_id, asset.effective.clone());
-                }
+            let live: Vec<&Asset> = captures
+                .iter()
+                .filter(|capture| capture.included)
+                .flat_map(|capture| &capture.copies)
+                .filter_map(|copy| held.live.get(&copy.asset_id))
+                .collect();
+            if let Some(first) = live.first() {
+                basis.metadata.insert(session_id, first.effective.clone());
             }
             for asset in captures
                 .iter()
@@ -497,70 +524,93 @@ async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Result<Ap
             {
                 relative.insert(asset.id, (asset.location_id, asset.relative_path.clone()));
             }
-            pin_sources(conn, &settled.dark, &mut relative).await?;
-            pin_sources(conn, &settled.flat, &mut relative).await?;
-            pin_sources(conn, &settled.bias, &mut relative).await?;
+            for pin in [&settled.dark, &settled.flat, &settled.bias] {
+                pin_sources(conn, pin, relative).await?;
+            }
             sessions.push(BasisSession { session_id, night, captures, calibration: settled });
         }
-        groups.push(BasisGroup { id, name: group_name, panel, rig_id, sessions });
+        basis.groups.push(BasisGroup { id, name, panel, rig_id, sessions });
     }
-    let basis = ProjectBasis { mode, keywords, groups };
-    basis.validate()?;
+    Ok(basis)
+}
 
+/// Each source's absolute path, with the locations they are on.
+async fn resolve_sources(
+    conn: &mut SqliteConnection,
+    relative: Relative,
+) -> Result<(BTreeMap<Uuid, SourcePath>, BTreeMap<Uuid, Location>)> {
+    let mut locations: BTreeMap<Uuid, Location> = BTreeMap::new();
+    let mut sources = BTreeMap::new();
+    for (id, (location_id, path)) in relative {
+        let root = match locations.entry(location_id) {
+            std::collections::btree_map::Entry::Occupied(known) => known.into_mut(),
+            std::collections::btree_map::Entry::Vacant(free) => {
+                free.insert(load_location(conn, location_id).await?)
+            }
+        };
+        sources.insert(id, SourcePath { location_id, path: joined(&root.path, &path)? });
+    }
+    Ok((sources, locations))
+}
+
+/// The `View (building)/` identity the Project's last failed Apply recorded.
+async fn failed_building(
+    conn: &mut SqliteConnection,
+    project_id: Uuid,
+) -> Result<Option<FileIdentity>> {
+    let expected: Option<String> = sqlx::query_scalar(
+        "SELECT expected FROM apply_operations WHERE project_id = ?1 AND outcome = 'failed' \
+         ORDER BY updated_at DESC, generation DESC LIMIT 1",
+    )
+    .bind(project_id.to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(expected
+        .map(|text| from_json::<ExpectedTree>(&text))
+        .transpose()?
+        .and_then(|expected| expected.building))
+}
+
+async fn read_inputs(conn: &mut SqliteConnection, project_id: Uuid) -> Result<ApplyInputs> {
+    let project = read_project(conn, project_id).await?;
+    let mut relative = Relative::new();
+    let held = held_basis(conn, project_id, &mut relative).await?;
+    let basis =
+        ProjectBasis { mode: project.mode, keywords: project.keywords, groups: held.groups };
+    basis.validate()?;
     let installed = read_manifest_in(conn, project_id, "installed").await?;
     let previous = read_manifest_in(conn, project_id, "previous").await?;
     for manifest in installed.iter().chain(&previous) {
         manifest_sources(conn, manifest, &mut relative).await?;
     }
-    let mut locations = BTreeMap::new();
-    let mut sources = BTreeMap::new();
-    for (id, (location_id, path)) in relative {
-        if !locations.contains_key(&location_id) {
-            locations.insert(location_id, load_location(conn, location_id).await?);
-        }
-        let root = &locations[&location_id].path;
-        sources.insert(id, SourcePath { location_id, path: joined(root, &path)? });
-    }
+    let (sources, locations) = resolve_sources(conn, relative).await?;
     let names = read_names(conn, project_id).await?;
-    let leftovers = read_leftovers(conn, project_id).await?;
-    let running = project_operations::active_operation(conn, project_id).await?;
-    let failed_building: Option<String> = sqlx::query_scalar(
-        "SELECT expected FROM apply_operations WHERE project_id = ?1 AND outcome = 'failed' \
-         ORDER BY updated_at DESC, generation DESC LIMIT 1",
-    )
-    .bind(&project)
-    .fetch_optional(&mut *conn)
-    .await?;
-    let failed_building = failed_building
-        .map(|text| from_json::<ExpectedTree>(&text))
-        .transpose()?
-        .and_then(|expected| expected.building);
     let basis_digest = digest(&Digested {
-        desired_revision,
+        desired_revision: project.desired_revision,
         applied_generation: installed.as_ref().map(|manifest| manifest.generation),
-        name: &name,
-        parent: parent.as_ref(),
+        name: &project.name,
+        parent: project.parent.as_ref(),
         basis: &basis,
         names: names.iter().collect(),
     })?;
     Ok(ApplyInputs {
         project_id,
-        name,
-        lifecycle,
-        desired_revision,
-        parent,
+        name: project.name,
+        lifecycle: project.lifecycle,
+        desired_revision: project.desired_revision,
+        parent: project.parent,
         basis,
         basis_digest,
-        unsettled,
-        metadata,
+        unsettled: held.unsettled,
+        metadata: held.metadata,
         sources,
         locations,
         names,
         installed,
         previous,
-        leftovers,
-        running,
-        failed_building,
+        leftovers: read_leftovers(conn, project_id).await?,
+        running: project_operations::active_operation(conn, project_id).await?,
+        failed_building: failed_building(conn, project_id).await?,
     })
 }
 
@@ -771,7 +821,7 @@ async fn manifest_sources(
                 assets.insert(asset_id);
             }
             EntrySource::Master { master_id, .. } => {
-                master_source(conn, master_id, sources).await?
+                master_source(conn, master_id, sources).await?;
             }
         }
     }

@@ -50,7 +50,7 @@ fn failed(path: &Path, error: &io::Error) -> ItemReason {
 
 /// Why symlinks can't be probed or made in a folder.
 #[derive(Debug)]
-pub(crate) enum SymlinkProbe {
+pub enum SymlinkProbe {
     /// The folder can't hold even a plain file.
     Unwritable(String),
     /// The folder takes files but no symlink: Windows without Developer
@@ -60,7 +60,7 @@ pub(crate) enum SymlinkProbe {
 
 /// Whether `folder` can hold a symlink: create a probe file and a symlink
 /// to it under fresh hidden names, then remove exactly those.
-pub(crate) fn probe_symlinks(folder: &Path) -> Result<(), SymlinkProbe> {
+pub fn probe_symlinks(folder: &Path) -> Result<(), SymlinkProbe> {
     let name = format!(".platevault-symlink-probe-{}", Uuid::new_v4().simple());
     let target = folder.join(format!("{name}.file"));
     fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(|error| {
@@ -81,10 +81,7 @@ pub(crate) fn probe_symlinks(folder: &Path) -> Result<(), SymlinkProbe> {
 
 /// Same file, size and modification time as the recorded basis; the file ID
 /// counts where the volume keeps it stable. The digest isn't read here.
-pub(crate) fn same_file(
-    observed: &ObservationFingerprint,
-    recorded: &ObservationFingerprint,
-) -> bool {
+pub fn same_file(observed: &ObservationFingerprint, recorded: &ObservationFingerprint) -> bool {
     same_identity(&observed.identity, &recorded.identity)
         && observed.size_bytes == recorded.size_bytes
         && observed.modified_ns == recorded.modified_ns
@@ -92,7 +89,7 @@ pub(crate) fn same_file(
 
 /// The original's snapshot (D19): its no-follow identity and SHA-256, which
 /// must still be the file, size, time and digest its basis recorded.
-pub(crate) fn snapshot(
+pub fn snapshot(
     path: &Path,
     basis: &ObservationFingerprint,
     sha256: Option<&str>,
@@ -121,13 +118,13 @@ pub(crate) fn snapshot(
 
 /// How one entry was written.
 #[derive(Clone, Debug)]
-pub(crate) struct Written {
+pub struct Written {
     pub placement: EntryPlacement,
     pub identity: FileIdentity,
 }
 
 /// What placing one entry needs, owned so it runs off the async runtime.
-pub(crate) struct Placing {
+pub struct Placing {
     pub entry: PlanEntry,
     pub snapshot: EntryEvidence,
     pub building: PathBuf,
@@ -140,7 +137,7 @@ pub(crate) struct Placing {
 /// snapshot: a symlink must point at the original, a clone or copy must hold
 /// the snapshot's bytes, a hard link must be the earlier own copy. A hard
 /// link the volume refuses becomes a copy of its own.
-pub(crate) fn place(placing: &Placing) -> Result<Written, ItemReason> {
+pub fn place(placing: &Placing) -> Result<Written, ItemReason> {
     let entry = &placing.entry;
     let path = placing.building.join(&entry.path);
     let folder = entry.path.parent().unwrap_or_else(|| Path::new(""));
@@ -217,7 +214,7 @@ fn copy(placing: &Placing, original: &Path, path: &Path) -> Result<Written, Item
 
 /// Immediately before the swap (PREP-FR-09): each original still holds its
 /// snapshot, and each entry is still the one written.
-pub(crate) fn verify_built(
+pub fn verify_built(
     building: &Path,
     entries: &[ManifestEntry],
     snapshots: &BTreeMap<Uuid, EntryEvidence>,
@@ -258,7 +255,7 @@ fn holds_identity(path: &Path, identity: &FileIdentity) -> bool {
 /// remove it: a symlink holds no data, a partial copy is this module's own,
 /// and a file holding the bytes of an original just snapshotted is a copy of
 /// it. Anything else stays and is returned; the folder then stays too.
-pub(crate) fn clear_building(building: &Path, digests: &BTreeSet<String>) -> Vec<PathBuf> {
+pub fn clear_building(building: &Path, digests: &BTreeSet<String>) -> Vec<PathBuf> {
     let (files, unreadable) = walk(building);
     let mut kept: Vec<PathBuf> = unreadable;
     for path in files {
@@ -316,7 +313,7 @@ fn walk(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
 /// Remove `root` and every folder below it that holds nothing, deepest
 /// first. A folder that holds anything stays; nothing is removed
 /// recursively.
-pub(crate) fn remove_empty_folders(root: &Path) {
+pub fn remove_empty_folders(root: &Path) {
     let mut folders = vec![root.to_path_buf()];
     let mut index = 0;
     while index < folders.len() {
@@ -338,13 +335,13 @@ pub(crate) fn remove_empty_folders(root: &Path) {
 }
 
 /// Whether `folder` holds no file or link at any depth.
-pub(crate) fn holds_nothing(folder: &Path) -> bool {
+pub fn holds_nothing(folder: &Path) -> bool {
     let (files, unreadable) = walk(folder);
     files.is_empty() && unreadable.is_empty()
 }
 
 /// Every file `folder` holds, relative to it, never following a link.
-pub(crate) fn files_below(folder: &Path) -> Vec<PathBuf> {
+pub fn files_below(folder: &Path) -> Vec<PathBuf> {
     walk(folder)
         .0
         .into_iter()
@@ -357,10 +354,7 @@ pub(crate) fn files_below(folder: &Path) -> Vec<PathBuf> {
 /// The files in `view` that `PlateVault` didn't place (VSEL-FR-20): every
 /// file or link not at a path of `placed`, with folders expanded to their
 /// files, with its no-follow evidence.
-pub(crate) fn foreign_files(
-    view: &Path,
-    placed: &BTreeSet<PathBuf>,
-) -> Vec<(PathBuf, EntryEvidence)> {
+pub fn foreign_files(view: &Path, placed: &BTreeSet<PathBuf>) -> Vec<(PathBuf, EntryEvidence)> {
     walk(view)
         .0
         .into_iter()
@@ -377,7 +371,7 @@ pub(crate) fn foreign_files(
 /// Move one ticked foreign file from `View (previous)/` into the new
 /// `View/` at the same place, once it is still the reviewed entry; never
 /// over an entry the new View placed.
-pub(crate) fn move_foreign(previous: &Path, view: &Path, item: &ForeignItem) -> ForeignItem {
+pub fn move_foreign(previous: &Path, view: &Path, item: &ForeignItem) -> ForeignItem {
     let mut item = item.clone();
     if !item.ticked {
         item.state = ForeignItemState::Stayed;
@@ -428,19 +422,19 @@ fn is_reviewed(path: &Path, reviewed: &EntryEvidence) -> bool {
 // ── The swap ─────────────────────────────────────────────────────────────────
 
 /// A rename that never replaces; tests stand in a tool holding a file.
-pub(crate) type Rename = fn(&Path, &Path) -> io::Result<()>;
+pub type Rename = fn(&Path, &Path) -> io::Result<()>;
 
 /// Whether a rename failed only because a tool holds a file open in the
 /// folder: on Windows a sharing, lock or access violation; elsewhere a busy
 /// resource.
-pub(crate) fn held_by_a_tool(error: &io::Error) -> bool {
+pub fn held_by_a_tool(error: &io::Error) -> bool {
     let windows = cfg!(windows) && matches!(error.raw_os_error(), Some(5 | 32 | 33));
     windows || error.kind() == io::ErrorKind::ResourceBusy
 }
 
 /// How moving the old View aside ended.
 #[derive(Debug)]
-pub(crate) enum Aside {
+pub enum Aside {
     Moved {
         waited: bool,
     },
@@ -453,7 +447,7 @@ pub(crate) enum Aside {
 /// (PREP-FR-18): the user reads "Waiting for a tool to release a file in
 /// View", it continues by itself once the file is released, and Cancel
 /// keeps the old View.
-pub(crate) async fn move_aside(
+pub async fn move_aside(
     rename: Rename,
     poll: Duration,
     from: &Path,
@@ -496,7 +490,7 @@ pub(crate) async fn move_aside(
 /// What retiring `View (previous)/` left for review, and whether the folder
 /// is gone.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct Retired {
+pub struct Retired {
     pub leftovers: Vec<PreviousItem>,
     pub gone: bool,
 }
@@ -508,7 +502,7 @@ pub(crate) struct Retired {
 /// that changed, one whose original can't be verified, a link that fails
 /// the check and every file `PlateVault` didn't place stay, named.
 /// Emptied folders are removed, never anything recursively.
-pub(crate) fn retire(
+pub fn retire(
     project: &Path,
     entries: &[ManifestEntry],
     sources: &BTreeMap<Uuid, PathBuf>,
@@ -556,7 +550,7 @@ pub(crate) fn retire(
 }
 
 /// The asset or master id an entry's original is recorded under.
-pub(crate) const fn source_id(entry: &ManifestEntry) -> Uuid {
+const fn source_id(entry: &ManifestEntry) -> Uuid {
     match entry.source {
         crate::EntrySource::Light { asset_id, .. }
         | crate::EntrySource::CalibrationFrame { asset_id, .. } => asset_id,
@@ -627,7 +621,7 @@ fn old_copy(
 
 /// `path` relative to the Project folder's `View (previous)/`, refusing
 /// anything else.
-pub(crate) fn in_previous(path: &NativePath) -> Option<PathBuf> {
+pub fn in_previous(path: &NativePath) -> Option<PathBuf> {
     let relative = path.relative_path().ok()?;
     let mut parts = relative.components();
     match parts.next() {

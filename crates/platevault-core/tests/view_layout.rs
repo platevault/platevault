@@ -87,5 +87,5 @@ fn a_long_entry_name_keeps_its_extension_and_takes_the_id_suffix() {
     let wide = format!("{}.xisf", "Ηλιακό στέμμα ".repeat(20));
     let entry = entry_basename(&wide, id, |_| false);
     assert!(component_len(&entry) <= COMPONENT_LIMIT);
-    assert!(entry.ends_with(".xisf"));
+    assert_eq!(Path::new(&entry).extension().and_then(|ext| ext.to_str()), Some("xisf"));
 }

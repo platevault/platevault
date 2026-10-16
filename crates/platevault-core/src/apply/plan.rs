@@ -40,7 +40,7 @@ use crate::{
 const FILTER_ROOM: usize = COMPONENT_LIMIT - 64;
 
 /// What the layout reads.
-pub(crate) struct PlanInput<'a> {
+pub struct PlanInput<'a> {
     pub basis: &'a ProjectBasis,
     /// One included light's effective metadata per session.
     pub metadata: &'a BTreeMap<Uuid, CaptureMetadata>,
@@ -53,7 +53,7 @@ pub(crate) struct PlanInput<'a> {
 
 /// One entry the build places.
 #[derive(Clone, Debug)]
-pub(crate) struct PlanEntry {
+pub struct PlanEntry {
     pub seq: u32,
     /// Relative to `View/`.
     pub path: PathBuf,
@@ -70,7 +70,7 @@ pub(crate) struct PlanEntry {
 
 /// The layout of one build and the names newcomers take.
 #[derive(Clone, Debug)]
-pub(crate) struct Plan {
+pub struct Plan {
     pub entries: Vec<PlanEntry>,
     pub names: Vec<EntryName>,
 }
@@ -171,15 +171,15 @@ impl Names {
         let clash =
             |error: crate::LibraryError| ApplyBlocker::FolderClash { detail: error.to_string() };
         let mut filters = BTreeMap::new();
-        let mut taken = BTreeSet::new();
+        let mut used = BTreeSet::new();
         for (key, raw) in &raws {
             let plain = layout::token("filter", raw, FILTER_ROOM).map_err(clash)?;
-            let token = if taken.contains(&name_key(&plain)) {
+            let token = if used.contains(&name_key(&plain)) {
                 layout::token_suffixed("filter", raw, FILTER_ROOM).map_err(clash)?
             } else {
                 plain
             };
-            taken.insert(name_key(&token));
+            used.insert(name_key(&token));
             filters.insert(key.clone(), token);
         }
         let distinct = |pick: fn(&Settings) -> Option<String>| {
@@ -217,23 +217,23 @@ impl Names {
         let mut parts: Vec<String> = self.filter(settings).into_iter().collect();
         parts.extend(self.gain_offset(settings));
         parts.extend(settings.exposure.as_ref().map(|exposure| format!("{exposure}s")));
-        joined(parts)
+        joined(&parts)
     }
 
     /// `<filter>[_GAIN_g][_OFFSET_o]`.
     fn flat_folder(&self, settings: &Settings) -> Option<String> {
         let mut parts: Vec<String> = self.filter(settings).into_iter().collect();
         parts.extend(self.gain_offset(settings));
-        joined(parts)
+        joined(&parts)
     }
 
     /// `[GAIN_g][_OFFSET_o]` below `Darks/` or `Bias/`.
     fn calibration_folder(&self, settings: &Settings) -> Option<String> {
-        joined(self.gain_offset(settings))
+        joined(&self.gain_offset(settings))
     }
 }
 
-fn joined(parts: Vec<String>) -> Option<String> {
+fn joined(parts: &[String]) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join("_"))
 }
 
@@ -290,7 +290,7 @@ struct Draft {
 /// # Errors
 /// [`ApplyBlocker::FolderClash`] for two groups or filter values that would
 /// share a folder, or a name that leaves no folder name.
-pub(crate) fn plan(input: &PlanInput<'_>) -> Result<Plan, ApplyBlocker> {
+pub fn plan(input: &PlanInput<'_>) -> Result<Plan, ApplyBlocker> {
     let basis = input.basis;
     let lit: Vec<(&BasisGroup, &BasisSession, Settings)> = basis
         .groups
@@ -501,13 +501,14 @@ fn finish(input: &PlanInput<'_>, drafts: Vec<Draft>) -> Plan {
     for (seq, (path, draft)) in (0_u32..).zip(placed) {
         let placement = match input.basis.mode {
             ViewMode::Symlinks => EntryPlacement::Symlink,
-            ViewMode::Copies => match first.get(&draft.source_id) {
-                Some(&of) => EntryPlacement::Hardlink { of },
-                None => {
+            ViewMode::Copies => {
+                if let Some(&of) = first.get(&draft.source_id) {
+                    EntryPlacement::Hardlink { of }
+                } else {
                     first.insert(draft.source_id, seq);
                     EntryPlacement::Copy
                 }
-            },
+            }
         };
         entries.push(PlanEntry {
             seq,
