@@ -28,7 +28,8 @@ production caller.
 
 - Definitions: functions at column 0 in `crates/**/src/**/*.rs`. Indented
   functions are `impl` methods, reached through traits or receivers that a
-  name-based scan cannot see, and are excluded.
+  name-based scan cannot see, and are excluded. Method coverage is therefore
+  zero: a dead method passes the gate. See [Methods](#methods) below.
 - References: `crates/**` and `apps/desktop/src-tauri/src/**`, minus `tests/`
   paths, minus each `#[cfg(test)]` item's own brace scope. Comment lines are
   stripped, so a doc comment naming a function does not disguise it as live.
@@ -56,6 +57,23 @@ them.
 
 Both require knowing which consumer *should* read a value — not derivable from
 the call graph.
+
+### Methods
+
+The gate checks no `impl` method. A hand triage in 2026-07 found five dead
+consuming builders:
+
+- `ContractError::with_field_error` and `::with_recovery_action`, wired up
+  since in #1397.
+- `Confidence::with_evidence`, still uncalled.
+- Two audit-record builders, since deleted.
+
+astro-plan-d1bg weighed the ways to close the gap once, and the
+`scripts/check-dead-callers.sh` header records the outcome. A name grep over
+indented `pub fn` reports trait and receiver methods falsely.
+`cargo-workspace-unused-pub` gave about 95% false positives on this workspace.
+Method coverage stays absent until a semantic index that filters `#[test]` and
+trait-impl methods is cheap enough to run as a gate.
 
 ## Review convention for the uncovered half
 
