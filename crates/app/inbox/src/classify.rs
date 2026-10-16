@@ -1715,24 +1715,32 @@ async fn build_breakdown(
 /// classify enumerates one folder level.
 ///
 /// Before bd astro-plan-3pvvc, `wire_path` turned a `\` inside a macOS or
-/// Linux file name into `/`, so the file `a\b.fits` was stored as `a/b.fits`:
-/// one level deeper than its folder, and the name of a different file. A
-/// cached classification holding such a row is recomputed rather than
-/// reused, so its evidence, metadata and confirm paths name the file that was
-/// classified. `Path` compares by component, so on Windows either separator
-/// matches.
+/// Linux name into `/`, so the file `a\b.fits` was stored as `a/b.fits`: one
+/// level deeper than its folder, and the name of a different file. A cached
+/// classification holding such a row is recomputed rather than reused, so its
+/// evidence, metadata and confirm paths name the file that was classified.
+///
+/// The check compares text. Both sides come from `wire_path`, which writes
+/// `/` as the only separator on every platform, so a name is exactly the text
+/// between two `/`. A `Path` comparison would skip the empty and `.`
+/// components in old text such as `p//b.fits` (from `\b.fits`) and
+/// `p/./b.fits` (from `.\b.fits`), and accept both.
 fn evidence_names_item_files(
     item: &persistence_inbox::repositories::inbox::InboxItemRow,
     evidence: &[persistence_inbox::repositories::inbox::InboxEvidenceRow],
 ) -> bool {
-    let item_path = Path::new(&item.relative_path);
+    let item_path = item.relative_path.as_str();
     evidence.iter().all(|ev| {
-        let file = Path::new(&ev.relative_file_path);
-        if item.is_master_item == 0 {
-            file.parent() == Some(item_path)
-        } else {
-            file == item_path
+        let file = ev.relative_file_path.as_str();
+        if item.is_master_item != 0 {
+            return file == item_path;
         }
+        let name = if item_path.is_empty() {
+            Some(file)
+        } else {
+            file.strip_prefix(item_path).and_then(|rest| rest.strip_prefix('/'))
+        };
+        name.is_some_and(|name| !name.is_empty() && !name.contains('/'))
     })
 }
 
@@ -2549,12 +2557,17 @@ mod tests {
         assert_eq!(row.override_stale, 0, "the file the override names did not change");
     }
 
-    /// A classification cached before bd astro-plan-3pvvc stored the macOS or
-    /// Linux file `a\b.fits` as `a/b.fits`. The content signature hashes only
-    /// the file name, size, mtime and header bytes, so it still matches after
-    /// the upgrade. The cache must not hand that row back: classify recomputes
-    /// it under the file's own path. A cached classification whose evidence
-    /// names its own files is still served from the cache.
+    /// A classification cached before bd astro-plan-3pvvc stored a macOS or
+    /// Linux name containing `\` with that `\` turned into `/`. The content
+    /// signature hashes only each file's name, size, mtime and header bytes,
+    /// so it still matches after the upgrade, and the cache must not hand such
+    /// a row back: classify recomputes it under the file's own path. Old text
+    /// that a component-wise `Path` comparison would accept is covered too:
+    /// `\b.fits` in folder `p` was stored as `p//b.fits`, and `.\b.fits` in
+    /// folder `q` as `q/./b.fits`. A cached classification whose evidence
+    /// names its own files is served from the cache: a folder at the root, a
+    /// subfolder and a master, before and after a recompute. Recomputing
+    /// writes new evidence row ids, so unchanged ids prove the cache was used.
     #[cfg(unix)]
     #[tokio::test]
     async fn cached_evidence_from_the_old_backslash_text_is_recomputed() {
@@ -2562,10 +2575,20 @@ mod tests {
 
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        write_fits_with_imagetyp(root, "a\\b.fits", "Light Frame");
-        let plain = root.join("plain");
-        std::fs::create_dir_all(&plain).unwrap();
-        write_fits_with_imagetyp(&plain, "x.fits", "Light Frame");
+        // (item, item path, folder, file name, current text, old text)
+        let legacy = [
+            ("item-root", "", "", "a\\b.fits", "a\\b.fits", "a/b.fits"),
+            ("item-slash", "p", "p", "\\b.fits", "p/\\b.fits", "p//b.fits"),
+            ("item-dot", "q", "q", ".\\b.fits", "q/.\\b.fits", "q/./b.fits"),
+        ];
+        for (_, _, folder, name, _, _) in legacy {
+            std::fs::create_dir_all(root.join(folder)).unwrap();
+            write_fits_with_imagetyp(&root.join(folder), name, "Light Frame");
+        }
+        std::fs::create_dir_all(root.join("plain")).unwrap();
+        write_fits_with_imagetyp(&root.join("plain"), "x.fits", "Light Frame");
+        std::fs::create_dir_all(root.join("masters")).unwrap();
+        write_fits_with_imagetyp(&root.join("masters"), "master_dark.fits", "Dark Frame");
 
         let db = test_db().await;
         let pool = db.pool();
@@ -2581,7 +2604,17 @@ mod tests {
             let rows = inbox_repo::list_evidence(pool, id).await.unwrap();
             rows.into_iter().map(|e| (e.id, e.relative_file_path)).collect::<Vec<_>>()
         };
-        for (id, relative_path) in [("item-legacy", ""), ("item-plain", "plain")] {
+        let paths = |rows: Vec<(String, String)>| -> Vec<String> {
+            rows.into_iter().map(|(_, path)| path).collect()
+        };
+
+        let legacy_ids = legacy.map(|(id, ..)| id);
+        let reused = ["item-plain", "item-master"];
+        let items = legacy
+            .map(|(id, path, ..)| (id, path))
+            .into_iter()
+            .chain([("item-plain", "plain"), ("item-master", "masters/master_dark.fits")]);
+        for (id, relative_path) in items {
             repo::insert_inbox_item(
                 pool,
                 &InsertInboxItem {
@@ -2595,30 +2628,55 @@ mod tests {
             )
             .await
             .unwrap();
+        }
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = 'item-master'")
+            .execute(pool)
+            .await
+            .unwrap();
+
+        for id in legacy_ids.into_iter().chain(reused) {
             classify_item(id).await.unwrap();
         }
+        assert_eq!(paths(evidence("item-plain").await), ["plain/x.fits"]);
+        assert_eq!(paths(evidence("item-master").await), ["masters/master_dark.fits"]);
 
-        // Rewrite the row the way the old producer stored it.
-        sqlx::query(
-            "UPDATE inbox_classification_evidence SET relative_file_path = 'a/b.fits' \
-             WHERE inbox_item_id = 'item-legacy'",
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        let plain_before = evidence("item-plain").await;
+        // Rewrite each legacy row the way the old producer stored it.
+        for (id, _, _, _, current, old) in legacy {
+            assert_eq!(paths(evidence(id).await), [current], "{id}: current text");
+            sqlx::query(
+                "UPDATE inbox_classification_evidence SET relative_file_path = ? \
+                 WHERE inbox_item_id = ?",
+            )
+            .bind(old)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        let mut before = Vec::new();
+        for id in reused {
+            before.push(evidence(id).await);
+        }
 
-        classify_item("item-legacy").await.unwrap();
-        classify_item("item-plain").await.unwrap();
+        for id in legacy_ids.into_iter().chain(reused) {
+            classify_item(id).await.unwrap();
+        }
+        let mut recomputed = Vec::new();
+        for (id, _, _, _, current, old) in legacy {
+            let rows = evidence(id).await;
+            assert_eq!(paths(rows.clone()), [current], "{id}: {old} is recomputed");
+            recomputed.push(rows);
+        }
+        for (id, rows) in reused.into_iter().zip(before) {
+            assert_eq!(evidence(id).await, rows, "{id}: its own files are served from the cache");
+        }
 
-        let legacy_paths: Vec<String> =
-            evidence("item-legacy").await.into_iter().map(|(_, path)| path).collect();
-        assert_eq!(legacy_paths, ["a\\b.fits"], "the old text is recomputed");
-        assert_eq!(
-            evidence("item-plain").await,
-            plain_before,
-            "a cache whose evidence names its own files is reused, row ids included"
-        );
+        for id in legacy_ids {
+            classify_item(id).await.unwrap();
+        }
+        for (id, rows) in legacy_ids.into_iter().zip(recomputed) {
+            assert_eq!(evidence(id).await, rows, "{id}: recomputed text is served from the cache");
+        }
     }
 
     /// spec 041 FR-046: a generic `inbox_file_overrides` entry (set via
