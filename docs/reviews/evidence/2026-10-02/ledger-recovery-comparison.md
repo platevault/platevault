@@ -108,13 +108,32 @@ Nothing here is applied. The owner chooses one option for each group. Every opti
 
 **Recommended: record only.** Leave the ledger as it is. This file is the record. Add one comment to `astro-plan-i3o6` that points here. A restore would gain nothing, because no store holds the rows, and it would put the 591 rows created since 2026-10-02 at risk.
 
-**Option B, placeholder records for the 180 ids.** Use this only if the owner wants the commit trailers to resolve.
+**Option B, placeholder records for the 180 ids and their 18 implied parents.** Use this only if the owner wants the commit trailers to resolve.
 
-1. Preserve. Pause writers. Take `bd export --all`, copy `.beads/embeddeddolt` to a dated directory outside `.beads` with checksums, and confirm the backup sync and remote push. Record counts of issues, comments, dependencies and `in_progress` claims.
-2. Generate one command file from this JSON. Each command is `bd create --id <id> --defer <far date> -l ledger-reconstructed`, with a description citing the commits and trailers. Add `--parent` only inside the `3v3r` tree, and only after creating its 18 implied parents. Set no assignee and no `blocks` edges, and leave every record open.
-3. Run every line with `--dry-run`. Expect 198 creates and nothing else.
-4. A second reviewer checks the file against the JSON and confirms that no existing id appears in it.
-5. Apply it as one `bd batch` transaction. Check that the counts grew by 198 and that comments, dependencies and claims are unchanged for every pre-existing id. If a check fails, roll back by removing the 198 new ids in one batch.
+The installed `bd` 1.3.1 (`c1c4b642a`) rules out the two single-command routes:
+
+- `bd create --id` cannot be combined with `--parent`; the command refuses with "cannot specify both --id and --parent flags". With `--parent` alone, `bd` mints a new child suffix, so the 64 child ids would not keep their historical values.
+- `bd batch` accepts only `create <type> <priority> <title...>` and rejects every flag, including `--id`.
+
+`bd create --graph` does fit. A graph plan node takes an explicit `id` and a `parent_key`. The tool keeps the explicit id and records the parent link as a `parent-child` dependency instead of minting a suffix. It also checks each explicit id against the database prefix, and refuses any id that already exists. The whole plan applies in one transaction and one Dolt commit. These behaviours come from the help text and the `c1c4b642a` source (`cmd/bd/create.go`, `cmd/bd/graph_apply.go`, `internal/storage/issueops/create.go`). This investigation did not dry-run the plan: `--readonly` refuses `create` even with `--dry-run`, so step 3 is the first execution check.
+
+1. Preserve the live store:
+   - Pause writers and take `bd export --all`.
+   - Copy `.beads/embeddeddolt` to a dated directory outside `.beads` and record checksums.
+   - Confirm the backup sync and the remote push.
+   - Record counts of issues, comments, dependencies and `in_progress` claims.
+2. Generate the plan from this JSON with `build_placeholder_plan.py` from the sources archive. The plan has 198 nodes, ordered parents first. Each node has:
+   - its historical `id` as both `key` and `id`;
+   - type `task`, priority 4, label `ledger-reconstructed` and `defer_until` 2099-01-01;
+   - a description and metadata that cite the referencing commits and trailers.
+
+   The 80 hierarchical nodes (64 children and 16 `3v3r.N` parents) carry `parent_key`. No node has an assignee, a status override or any other edge, so every record starts deferred and unclaimed.
+3. Run `bd create --graph <plan> --dry-run --json`. Expect 198 nodes, 0 edges and 80 parent-child links.
+4. A second reviewer checks the plan against this JSON and confirms that no existing id appears in it.
+5. Run `bd create --graph <plan> --json` once. Then check that the counts grew by exactly 198 issues and 80 dependencies, all among the new ids. Comments and claims on pre-existing ids must not change.
+6. If a check fails, preview the removal with `bd delete --from-file <198 ids> --dry-run`, then run it with `--force`. Every new edge stays inside the set, so the delete touches no existing bead.
+
+The plan covers the 198 ids in scope. The 28 further strings outside the 183 stay out unless the owner extends it. Eleven of them are `3v3r` descendants; adding them would also need an `astro-plan-3v3r.20` parent node.
 
 **Option C, the 26 clone-only design molecules.** Recommended: do not import them. They came from a scratch design run that nothing on main references. If the owner wants them, export them from the isolated copy, run `bd import --dry-run` to confirm 26 creates and zero updates, and import without `--allow-stale` after the step 1 preservation above.
 
