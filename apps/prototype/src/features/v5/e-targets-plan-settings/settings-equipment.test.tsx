@@ -78,11 +78,15 @@ describe("Settings › Equipment: cameras (PLAN-EQ-FR-08)", () => {
     expect(screen.getByRole("button", { name: m.actions_for({ name: `${MODEL} · 533 B` }) })).toBeInTheDocument()
   })
 
-  it("lists each camera's Don't use darks / Don't use bias defaults", async () => {
+  it("a camera's disclosure shows its Don't use darks / Don't use bias defaults and the INSTRUME values it matches", async () => {
+    const user = userEvent.setup()
     renderPage()
     const table = await screen.findByRole("table", { name: m.equipment_cameras() })
-    const row = within(table).getByRole("row", { name: new RegExp(`2600MM #2`) })
+    await user.click(within(table).getByRole("button", { name: m.table_row_details({ name: "ASI2600MM Pro · 2600MM #2" }) }))
+    const details = await within(table).findByText(m.equipment_matches_instrume())
+    const row = details.closest("tr")!
     expect(within(row).getByText(m.equipment_no_darks())).toBeInTheDocument()
+    expect(within(row).getByText("ASI2600MM Pro, ZWO ASI2600MM Pro")).toBeInTheDocument()
   })
 })
 
@@ -93,9 +97,9 @@ describe("Settings › Equipment: rig versions (PLAN-EQ-FR-07)", () => {
     const rig = store.getState().catalog.opticalTrains[ESPRIT]!
     await rowAction(user, rig.name, m.settings_edit())
     const dialog = await screen.findByRole("dialog")
-    // The night picker is named and described by its field.
+    // The night picker is named and described by its field, the provisional undated rule included.
     const night = within(dialog).getByRole("group", { name: m.equipment_version_from() })
-    expect(night).toHaveAccessibleDescription(m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) }))
+    expect(night).toHaveAccessibleDescription(`${m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) })} ${m.equipment_version_undated_help()}`)
     await user.click(within(dialog).getByRole("switch", { name: m.equipment_rotator() }))
     await user.click(save(dialog, m.settings_save()))
 
@@ -106,10 +110,10 @@ describe("Settings › Equipment: rig versions (PLAN-EQ-FR-07)", () => {
     const rigs = screen.getByRole("table", { name: m.project_rigs() })
     await user.click(within(rigs).getByRole("button", { name: m.table_row_details({ name: rig.name }) }))
     const versions = await screen.findByRole("table", { name: m.equipment_versions_of({ name: rig.name }) })
-    // Header row plus one row per version, newest first, the current one marked.
+    // Header row plus one row per version, newest first: the current one marked, the first one also covering earlier nights (provisional).
     const rows = within(versions).getAllByRole("row")
     expect(rows).toHaveLength(3)
     expect(rows[1]).toHaveTextContent(m.equipment_version_current({ night: formatNight(after.versionFrom, true) }))
-    expect(screen.getByText(m.equipment_version_rules())).toBeInTheDocument()
+    expect(rows[2]).toHaveTextContent(m.equipment_version_first({ night: formatNight(rig.versionFrom, true) }))
   })
 })

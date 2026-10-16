@@ -230,10 +230,9 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
           error={twin.id in values.twinAliases ? twinError(twin) : undefined}
         />
       ))}
-      <FieldGroup label={m.equipment_calibration_defaults()}>
-        <SwitchField label={m.equipment_no_darks()} description={m.equipment_no_calibration_help()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
-        <SwitchField label={m.equipment_no_bias()} checked={values.noBias} onChange={(noBias) => set({ noBias })} />
-      </FieldGroup>
+      {/* The calibration defaults, one switch per line so each label and its help read in full. */}
+      <SwitchField label={m.equipment_no_darks()} description={m.equipment_no_calibration_help()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
+      <SwitchField label={m.equipment_no_bias()} checked={values.noBias} onChange={(noBias) => set({ noBias })} />
     </FormDialog>
   )
 }
@@ -243,7 +242,26 @@ function calibrationDefaultsLine(m: Messages, camera: Camera): string {
   return [camera.noDarks ? m.equipment_no_darks() : null, camera.noBias ? m.equipment_no_bias() : null].filter(Boolean).join(" · ") || "–"
 }
 
-/** Every camera, detected or Manual: kind, alias, sensor, pixel size, its calibration defaults and the rigs it is on. */
+/**
+ * A camera's row disclosure: the "Don't use darks" / "Don't use bias"
+ * defaults its sessions settle by, and the INSTRUME values it matches. Those
+ * header names are not its physical alias: two cameras of a model match the
+ * same ones, and only the alias tells them apart (LIB-FR-26).
+ */
+function CameraDetails({ camera }: { camera: Camera }) {
+  const m = useMessages()
+  const matches = [...new Set([camera.name, ...camera.aliases])].join(", ")
+  return (
+    <KeyValueList
+      items={[
+        { label: m.equipment_calibration_defaults(), value: calibrationDefaultsLine(m, camera) },
+        { label: m.equipment_matches_instrume(), value: matches },
+      ]}
+    />
+  )
+}
+
+/** Every camera, detected or Manual: kind, alias, sensor, pixel size and the rigs it is on; its calibration defaults under its disclosure. */
 export function CamerasSection() {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
@@ -251,12 +269,11 @@ export function CamerasSection() {
   const rigCount = (c: Camera) => equipmentUsers(catalog, "camera", c.id).length
   const add: Action = { id: "add-camera", label: m.equipment_add_camera(), opensDialog: true, run: () => setEditing({ camera: null }) }
   const columns: Column<Camera>[] = [
-    { id: "name", header: m.equipment_name(), rowHeader: true, sortValue: (c) => c.name, cell: (c) => c.name },
+    { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (c) => c.name, cell: (c) => c.name },
     { id: "kind", header: m.equipment_camera_kind(), sortValue: (c) => c.kind, cell: (c) => (c.kind === "osc" ? m.equipment_osc() : m.equipment_mono()) },
     { id: "alias", header: m.equipment_camera_alias(), truncate: true, sortValue: (c) => c.physicalAlias ?? "", cell: (c) => c.physicalAlias ?? "–" },
     { id: "sensor", header: m.equipment_sensor(), align: "right", sortValue: (c) => c.widthPx * c.heightPx, cell: (c) => `${c.widthPx} × ${c.heightPx} px` },
     { id: "pixel", header: m.equipment_pixel_size_short(), align: "right", sortValue: (c) => c.pixelSizeUm, cell: (c) => `${formatDecimal(c.pixelSizeUm, 2)} µm` },
-    { id: "defaults", header: m.equipment_calibration_defaults(), truncate: true, sortValue: (c) => calibrationDefaultsLine(m, c), cell: (c) => calibrationDefaultsLine(m, c) },
     { id: "rigs", header: m.project_rigs(), sortValue: rigCount, cell: (c) => <RigsUsing kind="camera" id={c.id} /> },
     { id: "source", header: m.equipment_source(), sortValue: (c) => c.source, cell: (c) => <StatusBadge kind="source" value={c.source} /> },
   ]
@@ -274,6 +291,7 @@ export function CamerasSection() {
           rowLabel: cameraLabel,
           initialSort: { columnId: "name", direction: "asc" },
           stickyFirstColumn: true,
+          expand: { render: (c) => <CameraDetails camera={c} /> },
           empty: <EmptyState icon={CameraIcon} title={m.equipment_no_cameras()} action={<ActionButton action={add} />} />,
           rowActions: (c) => recordMenu(m, catalog, "camera", { id: c.id, name: cameraLabel(c) }, () => setEditing({ camera: c })),
         }}
@@ -519,17 +537,16 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
   return (
     <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={rig ? m.settings_edit_title({ name: rig.name }) : m.project_add_rig()} size="lg" confirm={confirm}>
       <TextField label={m.equipment_rig_name()} value={name} onChange={(next) => set({ name: next, named: next.trim() !== "" })} error={shown(errors, "name")} autoFocus />
-      <FieldGroup label={m.equipment_rig_parts()}>
-        <SelectField label={m.equipment_camera()} value={camera ? values.cameraId : NONE} options={[choose, ...cameras.map((c) => ({ value: c.id, label: cameraLabel(c) }))]} onChange={(cameraId) => set({ cameraId })} error={shown(errors, "cameraId")} />
-        <SelectField label={m.equipment_telescope()} value={telescope ? values.telescopeId : NONE} options={[choose, ...telescopes.map((t) => ({ value: t.id, label: t.name }))]} onChange={(telescopeId) => set({ telescopeId })} error={shown(errors, "telescopeId")} />
-        <SelectField
-          label={m.equipment_reducer()}
-          value={reducerId && catalog.reducers[reducerId] ? reducerId : NO_REDUCER}
-          options={[{ value: NO_REDUCER, label: m.equipment_no_reducer() }, ...reducers.map((r) => ({ value: r.id, label: `${r.name} · ${formatFactor(r.factor)}` }))]}
-          onChange={(next) => set({ reducerId: next })}
-        />
-        <SwitchField label={m.equipment_rotator()} description={m.equipment_rotator_help()} checked={values.rotator} onChange={(rotator) => set({ rotator })} />
-      </FieldGroup>
+      {/* One field per line: a camera reads by its alias too ("ASI2600MM Pro · 2600MM #1"), which a side-by-side group would wrap. */}
+      <SelectField label={m.equipment_camera()} value={camera ? values.cameraId : NONE} options={[choose, ...cameras.map((c) => ({ value: c.id, label: cameraLabel(c) }))]} onChange={(cameraId) => set({ cameraId })} error={shown(errors, "cameraId")} />
+      <SelectField label={m.equipment_telescope()} value={telescope ? values.telescopeId : NONE} options={[choose, ...telescopes.map((t) => ({ value: t.id, label: t.name }))]} onChange={(telescopeId) => set({ telescopeId })} error={shown(errors, "telescopeId")} />
+      <SelectField
+        label={m.equipment_reducer()}
+        value={reducerId && catalog.reducers[reducerId] ? reducerId : NO_REDUCER}
+        options={[{ value: NO_REDUCER, label: m.equipment_no_reducer() }, ...reducers.map((r) => ({ value: r.id, label: `${r.name} · ${formatFactor(r.factor)}` }))]}
+        onChange={(next) => set({ reducerId: next })}
+      />
+      <SwitchField label={m.equipment_rotator()} description={m.equipment_rotator_help()} checked={values.rotator} onChange={(rotator) => set({ rotator })} />
       <KeyValueList
         columns={2}
         items={[
@@ -547,7 +564,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
       />
       <NightField
         label={rig ? m.equipment_version_from() : m.equipment_first_night()}
-        description={rig ? m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) }) : m.equipment_first_night_help()}
+        description={rig ? `${m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) })} ${m.equipment_version_undated_help()}` : m.equipment_first_night_help()}
         value={values.from}
         onChange={(from) => set({ from })}
         today={nightOf(nowIso())}
@@ -559,16 +576,18 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
 
 /**
  * A rig's versions, newest first (PLAN-EQ-FR-07, PLAN-EQ-AC-08): the night
- * each began, what it was made of and how many sessions hold it. Editing the
+ * each began, how many sessions hold it and what it was made of. Editing the
  * rig appends one through `addRigVersion`; none is ever edited or removed, so
  * a session keeps the version it was captured with. The provisional rules
  * for nights outside the versions follow the backend's `RigVersion::for_night`
- * and `rigVersionAt`: a night before the first version reads the first, and a
- * session with no capture date reads a version only while the rig has one.
+ * and `rigVersionAt`: a night before the first version reads the first (its
+ * cell says so), and a session with no capture date reads a version only
+ * while the rig has one (the Edit dialog says so where a second one starts).
  */
 function RigVersions({ rig }: { rig: OpticalTrain }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
+  const versions = rigVersions(rig)
   const sessions = rigVersionSessionCounts(catalog, rig.id)
   const camera = (v: RigVersion) => {
     const record = v.cameraId ? catalog.cameras[v.cameraId] : undefined
@@ -578,26 +597,26 @@ function RigVersions({ rig }: { rig: OpticalTrain }) {
     const record = v.reducerId ? catalog.reducers[v.reducerId] : undefined
     return record ? `${record.name} · ${formatFactor(record.factor)}` : "–"
   }
+  const from = (v: RigVersion) => {
+    const night = formatNight(v.from, true)
+    const span = v.id === versions[0]!.id ? m.equipment_version_first({ night }) : night
+    return v.id === rig.versionId ? m.equipment_version_current({ night: span }) : span
+  }
   const telescope = (v: RigVersion) => (v.telescopeId ? catalog.telescopes[v.telescopeId]?.name : undefined) ?? "–"
   const filtersOf = (v: RigVersion) => v.filterIds.flatMap((id) => catalog.filters[id]?.name ?? []).join(", ") || "–"
   const rotator = (v: RigVersion) => (v.rotator ? m.equipment_rotator_yes() : m.equipment_rotator_no())
   const held = (v: RigVersion) => sessions.get(v.id) ?? 0
   const columns: Column<RigVersion>[] = [
-    { id: "from", header: m.equipment_first_night(), rowHeader: true, sortValue: (v) => v.from, cell: (v) => (v.id === rig.versionId ? m.equipment_version_current({ night: formatNight(v.from, true) }) : formatNight(v.from, true)) },
+    { id: "from", header: m.equipment_first_night(), rowHeader: true, sortValue: (v) => v.from, cell: from },
+    { id: "sessions", header: m.nav_sessions(), align: "right", sortValue: held, cell: (v) => formatCount(held(v)) },
     { id: "camera", header: m.equipment_camera(), sortValue: camera, cell: camera },
-    { id: "telescope", header: m.equipment_telescope(), sortValue: telescope, cell: telescope },
-    { id: "reducer", header: m.equipment_reducer(), sortValue: reducer, cell: reducer },
     { id: "focal", header: m.run_field_focal_length(), align: "right", sortValue: (v) => v.effectiveFocalLengthMm, cell: (v) => formatMm(v.effectiveFocalLengthMm) },
     { id: "filters", header: m.equipment_filters(), sortValue: filtersOf, cell: filtersOf },
+    { id: "telescope", header: m.equipment_telescope(), sortValue: telescope, cell: telescope },
+    { id: "reducer", header: m.equipment_reducer(), sortValue: reducer, cell: reducer },
     { id: "rotator", header: m.equipment_rotator(), sortValue: rotator, cell: rotator },
-    { id: "sessions", header: m.nav_sessions(), align: "right", sortValue: held, cell: (v) => formatCount(held(v)) },
   ]
-  return (
-    <>
-      <DataTable label={m.equipment_versions_of({ name: rig.name })} rows={rigVersions(rig)} columns={columns} getRowId={(v) => v.id} initialSort={{ columnId: "from", direction: "desc" }} scroll="none" />
-      <KeyValueList items={[{ label: m.status_provisional(), value: m.equipment_version_rules() }]} />
-    </>
-  )
+  return <DataTable label={m.equipment_versions_of({ name: rig.name })} rows={versions} columns={columns} getRowId={(v) => v.id} initialSort={{ columnId: "from", direction: "desc" }} scroll="none" />
 }
 
 /** Every rig: what it is made of, its focal length, field of view and filters, the Projects that use it, and its versions under its disclosure. */
@@ -618,7 +637,7 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
   const reducerName = (r: OpticalTrain) => recordName(r.reducerId ? catalog.reducers[r.reducerId] : undefined)
   const add: Action = { id: "add-rig", label: m.project_add_rig(), opensDialog: true, run: () => setEditing({ rig: null }) }
   const columns: Column<OpticalTrain>[] = [
-    { id: "name", header: m.equipment_name(), rowHeader: true, sortValue: (r) => r.name, cell: (r) => r.name },
+    { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
     { id: "camera", header: m.equipment_camera(), truncate: true, sortValue: cameraName, cell: cameraName },
     { id: "telescope", header: m.equipment_telescope(), truncate: true, sortValue: telescopeName, cell: telescopeName },
     { id: "reducer", header: m.equipment_reducer(), truncate: true, sortValue: reducerName, cell: reducerName },
