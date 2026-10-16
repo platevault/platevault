@@ -36,7 +36,7 @@ impl Catalog {
 ///
 /// # Errors
 /// `PersistenceFailure` for a corrupt record.
-pub(crate) async fn active_operation(
+pub async fn active_operation(
     conn: &mut SqliteConnection,
     project_id: Uuid,
 ) -> Result<Option<ProjectOperation>> {
@@ -66,7 +66,7 @@ pub(crate) async fn active_operation(
 /// # Errors
 /// `NotFound` for an unknown Project; `InvalidInput` naming the running
 /// operation, or for a Project whose lifecycle admits no `kind` operation.
-pub(crate) async fn reserve_operation(
+pub async fn reserve_operation(
     conn: &mut SqliteConnection,
     project_id: Uuid,
     kind: ProjectOperationKind,
@@ -117,7 +117,7 @@ pub(crate) async fn reserve_operation(
 ///
 /// # Errors
 /// `NotFound` unless `id` is an active operation.
-pub(crate) async fn settle_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<()> {
+pub async fn settle_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<()> {
     let settled = sqlx::query(
         "UPDATE project_operations SET state = 'settled', settled_at = ?2 \
          WHERE id = ?1 AND state = 'active'",
