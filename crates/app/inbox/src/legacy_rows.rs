@@ -9,22 +9,24 @@
 //! stores such an entry under its own text, which adds a new row; the old row
 //! stays and names the nested path. When nothing is there, the old row can
 //! never be classified. When a frame that is not a master is there, a master
-//! row would classify and confirm that other file. When a file is there, a
-//! folder row's items would plan sources below something that is not a
-//! folder; that file may be a real master, as `g/h.fits` beside the folder
-//! `g\h.fits`, and then only the folder's rows go. [`find`] lists the old
-//! rows a scan proves stale, and [`retire`] deletes them.
+//! row would classify and confirm that other file. When a folder is there, a
+//! master row names something that cannot be a master file; the folder's
+//! source groups stay, and only the master item and its own overrides go.
+//! When a file is there, a folder row's items would plan sources below
+//! something that is not a folder; that file may be a real master, as
+//! `g/h.fits` beside the folder `g\h.fits`, and then only the folder's rows
+//! go. [`find`] lists the old rows a scan proves stale, and [`retire`]
+//! deletes them.
 //!
 //! An old row is kept when this scan stores the same text itself (a nested
 //! folder or master really is there, and the row is its own), or when
 //! something the scan could not account for is at the nested path: an
 //! unreadable folder, a file whose header it could not read, a link on the
-//! way there (a dangling one may be an unmounted drive), a folder where a
-//! master row was stored. Only unconfirmed rows are deleted: still
-//! `pending_classification` or `classified`, with no plan linking them; a
-//! folder is kept whole when any of its items is not.
-//! A folder's rows never include a master row, so deleting them never touches
-//! a master stored at the same path.
+//! way there or at the path (a dangling one may be an unmounted drive). Only
+//! unconfirmed rows are deleted: still `pending_classification` or
+//! `classified`, with no plan linking them; a folder is kept whole when any
+//! of its items is not. A folder's rows never include a master row, so
+//! deleting them never touches a master stored at the same path.
 //!
 //! A kept master row can still hold another file's master fields. When the
 //! old scan read both `a\b.fits` and a nested master `a/b.fits`, it wrote both
@@ -65,6 +67,10 @@ pub struct LegacyRows {
     pub folders: Vec<String>,
     /// Master item paths.
     pub masters: Vec<String>,
+    /// Master item paths that now name a folder. A master item names a file,
+    /// so such a row is stale too, but the source groups at its path are the
+    /// folder's and stay: only the item and its own overrides go.
+    pub masters_at_folders: Vec<String>,
     /// Master item paths this scan stores itself that are also the old text
     /// of another master it stores, as `a/b.fits` is for `a\b.fits`. The row
     /// is the nested master's own and is kept, but the old scan may have
@@ -106,14 +112,22 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
     for old in masters.iter().filter_map(|text| old_text(text)) {
         if masters.contains(old.as_str()) {
             rows.masters_to_refresh.push(old);
-        } else if never_current(&old)
-            || matches!(look_up(root, &old), Entry::Absent)
-            || frames.contains(&root.join(&old).as_path())
-        {
+        } else if never_current(&old) || frames.contains(&root.join(&old).as_path()) {
             rows.masters.push(old);
+        } else {
+            match look_up(root, &old) {
+                Entry::Absent => rows.masters.push(old),
+                Entry::Folder => rows.masters_at_folders.push(old),
+                Entry::Other | Entry::Unknown => {}
+            }
         }
     }
-    for paths in [&mut rows.folders, &mut rows.masters, &mut rows.masters_to_refresh] {
+    for paths in [
+        &mut rows.folders,
+        &mut rows.masters,
+        &mut rows.masters_at_folders,
+        &mut rows.masters_to_refresh,
+    ] {
         paths.sort_unstable();
         paths.dedup();
     }
@@ -121,7 +135,8 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
 }
 
 /// Delete the unconfirmed `rows` of `root_id` with everything that hangs off
-/// them: see `delete_unconfirmed_master_rows_conn` and
+/// them: see `delete_unconfirmed_master_rows_conn`,
+/// `delete_unconfirmed_master_item_at_folder_conn` and
 /// `delete_unconfirmed_folder_rows_conn`. Masters go first, so a source group
 /// at a folder path is never kept alive by a master row this call deletes.
 ///
@@ -130,6 +145,9 @@ pub(crate) fn find(root: &Path, items: &[ScannedInboxItem]) -> LegacyRows {
 pub async fn retire(conn: &mut SqliteConnection, root_id: &str, rows: &LegacyRows) -> DbResult<()> {
     for master in &rows.masters {
         repo::delete_unconfirmed_master_rows_conn(conn, root_id, master).await?;
+    }
+    for master in &rows.masters_at_folders {
+        repo::delete_unconfirmed_master_item_at_folder_conn(conn, root_id, master).await?;
     }
     for folder in &rows.folders {
         repo::delete_unconfirmed_folder_rows_conn(conn, root_id, folder).await?;

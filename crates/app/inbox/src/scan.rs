@@ -1039,6 +1039,7 @@ mod tests {
                 folders: ["../z", "./w", "/v", "c/d"].map(str::to_owned).to_vec(),
                 masters: ["a/b.fits", "n/o.fits"].map(str::to_owned).to_vec(),
                 masters_to_refresh: vec!["k/m.fits".to_owned()],
+                ..Default::default()
             }
         );
     }
@@ -1149,6 +1150,39 @@ mod tests {
                 "running as root, the light frame at n/o.fits is read"
             );
         }
+    }
+
+    /// A master file whose name holds a backslash beside a folder at its old
+    /// text: the master `a\b.fits` beside the folder `b.fits` (holding a light
+    /// frame) in the folder `a`, and the master `c\d.fits` beside an empty
+    /// folder `d.fits` in `c`. A master row names a file, so the old rows
+    /// `a/b.fits` and `c/d.fits` are listed, as rows whose path names a folder.
+    /// Kept: `e/f.fits`, where a link to a folder sits.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_an_old_master_row_whose_path_names_a_folder() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let master = Some(("STACKCNT", 30));
+        for name in ["a\\b.fits", "c\\d.fits", "e\\f.fits"] {
+            write_realistic_fits(root, name, Some("DARK"), master);
+        }
+        let nested = root.join("a").join("b.fits");
+        fs::create_dir_all(&nested).unwrap();
+        write_realistic_fits(&nested, "x.fits", Some("LIGHT"), None);
+        fs::create_dir_all(root.join("c").join("d.fits")).unwrap();
+        fs::create_dir_all(root.join("e")).unwrap();
+        std::os::unix::fs::symlink(root.join("c").join("d.fits"), root.join("e").join("f.fits"))
+            .unwrap();
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                masters_at_folders: ["a/b.fits", "c/d.fits"].map(str::to_owned).to_vec(),
+                ..Default::default()
+            }
+        );
     }
 
     /// Constitution §I regression: a symlinked subdirectory reachable from the

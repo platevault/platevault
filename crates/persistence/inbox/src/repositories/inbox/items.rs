@@ -289,7 +289,52 @@ pub async fn delete_unconfirmed_master_rows_conn(
     root_id: &str,
     relative_path: &str,
 ) -> DbResult<()> {
+    delete_unconfirmed_master_item_conn(conn, root_id, relative_path).await?;
+    super::source_groups::delete_unreferenced_groups_at_conn(conn, root_id, relative_path).await
+}
+
+/// Delete the unconfirmed master item stored for `relative_path` under
+/// `root_id`, as [`delete_unconfirmed_master_rows_conn`] does, where that
+/// path now names a folder (bd astro-plan-3pvvc: an earlier scan stored the
+/// file `a\b.fits` as `a/b.fits`, and a folder `a/b.fits` is there).
+///
+/// The source groups at that path belong to the folder: the group a scan
+/// writes for it, which takes over the master's `sg-auto-*` group when the
+/// master had one, since a group is unique per root and path. They are kept,
+/// with the folder's file overrides; only the master's own overrides, keyed
+/// at exactly that path, are deleted, and only when the master item is.
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on connection failure.
+pub async fn delete_unconfirmed_master_item_at_folder_conn(
+    conn: &mut SqliteConnection,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<()> {
+    if !delete_unconfirmed_master_item_conn(conn, root_id, relative_path).await? {
+        return Ok(());
+    }
     sqlx::query(
+        "DELETE FROM inbox_file_overrides
+         WHERE relative_file_path = ?2
+           AND source_group_id IN (
+               SELECT id FROM inbox_source_groups WHERE root_id = ?1 AND relative_path = ?2)",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Delete the unconfirmed master item at `relative_path`; returns whether one
+/// was deleted.
+async fn delete_unconfirmed_master_item_conn(
+    conn: &mut SqliteConnection,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<bool> {
+    let deleted = sqlx::query(
         "DELETE FROM inbox_items
          WHERE root_id = ? AND relative_path = ? AND is_master_item = 1
            AND state IN ('pending_classification', 'classified')
@@ -298,8 +343,9 @@ pub async fn delete_unconfirmed_master_rows_conn(
     .bind(root_id)
     .bind(relative_path)
     .execute(&mut *conn)
-    .await?;
-    super::source_groups::delete_unreferenced_groups_at_conn(conn, root_id, relative_path).await
+    .await?
+    .rows_affected();
+    Ok(deleted > 0)
 }
 
 /// Delete the master item `inbox_item_id` when the database shows it is a row

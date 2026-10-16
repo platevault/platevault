@@ -650,3 +650,75 @@ async fn an_old_folder_row_at_a_masters_path_goes_and_the_master_stays() {
         sqlx::query_scalar("SELECT COUNT(*) FROM inbox_plan_links").fetch_one(&pool).await.unwrap();
     assert_eq!(links, 1, "the master's plan link stays");
 }
+
+/// The master `a\b.fits` beside the folder `b.fits` in the folder `a`. The
+/// old scan stored the master under `a/b.fits`, the folder's own text, and
+/// gave it a classification and an override. A master row names a file, so
+/// the scan deletes it with its override, and the folder's group, which took
+/// over the master's `sg-auto-*` group, stays and is listed to classify.
+#[tokio::test]
+async fn an_old_master_row_at_a_folders_path_goes_and_the_folder_stays() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_fits(root, "a\\b.fits", "DARK", Some(30));
+    write_fits(&root.join("a").join("b.fits"), "x.fits", "LIGHT", None);
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    sqlx::query(
+        "INSERT INTO registered_sources (id, path, kind, scan_depth, created_at, created_via) \
+         VALUES ('root-1', ?, 'inbox', 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root.to_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    repo::insert_inbox_item(
+        &pool,
+        &repo::InsertInboxItem {
+            id: "old-master",
+            root_id: "root-1",
+            relative_path: "a/b.fits",
+            file_count: 1,
+            content_signature: Some("sig-old"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE id = 'old-master'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    seed_classified(&pool, "old-master", "a/b.fits").await;
+    repo::set_overrides(&pool, "old-master", "a/b.fits", None, Some("Ha"), None, None)
+        .await
+        .unwrap();
+
+    scan(&pool, root).await;
+
+    let items: Vec<String> =
+        sqlx::query_scalar("SELECT relative_path FROM inbox_items ORDER BY relative_path")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(items, ["a\\b.fits"], "the old master row goes; the master's own row is stored");
+    let unclassified: Vec<String> = repo::list_unclassified_source_groups(&pool, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|group| group.relative_path)
+        .collect();
+    assert_eq!(unclassified, ["a/b.fits"], "the folder stays, ready to classify");
+    let overrides: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_file_overrides")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(overrides, 0, "the old master's override goes");
+    let classified: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_classifications")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(classified, 0, "the old master's classification goes with it");
+}
