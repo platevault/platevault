@@ -286,6 +286,9 @@ pub struct ScanOutput {
     pub items: Vec<ScannedInboxItem>,
     /// Per-directory access errors collected during the phase-1 walk.
     pub warnings: Vec<ScanWarning>,
+    /// Rows an earlier scan stored under the old backslash text that this scan
+    /// proves stale; pass them to [`crate::legacy_rows::retire`].
+    pub legacy_rows: crate::legacy_rows::LegacyRows,
 }
 
 /// Leaf-folder inventory collected by the pure directory walk (phase 1).
@@ -346,7 +349,7 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings, &mut visited)?;
 
     if leaf_dirs.is_empty() {
-        return Ok(ScanOutput { items: vec![], warnings });
+        return Ok(ScanOutput { warnings, ..ScanOutput::default() });
     }
 
     // Phase 2: process per-file I/O.
@@ -390,7 +393,8 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, Strin
     // Sort by relative_path for deterministic output.
     items.sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
-    Ok(ScanOutput { items, warnings })
+    let legacy_rows = crate::legacy_rows::find(root, &items);
+    Ok(ScanOutput { items, warnings, legacy_rows })
 }
 
 /// Compute the [`ScannedInboxItem`] for one leaf directory.
@@ -979,6 +983,121 @@ mod tests {
         for (relative_path, file) in classified.iter().zip(files) {
             assert_eq!(&root.join(relative_path), file, "{relative_path} must name its own file");
         }
+    }
+
+    /// An earlier scan stored a macOS or Linux name containing `\` with the
+    /// `\` turned into `/` (bd astro-plan-3pvvc). The next scan lists and
+    /// retires the old rows that name nothing, or that would make a master
+    /// row classify a different frame, and keeps the rows that are a nested
+    /// entry's own and the rows with an open plan.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn scan_retires_rows_stored_under_the_old_backslash_text() {
+        use persistence_inbox::repositories::inbox::{self as repo, InsertInboxItem};
+        use persistence_inbox::repositories::inbox::{
+            upsert_inbox_source_group, UpsertSourceGroup,
+        };
+        use persistence_plans::repositories::plans as plans_repo;
+
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let folder = |relative: &str| {
+            let dir = relative.split('/').fold(root.to_path_buf(), |dir, name| dir.join(name));
+            fs::create_dir_all(&dir).unwrap();
+            dir
+        };
+        let master = Some(("STACKCNT", 30));
+        // Folders: `c\d` has no nested twin, `t\u` has one, and the old text of
+        // `\v` and `.\w` has an empty or `.` name.
+        for name in ["c\\d", "t\\u", "t/u", "\\v", ".\\w"] {
+            write_realistic_fits(&folder(name), "x.fits", Some("LIGHT"), None);
+        }
+        // Masters at the root: nothing nested for `n\o` and `p\q`, a frame
+        // that is not a master at `a/b.fits`, a master at `k/m.fits`.
+        for name in ["a\\b.fits", "k\\m.fits", "n\\o.fits", "p\\q.fits"] {
+            write_realistic_fits(root, name, Some("DARK"), master);
+        }
+        write_realistic_fits(&folder("a"), "b.fits", Some("LIGHT"), None);
+        write_realistic_fits(&folder("k"), "m.fits", Some("DARK"), master);
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: vec!["./w".to_owned(), "/v".to_owned(), "c/d".to_owned()],
+                masters: vec!["a/b.fits".to_owned(), "n/o.fits".to_owned(), "p/q.fits".to_owned()],
+            }
+        );
+
+        // The rows the old scan stored.
+        let db = persistence_core::test_support::setup_db().await;
+        let pool = db.pool();
+        let item = |id: &'static str, relative_path: &'static str| async move {
+            let row = InsertInboxItem {
+                id,
+                root_id: "root-1",
+                relative_path,
+                file_count: 1,
+                content_signature: None,
+                lane: "fits",
+            };
+            repo::insert_inbox_item(pool, &row).await.unwrap();
+        };
+        for old in ["./w", "/v", "c/d", "t/u"] {
+            let group = UpsertSourceGroup {
+                id: old,
+                root_id: "root-1",
+                relative_path: old,
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            };
+            upsert_inbox_source_group(pool, &group).await.unwrap();
+            item(old, old).await;
+            sqlx::query("UPDATE inbox_items SET source_group_id = id WHERE id = ?")
+                .bind(old)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+        for old in ["a/b.fits", "k/m.fits", "n/o.fits", "p/q.fits"] {
+            item(old, old).await;
+        }
+        sqlx::query("UPDATE inbox_items SET is_master_item = 1 WHERE relative_path LIKE '%.fits'")
+            .execute(pool)
+            .await
+            .unwrap();
+        let plan = plans_repo::InsertPlan {
+            id: "plan-open",
+            title: "open plan",
+            origin: "inbox",
+            origin_path: None,
+            plan_type: "split",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        };
+        plans_repo::insert_plan(pool, &plan).await.unwrap();
+        repo::insert_plan_link(pool, "p/q.fits", "plan-open").await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        crate::legacy_rows::retire(&mut tx, "root-1", &scanned.legacy_rows).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let column = |sql: &'static str| async move {
+            sqlx::query_scalar::<_, String>(sql).fetch_all(pool).await.unwrap()
+        };
+        assert_eq!(
+            column("SELECT relative_path FROM inbox_source_groups ORDER BY relative_path").await,
+            ["t/u"],
+            "a nested folder's own row stays"
+        );
+        assert_eq!(
+            column("SELECT relative_path FROM inbox_items ORDER BY relative_path").await,
+            ["k/m.fits", "p/q.fits", "t/u"],
+            "a nested master's own row and a row with an open plan stay"
+        );
     }
 
     /// Constitution §I regression: a symlinked subdirectory reachable from the

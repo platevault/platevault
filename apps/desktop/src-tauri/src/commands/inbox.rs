@@ -12,6 +12,7 @@
 use app_core::inbox::attribution::suggest_candidates;
 use app_core::inbox::classify::{classify, classify_source_group, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
+use app_core::inbox::legacy_rows::retire as retire_legacy_rows;
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::property_registry::property_registry as get_property_registry;
 use app_core::inbox::reclassify::{
@@ -378,6 +379,7 @@ pub async fn inbox_scan_folder(
         .map_err(|e| ContractError::internal(e.to_string()))?
         .map_err(ContractError::internal)?;
     let scanned = scan_out.items;
+    let legacy_rows = scan_out.legacy_rows;
     let scan_warnings: Vec<ScanDirWarning> = scan_out
         .warnings
         .into_iter()
@@ -459,6 +461,12 @@ pub async fn inbox_scan_folder(
         // untouched, because a detected master IS a real, classified,
         // confirmable thing. `sub_count` remains the source group's file count.
     }
+
+    // Rows an earlier scan stored under the old backslash text for an entry
+    // this scan just stored under its own text (bd astro-plan-3pvvc).
+    retire_legacy_rows(&mut *tx, &req.root_id, &legacy_rows)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     tx.commit().await.map_err(|e| ContractError::internal(e.to_string()))?;
 

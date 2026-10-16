@@ -132,6 +132,40 @@ pub async fn update_source_group_child_count_conn(
     Ok(())
 }
 
+/// Delete the inbox rows stored for the folder `relative_path` under
+/// `root_id`: every folder item without an open plan, then the source group
+/// once no item refers to it. Items with an open plan, and their group, stay.
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on connection failure.
+pub async fn delete_unlinked_folder_rows_conn(
+    conn: &mut SqliteConnection,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "DELETE FROM inbox_items
+         WHERE root_id = ? AND relative_path = ? AND is_master_item = 0
+           AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM inbox_source_groups
+         WHERE root_id = ? AND relative_path = ?
+           AND NOT EXISTS (
+               SELECT 1 FROM inbox_items WHERE inbox_items.source_group_id = inbox_source_groups.id
+           )",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// One scanned-but-unclassified folder for the Inbox list (spec 058 FR-016).
 ///
 /// Deliberately carries no item id: a source-group row is non-confirmable

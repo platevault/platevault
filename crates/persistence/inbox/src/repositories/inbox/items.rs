@@ -274,6 +274,28 @@ pub async fn delete_sub_item_if_unlinked_conn(
     Ok(())
 }
 
+/// Delete the master item stored for the file `relative_path` under
+/// `root_id`, unless a plan is open for it.
+///
+/// # Errors
+/// Returns `persistence_core::DbError::Database` on connection failure.
+pub async fn delete_unlinked_master_item_conn(
+    conn: &mut SqliteConnection,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "DELETE FROM inbox_items
+         WHERE root_id = ? AND relative_path = ? AND is_master_item = 1
+           AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// List all single-type sub-items belonging to a source group, ordered by
 /// `group_key` for deterministic display (spec 041 T066).
 ///
