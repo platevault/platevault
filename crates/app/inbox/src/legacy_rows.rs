@@ -118,16 +118,20 @@ fn never_current(text: &str) -> bool {
 /// every folder on the way there a real folder.
 ///
 /// Each name is checked in turn without following links. The first missing
-/// one makes the path absent. A link or junction on the way makes the answer
-/// unknown, because a dangling link (an unmounted drive, say) reports the path
-/// below it missing although the drive may hold it. So does any other stat
-/// error. Unknown is never absent.
+/// one makes the path absent, and so does a name below a file: when the file
+/// `a` sits beside `a\b.fits`, stating `a/b.fits` reports `NotADirectory`,
+/// and nothing can be at that path. A link or junction on the way makes the
+/// answer unknown, because a dangling link (an unmounted drive, say) reports
+/// the path below it missing although the drive may hold it. So does any
+/// other stat error. Unknown is never absent.
 fn is_absent(root: &Path, text: &str) -> bool {
     let mut path = root.to_path_buf();
     for name in text.split('/') {
         path.push(name);
         match std::fs::symlink_metadata(&path) {
-            Err(e) => return e.kind() == io::ErrorKind::NotFound,
+            Err(e) => {
+                return matches!(e.kind(), io::ErrorKind::NotFound | io::ErrorKind::NotADirectory)
+            }
             Ok(meta) if is_link_or_junction_metadata(&meta) => return false,
             Ok(_) => {}
         }

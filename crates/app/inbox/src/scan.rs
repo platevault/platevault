@@ -1029,6 +1029,32 @@ mod tests {
         );
     }
 
+    /// A backslash name next to a regular file named after its first part:
+    /// the master `a\b.fits` beside the file `a`, and the folder `c\d` beside
+    /// the file `c`. The old text `a/b.fits` and `c/d` runs through a file,
+    /// so nothing can be there, and both old rows are listed.
+    #[cfg(unix)]
+    #[test]
+    fn scan_lists_old_rows_whose_path_runs_through_a_file() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        write_realistic_fits(root, "a\\b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        write_file(root, "a", b"a regular file");
+        let folder = root.join("c\\d");
+        fs::create_dir_all(&folder).unwrap();
+        write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        write_file(root, "c", b"another regular file");
+
+        let scanned = scan_root(root, &ScanOptions::default()).unwrap();
+        assert_eq!(
+            scanned.legacy_rows,
+            crate::legacy_rows::LegacyRows {
+                folders: vec!["c/d".to_owned()],
+                masters: vec!["a/b.fits".to_owned()],
+            }
+        );
+    }
+
     /// Constitution §I regression: a symlinked subdirectory reachable from the
     /// scan root must not be traversed unless `follow_symlinks` is enabled.
     #[cfg(unix)]
