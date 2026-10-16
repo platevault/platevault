@@ -14,17 +14,20 @@
 //! [`Offers::current`] and [`Offers::feed`] say where the offer for the
 //! release stands. [`OfferChannel::System`] holds only while a notification
 //! that stays on screen until it is answered ([`Delivery::Persistent`]) is
-//! outstanding. Everywhere else the notification is a heads-up
-//! ([`Delivery::Transient`]) and [`OfferChannel::InApp`] keeps the in-app
-//! notice visible:
+//! outstanding, and for at most [`PERSISTENT_OFFER_TIMEOUT`]: then the
+//! in-app notice offers the update too, and the notification stays.
+//! Everywhere else the notification is a heads-up ([`Delivery::Transient`])
+//! and [`OfferChannel::InApp`] keeps the in-app notice visible:
 //!
 //! - macOS: `System` for the Alert notification style, which stays until
 //!   the user acts. While the app is frontmost, the OS asks the app how to
 //!   present a notification, and the app presents it as a banner, so the
 //!   OS's question turns the offer of that release in-app
-//!   ([`Responder::heads_up`]). The Banner style leaves the screen by
-//!   itself, and Focus sends it to Notification Center, so a banner is a
-//!   heads-up.
+//!   ([`Responder::heads_up`]). A Focus that silences the app sends even an
+//!   alert straight to Notification Center without asking, and the app
+//!   cannot read the Focus, so the timeout bounds how long the offer waits
+//!   unseen. The Banner style leaves the screen by itself, and Focus sends
+//!   it to Notification Center, so a banner is a heads-up.
 //! - Windows: a heads-up until the app can read whether the user turned its
 //!   toasts off (`ToastNotifier.Setting`, decision D2 pending).
 //! - Linux and the other freedesktop systems: a heads-up. The notification
@@ -67,6 +70,7 @@ pub use contracts_core::updates::{OfferChannel, UpdateOffer};
 use contracts_core::updates::{UpdatePhase, UpdateStatus};
 use serde::Deserialize;
 use tokio::sync::{mpsc, watch};
+use tokio::time::Instant;
 
 use super::UpdatePort;
 use crate::channels::{Feed as _, Latest};
@@ -76,6 +80,11 @@ use crate::AppIdentity;
 /// The longest the OS may take to accept the offer, an unanswered macOS
 /// permission prompt included, before the in-app notice takes over.
 pub const OFFER_DEADLINE: Duration = Duration::from_secs(30);
+
+/// The longest a notification that stays on screen carries the offer
+/// unanswered before the in-app notice offers the update too: a Focus may
+/// have sent it unseen to Notification Center.
+pub const PERSISTENT_OFFER_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// A button of the offer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -179,9 +188,9 @@ impl OfferText {
 /// How long an accepted notification stays on screen.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Delivery {
-    /// Until the user answers it: the notification carries the offer,
-    /// unless the OS shows it as a heads-up after all
-    /// ([`Responder::heads_up`]).
+    /// Until the user answers it: the notification carries the offer for up
+    /// to [`PERSISTENT_OFFER_TIMEOUT`], unless the OS shows it as a heads-up
+    /// after all ([`Responder::heads_up`]).
     Persistent,
     /// It may leave the screen unanswered: a heads-up beside the in-app
     /// notice.
@@ -366,9 +375,17 @@ struct Offer<P, S, L> {
     status: Latest<UpdateStatus>,
     /// The release last posted.
     offered: Option<String>,
-    /// How the notification for `offered` stays on screen, while it is
-    /// posted and unanswered.
-    outstanding: Option<Delivery>,
+    /// The notification for `offered`, while it is posted and unanswered.
+    outstanding: Option<Outstanding>,
+}
+
+/// A posted notification the user has not answered.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Outstanding {
+    /// It stays on screen and carries the offer until `until`.
+    Carrying { until: Instant },
+    /// A heads-up beside the in-app notice.
+    HeadsUp,
 }
 
 impl<P, S, L> Offer<P, S, L>
@@ -378,12 +395,20 @@ where
     L: Fn() -> &'static ShippedLocale,
 {
     async fn run(mut self, mut received: mpsc::UnboundedReceiver<Event>) {
-        while let Some(event) = received.recv().await {
-            match event {
-                Event::Status(status) => self.on_status(status).await,
-                Event::Response { version, response } => self.on_response(&version, response),
-                Event::HeadsUp { version } => self.on_heads_up(&version),
-                Event::Ended => return,
+        loop {
+            tokio::select! {
+                // Queued events first: a response or a newer release that
+                // is already waiting decides the offer, not the timeout.
+                biased;
+                event = received.recv() => match event {
+                    Some(Event::Status(status)) => self.on_status(status).await,
+                    Some(Event::Response { version, response }) => {
+                        self.on_response(&version, response);
+                    }
+                    Some(Event::HeadsUp { version }) => self.on_heads_up(&version),
+                    Some(Event::Ended) | None => return,
+                },
+                () = at(self.carried_until()) => self.stop_carrying(),
             }
         }
     }
@@ -393,7 +418,7 @@ where
         match available {
             Some(version) if self.offered.as_ref() == Some(&version) => {
                 // Still posted, or answered, closed or withdrawn earlier.
-                if self.outstanding != Some(Delivery::Persistent) {
+                if self.carried_until().is_none() {
                     self.publish(&version, OfferChannel::InApp);
                 }
             }
@@ -401,12 +426,14 @@ where
                 self.withdraw();
                 self.offered = Some(version.clone());
                 let channel = match self.post(&version).await {
-                    Ok(delivery) => {
-                        self.outstanding = Some(delivery);
-                        match delivery {
-                            Delivery::Persistent => OfferChannel::System,
-                            Delivery::Transient => OfferChannel::InApp,
-                        }
+                    Ok(Delivery::Persistent) => {
+                        let until = Instant::now() + PERSISTENT_OFFER_TIMEOUT;
+                        self.outstanding = Some(Outstanding::Carrying { until });
+                        OfferChannel::System
+                    }
+                    Ok(Delivery::Transient) => {
+                        self.outstanding = Some(Outstanding::HeadsUp);
+                        OfferChannel::InApp
                     }
                     Err(refusal) => {
                         tracing::info!(?refusal, version, "the in-app notice offers the update");
@@ -463,16 +490,43 @@ where
     }
 
     fn on_heads_up(&mut self, version: &str) {
-        if self.offered.as_deref() == Some(version)
-            && self.outstanding == Some(Delivery::Persistent)
-        {
-            // Still on screen for now, and its buttons still work.
-            self.outstanding = Some(Delivery::Transient);
-            self.publish(version, OfferChannel::InApp);
+        if self.offered.as_deref() == Some(version) {
+            self.stop_carrying();
+        }
+    }
+
+    /// When the outstanding notification stops carrying the offer, or
+    /// `None` while it does not carry it.
+    const fn carried_until(&self) -> Option<Instant> {
+        match self.outstanding {
+            Some(Outstanding::Carrying { until }) => Some(until),
+            Some(Outstanding::HeadsUp) | None => None,
+        }
+    }
+
+    /// The notification that carries the offer stays, as a heads-up, and
+    /// the in-app notice offers the update.
+    fn stop_carrying(&mut self) {
+        if self.carried_until().is_none() {
+            return;
+        }
+        // Still on screen, or in Notification Center, and its buttons
+        // still work.
+        self.outstanding = Some(Outstanding::HeadsUp);
+        if let Some(version) = self.offered.clone() {
+            self.publish(&version, OfferChannel::InApp);
         }
     }
 
     fn publish(&self, version: &str, channel: OfferChannel) {
         self.published.send_replace(UpdateOffer { version: Some(version.to_owned()), channel });
+    }
+}
+
+/// Resolves at `deadline`, and never without one.
+async fn at(deadline: Option<Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
     }
 }

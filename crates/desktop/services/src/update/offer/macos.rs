@@ -7,14 +7,17 @@
 //! registered, and only when the app may show notifications on screen: full
 //! permission with the Banner or Alert style ([`delivery`]). When permission
 //! was never asked, it is asked for now. The Alert style stays on screen
-//! until the user acts, so it carries the offer; a banner leaves the screen
-//! by itself, and Focus sends it to Notification Center, so it is a heads-up
-//! beside the in-app notice. The center asks the app how to present a
-//! notification only while the app is frontmost, and the app then presents
-//! it as a banner, whatever the style: the delegate reports that
-//! presentation ([`Responders::present`]), and the offer of its release
-//! turns in-app ([`Responder::heads_up`]). A process without a bundle, such
-//! as `cargo tauri dev`, gets the in-app notice.
+//! until the user acts, so it carries the offer, for a bounded time
+//! (`PERSISTENT_OFFER_TIMEOUT`): a Focus that silences the app sends even
+//! an alert to Notification Center unseen, without asking the app, and the
+//! app cannot read the Focus. A banner leaves the screen by itself, and
+//! Focus sends it to Notification Center, so it is a heads-up beside the
+//! in-app notice. The center asks the app how to present a notification
+//! only while the app is frontmost, and the app then presents it as a
+//! banner, whatever the style: the delegate reports that presentation
+//! ([`Responders::present`]), and the offer of its release turns in-app
+//! ([`Responder::heads_up`]). A process without a bundle, such as
+//! `cargo tauri dev`, gets the in-app notice.
 //!
 //! Each release is posted under a request identifier of its own, and the
 //! category's handlers route a response or a presentation by the identifier

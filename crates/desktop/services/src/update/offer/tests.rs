@@ -16,7 +16,7 @@ use tokio::sync::{oneshot, watch};
 
 use super::{
     allows, Delivery, OfferAction, OfferChannel, OfferText, Offers, Refusal, Responder, Response,
-    SystemOffer, UpdateOffer, OFFER_DEADLINE,
+    SystemOffer, UpdateOffer, OFFER_DEADLINE, PERSISTENT_OFFER_TIMEOUT,
 };
 use crate::channels::{Feed as _, Latest};
 use crate::locale::{self, ShippedLocale};
@@ -353,19 +353,71 @@ async fn a_heads_up_reported_before_the_os_accepts_the_post_still_counts() {
     published(&offers, &offer("0.7.0", OfferChannel::InApp)).await;
 }
 
-#[tokio::test]
+/// A feed of `offers` past the offer published now.
+async fn past_current(offers: &Offers) -> Latest<UpdateOffer> {
+    let mut feed = offers.feed();
+    feed.next().await;
+    feed
+}
+
+/// The next offer `feed` publishes, within `within`.
+async fn next_offer(feed: &mut Latest<UpdateOffer>, within: Duration) -> UpdateOffer {
+    let change = tokio::time::timeout(within, feed.next()).await;
+    change.expect("nothing was published").expect("the offer feed ended")
+}
+
+/// With time paused, `feed` publishes nothing before `quiet` has passed:
+/// the tasks under test run first, and the clock moves on only once they
+/// all wait.
+async fn nothing_published(feed: &mut Latest<UpdateOffer>, quiet: Duration) {
+    if let Ok(change) = tokio::time::timeout(quiet, feed.next()).await {
+        panic!("{change:?} was published");
+    }
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_heads_up_of_the_notification_for_an_older_release_changes_nothing() {
     let (port, system, offers) = on_screen().await;
     port.publish(UpdatePhase::Available, "0.7.1");
     published(&offers, &offer("0.7.1", OfferChannel::System)).await;
-    let mut feed = offers.feed();
-    assert_eq!(feed.next().await, Some(offer("0.7.1", OfferChannel::System)));
+    let mut feed = past_current(&offers).await;
     system.heads_up(0);
-    // Handled in order, so the newer release's own heads-up, sent after,
-    // makes the only change.
+    nothing_published(&mut feed, Duration::from_secs(1)).await;
     system.heads_up(1);
-    let change = tokio::time::timeout(OFFER_DEADLINE, feed.next()).await;
-    assert_eq!(change.expect("nothing was published"), Some(offer("0.7.1", OfferChannel::InApp)));
+    assert_eq!(next_offer(&mut feed, OFFER_DEADLINE).await, offer("0.7.1", OfferChannel::InApp));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_heads_up_after_the_user_answered_changes_nothing() {
+    let (_, system, offers) = on_screen().await;
+    system.answer_last(Response::Dismissed);
+    published(&offers, &offer("0.7.0", OfferChannel::InApp)).await;
+    let mut feed = past_current(&offers).await;
+    system.heads_up(0);
+    nothing_published(&mut feed, Duration::from_secs(1)).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unanswered_notification_carries_the_offer_only_until_the_timeout() {
+    let start = tokio::time::Instant::now();
+    let (port, system, offers) = on_screen().await;
+    let mut feed = past_current(&offers).await;
+    let change = next_offer(&mut feed, PERSISTENT_OFFER_TIMEOUT * 2).await;
+    assert_eq!(change, offer("0.7.0", OfferChannel::InApp));
+    assert!(start.elapsed() >= PERSISTENT_OFFER_TIMEOUT, "handed over after {:?}", start.elapsed());
+    assert_eq!(system.withdrawn(), 0, "the notification was taken away");
+    // Still outstanding: withdrawn when the phase leaves available.
+    port.publish(UpdatePhase::Checking, "0.7.0");
+    until("the withdrawal", || system.withdrawn() == 1).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_answered_notification_hands_nothing_over_at_the_timeout() {
+    let (_, system, offers) = on_screen().await;
+    system.answer_last(Response::Dismissed);
+    published(&offers, &offer("0.7.0", OfferChannel::InApp)).await;
+    let mut feed = past_current(&offers).await;
+    nothing_published(&mut feed, PERSISTENT_OFFER_TIMEOUT * 2).await;
 }
 
 #[tokio::test]
