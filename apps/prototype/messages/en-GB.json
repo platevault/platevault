@@ -6874,5 +6874,7 @@
   "wrapup_trash_hint": "Unusable frames, files in Processing and duplicate copies, each with its exact files. Output is never offered.",
   "view_edit_settings": "Edit View settings",
   "calibrate_layout_title": "Folder names",
-  "calibrate_mixed_parts": "Mixed settings in folder names"
+  "calibrate_mixed_parts": "Mixed settings in folder names",
+  "apply_refused_no_symlinks": "{name} can't hold symlinks: choose another processing location",
+  "view_choose_location_provisional": "Provisional: choose another processing location in Edit View settings. No junction or copied layout is tried instead."
 }

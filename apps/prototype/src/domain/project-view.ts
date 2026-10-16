@@ -899,6 +899,7 @@ export type ApplyRefusal =
   | { kind: "previous-unreviewed"; leftovers: PreviousLeftover[] }
   | { kind: "space"; neededBytes: number; freeBytes: number }
   | { kind: "developer-mode" }
+  | { kind: "no-symlinks"; volume: string }
 
 /** The Apply sheet's content (VSEL-FR-14, PREP-FR-08): what Apply would do now, and why it is refused. */
 export interface ApplyPlan {
@@ -940,6 +941,22 @@ export function needsSymlinks(catalog: Catalog, project: Pick<Project, "settings
   return project.settings.mode === "symlink" || projectApplication(catalog, project) === "siril"
 }
 
+/**
+ * The one rule for Apply's symlinks (PREP-FR-15, PREP-FR-17, PREP-AC-03;
+ * provisional): when the Project needs symlinks (`needsSymlinks`), Windows
+ * with Developer Mode off refuses, and so does a processing location whose
+ * volume can't hold symlinks (exFAT, FAT): the user chooses another
+ * location. No junction, copy or other fallback is tried. Null when Apply
+ * can write its links, or writes none.
+ */
+export function symlinkRefusal(world: Pick<World, "catalog" | "disk" | "settings">, project: Pick<Project, "settings">, paths: Pick<ProjectPaths, "root"> | null): ApplyRefusal | null {
+  if (!needsSymlinks(world.catalog, project)) return null
+  if (world.settings.developerModeCheck === "off") return { kind: "developer-mode" }
+  const volumeId = paths ? volumeForPath(world.disk, paths.root) : null
+  const volume = volumeId ? world.disk.volumes[volumeId] : undefined
+  return volume && !volume.symlinks ? { kind: "no-symlinks", volume: volume.name } : null
+}
+
 function layoutDiff(before: ViewLayout | null, after: ViewLayout): Array<keyof ViewLayout> {
   if (!before) return []
   return (Object.keys(after) as Array<keyof ViewLayout>).filter((k) => before[k] !== after[k])
@@ -974,7 +991,8 @@ export function applyPlan(world: World, project: Project): ApplyPlan {
   const leftovers = unreviewedLeftovers(project)
   if (leftovers.length > 0) refusals.push({ kind: "previous-unreviewed", leftovers })
   if (paths && plan.bytes > free) refusals.push({ kind: "space", neededBytes: plan.bytes, freeBytes: free })
-  if (needsSymlinks(catalog, project) && world.settings.developerModeCheck === "off") refusals.push({ kind: "developer-mode" })
+  const links = symlinkRefusal(world, project, paths)
+  if (links) refusals.push(links)
   const fingerprint = stableHash(
     JSON.stringify({
       entries: plan.entries.map((e) => [e.path, sourceIdentity(e.source), e.sha256, e.originalPath, e.patches]),
@@ -1029,6 +1047,8 @@ export function applyRefusalRef(refusal: ApplyRefusal): MessageRef {
       return msg("apply_refused_space")
     case "developer-mode":
       return msg("apply_refused_developer_mode")
+    case "no-symlinks":
+      return msg("apply_refused_no_symlinks", { name: refusal.volume })
   }
 }
 

@@ -410,6 +410,7 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
   const offline = refusals.find((r) => r.kind === "offline")
   const drift = refusals.find((r) => r.kind === "pin-drift")
   const developer = refusals.some((r) => r.kind === "developer-mode")
+  const noLinks = refusals.find((r) => r.kind === "no-symlinks")
   const space = plan.space.twoViews && !plan.first ? m.project_apply_space_two_views({ size: formatBytes(plan.space.neededBytes) }) : formatBytes(plan.space.neededBytes)
 
   const facts = [
@@ -483,6 +484,11 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
             }
           >
             {application === "siril" ? m.view_siril_needs_links() : m.view_use_copies_provisional()}
+          </Notice>
+        ) : null}
+        {noLinks ? (
+          <Notice tone="refusal" title={say(m, applyRefusalRef(noLinks))}>
+            {m.view_choose_location_provisional()}
           </Notice>
         ) : null}
         {leftovers.length > 0 ? (

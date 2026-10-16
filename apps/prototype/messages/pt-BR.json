@@ -6888,5 +6888,7 @@
   "wrapup_trash_hint": "Quadros inutilizáveis, arquivos em Processing e cópias duplicadas, cada um com os seus arquivos exatos. Output nunca é oferecido.",
   "view_edit_settings": "Editar as configurações da View",
   "calibrate_layout_title": "Nomes das pastas",
-  "calibrate_mixed_parts": "Configurações mistas nos nomes das pastas"
+  "calibrate_mixed_parts": "Configurações mistas nos nomes das pastas",
+  "apply_refused_no_symlinks": "{name} não aceita links simbólicos: escolha outro local de processamento",
+  "view_choose_location_provisional": "Provisório: escolha outro local de processamento em Editar as configurações da View. Nenhuma junção ou layout copiado é tentado no lugar."
 }

@@ -116,6 +116,17 @@ describe("Windows Developer Mode and Siril (PREP-FR-15, PREP-FR-17; provisional)
     expect(applyPlan(store.getState(), project(CYGNUS)).refusals.map((r) => r.kind)).not.toContain("developer-mode")
   })
 
+  it("refuses Symlinks on a processing location that can't hold symlinks and asks for another one (PREP-AC-03)", () => {
+    const heart = "prj_heart"
+    setProject(heart, { folderPath: null, view: null, settings: { ...project(heart).settings, mode: "symlink", profileId: PROFILE_IDS.pixinsight, processingParent: "/Volumes/Scratch/Processing" } })
+    const refusal = applyPlan(store.getState(), project(heart)).refusals.find((r) => r.kind === "no-symlinks")
+    expect(refusal).toEqual({ kind: "no-symlinks", volume: "Scratch" })
+    setProject(heart, { settings: { ...project(heart).settings, mode: "copy" } })
+    expect(applyPlan(store.getState(), project(heart)).refusals.map((r) => r.kind)).not.toContain("no-symlinks")
+    setProject(heart, { settings: { ...project(heart).settings, profileId: PROFILE_IDS.siril } })
+    expect(applyPlan(store.getState(), project(heart)).refusals.map((r) => r.kind)).toContain("no-symlinks")
+  })
+
   it("links one Siril set per group and light folder into View once Apply swaps (PREP-AC-37)", () => {
     setProject(CYGNUS, { settings: { ...project(CYGNUS).settings, profileId: PROFILE_IDS.siril } })
     const sets = applyPlan(store.getState(), project(CYGNUS)).siril!
