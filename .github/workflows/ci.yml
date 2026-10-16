@@ -849,9 +849,10 @@ jobs:
   # The gate also runs when the script cannot scope the change: the `ALL`
   # sentinel (a rust-relevant file outside every member, e.g. the root
   # Cargo.toml) and the empty result of an active Rust lane whose files map to
-  # no member (Cargo.lock, scripts/** — which holds the baseline and this
-  # check — this workflow, assets/seed/**). Those are the two cases the Rust
-  # tests step also treats as "run everything".
+  # no member: Cargo.lock, justfile, scripts/** (which holds the baseline and
+  # this check), this workflow, assets/seed/**, and any path the `decide`
+  # step's unclassified-path catch-all routes into both lanes. Those are the
+  # two cases the Rust tests step also treats as "run everything".
   # Skipped when the closure stops short of perf-bench (a desktop_shell- or
   # e2e_tests-only change); the job-level `if:` already skips non-Rust PRs.
   #
