@@ -427,10 +427,16 @@ fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<Fold
     Ok(changed_folder(folder).is_none().then_some(listing))
 }
 
-/// Whether `folder` can now be listed in full: it opens, and every entry is
-/// read and `stat`ed (or was removed meanwhile). Links are not followed.
-pub(crate) fn lists_fully(folder: &Path) -> bool {
-    let Ok(entries) = fs::read_dir(folder) else {
+/// Whether `relative`, a folder below `root` (whose stamp is `stamp`), can
+/// now be listed in full: it opens, and every entry is read and `stat`ed (or
+/// was removed meanwhile). Links are not followed: the folder, and every
+/// folder above it, must be a real folder on the root's volume, before the
+/// read and after it, so a folder swapped for a link is never listed.
+pub(crate) fn lists_fully(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
+    if entry_at(root, stamp, relative) != Entry::Folder {
+        return false;
+    }
+    let Ok(entries) = fs::read_dir(root.join(relative)) else {
         return false;
     };
     entries.into_iter().all(|entry| {
@@ -438,7 +444,7 @@ pub(crate) fn lists_fully(folder: &Path) -> bool {
             Ok(_) => true,
             Err(error) => error.kind() == std::io::ErrorKind::NotFound,
         })
-    })
+    }) && entry_at(root, stamp, relative) == Entry::Folder
 }
 
 /// `SourceUnavailable` unless `root` still carries `stamp`.
@@ -1133,5 +1139,23 @@ mod swapped_folders {
         fs::rename(root.join("night"), &moved).unwrap();
         symlink(&moved, root.join("night")).unwrap();
         assert_eq!(frames(&filter, &root), None, "listed through a link above it");
+    }
+
+    /// A folder a walk could not list in full is probed again at a sweep;
+    /// once it, or a folder above it, is swapped for a link, the probe does
+    /// not read through the link.
+    #[test]
+    fn a_folder_swapped_for_a_link_is_never_probed_through_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night/Ha")).unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        assert!(lists_fully(&root, stamp, Path::new("night/Ha")));
+
+        let moved = dir.path().join("moved");
+        fs::rename(root.join("night"), &moved).unwrap();
+        symlink(&moved, root.join("night")).unwrap();
+        assert!(!lists_fully(&root, stamp, Path::new("night/Ha")), "probed through a parent link");
+        assert!(!lists_fully(&root, stamp, Path::new("night")), "probed through the link");
     }
 }

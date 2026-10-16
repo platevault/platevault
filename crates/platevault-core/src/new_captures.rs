@@ -433,8 +433,9 @@ struct Live {
     /// folders the OS refused deliver no event, and only those a walk lists
     /// hold files the count holds.
     complete: bool,
-    /// The folders the OS refused that no walk could list as it started. A
-    /// sweep restarts the watcher once one of them can be listed.
+    /// The folders the OS refused that no walk could list as it started,
+    /// relative to the root. A sweep restarts the watcher once one of them
+    /// can be listed.
     unlisted: Vec<PathBuf>,
     #[cfg(test)]
     _held: Held,
@@ -900,12 +901,12 @@ impl Run {
             Some(live) if !live.complete => true,
             None => true,
             Some(live) => {
-                let mut unlisted: Vec<PathBuf> =
-                    watched.unlisted.iter().map(|folder| watched.root.join(folder)).collect();
-                unlisted.extend(live.unlisted.iter().cloned());
+                let unlisted: Vec<PathBuf> =
+                    watched.unlisted.iter().chain(&live.unlisted).cloned().collect();
+                let (root, stamp) = (watched.root.clone(), watched.stamp);
                 !unlisted.is_empty()
                     && tokio::task::spawn_blocking(move || {
-                        unlisted.iter().any(|folder| inventory::lists_fully(folder))
+                        unlisted.iter().any(|folder| inventory::lists_fully(&root, stamp, folder))
                     })
                     .await
                     .unwrap_or(false)
@@ -1106,8 +1107,11 @@ impl Run {
             // The walk skips a folder it cannot list, as a scan does, so the
             // watcher misses nothing the count holds there.
             let refused_count = refused.len();
-            let unlisted: Vec<PathBuf> =
-                refused.into_iter().filter(|folder| std::fs::read_dir(folder).is_err()).collect();
+            let unlisted: Vec<PathBuf> = refused
+                .into_iter()
+                .filter(|folder| std::fs::read_dir(folder).is_err())
+                .filter_map(|folder| folder.strip_prefix(&watched).ok().map(Path::to_path_buf))
+                .collect();
             let complete = unlisted.len() == refused_count;
             Ok((events, guard, folders, complete, unlisted))
         })
