@@ -69,6 +69,16 @@ function nativeSeparators(path: string): RegExp {
 }
 
 /**
+ * A native path written with `/` as its only separator, so it can be split
+ * the way wire text is: under a Windows path (drive or UNC share) every `\`
+ * becomes `/`; any other path is returned as it is, because there `\` is part
+ * of a name (bd astro-plan-3pvvc).
+ */
+export function nativeWithSlashes(path: string): string {
+  return isWindowsPath(path) ? path.replace(/\\/g, '/') : path;
+}
+
+/**
  * Return the last name of a native path, such as a source root from the
  * folder picker. A Windows path (drive or UNC share) splits on `/` and `\`;
  * any other path only on `/`, because there `\` is part of a name. For a path

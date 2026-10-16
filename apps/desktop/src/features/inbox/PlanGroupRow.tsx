@@ -16,6 +16,7 @@ import type { PlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
 import * as pp from './plan-panel.css';
 import type { InboxOpenPlan } from './store';
 import {
+  actionDestination,
   breakdownDestination,
   buildGroupBreakdown,
   buildGroupSummary,
@@ -378,7 +379,7 @@ export function PlanGroupRow({
                       path / item hint — not the repetitive action kind. */}
                   {frameTypeLabel(
                     a,
-                    destText,
+                    actionDestination(a, absoluteByFromPath),
                     frameTypeByItemId?.[plan.inboxItemId],
                   )}
                   {a.requiresDestructiveConfirm && (
