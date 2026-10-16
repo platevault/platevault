@@ -1,31 +1,23 @@
 /**
- * Project and run derivations for harness v5 (foundation-owned). Candidates,
- * goal progress, warnings, the six run step gates and their Next action, the
- * run blockers, the Project Next rule and stage, and Fit per rig. Every
- * screen reads these so the numbers and the next step agree everywhere
- * (D-W33, D-W35, D-W36, D-W37). Library-level totals live in library.ts.
- * Nothing here writes state. Copy is a `MessageRef` (a catalogue key and its
- * params), worded by the screen with `say(m, …)`, so it follows a language
- * switch; the name helpers that return a string take the caller's `m`.
+ * Project and library derivations for harness v5 (foundation-owned):
+ * associations, rigs and channels; a Project's suggestions and the sessions
+ * it holds; goal progress and subject conditions; session readiness; Fit per
+ * rig; and the staged-flow vocabulary every StepFlow builder words. Every
+ * screen reads these so the numbers agree everywhere (D-W33, D-W36, D-W37).
+ * The Project's View, Apply, Output and Wrap up derivations live in
+ * `project-view.ts`; library-level totals in `library.ts`. Nothing here
+ * writes state. Copy is a `MessageRef` (a catalogue key and its params),
+ * worded by the screen with `say(m, …)`, so it follows a language switch;
+ * the name helpers that return a string take the caller's `m`.
  */
-import { calibrationPlan, type CalibrationPlan, handoffCalibration, handsOff, KIND_NAME, masterAge } from "./calibration"
+import { isSettled, unsettledKinds } from "./calibration"
 import { CALIBRATION_STEPS, stackRefusals } from "./calibration-process"
 import { latestCorrection } from "./corrections"
-import { filesUnder, volumeForPath } from "./disk"
-import { BANDS, GOAL_CHANNELS, isGoalChannel, NARROW_BANDS, numberText, RUN_STEPS, STEP_NAME, WRAP_UP_NAME, WRAP_UP_STEPS } from "./labels"
-import {
-  assetAvailability,
-  coverageFraction,
-  effectiveExposureS,
-  type Footprint,
-  type FrameTotals,
-  measurementApplies,
-  qualityApplicability,
-  sessionFootprint,
-} from "./library"
-import { memberSessions, runSummary, sessionExposureS, sessionRef } from "./membership"
-import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight, windowProgress, type WindowProgress } from "./planning"
-import { angularSeparationDeg, type FieldOfView, fieldOfView } from "./sky"
+import { BANDS, GOAL_CHANNELS, isGoalChannel, NARROW_BANDS, numberText } from "./labels"
+import { effectiveExposureS, type FrameTotals, measurementApplies, qualityApplicability } from "./library"
+import { frameOut, framesRef, sessionExposureS } from "./membership"
+import { defaultCriteria, filterSuitability, type FilterTonight, windowProgress, type WindowProgress } from "./planning"
+import { type FieldOfView, fieldOfView } from "./sky"
 import { goalMeasure, type GoalMeasure, type GoalUnit, type NamingValues, namingValues, subjectConditions } from "./templates"
 import type {
   AppSettings,
@@ -34,43 +26,33 @@ import type {
   Band,
   CameraKind,
   ApplicationProfile,
-  CalibrationMaster,
   CalibrationProcess,
   CalibrationProcessId,
   CalibrationStepId,
   Catalog,
-  Filter,
+  CloseSnapshot,
   CorrectionField,
-  MasterId,
-  MetadataDecision,
-  ProfileId,
-  WrapUpStepRecord,
   Disk,
+  Filter,
   FrozenGoal,
   Goal,
   GoalChannel,
-  GoalFreeze,
   GoalTemplateValue,
   IsoDateTime,
   Location,
+  MetadataDecision,
   NightDate,
   ObservingSite,
-  WrapUpStepId,
-  MembershipContent,
-  MembershipRevision,
-  MosaicPanel,
   Operation,
   OpticalTrain,
   OpticalTrainId,
-  Preparation,
+  PinKind,
+  ProfileId,
   Project,
+  ProjectGroup,
   ProjectId,
-  ResultRecord,
-  Run,
-  RunGroup,
-  RunId,
-  RunSetup,
-  RunStep,
+  ProjectInput,
+  ProjectState,
   Session,
   SessionId,
   SimulationFaults,
@@ -78,7 +60,7 @@ import type {
   SubjectConditions,
   Target,
 } from "./types"
-import { fileName, formatCount, formatDecimal } from "@/lib/format"
+import { formatCount, formatDecimal } from "@/lib/format"
 import { joinRefs, type MessageRef, type Messages, msg, nightRef, say, verbatim } from "@/lib/i18n"
 
 /** The read-only slice of the prototype state derivations need; `PrototypeState` satisfies it. */
@@ -92,7 +74,7 @@ export interface World {
 
 const SETTLED = new Set(["succeeded", "partial", "failed", "canceled"])
 
-function unsettled(op: Operation): boolean {
+export function unsettled(op: Operation): boolean {
   return !SETTLED.has(op.status)
 }
 
@@ -111,8 +93,8 @@ export function sessionTargetId(session: Session): string | null {
 
 /**
  * Naming token values of a session (D-W20): its settled Target, corrected
- * channel and exposure, camera and settings. Archive, Restore, review names
- * and the Settings preview lay files out from these; Import, before any
+ * channel and exposure, camera and settings. Archive, review names and the
+ * Settings preview lay files out from these; Import, before any
  * association, reads the header (`headerNamingValues`).
  */
 export function sessionNamingValues(catalog: Catalog, session: Session, frameType: string = session.imageType): NamingValues {
@@ -240,16 +222,16 @@ export function goalChannel(catalog: Catalog, session: Session): GoalChannel | n
 }
 
 // ---------------------------------------------------------------------------
-// Subjects and panels
+// Subjects and panel groups
 // ---------------------------------------------------------------------------
 
 export function subjectTarget(catalog: Catalog, subject: Subject): Target | undefined {
   return catalog.targets[subject.targetId]
 }
 
-/** A mosaic reads by its own name; a Target subject by the Target's name. */
+/** A subject reads by its Target's name. */
 export function subjectRef(catalog: Catalog, subject: Subject): MessageRef {
-  const name = subject.mosaic?.name ?? subjectTarget(catalog, subject)?.name
+  const name = subjectTarget(catalog, subject)?.name
   return name === undefined ? msg("plan_unknown_target") : verbatim(name)
 }
 
@@ -261,154 +243,61 @@ export function findSubject(project: Project, subjectId: string): Subject | unde
   return project.subjects.find((s) => s.id === subjectId)
 }
 
-export function findPanel(subject: Subject | undefined, panelId: string | null): MosaicPanel | undefined {
-  return panelId ? subject?.mosaic?.panels.find((p) => p.id === panelId) : undefined
+export function findGroup(project: Project, groupId: string | null): ProjectGroup | undefined {
+  return groupId ? project.groups.find((g) => g.id === groupId) : undefined
 }
 
-/** "Panel 2". */
-export function panelRef(panel: MosaicPanel): MessageRef {
-  return msg("review_panel_n", { n: panel.n })
+/** A Project is a mosaic once one of its groups is marked a panel (PRJ-FR-29); there is no mosaic mode up front. */
+export function isMosaic(project: Pick<Project, "groups">): boolean {
+  return project.groups.some((g) => g.panel)
 }
 
-export function panelLabel(m: Messages, panel: MosaicPanel): string {
-  return say(m, panelRef(panel))
+/** The Project's panel groups, in group order. */
+export function panelGroups(project: Pick<Project, "groups">): ProjectGroup[] {
+  return project.groups.filter((g) => g.panel)
 }
 
-/** Centre the Planner uses: a mosaic's centre, else the Target's coordinates (D-W63). */
+/** A group as a list names it: its own name, data in every language. */
+export function groupRef(group: ProjectGroup): MessageRef {
+  return verbatim(group.name)
+}
+
+/** Centre the Planner uses: the Target's coordinates (D-W63). */
 export function subjectCentre(catalog: Catalog, subject: Subject): { ra: number; dec: number } | null {
-  if (subject.mosaic) return subject.mosaic.centre
   const target = subjectTarget(catalog, subject)
   return target && target.ra !== null && target.dec !== null ? { ra: target.ra, dec: target.dec } : null
 }
 
-export type PanelFlag = "ambiguous" | "off-panel" | "no-pointing" | "fov-unknown"
-
-export const PANEL_FLAG_NAME: Record<PanelFlag, MessageRef> = {
-  ambiguous: msg("domain_panel_flag_ambiguous"),
-  "off-panel": msg("domain_panel_flag_off_panel"),
-  "no-pointing": msg("project_placement_no_pointing"),
-  "fov-unknown": msg("domain_fov_unknown"),
-}
-
-/**
- * The panel a session belongs to by its pointing, checked against each
- * panel's centre and rotation with the rig's field of view (D-W38). A session
- * in more than one panel, in none, or without pointing is flagged; nothing is
- * assigned silently.
- */
-export function panelForSession(catalog: Catalog, subject: Subject, session: Session, rigId: OpticalTrainId): { panelId: string | null; flag: PanelFlag | null; detail: MessageRef } {
-  const panels = subject.mosaic?.panels ?? []
-  if (!session.pointing) return { panelId: null, flag: "no-pointing", detail: PANEL_FLAG_NAME["no-pointing"] }
-  const rig = catalog.opticalTrains[rigId]
-  const fov = rig ? rigFieldOfView(catalog, rig) : null
-  if (!fov) return { panelId: null, flag: "fov-unknown", detail: PANEL_FLAG_NAME["fov-unknown"] }
-  const { ra, dec } = session.pointing
-  const inside = panels.filter((panel) => {
-    const cos = Math.cos((panel.dec * Math.PI) / 180)
-    let dRa = ra - panel.ra
-    if (dRa > 180) dRa -= 360
-    if (dRa < -180) dRa += 360
-    const x = dRa * cos
-    const y = dec - panel.dec
-    const r = (panel.rotationDeg * Math.PI) / 180
-    const u = x * Math.cos(r) + y * Math.sin(r)
-    const v = -x * Math.sin(r) + y * Math.cos(r)
-    return Math.abs(u) <= fov.widthDeg / 2 && Math.abs(v) <= fov.heightDeg / 2
-  })
-  if (inside.length === 1) return { panelId: inside[0]!.id, flag: null, detail: msg("domain_panel_pointing_inside", { panel: panelRef(inside[0]!) }) }
-  if (inside.length > 1) return { panelId: null, flag: "ambiguous", detail: joinRefs([PANEL_FLAG_NAME.ambiguous, joinRefs(inside.map(panelRef), ", ")], ": ") }
-  return { panelId: null, flag: "off-panel", detail: PANEL_FLAG_NAME["off-panel"] }
-}
-
-/**
- * The panel whose centre is nearest a session's pointing, on the tangent
- * plane: where clicking a flagged session places it (round 5). Null without
- * pointing or panels; the row's menu still offers every panel.
- */
-export function nearestPanel<P extends { ra: number; dec: number }>(pointing: Session["pointing"], panels: P[]): P | null {
-  if (!pointing) return null
-  let best: P | null = null
-  let bestDistance = Infinity
-  for (const panel of panels) {
-    let dRa = pointing.ra - panel.ra
-    if (dRa > 180) dRa -= 360
-    if (dRa < -180) dRa += 360
-    const x = dRa * Math.cos((panel.dec * Math.PI) / 180)
-    const y = pointing.dec - panel.dec
-    const distance = x * x + y * y
-    if (distance < bestDistance) {
-      best = panel
-      bestDistance = distance
-    }
-  }
-  return best
-}
-
 // ---------------------------------------------------------------------------
-// Projects: state, runs, candidates and members (D-W33, D-W34, D-W37)
+// Projects: state, suggestions and held sessions (D-W33, D-W37, PRJ-FR-08)
 // ---------------------------------------------------------------------------
 
-export type ProjectStatus = "open" | "done" | "archived"
-
-/** Header state: Open, Done, or Archived (Done with an Archive). A Reopened Project reads Open. */
-export function projectStatus(project: Project): ProjectStatus {
-  if (project.state === "open") return "open"
-  return project.archive ? "archived" : "done"
-}
-
-/** The header's StatusBadge word (C2, D10): Open, Closed, or Archived (Closed with an Archive). */
-export const PROJECT_STATUS_NAME: Record<ProjectStatus, MessageRef> = { open: msg("status_open"), done: msg("status_closed"), archived: msg("status_archived") }
-
-export type ProjectTabId = "runs" | "wrap-up"
-
-export interface ProjectTabs {
-  status: ProjectStatus
-  tabs: Array<{ id: ProjectTabId; label: MessageRef; count: number | null }>
-  /** Wrap up's EmptyState until every run is Finished or Trashed (§5.5); null once Wrap up is available or the Project is closed. */
-  wrapUpUnavailable: FlowGate | null
-}
+/** The header's StatusBadge word (PRJ-FR-14, PRJ-FR-25): Open, Closed, or Archived. */
+export const PROJECT_STATUS_NAME: Record<ProjectState, MessageRef> = { open: msg("status_open"), closed: msg("status_closed"), archived: msg("status_archived") }
 
 /**
- * The Project page's StatusBadge and its two tabs, Runs and Wrap up (D10, §5.7),
- * in place of the stage strip (`projectStageStrip`). Runs counts the runs
- * outside the Trash; Wrap up reads its one line until it is available.
+ * Closed and Archived Projects are locked: no edits, no Apply, no incoming
+ * pending changes (PRJ-FR-25). Provisional (decision record §2): there is no
+ * Reopen, so the lock is for good. This predicate is the one place that
+ * decides it; every writer refuses through it (`closedRefusal`).
  */
-export function projectTabs(world: World, project: Project): ProjectTabs {
-  const wrapUp = wrapUpFlowState(world, project)
-  return {
-    status: projectStatus(project),
-    tabs: [
-      { id: "runs", label: msg("common_runs"), count: projectRuns(world.catalog, project.id).length },
-      { id: "wrap-up", label: msg("wrapup_action"), count: null },
-    ],
-    wrapUpUnavailable: wrapUp.unavailable,
-  }
+export function isLocked(project: Pick<Project, "state">): boolean {
+  return project.state !== "open"
 }
 
-/** Runs of a Project outside its Trash, oldest first. */
-export function projectRuns(catalog: Catalog, projectId: ProjectId): Run[] {
-  return Object.values(catalog.runs)
-    .filter((r) => r.projectId === projectId && !r.trashedAt)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+/** The sessions a Project holds (its desired inputs). */
+export function projectSessionIds(project: Pick<Project, "inputs">): Set<SessionId> {
+  return new Set(project.inputs.map((i) => i.sessionId))
 }
 
-/** The Project's Trash: trashed runs, newest first (D-W72). */
-export function projectTrash(catalog: Catalog, projectId: ProjectId): Run[] {
-  return Object.values(catalog.runs)
-    .filter((r) => r.projectId === projectId && r.trashedAt)
-    .sort((a, b) => (b.trashedAt ?? "").localeCompare(a.trashedAt ?? ""))
-}
-
-export function projectGroups(catalog: Catalog, projectId: ProjectId): RunGroup[] {
-  return Object.values(catalog.runGroups)
-    .filter((g) => g.projectId === projectId)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+export function findInput(project: Pick<Project, "inputs">, sessionId: SessionId): ProjectInput | undefined {
+  return project.inputs.find((i) => i.sessionId === sessionId)
 }
 
 /**
- * Candidate rule (D-W33, D-W37, PRJ-FR-09): the session's confirmed Target is
- * a subject of the Project and its rig is one of the Project's rigs.
- * Trashed sessions are never candidates. Returns the matching subject.
+ * Suggestion rule (D-W33, D-W37, PRJ-FR-09): the session's confirmed Target
+ * is a subject of the Project and its rig is one of the Project's rigs.
+ * Trashed sessions never match. Returns the matching subject.
  */
 export function candidateSubject(catalog: Catalog, project: Project, session: Session): Subject | null {
   if (session.imageType !== "light" || session.supersededBy || isTrashedSession(catalog, session)) return null
@@ -427,9 +316,8 @@ export interface Candidate {
 }
 
 /**
- * Sessions the candidate rule matches, reviewed or not: what a goal's
- * "captured" counts and what a Project's review queue draws on. Only the
- * Ready ones are candidates (`projectCandidates`, P-REV2).
+ * Sessions the suggestion rule matches, reviewed or not, held or not: what a
+ * goal's "captured" counts and what a Project's review queue draws on.
  */
 export function projectMatches(catalog: Catalog, project: Project): Candidate[] {
   const out: Candidate[] = []
@@ -439,125 +327,51 @@ export function projectMatches(catalog: Catalog, project: Project): Candidate[] 
     const rigId = sessionRigId(session)!
     out.push({ session, subject, rigId, reason: msg("domain_candidate_reason", { target: subjectRef(catalog, subject), rig: rigRef(catalog, rigId) }) })
   }
-  return out.sort((a, b) => a.session.night.localeCompare(b.session.night) || (a.session.channel ?? "").localeCompare(b.session.channel ?? ""))
+  return out.sort((a, b) => a.session.night.localeCompare(b.session.night) || (a.session.channel ?? "").localeCompare(b.session.channel ?? "") || a.session.framing - b.session.framing)
 }
 
-/** Candidates (D2, P-REV2): matching sessions that are fully reviewed. Only they join a run; the rest wait in the review queue. */
-export function projectCandidates(catalog: Catalog, project: Project): Candidate[] {
-  return projectMatches(catalog, project).filter((c) => sessionReadiness(catalog, c.session) === "ready")
+/** Why a session cannot be added to a Project yet (PRJ-FR-08): "Review 12 frames first", "Choose its flats first". Null when it can. */
+export function joinBlocker(catalog: Catalog, session: Session): MessageRef | null {
+  const readiness = sessionReadiness(catalog, session)
+  if (readiness === "needs-target") return msg("domain_join_needs_target")
+  if (readiness === "needs-rig") return msg("domain_join_needs_rig")
+  if (readiness === "needs-review") return msg("domain_join_needs_review", { count: sessionUnreviewedFrames(catalog, session) })
+  const kinds = unsettledKinds(session.calibration)
+  return kinds.length > 0 ? CHOOSE_FIRST[kinds[0]!] : null
 }
 
-/** Matching sessions that still need review before they can join a run: "3 sessions need review ▸" (C14). */
+const CHOOSE_FIRST: Record<PinKind, MessageRef> = {
+  dark: msg("domain_join_choose_darks"),
+  flat: msg("domain_join_choose_flats"),
+  bias: msg("domain_join_choose_bias"),
+}
+
+/** Ready and settled: the only sessions a Project can add (PRJ-FR-08, LIB-FR-23). */
+export function canJoinProject(catalog: Catalog, session: Session): boolean {
+  return sessionReadiness(catalog, session) === "ready" && isSettled(session.calibration)
+}
+
+export interface Suggestion extends Candidate {
+  /** Why Add is not offered yet ("Choose its flats first"); null when it can be added. */
+  blocked: MessageRef | null
+}
+
+/**
+ * Suggestions (PRJ-FR-09, D-W96): Ready matching sessions the Project does
+ * not hold. They are never added by themselves; one whose calibration is not
+ * settled shows "Choose its flats first" instead of Add.
+ */
+export function projectSuggestions(catalog: Catalog, project: Project): Suggestion[] {
+  const held = projectSessionIds(project)
+  return projectMatches(catalog, project)
+    .filter((c) => !held.has(c.session.id) && sessionReadiness(catalog, c.session) === "ready")
+    .map((c) => ({ ...c, blocked: joinBlocker(catalog, c.session) }))
+}
+
+/** Matching sessions that still need review before they can be suggested: "3 sessions need review ▸" (C14). */
 export function projectSessionsNeedingReview(catalog: Catalog, project: Project): Candidate[] {
-  return projectMatches(catalog, project).filter((c) => sessionReadiness(catalog, c.session) !== "ready")
-}
-
-/** The latest saved membership revision of a run, if any. */
-export function latestRevision(run: Run): MembershipRevision | null {
-  return run.revisions.at(-1) ?? null
-}
-
-/** What Select and Review edit: the draft, else the latest revision. */
-export function workingContent(run: Run): MembershipContent | null {
-  return run.draft ?? latestRevision(run)
-}
-
-/** Calibrate and Prepare need a saved revision and no unsaved draft. */
-export function savedContent(run: Run): MembershipRevision | null {
-  return run.draft ? null : latestRevision(run)
-}
-
-/** Members: sessions in the latest saved membership of a Project's runs outside its Trash (D-W34). */
-export function projectMemberSessionIds(catalog: Catalog, projectId: ProjectId): Set<SessionId> {
-  const ids = new Set<SessionId>()
-  for (const run of projectRuns(catalog, projectId)) for (const s of latestRevision(run)?.sessions ?? []) ids.add(s.sessionId)
-  return ids
-}
-
-/** Matches of the run's subject on the run's rig; a panel run's, by pointing (D-W49, D-W38). */
-function forRun(catalog: Catalog, run: Run, matches: Candidate[]): Candidate[] {
-  return matches.filter((c) => {
-    if (c.subject.id !== run.subjectId || c.rigId !== run.rigId) return false
-    if (!run.panelId) return true
-    return panelForSession(catalog, c.subject, c.session, run.rigId).panelId === run.panelId
-  })
-}
-
-/** The run's candidates: the subject's Ready candidates on the run's rig; a panel run's, by pointing (D-W49, D-W38, D2). */
-export function runCandidates(catalog: Catalog, run: Run): Candidate[] {
-  const project = catalog.projects[run.projectId]
-  return project ? forRun(catalog, run, projectCandidates(catalog, project)) : []
-}
-
-/** Sessions that would be the run's candidates once reviewed: Select's "N sessions need review ▸" (C14). */
-export function runSessionsNeedingReview(catalog: Catalog, run: Run): Candidate[] {
-  const project = catalog.projects[run.projectId]
-  return project ? forRun(catalog, run, projectSessionsNeedingReview(catalog, project)) : []
-}
-
-export interface SessionGeometry {
-  /** Separation of the session's pointing from the Target (a panel run: its panel's centre); null without pointing. */
-  distanceDeg: number | null
-  /** Fraction (0-1) of the framing the session's footprint covers: the panel, else the Target's extent, else the rig's field centred on the Target. Null without a qualified footprint (D01). */
-  coverage: number | null
-}
-
-/** Select's sky tools (spec 066): distance from the Target and footprint coverage, from qualified geometry only. */
-export function runSessionGeometry(catalog: Catalog, run: Run, session: Session): SessionGeometry {
-  const project = catalog.projects[run.projectId]
-  const subject = project ? findSubject(project, run.subjectId) : undefined
-  const panel = findPanel(subject, run.panelId)
-  const centre = panel ?? (subject ? subjectCentre(catalog, subject) : null)
-  if (!centre || !session.pointing) return { distanceDeg: null, coverage: null }
-  const distanceDeg = angularSeparationDeg(session.pointing.ra, session.pointing.dec, centre.ra, centre.dec)
-  const rig = catalog.opticalTrains[run.rigId]
-  const fov = rig ? rigFieldOfView(catalog, rig) : null
-  const target = subject ? subjectTarget(catalog, subject) : undefined
-  const region: Footprint | null = panel
-    ? fov && { ra: panel.ra, dec: panel.dec, widthDeg: fov.widthDeg, heightDeg: fov.heightDeg, rotationDeg: panel.rotationDeg }
-    : target?.sizeDeg
-      ? { ra: centre.ra, dec: centre.dec, widthDeg: target.sizeDeg.width, heightDeg: target.sizeDeg.height, rotationDeg: 0 }
-      : fov && { ra: centre.ra, dec: centre.dec, widthDeg: fov.widthDeg, heightDeg: fov.heightDeg, rotationDeg: 0 }
-  const footprint = sessionFootprint(catalog, session)
-  return { distanceDeg, coverage: region && footprint ? coverageFraction(region, [footprint]) : null }
-}
-
-export interface RunRefresh {
-  /** Candidates not yet in the run: "Add N new sessions" (VSEL-FR-12). */
-  newCandidates: Candidate[]
-  /** Members that stopped being candidates: "no longer matches subject" (D-W45). */
-  noLongerMatching: SessionId[]
-}
-
-export function runRefresh(catalog: Catalog, run: Run): RunRefresh {
-  const content = workingContent(run)
-  const memberIds = new Set((content?.sessions ?? []).map((s) => s.sessionId))
-  const candidates = runCandidates(catalog, run)
-  const subject = catalog.projects[run.projectId] ? findSubject(catalog.projects[run.projectId]!, run.subjectId) : undefined
-  return {
-    newCandidates: candidates.filter((c) => !memberIds.has(c.session.id)),
-    noLongerMatching: [...memberIds].filter((id) => {
-      const session = catalog.sessions[id]
-      return !session || !subject || sessionTargetId(session) !== subject.targetId || sessionRigId(session) !== run.rigId
-    }),
-  }
-}
-
-/** Panel assignment of a run group's candidates: per panel, plus the flagged sessions the user must place (D-W38). */
-export function groupCandidates(catalog: Catalog, group: RunGroup): { byPanel: Record<string, Candidate[]>; flagged: Array<{ candidate: Candidate; flag: PanelFlag; detail: MessageRef }> } {
-  const project = catalog.projects[group.projectId]
-  const subject = project ? findSubject(project, group.subjectId) : undefined
-  const byPanel: Record<string, Candidate[]> = {}
-  const flagged: Array<{ candidate: Candidate; flag: PanelFlag; detail: MessageRef }> = []
-  if (!project || !subject) return { byPanel, flagged }
-  for (const panel of subject.mosaic?.panels ?? []) byPanel[panel.id] = []
-  for (const candidate of projectCandidates(catalog, project)) {
-    if (candidate.subject.id !== subject.id || candidate.rigId !== group.rigId) continue
-    const placed = panelForSession(catalog, subject, candidate.session, group.rigId)
-    if (placed.panelId) byPanel[placed.panelId]?.push(candidate)
-    else flagged.push({ candidate, flag: placed.flag!, detail: placed.detail })
-  }
-  return { byPanel, flagged }
+  const held = projectSessionIds(project)
+  return projectMatches(catalog, project).filter((c) => !held.has(c.session.id) && sessionReadiness(catalog, c.session) !== "ready")
 }
 
 // ---------------------------------------------------------------------------
@@ -597,18 +411,13 @@ export interface GoalProgress {
   goal: Goal
   inProject: FrameTotals
   captured: FrameTotals
-  /** Members the goal's quality bar cannot judge (no applicable measurement); they do not count (PRJ-FR-03). */
+  /** Frames in project the goal's quality bar cannot judge (no applicable measurement); they do not count (PRJ-FR-03). */
   unknownQuality: number
   /** Usable frames in project that the bar's FWHM limit leaves out (C7); zero without a limit. */
   belowBar: FrameTotals
   met: boolean
   /** The goal's one unit, its amount and what remains, in that unit (C7, `goalMeasure` in templates.ts). */
   measure: GoalMeasure
-  /**
-   * Integration still needed in project; null without an integration goal.
-   * @deprecated Use `measure.remaining`, counted in `measure.unit`, so frame goals have one too (C7); W3 pages migrate.
-   */
-  remainingS: number | null
   /** "Ha 6h10 in project · 9h15 captured · goal 10h" ("in project" never above "captured", PRJ-FR-21). */
   line: MessageRef
   /** The line without its channel: "6h10 in project · 9h15 captured · goal 10h", beside a channel chip. */
@@ -633,27 +442,22 @@ function frameVerdict(catalog: Catalog, asset: Asset, bar: Goal["qualityBar"]): 
   return fwhm.value <= bar.maxArcsec ? "counted" : "below-bar"
 }
 
-function goalMatches(catalog: Catalog, goal: Goal, session: Session, subject: Subject, rigId: OpticalTrainId): boolean {
-  if (goalChannel(catalog, session) !== goal.channel) return false
-  if (!goal.panelId) return true
-  return panelForSession(catalog, subject, session, rigId).panelId === goal.panelId
-}
-
 /** One goal's counted totals: the live library's, or the ones Close froze (`FrozenGoal`). */
 type GoalCounts = Omit<FrozenGoal, "goalId">
 
 /**
- * Counts each goal against the live library. "in project" counts frames in
- * the latest saved memberships of the Project's runs outside its Trash (each
- * frame once), leaving out run exclusions and rejections, Trashed frames and
- * frames the quality bar does not admit; those the bar's FWHM limit leaves
- * out count as below the bar. "captured" counts every candidate frame plus
- * those members, Trashed frames aside, so "in project" never exceeds
- * "captured" (D-W66).
+ * Counts each goal against the live library (PRJ-FR-04). "in project"
+ * counts the frames of the sessions this Project holds that are in (not
+ * excluded by the Project, not rejected in the Library, not Trashed) and
+ * that the quality bar admits; a panel goal counts its panel group only.
+ * Those the bar's FWHM limit leaves out count as below the bar. "captured"
+ * adds every frame of the matching sessions the Project does not hold, so
+ * "in project" never exceeds "captured" (D-W66). Each Project counts its
+ * own sessions; a frame counts once per Project.
  */
 function liveCounter(catalog: Catalog, project: Project): (goal: Goal) => GoalCounts {
-  const runs = projectRuns(catalog, project.id)
-  const candidates = projectMatches(catalog, project)
+  const matches = projectMatches(catalog, project)
+  const held = projectSessionIds(project)
   const total = (ids: Set<AssetId>) => {
     const totals = zero()
     for (const id of ids) {
@@ -665,31 +469,32 @@ function liveCounter(catalog: Catalog, project: Project): (goal: Goal) => GoalCo
     return totals
   }
   return (goal) => {
-    const subject = findSubject(project, goal.subjectId)
     const inProjectIds = new Set<AssetId>()
     const capturedIds = new Set<AssetId>()
     const belowBarIds = new Set<AssetId>()
     const unmeasuredIds = new Set<AssetId>()
+    const subject = findSubject(project, goal.subjectId)
     if (subject) {
-      for (const run of runs) {
-        if (run.subjectId !== subject.id || (goal.panelId && run.panelId !== goal.panelId)) continue
-        const revision = latestRevision(run)
-        if (!revision) continue
-        for (const id of [...revision.included, ...revision.excluded, ...revision.rejected, ...revision.unresolved]) {
+      for (const input of project.inputs) {
+        if (goal.groupId && input.groupId !== goal.groupId) continue
+        const session = catalog.sessions[input.sessionId]
+        if (!session || candidateSubject(catalog, project, session)?.id !== subject.id || goalChannel(catalog, session) !== goal.channel) continue
+        for (const id of session.assetIds) {
           const asset = catalog.assets[id]
-          const session = asset?.sessionId ? catalog.sessions[asset.sessionId] : undefined
-          if (!asset || asset.trashed || !session || goalChannel(catalog, session) !== goal.channel) continue
+          if (!asset || asset.trashed) continue
           capturedIds.add(id)
-          if (!revision.included.includes(id)) continue
+          if (frameOut(catalog, input, id) !== null) continue
           const verdict = frameVerdict(catalog, asset, goal.qualityBar)
           if (verdict === "counted") inProjectIds.add(id)
           else if (verdict === "below-bar") belowBarIds.add(id)
           else if (verdict === "unmeasured") unmeasuredIds.add(id)
         }
       }
-      for (const candidate of candidates) {
-        if (candidate.subject.id !== subject.id || !goalMatches(catalog, goal, candidate.session, subject, candidate.rigId)) continue
-        for (const id of liveAssetIds(catalog, candidate.session)) capturedIds.add(id)
+      if (!goal.groupId) {
+        for (const candidate of matches) {
+          if (held.has(candidate.session.id) || candidate.subject.id !== subject.id || goalChannel(catalog, candidate.session) !== goal.channel) continue
+          for (const id of liveAssetIds(catalog, candidate.session)) capturedIds.add(id)
+        }
       }
     }
     return { inProject: total(inProjectIds), captured: total(capturedIds), belowBar: total(belowBarIds), unknownQuality: unmeasuredIds.size }
@@ -712,7 +517,6 @@ function progressOf(goal: Goal, counts: GoalCounts, frozen: boolean): GoalProgre
     belowBar,
     met: measure.met,
     measure,
-    remainingS: measure.unit === "time" ? measure.remaining : null,
     line: msg("domain_goal_line", { channel: goal.channel, amounts }),
     amounts,
     belowBarLine: belowBar.frames > 0 ? msg("domain_goal_below_bar", { amount: count(measure.unit === "time" ? belowBar.seconds : belowBar.frames) }) : null,
@@ -721,14 +525,13 @@ function progressOf(goal: Goal, counts: GoalCounts, frozen: boolean): GoalProgre
 }
 
 /**
- * Progress of every goal (`liveCounter` says what counts). A closed Project
- * reads the figures frozen at Close (C7, `freezeGoals`), so later library
- * changes leave them as they were; an open one, or a closed one saved
- * without them, reads the live library.
+ * Progress of every goal (`liveCounter` says what counts). A Closed or
+ * Archived Project reads the figures frozen at Close (C7, PRJ-FR-25), so
+ * later library changes leave them as they were; an open one reads the
+ * live library.
  */
 export function goalProgress(catalog: Catalog, project: Project): GoalProgress[] {
-  const freeze = project.state === "done" ? project.goalFreeze : null
-  const frozen = new Map((freeze?.goals ?? []).map((g) => [g.goalId, g]))
+  const frozen = new Map((isLocked(project) ? (project.snapshot?.goals ?? []) : []).map((g) => [g.goalId, g]))
   let live: ((goal: Goal) => GoalCounts) | null = null
   return project.goals.map((goal) => {
     const held = frozen.get(goal.id)
@@ -739,28 +542,33 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
 }
 
 /**
- * The goal figures to keep when a Project closes (C7): every goal counted
- * against the live library at `at`. Close writes them into
- * `Project.goalFreeze` with the Done state; Reopen clears them.
+ * What Close freezes (PRJ-FR-25): every goal counted against the live
+ * library at `at`, and the calibration each held session has now, so a
+ * later reassignment never changes a Closed Project.
  */
-export function freezeGoals(catalog: Catalog, project: Project, at: IsoDateTime): GoalFreeze {
+export function closeSnapshot(catalog: Catalog, project: Project, at: IsoDateTime): CloseSnapshot {
   const count = liveCounter(catalog, project)
-  return { at, goals: project.goals.map((goal) => ({ goalId: goal.id, ...count(goal) })) }
+  const calibration: CloseSnapshot["calibration"] = {}
+  for (const input of project.inputs) {
+    const cal = catalog.sessions[input.sessionId]?.calibration
+    if (cal) calibration[input.sessionId] = cal
+  }
+  return { at, goals: project.goals.map((goal) => ({ goalId: goal.id, ...count(goal) })), calibration }
 }
 
-/** "1 frame", "1,200 frames". */
-function framesRef(count: number): MessageRef {
-  return msg("project_frames_count", { count, n: formatCount(count) })
+/** The calibration a held session reads for this Project: a Closed Project's frozen snapshot, else the session's current pins. */
+export function heldCalibration(catalog: Catalog, project: Project, sessionId: SessionId): Session["calibration"] {
+  return (isLocked(project) ? project.snapshot?.calibration[sessionId] : undefined) ?? catalog.sessions[sessionId]?.calibration ?? null
 }
 
 // ---------------------------------------------------------------------------
-// Subject progress (C7): mosaic coverage, panel balance, channel ratio and
-// the deadline or season window
+// Subject progress (C7): panel balance, channel ratio and the deadline or
+// season window
 // ---------------------------------------------------------------------------
 
-/** One panel's counted amount on a channel, against the panels' mean (`panelBalance`). */
+/** One panel group's counted amount on a channel, against the panels' mean (`panelBalance`). */
 export interface PanelShare {
-  panel: MosaicPanel
+  panel: ProjectGroup
   /** Counted in project, in the balance's unit: seconds of Usable frames inside the bar, or frames. */
   counted: number
   /** Signed percent from the panels' mean; 0 while nothing is counted. */
@@ -775,7 +583,7 @@ export interface PanelBalance {
   tolerancePct: number
   /** The panels' mean counted amount, in `unit`. */
   mean: number
-  /** In panel order. */
+  /** In group order. */
   panels: PanelShare[]
   balanced: boolean
   /** Out of balance: the panel furthest from the mean, the one below it on a tie (it is the one to image); null when balanced. */
@@ -792,7 +600,7 @@ export interface PanelBalance {
  * max-minus-min spread was the alternative, but it names no panel. Revisit
  * if the user means the spread. While nothing is counted the panels are even.
  */
-export function panelBalance(channel: GoalChannel, unit: GoalUnit, counted: Array<{ panel: MosaicPanel; counted: number }>, tolerancePct: number): PanelBalance {
+export function panelBalance(channel: GoalChannel, unit: GoalUnit, counted: Array<{ panel: ProjectGroup; counted: number }>, tolerancePct: number): PanelBalance {
   const mean = counted.length === 0 ? 0 : counted.reduce((sum, p) => sum + p.counted, 0) / counted.length
   const panels = counted.map(({ panel, counted: amount }): PanelShare => {
     const deviationPct = mean > 0 ? ((amount - mean) / mean) * 100 : 0
@@ -804,7 +612,7 @@ export function panelBalance(channel: GoalChannel, unit: GoalUnit, counted: Arra
   const pct = numberText(tolerancePct)
   const line = !furthest
     ? msg("domain_balance_within", { pct })
-    : msg(furthest.deviationPct < 0 ? "domain_balance_below" : "domain_balance_above", { panel: panelRef(furthest.panel), deviation: formatCount(Math.round(Math.abs(furthest.deviationPct))), pct })
+    : msg(furthest.deviationPct < 0 ? "domain_balance_below" : "domain_balance_above", { panel: groupRef(furthest.panel), deviation: formatCount(Math.round(Math.abs(furthest.deviationPct))), pct })
   return { channel, unit, tolerancePct, mean, panels, balanced, furthest, line }
 }
 
@@ -817,7 +625,7 @@ export interface RatioPart {
   part: number | null
 }
 
-/** A subject's channel ratio: counted, next to the ratio its goals imply (C7; a display, never a goal). */
+/** A subject's channel ratio: counted, next to the ratio its goals imply (C7: a display, never a goal). */
 export interface ChannelRatio {
   unit: GoalUnit
   counted: RatioPart[]
@@ -841,10 +649,11 @@ function ratioRef(parts: RatioPart[]): MessageRef {
 }
 
 /**
- * A subject's channel ratio (C7): its counted time per channel, Usable frames
- * inside each goal's bar, next to the ratio its goals imply; in frames when
- * every goal counts frames. A mosaic's panels add up per channel. Channels
- * follow `GOAL_CHANNELS`. Null below two channels: one channel has no ratio.
+ * A subject's channel ratio (C7): its counted time per channel, Usable
+ * frames inside each goal's bar, next to the ratio its goals imply; in frames
+ * when every goal counts frames. A mosaic's panels add up per channel.
+ * Channels follow `GOAL_CHANNELS`. Null below two channels: one channel has
+ * no ratio.
  */
 export function channelRatio(progress: GoalProgress[]): ChannelRatio | null {
   const channels = GOAL_CHANNELS.filter((c) => progress.some((p) => p.goal.channel === c))
@@ -858,14 +667,14 @@ export function channelRatio(progress: GoalProgress[]): ChannelRatio | null {
   return { unit, counted, implied, line }
 }
 
-/** One channel of a subject: a plain subject's goal, or a mosaic's goal per panel (C7). */
+/** One channel of a subject: a plain subject's goal, or a mosaic's goal per panel group (C7). */
 export interface ChannelProgress {
   channel: GoalChannel
   /** In panel order for a mosaic. */
   goals: GoalProgress[]
   /** The least complete goal: what the channel's progress shows (C7). */
   weakest: GoalProgress
-  /** Mosaic panel balance; null for a plain subject or with fewer than two panels holding a goal. */
+  /** Mosaic panel balance; null for a plain Project or with fewer than two panels holding a goal. */
   balance: PanelBalance | null
 }
 
@@ -878,11 +687,11 @@ export interface SubjectProgress {
   channels: ChannelProgress[]
   /** Share of the goals met, 0 to 1: a plain subject's mean over its goals, a mosaic's weakest panel's. Null without an amount. */
   fraction: number | null
-  /** A mosaic's least complete panel, which `fraction` shows; null for a plain subject. */
-  weakestPanel: MosaicPanel | null
+  /** A mosaic's least complete panel group, which `fraction` shows; null for a plain Project. */
+  weakestPanel: ProjectGroup | null
   /** Every goal met, every panel's for a mosaic (C7); a subject without goals never is. Panel balance is shown beside it, never holds it. */
   complete: boolean
-  /** Every channel's panels within the panel balance; true for a plain subject. */
+  /** Every channel's panels within the panel balance; true for a plain Project. */
   balanced: boolean
   ratio: ChannelRatio | null
   /** Nights left and the planning priority; null without a window or a planning night. */
@@ -893,16 +702,15 @@ export interface SubjectProgress {
 
 const average = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length
 
-function summary(subject: Subject, goals: GoalProgress[], tonight: NightDate | null): SubjectProgress {
+function summary(subject: Subject, panels: ProjectGroup[], goals: GoalProgress[], tonight: NightDate | null): SubjectProgress {
   const conditions = subjectConditions(subject)
-  const panels = subject.mosaic?.panels ?? []
-  const panelOrder = (p: GoalProgress) => panels.findIndex((panel) => panel.id === p.goal.panelId)
+  const panelOrder = (p: GoalProgress) => panels.findIndex((panel) => panel.id === p.goal.groupId)
   const channels = GOAL_CHANNELS.flatMap((channel): ChannelProgress[] => {
     const own = goals.filter((p) => p.goal.channel === channel).sort((a, b) => panelOrder(a) - panelOrder(b))
     if (own.length === 0) return []
     const weakest = own.reduce((a, b) => ((b.measure.fraction ?? 0) < (a.measure.fraction ?? 0) ? b : a))
     const onPanels = panels.flatMap((panel) => {
-      const held = own.filter((p) => p.goal.panelId === panel.id)
+      const held = own.filter((p) => p.goal.groupId === panel.id)
       return held.length > 0 ? [{ panel, held }] : []
     })
     if (onPanels.length < 2) return [{ channel, goals: own, weakest, balance: null }]
@@ -912,10 +720,10 @@ function summary(subject: Subject, goals: GoalProgress[], tonight: NightDate | n
   })
   const fractions = (of: GoalProgress[]) => of.map((p) => p.measure.fraction).filter((f): f is number => f !== null)
   let fraction: number | null = null
-  let weakestPanel: MosaicPanel | null = null
-  if (subject.mosaic) {
+  let weakestPanel: ProjectGroup | null = null
+  if (panels.length > 0) {
     for (const panel of panels) {
-      const own = fractions(goals.filter((p) => p.goal.panelId === panel.id))
+      const own = fractions(goals.filter((p) => p.goal.groupId === panel.id))
       if (own.length === 0) continue
       const share = average(own)
       if (fraction === null || share < fraction) {
@@ -923,7 +731,8 @@ function summary(subject: Subject, goals: GoalProgress[], tonight: NightDate | n
         weakestPanel = panel
       }
     }
-  } else {
+  }
+  if (weakestPanel === null) {
     const own = fractions(goals)
     fraction = own.length > 0 ? average(own) : null
   }
@@ -939,19 +748,21 @@ function summary(subject: Subject, goals: GoalProgress[], tonight: NightDate | n
     balanced: channels.every((c) => c.balance?.balanced ?? true),
     ratio: channelRatio(goals),
     window: conditions.window && tonight ? windowProgress(conditions.window, tonight) : null,
-    line: percent === null ? null : weakestPanel ? msg("domain_subject_weakest_panel", { panel: panelRef(weakestPanel), percent }) : msg("domain_subject_percent", { percent }),
+    line: percent === null ? null : weakestPanel ? msg("domain_subject_weakest_panel", { panel: groupRef(weakestPanel), percent }) : msg("domain_subject_percent", { percent }),
   }
 }
 
 /**
  * Each subject's goals with its conditions (C7): a mosaic completes when
- * every panel meets its goals and its progress shows the weakest panel;
- * per channel, the panels' balance; the channel ratio; and, from `tonight`
- * (the planning night, `upcomingNight`), the nights left in its window.
+ * every panel group meets its goals and its progress shows the weakest
+ * panel; per channel, the panels' balance; the channel ratio; and, from
+ * `tonight` (the planning night, `upcomingNight`), the nights left in its
+ * window.
  */
 export function subjectProgress(catalog: Catalog, project: Project, tonight: NightDate | null): SubjectProgress[] {
   const progress = goalProgress(catalog, project)
-  return project.subjects.map((subject) => summary(subject, progress.filter((p) => p.goal.subjectId === subject.id), tonight))
+  const panels = panelGroups(project)
+  return project.subjects.map((subject) => summary(subject, panels, progress.filter((p) => p.goal.subjectId === subject.id), tonight))
 }
 
 /** One subject in Planning's deadline order (`planningPriorities`). */
@@ -981,16 +792,17 @@ export function planningPriorities(catalog: Catalog, tonight: NightDate): Subjec
 }
 
 // ---------------------------------------------------------------------------
-// Run pipeline: six steps, gates and Next (v4's rule, D-W3)
+// Gate vocabulary and links
 // ---------------------------------------------------------------------------
 
 /**
- * Gate vocabulary: each state has its own glyph shape (`StepGlyph`), so colour only reinforces. The review gate
- * says what it waits for, "Needs review", so it does not read as the Review step's name.
+ * Gate vocabulary: each state has its own glyph shape (`StepGlyph`), so
+ * colour only reinforces. The review gate says what it waits for, "Needs
+ * review", so it does not read as the Review step's name.
  */
 export type GateState = "done" | "ready" | "review" | "blocked" | "running" | "partial" | "idle"
 
-/** The gate word for a state (`gateWord` in app/run-ui words it). */
+/** The gate word for a state (`gateWord` words it). */
 export const GATE_WORD: Record<GateState, MessageRef> = {
   done: msg("status_done"),
   ready: msg("status_ready"),
@@ -1017,508 +829,40 @@ export interface StepLink {
   focusId?: string
 }
 
-/** The Prepare step's Prepare… button, which a ready run's Next focuses. */
-export const PREPARE_BUTTON_ID = "prepare-start"
-
-/** A run step's gate; its name is `stepName(m, id)`. */
-export interface RunStepState {
-  id: RunStep
-  n: number
-  state: GateState
-  /** Short status beside the step name, e.g. "Saved r2" or "94 of 208". */
-  status: MessageRef
-  items: GateItem[]
-  link: StepLink
-  /** Verb phrase used when this step holds the Next action. */
-  nextLabel: MessageRef
-}
-
+/** A Project's one Next action (PRJ-FR-18): what to do, why, and where. */
 export interface NextAction {
   label: MessageRef
   reason: MessageRef
   link: StepLink
-  step: RunStepState | null
-}
-
-/** A run that waits on the user (D-W35, PRJ-FR-18). A run in the Trash is never blocked. */
-export interface RunBlocker {
-  kind: "unresolved-inputs" | "calibration-review" | "preparation-failed"
-  step: RunStep
-  message: MessageRef
-}
-
-export interface RunPipeline {
-  runId: RunId
-  status: "open" | "complete" | "trashed"
-  steps: RunStepState[]
-  current: RunStepState
-  next: NextAction | null
-  blocker: RunBlocker | null
-  calibration: CalibrationPlan
-}
-
-/**
- * A run's status in the one run vocabulary (round 5): Trashed or Complete,
- * else the gate word of the step it is at ("Blocked", "Partial"). The run
- * header, a group's panels and the Project's Runs table all show it, so the
- * same run reads the same everywhere.
- */
-export type RunState = GateState | "complete" | "trashed"
-
-export interface RunStatus {
-  state: RunState
-  /** The step it is at: where it is held, else its first step not done; Restore and Reopen return there. */
-  step: RunStep
-}
-
-export function runStatus(pipeline: Pick<RunPipeline, "status" | "current">): RunStatus {
-  return { state: pipeline.status === "open" ? pipeline.current.state : pipeline.status, step: pipeline.current.id }
-}
-
-/** When a run last changed: created, edited, saved, prepared, a Result accepted, Completed or Trashed. */
-export function runUpdatedAt(catalog: Catalog, run: Run): IsoDateTime {
-  const times = [
-    run.draft?.updatedAt,
-    run.completedAt,
-    run.trashedAt,
-    ...run.revisions.map((r) => r.savedAt),
-    ...runPreparations(catalog, run.id).flatMap((p) => [p.createdAt, p.settledAt]),
-    ...Object.values(catalog.results).flatMap((r) => (r.runId === run.id ? [r.acceptedAt] : [])),
-  ]
-  return times.reduce<IsoDateTime>((latest, t) => (t && t > latest ? t : latest), run.createdAt)
-}
-
-export function runStepLink(run: Pick<Run, "id" | "projectId">, step: RunStep, search?: Record<string, string>): StepLink {
-  return { to: "/projects/$projectId/runs/$runId/$step", params: { projectId: run.projectId, runId: run.id, step }, search }
-}
-
-export function groupStepLink(group: Pick<RunGroup, "id" | "projectId">, step: RunStep): StepLink {
-  return { to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: group.projectId, groupId: group.id, step } }
 }
 
 export function projectLink(projectId: ProjectId, search?: Record<string, string>): StepLink {
   return { to: "/projects/$projectId", params: { projectId }, search }
 }
 
-/** The hash path of a run step, for Activity entries and operation links (the string form of `runStepLink`). */
-export function runHref(run: Pick<Run, "id" | "projectId">, step: RunStep = "select"): string {
-  return `/projects/${run.projectId}/runs/${run.id}/${step}`
+/** The hash path of a Project page, for Activity entries and operation links. */
+export function projectHref(projectId: ProjectId, search?: Record<string, string>): string {
+  const query = search ? `?${new URLSearchParams(search).toString()}` : ""
+  return `/projects/${projectId}${query}`
 }
 
-/** The hash path of a run group step (the string form of `groupStepLink`). */
-export function groupHref(group: Pick<RunGroup, "id" | "projectId">, step: RunStep = "select"): string {
-  return `/projects/${group.projectId}/groups/${group.id}/${step}`
-}
-
-/** The setup a run uses: its own, or its group's shared setup (D-W38). */
-export function runSetup(catalog: Catalog, run: Run): RunSetup {
-  if (run.groupId) {
-    const group = catalog.runGroups[run.groupId]
-    if (group) return group.setup
-  }
-  return run.setup ?? { profileId: null, inputMode: null, calibrationPolicy: "automatic" }
-}
-
-export function runPreparations(catalog: Catalog, runId: RunId): Preparation[] {
-  return Object.values(catalog.preparations)
-    .filter((p) => p.runId === runId)
-    .sort((a, b) => a.prepRevision - b.prepRevision || a.createdAt.localeCompare(b.createdAt))
-}
-
-/** Results of a run outside the Trash: candidate, accepted and rejected products, intermediates apart. */
-export function runResults(catalog: Catalog, runId: RunId): { products: ResultRecord[]; intermediates: ResultRecord[] } {
-  const all = Object.values(catalog.results).filter((r) => r.runId === runId && !r.trashed)
-  return { products: all.filter((r) => !r.intermediate), intermediates: all.filter((r) => r.intermediate) }
-}
-
-/** Unsettled operations that affect a run; Complete and Move to Trash wait for them (RES-FR-07, RES-FR-10). */
-export function runOperations(operations: Record<string, Operation>, runId: RunId): Operation[] {
-  return Object.values(operations).filter((op) => op.scope.runIds?.includes(runId) && unsettled(op))
-}
-
-const blocks = (items: GateItem[]) => items.some((i) => i.met === false)
-
-export function runPipeline(world: World, run: Run): RunPipeline {
-  const { catalog, disk } = world
-  const content = workingContent(run)
-  const latest = latestRevision(run)
-  const summary = content ? runSummary(disk, catalog, content) : null
-  const included = summary?.included.frames ?? 0
-  const unresolved = summary?.unresolved ?? 0
-  const selected = content?.sessions.length ?? 0
-  const saved = run.draft === null && latest !== null
-  const complete = run.completion === "complete"
-  const setup = runSetup(catalog, run)
-  const refresh = runRefresh(catalog, run)
-  const link = (step: RunStep, focusId?: string): StepLink => ({ ...runStepLink(run, step), focusId })
-  const STEP = (id: RunStep) => ({ id, n: RUN_STEPS.indexOf(id) + 1 })
-  const DASH = verbatim("–")
-
-  // 1 Select: the subject's candidates on the run's rig, saved as a revision.
-  const addNew = msg("domain_next_add_new_sessions", { count: refresh.newCandidates.length })
-  const selectItems: GateItem[] = [
-    {
-      label: msg("domain_gate_sessions_selected"),
-      met: selected > 0,
-      detail: selected > 0 ? joinRefs([msg("location_sessions_count", { count: selected, n: formatCount(selected) }), framesRef(included)], " · ") : msg("domain_gate_no_sessions"),
-    },
-    {
-      label: msg("domain_gate_no_unresolved"),
-      met: unresolved === 0,
-      detail: unresolved === 0 ? msg("domain_gate_all_readable") : msg("domain_gate_members_unreadable", { count: unresolved, n: formatCount(unresolved) }),
-    },
-    {
-      label: msg("domain_gate_membership_saved"),
-      met: saved,
-      detail: saved ? msg("domain_gate_revision_saved", { revision: latest!.revision }) : latest ? msg("domain_gate_unsaved_on_revision", { revision: latest.revision }) : msg("domain_gate_not_saved_yet"),
-    },
-  ]
-  if (refresh.newCandidates.length > 0) selectItems.push({ label: msg("domain_gate_new_candidates"), met: "advisory", detail: addNew })
-  if (refresh.noLongerMatching.length > 0) {
-    selectItems.push({ label: msg("domain_gate_no_longer_matches"), met: "advisory", detail: msg("domain_gate_members_flagged", { count: refresh.noLongerMatching.length }) })
-  }
-  const select: RunStepState = {
-    ...STEP("select"),
-    state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !saved ? "review" : "done",
-    status:
-      selected === 0
-        ? msg("run_cal_no_sessions")
-        : unresolved > 0
-          ? msg("domain_status_unresolved", { count: unresolved })
-          : saved && latest
-            ? msg("domain_status_saved_revision", { revision: latest.revision })
-            : msg("domain_status_unsaved"),
-    items: selectItems,
-    link: link("select", selected > 0 && !saved && !complete ? "save-run" : undefined),
-    nextLabel:
-      selected === 0
-        ? msg("domain_next_select_sessions")
-        : unresolved > 0
-          ? msg("domain_next_resolve_inputs")
-          : !saved
-            ? msg("domain_next_save_run")
-            : refresh.newCandidates.length > 0
-              ? addNew
-              : msg("domain_next_edit_selection"),
-  }
-
-  // 2 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55). With the
-  // policy off compatible masters wait as Suggested and hold nothing back; a drifted accepted input still does.
-  const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, savedContent(run) ?? content)
-  const off = setup.calibrationPolicy === "off"
-  const offers = run.masterOffers.filter((o) => o.state === "pending").length
-  const needReview = calibration.needsReview.length
-  const calibrateItems: GateItem[] = [
-    {
-      label: msg("domain_gate_calibration_matched"),
-      met: needReview === 0 && (off || calibration.rows.length > 0),
-      detail:
-        needReview > 0
-          ? msg("domain_gate_requirements_need_review", { count: needReview })
-          : off
-            ? msg("domain_gate_policy_off")
-            : calibration.rows.length === 0
-              ? msg("domain_gate_select_first")
-              : msg("domain_gate_requirements_matched", { count: calibration.rows.length }),
-    },
-  ]
-  if (offers > 0) calibrateItems.push({ label: msg("domain_gate_master_found"), met: "advisory", detail: msg("domain_gate_masters_offered", { count: offers }) })
-  // A Complete run's calibration is what it recorded (`calibrationPlan`): none of it needs review.
-  const calibrate: RunStepState = {
-    ...STEP("calibrate"),
-    state: needReview > 0 ? "blocked" : off ? "done" : calibration.rows.length === 0 ? "idle" : "done",
-    status:
-      needReview > 0
-        ? msg("domain_status_need_review", { count: needReview })
-        : off
-          ? msg("run_cal_off")
-          : calibration.rows.length === 0
-            ? DASH
-            : msg("run_cal_automatic"),
-    items: calibrateItems,
-    link: link("calibrate"),
-    nextLabel: msg("domain_next_review_matches"),
-  }
-
-  // 3 Prepare: the latest preparation revision of the latest membership revision.
-  const preparations = runPreparations(catalog, run.id)
-  const prep = preparations.at(-1) ?? null
-  const prepCurrent = prep && latest && prep.membershipRevision === latest.revision ? prep : null
-  const profile = setup.profileId ? catalog.profiles[setup.profileId] : undefined
-  const prepareItems: GateItem[] = [
-    { label: msg("domain_gate_membership_saved"), met: saved, detail: saved ? msg("domain_gate_revision", { revision: latest!.revision }) : msg("domain_gate_save_first") },
-    {
-      label: msg("domain_gate_calibration_matched"),
-      met: calibrate.state === "done",
-      detail: calibrate.state === "done" ? msg("domain_gate_handoff_settled") : msg("domain_gate_requirements_need_review", { count: needReview }),
-    },
-    { label: msg("domain_gate_profile_chosen"), met: Boolean(profile), detail: profile ? verbatim(profile.name) : msg("domain_gate_choose_profile") },
-  ]
-  let prepState: GateState
-  let prepStatus: MessageRef
-  if (prepCurrent?.state === "running" || prepCurrent?.state === "paused") {
-    prepState = "running"
-    prepStatus = msg("setup_stat_complete_value", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
-  } else if (prepCurrent?.state === "prepared") {
-    prepState = prepCurrent.unverified ? "review" : "done"
-    prepStatus = prepCurrent.unverified ? msg("status_unverified") : prepCurrent.prepRevision > 1 ? msg("domain_status_prepared_revision", { revision: prepCurrent.prepRevision }) : msg("status_prepared")
-  } else if (prepCurrent?.state === "partial") {
-    prepState = "partial"
-    prepStatus = msg("run_partial_count", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
-    prepareItems.push({ label: msg("domain_gate_all_prepared"), met: false, detail: msg("domain_gate_inputs_not_prepared", { count: prepCurrent.blocked.length, n: formatCount(prepCurrent.blocked.length) }) })
-  } else if (prepCurrent?.state === "failed") {
-    prepState = "blocked"
-    prepStatus = msg("status_failed")
-    prepareItems.push({ label: msg("domain_gate_preparation_succeeded"), met: false, detail: msg("domain_gate_last_preparation_failed") })
-  } else if (prep && !prepCurrent) {
-    prepState = "review"
-    prepStatus = msg("domain_status_revision_only", { revision: prep.membershipRevision })
-  } else {
-    prepState = blocks(prepareItems) ? "idle" : "ready"
-    prepStatus = blocks(prepareItems) ? msg("domain_status_to_do", { count: prepareItems.filter((i) => i.met === false).length }) : msg("status_ready")
-  }
-  if (complete && prepState !== "done") prepState = "done"
-  const prepare: RunStepState = {
-    ...STEP("prepare"),
-    state: prepState,
-    status: prepStatus,
-    items:
-      prepState === "done"
-        ? [
-            {
-              label: msg("domain_gate_run_prepared"),
-              met: true,
-              detail: prepCurrent ? msg("domain_gate_entries_at", { count: prepCurrent.entryCount, n: formatCount(prepCurrent.entryCount), path: prepCurrent.folderPath }) : msg("domain_gate_complete"),
-            },
-          ]
-        : prepareItems,
-    // Ready: the step's own Prepare… button is the action, so Next focuses it on every page (the same Next everywhere).
-    link: link("prepare", prepState === "ready" ? PREPARE_BUTTON_ID : undefined),
-    nextLabel:
-      prepState === "done"
-        ? msg("domain_next_open_in_application")
-        : prepState === "partial" || prepState === "blocked"
-          ? msg("domain_next_resolve_preparation")
-          : prepState === "running"
-            ? msg("domain_next_watch_preparation")
-            : prepState === "ready"
-              ? msg("domain_next_prepare_run")
-              : msg("domain_next_review_preparation"),
-  }
-
-  // 4 Results: discovered in the recorded Results folder, then accepted or rejected (D-W4); Finish run is its Proceed.
-  const { products } = runResults(catalog, run.id)
-  const accepted = products.filter((r) => r.acceptance === "accepted").length
-  const rejected = products.filter((r) => r.acceptance === "rejected").length
-  const candidates = products.length - accepted - rejected
-  const results: RunStepState = {
-    ...STEP("results"),
-    state: complete ? "done" : prepState !== "done" ? "idle" : candidates > 0 ? "review" : accepted + rejected > 0 ? "done" : "ready",
-    status: products.length === 0 ? (prepState === "done" ? msg("domain_status_awaiting_outputs") : DASH) : msg("domain_status_accepted_of", { accepted, total: products.length }),
-    items: [
-      { label: msg("domain_gate_run_prepared"), met: prepState === "done", detail: prepState === "done" ? msg("domain_gate_results_folder") : msg("domain_gate_prepare_first") },
-      {
-        label: msg("domain_gate_results_accepted"),
-        met: "advisory",
-        detail:
-          products.length === 0
-            ? msg("domain_gate_no_outputs")
-            : joinRefs([msg("rungroup_accepted_count", { count: accepted }), ...(rejected > 0 ? [msg("rungroup_rejected_count", { count: rejected })] : []), msg("rungroup_candidates_count", { count: candidates })], " · "),
-      },
-    ],
-    link: link("results"),
-    nextLabel: candidates > 0 ? msg("domain_next_accept_results") : msg("domain_next_look_for_results"),
-  }
-
-  const steps = [select, calibrate, prepare, results]
-  const trashed = run.trashedAt !== null
-  // A step that has not started (its prerequisites are missing) never captures Next ahead of an earlier open step.
-  // Once Complete, no gate waits on the user.
-  const blocking = complete ? undefined : steps.find((s) => s.state !== "done" && s.state !== "idle" && blocks(s.items))
-  const open = complete ? undefined : (blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done"))
-  const current = open ?? results
-  const next: NextAction | null = trashed || !open ? null : stepAction(open)
-  const blocker = trashed || complete ? null : runBlocker(prepare.state, needReview, unresolved, prepCurrent?.state === "partial" ? prepCurrent.blocked.length : 0)
-  return { runId: run.id, status: trashed ? "trashed" : complete ? "complete" : "open", steps, current, next, blocker, calibration }
-}
-
-function stepReason(step: RunStepState): MessageRef {
-  return step.items.find((i) => i.met === false)?.detail ?? step.items.find((i) => i.met === "advisory")?.detail ?? step.status
-}
-
-function stepAction(step: RunStepState): NextAction {
-  return { step, label: step.nextLabel, reason: stepReason(step), link: step.link }
-}
-
-/**
- * The toolbar's Next while the user is on `here`. A Next on another step stands. A Next on this step that
- * focuses a control (Save run, Prepare…) stands too. Otherwise Next never points at the screen it is on: a step
- * whose gate blocks, or whose own action is still to do (no advisory item to move past), is resolved here, so
- * Next is null (the caption names the gate); an advisory step (Results) moves on to the first later step that is
- * not done; null when nothing later waits.
- */
-export function nextFrom(steps: RunStepState[], next: NextAction | null, here: RunStep | null): NextAction | null {
-  if (!next?.step || next.step.id !== here || next.link.focusId) return next
-  if (blocks(next.step.items) || !next.step.items.some((i) => i.met === "advisory")) return null
-  const later = steps.slice(steps.findIndex((s) => s.id === here) + 1).filter((s) => s.state !== "done")
-  const following = later.find((s) => s.state !== "idle") ?? later[0]
-  return following ? stepAction(following) : null
-}
-
-/** Which step made a run's unsaved draft: Review when only its rejections changed (D-W54), else Select. */
-function draftOwner(run: Run): "select" | "review" | null {
-  if (!run.draft) return null
-  const latest = latestRevision(run)
-  if (!latest) return "select"
-  const same = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id))
-  const d = run.draft
-  const sessionsSame = same(
-    d.sessions.map((s) => s.sessionId),
-    latest.sessions.map((s) => s.sessionId),
-  )
-  return sessionsSame && same(d.excluded, latest.excluded) && same(d.unresolved, latest.unresolved) ? "review" : "select"
-}
-
-/** Frames a run's Review lists and how many still have no quality decision (Review's Unreviewed filter). */
-export function runReviewCounts(catalog: Catalog, run: Run): { total: number; unreviewed: number } {
-  const content = workingContent(run)
-  if (!content) return { total: 0, unreviewed: 0 }
-  const seen = new Set<AssetId>()
-  let unreviewed = 0
-  for (const id of [...content.included, ...content.rejected, ...content.excluded, ...content.unresolved]) {
-    const asset = catalog.assets[id]
-    if (!asset || asset.trashed || seen.has(id)) continue
-    seen.add(id)
-    const q = frameQuality(asset)
-    if (q.library !== "usable" && q.library !== "unusable") unreviewed += 1
-  }
-  return { total: seen.size, unreviewed }
-}
-
-function runBlocker(prepare: GateState, needReview: number, unresolved: number, unprepared: number): RunBlocker | null {
-  if (unresolved > 0) return { kind: "unresolved-inputs", step: "select", message: msg("blocker_unreadable_inputs", { count: unresolved, n: formatCount(unresolved) }) }
-  if (needReview > 0) return { kind: "calibration-review", step: "calibrate", message: msg("blocker_calibration_review", { count: needReview }) }
-  if (prepare === "blocked") return { kind: "preparation-failed", step: "prepare", message: msg("blocker_preparation_failed") }
-  if (prepare === "partial") return { kind: "unresolved-inputs", step: "prepare", message: msg("blocker_inputs_not_prepared", { count: unprepared, n: formatCount(unprepared) }) }
-  return null
-}
-
-/** An unsettled operation that holds a run back: "Prepare M 31 is running". */
-function operationHolds(op: Operation): MessageRef {
+/** An unsettled operation that holds a step back: "Apply · M 31 is running". */
+export function operationHolds(op: Operation): MessageRef {
   if (op.status === "paused") return msg("domain_operation_paused", { title: op.title })
   if (op.status === "interrupted") return msg("domain_operation_interrupted", { title: op.title })
   return msg("domain_operation_running", { title: op.title })
-}
-
-/** Why Move to Trash is refused (RES-FR-10): running operations affecting the run. */
-export function trashRefusals(world: World, run: Run): MessageRef[] {
-  return runOperations(world.operations, run.id).map(operationHolds)
-}
-
-/** Why Complete is refused (RES-FR-07): a running preparation or storage operation affecting the run. */
-export function completeRefusals(world: World, run: Run): MessageRef[] {
-  return runOperations(world.operations, run.id).map(operationHolds)
-}
-
-// ---------------------------------------------------------------------------
-// Run groups (D-W38, D-W41, D-W73, D-W75)
-// ---------------------------------------------------------------------------
-
-export interface GroupPanelState {
-  panel: MosaicPanel
-  run: Run
-  /** A trashed panel run stays listed as Trashed; its frames leave every group count (D-W75). */
-  trashed: boolean
-  pipeline: RunPipeline
-}
-
-/** A group's overall status: the worst run status over its live panels, at the earliest step one of them holds it; `at` of `of` live panels are at that step. */
-export interface GroupStatus extends RunStatus {
-  at: number
-  of: number
-}
-
-export interface GroupPipeline {
-  group: RunGroup
-  panels: GroupPanelState[]
-  /** Group steps: each the worst gate over the panels outside the Trash. */
-  steps: RunStepState[]
-  status: GroupStatus
-  /** Open on the group folder only when every live panel is prepared and verified (PREP-FR-13). */
-  allVerified: boolean
-  next: NextAction | null
-}
-
-const GATE_ORDER: GateState[] = ["blocked", "partial", "review", "running", "ready", "idle", "done"]
-/** Worst first: a held or waiting panel outranks a Complete one. */
-const RUN_STATE_ORDER: RunState[] = [...GATE_ORDER, "complete"]
-
-/** "Partial · 1 of 2 panels at Prepare". With every panel trashed the group reads Trashed. */
-function groupStatus(panels: GroupPanelState[]): GroupStatus {
-  const live = panels.filter((p) => !p.trashed).map((p) => runStatus(p.pipeline))
-  const state = RUN_STATE_ORDER.find((s) => live.some((x) => x.state === s))
-  if (!state) return { state: "trashed", step: panels[0] ? runStatus(panels[0].pipeline).step : "select", at: 0, of: 0 }
-  const step = RUN_STEPS.find((id) => live.some((x) => x.state === state && x.step === id))!
-  return { state, step, at: live.filter((x) => x.step === step).length, of: live.length }
-}
-
-/** When a group last changed: its own record, any panel run (`runUpdatedAt`) or its group Result. */
-export function groupUpdatedAt(catalog: Catalog, group: RunGroup): IsoDateTime {
-  const times = [
-    ...group.runIds.flatMap((id) => {
-      const run = catalog.runs[id]
-      return run ? [runUpdatedAt(catalog, run)] : []
-    }),
-    ...Object.values(catalog.results).flatMap((r) => (r.runId === null && r.groupId === group.id ? [r.acceptedAt] : [])),
-  ]
-  return times.reduce<IsoDateTime>((latest, t) => (t && t > latest ? t : latest), group.createdAt)
-}
-
-export function groupPipeline(world: World, group: RunGroup): GroupPipeline {
-  const { catalog } = world
-  const project = catalog.projects[group.projectId]
-  const subject = project ? findSubject(project, group.subjectId) : undefined
-  const panels: GroupPanelState[] = []
-  for (const runId of group.runIds) {
-    const run = catalog.runs[runId]
-    const panel = findPanel(subject, run?.panelId ?? null)
-    if (!run || !panel) continue
-    panels.push({ panel, run, trashed: run.trashedAt !== null, pipeline: runPipeline(world, run) })
-  }
-  const live = panels.filter((p) => !p.trashed)
-  const steps = RUN_STEPS.map((id, index): RunStepState => {
-    const states = live.map((p) => p.pipeline.steps[index]!)
-    const state = live.length === 0 ? "idle" : states.every((s) => s.state === "done") ? "done" : (GATE_ORDER.find((g) => g !== "done" && states.some((s) => s.state === g)) ?? "idle")
-    const doneCount = states.filter((s) => s.state === "done").length
-    return {
-      id,
-      n: index + 1,
-      state,
-      status: live.length === 0 ? verbatim("–") : msg("domain_panels_done", { done: doneCount, count: live.length }),
-      items: states.flatMap((s, i) => s.items.map((item) => ({ ...item, label: joinRefs([panelRef(live[i]!.panel), item.label], ": ") }))),
-      link: groupStepLink(group, id),
-      nextLabel: id === "prepare" ? msg("domain_next_prepare_all") : (states.find((s) => s.state !== "done")?.nextLabel ?? STEP_NAME[id]),
-    }
-  })
-  const allVerified = live.length > 0 && live.every((p) => p.pipeline.steps.find((s) => s.id === "prepare")!.state === "done")
-  const blocking = steps.find((s) => s.state === "blocked" || s.state === "partial")
-  const open = blocking ?? steps.find((s) => s.state !== "done" && s.state !== "idle") ?? steps.find((s) => s.state !== "done")
-  // The reason names the first panel that holds the step back, e.g. "Panel 2: 30 inputs could not be prepared."
-  const holder = open ? live.find((p) => p.pipeline.steps[open.n - 1]!.state === open.state) : undefined
-  const next = open ? { step: open, label: open.nextLabel, reason: holder ? joinRefs([panelRef(holder.panel), stepReason(holder.pipeline.steps[open.n - 1]!)], ": ") : open.status, link: open.link } : null
-  return { group, panels, steps, status: groupStatus(panels), allVerified, next }
 }
 
 // ---------------------------------------------------------------------------
 // Home (D-W35, D-W39, D-W48, PRJ-FR-17 to PRJ-FR-19)
 // ---------------------------------------------------------------------------
 
-/** Sessions that match or are members of at least one Project (any state), reviewed or not. */
+/** Sessions that match or are held by at least one Project (any state), reviewed or not. */
 function sessionsInProjects(catalog: Catalog): Set<SessionId> {
   const ids = new Set<SessionId>()
   for (const project of Object.values(catalog.projects)) {
     for (const c of projectMatches(catalog, project)) ids.add(c.session.id)
-    for (const id of projectMemberSessionIds(catalog, project.id)) ids.add(id)
+    for (const input of project.inputs) ids.add(input.sessionId)
   }
   return ids
 }
@@ -1526,11 +870,13 @@ function sessionsInProjects(catalog: Catalog): Set<SessionId> {
 export interface SessionsNeedingWork {
   /** No confirmed Target (LIB-FR-17). */
   needsTarget: Session[]
-  /** A confirmed Target but no Project's candidate or member. */
+  /** A confirmed Target but no Project's suggestion or input. */
   notInProject: Session[]
   /** Sessions open Projects match that still have Unreviewed frames: they wait in the review queue (P-REV2). */
   unreviewed: Array<{ session: Session; projectId: ProjectId; frames: number }>
-  /** Candidates of a Project that are members of none of its runs (PRJ-FR-19). */
+  /** Light sessions whose calibration is not settled, reviewed or not (Import never waits): the Library's "Needs calibration" queue (LIB-FR-23), which Home counts. */
+  needsCalibration: Session[]
+  /** Suggestions of an open Project that it can add now (PRJ-FR-19): Ready and settled. */
   readyToAdd: Array<{ session: Session; projectId: ProjectId }>
 }
 
@@ -1546,10 +892,10 @@ export function sessionUnreviewedFrames(catalog: Catalog, session: Session): num
   return unreviewedAssetIds(catalog, session).length
 }
 
-/** A light session's intake state (§5.7, P-REV2): it joins a Project's runs only once Ready. */
+/** A light session's intake state (§5.7, P-REV2): it can join a Project only once Ready (and settled). */
 export type SessionReadiness = "needs-target" | "needs-rig" | "needs-review" | "ready"
 
-/** Ready means a settled Target, a settled rig and every live frame Usable or Unusable (C10). */
+/** Ready means a settled Target, a settled rig and every live frame Usable or Unusable (C10). Calibration settles separately (`isSettled`). */
 export function sessionReadiness(catalog: Catalog, session: Session): SessionReadiness {
   if (!sessionTargetId(session)) return "needs-target"
   if (!sessionRigId(session)) return "needs-rig"
@@ -1563,6 +909,13 @@ export function reviewQueue(catalog: Catalog): Session[] {
     .sort((a, b) => a.night.localeCompare(b.night) || a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
 }
 
+/** The Library's "Needs calibration" queue (LIB-FR-23): live light sessions whose darks, flats or bias are not settled, oldest night first. */
+export function calibrationQueue(catalog: Catalog): Session[] {
+  return liveLightSessions(catalog)
+    .filter((s) => !isSettled(s.calibration))
+    .sort((a, b) => a.night.localeCompare(b.night) || a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id))
+}
+
 /** The session intake step page: `/sessions/$sessionId?step=` (C14). */
 export function sessionIntakeLink(sessionId: SessionId, step: SessionIntakeStepId): StepLink {
   return { to: "/sessions/$sessionId", params: { sessionId }, search: { step } }
@@ -1571,20 +924,20 @@ export function sessionIntakeLink(sessionId: SessionId, step: SessionIntakeStepI
 export function sessionsNeedingWork(catalog: Catalog): SessionsNeedingWork {
   const live = liveLightSessions(catalog)
   const inProjects = sessionsInProjects(catalog)
-  const out: SessionsNeedingWork = { needsTarget: [], notInProject: [], unreviewed: [], readyToAdd: [] }
+  const out: SessionsNeedingWork = { needsTarget: [], notInProject: [], unreviewed: [], needsCalibration: [], readyToAdd: [] }
   for (const session of live) {
     if (!sessionTargetId(session)) out.needsTarget.push(session)
     else if (!inProjects.has(session.id)) out.notInProject.push(session)
+    if (!isSettled(session.calibration)) out.needsCalibration.push(session)
   }
   for (const project of Object.values(catalog.projects)) {
     if (project.state !== "open") continue
-    const members = projectMemberSessionIds(catalog, project.id)
     for (const { session } of projectSessionsNeedingReview(catalog, project)) {
       const frames = sessionUnreviewedFrames(catalog, session)
       if (frames > 0) out.unreviewed.push({ session, projectId: project.id, frames })
     }
-    for (const { session } of projectCandidates(catalog, project)) {
-      if (!members.has(session.id)) out.readyToAdd.push({ session, projectId: project.id })
+    for (const suggestion of projectSuggestions(catalog, project)) {
+      if (!suggestion.blocked) out.readyToAdd.push({ session: suggestion.session, projectId: project.id })
     }
   }
   return out
@@ -1603,76 +956,8 @@ export function planningSite(world: Pick<World, "catalog" | "settings" | "faults
   return picked ?? defaultSite(world)
 }
 
-/**
- * A Project's one Next action, the first rule that applies (D-W35, PRJ-FR-18):
- * 1. sessions it matches have Unreviewed frames: "Review N new frames", at the first one's review step (P-REV2, C14);
- * 2. one of its runs is blocked: that run at its blocked step;
- * 3. every run is Complete: "Wrap up" (P-WRAP1), until its steps are done or skipped;
- * 4. a goal is unmet in project and tonight has a window for that subject: "Plan tonight";
- * 5. otherwise "Start a processing run".
- * A Done Project has no Next. `wrapUpOf` gives the Project's Wrap up (slice
- * B's `wrapUpOf`, whose Trash step is derived from what is left to trash).
- */
-export function projectNext(world: World, project: Project, nowMs: number, wrapUpOf: (project: Project) => ProjectWrapUp): NextAction | null {
-  const { catalog } = world
-  if (project.state === "done") return null
-  const waiting = projectSessionsNeedingReview(catalog, project)
-  const unreviewed = waiting.reduce((n, c) => n + sessionUnreviewedFrames(catalog, c.session), 0)
-  const runs = projectRuns(catalog, project.id)
-  if (unreviewed > 0) {
-    // Review happens at ingestion (P-REV2): the first waiting session's review step, then Finish review opens the next (C14).
-    const first = waiting.find((c) => sessionUnreviewedFrames(catalog, c.session) > 0)!
-    return {
-      label: msg("domain_next_review_new_frames", { count: unreviewed, n: formatCount(unreviewed) }),
-      reason: msg("flow_reason_sessions_need_review"),
-      link: sessionIntakeLink(first.session.id, "review"),
-      step: null,
-    }
-  }
-  for (const run of runs) {
-    const { blocker, steps } = runPipeline(world, run)
-    if (blocker) {
-      return {
-        label: msg("activity_open_destination", { name: run.name }),
-        reason: msg("domain_reason_step_blocker", { step: STEP_NAME[blocker.step], message: blocker.message }),
-        link: runStepLink(run, blocker.step),
-        step: steps.find((s) => s.id === blocker.step) ?? null,
-      }
-    }
-  }
-  const wrapUp = wrapUpOf(project)
-  if (wrapUp.available) {
-    const step = wrapUp.steps.find((s) => s.id === wrapUp.current)
-    return {
-      label: msg("wrapup_action"),
-      reason: step ? msg("domain_reason_wrap_up_next", { step: step.label }) : msg("domain_reason_wrap_up_settled"),
-      link: projectLink(project.id, { stage: "wrap-up" }),
-      step: null,
-    }
-  }
-  const site = planningSite(world)
-  if (site) {
-    const unmet = goalProgress(catalog, project).filter((g) => !g.met)
-    for (const progress of unmet) {
-      const subject = findSubject(project, progress.goal.subjectId)
-      const centre = subject ? subjectCentre(catalog, subject) : null
-      const target = subject ? subjectTarget(catalog, subject) : undefined
-      if (!centre || !target) continue
-      if (bestWindowTonight({ ...target, ...centre }, site, defaultCriteria(site), nowMs)) {
-        return {
-          label: msg("target_plan_tonight"),
-          reason: msg("domain_reason_window_tonight", { line: progress.line, subject: subjectRef(catalog, subject!) }),
-          link: { to: "/plan", search: { project: project.id } },
-          step: null,
-        }
-      }
-    }
-  }
-  return { label: msg("domain_next_start_run"), reason: msg("domain_reason_choose_subject_rig"), link: projectLink(project.id, { start: "run" }), step: null }
-}
-
 // ---------------------------------------------------------------------------
-// Wrap up and archive destinations (P-WRAP1, P-ARC1)
+// Archive destinations (P-ARC1)
 // ---------------------------------------------------------------------------
 
 /** Archive locations that can take an archive: role Archive and not retired, the Default first. */
@@ -1693,47 +978,6 @@ export function archiveDestination(world: Pick<World, "catalog" | "settings">, p
   const own = project.archiveLocationId ? world.catalog.locations[project.archiveLocationId] : undefined
   if (own && own.role === "archive" && !own.retiredAt) return own
   return defaultArchiveLocation(world)
-}
-
-export interface WrapUpStep {
-  id: WrapUpStepId
-  label: MessageRef
-  state: "todo" | "done" | "skipped"
-  at: IsoDateTime | null
-}
-
-export interface ProjectWrapUp {
-  /** Every run outside the Trash is Complete and the Project is open (P-WRAP1). */
-  available: boolean
-  /** Runs that keep Wrap up unavailable: those not Complete. */
-  waitingOn: Run[]
-  steps: WrapUpStep[]
-  /** The first step still to do; null once each is done or skipped (Done is next). */
-  current: WrapUpStepId | null
-}
-
-/**
- * The Project's Wrap up stage: Clean up runs, Trash (rejects, intermediates,
- * duplicates) and Archive, each optional and skippable, then Done. A run's own
- * Clean up stays on its Done step; sizes come from `preparationFootprint`
- * (storage.ts) and the slice's trash and archive plans. `derived` holds the
- * states a caller derives from what is left (the Trash step, from slice B's
- * offers: `wrapUpOf`); the other steps read their record.
- */
-export function projectWrapUp(catalog: Catalog, project: Project, derived: Partial<Record<WrapUpStepId, WrapUpStep["state"]>> = {}): ProjectWrapUp {
-  const runs = projectRuns(catalog, project.id)
-  const waitingOn = runs.filter((r) => r.completion !== "complete")
-  const steps = WRAP_UP_STEPS.map((id): WrapUpStep => {
-    const record = project.wrapUp[id]
-    const state = derived[id]
-    return state ? { id, label: WRAP_UP_NAME[id], state, at: null } : { id, label: WRAP_UP_NAME[id], state: record?.state ?? "todo", at: record?.at ?? null }
-  })
-  return {
-    available: project.state === "open" && runs.length > 0 && waitingOn.length === 0,
-    waitingOn,
-    steps,
-    current: steps.find((s) => s.state === "todo")?.id ?? null,
-  }
 }
 
 /** Home's Target status: unmet goals of open Projects and what each channel still needs in project. */
@@ -1843,18 +1087,6 @@ export function projectGoalSet(project: Project): GoalTemplateValue[] {
 }
 
 // ---------------------------------------------------------------------------
-// Availability shorthand used by run steps
-// ---------------------------------------------------------------------------
-
-/** Frames of a content that cannot be read now, by asset id. */
-export function unavailableMembers(disk: Disk, catalog: Catalog, content: MembershipContent): AssetId[] {
-  return [...content.included, ...content.unresolved].filter((id) => {
-    const asset = catalog.assets[id]
-    return asset ? assetAvailability(disk, catalog, asset) !== "available" : true
-  })
-}
-
-// ---------------------------------------------------------------------------
 // Staged flows (round 10, plan §5): the step states every StepFlow builder
 // words (store/actions/flows.ts). One rule per flow, derived from the
 // records, so the strip, the footer and every list agree.
@@ -1878,24 +1110,24 @@ export interface DerivedStep<Id extends string> {
 }
 
 /** The state of a step that is not finished or skipped: Blocked or Current when it is the flow's position, else Redo when it was settled before, else To do. */
-function openState(isCurrent: boolean, gate: FlowGate | null, settledBefore: boolean): FlowStepState {
+export function openStepState(isCurrent: boolean, gate: FlowGate | null, settledBefore: boolean): FlowStepState {
   if (isCurrent) return gate ? "blocked" : "current"
   return settledBefore ? "redo" : "todo"
 }
 
-/** Proceed waits while an operation affecting the step runs: "Prepare M 31 is running". */
-function runningGate(operations: Operation[]): FlowGate | null {
+/** Proceed waits while an operation affecting the step runs: "Apply · M 31 is running". */
+export function runningGate(operations: Operation[]): FlowGate | null {
   return operations.length > 0 ? { reason: joinRefs(operations.map(operationHolds), "; "), blockers: [] } : null
 }
 
-/** "Finished 12 Oct": when a run, step or flow settled. */
-function finishedOn(at: IsoDateTime): MessageRef {
+/** "Finished 12 Oct": when a step or flow settled. */
+export function finishedOn(at: IsoDateTime): MessageRef {
   return msg("stepflow_finished_on", { date: nightRef(at.slice(0, 10)) })
 }
 
-// --- Corrected metadata at Prepare (C15, D11) ------------------------------
+// --- Corrected metadata at Apply (PREP-FR-03, C15, D11) --------------------
 
-/** One corrected value of a run input's session: the recorded header value and the catalog's correction, set at intake. */
+/** One corrected value of a held session: the recorded header value and the catalog's correction, set at intake. */
 export interface CorrectedValue {
   session: Session
   field: CorrectionField
@@ -1903,276 +1135,39 @@ export interface CorrectedValue {
   corrected: string
 }
 
-export interface RunCorrections {
-  /** Each session × field whose correction differs from the recorded value: Prepare shows "N corrected values". */
+export interface ViewCorrections {
+  /** Each session × field whose correction differs from the recorded value: the Apply sheet shows "N corrected values". */
   values: CorrectedValue[]
-  /** How each included frame gets each value: through the profile's configuration when it reads corrected values, else as a patched copy. */
+  /** How each frame in the View gets each value: through the profile's configuration when it reads corrected values, else as an isolated patched copy. */
   decisions: MetadataDecision[]
 }
 
 /**
- * The corrections a run's inputs carry. Corrections are made at intake, not
- * at Prepare (C15): Prepare applies every one, with no per-field choice, and
- * reports the count. Source headers never change.
+ * The corrections the Project's frames carry (PREP-FR-03). Corrections are
+ * made at intake, not at Apply (C15): Apply applies every one, with no
+ * per-field choice, and reports the count. Originals and links are never
+ * patched.
  */
-export function runCorrections(catalog: Catalog, content: MembershipContent | null, profile: ApplicationProfile | null): RunCorrections {
-  const out: RunCorrections = { values: [], decisions: [] }
+export function viewCorrections(catalog: Catalog, inputs: ProjectInput[], profile: ApplicationProfile | null): ViewCorrections {
+  const out: ViewCorrections = { values: [], decisions: [] }
   const decision: MetadataDecision["decision"] = profile?.capability.correctedMetadata === "configuration" ? "configuration" : "patched-copy"
-  for (const member of content ? memberSessions(catalog, content) : []) {
-    for (const field of new Set(member.session.corrections.map((c) => c.field))) {
-      const correction = latestCorrection(member.session, field)
+  for (const input of inputs) {
+    const session = catalog.sessions[input.sessionId]
+    if (!session) continue
+    for (const field of new Set(session.corrections.map((c) => c.field))) {
+      const correction = latestCorrection(session, field)
       if (!correction || correction.observedValue === correction.correctedValue) continue
-      out.values.push({ session: member.session, field, recorded: correction.observedValue, corrected: correction.correctedValue })
-      for (const assetId of member.included) out.decisions.push({ assetId, field, observed: correction.observedValue, corrected: correction.correctedValue, decision })
+      out.values.push({ session, field, recorded: correction.observedValue, corrected: correction.correctedValue })
+      for (const assetId of session.assetIds) {
+        if (frameOut(catalog, input, assetId) !== null) continue
+        out.decisions.push({ assetId, field, observed: correction.observedValue, corrected: correction.correctedValue, decision })
+      }
     }
   }
   return out
 }
 
-// --- Review lock (C10) ------------------------------------------------------
-
-/**
- * The prepared view that holds a run's inputs: the latest preparation of a
- * run that is neither Finished nor Trashed, unless it failed, was canceled or
- * its view was removed. An offline view still counts: a tool may be using it.
- */
-function heldView(world: World, run: Run): Preparation | null {
-  if (run.completion === "complete" || run.trashedAt) return null
-  const prep = runPreparations(world.catalog, run.id).at(-1)
-  if (!prep || prep.state === "failed" || prep.state === "canceled") return null
-  const volumeId = volumeForPath(world.disk, prep.folderPath)
-  const online = Boolean(volumeId && world.disk.volumes[volumeId]?.mounted)
-  return !online || filesUnder(world.disk, prep.folderPath).length > 0 ? prep : null
-}
-
-/** Runs whose prepared view uses the session: its review stays locked until each finishes or its view is removed (C10). */
-export function sessionReviewLock(world: World, sessionId: SessionId): Run[] {
-  return Object.values(world.catalog.runs).filter((run) => {
-    const prep = heldView(world, run)
-    const revision = prep ? run.revisions.find((r) => r.revision === prep.membershipRevision) : undefined
-    return revision?.sessions.some((s) => s.sessionId === sessionId) ?? false
-  })
-}
-
-/** Why the session's review marks cannot change now: "Locked by a prepared run view", naming each run. Null when they can. */
-export function reviewLockGate(world: World, sessionId: SessionId): FlowGate | null {
-  const runs = sessionReviewLock(world, sessionId)
-  if (runs.length === 0) return null
-  return { reason: msg("flow_review_locked"), blockers: runs.map((run) => ({ label: verbatim(run.name), link: runStepLink(run, "results") })) }
-}
-
-// --- Run flow (D1, D5, C2, C10) ---------------------------------------------
-
-export interface RunFlowState {
-  steps: Array<DerivedStep<RunStep>>
-  /** The first step that is not finished; Results once the run is Finished. */
-  current: RunStep
-  /** Set once the run is Finished (C2): every step is read-only and Run ▾ offers Reopen run. */
-  finishedAt: IsoDateTime | null
-  trashed: boolean
-  /** Matched against the saved revision; a Finished run's is what it recorded (D5). */
-  calibration: CalibrationPlan
-  /** What Prepare applies (C15). */
-  corrections: RunCorrections
-}
-
-/**
- * The run flow: Select → Calibrate → Prepare → Results, with Finish run as
- * Results' Proceed (D1, C2). There is no Review step (review happens at
- * intake, P-REV2) and no Done step. A step is finished only when every step
- * before it is; one that was settled before but no longer holds reads Redo.
- * - Select: a saved revision with no draft, whose sessions are all Ready.
- *   Library marks that change the membership of a run not yet prepared
- *   leave a draft: Select is current again and Select and Prepare read
- *   "Inputs changed · Refresh" until Proceed saves it (C10).
- * - Calibrate: every row has a master or No calibration, recorded.
- * - Prepare: the latest revision is prepared and verified.
- * - Results: finished by Finish run, once nothing is still being written.
- */
-export function runFlowState(world: World, run: Run): RunFlowState {
-  const { catalog, disk } = world
-  const latest = latestRevision(run)
-  const working = workingContent(run)
-  const inputsChanged = draftOwner(run) === "review"
-  const finishedRun = run.completion === "complete"
-  const link = (step: RunStep) => runStepLink(run, step)
-  const stepLabel = (step: RunStep) => STEP_NAME[step]
-  const running = runOperations(world.operations, run.id)
-
-  // 1 Select
-  const members = (working?.sessions ?? []).map((s) => catalog.sessions[s.sessionId]).filter((s): s is Session => s !== undefined)
-  const notReady = members.filter((s) => sessionReadiness(catalog, s) !== "ready")
-  const selectGate: FlowGate | null =
-    members.length === 0
-      ? { reason: msg("flow_select_one_session"), blockers: [] }
-      : notReady.length > 0
-        ? { reason: msg("flow_sessions_need_review", { count: notReady.length }), blockers: notReady.map((s) => ({ label: sessionRef(s), link: sessionIntakeLink(s.id, "review") })) }
-        : null
-  const selectDone = latest !== null && run.draft === null && selectGate === null
-  const selectSummary = inputsChanged ? msg("flow_inputs_changed") : run.draft ? msg("status_unsaved_changes") : latest ? msg("domain_status_saved_revision", { revision: latest.revision }) : msg("status_not_saved")
-
-  // 2 Calibrate
-  const setup = runSetup(catalog, run)
-  const calibration = calibrationPlan(catalog, disk, run, setup.calibrationPolicy, selectDone || finishedRun ? latest : null)
-  const open = calibration.needsReview
-  const recorded = calibration.policy === "off" || calibration.rows.every((r) => r.assignment !== null)
-  const calibrateDone = selectDone && open.length === 0 && recorded
-  const calibrateGate: FlowGate | null = !selectDone
-    ? { reason: msg("domain_gate_save_first"), blockers: [{ label: stepLabel("select"), link: link("select") }] }
-    : open.length > 0
-      ? { reason: msg("blocker_calibration_review", { count: open.length }), blockers: open.map((row) => ({ label: joinRefs([KIND_NAME[row.kind], sessionRef(row.member.session)], " · "), link: link("calibrate") })) }
-      : null
-  // Without a saved selection there is nothing to match yet: the gate says so, and no count is shown.
-  const calibrateSummary: MessageRef | null = !selectDone && !finishedRun
-    ? null
-    : calibration.policy === "off"
-      ? msg("run_cal_off")
-      : open.length > 0
-        ? msg("domain_status_need_review", { count: open.length })
-        : msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length })
-
-  // 3 Prepare
-  const preparations = runPreparations(catalog, run.id)
-  const prep = preparations.at(-1) ?? null
-  const prepCurrent = prep && latest && prep.membershipRevision === latest.revision ? prep : null
-  const profile = setup.profileId ? (catalog.profiles[setup.profileId] ?? null) : null
-  const corrections = runCorrections(catalog, latest, profile)
-  const prepared = prepCurrent?.state === "prepared" && !prepCurrent.unverified
-  const prepareDone = calibrateDone && prepared
-  const prepareGate: FlowGate | null = !selectDone
-    ? { reason: msg("domain_gate_save_first"), blockers: [{ label: stepLabel("select"), link: link("select") }] }
-    : !calibrateDone
-      ? { reason: msg("flow_resolve_calibration_first"), blockers: [{ label: stepLabel("calibrate"), link: link("calibrate") }] }
-      : !profile
-        ? { reason: msg("flow_choose_profile"), blockers: [] }
-        : runningGate(running)
-  const prepState: MessageRef = !prepCurrent
-    ? msg("status_not_started")
-    : prepCurrent.state === "running" || prepCurrent.state === "paused"
-      ? msg("setup_stat_complete_value", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
-      : prepCurrent.state === "partial"
-        ? msg("run_partial_count", { done: prepCurrent.preparedAssetIds.length, total: prepCurrent.entryCount })
-        : prepCurrent.state === "prepared"
-          ? prepCurrent.unverified
-            ? msg("status_unverified")
-            : msg("status_prepared")
-          : msg("status_failed")
-  const prepareSummary = inputsChanged
-    ? msg("flow_inputs_changed")
-    : corrections.values.length > 0
-      ? joinRefs([prepState, msg("flow_corrected_values", { count: corrections.values.length })], " · ")
-      : prepState
-
-  // 4 Results
-  const { products } = runResults(catalog, run.id)
-  const writing = products.filter((r) => r.processingState === "pending")
-  const accepted = products.filter((r) => r.acceptance === "accepted").length
-  const resultsGate: FlowGate | null = !prepareDone
-    ? { reason: msg("domain_gate_prepare_first"), blockers: [{ label: stepLabel("prepare"), link: link("prepare") }] }
-    : writing.length > 0
-      ? { reason: msg("flow_files_being_written", { count: writing.length }), blockers: writing.map((r) => ({ label: verbatim(fileName(r.path)), link: link("results") })) }
-      : runningGate(running)
-  const resultsSummary = finishedRun && run.completedAt ? finishedOn(run.completedAt) : products.length === 0 ? msg("domain_status_awaiting_outputs") : msg("domain_status_accepted_of", { accepted, total: products.length })
-
-  const done: Record<RunStep, boolean> = finishedRun
-    ? { select: true, calibrate: true, prepare: true, results: true }
-    : { select: selectDone, calibrate: calibrateDone, prepare: prepareDone, results: false }
-  const settledBefore: Record<RunStep, boolean> = { select: latest !== null, calibrate: run.calibration.length > 0, prepare: prep !== null, results: false }
-  const gates: Record<RunStep, FlowGate | null> = { select: selectGate, calibrate: calibrateGate, prepare: prepareGate, results: resultsGate }
-  const summaries: Record<RunStep, MessageRef | null> = { select: selectSummary, calibrate: calibrateSummary, prepare: prepareSummary, results: resultsSummary }
-  const current = finishedRun ? "results" : RUN_STEPS.find((id) => !done[id])!
-  const steps = RUN_STEPS.map((id): DerivedStep<RunStep> => {
-    if (done[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
-    const gate = id === current && !run.trashedAt ? gates[id] : null
-    return { id, state: openState(id === current, gate, settledBefore[id]), gate, summary: run.trashedAt && id === current ? msg("status_trashed") : summaries[id] }
-  })
-  return { steps, current, finishedAt: finishedRun ? run.completedAt : null, trashed: run.trashedAt !== null, calibration, corrections }
-}
-
-// --- Run group flow (§5.2) --------------------------------------------------
-
-/** One live panel of a run group, with its run's flow. */
-export interface GroupFlowPanel {
-  panel: MosaicPanel
-  run: Run
-  flow: RunFlowState
-}
-
-export interface GroupFlowState {
-  steps: Array<DerivedStep<RunStep>>
-  /** The first step some live panel has not finished; Results once every live panel is Finished. */
-  current: RunStep
-  /** Set once every live panel is Finished: the last panel's finish. Every step is then read-only. */
-  finishedAt: IsoDateTime | null
-  /** The panels outside the Trash, in panel order: the steps aggregate these and Proceed acts on them (D-W75). */
-  panels: GroupFlowPanel[]
-}
-
-function settledState(state: FlowStepState): boolean {
-  return state === "finished" || state === "skipped"
-}
-
-/** "Panel 2 · Select at least one session": a panel's own words, named by its panel. */
-function panelNamed(panel: MosaicPanel, ref: MessageRef): MessageRef {
-  return joinRefs([panelRef(panel), ref], " · ")
-}
-
-/**
- * The run group flow: the run flow's steps, each the worst state its live
- * panels' runs hold it in (§5.2). A step is finished once every panel
- * finished it. The current step is the first one some panel has not
- * finished; its gate collects the panels' gates, each named "Panel N ·
- * reason", so Proceed waits until every panel passes. A later step reads
- * Redo when a panel settled it before, else To do: a panel further on is
- * never shown as a second current step. A trashed panel is left out of
- * every step (D-W75).
- */
-export function groupFlowState(world: World, group: RunGroup): GroupFlowState {
-  const project = world.catalog.projects[group.projectId]
-  const subject = project ? findSubject(project, group.subjectId) : undefined
-  const panels = group.runIds
-    .flatMap((id): GroupFlowPanel[] => {
-      const run = world.catalog.runs[id]
-      const panel = findPanel(subject, run?.panelId ?? null)
-      return run && panel && !run.trashedAt ? [{ panel, run, flow: runFlowState(world, run) }] : []
-    })
-    .sort((a, b) => a.panel.n - b.panel.n)
-  const stateOf = (p: GroupFlowPanel, id: RunStep) => p.flow.steps.find((s) => s.id === id)!
-  const finishedAt = panels.length > 0 && panels.every((p) => p.flow.finishedAt !== null) ? panels.map((p) => p.flow.finishedAt!).sort().at(-1)! : null
-  const current: RunStep = finishedAt ? "results" : (RUN_STEPS.find((id) => panels.length === 0 || panels.some((p) => !settledState(stateOf(p, id).state))) ?? "results")
-  const summaryOf = (id: RunStep): MessageRef | null => {
-    if (finishedAt && id === "results") return finishedOn(finishedAt)
-    const parts = panels.flatMap((p) => {
-      const summary = stateOf(p, id).summary
-      return summary ? [joinRefs([panelRef(p.panel), summary], ": ")] : []
-    })
-    return parts.length > 0 ? joinRefs(parts, " · ") : null
-  }
-  const gateOf = (id: RunStep): FlowGate | null => {
-    if (panels.length === 0) return { reason: msg("flow_group_no_live_panels"), blockers: [] }
-    const held = panels.flatMap((p) => {
-      const gate = stateOf(p, id).gate
-      return gate ? [{ p, gate }] : []
-    })
-    if (held.length === 0) return null
-    return {
-      reason: held.length === 1 ? panelNamed(held[0]!.p.panel, held[0]!.gate.reason) : msg("flow_panels_blocked", { count: held.length }),
-      blockers: held.map(({ p, gate }) => ({ label: panelNamed(p.panel, gate.reason), link: runStepLink(p.run, id) })),
-    }
-  }
-  const steps = RUN_STEPS.map((id): DerivedStep<RunStep> => {
-    const summary = summaryOf(id)
-    if (finishedAt || (panels.length > 0 && panels.every((p) => settledState(stateOf(p, id).state)))) return { id, state: "finished", gate: null, summary }
-    if (id === current) {
-      const gate = gateOf(id)
-      return { id, state: gate ? "blocked" : "current", gate, summary }
-    }
-    return { id, state: panels.some((p) => stateOf(p, id).state === "redo") ? "redo" : "todo", gate: null, summary }
-  })
-  return { steps, current, finishedAt, panels }
-}
-
-// --- Session intake (P-REV2, C10, C14, C15) ---------------------------------
+// --- Session intake (P-REV2, C10, C14, C15) --------------------------------
 
 export type SessionIntakeStepId = "target" | "rig" | "review"
 
@@ -2186,8 +1181,6 @@ export interface SessionIntakeState {
   /** The first step not settled; Review once the session is Ready. */
   current: SessionIntakeStepId
   readiness: SessionReadiness
-  /** Unfinished runs whose prepared view holds the session's review (C10). */
-  lockedBy: Run[]
   /** The next session in the review queue (C14): where Finish review goes. */
   next: Session | null
   /** The corrections intake recorded, recorded beside corrected (C15). */
@@ -2220,7 +1213,9 @@ export function importReviewLink(catalog: Catalog, sessionIds: SessionId[]): Ste
  * whenever it holds: a settled Target, a settled rig, 0 Unreviewed. Only
  * Review has a domain gate (every frame Usable or Unusable, C10); Target's
  * and Rig's Proceed confirm what the page's picker holds, so the builder
- * gates them on that choice. A Ready session stays on Review, whose Finish
+ * gates them on that choice. Review is always allowed: a Project that holds
+ * the session gets the change as a pending change, labelled as the
+ * Library's (VSEL-FR-12). A Ready session stays on Review, whose Finish
  * review opens the next session the queue holds (C14).
  */
 export function sessionIntakeState(world: World, session: Session): SessionIntakeState {
@@ -2231,101 +1226,27 @@ export function sessionIntakeState(world: World, session: Session): SessionIntak
   const target = targetId ? catalog.targets[targetId] : undefined
   const settled: Record<SessionIntakeStepId, boolean> = { target: targetId !== null, rig: rigId !== null, review: unreviewed === 0 }
   const reviewGate: FlowGate | null = unreviewed > 0 ? { reason: msg("flow_frames_unreviewed", { count: unreviewed }), blockers: [] } : null
-  const lockedBy = sessionReviewLock(world, session.id)
   const summaries: Record<SessionIntakeStepId, MessageRef> = {
     target: target ? verbatim(target.name) : msg("sessions_filter_needs_target"),
     rig: rigId ? rigRef(catalog, rigId) : msg("sessions_rig_needs_review"),
-    review: lockedBy.length > 0 ? msg("flow_review_locked") : unreviewed > 0 ? msg("flow_frames_unreviewed", { count: unreviewed }) : msg("status_ready"),
+    review: unreviewed > 0 ? msg("flow_frames_unreviewed", { count: unreviewed }) : msg("status_ready"),
   }
   const current = SESSION_INTAKE_STEPS.find((id) => !settled[id]) ?? "review"
   const steps = SESSION_INTAKE_STEPS.map((id): DerivedStep<SessionIntakeStepId> => {
     if (settled[id]) return { id, state: "finished", gate: null, summary: summaries[id] }
     const gate = id === current && id === "review" ? reviewGate : null
-    return { id, state: openState(id === current, gate, false), gate, summary: summaries[id] }
+    return { id, state: openStepState(id === current, gate, false), gate, summary: summaries[id] }
   })
   const corrections = SESSION_CORRECTION_FIELDS.flatMap((field): CorrectedValue[] => {
     const correction = latestCorrection(session, field)
     return correction && correction.observedValue !== correction.correctedValue ? [{ session, field, recorded: correction.observedValue, corrected: correction.correctedValue }] : []
   })
-  return { steps, current, readiness: sessionReadiness(catalog, session), lockedBy, next: nextInReviewQueue(catalog, session), corrections }
+  return { steps, current, readiness: sessionReadiness(catalog, session), next: nextInReviewQueue(catalog, session), corrections }
 }
 
 const SESSION_CORRECTION_FIELDS: CorrectionField[] = ["target", "equipment", "filter", "exposure", "focal-length"]
 
-// --- Wrap up (C3, D4, F2) ---------------------------------------------------
-
-/** Where Wrap up's StepPage lives: the Project's Wrap up tab, one step at a time. */
-export function wrapUpStepLink(projectId: ProjectId, step: WrapUpStepId): StepLink {
-  return projectLink(projectId, { stage: "wrap-up", step })
-}
-
-/** A step record's state from its operations (F2): Finished only once every one succeeded. */
-export type WrapUpRecordState = "todo" | "running" | "finished" | "skipped" | "redo"
-
-export function wrapUpRecordState(operations: Record<string, Operation>, record: WrapUpStepRecord | undefined): { state: WrapUpRecordState; failed: Operation | null; running: Operation[] } {
-  if (!record) return { state: "todo", failed: null, running: [] }
-  if (record.redo) return { state: "redo", failed: null, running: [] }
-  if (record.state === "skipped") return { state: "skipped", failed: null, running: [] }
-  const ops = record.operationIds.map((id) => operations[id]).filter((op): op is Operation => op !== undefined)
-  const unsettledOps = ops.filter(unsettled)
-  if (unsettledOps.length > 0) return { state: "running", failed: null, running: unsettledOps }
-  const failed = ops.find((op) => op.status !== "succeeded") ?? null
-  return { state: failed ? "todo" : "finished", failed, running: [] }
-}
-
-export interface WrapUpFlowState {
-  /** Every run outside the Trash is Finished: before then the tab shows "Finish every run first" (§5.5). */
-  available: boolean
-  /** Until it is available (and the Project is open), the tab's one line: "Finish every run first · 2 open ▸" or "No runs yet". */
-  unavailable: FlowGate | null
-  waitingOn: Run[]
-  steps: Array<DerivedStep<WrapUpStepId>>
-  /** The first step not finished or skipped, in the strict order (C3); Archive once the Project is closed. */
-  current: WrapUpStepId
-  /** Close project succeeded: the record is read-only until Reopen. */
-  closed: boolean
-  /** Close project's Archive transfer while it runs ("Closing"). */
-  closing: Operation[]
-}
-
-/**
- * Wrap up: Clean up runs → Trash → Archive, strictly in that order (C3). A
- * later step is read-only until the earlier ones are finished or skipped;
- * an earlier one reopens until Close, and the steps after it read Redo. A
- * step finishes when its operations succeed, not when they start (F2).
- * Archive's Proceed is Close project: the Project closes when its transfer
- * succeeds (§5.5).
- */
-export function wrapUpFlowState(world: World, project: Project): WrapUpFlowState {
-  const runs = projectRuns(world.catalog, project.id)
-  const waitingOn = runs.filter((r) => r.completion !== "complete")
-  const closed = project.state === "done"
-  const available = runs.length > 0 && waitingOn.length === 0
-  const unavailable = available || closed ? null : wrapUpUnavailable(runs, waitingOn)
-  const records = WRAP_UP_STEPS.map((id) => ({ id, record: project.wrapUp[id], ...wrapUpRecordState(world.operations, project.wrapUp[id]) }))
-  const settled = (s: WrapUpRecordState) => s === "finished" || s === "skipped"
-  const firstOpen = records.find((r) => !settled(r.state))
-  const current: WrapUpStepId = closed || !firstOpen ? "archive" : firstOpen.id
-  const position = WRAP_UP_STEPS.indexOf(current)
-  const steps = records.map(({ id, record, state, failed, running }, index): DerivedStep<WrapUpStepId> => {
-    const summary =
-      state === "finished" && record ? finishedOn(record.at) : state === "skipped" ? msg("status_skipped") : state === "running" ? msg("status_running") : failed?.summary ?? null
-    if ((closed || index < position) && settled(state)) return { id, state, gate: null, summary }
-    if (index > position) return { id, state: record ? "redo" : "todo", gate: null, summary: null }
-    const gate: FlowGate | null = closed ? null : (unavailable ?? runningGate(running))
-    return { id, state: openState(true, gate, false), gate, summary }
-  })
-  const archive = records.find((r) => r.id === "archive")!
-  return { available, unavailable, waitingOn, steps, current, closed, closing: closed ? [] : archive.running }
-}
-
-/** Why Wrap up is not available yet: "Finish every run first · 2 open", naming each open run, or "No runs yet" (§5.5). */
-function wrapUpUnavailable(runs: Run[], waitingOn: Run[]): FlowGate {
-  if (runs.length === 0) return { reason: msg("project_no_runs"), blockers: [] }
-  return { reason: msg("flow_finish_every_run", { count: waitingOn.length }), blockers: waitingOn.map((run) => ({ label: verbatim(run.name), link: runStepLink(run, "results") })) }
-}
-
-// --- Calibration process (P-CAL3) -------------------------------------------
+// --- Calibration process (P-CAL3) ------------------------------------------
 
 export interface CalibrationFlowState {
   steps: Array<DerivedStep<CalibrationStepId>>
@@ -2354,42 +1275,11 @@ export function calibrationFlowState(world: World, process: CalibrationProcess, 
     const summary = record.state === "done" && record.at ? finishedOn(record.at) : record.state === "skipped" ? msg("status_skipped") : record.state === "running" ? msg("status_running") : record.reason
     if (settled(id)) return { id, state: record.state === "skipped" ? "skipped" : "finished", gate: null, summary }
     const gate = id === current ? gateFor(id) : null
-    return { id, state: openState(id === current, gate, false), gate, summary }
+    return { id, state: openStepState(id === current, gate, false), gate, summary }
   })
   return { steps, current, finished }
 }
 
 export function calibrationStepLink(processId: CalibrationProcessId, step: CalibrationStepId): StepLink {
   return { to: "/calibration/processes/$processId/$step", params: { processId, step } }
-}
-
-// --- Master age and Replace (C9, D9) ----------------------------------------
-
-/** The calibration a run hands off now: against its saved revision, else its working content (the library's Used by). */
-function handedOffPlan(world: World, run: Run): CalibrationPlan {
-  return calibrationPlan(world.catalog, world.disk, run, runSetup(world.catalog, run).calibrationPolicy, savedContent(run) ?? workingContent(run))
-}
-
-/** Unfinished runs Replace… re-points from `masterId`, listed in its confirm (C9). Finished runs keep what they recorded. */
-export function masterReplacementRuns(world: World, masterId: MasterId): Run[] {
-  return Object.values(world.catalog.runs).filter((run) => {
-    if (run.completion === "complete" || run.trashedAt) return false
-    return handedOffPlan(world, run).rows.some((row) => handsOff(row) && row.input?.masterId === masterId)
-  })
-}
-
-/** Unfinished runs that hand off an old master, per master: the only case that raises an issue (C9). */
-export function oldMastersInUse(world: World, nowMs: number): Array<{ master: CalibrationMaster; runs: Run[] }> {
-  const out = new Map<MasterId, { master: CalibrationMaster; runs: Run[] }>()
-  for (const run of Object.values(world.catalog.runs)) {
-    if (run.completion === "complete" || run.trashedAt) continue
-    const plan = handedOffPlan(world, run)
-    for (const master of handoffCalibration(world.catalog, plan).map((s) => world.catalog.masters[s.input.masterId])) {
-      if (!master || masterAge(master, world.settings, nowMs) === null) continue
-      const entry = out.get(master.id) ?? { master, runs: [] }
-      if (!entry.runs.includes(run)) entry.runs.push(run)
-      out.set(master.id, entry)
-    }
-  }
-  return [...out.values()]
 }

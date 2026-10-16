@@ -2,9 +2,13 @@
  * Shared domain contract for the PlateVault prototype, harness v5
  * (foundation-owned).
  *
- * Vocabulary follows specs 063-072 and the workflow decisions D-W1 to D-W75
- * (`specs/063-clean-rebuild-contract/workflow-decisions.md`). "Run" is the UI
- * word for the domain's View (D-W3); the prototype uses Run throughout.
+ * Vocabulary follows specs 063-072 and the workflow decisions D-W1 to D-W116
+ * (`specs/063-clean-rebuild-contract/workflow-decisions.md`), with the F4
+ * Project model (D-W93 to D-W116): a Project holds explicit sessions in
+ * groups; calibration is matched at ingestion and pinned on each session; one
+ * View per Project is rebuilt from the originals by Apply; Results live in
+ * the Project's Output folder; Close locks a Project for good. There are no
+ * runs, membership revisions, preparations or Result records.
  * Screens read and write these entities through the store; they never
  * redefine them. Screen-local UI state lives in `src/store/slices/<slice>.ts`.
  * A screen that needs a change here messages the integration owner instead of
@@ -20,8 +24,8 @@
  * Dropped by the contract and absent here: the Inbox (D-W24, D-W33), Project
  * session links (D-W34), View origins and stand-alone Views (D-W1), project
  * checklist kinds other than goals (D-W29), the global filter list (D-W31),
- * "File into library" filing (D-W11), the Abandoned state (D-W72) and the
- * naming "Auto-apply pattern" (D-W58).
+ * "File into library" filing (D-W11), the Abandoned state (D-W72), the
+ * naming "Auto-apply pattern" (D-W58), and every run concept (D-W94).
  */
 import type { MessageRef } from "@/lib/i18n"
 import type { FrameTotals } from "./library"
@@ -37,8 +41,7 @@ export type AssetId = string
 export type SessionId = string
 export type TargetId = string
 export type ProjectId = string
-export type RunId = string
-export type RunGroupId = string
+export type ProjectGroupId = string
 export type SubjectId = string
 export type GoalId = string
 export type GoalTemplateId = string
@@ -46,8 +49,8 @@ export type TrashEpisodeId = string
 export type ImportSourceId = string
 export type MasterId = string
 export type ProfileId = string
-export type PreparationId = string
-export type ResultId = string
+export type MasterVersionId = string
+export type RigVersionId = string
 export type OperationId = string
 export type CameraId = string
 export type TelescopeId = string
@@ -395,6 +398,17 @@ export interface Session {
   supersededBy: SessionId | null
   /** "provisional" while a scan runs; "incomplete" when part was unreadable or the scan stopped. */
   scope: "complete" | "provisional" | "incomplete"
+  /**
+   * The framing within its capture key (D-W107, LIB-FR-04): 1 for the
+   * night's first framing, 2 for "framing 2" and so on. Intake splits frames
+   * whose pointing moves more than the framing margin from the session's or
+   * whose ROTATANG turns more than it; a meridian flip never splits.
+   */
+  framing: number
+  /** The rig version the session was captured with (LIB-FR-26): set with its rig and kept when the rig is edited later. */
+  rigVersionId: RigVersionId | null
+  /** A light session's calibration, matched at ingestion and pinned per kind (LIB-FR-23, CAL-FR-02); null for a calibration session. */
+  calibration: SessionCalibration | null
 }
 
 export interface Target {
@@ -429,6 +443,16 @@ export interface Camera {
   pixelSizeUm: number
   /** Mono or OSC comes from the camera, never from the filter list (D-W31, PLAN-EQ-FR-02). */
   kind: CameraKind
+  /**
+   * The unique name of this physical camera (LIB-FR-26): needed once the
+   * rigs hold two cameras of one model, so darks and bias link to one of
+   * them at import. Distinct from `aliases`, the header names it matches.
+   */
+  physicalAlias: string | null
+  /** "Don't use darks": its sessions settle as No darks with no warning, overridable per session (CAL-FR-22). */
+  noDarks: boolean
+  /** "Don't use bias": its sessions settle as No bias with no warning, overridable per session (CAL-FR-22). */
+  noBias: boolean
 }
 
 export interface Telescope {
@@ -438,6 +462,26 @@ export interface Telescope {
   source: RecordSource
   focalLengthMm: number
   apertureMm: number | null
+}
+
+/**
+ * The optics of one dated rig version (PLAN-EQ-FR-07): editing a rig adds a
+ * version from a night on; a session keeps the version it was captured
+ * with, so a later edit never remaps it. Flats need the lights' exact
+ * version (CAL-FR-19); Project grouping starts a new group only when the
+ * optics change (camera, focal length, reducer; PRJ-FR-31).
+ */
+export interface RigVersion {
+  id: RigVersionId
+  /** The first observing night the version applies to. */
+  from: NightDate
+  cameraId: CameraId | null
+  telescopeId: TelescopeId | null
+  reducerId: ReducerId | null
+  effectiveFocalLengthMm: number
+  filterIds: FilterId[]
+  /** A rotator: a flat with no ROTATANG reads unknown rotation, so it is only suggested (CAL-FR-20). */
+  rotator: boolean
 }
 
 /**
@@ -452,6 +496,7 @@ export interface OpticalTrain {
   name: string
   /** "detected" until the user confirms it (Confirm equipment promotes it to "manual"); a rig added by hand is "manual". */
   source: RecordSource
+  /** The current version's optics: the top-level fields are the newest version, `history` the earlier ones. */
   cameraId: CameraId | null
   telescopeId: TelescopeId | null
   /** The reducer or extender in the train; null or absent without one. The effective focal length already includes its factor. */
@@ -460,6 +505,12 @@ export interface OpticalTrain {
   notes: string
   /** The filters the rig carries, the same form for mono and OSC cameras (PLAN-EQ-FR-01); Mono or OSC still comes from the camera. */
   filterIds: FilterId[]
+  rotator: boolean
+  /** The current version's id and first night. */
+  versionId: RigVersionId
+  versionFrom: NightDate
+  /** Earlier versions, oldest first, frozen as they were (PLAN-EQ-FR-07). */
+  history: RigVersion[]
 }
 
 /** A focal reducer or extender: its factor scales the telescope's focal length (0.8 for a 0.8× reducer, 2 for a 2× Barlow). */
@@ -498,30 +549,15 @@ export interface ObservingSite {
 // Projects (PV-PRJ)
 // ---------------------------------------------------------------------------
 
-/** One mosaic panel, set explicitly by centre and rotation (D-W38, D-W73). */
-export interface MosaicPanel {
-  id: string
-  /** 1-based panel number; folders read `Panel N/` (PREP-FR-07). */
-  n: number
-  ra: number
-  dec: number
-  rotationDeg: number
-}
-
 /**
- * A Project subject: a Target, optionally marked Mosaic with explicit panels
- * (D-W9, D-W38). Candidates are sessions whose confirmed Target is
- * `targetId`, whatever the panel; panel assignment is by pointing.
+ * A Project subject: a Target (D-W9). Suggestions are sessions whose
+ * confirmed Target is `targetId` on one of the Project's rigs (PRJ-FR-09).
+ * A mosaic is not a subject mode: marking a group as a panel makes the
+ * Project a mosaic (PRJ-FR-29).
  */
 export interface Subject {
   id: SubjectId
   targetId: TargetId
-  mosaic: {
-    name: string
-    /** Tonight's windows for a mosaic use this centre (D-W63). */
-    centre: { ra: number; dec: number }
-    panels: MosaicPanel[]
-  } | null
   /** Goal conditions beside the goals (C7). Absent reads as `DEFAULT_SUBJECT_CONDITIONS` (`subjectConditions` in templates.ts). */
   conditions?: SubjectConditions
 }
@@ -564,39 +600,22 @@ export type QualityBar = { kind: "usable-only" } | { kind: "max-fwhm"; maxArcsec
 export type GoalChannel = Band | "OSC" | "Dual-band"
 
 /**
- * Goals for one subject (or one mosaic panel) and one channel (D-W29). A row
- * holds one amount, time or frames (C7, `goalAmount`), and a quality bar.
- * Missing calibration and exposure mismatch are derived warnings, never
- * goals.
+ * Goals for one subject (or one mosaic panel group) and one channel (D-W29).
+ * A row holds one amount, time or frames (C7, `goalAmount`), and a quality
+ * bar. Exposure mismatch is a derived warning, never a goal.
  */
 export interface Goal {
   id: GoalId
   subjectId: SubjectId
-  /** Set for a mosaic subject: panels carry their own goals. */
-  panelId: string | null
+  /** Set for a mosaic: each panel group carries its own goals (PRJ-FR-29). */
+  groupId: ProjectGroupId | null
   channel: GoalChannel
   integrationS: number | null
   frameCount: number | null
   qualityBar: QualityBar | null
 }
 
-/** One goal's counted totals at Close (C7): what `goalProgress` reads for a closed Project instead of the live library. */
-export interface FrozenGoal {
-  goalId: GoalId
-  inProject: FrameTotals
-  captured: FrameTotals
-  /** Usable frames in project that the bar's FWHM limit leaves out ("+N h below bar"). */
-  belowBar: FrameTotals
-  unknownQuality: number
-}
-
-/** Goal figures as they stood when the Project closed (C7); Reopen clears them, so an open Project always reads the live library. */
-export interface GoalFreeze {
-  at: IsoDateTime
-  goals: FrozenGoal[]
-}
-
-/** The three Wrap up steps after every run is Finished, in their strict order (P-WRAP1, C3): Clean up runs → Trash → Archive. */
+/** The three Wrap up steps, in their strict order (PRJ-FR-14, C3): Clean up → Trash → Archive, whose last action is Close project. */
 export type WrapUpStepId = "cleanup" | "trash" | "archive"
 
 /** A Wrap up step the user finished or skipped; an absent step is still to do. */
@@ -613,33 +632,208 @@ export interface WrapUpStepRecord {
   redo: boolean
 }
 
+/**
+ * A group of a Project's sessions (PRJ-FR-27 to PRJ-FR-29): one rig and
+ * framing, or a mosaic panel. It holds whole sessions only. Its folder is
+ * `GROUP_<name>` or `PANEL_<name>` once the Project has two or more groups.
+ */
+export interface ProjectGroup {
+  id: ProjectGroupId
+  /** Prefilled when created ("<Rig>", "<Rig> · Framing 2", "Panel N", "<Rig> · 2"); a rename changes the folder on the next Apply. */
+  name: string
+  /** A mosaic panel: its folder uses the PANEL keyword, and a Project with one is a mosaic (PRJ-FR-29). */
+  panel: boolean
+  createdAt: IsoDateTime
+}
+
+/**
+ * One session the Project holds (PRJ-FR-08, VSEL-FR-10): added by the user
+ * only, never by a suggestion. Its Usable frames are in; library-Unusable
+ * frames stay out unless `included` names them; `excluded` leaves out frames
+ * for this Project only. Files, the library and other Projects never change.
+ */
+export interface ProjectInput {
+  sessionId: SessionId
+  groupId: ProjectGroupId
+  /** Frames this Project leaves out. */
+  excluded: AssetId[]
+  /** Library-Unusable frames this Project includes explicitly (VSEL-FR-15). */
+  included: AssetId[]
+}
+
+/** The GROUP and PANEL keyword names (PRJ-FR-28): Settings holds the defaults, a Project may override them. */
+export interface GroupKeywords {
+  group: string
+  panel: string
+}
+
+/** What the View step chooses (VSEL-FR-16, PREP-FR-01, PREP-FR-04); a change reaches the View through Apply. */
+export interface ProjectSettings {
+  /** The application the View is handed to; null until chosen. */
+  profileId: ProfileId | null
+  /** Symlinks or Copies (F1, F2). */
+  mode: InputMode
+  /** The parent folder the Project folder lives in (PREP-FR-06); null takes Settings' last chosen one. Fixed by the first Apply. */
+  processingParent: string | null
+  /** Keyword names for this Project; null uses Settings'. */
+  keywords: GroupKeywords | null
+}
+
+/** What one View entry places: a frame, or one dated version of a master (CAL-FR-14). */
+export type ViewSource = { type: "asset"; assetId: AssetId } | { type: "master"; masterId: MasterId; versionId: MasterVersionId }
+
+/**
+ * One entry an Apply placed in the View. Its name is fixed for life: the
+ * next Apply keeps it for the same source, and a newcomer that clashes gets
+ * a suffix (PREP-FR-19). These are custody facts, not Result lineage.
+ */
+export interface ViewEntry {
+  /** Path under `View/`: "GROUP_RedCat-51/NIGHT_2026-09-18/Lights/Ha/Light_0001.fits". */
+  path: string
+  source: ViewSource
+  role: "light" | "flat" | "dark" | "bias"
+  /** The original it was built from, and that original's SHA-256 then (D19). */
+  originalPath: string
+  sha256: string
+  /** Bytes a copy holds; 0 for a symlink. */
+  sizeBytes: number
+  /** The SHA-256 of the copy as placed (an isolated patched copy differs from its original, PREP-FR-03); null for a symlink. */
+  copySha256: string | null
+}
+
+/** The layout facts that make a tool re-add the View when they change (PRJ-FR-28, PREP-FR-16). */
+export interface ViewLayout {
+  groupLevel: boolean
+  /** GAIN_ and OFFSET_ folder tokens: the Project mixes gain or offset (D-W108). */
+  gain: boolean
+  offset: boolean
+  /** Darks and Bias sit inside each group: the Project mixes cameras. */
+  perGroupDarks: boolean
+}
+
+/**
+ * The applied state: what the last Apply built and swapped in (VSEL-FR-16).
+ * The Project's inputs, groups and settings are the desired state; where
+ * they differ from these, the difference is a pending change.
+ */
+export interface AppliedView {
+  at: IsoDateTime
+  operationId: OperationId
+  /** `<Project folder>/View`. */
+  folderPath: string
+  settings: ProjectSettings
+  inputs: ProjectInput[]
+  groups: ProjectGroup[]
+  /** The calibration each session had when the View was built, so a later reassignment reads as a pending change. */
+  calibration: Record<SessionId, SessionCalibration>
+  entries: ViewEntry[]
+  layout: ViewLayout
+}
+
+/**
+ * A file the last swap left in `View (previous)/` (VSEL-FR-14, D-W110): a
+ * copy that differs from what PlateVault placed, a copy whose original
+ * could not be verified, or a file PlateVault didn't place that the user
+ * left unticked. The next Apply waits until each is reviewed.
+ */
+export interface PreviousLeftover {
+  /** Path under `View (previous)/`. */
+  path: string
+  reason: "changed-copy" | "unverified-copy" | "unplaced"
+  sizeBytes: number
+  /** Reviewed as Keep: it stays and is not asked about again (provisional, VSEL-AC-34). */
+  kept: boolean
+}
+
+export interface PreviousView {
+  /** `<Project folder>/View (previous)`. */
+  folderPath: string
+  at: IsoDateTime
+  leftovers: PreviousLeftover[]
+}
+
+/** A Result's Kind (RES-FR-01), chosen in its dropdown. */
+export type OutputKind = "final-image" | "linear-integration" | "channel-product" | "mosaic-panel" | "assembled-mosaic" | "other"
+
+/** What the user set or did on one `Output/` file; its availability and writing state come from the disk (RES-FR-01). */
+export interface OutputMeta {
+  kind: OutputKind | null
+  channel: string | null
+  /** Copy to Output: the Processing file it copied, verified and left in place (RES-FR-02). */
+  copiedFrom: string | null
+  at: IsoDateTime
+}
+
+/**
+ * A generated master PlateVault found in the Project's `Processing/` folder,
+ * offered once per file and digest on the Output step (CAL-FR-06,
+ * RES-FR-11, provisional): Hide records the decline so it does not return.
+ */
+export interface ProcessingMasterOffer {
+  path: string
+  sha256: string
+  state: "offered" | "adopted" | "hidden"
+  at: IsoDateTime
+}
+
+/** One goal's counted totals at Close (C7): what `goalProgress` reads for a Closed Project instead of the live library. */
+export interface FrozenGoal {
+  goalId: GoalId
+  inProject: FrameTotals
+  captured: FrameTotals
+  /** Usable frames in project that the bar's FWHM limit leaves out ("+N h below bar"). */
+  belowBar: FrameTotals
+  unknownQuality: number
+}
+
+/**
+ * What Close freezes (PRJ-FR-25): the goal figures and the calibration each
+ * held session used, so later library or calibration changes never touch a
+ * Closed Project. Duplicate reads the sessions' current pins, not this
+ * (D-W112).
+ */
+export interface CloseSnapshot {
+  at: IsoDateTime
+  goals: FrozenGoal[]
+  calibration: Record<SessionId, SessionCalibration>
+}
+
+/** Open, Closed (Close project without an archive), or Archived (its Close project archive succeeded); there is no Reopen (PRJ-FR-14, PRJ-FR-25). */
+export type ProjectState = "open" | "closed" | "archived"
+
 export interface Project {
   id: ProjectId
   name: string
   notes: string
   subjects: Subject[]
-  /** Rigs taking part; each run uses exactly one of them (D-W37). */
+  /** Rigs taking part; suggestions are sessions on one of them (D-W37). */
   rigIds: OpticalTrainId[]
   goals: Goal[]
+  /** The sessions it holds (desired state), each in one group. */
+  inputs: ProjectInput[]
+  groups: ProjectGroup[]
+  settings: ProjectSettings
+  /** `<Processing location>/<Project>`, fixed by the first Apply; null before it. */
+  folderPath: string | null
+  /** The applied View; null until the first Apply. */
+  view: AppliedView | null
+  /** What the last swap left in `View (previous)/`; null once it is empty. */
+  previous: PreviousView | null
+  /** Kind, Channel and Copy to Output records, by path under `Output/`. */
+  output: Record<string, OutputMeta>
+  masterOffers: ProcessingMasterOffer[]
   /**
    * Archive destination for this Project (P-ARC1); null uses the Default
    * archive location (`settings.defaultArchiveLocationId`).
    */
   archiveLocationId: LocationId | null
-  /** Wrap up progress (P-WRAP1); Done follows the last step. */
+  /** Wrap up progress (PRJ-FR-14); Close project follows the last step. */
   wrapUp: Partial<Record<WrapUpStepId, WrapUpStepRecord>>
-  /** Only the user marks a Project Done; Reopen returns it to open (D-W26, D-W46). */
-  state: "open" | "done"
-  doneAt: IsoDateTime | null
-  /**
-   * Goal figures frozen at Close (C7, `freezeGoals` in derive.ts); Reopen
-   * clears them. Absent or null: the goals read the live library.
-   */
-  goalFreeze?: GoalFreeze | null
-  /**
-   * Archive after Done. It survives Reopen: archived sessions show as
-   * Archived until the user restores them (D-W69).
-   */
+  state: ProjectState
+  closedAt: IsoDateTime | null
+  /** What Close froze; null while open. */
+  snapshot: CloseSnapshot | null
+  /** The sessions the Close project archive moved (STO-FR-13). */
   archive: { at: IsoDateTime; sessionIds: SessionId[] } | null
   createdAt: IsoDateTime
   revision: number
@@ -677,129 +871,8 @@ export interface GoalTemplate {
 }
 
 // ---------------------------------------------------------------------------
-// Processing runs (the domain's View: PV-VSEL, D-W3) and measurements (PV-PIX)
+// Measurements (PV-PIX)
 // ---------------------------------------------------------------------------
-
-/** The four steps of the run flow, in order (D1, C2): Results' Proceed is Finish run, and there is no Review or Done step. */
-export type RunStep = "select" | "calibrate" | "prepare" | "results"
-
-export type SelectionReasonKind =
-  /** "Target <subject> on <rig>": the candidate rule (D-W49). */
-  | "candidate"
-  /** A panel run: pointing inside this panel (D-W38). */
-  | "panel-pointing"
-  /** A flagged session the user assigned to this panel (D-W38). */
-  | "panel-assigned"
-  | "refresh-added"
-  | "manual"
-
-export interface SelectionReason {
-  kind: SelectionReasonKind
-  /** Persisted with the membership; worded at render. */
-  detail: MessageRef
-}
-
-export interface MembershipContent {
-  sessions: Array<{ sessionId: SessionId; reason: SelectionReason }>
-  /** Exact included frame identities. */
-  included: AssetId[]
-  /** Run-scoped exclusions ("Exclude from run"). Files stay on disk (VSEL-FR-10). */
-  excluded: AssetId[]
-  /**
-   * Frames marked Unusable in the library (X) after they joined leave the
-   * draft with the reason "Rejected"; marking them Usable again restores
-   * them (D-W54, P-REJ2).
-   */
-  rejected: AssetId[]
-  /** Selected members that are unavailable; never omitted silently. */
-  unresolved: AssetId[]
-}
-
-export interface MembershipRevision extends MembershipContent {
-  revision: number
-  savedAt: IsoDateTime
-  /** The changes this save accepted (VSEL-FR-16); worded at render. */
-  accepted: MessageRef[]
-}
-
-export interface MembershipDraft extends MembershipContent {
-  /** Committed revision the draft started from; null before the first save. */
-  baseRevision: number | null
-  updatedAt: IsoDateTime
-}
-
-/** Automatic assignment is the default; off hands off no calibration (D-W5, D-W55). */
-export type CalibrationPolicy = "automatic" | "off"
-
-/** Setup a run group shares with every panel run (D-W38); a single run holds its own. */
-export interface RunSetup {
-  profileId: ProfileId | null
-  /** The run view; null uses Settings' default run view (P-PREP3). */
-  inputMode: InputMode | null
-  calibrationPolicy: CalibrationPolicy
-}
-
-/**
- * A master found in a run's Results, offered once (D-W5, D-W55). Dismiss is
- * reversible (P-CAL2): a dismissed offer is listed under the Calibration
- * library's Dismissed filter, where Restore offer makes it pending again.
- */
-export interface MasterOffer {
-  masterId: MasterId
-  state: "pending" | "adopted" | "dismissed"
-  at: IsoDateTime
-}
-
-/**
- * A processing run: one Project, one subject (or one panel of a mosaic
- * subject) and one rig, all fixed at creation (D-W8, D-W50). The six steps
- * are derived (`runPipeline` in derive.ts), never stored.
- */
-export interface Run {
-  id: RunId
-  name: string
-  projectId: ProjectId
-  subjectId: SubjectId
-  /** Panel run: the one panel this run is tied to (D-W73). */
-  panelId: string | null
-  groupId: RunGroupId | null
-  rigId: OpticalTrainId
-  /** Null for a panel run, which uses its group's shared setup (`runSetup`). */
-  setup: RunSetup | null
-  /** Committed membership revisions, oldest first (D-W34). */
-  revisions: MembershipRevision[]
-  /** Unsaved working copy; null when there are no unsaved changes. */
-  draft: MembershipDraft | null
-  /** Calibration decisions that override automatic assignment. */
-  calibration: CalibrationAssignment[]
-  masterOffers: MasterOffer[]
-  /** Last chosen `<output>` parent; the run folder is `<output>/<Project>/<Run>/` (PREP-FR-06). */
-  outputParent: string | null
-  completion: "open" | "complete"
-  completedAt: IsoDateTime | null
-  /** The step the run was in when completed; Reopen returns it there (D-W71 kept by D-W72). */
-  stageBeforeComplete: RunStep | null
-  /** Soft delete into the Project's Trash (D-W72). Restore clears it; Empty Trash removes the record. */
-  trashedAt: IsoDateTime | null
-  notes: string
-  createdAt: IsoDateTime
-  revision: number
-}
-
-/** One run per mosaic panel with one shared setup (D-W38, D-W41, D-W73). */
-export interface RunGroup {
-  id: RunGroupId
-  name: string
-  projectId: ProjectId
-  subjectId: SubjectId
-  rigId: OpticalTrainId
-  /** Panel runs in panel order; a trashed panel run stays listed as Trashed (D-W75). */
-  runIds: RunId[]
-  setup: RunSetup
-  outputParent: string | null
-  createdAt: IsoDateTime
-  revision: number
-}
 
 export type MetricKey = "fwhm" | "hfr" | "eccentricity" | "star-count" | "background" | "snr"
 
@@ -858,12 +931,13 @@ export interface MeasurementImportRow {
  */
 export interface MeasurementImport {
   id: MeasurementImportId
-  runId: RunId
+  /** The session under review the import was started from. */
+  sessionId: SessionId
   path: string
   importedAt: IsoDateTime
   matched: number
-  /** Matched rows whose frame is outside this run; values still attach to the frame. */
-  outsideRun: number
+  /** Matched rows whose frame is outside that session; values still attach to the frame. */
+  outsideSession: number
   rows: MeasurementImportRow[]
 }
 
@@ -873,11 +947,38 @@ export interface MeasurementImport {
 
 export type CalibrationKind = "dark" | "flat" | "bias" | "dark-flat"
 
+/** The kinds a light session pins (CAL-FR-02): dark flats are never matched, suggested or assigned (CAL-FR-01). */
+export type PinKind = "dark" | "flat" | "bias"
+
+/** One dated file of a master (CAL-FR-14): its bytes, provenance and capture date. No version is Latest. */
+export interface MasterVersion {
+  id: MasterVersionId
+  path: string
+  sha256: string
+  /** DATE-OBS of the master: matching and the Old badge count from capture time, never import time (CAL-FR-21). */
+  capturedAt: IsoDateTime
+  frameCount: number | null
+  /**
+   * Where the file came from: indexed in the library, generated in a
+   * Project's `Processing/` folder, stacked from a raw calibration session by
+   * its calibration process, or stacked elsewhere and imported (P-CAL3).
+   * `sessionId` is the raw session a stacked master came from.
+   */
+  origin: { kind: "library" | "generated" | "stacked" | "imported"; projectId: ProjectId | null; sourcePath: string; sessionId: SessionId | null }
+  adoption: { destinationPath: string; verifiedSha256: string; adoptedAt: IsoDateTime } | null
+}
+
+/**
+ * A library master (CAL-FR-14): one record with its kind, its camera (or
+ * physical camera alias) and the settings it matches, and an ordered list of
+ * dated versions. Adding a version moves no session.
+ */
 export interface CalibrationMaster {
   id: MasterId
   kind: CalibrationKind
-  path: string
   cameraName: string | null
+  /** The physical camera it was linked to at import; null matches by model while the rigs hold one camera of it (CAL-FR-21, LIB-FR-26). */
+  cameraId: CameraId | null
   widthPx: number
   heightPx: number
   binning: number
@@ -887,23 +988,17 @@ export interface CalibrationMaster {
   channel: string | null
   /** Flats only: optical train evidence; null when unknown. */
   opticalTrainId: OpticalTrainId | null
+  /** Flats only: the rig version they were taken with; the lights must have the same one (CAL-FR-19). */
+  rigVersionId: RigVersionId | null
   ccdTempC: number | null
-  frameCount: number | null
-  createdAt: IsoDateTime
+  /** Flats only: ROTATANG when the master was taken; null when unknown (CAL-FR-20). */
+  rotationDeg: number | null
+  /** Oldest capture first. */
+  versions: MasterVersion[]
   /** Candidates are never preselected; adoption makes a master reusable. */
   state: "adopted" | "candidate"
-  /**
-   * Where the master came from: indexed in the library, found in a run's
-   * Results, stacked from a raw calibration session by its calibration
-   * process, or stacked elsewhere and imported directly (P-CAL3).
-   * `sessionId` is the lineage: the raw session a stacked master came from.
-   */
-  origin: { kind: "library" | "generated" | "stacked" | "imported"; runId: RunId | null; sourcePath: string; sessionId: SessionId | null }
-  adoption: { destinationPath: string; verifiedSha256: string; adoptedAt: IsoDateTime } | null
-  /** Set while the master is hidden (P-CAL2, C2 "Hide"): it leaves the library's list for its Hidden filter and is never matched; Restore clears it. */
-  dismissedAt?: IsoDateTime
-  /** The master that replaced this one (C9 Replace…): unfinished runs were re-pointed to it; finished runs keep this one. */
-  replacedBy?: MasterId
+  /** Set while the master is hidden (CAL-FR-16): it leaves the list for Show hidden and is never matched; Restore clears it. */
+  hiddenAt?: IsoDateTime
 }
 
 export type MatchCriterionName =
@@ -916,34 +1011,49 @@ export type MatchCriterionName =
   | "exposure"
   | "channel"
   | "optical-train"
+  | "rig-version"
   | "temperature"
+  | "rotation"
+  | "age"
 
 export interface MatchCriterion {
   name: MatchCriterionName
-  result: "compatible" | "incompatible" | "unknown"
+  /** "warning": inside the hard limits but past the warning level, so the match is only suggested (CAL-FR-20, CAL-FR-21). */
+  result: "compatible" | "warning" | "incompatible" | "unknown"
   lightValue: MessageRef
   calibrationValue: MessageRef
 }
 
-/** Runs are assigned masters only (P-CAL3); raw calibration frames are input to a calibration process. */
-export type CalibrationInput = { type: "master"; masterId: MasterId }
+/** What a pin or a suggestion names: one dated master version, or a raw calibration session (CAL-FR-04, CAL-FR-14). */
+export type CalibrationSource = { type: "master"; masterId: MasterId; versionId: MasterVersionId } | { type: "raw"; sessionId: SessionId }
 
-export interface CalibrationAssignment {
-  id: string
-  lightSessionId: SessionId
-  kind: CalibrationKind
-  input: CalibrationInput | null
-  /** Suggestions never enter a verified handoff until accepted. "automatic" records the automatic policy's choice once another master could outrank it, so a run keeps its masters (no silent re-rank). */
-  state: "suggested" | "accepted" | "exception" | "deferred" | "unresolved" | "automatic"
+/** Why this match (CAL-FR-03, CAL-FR-08): recorded with every pin and suggestion and kept after pinning. */
+export interface MatchEvidence {
+  /** The calibration's capture time; the lights' is the session's start. */
+  capturedAt: IsoDateTime
+  /** Flats: observing nights apart; darks and bias: days apart. Either direction. */
+  apart: number
+  /** Flats: the ROTATANG difference to the lights; null when unknown. */
+  rotationDeltaDeg: number | null
   criteria: MatchCriterion[]
-  /** Run-scoped; never rewrites master evidence. */
-  exception: { reason: string; at: IsoDateTime } | null
-  /**
-   * The D19 basis of an accepted input or exception (CAL-FR-08): when it was
-   * decided and the SHA-256 each handed-off file had then.
-   */
-  basis: { at: IsoDateTime; files: Array<{ path: string; sha256: string }> } | null
+  /** The files the source places and their SHA-256 when matched (D19). */
+  files: Array<{ path: string; sha256: string }>
 }
+
+/**
+ * One kind's calibration on a light session (LIB-FR-23, CAL-FR-05):
+ * waiting for a match; a suggestion that needs confirmation; pinned; or an
+ * explicit No, which needs no reason. A pin changes only by Reassign
+ * (LIB-FR-25); matching never replaces it.
+ */
+export type CalibrationChoice =
+  | { state: "waiting" }
+  | { state: "suggested"; source: CalibrationSource; evidence: MatchEvidence }
+  | { state: "pinned"; source: CalibrationSource; evidence: MatchEvidence; at: IsoDateTime; by: "matching" | "user" }
+  | { state: "none"; at: IsoDateTime; by: "user" | "camera-default" }
+
+/** Settled once every kind is pinned or No (LIB-FR-23); only then can a Project add the session (PRJ-FR-08). */
+export type SessionCalibration = Record<PinKind, CalibrationChoice>
 
 /** The steps of a calibration process, in order (P-CAL3). */
 export type CalibrationStepId = "stack" | "detect" | "import" | "register" | "raws"
@@ -980,6 +1090,8 @@ export interface CalibrationProcess {
   /** Where Import put the master in structured calibration storage. */
   storagePath: string | null
   masterId: MasterId | null
+  /** The version Register added to that master. */
+  versionId: MasterVersionId | null
   /** What happened to the raws once the master registered. */
   raws: "trashed" | "kept" | null
   steps: Record<CalibrationStepId, CalibrationStepRecord>
@@ -990,14 +1102,14 @@ export interface CalibrationProcess {
 }
 
 // ---------------------------------------------------------------------------
-// Application preparation (PV-PREP)
+// Application handoff (PV-PREP)
 // ---------------------------------------------------------------------------
 
 export type ApplicationKind = "pixinsight-wbpp" | "siril" | "seti-astro" | "generic"
 
 /**
- * Run views (P-PREP3): "symlink" links each input to its catalogue original;
- * "copy" writes temporary copies, removed when the run completes.
+ * View modes (PREP-FR-04, F1, F2): "symlink" links each entry to its
+ * catalogue original; "copy" writes copies, cloned where the volume can.
  */
 export type InputMode = "symlink" | "copy"
 
@@ -1025,12 +1137,10 @@ export interface ApplicationProfile {
   capability: ProfileCapability
 }
 
-export type PreparationState = "running" | "prepared" | "partial" | "failed" | "canceled" | "paused"
-
 /**
  * How a corrected metadata value reaches the application for one input
- * (PREP-FR-03, PREP-AC-06): through its configuration, a patched copy, by
- * accepting the source value, or by excluding the input.
+ * (PREP-FR-03, PREP-AC-06): through its configuration, an isolated patched
+ * copy, by accepting the source value, or by excluding the input.
  */
 export interface MetadataDecision {
   assetId: AssetId
@@ -1040,104 +1150,23 @@ export interface MetadataDecision {
   decision: "configuration" | "patched-copy" | "accept-source" | "excluded"
 }
 
-/**
- * One preparation revision of one run. A single run prepares to
- * `<output>/<Project>/<Run>/`, later revisions to `<Run> (rev N)/` beside it
- * (D-W51). A panel run prepares to `<output>/<Project>/<Mosaic>/Panel N/`,
- * later group revisions to `<Mosaic> (rev N)/Panel N/` (D-W67, PREP-FR-12).
- */
-export interface Preparation {
-  id: PreparationId
-  runId: RunId
-  /** Set for a panel run's preparation: the group revision it belongs to. */
-  groupId: RunGroupId | null
-  /** 1 for the first prepared folder, N for `(rev N)`. */
-  prepRevision: number
-  membershipRevision: number
-  profileId: ProfileId
-  mode: InputMode
-  /** The prepared folder: `<output>/<Project>/<Run>/` or a group's `Panel N/`. */
-  folderPath: string
-  /** The Results folder shared by every revision: `<Run> Results/` or `<Mosaic> Results/Panel N/` (D-W51, D-W73). */
-  resultsPath: string
-  entryCount: number
-  /** Bytes the run view's copies hold; 0 for Symlinks. */
-  footprintBytes: number
-  state: PreparationState
-  operationId: OperationId | null
-  preparedAssetIds: AssetId[]
-  /** Calibration masters written into the folder; with `preparedAssetIds`, what a Copies view copied. */
-  preparedCalibrationCount: number
-  /** Why each input was not prepared (a frame, or a master by its entry id); worded at render. */
-  blocked: Array<{ assetId: AssetId; path: string; reason: MessageRef }>
-  metadataDecisions: MetadataDecision[]
-  launches: Array<{ at: IsoDateTime; outcome: "opened" | "missing-executable" | "launch-failed" }>
-  /**
-   * Set when Open found prepared entries that no longer match the preparation
-   * snapshot (PREP-FR-10); cleared by the next Open that re-verifies them.
-   * The run reads Unverified meanwhile.
-   */
-  unverified?: { at: IsoDateTime; changed: Array<{ path: string; reason: MessageRef }> } | null
-  createdAt: IsoDateTime
-  settledAt: IsoDateTime | null
-}
-
-// ---------------------------------------------------------------------------
-// Results (PV-RES)
-// ---------------------------------------------------------------------------
-
-export type ResultKind = "final-image" | "linear-integration" | "channel-product" | "mosaic-panel" | "assembled-mosaic"
-
-/**
- * A product discovered in a run's recorded Results folder, or attached by the
- * user (D-W4). Recognized intermediates are kept apart from candidates and
- * reach the OS Trash only through the Done / Archive sheet (D-W70).
- */
-export interface ResultRecord {
-  id: ResultId
-  /** The run that owns it; null for a group Result (the assembled mosaic). */
-  runId: RunId | null
-  /** Set for a panel run's Result and for the group Result. */
-  groupId: RunGroupId | null
-  path: string
-  kind: ResultKind | null
-  channel: string | null
-  /** A processing intermediate (calibrated, registered frames), never a candidate. */
-  intermediate: boolean
-  discovered: "results-folder" | "attached"
-  /** The preparation revision it came from, when known (D-W67). */
-  fromPrepRevision: number | null
-  processingState: "pending" | "written" | "unknown"
-  /** Run association (attribution), separate from input-frame lineage (RES-FR-03). */
-  association: "tool-recorded" | "user-linked"
-  lineage: "tool-recorded" | "unknown"
-  /** "rejected": the user set the product aside; Results settles once every product is accepted or rejected. */
-  acceptance: "candidate" | "accepted" | "rejected"
-  acceptedAt: IsoDateTime | null
-  sha256: string
-  /** "drifted" when bytes changed outside PlateVault after acceptance. */
-  contentState: "unchanged" | "drifted"
-  /** Set when Empty Trash moved this Result (a ticked Results folder) to the OS Trash. */
-  trashed: { at: IsoDateTime; episodeId: TrashEpisodeId } | null
-}
-
 // ---------------------------------------------------------------------------
 // Trash episodes (D-W43, D-W70, D-W72, D-W74)
 // ---------------------------------------------------------------------------
 
 export type TrashEpisodeKind =
-  /** Done / Archive: library-Unusable candidate frames (D-W43). */
+  /** Wrap up Trash: library-Unusable frames of the Project's sessions (D-W43). */
   | "rejected-frames"
-  /** Done / Archive: processing intermediates in Results folders (D-W70). */
-  | "intermediates"
-  /** Done / Archive: byte-identical extra copies (D-W74). */
+  /** Wrap up Trash: files in the Project's `Processing/` folder (PRJ-FR-15). */
+  | "processing-files"
+  /** Wrap up Trash: byte-identical extra copies (D-W74). */
   | "duplicate-copies"
-  /** Empty Trash of runs: prepared folders and ticked Results folders (D-W72). */
-  | "empty-trash"
   /** Import Move: sources sent to the OS Trash after their destination verified (D-W11). */
   | "import-move"
-  /** Clean up of a Complete run: only the entries its preparations created (D-W26, PREP-FR-14). */
-  | "run-cleanup"
+  /** Wrap up Clean up: the View's entries and what `View (previous)/` still holds (F1, STO-FR-01). */
+  | "view-cleanup"
+  /** A `View (previous)/` file the user reviewed as Trash before the next Apply (D-W110). */
+  | "previous-leftovers"
   /** A calibration process's raws after their master registered (P-CAL3). */
   | "calibration-raws"
 
@@ -1151,13 +1180,11 @@ export interface TrashEpisode {
   kind: TrashEpisodeKind
   at: IsoDateTime
   projectId: ProjectId | null
-  runIds: RunId[]
   items: Array<{
     path: string
     volumeId: VolumeId
     sizeBytes: number
     assetId: AssetId | null
-    resultId: ResultId | null
     outcome: "trashed" | "refused"
     /** Why the item stayed in place (`trashRefusal`); worded at render. */
     reason: MessageRef | null
@@ -1221,14 +1248,48 @@ export interface ObservingWindow {
   moonSeparationDeg: number
 }
 
+/** The default reminder lead time (PLAN-AC-15, D-W88 as amended): 12 hours. */
+export const DEFAULT_REMINDER_LEAD_MIN = 12 * 60
+
 export interface ReminderSettings {
   enabled: boolean
   /** Always the default site at the time reminders were enabled. */
   siteId: SiteId | null
-  leadTimeMin: number | null
+  /** Minutes before a window starts; more than 30, `DEFAULT_REMINDER_LEAD_MIN` until the user picks another (PLAN-FR-06). */
+  leadTimeMin: number
   permission: "not-requested" | "granted" | "denied"
+  /**
+   * Durable suppression (PLAN-FR-06): the Target/site/window identities
+   * (`ObservingWindow.key`) already notified, coalesced into a startup
+   * notice, or recorded as missed. None is notified again.
+   */
   deliveredWindowKeys: string[]
   enabledAt: IsoDateTime | null
+  /**
+   * When PlateVault last checked the windows (launch, resume, while open).
+   * The startup and resume scan looks back to it: windows that ended since
+   * are recorded in Activity as missed, windows already inside the lead
+   * time are coalesced into one notice (PLAN-AC-15). Null before the first check.
+   */
+  checkedAt: IsoDateTime | null
+}
+
+/**
+ * The reminder data an Activity entry carries (PLAN-AC-15), for the bell and
+ * Activity: "single", a normal notice for one window as it enters the lead
+ * time; "coalesced", the one startup or resume notice for every unended
+ * window already inside the lead time; "missed", a window that ended while
+ * PlateVault was closed, recorded in Activity only (kind "reminder-missed")
+ * and never a notification.
+ */
+export interface ReminderNotice {
+  delivery: "single" | "coalesced" | "missed"
+  windows: Array<Pick<ObservingWindow, "key" | "targetId" | "siteId" | "start" | "end">>
+  /** Target names in window order; a notice shows at most three, then "N more" (`more`). */
+  names: string[]
+  more: number
+  /** Where the notice opens: Targets for tonight. */
+  href: string
 }
 
 export interface CalendarExport {
@@ -1256,7 +1317,10 @@ export type OperationKind =
   | "stack-master"
   /** Duplicate scan: byte-identical live copies, after each index and import (P-STO2). */
   | "duplicate-scan"
-  | "prepare"
+  /** Apply: build `View (building)/` from the originals, verify, wait for a held file, swap (PREP-FR-06, PREP-FR-09, PREP-FR-18). */
+  | "apply"
+  /** Copy to Output: a verified copy of one Processing file (RES-FR-02). */
+  | "copy-to-output"
   | "cleanup"
   | "archive"
   | "trash"
@@ -1283,11 +1347,7 @@ export interface OperationItem {
 }
 
 export interface OperationScope {
-  /**
-   * Every run the operation can affect. Complete and Move to Trash are
-   * refused while one of these is Running (RES-FR-07, RES-FR-10).
-   */
-  runIds?: RunId[]
+  /** The Project it works on: one PlateVault operation per Project at a time (PREP-FR-19). */
   projectId?: ProjectId
   locationIds?: LocationId[]
   sessionIds?: SessionId[]
@@ -1313,8 +1373,8 @@ export interface Operation {
   settledAt: IsoDateTime | null
 }
 
-/** "reminder": a delivered planning reminder, the simulated OS notification. */
-export type ActivityKind = "operation" | "write-failed" | "write-refused" | "refusal" | "saved" | "reminder"
+/** "reminder": a delivered planning reminder, the simulated OS notification; "reminder-missed": a window that ended while PlateVault was closed, Activity only. */
+export type ActivityKind = "operation" | "write-failed" | "write-refused" | "refusal" | "saved" | "reminder" | "reminder-missed"
 
 export interface ActivityEvent {
   id: string
@@ -1329,6 +1389,8 @@ export interface ActivityEvent {
   href: string | null
   /** An indexing outcome whose scope was incomplete, kept even when no Operation record is retained. */
   outcome?: "incomplete-scope"
+  /** Set on "reminder" and "reminder-missed" entries. */
+  reminder?: ReminderNotice
 }
 
 // ---------------------------------------------------------------------------
@@ -1364,25 +1426,67 @@ export interface AppSettings {
     /** Set when the user dismissed Home's Getting started checklist. */
     checklistDismissedAt?: IsoDateTime | null
   }
-  /** Last chosen `<output>` parent folder; no root is assumed on first use (PREP-FR-06). */
-  lastOutputParent: string | null
+  /** The last chosen Processing parent folder; no root is assumed on first use (PREP-FR-06). */
+  lastProcessingParent: string | null
   /** Overridden naming templates only; the rest use the per-type defaults (STO-IMP-FR-07). */
   naming: Partial<Record<NamingFrameType, string>>
   /** Tokens a naming template leaves out when their value is missing, instead of writing their fallback (wmbp9); the folder they leave empty collapses. */
   namingOmit: NamingToken[]
   /** Keep raw calibration frames after their master registers; off moves them to the OS Trash (P-CAL3). */
   keepRawCalibration: boolean
-  /** Darks, bias and dark flats older than this many days read "Old · {n} d" (C9; flats are exempt). */
+  /** A dark or bias master whose newest version is older than this many days reads "Old · {n} d" (CAL-FR-15; flats are exempt). Not a matching window. */
   masterMaxAgeDays: number
   /** Online Target resolution (LIB-AC-12, D18). Local search always works. */
   targetLookup: {
     enabled: boolean
     provider: "cds-sesame" | "simbad"
   }
-  /** The run view a run uses until it picks one in Prepare (P-PREP3). */
-  defaultRunView: InputMode
+  /** The View mode a new Project starts with (PREP-FR-04). */
+  defaultInputMode: InputMode
+  /** The GROUP and PANEL keyword names (PRJ-FR-28); a Project may override them. */
+  keywords: GroupKeywords
+  /** Framing and calibration matching thresholds (D-W114), adjustable in Settings. */
+  matching: MatchingSettings
   /** Windows Developer Mode as PlateVault last checked it: at launch, in setup, Settings and at Prepare (P-PREP3). */
   developerModeCheck: DeveloperMode
+}
+
+/**
+ * The matching defaults the owner settled (D-W114), all adjustable:
+ * framing groups sessions and splits them at intake (PRJ-FR-31, D-W107);
+ * flats and darks/bias have their own windows and checks (CAL-FR-19 to
+ * CAL-FR-21).
+ */
+export interface MatchingSettings {
+  framing: {
+    /** Same framing: footprints overlap at least this much. */
+    overlapPct: number
+    /** Same framing: centres within this share of the field. */
+    centrePct: number
+    /** Same framing: ROTATANG within this many degrees; a meridian flip (180°) is the same framing. */
+    rotationDeg: number
+    /** Mosaic panels overlap between these. */
+    panelOverlapMinPct: number
+    panelOverlapMaxPct: number
+  }
+  flats: {
+    /** Rotation within this is fine. */
+    fineDeg: number
+    /** Rotation up to this warns (a suggestion); beyond it is not offered. */
+    warnDeg: number
+    /** Observing nights apart, either direction: 1 is the same or the next night. */
+    windowNights: number
+  }
+  darks: {
+    /** Days apart by capture time, either direction (CAL-FR-21). */
+    windowDays: number
+    /** Sensor temperature difference past which the match is only suggested (provisional: the legacy matcher's 2 °C, crates/calibration/core/src/ranking.rs:155). */
+    temperatureWarnC: number
+  }
+  bias: {
+    windowDays: number
+    temperatureWarnC: number
+  }
 }
 
 export interface SimulationFaults {
@@ -1406,6 +1510,8 @@ export interface SimulationFaults {
   developerMode: DeveloperMode
   /** The Quick actions switch: how the actions the owner ticked run (astro-plan-zzjlz; prototype only, never in Settings). */
   quickActions: QuickActionMode
+  /** A tool holds a file in a View (Windows): Apply waits after its build until the prototype control releases it (PREP-FR-18). */
+  viewFileHeld: boolean
 }
 
 /** One-click runs a ticked action in place, with an Undo notice where it has an inverse; Open page sends it to the page that owns it. */
@@ -1423,8 +1529,6 @@ export interface Catalog {
   opticalTrains: Record<OpticalTrainId, OpticalTrain>
   sites: Record<SiteId, ObservingSite>
   projects: Record<ProjectId, Project>
-  runs: Record<RunId, Run>
-  runGroups: Record<RunGroupId, RunGroup>
   /** User goal templates; the built-ins are constants (`BUILT_IN_GOAL_TEMPLATES`). */
   goalTemplates: Record<GoalTemplateId, GoalTemplate>
   measurements: Record<AssetId, FrameMeasurement>
@@ -1433,8 +1537,6 @@ export interface Catalog {
   /** Calibration processes by id (P-CAL3): one per raw calibration session, plus masters imported directly. */
   calibrationProcesses: Record<CalibrationProcessId, CalibrationProcess>
   profiles: Record<ProfileId, ApplicationProfile>
-  preparations: Record<PreparationId, Preparation>
-  results: Record<ResultId, ResultRecord>
   trashEpisodes: Record<TrashEpisodeId, TrashEpisode>
   importSources: Record<ImportSourceId, ImportSource>
   /** Planning records by Target; the planned ones form the Plan list. */

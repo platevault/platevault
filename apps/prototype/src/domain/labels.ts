@@ -7,10 +7,7 @@
 import { formatCount, formatDecimal } from "@/lib/format"
 import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { ApplicationProfile, Band, Catalog, GoalChannel, InputMode, MoonConstraint, OperationUnit, QualityBar, ResultKind, RunStep, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
-
-/** The run flow's steps, in order (D1, C2): Results' Proceed is Finish run. */
-export const RUN_STEPS: RunStep[] = ["select", "calibrate", "prepare", "results"]
+import type { ApplicationProfile, Band, Catalog, GoalChannel, InputMode, MoonConstraint, OperationUnit, OutputKind, QualityBar, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 /**
  * The catalogue's object types (sky.ts) in the reader's language. A type a
@@ -36,26 +33,22 @@ export function objectTypeRef(objectType: string): MessageRef {
   return OBJECT_TYPE_NAME[objectType] ?? verbatim(objectType)
 }
 
-/** A run step's name: Select, Calibrate, Prepare, Results (`stepName` in app/run-ui words it). */
-export const STEP_NAME: Record<RunStep, MessageRef> = {
-  select: msg("step_select"),
-  calibrate: msg("step_calibrate"),
-  prepare: msg("step_prepare"),
-  results: msg("step_results"),
-}
-
-/** Run views (P-PREP3): Symlinks, Copies. */
+/** View modes (PREP-FR-04): Symlinks, Copies. */
 export const MODE_NAME: Record<InputMode, MessageRef> = {
   symlink: msg("domain_mode_symlink"),
   copy: msg("domain_mode_copy"),
 }
 
-export const RESULT_KIND_NAME: Record<ResultKind, MessageRef> = {
+/** A Result's Kind in its dropdown (RES-FR-01), in choice order. */
+export const OUTPUT_KINDS: OutputKind[] = ["final-image", "linear-integration", "channel-product", "mosaic-panel", "assembled-mosaic", "other"]
+
+export const OUTPUT_KIND_NAME: Record<OutputKind, MessageRef> = {
   "final-image": msg("domain_result_final_image"),
   "linear-integration": msg("domain_result_linear_integration"),
   "channel-product": msg("domain_result_channel_product"),
   "mosaic-panel": msg("domain_result_mosaic_panel"),
   "assembled-mosaic": msg("domain_result_assembled_mosaic"),
+  other: msg("domain_result_other"),
 }
 
 /** Strip order of the Targets Filters column (PLAN-TGT-FR-06). */
@@ -136,7 +129,7 @@ export const DEFAULT_MOON_AVOIDANCE: Record<Band, MoonAvoidance> = {
   OIII: { separationDeg: 60, widthDays: 7 },
 }
 
-/** Wrap up steps in order (P-WRAP1); Done follows the last. */
+/** Wrap up steps in order (PRJ-FR-14); Close project is the last step's final action. */
 export const WRAP_UP_STEPS: WrapUpStepId[] = ["cleanup", "trash", "archive"]
 
 export const WRAP_UP_NAME: Record<WrapUpStepId, MessageRef> = {

@@ -1,40 +1,51 @@
 /**
- * Explainable calibration matching for a run (D13, CAL-FR-01 to CAL-FR-10,
- * D-W5, D-W55). Ported from harness v4's T4 domain: the requirement table
- * behind "Review matches", automatic assignment, and the drift checks of
- * accepted inputs. A run matches only against its own rig (CAL-FR-10): the
- * camera criteria cover darks and bias, the optical train criterion covers
- * flats. Runs are assigned masters only (P-CAL3): raw calibration frames are
- * input to a calibration process (`calibration-process.ts`), never a run
- * input. Nothing here writes state.
+ * Calibration matched at ingestion and pinned on the session (D-W101 to
+ * D-W106, CAL-FR-02 to CAL-FR-08, CAL-FR-19 to CAL-FR-23). Pure: nothing
+ * here writes state.
+ *
+ * Every new light session gets, per kind (darks, flats, bias), its best
+ * source: one dated version of a library master, or a raw calibration
+ * session. A source that passes every check inside its window is pinned
+ * automatically; any other compatible source is a suggestion that needs
+ * confirmation; a source that fails a hard check is never offered. A pin
+ * changes only by Reassign; matching never replaces it, and calibration
+ * that arrives later fills only sessions still waiting. Dark flats are
+ * never matched. A Project never matches calibration itself: it reads its
+ * sessions' pins (and a Closed Project its frozen snapshot).
  */
 import { correctedExposureS } from "./corrections"
 import { fileAt } from "./disk"
-import { isUnder } from "./indexing"
-import { memberSessions, type MemberSession } from "./membership"
+import { isUnder, nightOf, sessionRigVersion } from "./indexing"
+import { preferredCopy } from "./library"
 import type {
   AppSettings,
   AssetId,
-  CalibrationAssignment,
-  CalibrationInput,
+  CalibrationChoice,
   CalibrationKind,
   CalibrationMaster,
-  CalibrationPolicy,
+  CalibrationSource,
+  CameraId,
   Catalog,
   Disk,
   DiskFile,
   IsoDateTime,
-  MasterId,
+  MasterVersion,
   MatchCriterion,
-  MembershipContent,
-  Run,
+  MatchEvidence,
+  NightDate,
+  PinKind,
+  RigVersionId,
   Session,
-  SessionId,
+  SessionCalibration,
 } from "./types"
-import { fileName, formatExposure } from "@/lib/format"
+import { fileName, formatDecimal, formatExposure, formatNight } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 
+/** The calibration kinds the library lists, in order. Dark flats are indexed but never matched (CAL-FR-01). */
 export const KINDS: CalibrationKind[] = ["dark", "flat", "bias"]
+
+/** The kinds a light session pins, in order. */
+export const PIN_KINDS: PinKind[] = ["dark", "flat", "bias"]
 
 /** "Dark", "Flat", "Bias", "Dark flat". */
 export const KIND_NAME: Record<CalibrationKind, MessageRef> = {
@@ -52,6 +63,21 @@ export const KIND_NOUN: Record<CalibrationKind, MessageRef> = {
   "dark-flat": msg("calibration_kind_dark_flat"),
 }
 
+/** "No darks", "No flats", "No bias": the explicit choice that settles a kind with no reason (CAL-FR-05). */
+export const NO_KIND_NAME: Record<PinKind, MessageRef> = {
+  dark: msg("calibration_no_darks"),
+  flat: msg("calibration_no_flats"),
+  bias: msg("calibration_no_bias"),
+}
+
+/** "Waiting", "Suggested", "Pinned", "No": one kind's state on a session (LIB-FR-23). */
+export const CHOICE_STATE_NAME: Record<CalibrationChoice["state"], MessageRef> = {
+  waiting: msg("calibration_choice_waiting"),
+  suggested: msg("calibration_choice_suggested"),
+  pinned: msg("calibration_choice_pinned"),
+  none: msg("calibration_choice_none"),
+}
+
 const MASTER_TYPE_NAME: Record<CalibrationKind, MessageRef> = {
   dark: msg("import_type_master_dark"),
   flat: msg("import_type_master_flat"),
@@ -59,16 +85,31 @@ const MASTER_TYPE_NAME: Record<CalibrationKind, MessageRef> = {
   "dark-flat": msg("import_type_master_dark_flat"),
 }
 
-/** One reusable calibration input: an adopted master. */
+const RAW_TYPE_NAME: Record<PinKind, MessageRef> = {
+  dark: msg("import_type_dark"),
+  flat: msg("import_type_flat"),
+  bias: msg("import_type_bias"),
+}
+
+const DAY_MS = 86_400_000
+
+// ---------------------------------------------------------------------------
+// Sources
+// ---------------------------------------------------------------------------
+
+/** A calibration source a light session can pin, with the facts the checks compare. */
 export interface CalSource {
-  input: CalibrationInput
-  /** Master id; also the `/calibration` key. */
-  id: string
-  kind: CalibrationKind
+  source: CalibrationSource
+  /** `sourceKey(source)`: stable across renders. */
+  key: string
+  kind: PinKind
+  /** The master file's name, or the raw session's label facts. */
   name: string
-  night: string | null
+  capturedAt: IsoDateTime
+  night: NightDate
   cameraName: string | null
-  telescopeName: string | null
+  /** The physical camera: a master's import link, or a raw session's rig camera. */
+  cameraId: CameraId | null
   widthPx: number | null
   heightPx: number | null
   binning: number
@@ -76,29 +117,55 @@ export interface CalSource {
   offset: number | null
   exposureS: number | null
   channel: string | null
-  /** Optical train evidence; null when unknown. */
   opticalTrainId: string | null
+  rigVersionId: RigVersionId | null
   ccdTempC: number | null
+  rotationDeg: number | null
   frameCount: number | null
+  /** A master, which wins over a raw set when both match (CAL-FR-04). */
+  isMaster: boolean
   imageTypeLabel: MessageRef
-  /** Master file path. */
-  path: string
-  /** Files handed off for this input. */
-  files: Array<{ assetId: AssetId | null; path: string; sizeBytes: number; fileName: string }>
+  /** The files the source places, with the SHA-256 the library holds for each. */
+  files: Array<{ assetId: AssetId | null; path: string; sha256: string; sizeBytes: number }>
 }
 
-export function masterSource(catalog: Catalog, masterId: string): CalSource | null {
-  const master = catalog.masters[masterId]
-  if (!master) return null
-  const asset = Object.values(catalog.assets).find((a) => a.copies.some((c) => c.path === master.path))
+export function sourceKey(source: CalibrationSource): string {
+  return source.type === "master" ? `m:${source.masterId}:${source.versionId}` : `r:${source.sessionId}`
+}
+
+/** Versions by capture date, newest first; no version is Latest (CAL-FR-14), this only orders them. */
+export function versionsNewestFirst(master: Pick<CalibrationMaster, "versions">): MasterVersion[] {
+  return [...master.versions].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
+}
+
+/** The newest version by capture date: what the Old badge reads (CAL-FR-15). */
+export function newestVersion(master: Pick<CalibrationMaster, "versions">): MasterVersion | undefined {
+  return versionsNewestFirst(master)[0]
+}
+
+export function masterVersion(master: CalibrationMaster | undefined, versionId: string): MasterVersion | undefined {
+  return master?.versions.find((v) => v.id === versionId)
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)] ?? null
+}
+
+/** One master version as a source. */
+export function versionSource(catalog: Catalog, master: CalibrationMaster, version: MasterVersion): CalSource | null {
+  if (master.kind === "dark-flat") return null
+  const asset = Object.values(catalog.assets).find((a) => a.copies.some((c) => c.path === version.path))
   return {
-    input: { type: "master", masterId: master.id },
-    id: master.id,
+    source: { type: "master", masterId: master.id, versionId: version.id },
+    key: sourceKey({ type: "master", masterId: master.id, versionId: version.id }),
     kind: master.kind,
-    name: fileName(master.path),
-    night: master.createdAt.slice(0, 10),
+    name: fileName(version.path),
+    capturedAt: version.capturedAt,
+    night: nightOf(version.capturedAt),
     cameraName: master.cameraName,
-    telescopeName: null,
+    cameraId: master.cameraId,
     widthPx: master.widthPx,
     heightPx: master.heightPx,
     binning: master.binning,
@@ -107,16 +174,71 @@ export function masterSource(catalog: Catalog, masterId: string): CalSource | nu
     exposureS: master.exposureS,
     channel: master.channel,
     opticalTrainId: master.opticalTrainId,
+    rigVersionId: master.rigVersionId,
     ccdTempC: master.ccdTempC,
-    frameCount: master.frameCount,
+    rotationDeg: master.rotationDeg,
+    frameCount: version.frameCount,
+    isMaster: true,
     imageTypeLabel: MASTER_TYPE_NAME[master.kind],
-    path: master.path,
-    files: [{ assetId: asset?.id ?? null, path: master.path, sizeBytes: asset?.sizeBytes ?? 0, fileName: fileName(master.path) }],
+    files: [{ assetId: asset?.id ?? null, path: version.path, sha256: version.adoption?.verifiedSha256 ?? version.sha256, sizeBytes: asset?.sizeBytes ?? 0 }],
   }
 }
 
-export function sourceFor(catalog: Catalog, input: CalibrationInput): CalSource | null {
-  return masterSource(catalog, input.masterId)
+const RAW_KINDS: ReadonlySet<string> = new Set(["dark", "flat", "bias"])
+
+/** A raw calibration session as a source (CAL-FR-04): its live frames, for an application that builds its own masters. */
+export function rawSource(catalog: Catalog, disk: Disk, session: Session): CalSource | null {
+  if (!RAW_KINDS.has(session.imageType) || session.supersededBy) return null
+  const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is NonNullable<typeof a> => a !== undefined && !a.trashed)
+  if (assets.length === 0) return null
+  const first = assets[0]!
+  const kind = session.imageType as PinKind
+  const rig = sessionRigVersion(catalog, session)
+  return {
+    source: { type: "raw", sessionId: session.id },
+    key: sourceKey({ type: "raw", sessionId: session.id }),
+    kind,
+    name: `${formatNight(session.night)} · ${session.channel ?? formatExposure(session.exposureS)}`,
+    capturedAt: session.startedAt,
+    night: session.night,
+    cameraName: session.cameraName,
+    cameraId: rig?.version.cameraId ?? null,
+    widthPx: first.observed.widthPx,
+    heightPx: first.observed.heightPx,
+    binning: session.binning,
+    gain: session.gain,
+    offset: session.offset,
+    exposureS: kind === "dark" ? (correctedExposureS(session) ?? session.exposureS) : null,
+    channel: kind === "flat" ? session.channel : null,
+    opticalTrainId: rig?.rigId ?? null,
+    rigVersionId: session.rigVersionId,
+    ccdTempC: session.ccdTempC,
+    rotationDeg: median(assets.map((a) => a.observed.rotationDeg).filter((r): r is number => r !== null)),
+    frameCount: assets.length,
+    isMaster: false,
+    imageTypeLabel: RAW_TYPE_NAME[kind],
+    files: assets.map((a) => {
+      const copy = preferredCopy(disk, catalog, a)
+      return { assetId: a.id, path: copy.path, sha256: a.sha256, sizeBytes: a.sizeBytes }
+    }),
+  }
+}
+
+export function sourceFor(catalog: Catalog, disk: Disk, source: CalibrationSource): CalSource | null {
+  if (source.type === "raw") {
+    const session = catalog.sessions[source.sessionId]
+    return session ? rawSource(catalog, disk, session) : null
+  }
+  const master = catalog.masters[source.masterId]
+  const version = masterVersion(master, source.versionId)
+  return master && version ? versionSource(catalog, master, version) : null
+}
+
+/** "MasterDark_2026-09-08.xisf · 8 Sep", "18 Sep · Ha (raw)": a source as a list names it. */
+export function sourceRef(catalog: Catalog, disk: Disk, source: CalibrationSource): MessageRef {
+  const s = sourceFor(catalog, disk, source)
+  if (!s) return msg("domain_calibration_source_missing")
+  return s.isMaster ? joinRefs([verbatim(s.name), { night: s.night }], " · ") : msg("domain_calibration_source_raw", { name: s.name })
 }
 
 /**
@@ -131,54 +253,48 @@ function readableSha(disk: Disk, path: string): string | null {
 }
 
 /**
- * Why an input's current bytes do not match their basis, or null when they do
- * (CAL-FR-08, D19). An adopted master is checked against its adoption digest,
- * a library master against the SHA-256 recorded when it was indexed. A master
- * that cannot be read is unverified.
+ * Why a master version's current bytes do not match their basis, or null
+ * when they do (CAL-FR-08, D19): an adopted version is checked against its
+ * adoption digest, a library one against the SHA-256 recorded when it was
+ * indexed. A version that cannot be read is unverified, so never matched.
  */
-export function inputDrift(catalog: Catalog, disk: Disk, input: CalibrationInput): string | null {
-  const master = catalog.masters[input.masterId]
-  if (!master) return "This master is no longer in the calibration library."
-  const source = masterSource(catalog, master.id)
-  const assetId = source?.files[0]?.assetId
-  const basis = master.adoption?.verifiedSha256 ?? (assetId ? (catalog.assets[assetId]?.sha256 ?? null) : null)
-  const current = readableSha(disk, master.path)
-  if (current === null) return `Unverified: ${master.path} cannot be read, so its bytes cannot be checked against ${master.adoption ? "its adoption digest" : "its recorded SHA-256"}.`
-  if (basis !== null && current !== basis) return master.adoption ? "Drifted: its SHA-256 differs from its adoption digest." : "Drifted: its SHA-256 differs from the digest recorded when it was indexed."
+export function versionDrift(disk: Disk, version: MasterVersion): MessageRef | null {
+  const basis = version.adoption?.verifiedSha256 ?? version.sha256
+  const current = readableSha(disk, version.path)
+  if (current === null) return msg("domain_calibration_version_unverified", { path: version.path })
+  if (current !== basis) return version.adoption ? msg("domain_calibration_version_drifted_adoption") : msg("domain_calibration_version_drifted")
   return null
 }
 
-/** The files an input hands off and the SHA-256 each has now: the basis recorded on acceptance (CAL-FR-08). */
-export function basisFiles(catalog: Catalog, disk: Disk, input: CalibrationInput): Array<{ path: string; sha256: string }> {
-  return (sourceFor(catalog, input)?.files ?? []).flatMap((file) => {
-    const sha256 = readableSha(disk, file.path)
-    return sha256 === null ? [] : [{ path: file.path, sha256 }]
-  })
-}
-
-/** A recorded acceptance basis whose file now reads different bytes (D19). */
-function basisDrift(disk: Disk, assignment: CalibrationAssignment): string | null {
-  const changed = assignment.basis?.files.find((file) => {
-    const current = readableSha(disk, file.path)
-    return current !== null && current !== file.sha256
-  })
-  return changed ? `Drifted: ${fileName(changed.path)} changed since this input was accepted (SHA-256 differs).` : null
-}
-
-/** Reusable sources only: adopted masters whose bytes match their basis. Candidates never match (CAL-AC-04), nor a dismissed master (P-CAL2). */
-export function reusableSources(catalog: Catalog, disk: Disk): CalSource[] {
+/**
+ * The sources matching may offer: every version of an adopted master that
+ * is not hidden and reads its basis bytes, and every raw dark, flat and bias
+ * session. Candidates and hidden masters never match (CAL-FR-16).
+ */
+export function calibrationSources(catalog: Catalog, disk: Disk): CalSource[] {
   const out: CalSource[] = []
   for (const master of Object.values(catalog.masters)) {
-    if (master.state !== "adopted" || master.dismissedAt) continue
-    if (inputDrift(catalog, disk, { type: "master", masterId: master.id })) continue
-    const source = masterSource(catalog, master.id)
+    if (master.state !== "adopted" || master.hiddenAt) continue
+    for (const version of master.versions) {
+      if (versionDrift(disk, version)) continue
+      const source = versionSource(catalog, master, version)
+      if (source) out.push(source)
+    }
+  }
+  for (const session of Object.values(catalog.sessions)) {
+    const source = rawSource(catalog, disk, session)
     if (source) out.push(source)
   }
   return out
 }
 
+// ---------------------------------------------------------------------------
+// Checks (CAL-FR-19 to CAL-FR-21)
+// ---------------------------------------------------------------------------
+
 export interface LightGeometry {
   cameraName: string | null
+  cameraId: CameraId | null
   widthPx: number | null
   heightPx: number | null
   binning: number
@@ -187,14 +303,22 @@ export interface LightGeometry {
   exposureS: number
   channel: string | null
   opticalTrainId: string | null
+  rigVersionId: RigVersionId | null
+  /** The rig version has a rotator: a missing flat angle reads unknown. */
+  rotator: boolean
   ccdTempC: number | null
+  rotationDeg: number | null
+  night: NightDate
+  startedAt: IsoDateTime
 }
 
 export function lightGeometry(catalog: Catalog, session: Session): LightGeometry {
-  const first = session.assetIds.map((id) => catalog.assets[id]).find((a) => a !== undefined)
-  const train = session.equipment.status === "confirmed" || session.equipment.status === "associated" ? session.equipment.value : null
+  const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a) => a !== undefined)
+  const first = assets[0]
+  const rig = sessionRigVersion(catalog, session)
   return {
     cameraName: session.cameraName,
+    cameraId: rig?.version.cameraId ?? null,
     widthPx: first?.observed.widthPx ?? null,
     heightPx: first?.observed.heightPx ?? null,
     binning: session.binning,
@@ -202,8 +326,13 @@ export function lightGeometry(catalog: Catalog, session: Session): LightGeometry
     offset: session.offset,
     exposureS: correctedExposureS(session) ?? session.exposureS,
     channel: session.channel,
-    opticalTrainId: train,
+    opticalTrainId: rig?.rigId ?? null,
+    rigVersionId: session.rigVersionId,
+    rotator: rig?.version.rotator ?? false,
     ccdTempC: session.ccdTempC,
+    rotationDeg: session.pointing?.rotationDeg ?? median(assets.map((a) => a.observed.rotationDeg).filter((r): r is number => r !== null)),
+    night: session.night,
+    startedAt: session.startedAt,
   }
 }
 
@@ -211,38 +340,106 @@ export function trainName(catalog: Catalog, id: string | null): string | null {
   return id ? (catalog.opticalTrains[id]?.name ?? id) : null
 }
 
+const value = (v: string | null) => (v === null ? msg("domain_not_recorded") : verbatim(v))
+
 function criterion(name: MatchCriterion["name"], light: string | null, calibration: string | null): MatchCriterion {
   const result = light === null || calibration === null ? "unknown" : light === calibration ? "compatible" : "incompatible"
-  const value = (v: string | null) => (v === null ? msg("domain_not_recorded") : verbatim(v))
   return { name, result, lightValue: value(light), calibrationValue: value(calibration) }
 }
 
-const str = (value: number | string | null) => (value === null ? null : String(value))
+const str = (v: number | string | null) => (v === null ? null : String(v))
 
-/** The calibration facts the D13 criteria compare: a master's, or a raw calibration session's before it is stacked. */
-export type MatchSource = Pick<CalSource, "kind" | "cameraName" | "widthPx" | "heightPx" | "binning" | "gain" | "offset" | "exposureS" | "channel" | "opticalTrainId" | "imageTypeLabel">
+/** Rotation difference in degrees, 0 to 180. */
+export function angleDelta(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360
+  return d > 180 ? 360 - d : d
+}
 
-/** D13 criteria for one light session and one calibration source; temperature is never compared. */
-export function matchCriteria(catalog: Catalog, light: LightGeometry, source: MatchSource): MatchCriterion[] {
+function nightsApart(a: NightDate, b: NightDate): number {
+  return Math.round(Math.abs(Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / DAY_MS)
+}
+
+function daysApart(a: IsoDateTime, b: IsoDateTime): number {
+  return Math.floor(Math.abs(Date.parse(a) - Date.parse(b)) / DAY_MS)
+}
+
+/**
+ * The camera check (CAL-FR-21, LIB-FR-26): a source linked to a physical
+ * camera matches only that camera. Otherwise it matches by model while the
+ * rigs hold one camera of that model; with several, it is unknown until the
+ * user links it, so it is only suggested.
+ */
+function cameraCriterion(catalog: Catalog, light: LightGeometry, source: Pick<CalSource, "cameraName" | "cameraId">): MatchCriterion {
+  const lightCamera = light.cameraId ? catalog.cameras[light.cameraId] : undefined
+  const lightName = lightCamera?.physicalAlias ?? light.cameraName
+  if (source.cameraId) {
+    const sourceCamera = catalog.cameras[source.cameraId]
+    const sourceName = sourceCamera?.physicalAlias ?? sourceCamera?.name ?? source.cameraName
+    if (!light.cameraId) return { name: "camera", result: "unknown", lightValue: value(lightName), calibrationValue: value(sourceName) }
+    return { name: "camera", result: source.cameraId === light.cameraId ? "compatible" : "incompatible", lightValue: value(lightName), calibrationValue: value(sourceName) }
+  }
+  const base = criterion("camera", light.cameraName, source.cameraName)
+  if (base.result !== "compatible") return base
+  const sameModel = Object.values(catalog.cameras).filter((c) => c.name === light.cameraName || c.aliases.includes(light.cameraName ?? ""))
+  return sameModel.length > 1 ? { ...base, result: "unknown" } : base
+}
+
+/** Temperature within the warning level (CAL-FR-21); past it the match is only suggested. */
+function temperatureCriterion(light: number | null, source: number | null, warnC: number): MatchCriterion {
+  const v = (t: number | null) => (t === null ? msg("domain_not_recorded") : verbatim(`${formatDecimal(t, 1)} °C`))
+  if (light === null || source === null) return { name: "temperature", result: "unknown", lightValue: v(light), calibrationValue: v(source) }
+  return { name: "temperature", result: Math.abs(light - source) <= warnC ? "compatible" : "warning", lightValue: v(light), calibrationValue: v(source) }
+}
+
+/** Flat rotation (CAL-FR-20): fine, warning, or not offered; a missing angle is unknown on a rig with a rotator. */
+function rotationCriterion(light: LightGeometry, source: CalSource, flats: AppSettings["matching"]["flats"]): MatchCriterion {
+  const v = (r: number | null) => (r === null ? msg("domain_not_recorded") : verbatim(`${formatDecimal(r, 1)}°`))
+  if (light.rotationDeg === null || source.rotationDeg === null) {
+    return { name: "rotation", result: light.rotator ? "unknown" : "compatible", lightValue: v(light.rotationDeg), calibrationValue: v(source.rotationDeg) }
+  }
+  const delta = angleDelta(light.rotationDeg, source.rotationDeg)
+  const result = delta <= flats.fineDeg ? "compatible" : delta <= flats.warnDeg ? "warning" : "incompatible"
+  return { name: "rotation", result, lightValue: v(light.rotationDeg), calibrationValue: v(source.rotationDeg) }
+}
+
+/**
+ * Every check for one light session and one source. Flats: camera, optical
+ * train, filter, binning, sensor size and the same rig version are hard;
+ * rotation and the night window decide pin or suggestion. Darks and bias:
+ * camera, gain, offset, binning and size (and exposure for darks) are hard;
+ * temperature and the day window decide pin or suggestion.
+ */
+export function matchCriteria(catalog: Catalog, settings: Pick<AppSettings, "matching">, light: LightGeometry, source: CalSource): MatchCriterion[] {
   const lightDims = light.widthPx === null || light.heightPx === null ? null : `${light.widthPx} × ${light.heightPx}`
   const sourceDims = source.widthPx === null || source.heightPx === null ? null : `${source.widthPx} × ${source.heightPx}`
   const list: MatchCriterion[] = [
-    criterion("camera", light.cameraName, source.cameraName),
+    cameraCriterion(catalog, light, source),
     criterion("dimensions", lightDims, sourceDims),
     criterion("binning", `${light.binning}×${light.binning}`, `${source.binning}×${source.binning}`),
-    criterion("gain", str(light.gain), str(source.gain)),
-    criterion("offset", str(light.offset), str(source.offset)),
     { name: "image-type", result: "compatible", lightValue: msg("import_type_light"), calibrationValue: source.imageTypeLabel },
   ]
-  if (source.kind === "dark") {
-    list.push(criterion("exposure", formatExposure(light.exposureS), source.exposureS === null ? null : formatExposure(source.exposureS)))
-  }
+  const { flats, darks, bias } = settings.matching
   if (source.kind === "flat") {
     list.push(criterion("channel", light.channel, source.channel))
     list.push(criterion("optical-train", trainName(catalog, light.opticalTrainId), trainName(catalog, source.opticalTrainId)))
+    list.push(criterion("rig-version", light.rigVersionId, source.rigVersionId))
+    list.push(rotationCriterion(light, source, flats))
+    const apart = nightsApart(light.night, source.night)
+    list.push({ name: "age", result: apart <= flats.windowNights ? "compatible" : "warning", lightValue: { night: light.night }, calibrationValue: { night: source.night } })
+    return list
   }
+  list.push(criterion("gain", str(light.gain), str(source.gain)))
+  list.push(criterion("offset", str(light.offset), str(source.offset)))
+  if (source.kind === "dark") list.push(criterion("exposure", formatExposure(light.exposureS), source.exposureS === null ? null : formatExposure(source.exposureS)))
+  const window = source.kind === "dark" ? darks : bias
+  list.push(temperatureCriterion(light.ccdTempC, source.ccdTempC, window.temperatureWarnC))
+  const apart = daysApart(light.startedAt, source.capturedAt)
+  list.push({ name: "age", result: apart <= window.windowDays ? "compatible" : "warning", lightValue: { night: light.night }, calibrationValue: { night: source.night } })
   return list
 }
+
+/** Criteria a failure of which keeps a source from ever being offered (CAL-FR-19, CAL-FR-21). */
+const HARD: ReadonlySet<MatchCriterion["name"]> = new Set(["camera", "dimensions", "binning", "channel", "optical-train", "rig-version", "rotation", "gain", "offset", "exposure"])
 
 export const CRITERION_NAME: Record<MatchCriterion["name"], MessageRef> = {
   camera: msg("domain_criterion_camera"),
@@ -254,322 +451,274 @@ export const CRITERION_NAME: Record<MatchCriterion["name"], MessageRef> = {
   exposure: msg("domain_criterion_exposure"),
   channel: msg("domain_criterion_channel"),
   "optical-train": msg("domain_criterion_rig"),
+  "rig-version": msg("domain_criterion_rig_version"),
   temperature: msg("domain_criterion_temperature"),
+  rotation: msg("domain_criterion_rotation"),
+  age: msg("domain_criterion_age"),
 }
 
 export interface MatchSummary {
   compatible: number
+  warning: number
   incompatible: number
   unknown: number
   allCompatible: boolean
 }
 
 export function summarize(criteria: MatchCriterion[]): MatchSummary {
-  const compatible = criteria.filter((c) => c.result === "compatible").length
-  const incompatible = criteria.filter((c) => c.result === "incompatible").length
-  const unknown = criteria.filter((c) => c.result === "unknown").length
-  return { compatible, incompatible, unknown, allCompatible: incompatible === 0 && unknown === 0 }
+  const count = (result: MatchCriterion["result"]) => criteria.filter((c) => c.result === result).length
+  const summary = { compatible: count("compatible"), warning: count("warning"), incompatible: count("incompatible"), unknown: count("unknown") }
+  return { ...summary, allCompatible: summary.warning === 0 && summary.incompatible === 0 && summary.unknown === 0 }
 }
 
-/** "All 8 criteria compatible", or the criteria that are not: "Rig unknown". */
+const CRITERION_RESULT_KEY = { unknown: "domain_criterion_unknown", warning: "domain_criterion_warning", incompatible: "domain_criterion_incompatible" } as const
+
+/** "All 9 checks pass", or the checks that do not: "Rotation warning, Temperature unknown". */
 export function summaryRef(criteria: MatchCriterion[]): MessageRef {
   const bad = criteria.filter((c) => c.result !== "compatible")
   if (bad.length === 0) return msg("domain_criteria_all_compatible", { count: criteria.length })
   return joinRefs(
-    bad.map((c) => msg(c.result === "unknown" ? "domain_criterion_unknown" : "domain_criterion_incompatible", { criterion: CRITERION_NAME[c.name] })),
+    bad.map((c) => msg(CRITERION_RESULT_KEY[c.result as keyof typeof CRITERION_RESULT_KEY], { criterion: CRITERION_NAME[c.name] })),
     ", ",
   )
 }
 
-export interface Candidate {
+/** A source a light session may take: pinned automatically, or only suggested (CAL-FR-02). Never-offered sources are left out. */
+export interface PinCandidate {
   source: CalSource
-  criteria: MatchCriterion[]
-  summary: MatchSummary
+  evidence: MatchEvidence
+  verdict: "pin" | "suggest"
 }
 
-function nightDistance(a: string, b: string | null): number {
-  if (!b) return Number.POSITIVE_INFINITY
-  return Math.abs(new Date(a).getTime() - new Date(b).getTime())
+function evidenceOf(light: LightGeometry, source: CalSource, criteria: MatchCriterion[]): MatchEvidence {
+  return {
+    capturedAt: source.capturedAt,
+    apart: source.kind === "flat" ? nightsApart(light.night, source.night) : daysApart(light.startedAt, source.capturedAt),
+    rotationDeltaDeg: source.kind === "flat" && light.rotationDeg !== null && source.rotationDeg !== null ? angleDelta(light.rotationDeg, source.rotationDeg) : null,
+    criteria,
+    files: source.files.map((f) => ({ path: f.path, sha256: f.sha256 })),
+  }
 }
 
 /**
- * The matching rule's order: compatible first, then fewer incompatible and
- * unknown criteria, then the nearest night, then more frames. Night and frame
- * count only order; neither is ever a criterion. Negative when `a` ranks first.
+ * The ranking (CAL-FR-20, CAL-FR-21, CAL-FR-04): a pin before a
+ * suggestion, a master before a raw set, then nearest by night (flats) or
+ * capture time (darks, bias), then the smallest rotation difference, then
+ * more frames. Negative when `a` ranks first.
  */
-export function compareCandidates(night: string, a: Candidate, b: Candidate): number {
+export function compareCandidates(a: PinCandidate, b: PinCandidate): number {
   return (
-    Number(b.summary.allCompatible) - Number(a.summary.allCompatible) ||
-    a.summary.incompatible - b.summary.incompatible ||
-    a.summary.unknown - b.summary.unknown ||
-    nightDistance(night, a.source.night) - nightDistance(night, b.source.night) ||
-    (b.source.frameCount ?? 0) - (a.source.frameCount ?? 0)
+    Number(a.verdict === "suggest") - Number(b.verdict === "suggest") ||
+    Number(b.source.isMaster) - Number(a.source.isMaster) ||
+    a.evidence.apart - b.evidence.apart ||
+    (a.evidence.rotationDeltaDeg ?? 0) - (b.evidence.rotationDeltaDeg ?? 0) ||
+    (b.source.frameCount ?? 0) - (a.source.frameCount ?? 0) ||
+    a.source.key.localeCompare(b.source.key)
   )
 }
 
-/** Candidates for one requirement, in the matching rule's order (`compareCandidates`). */
-export function candidatesFor(catalog: Catalog, session: Session, kind: CalibrationKind, sources: CalSource[]): Candidate[] {
+/** The sources one light session may take for one kind, best first; a hard-check failure is never offered. */
+export function candidatesFor(catalog: Catalog, settings: Pick<AppSettings, "matching">, session: Session, kind: PinKind, sources: CalSource[]): PinCandidate[] {
   const light = lightGeometry(catalog, session)
-  return sources
-    .filter((s) => s.kind === kind)
-    .map((source) => {
-      const criteria = matchCriteria(catalog, light, source)
-      return { source, criteria, summary: summarize(criteria) }
-    })
-    .sort((a, b) => compareCandidates(session.night, a, b))
+  const out: PinCandidate[] = []
+  for (const source of sources) {
+    if (source.kind !== kind) continue
+    const criteria = matchCriteria(catalog, settings, light, source)
+    if (criteria.some((c) => c.result === "incompatible" && HARD.has(c.name))) continue
+    const verdict = criteria.every((c) => c.result === "compatible") ? "pin" : "suggest"
+    out.push({ source, evidence: evidenceOf(light, source, criteria), verdict })
+  }
+  return out.sort(compareCandidates)
 }
 
-export function sameInput(a: CalibrationInput | null, b: CalibrationInput | null): boolean {
-  return a !== null && b !== null && a.masterId === b.masterId
+// ---------------------------------------------------------------------------
+// Choices
+// ---------------------------------------------------------------------------
+
+export function emptyCalibration(): SessionCalibration {
+  return { dark: { state: "waiting" }, flat: { state: "waiting" }, bias: { state: "waiting" } }
 }
 
-export function inputKey(input: CalibrationInput): string {
-  return input.masterId
+/** Settled: every kind pinned or an explicit No (LIB-FR-23); a suggestion counts only once confirmed. */
+export function isSettled(calibration: SessionCalibration | null): boolean {
+  return calibration !== null && PIN_KINDS.every((kind) => calibration[kind].state === "pinned" || calibration[kind].state === "none")
 }
 
-/**
- * Row state. "automatic" is a compatible master the automatic policy assigns
- * without a click (D-W5, D-W55); once stored it stays the run's choice. With
- * the policy off a compatible master is "suggested" and waits for Accept.
- */
-export type RowState = CalibrationAssignment["state"]
-
-export interface RequirementRow {
-  key: string
-  /** The first light session the row covers: its facts and night rank the candidates. */
-  member: MemberSession
-  /** Every light session the row covers, in run order (`requirementKey`). */
-  members: MemberSession[]
-  kind: CalibrationKind
-  /** Stored decision for this run, if any. */
-  assignment: CalibrationAssignment | null
-  /** The best compatible candidate. */
-  suggestion: Candidate | null
-  /** Best candidate when nothing is fully compatible; named, not preselected. */
-  closest: Candidate | null
-  candidates: Candidate[]
-  state: RowState
-  /** Input handed off (automatic, accepted or exception), or the one on offer. */
-  input: CalibrationInput | null
-  source: CalSource | null
-  criteria: MatchCriterion[]
-  /** The handed-off input's bytes no longer match its basis; the row needs review (CAL-FR-08). */
-  drift: string | null
-  /** A compatible master the matching rule ranks above the assigned one: offered as "Better match available", never switched to by itself. */
-  better: Candidate | null
-  /** Identifies the setup group: the covered lights' channels, rig, size, binning, gain and offset. */
-  groupKey: string
-  /** The group's setup, one ref per part, in the order of `groupKey`. */
-  groupParts: MessageRef[]
+/** The kinds still waiting or suggested, in order: "Choose its flats first". */
+export function unsettledKinds(calibration: SessionCalibration | null): PinKind[] {
+  if (!calibration) return []
+  return PIN_KINDS.filter((kind) => calibration[kind].state === "waiting" || calibration[kind].state === "suggested")
 }
 
-/** The light sessions a row's decision is stored for. */
-export function sessionIdsOf(row: RequirementRow): SessionId[] {
-  return row.members.map((m) => m.session.id)
+/** A camera's "Don't use darks" / "Don't use bias" (CAL-FR-22): settled as No with no warning. */
+function cameraDefault(catalog: Catalog, session: Session, kind: PinKind, at: IsoDateTime): CalibrationChoice | null {
+  if (kind === "flat") return null
+  const cameraId = sessionRigVersion(catalog, session)?.version.cameraId
+  const camera = cameraId ? catalog.cameras[cameraId] : undefined
+  if (!camera) return null
+  return (kind === "dark" && camera.noDarks) || (kind === "bias" && camera.noBias) ? { state: "none", at, by: "camera-default" } : null
 }
 
-export function assignmentId(runId: string, sessionId: string, kind: CalibrationKind): string {
-  return `cal_${runId}_${sessionId}_${kind}`
+/** One kind's best match: a pin, a suggestion, or waiting when nothing compatible exists. */
+export function matchChoice(catalog: Catalog, settings: Pick<AppSettings, "matching">, session: Session, kind: PinKind, at: IsoDateTime, sources: CalSource[]): CalibrationChoice {
+  const preset = cameraDefault(catalog, session, kind, at)
+  if (preset) return preset
+  const best = candidatesFor(catalog, settings, session, kind, sources)[0]
+  if (!best) return { state: "waiting" }
+  return best.verdict === "pin" ? { state: "pinned", source: best.source.source, evidence: best.evidence, at, by: "matching" } : { state: "suggested", source: best.source.source, evidence: best.evidence }
 }
 
 /**
- * Light sessions with the same key share one requirement row. Darks and bias
- * do not depend on the filter or the night (P-CAL3 files them per camera,
- * exposure, gain and offset), so they key on the light facts their criteria
- * compare (`matchCriteria`): one dark and one bias row across a run's
- * channels. Flats and dark flats stay per light session (filter and night).
+ * The session's calibration after matching (CAL-FR-02, LIB-FR-25): kinds
+ * already pinned or No stay exactly as they are; kinds waiting or suggested
+ * take the best match now, so later calibration fills only what still waits.
  */
-function requirementKey(catalog: Catalog, session: Session, kind: CalibrationKind): string {
-  if (kind !== "dark" && kind !== "bias") return `${kind}|${session.id}`
-  const g = lightGeometry(catalog, session)
-  return [kind, g.cameraName, g.widthPx, g.heightPx, g.binning, g.gain, g.offset, ...(kind === "dark" ? [g.exposureS] : [])].join("|")
-}
-
-/** The setup group of the light sessions one row covers: their channels, then the rig and camera settings they share. */
-function groupOf(catalog: Catalog, sessions: Session[]): { key: string; parts: MessageRef[] } {
-  const session = sessions[0]!
-  const g = lightGeometry(catalog, session)
-  const train = trainName(catalog, g.opticalTrainId)
-  const unknown = msg("status_unknown")
-  const channels = [...new Set(sessions.map((s) => s.channel))]
-  const values = [channels.join(","), train ?? g.cameraName, g.widthPx && g.heightPx ? `${g.widthPx}\u00a0×\u00a0${g.heightPx}` : null, String(g.binning), `${g.gain ?? "?"}/${g.offset ?? "?"}`]
-  const parts = [
-    joinRefs(
-      channels.map((channel) => (channel ? verbatim(channel) : msg("palette_session_no_filter"))),
-      ", ",
-    ),
-    train ? verbatim(train) : msg("domain_cal_group_rig_unknown", { camera: g.cameraName ? verbatim(g.cameraName) : msg("newproject_camera_unknown") }),
-    g.widthPx && g.heightPx ? verbatim(`${g.widthPx}\u00a0×\u00a0${g.heightPx}`) : msg("domain_cal_group_size_unknown"),
-    msg("run_cal_bin", { binning: g.binning }),
-    msg("domain_cal_group_gain_offset", { gain: g.gain ?? unknown, offset: g.offset ?? unknown }),
-  ]
-  return { key: values.join("|"), parts }
-}
-
-export interface CalibrationPlan {
-  policy: CalibrationPolicy
-  rows: RequirementRow[]
-  groups: Array<{ key: string; parts: MessageRef[]; rows: RequirementRow[] }>
-  counts: Record<RowState, number>
-  /** Rows that need the user: no compatible input, deferred, or a drifted input (CAL-AC-06). With the policy off, drifted inputs only; a Complete run's, none. */
-  needsReview: RequirementRow[]
-}
-
-const HANDED_OFF = new Set<RowState>(["automatic", "accepted", "exception"])
-
-/** The row's input goes to the application: assigned automatically, accepted, or an exception. */
-export function handsOff(row: Pick<RequirementRow, "state">): boolean {
-  return HANDED_OFF.has(row.state)
+export function matchSessionCalibration(catalog: Catalog, settings: Pick<AppSettings, "matching">, session: Session, at: IsoDateTime, sources: CalSource[]): SessionCalibration {
+  const current = session.calibration ?? emptyCalibration()
+  const next = { ...current }
+  for (const kind of PIN_KINDS) {
+    if (current[kind].state === "pinned" || current[kind].state === "none") continue
+    next[kind] = matchChoice(catalog, settings, session, kind, at, sources)
+  }
+  return next
 }
 
 /**
- * The run's calibration requirements. With the automatic policy every row
- * with a compatible candidate is assigned without a click, and a stored
- * assignment keeps its master when a better one appears (no silent re-rank);
- * rows with no compatible input, deferred rows and drifted inputs need
- * review. With the policy off compatible masters are Suggested and nothing is
- * handed off until accepted (D-W55, round 6). A Complete run's calibration is
- * what it recorded (Complete records its automatic choices, `automaticAssignments`):
- * nothing is matched or judged again, and nothing needs review, until Reopen.
+ * Matching at ingestion (CAL-FR-02, LIB-FR-25): every live light session
+ * with a kind still waiting or suggested takes its best match now, against
+ * the library as it stands after the batch. Pins and Nos never change. A
+ * session whose choices stay the same keeps its record (and revision).
  */
-export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: CalibrationPolicy, content: MembershipContent | null): CalibrationPlan {
-  const counts: Record<RowState, number> = { automatic: 0, suggested: 0, accepted: 0, exception: 0, deferred: 0, unresolved: 0 }
-  const frozen = run.completion === "complete"
-  const sources = frozen ? [] : reusableSources(catalog, disk)
-  const requirements = new Map<string, { kind: CalibrationKind; members: MemberSession[] }>()
-  for (const member of content ? memberSessions(catalog, content) : []) {
-    for (const kind of KINDS) {
-      const key = requirementKey(catalog, member.session, kind)
-      const requirement = requirements.get(key)
-      if (requirement) requirement.members.push(member)
-      else requirements.set(key, { kind, members: [member] })
+export function calibrateSessions(catalog: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, at: IsoDateTime): Catalog {
+  let sources: CalSource[] | null = null
+  let sessions = catalog.sessions
+  for (const session of Object.values(catalog.sessions)) {
+    if (session.imageType !== "light" || session.supersededBy) continue
+    const current = session.calibration ?? emptyCalibration()
+    if (session.calibration && PIN_KINDS.every((kind) => current[kind].state === "pinned" || current[kind].state === "none")) continue
+    sources ??= calibrationSources(catalog, disk)
+    const next = matchSessionCalibration(catalog, settings, session, at, sources)
+    if (session.calibration && PIN_KINDS.every((kind) => sameChoice(current[kind], next[kind]))) continue
+    if (sessions === catalog.sessions) sessions = { ...catalog.sessions }
+    sessions[session.id] = { ...session, calibration: next }
+  }
+  return sessions === catalog.sessions ? catalog : { ...catalog, sessions }
+}
+
+/** Whether two choices are the same decision (state and source): a pending change compares them. */
+export function sameChoice(a: CalibrationChoice, b: CalibrationChoice): boolean {
+  if (a.state !== b.state) return false
+  if (a.state === "pinned" || a.state === "suggested") return sourceKey(a.source) === sourceKey((b as typeof a).source)
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Pin health (D-W113, CAL-FR-08)
+// ---------------------------------------------------------------------------
+
+/** A pinned file now: as pinned, changed in place, gone, or on a volume that cannot be read now. */
+export type PinHealth = "ok" | "changed" | "missing" | "unreadable"
+
+/**
+ * Whether a pin's files still hold the bytes recorded when it was pinned.
+ * A changed or missing file keeps the pin: the session shows it, Apply
+ * refuses with a link to reassign, and nothing switches by itself.
+ */
+export function pinHealth(disk: Disk, choice: CalibrationChoice): { state: PinHealth; path: string | null } {
+  if (choice.state !== "pinned") return { state: "ok", path: null }
+  for (const file of choice.evidence.files) {
+    const found = fileAt(disk, file.path)
+    if (!found) {
+      const mounted = Object.values(disk.volumes).some((v) => v.mounted && isUnder(file.path, v.mountPath))
+      return { state: mounted ? "missing" : "unreadable", path: file.path }
     }
+    if (disk.volumes[found.volumeId]?.mounted === false || disk.deniedPaths.some((d) => isUnder(file.path, d))) return { state: "unreadable", path: file.path }
+    if (found.sha256 !== file.sha256) return { state: "changed", path: file.path }
   }
-  const rows: RequirementRow[] = []
-  for (const [key, { kind, members }] of requirements) {
-    const member = members[0]!
-    const group = groupOf(catalog, members.map((m) => m.session))
-    const candidates = candidatesFor(catalog, member.session, kind, sources)
-    const suggestion = candidates[0]?.summary.allCompatible ? candidates[0] : null
-    const closest = suggestion ? null : (candidates[0] ?? null)
-    // Decisions are stored per light session, for every session the row covers; the first one found decides.
-    const stored = members.map((m) => run.calibration.find((a) => a.lightSessionId === m.session.id && a.kind === kind)).find((a) => a !== undefined) ?? null
-    // Off assigns nothing by itself: a stored automatic choice waits for Accept like any suggestion.
-    const assignment = policy === "off" && stored?.state === "automatic" ? null : stored
-    let state: RowState
-    let input: CalibrationInput | null
-    let criteria: MatchCriterion[]
-    let drift: string | null = null
-    let better: Candidate | null = null
-    if (assignment) {
-      state = assignment.state
-      input = assignment.input
-      const live = assignment.input ? candidates.find((c) => sameInput(c.source.input, assignment.input)) : undefined
-      criteria = assignment.criteria.length > 0 ? assignment.criteria : (live?.criteria ?? [])
-      if (!frozen && assignment.input && HANDED_OFF.has(state)) {
-        drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, assignment)
-        if (suggestion && !sameInput(suggestion.source.input, assignment.input) && (!live || compareCandidates(member.session.night, suggestion, live) < 0)) better = suggestion
-      }
-    } else if (suggestion) {
-      state = policy === "automatic" ? "automatic" : "suggested"
-      input = suggestion.source.input
-      criteria = suggestion.criteria
-      if (policy === "automatic") drift = inputDrift(catalog, disk, suggestion.source.input)
-    } else {
-      state = "unresolved"
-      input = null
-      criteria = closest?.criteria ?? []
-    }
-    rows.push({
-      key,
-      member,
-      members,
-      kind,
-      assignment,
-      suggestion,
-      closest,
-      candidates,
-      state,
-      input,
-      source: input ? sourceFor(catalog, input) : null,
-      criteria,
-      drift,
-      better,
-      groupKey: group.key,
-      groupParts: group.parts,
-    })
-  }
-  const groups: CalibrationPlan["groups"] = []
-  for (const row of rows) {
-    const g = groups.find((x) => x.key === row.groupKey)
-    if (g) g.rows.push(row)
-    else groups.push({ key: row.groupKey, parts: row.groupParts, rows: [row] })
-  }
-  for (const row of rows) counts[row.state] += 1
-  const needsReview = frozen ? [] : rows.filter((r) => r.drift !== null || (policy === "automatic" && (r.state === "suggested" || r.state === "deferred" || r.state === "unresolved")))
-  return { policy, rows, groups, counts, needsReview }
+  return { state: "ok", path: null }
 }
 
-/**
- * The plan's automatic choices as stored assignments, each with the SHA-256
- * its files have now: recorded before a master joins the matched set (no
- * silent re-rank) and on Complete, which freezes what the run handed off.
- */
-export function automaticAssignments(catalog: Catalog, disk: Disk, runId: string, plan: CalibrationPlan, at: IsoDateTime): CalibrationAssignment[] {
-  return plan.rows.flatMap((row): CalibrationAssignment[] => {
-    const input = row.input
-    if (row.state !== "automatic" || row.assignment !== null || !input) return []
-    const basis = { at, files: basisFiles(catalog, disk, input) }
-    return row.members.map(({ session }) => ({ id: assignmentId(runId, session.id, row.kind), lightSessionId: session.id, kind: row.kind, input, state: "automatic", criteria: row.criteria, exception: null, basis }))
+export interface PinProblem {
+  kind: PinKind
+  state: Exclude<PinHealth, "ok">
+  path: string
+}
+
+/** The pinned files of a session that changed, went missing or cannot be read now. */
+export function sessionPinProblems(disk: Disk, calibration: SessionCalibration | null): PinProblem[] {
+  if (!calibration) return []
+  return PIN_KINDS.flatMap((kind) => {
+    const health = pinHealth(disk, calibration[kind])
+    return health.state === "ok" || !health.path ? [] : [{ kind, state: health.state, path: health.path }]
   })
 }
 
-/** Handed-off calibration inputs, deduplicated (one master can serve many sessions). */
-export function handoffCalibration(catalog: Catalog, plan: CalibrationPlan): CalSource[] {
-  const out: CalSource[] = []
-  for (const row of plan.rows) {
-    if (!HANDED_OFF.has(row.state) || !row.input || row.drift) continue
-    if (out.some((s) => sameInput(s.input, row.input))) continue
-    const source = sourceFor(catalog, row.input)
-    if (source) out.push(source)
+// ---------------------------------------------------------------------------
+// Calibration arriving later (LIB-FR-25)
+// ---------------------------------------------------------------------------
+
+export interface ArrivalUse {
+  session: Session
+  kind: PinKind
+  candidate: PinCandidate
+}
+
+/**
+ * What new calibration sets would calibrate, for Import review: "Used for:
+ * Ha · 12 Oct, Ha · 13 Oct". `fills` are sessions still waiting or
+ * suggested that a new set would pin or suggest; `noSessions` are sessions
+ * set to No for that kind that it matches, offered unticked under "Also use
+ * for these sessions". A pinned session is never listed.
+ */
+export function calibrationArrival(catalog: Catalog, settings: Pick<AppSettings, "matching">, incoming: CalSource[]): { fills: ArrivalUse[]; noSessions: ArrivalUse[] } {
+  const fills: ArrivalUse[] = []
+  const noSessions: ArrivalUse[] = []
+  for (const session of Object.values(catalog.sessions)) {
+    if (session.imageType !== "light" || session.supersededBy || !session.calibration) continue
+    for (const kind of PIN_KINDS) {
+      const state = session.calibration[kind].state
+      if (state === "pinned") continue
+      const candidate = candidatesFor(catalog, settings, session, kind, incoming)[0]
+      if (!candidate) continue
+      ;(state === "none" ? noSessions : fills).push({ session, kind, candidate })
+    }
   }
-  return out
+  return { fills, noSessions }
 }
 
 // ---------------------------------------------------------------------------
-// Master age, import matching and Replace (C9, D9)
+// Master age and import matching (CAL-FR-13 to CAL-FR-15)
 // ---------------------------------------------------------------------------
 
-/** Kinds whose masters age (C9): darks, bias and dark flats. Flats are exempt. */
-const AGEING_KINDS: ReadonlySet<CalibrationKind> = new Set(["dark", "bias", "dark-flat"])
+/** Kinds whose masters age (CAL-FR-15): darks and bias. Flats are exempt. */
+const AGEING_KINDS: ReadonlySet<CalibrationKind> = new Set(["dark", "bias"])
 
-/** Settings › Old masters after, by default (C9). */
+/** Settings › Old masters after, by default (CAL-FR-15). A reminder badge only, never a matching window. */
 export const DEFAULT_MASTER_MAX_AGE_DAYS = 90
 
-const DAY_MS = 86_400_000
-
 /**
- * "Old · 120 d": a dark, bias or dark flat older than
- * `settings.masterMaxAgeDays` (`DEFAULT_MASTER_MAX_AGE_DAYS` by default). Null for a younger master and
- * for every flat. Age alone raises no issue: only an old master assigned to
- * an unfinished run does (`oldMastersInUse` in derive.ts).
+ * "Old · 120 d": a dark or bias master whose newest version is older than
+ * `settings.masterMaxAgeDays`, a reminder to shoot new ones. Null for a
+ * younger master and for every flat. It raises no issue on any other row.
  */
-export function masterAge(master: Pick<CalibrationMaster, "kind" | "createdAt">, settings: Pick<AppSettings, "masterMaxAgeDays">, nowMs: number): { days: number; label: MessageRef } | null {
-  if (!AGEING_KINDS.has(master.kind)) return null
-  const days = Math.floor((nowMs - Date.parse(master.createdAt)) / DAY_MS)
+export function masterAge(master: Pick<CalibrationMaster, "kind" | "versions">, settings: Pick<AppSettings, "masterMaxAgeDays">, nowMs: number): { days: number; label: MessageRef } | null {
+  const newest = newestVersion(master)
+  if (!AGEING_KINDS.has(master.kind) || !newest) return null
+  const days = Math.floor((nowMs - Date.parse(newest.capturedAt)) / DAY_MS)
   return days > settings.masterMaxAgeDays ? { days, label: msg("flow_master_old", { n: days }) } : null
 }
 
-/** What an imported master file is to the library (C9): new, the replacement of a master with the same facts, or one the library already holds. */
-export type MasterMatch = { kind: "new" } | { kind: "replaces"; master: CalibrationMaster } | { kind: "duplicate"; master: CalibrationMaster }
+/** What an imported master file is to the library (CAL-FR-13): new, a new version of a master with its settings, or bytes the library holds. */
+export type MasterMatch = { kind: "new" } | { kind: "version"; master: CalibrationMaster } | { kind: "duplicate"; master: CalibrationMaster; version: MasterVersion }
 
-type MasterFacts = Pick<CalibrationMaster, "kind" | "cameraName" | "widthPx" | "heightPx" | "binning" | "gain" | "offset" | "exposureS" | "channel">
+export type MasterFacts = Pick<CalibrationMaster, "kind" | "cameraName" | "widthPx" | "heightPx" | "binning" | "gain" | "offset" | "exposureS" | "channel" | "ccdTempC">
 
-/** The facts a replacement shares with the master it replaces: what matching compares for its kind (camera, size, binning, gain and offset; exposure for darks and dark flats; the filter for flats and dark flats). */
-function replacementKey(facts: MasterFacts): string {
-  const exposure = facts.kind === "dark" || facts.kind === "dark-flat" ? facts.exposureS : null
+/** The settings a master record matches (CAL-FR-14): camera, size, binning, gain and offset; exposure and temperature for darks; temperature for bias; the filter for flats. */
+export function masterRecordKey(facts: MasterFacts): string {
+  const exposure = facts.kind === "dark" ? facts.exposureS : null
+  const temperature = facts.kind === "dark" || facts.kind === "bias" ? facts.ccdTempC : null
   const channel = facts.kind === "flat" || facts.kind === "dark-flat" ? (facts.channel ?? "").toLowerCase() : null
-  return [facts.kind, facts.cameraName, facts.widthPx, facts.heightPx, facts.binning, facts.gain, facts.offset, exposure, channel].join("|")
+  return [facts.kind, facts.cameraName, facts.widthPx, facts.heightPx, facts.binning, facts.gain, facts.offset, exposure, temperature, channel].join("|")
 }
 
 /** The calibration kind of a master file's IMAGETYP; null when the file is not a master. */
@@ -578,61 +727,37 @@ export function masterKindOf(file: Pick<DiskFile, "header">): CalibrationKind | 
   return type.startsWith("master-") ? (type.slice("master-".length) as CalibrationKind) : null
 }
 
-function factsOf(file: DiskFile, kind: CalibrationKind): MasterFacts {
+export function factsOf(file: DiskFile, kind: CalibrationKind): MasterFacts {
   const h = file.header!
-  return { kind, cameraName: h.instrument, widthPx: h.widthPx, heightPx: h.heightPx, binning: h.binning, gain: h.gain, offset: h.offset, exposureS: h.exposureS, channel: h.filter }
-}
-
-/** A master still in the library's list: not hidden and not replaced. */
-function listed(master: CalibrationMaster): boolean {
-  return !master.dismissedAt && !master.replacedBy
+  return { kind, cameraName: h.instrument, widthPx: h.widthPx, heightPx: h.heightPx, binning: h.binning, gain: h.gain, offset: h.offset, exposureS: h.exposureS, channel: h.filter, ccdTempC: h.ccdTempC }
 }
 
 /**
- * Import masters' preview (C9), per file: Duplicate when the library holds
- * the same bytes or path; Replaces when a listed master of the same kind has
- * the same facts (the newest one); else New. Null when the file is not a
- * master.
+ * Import masters' preview (CAL-FR-13), per file: Duplicate when a version
+ * holds the same bytes or path; New version of a master whose settings it
+ * matches (not hidden); else New. Null when the file is not a master.
  */
 export function masterImportMatch(catalog: Catalog, disk: Disk, file: DiskFile): MasterMatch | null {
   const kind = masterKindOf(file)
   if (!kind || !file.header) return null
-  const masters = Object.values(catalog.masters)
-  const duplicate = masters.find((m) => m.path === file.path || m.origin.sourcePath === file.path || m.adoption?.verifiedSha256 === file.sha256 || fileAt(disk, m.path)?.sha256 === file.sha256)
-  if (duplicate) return { kind: "duplicate", master: duplicate }
-  const key = replacementKey(factsOf(file, kind))
-  const replaced = masters.filter((m) => listed(m) && m.state === "adopted" && replacementKey(m) === key).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-  return replaced ? { kind: "replaces", master: replaced } : { kind: "new" }
+  for (const master of Object.values(catalog.masters)) {
+    const version = master.versions.find((v) => v.path === file.path || v.origin.sourcePath === file.path || v.sha256 === file.sha256 || v.adoption?.verifiedSha256 === file.sha256 || fileAt(disk, v.path)?.sha256 === file.sha256)
+    if (version) return { kind: "duplicate", master, version }
+  }
+  const key = masterRecordKey(factsOf(file, kind))
+  const master = Object.values(catalog.masters).find((m) => !m.hiddenAt && m.state === "adopted" && masterRecordKey(m) === key)
+  return master ? { kind: "version", master } : { kind: "new" }
 }
 
-/** "New", "Replaces MasterDark_2026-09-08.xisf", "Duplicate": the preview's Match cell. */
-export function masterMatchRef(match: MasterMatch): MessageRef {
+/** "New", "New version of MasterDark 300 s", "Duplicate": the preview's Match cell. */
+export function masterMatchRef(catalog: Catalog, match: MasterMatch): MessageRef {
   if (match.kind === "new") return msg("flow_match_new")
-  return match.kind === "replaces" ? msg("flow_match_replaces", { master: fileName(match.master.path) }) : msg("flow_match_duplicate")
+  return match.kind === "version" ? msg("flow_match_version_of", { master: masterRecordRef(catalog, match.master) }) : msg("flow_match_duplicate")
 }
 
-/** Why `file` cannot replace `master` (Replace… on a master row, C9): it is not a master, another kind, or one the library holds already. Null when it can. */
-export function replacementRefusal(catalog: Catalog, disk: Disk, master: CalibrationMaster, file: DiskFile): MessageRef | null {
-  const match = masterImportMatch(catalog, disk, file)
-  if (!match) return msg("store_cal_not_a_master")
-  if (masterKindOf(file) !== master.kind) return msg("flow_replace_other_kind", { kind: KIND_NOUN[master.kind] })
-  return match.kind === "duplicate" ? msg("flow_match_duplicate") : null
-}
-
-/**
- * A run's stored calibration with every input of `from` pointing at `to`
- * (C9 Replace…). Each assignment keeps its state; its criteria and basis are
- * the new master's as of `at`. A Finished run is never re-pointed: it keeps
- * what it recorded (D5).
- */
-export function repointAssignments(catalog: Catalog, disk: Disk, run: Run, from: MasterId, to: MasterId, at: IsoDateTime): CalibrationAssignment[] {
-  const source = masterSource(catalog, to)
-  if (!source || run.completion === "complete") return run.calibration
-  const input: CalibrationInput = { type: "master", masterId: to }
-  return run.calibration.map((a) => {
-    if (a.input?.masterId !== from) return a
-    const session = catalog.sessions[a.lightSessionId]
-    const criteria = session ? matchCriteria(catalog, lightGeometry(catalog, session), source) : a.criteria
-    return { ...a, input, criteria, basis: { at, files: basisFiles(catalog, disk, input) } }
-  })
+/** A master record's name: "Dark 300 s · ASI2600MM Pro", "Flat Ha · RedCat 51 / ASI2600MM". */
+export function masterRecordRef(catalog: Catalog, master: CalibrationMaster): MessageRef {
+  const detail = master.kind === "flat" ? (master.channel ?? "") : master.kind === "dark" && master.exposureS !== null ? formatExposure(master.exposureS) : ""
+  const where = master.kind === "flat" ? (trainName(catalog, master.opticalTrainId) ?? master.cameraName) : (master.cameraId ? catalog.cameras[master.cameraId]?.physicalAlias : null) ?? master.cameraName
+  return joinRefs([joinRefs([KIND_NAME[master.kind], ...(detail ? [verbatim(detail)] : [])], " "), ...(where ? [verbatim(where)] : [])], " · ")
 }

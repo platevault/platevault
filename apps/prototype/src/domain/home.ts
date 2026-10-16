@@ -7,41 +7,22 @@
  *   or failed one, a location never scanned or whose last scan did not
  *   finish, or the image files no copy in the library holds yet (new since
  *   its last scan).
- * - `pendingWork`: sessions that need a Target, wait for review, sit in no
- *   Project or are ready to add to a run, and Finished runs whose prepared
- *   view is still on disk, with the bytes Clean up frees.
+ * - `pendingWork`: sessions that need a Target, wait for review, wait for
+ *   their calibration to settle, sit in no Project, or are suggestions a
+ *   Project can add now.
  * - `openWork`: open Projects and calibration processes, deadline or season
- *   first, each with its in-context issues.
+ *   first, each with its row-local issues (F7).
  * - `homeStatus`: every location's availability and space, and the
  *   background jobs other than imports.
  */
 import { calibrationProcesses, type ProcessView } from "./calibration-process"
-import {
-  goalProgress,
-  type NextAction,
-  oldMastersInUse,
-  planningPriorities,
-  projectLink,
-  projectMemberSessionIds,
-  projectNext,
-  projectRuns,
-  projectWrapUp,
-  runningWork,
-  runPipeline,
-  runPreparations,
-  runStepLink,
-  sessionsNeedingWork,
-  type StepLink,
-  type SubjectPriority,
-  wrapUpStepLink,
-  type World,
-} from "./derive"
-import { fileKey, filesUnder, freeBytes } from "./disk"
+import { goalProgress, type NextAction, planningPriorities, projectLink, projectSessionIds, runningWork, sessionsNeedingWork, type StepLink, type SubjectPriority, type World } from "./derive"
+import { fileKey, freeBytes } from "./disk"
 import { listLocation } from "./indexing"
-import { deriveIssues, type Issue } from "./issues"
+import { deriveIssues, type Issue, issuesFor } from "./issues"
 import { locationAvailability } from "./library"
-import { runFootprint } from "./storage"
-import type { Availability, Location, NightDate, Operation, Project, ProjectId, Run, Session, SessionId } from "./types"
+import { pendingChanges, projectNext } from "./project-view"
+import type { Availability, Location, NightDate, Operation, Project, ProjectId, Session } from "./types"
 
 // ---------------------------------------------------------------------------
 // Pending ingestions
@@ -126,57 +107,28 @@ export function pendingIngestions(world: Pick<World, "disk" | "catalog" | "opera
 export type PendingWork =
   | { kind: "needs-target"; session: Session }
   | { kind: "unreviewed"; session: Session; projectId: ProjectId; frames: number }
+  /** The session's darks, flats or bias are not settled: it waits in the Library's Needs calibration queue (LIB-FR-23); Import never waits. */
+  | { kind: "needs-calibration"; session: Session }
   | { kind: "not-in-project"; session: Session }
+  /** A suggestion the Project can add now: Ready and settled. It is never added by itself (PRJ-FR-09). */
   | { kind: "ready-to-add"; session: Session; projectId: ProjectId }
-  /** A Finished run whose prepared view is still on disk: Clean up unlinks its links and frees `bytes` of copies. */
-  | { kind: "clean-up"; run: Run; project: Project; entries: number; bytes: number }
-
-/** A Finished run's prepared entries still on disk, and the bytes their copies hold (links count zero). */
-function preparedOnDisk(world: Pick<World, "disk" | "catalog">, run: Run): { entries: number; bytes: number } {
-  const entries = runPreparations(world.catalog, run.id).reduce((n, p) => n + filesUnder(world.disk, p.folderPath).length, 0)
-  return { entries, bytes: entries > 0 ? runFootprint(world.disk, world.catalog, run.id).preparedBytes : 0 }
-}
 
 /**
  * Pending work in the order it unblocks the rest: a Target, then review,
- * then a Project, then a run, then Clean up; oldest night first within a
- * kind. A session reviewed for several Projects shows once. A session an
- * open run's draft already holds is not ready to add: it waits only for
- * that run's Save.
+ * then calibration, then a Project, then an Add; oldest night first within a
+ * kind. A session reviewed for several Projects shows once.
  */
 export function pendingWork(world: Pick<World, "disk" | "catalog">): PendingWork[] {
   const work = sessionsNeedingWork(world.catalog)
   const byNight = (a: { session: Session }, b: { session: Session }) => a.session.night.localeCompare(b.session.night) || a.session.id.localeCompare(b.session.id)
   const unreviewed = [...new Map(work.unreviewed.map((u) => [u.session.id, u])).values()]
-  const cleanUp: PendingWork[] = []
-  for (const project of Object.values(world.catalog.projects)) {
-    if (project.state !== "open") continue
-    for (const run of projectRuns(world.catalog, project.id)) {
-      if (run.completion !== "complete") continue
-      const { entries, bytes } = preparedOnDisk(world, run)
-      if (entries > 0) cleanUp.push({ kind: "clean-up", run, project, entries, bytes })
-    }
-  }
   return [
     ...work.needsTarget.map((session) => ({ session })).sort(byNight).map(({ session }): PendingWork => ({ kind: "needs-target", session })),
     ...unreviewed.sort(byNight).map((u): PendingWork => ({ kind: "unreviewed", ...u })),
+    ...work.needsCalibration.map((session) => ({ session })).sort(byNight).map(({ session }): PendingWork => ({ kind: "needs-calibration", session })),
     ...work.notInProject.map((session) => ({ session })).sort(byNight).map(({ session }): PendingWork => ({ kind: "not-in-project", session })),
-    ...work.readyToAdd
-      .filter((r) => !inOpenDraft(world, r.projectId, r.session.id))
-      .sort(byNight)
-      .map((r): PendingWork => ({ kind: "ready-to-add", ...r })),
-    ...cleanUp,
+    ...work.readyToAdd.sort(byNight).map((r): PendingWork => ({ kind: "ready-to-add", ...r })),
   ]
-}
-
-/** Whether an open run of the Project outside its Trash holds the session in its unsaved draft. */
-function inOpenDraft(world: Pick<World, "catalog">, projectId: ProjectId, sessionId: SessionId): boolean {
-  return projectRuns(world.catalog, projectId).some((run) => run.completion === "open" && (run.draft?.sessions.some((s) => s.sessionId === sessionId) ?? false))
-}
-
-/** Where a Finished run's Clean up happens: Wrap up's first step once every run is Finished, else the run's Results step. */
-export function cleanUpLink(world: Pick<World, "catalog">, run: Run, project: Project): StepLink {
-  return projectWrapUp(world.catalog, project).available ? wrapUpStepLink(project.id, "cleanup") : runStepLink(run, "results")
 }
 
 // ---------------------------------------------------------------------------
@@ -193,25 +145,18 @@ interface Ranked {
 }
 
 export type OpenWork =
-  | (Ranked & { kind: "project"; project: Project; next: NextAction | null; goals: { met: number; total: number }; openRuns: number })
+  | (Ranked & { kind: "project"; project: Project; next: NextAction | null; goals: { met: number; total: number }; sessions: number; pending: number })
   | (Ranked & { kind: "calibration"; view: ProcessView })
 
-/** Issues about one of the Project's runs, an old master its unfinished runs hand off, or a session its runs hold. */
-function projectIssues(world: World, project: Project, issues: Issue[], oldMasterRuns: Map<string, Run[]>): Issue[] {
-  const runs = new Set(projectRuns(world.catalog, project.id).map((r) => r.id))
-  const sessions = projectMemberSessionIds(world.catalog, project.id)
-  return issues.filter((issue) => {
-    if (!issue.about) return false
-    if (issue.kind === "run-blocked" || issue.kind === "calibration-review" || issue.kind === "master-offer") return runs.has(issue.about)
-    if (issue.kind === "master-old") return (oldMasterRuns.get(issue.about) ?? []).some((r) => runs.has(r.id))
-    if (issue.kind === "drift") return sessions.has(issue.about)
-    return false
-  })
+/** A Project row's issues (F7): its own, and those of the sessions it holds (drift, a changed or missing pinned file). */
+function projectIssues(project: Project, issues: Issue[]): Issue[] {
+  const sessions = projectSessionIds(project)
+  return [...issuesFor(issues, { kind: "project", id: project.id }), ...issues.filter((i) => i.owner.kind === "session" && sessions.has(i.owner.id))]
 }
 
 /** Issues about a calibration process: its failure, or drift on the master it made. */
 function processIssues(view: ProcessView, issues: Issue[]): Issue[] {
-  return issues.filter((issue) => (issue.kind === "calibration-failed" && issue.about === view.process.id) || (issue.kind === "drift" && view.master !== null && issue.about === view.master.id))
+  return [...issuesFor(issues, { kind: "process", id: view.process.id }), ...(view.master ? issuesFor(issues, { kind: "master", id: view.master.id }) : [])]
 }
 
 /**
@@ -221,7 +166,6 @@ function processIssues(view: ProcessView, issues: Issue[]): Issue[] {
  */
 export function openWork(world: World, nowMs: number, tonight: NightDate): OpenWork[] {
   const issues = deriveIssues(world, nowMs)
-  const oldMasterRuns = new Map(oldMastersInUse(world, nowMs).map(({ master, runs }) => [master.id, runs]))
   const priorities = planningPriorities(world.catalog, tonight)
   const projects: OpenWork[] = []
   for (const project of Object.values(world.catalog.projects)) {
@@ -231,12 +175,13 @@ export function openWork(world: World, nowMs: number, tonight: NightDate): OpenW
     projects.push({
       kind: "project",
       project,
-      next: projectNext(world, project, nowMs, (p) => projectWrapUp(world.catalog, p)),
+      next: projectNext(world, project, nowMs),
       goals: { met: progress.filter((p) => p.met).length, total: progress.length },
-      openRuns: projectRuns(world.catalog, project.id).filter((r) => r.completion === "open").length,
+      sessions: project.inputs.length,
+      pending: pendingChanges(world, project).length,
       window: top?.window ?? null,
       priority: top?.priority ?? 0,
-      issues: projectIssues(world, project, issues, oldMasterRuns),
+      issues: projectIssues(project, issues),
     })
   }
   projects.sort((a, b) => (a.kind === "project" && b.kind === "project" ? a.project.name.localeCompare(b.project.name) : 0))
@@ -297,12 +242,9 @@ function rankLocation(row: LocationStatus): number {
   return 2
 }
 
-/** Where a background job's work lives: its run's current step, its Project, Calibration, or Activity. */
-export function operationLink(world: World, op: Operation): StepLink {
+/** Where a background job's work lives: Calibration, its Project, or Activity. */
+export function operationLink(op: Operation): StepLink {
   if (op.kind === "stack-master") return { to: "/calibration" }
-  const runId = op.scope.runIds?.[0]
-  const run = runId ? world.catalog.runs[runId] : undefined
-  if (run) return runStepLink(run, runPipeline(world, run).current.id)
   if (op.scope.projectId) return projectLink(op.scope.projectId)
   return { to: "/activity" }
 }

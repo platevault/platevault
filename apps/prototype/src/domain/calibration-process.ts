@@ -1,9 +1,9 @@
 /**
- * The calibration process (P-CAL3; foundation-owned). Runs are assigned
- * masters only, and raw calibration frames exist only as input to a process:
+ * The calibration process (P-CAL3; foundation-owned). A raw calibration
+ * session can become a master in structured calibration storage:
  *
  * 1. Import or indexing routes each raw calibration session into a process
- *    awaiting Stack (`routeRawCalibration`, called by `readFiles`).
+ *    awaiting Stack (`routeRawCalibration`, called by `ingestFiles`).
  * 2. Stack hands the raws to a tool profile (Siril, PixInsight) with an
  *    output folder (`stackOutputFolder`).
  * 3. Detect watches that folder for the master: IMAGETYP master of the
@@ -11,7 +11,8 @@
  *    (`findStackedMaster`).
  * 4. Import copies it into structured calibration storage, laid out per kind
  *    by the master naming templates (`masterStoragePath`).
- * 5. Register records the master with lineage to its raw session.
+ * 5. Register records the master as a new dated version (CAL-FR-14), with
+ *    lineage to its raw session; sessions still waiting are matched again.
  * 6. Raws: the raw frames go to the OS Trash, or stay when
  *    `settings.keepRawCalibration` is on.
  *
@@ -88,6 +89,7 @@ export function awaitingStackProcess(session: Session, now: IsoDateTime): Calibr
     detected: null,
     storagePath: null,
     masterId: null,
+    versionId: null,
     raws: null,
     steps: { stack: stepRecord("todo"), detect: stepRecord("todo"), import: stepRecord("todo"), register: stepRecord("todo"), raws: stepRecord("todo") },
     operationId: null,
@@ -210,7 +212,7 @@ export function calibrationStorage(catalog: Catalog): Location | null {
 
 /** Where Stack asks the tool to write: `<output parent or calibration storage>/Stacking/<process>`; the folder name is data, worded once. */
 export function stackOutputFolder(catalog: Catalog, settings: AppSettings, process: CalibrationProcess): string | null {
-  const root = settings.lastOutputParent ?? calibrationStorage(catalog)?.path ?? null
+  const root = settings.lastProcessingParent ?? calibrationStorage(catalog)?.path ?? null
   if (!root) return null
   const name = processName(m, catalog, process).replace(/ · /g, " ").replace(/[\\/:*?"<>|]/g, "-")
   return `${root}/Stacking/${name}`

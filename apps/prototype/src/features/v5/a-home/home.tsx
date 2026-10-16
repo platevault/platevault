@@ -549,8 +549,8 @@ function JobsTable({ jobs, follow }: { jobs: Operation[]; follow: Follow }) {
       columns={columns}
       getRowId={(op) => op.id}
       rowLabel={title}
-      rowActions={(op) => [{ id: "open", label: m.verb_open(), run: () => follow(operationLink(world, op)) }]}
-      onRowClick={(op) => follow(operationLink(world, op))}
+      rowActions={(op) => [{ id: "open", label: m.verb_open(), run: () => follow(operationLink(op)) }]}
+      onRowClick={(op) => follow(operationLink(op))}
       empty={m.home_nothing_running()}
     />
   )

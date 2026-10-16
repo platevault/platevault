@@ -1,73 +1,69 @@
 /**
- * Storage derivations (foundation-owned). A footprint is the bytes of a
- * run's prepared copies: it matters for Clean up only, so it is shown on the
- * run's Done step and in Wrap up. Settings › Locations shows each location's
- * disk use (P-STO2). Duplicates are byte-identical live copies; a duplicate
- * scan (`duplicate-scan`) runs by itself after each index and import, and
- * the Duplicates review lists what it found that is still live. A run view's
- * links decide what may go to the OS Trash (`linkRefusal`, P-TRASH2).
- * Nothing here writes state.
+ * Storage derivations (foundation-owned). A View's footprint is the bytes
+ * its copies hold: it matters for Apply's space check and for Clean up.
+ * Settings › Locations shows each location's disk use (P-STO2). Duplicates
+ * are byte-identical live copies; a duplicate scan (`duplicate-scan`) runs
+ * by itself after each index and import, and the Duplicates review lists
+ * what it found that is still live. The symlinks in Projects' Views decide
+ * what may go to the OS Trash (`trashBlock`, P-TRASH2). Nothing here writes
+ * state.
  */
 import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
-import { runPreparations, runStepLink, type StepLink, type World } from "./derive"
+import { projectLink, type StepLink, type World } from "./derive"
 import { isUnder } from "./indexing"
 import { type MessageRef, msg } from "@/lib/i18n"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Preparation, ResultId, Run, RunId } from "./types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Project } from "./types"
 
 export interface Footprint {
-  /** Bytes the prepared folder holds itself: a Copies view's copies; symlinks count zero. */
-  preparedBytes: number
-  /** Bytes in the Results folder. */
-  resultsBytes: number
-  /** False when the folder's volume is not mounted: the bytes are unknown and read zero. */
+  /** Bytes the View holds itself: its copies, each inode once; symlinks count zero. */
+  viewBytes: number
+  /** Bytes `View (previous)/` still holds. */
+  previousBytes: number
+  /** False when the Project folder's volume is not mounted: the bytes are unknown and read zero. */
   online: boolean
 }
 
-export function preparationFootprint(disk: Disk, preparation: Preparation): Footprint {
-  const volumeId = volumeForPath(disk, preparation.folderPath)
-  const online = Boolean(volumeId && disk.volumes[volumeId]?.mounted)
-  if (!online) return { preparedBytes: 0, resultsBytes: 0, online }
-  return {
-    preparedBytes: filesUnder(disk, preparation.folderPath).reduce((sum, f) => sum + (f.linkTarget ? 0 : f.sizeBytes), 0),
-    resultsBytes: filesUnder(disk, preparation.resultsPath).reduce((sum, f) => sum + f.sizeBytes, 0),
-    online,
+function folderBytes(disk: Disk, folder: string): number {
+  const inodes = new Set<number>()
+  let bytes = 0
+  for (const file of filesUnder(disk, folder)) {
+    if (file.linkTarget || inodes.has(file.inode)) continue
+    inodes.add(file.inode)
+    bytes += file.sizeBytes
   }
+  return bytes
 }
 
-/** A run's footprint over all its preparations: what its Clean up would free. */
-export function runFootprint(disk: Disk, catalog: Catalog, runId: RunId): Footprint {
-  return runPreparations(catalog, runId).reduce<Footprint>(
-    (sum, p) => {
-      const f = preparationFootprint(disk, p)
-      return { preparedBytes: sum.preparedBytes + f.preparedBytes, resultsBytes: sum.resultsBytes + f.resultsBytes, online: sum.online && f.online }
-    },
-    { preparedBytes: 0, resultsBytes: 0, online: true },
-  )
+/** A Project's View footprint (PREP-FR-04): what its copies and `View (previous)/` hold. */
+export function viewFootprint(disk: Disk, project: Project): Footprint {
+  const folder = project.view?.folderPath ?? null
+  if (!folder) return { viewBytes: 0, previousBytes: 0, online: true }
+  const volumeId = volumeForPath(disk, folder)
+  const online = Boolean(volumeId && disk.volumes[volumeId]?.mounted)
+  if (!online) return { viewBytes: 0, previousBytes: 0, online }
+  return { viewBytes: folderBytes(disk, folder), previousBytes: project.previous ? folderBytes(disk, project.previous.folderPath) : 0, online }
 }
 
-/** One run view's symlink to a catalogue file (P-PREP3). */
-export interface RunViewLink {
+/** One View's symlink to a catalogue original (PREP-FR-04). */
+export interface ViewLink {
   link: DiskFile
-  run: Run
-  /** In the latest view of a run that is not Complete: the file stays out of the OS Trash until that view is refreshed (P-TRASH2). */
+  project: Project
+  /** In the View of an open Project: the original stays out of the OS Trash while the View links it (P-TRASH2). A Closed Project's kept View holds nothing. */
   holds: boolean
 }
 
-/** Every run view's links, by the path each points at. */
-export type RunViewLinks = Map<string, RunViewLink[]>
+/** Every View's links, by the path each points at. */
+export type ViewLinks = Map<string, ViewLink[]>
 
-export function runViewLinks(catalog: Catalog, disk: Disk): RunViewLinks {
-  const views = Object.values(catalog.runs).flatMap((run) => {
-    const preps = runPreparations(catalog, run.id)
-    return preps.map((prep, index) => ({ folder: prep.folderPath, run, holds: run.completion !== "complete" && index === preps.length - 1 }))
-  })
-  const out: RunViewLinks = new Map()
+export function viewLinks(catalog: Catalog, disk: Disk): ViewLinks {
+  const views = Object.values(catalog.projects).flatMap((project) => (project.view ? [{ folder: project.view.folderPath, project, holds: project.state === "open" }] : []))
+  const out: ViewLinks = new Map()
   if (views.length === 0) return out
   for (const file of Object.values(disk.files)) {
     if (!file.linkTarget) continue
     const view = views.find((v) => isUnder(file.path, v.folder))
     if (!view) continue
-    const entry = { link: file, run: view.run, holds: view.holds }
+    const entry = { link: file, project: view.project, holds: view.holds }
     const list = out.get(file.linkTarget)
     if (list) list.push(entry)
     else out.set(file.linkTarget, [entry])
@@ -85,7 +81,6 @@ export interface TrashBlock {
 export interface TrashItem {
   path: string
   assetId?: AssetId
-  resultId?: ResultId
   /** Refused before the move, for example "Offline" for a folder that cannot be listed. */
   refusedReason?: MessageRef
 }
@@ -93,19 +88,19 @@ export interface TrashItem {
 /**
  * The guard every move to the OS Trash applies, in every flow and again for
  * each item as it moves: the disk's own refusal (`trashRefusal`), then the
- * run views (P-TRASH2). A file the latest view of a run that is not
- * Complete links to stays, "linked by {run}", leading to that run's
- * Prepare step; refreshing the view drops the link. Null when it may go.
+ * Views (P-TRASH2). A file an open Project's View links to stays, "linked
+ * by {Project}", leading to that Project; removing the session there and
+ * applying drops the link. Null when it may go.
  */
-export function trashBlock(disk: Disk, links: RunViewLinks, path: string): TrashBlock | null {
+export function trashBlock(disk: Disk, links: ViewLinks, path: string): TrashBlock | null {
   const reason = trashRefusal(disk, path)
   if (reason) return { reason }
-  const run = links.get(path)?.find((l) => l.holds)?.run
-  return run ? { reason: msg("domain_trash_linked_by", { name: run.name }), link: runStepLink(run, "prepare") } : null
+  const project = links.get(path)?.find((l) => l.holds)?.project
+  return project ? { reason: msg("domain_trash_linked_by", { name: project.name }), link: projectLink(project.id) } : null
 }
 
-/** Links in kept run views (a Complete run's view the user kept, a superseded revision): they leave with the paths. */
-export function keptViewLinks(links: RunViewLinks, paths: Iterable<string>): DiskFile[] {
+/** Links in kept Views (a Closed Project's View the user kept): they leave with the paths. */
+export function keptViewLinks(links: ViewLinks, paths: Iterable<string>): DiskFile[] {
   return [...new Set(paths)].flatMap((path) => (links.get(path) ?? []).filter((l) => !l.holds).map((l) => l.link))
 }
 
@@ -148,9 +143,11 @@ function isLibraryCopy(catalog: Catalog, disk: Disk, copy: AssetCopy): boolean {
 }
 
 /**
- * The copy a frame keeps (D-W74): a copy in library storage over one on a
- * capture card or elsewhere; then the one in the earliest-registered
- * location, then the copy found first. Only byte-identical copies take part.
+ * The copy a frame keeps (D-W74, D-W116): a copy in library storage over one
+ * on a capture card or elsewhere; then the one in the earliest-registered
+ * location; on a tie there, the first-catalogued copy (the first in
+ * `asset.copies`, which lists copies in the order indexing found them).
+ * Only byte-identical copies take part; nothing is removed without review.
  */
 export function keptCopy(catalog: Catalog, disk: Disk, asset: Asset): AssetCopy | null {
   return preferredCopy(catalog, disk, asset.copies.filter((c) => c.sha256 === asset.sha256))
@@ -198,12 +195,12 @@ function duplicateGroup(catalog: Catalog, disk: Disk, asset: Asset, paths?: Read
 }
 
 /**
- * The copy the review preselects to keep: the one in the earliest-registered
- * location, unless exactly one copy cannot go to the OS Trash
- * (`trashBlock`, say write permission removed or linked by a run): keeping
- * that one is the only choice that lets the others go.
+ * The copy the review preselects to keep: the frame's kept copy
+ * (`keptCopy`), unless exactly one copy cannot go to the OS Trash
+ * (`trashBlock`, say write permission removed or linked by an open
+ * Project's View): keeping that one is the only choice that lets the others go.
  */
-export function keepChoice(disk: Disk, links: RunViewLinks, group: DuplicateGroup): AssetCopy {
+export function keepChoice(disk: Disk, links: ViewLinks, group: DuplicateGroup): AssetCopy {
   const stuck = group.copies.filter((c) => trashBlock(disk, links, c.path) !== null)
   return stuck.length === 1 ? stuck[0]! : group.copies[0]!
 }

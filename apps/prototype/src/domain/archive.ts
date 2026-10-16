@@ -1,15 +1,15 @@
 /**
- * Archive plans and the Unusable-frames Trash offer (STO-FR-13, P-ARC1,
- * PRJ-FR-15, D-W43, D-W57), shared by Wrap up and Sessions. Pure: nothing
- * here writes state; the transfer itself starts in `store/actions/archive.ts`.
- * Every OS Trash refusal is the shared `trashBlock` (the disk, then run views
- * linking the file, P-TRASH2). Lifted verbatim from features/v5/b-projects/model.ts,
- * taking `World` in place of `PrototypeState` so the domain stays store-free.
+ * Archive plans and the Wrap up Trash offers (STO-FR-13, P-ARC1, PRJ-FR-15,
+ * D-W43, D-W57), shared by Wrap up and Sessions. Pure: nothing here writes
+ * state; the transfer itself starts in `store/actions/archive.ts`. Every OS
+ * Trash refusal is the shared `trashBlock` (the disk, then the Views linking
+ * the file, P-TRASH2). An Archive that moves originals a Closed Project's
+ * kept View links repoints those links and records it (D-W111).
  */
 import { fileAt, fileKey, freeBytes } from "./disk"
-import { archiveDestination, defaultArchiveLocation, liveAssetIds, projectMemberSessionIds, sessionNamingValues, type StepLink, type World } from "./derive"
+import { archiveDestination, defaultArchiveLocation, liveAssetIds, sessionNamingValues, type StepLink, type World } from "./derive"
 import { qualityApplicability } from "./library"
-import { keptCopy, keptViewLinks, runViewLinks, type RunViewLinks, type TrashBlock, trashBlock, type TrashItem } from "./storage"
+import { keptCopy, keptViewLinks, type TrashBlock, trashBlock, type TrashItem, viewLinks, type ViewLinks } from "./storage"
 import { namingTemplate, resolveNamingTemplate } from "./templates"
 import type { Asset, AssetCopy, AssetId, Catalog, Disk, Location, Operation, Project, Session, SessionId, Volume } from "./types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
@@ -60,7 +60,8 @@ function frameLabel(catalog: Catalog, asset: Asset): string {
 // Trash offers
 // ---------------------------------------------------------------------------
 
-export type OfferKind = "rejected-frames" | "intermediates" | "duplicate-copies"
+/** Wrap up's offers (PRJ-FR-14, PRJ-FR-15): Clean up's View, then Trash's rejected frames, Processing files and duplicate copies. */
+export type OfferKind = "view-cleanup" | "rejected-frames" | "processing-files" | "duplicate-copies"
 
 export interface OfferEntry {
   key: string
@@ -68,14 +69,15 @@ export interface OfferEntry {
   path: string
   detail: string | null
   sizeBytes: number
+  /** Ticked when the offer opens: Clean up ticks the View's copies and leaves its symlinks unticked (F1). */
+  preselected: boolean
 }
 
 export interface OfferRefusal {
   key: string
   label: string
   path: string | null
-  reason: MessageRef
-  /** Where the refusal can be resolved: the run whose view links the item (P-TRASH2). */
+  /** Where the refusal can be resolved: the Project whose View links the item (P-TRASH2). */
   link?: StepLink
 }
 
@@ -89,7 +91,7 @@ export interface TrashOffer {
   refusals: OfferRefusal[]
   /** What the approval hands to the OS Trash engine. */
   items: TrashItem[]
-  /** Links in kept run views that leave with the items (P-TRASH2). */
+  /** Links in kept Views that leave with the items (P-TRASH2). */
   keptLinks: number
 }
 
@@ -97,42 +99,30 @@ type OfferCount = { count: number; n: string; size: string }
 
 /** The offer's title: "Move 5 rejected frames to Trash (1.2 GB)", or its "none left" form. */
 const OFFER_TITLE: Record<OfferKind, { some: (count: OfferCount) => string; none: () => string }> = {
+  "view-cleanup": { some: (c) => m.wrapup_offer_view(c), none: () => m.wrapup_offer_view_none() },
   "rejected-frames": { some: (c) => m.wrapup_offer_rejected(c), none: () => m.wrapup_offer_rejected_none() },
-  intermediates: { some: (c) => m.wrapup_offer_intermediates(c), none: () => m.wrapup_offer_intermediates_none() },
+  "processing-files": { some: (c) => m.wrapup_offer_processing(c), none: () => m.wrapup_offer_processing_none() },
   "duplicate-copies": { some: (c) => m.wrapup_offer_duplicates(c), none: () => m.wrapup_offer_duplicates_none() },
 }
 
-/** A Trash offer of `kind` over its entries and items: its title, the bytes it reclaims and the kept-view links that leave with it. */
-export function trashOffer(kind: OfferKind, disk: Disk, links: RunViewLinks, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
+/** A Trash offer of `kind` over its entries and items: its title, the bytes it reclaims and the kept-View links that leave with it. */
+export function trashOffer(kind: OfferKind, disk: Disk, links: ViewLinks, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
   const paths = items.map((i) => i.path)
   const sizeBytes = reclaimBytes(disk, paths)
   const title = entries.length === 0 ? OFFER_TITLE[kind].none() : OFFER_TITLE[kind].some({ count: entries.length, n: formatCount(entries.length), size: formatBytes(sizeBytes) })
   return { kind, title, count: entries.length, sizeBytes, entries, refusals, items, keptLinks: keptViewLinks(links, paths).length }
 }
 
-/** Frames recorded as inputs of a Result: the prepared revision a tool-recorded Result came from. */
-function resultInputs(catalog: Catalog): Map<AssetId, string> {
-  const out = new Map<AssetId, string>()
-  for (const result of Object.values(catalog.results)) {
-    if (result.trashed || result.lineage !== "tool-recorded" || !result.runId) continue
-    const prep = Object.values(catalog.preparations).find((p) => p.runId === result.runId && p.prepRevision === result.fromPrepRevision)
-    const name = result.path.split("/").at(-1) ?? result.path
-    for (const id of prep?.preparedAssetIds ?? []) if (!out.has(id)) out.set(id, name)
-  }
-  return out
-}
-
 /**
  * "Move N Unusable frames to Trash" (D-W43, PRJ-FR-15, round 6): of the
  * given frames, those whose applicable library quality is Unusable.
- * Project-only rejects, ChangedContent and Trashed frames never enter. Every
- * copy moves, and one refused copy refuses the frame (D-W57). Wrap up offers
- * the Project's frames; Sessions' Unusable filter offers any.
+ * ChangedContent and Trashed frames never enter. Every copy moves, and one
+ * refused copy refuses the frame (D-W57). Wrap up offers the Project's
+ * frames; Sessions' Unusable filter offers any.
  */
 export function unusableFramesOffer(state: Pick<World, "catalog" | "disk" | "operations">, assetIds: Iterable<AssetId>): TrashOffer {
   const { catalog, disk } = state
-  const links = runViewLinks(catalog, disk)
-  const inputs = resultInputs(catalog)
+  const links = viewLinks(catalog, disk)
   const moving = sessionsInTransfer(state.operations)
   const entries: OfferEntry[] = []
   const refusals: OfferRefusal[] = []
@@ -145,11 +135,6 @@ export function unusableFramesOffer(state: Pick<World, "catalog" | "disk" | "ope
     const label = asset.fileName
     const path = asset.copies[0]?.path ?? ""
     const refuse = (block: TrashBlock) => refusals.push({ key: id, label, path, ...block })
-    const input = inputs.get(id)
-    if (input) {
-      refuse({ reason: msg("wrapup_refusal_result_input", { name: input }) })
-      continue
-    }
     if (asset.sessionId && moving.has(asset.sessionId)) {
       refuse({ reason: msg("wrapup_refusal_archive_moving") })
       continue
@@ -170,6 +155,7 @@ export function unusableFramesOffer(state: Pick<World, "catalog" | "disk" | "ope
       path,
       detail: asset.copies.length > 1 ? `${frameLabel(catalog, asset)} · ${m.wrapup_copies({ count: asset.copies.length })}` : frameLabel(catalog, asset),
       sizeBytes: asset.sizeBytes,
+      preselected: true,
     })
     for (const copy of asset.copies) items.push({ path: copy.path, assetId: id })
   }
@@ -206,7 +192,7 @@ export interface ArchivePlan {
   volume: Volume | null
   freeBytes: number
   rows: ArchiveRow[]
-  /** Kept because a run in another Project not marked Done uses them (D-W46). */
+  /** Kept because another open Project holds them (D-W46, STO-FR-13); a suggestion does not count. */
   kept: Array<{ session: Session; projects: string[] }>
   refused: Array<{ session: Session; reason: MessageRef }>
   sizeBytes: number
@@ -231,7 +217,7 @@ function sourceCopy(catalog: Catalog, disk: Disk, asset: Asset): AssetCopy | nul
   return keptCopy(catalog, disk, asset) ?? asset.copies[0] ?? null
 }
 
-/** Checks shared by archive and restore: the source is readable and nothing else sits at the destination. */
+/** Checks before a move: the source is readable and nothing else sits at the destination. */
 function moveRefusal(state: World, move: ArchiveMove): MessageRef | null {
   const source = state.disk.volumes[move.from.volumeId]
   if (!source?.mounted) return msg("run_cleanup_volume_offline", { name: source?.name ?? msg("wrapup_its_volume") })
@@ -289,22 +275,22 @@ export function sessionsArchivePlan(state: World, sessions: Session[]): ArchiveP
 }
 
 /**
- * Archive of a Project at Wrap up (STO-FR-13, P-ARC1): its member sessions
- * transfer to the chosen archive location (the Project's own, else the
- * Default) along the naming template. A session that a run in another
- * Project not marked Done uses stays and is listed as kept (D-W46); being
- * another Project's candidate does not count.
+ * Archive of a Project at Wrap up (STO-FR-13, P-ARC1): the sessions it
+ * holds transfer to the chosen archive location (the Project's own, else
+ * the Default) along the naming template. A session another open Project
+ * holds stays and is listed as kept (D-W46); being another Project's
+ * suggestion does not count, nor being held by a Closed one.
  */
 export function archivePlan(state: World, project: Project, destinationId?: string | null): ArchivePlan {
   const { catalog } = state
   const archived = new Set(project.archive?.sessionIds ?? [])
   const usedElsewhere = new Map<SessionId, string[]>()
   for (const other of Object.values(catalog.projects)) {
-    if (other.id === project.id || other.state === "done") continue
-    for (const id of projectMemberSessionIds(catalog, other.id)) usedElsewhere.set(id, [...(usedElsewhere.get(id) ?? []), other.name])
+    if (other.id === project.id || other.state !== "open") continue
+    for (const input of other.inputs) usedElsewhere.set(input.sessionId, [...(usedElsewhere.get(input.sessionId) ?? []), other.name])
   }
-  const members = [...projectMemberSessionIds(catalog, project.id)]
-    .map((id) => catalog.sessions[id])
+  const members = project.inputs
+    .map((input) => catalog.sessions[input.sessionId])
     .filter((s): s is Session => s !== undefined && !archived.has(s.id))
     .sort((a, b) => a.night.localeCompare(b.night))
   const kept = members.filter((s) => usedElsewhere.has(s.id)).map((session) => ({ session, projects: usedElsewhere.get(session.id)! }))
@@ -318,28 +304,4 @@ export function archivePlan(state: World, project: Project, destinationId?: stri
     destination ? null : msg("wrapup_no_archive_location"),
   )
   return { ...plan, kept }
-}
-
-/** Where each archived frame came from, recorded by the archive transfer so Restore puts it back. */
-export type ArchiveOrigins = Record<AssetId, CopyRef>
-
-/**
- * Restore archived sessions of a Reopened Project (D-W69, STO-AC-22): a
- * reviewed transfer back to where Archive found them; a frame without a
- * recorded origin goes to the first Captures location along the template.
- */
-export function restorePlan(state: World, project: Project, origins: ArchiveOrigins, sessionIds: SessionId[]): ArchivePlan {
-  const { catalog } = state
-  const captures = Object.values(catalog.locations).find((l) => l.role === "captures" && !l.retiredAt) ?? null
-  const sessions = sessionIds.map((id) => catalog.sessions[id]).filter((s): s is Session => s !== undefined && (project.archive?.sessionIds ?? []).includes(s.id))
-  const plan = planOver(
-    state,
-    sessions,
-    (session, asset) =>
-      origins[asset.id] ?? (captures ? { locationId: captures.id, volumeId: captures.volumeId, path: joinPath(templatedFolder(state, captures.path, session), asset.fileName) } : null),
-    captures,
-    null,
-  )
-  // Restore writes back to each origin's own volume; the free-space check above uses the Captures fallback only.
-  return { ...plan, kept: [], blocked: plan.rows.length === 0 && plan.refused.length === 0 ? msg("project_nothing_to_restore") : null }
 }

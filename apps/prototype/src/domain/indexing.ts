@@ -5,17 +5,22 @@
  *
  * Used by the demo seed (synchronously) and by the "index" operation
  * (progressively, a batch per tick), so both produce identical catalogs.
- * Raw calibration sessions are routed into a calibration process awaiting
- * Stack (P-CAL3, `routeRawCalibration`); masters in a Calibration location are
- * library masters.
+ * Intake splits a night's frames into sessions by capture key and framing
+ * (D-W107), and every ingestion matches calibration on the light sessions
+ * still waiting (`ingestFiles`, CAL-FR-02). Raw calibration sessions are
+ * routed into a calibration process awaiting Stack (P-CAL3,
+ * `routeRawCalibration`); masters in a Calibration location become dated
+ * versions of library masters (CAL-FR-14).
  */
 import { formatDegrees } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
+import { calibrateSessions, emptyCalibration, factsOf, masterRecordKey } from "./calibration"
 import { routeRawCalibration } from "./calibration-process"
 import { correctedExposureS } from "./corrections"
 import { isRetiredAsset } from "./library"
 import { angularSeparationDeg, BUNDLED_CATALOGUE, bundledEntryFor, normalizeName, targetFromEntry } from "./sky"
 import type {
+  AppSettings,
   Asset,
   AssetCopy,
   AssetId,
@@ -29,8 +34,13 @@ import type {
   FrameHeader,
   IsoDateTime,
   Location,
+  MasterVersion,
+  MatchingSettings,
+  NightDate,
   OpticalTrain,
   OpticalTrainId,
+  RigVersion,
+  RigVersionId,
   Session,
   SessionId,
   Target,
@@ -259,19 +269,21 @@ function findOrDetectCamera(catalog: Catalog, header: NonNullable<DiskFile["head
     heightPx: header.heightPx * header.binning,
     pixelSizeUm: header.pixelSizeUm ?? 0,
     kind: header.bayerPattern !== null ? "osc" : "mono",
+    physicalAlias: null,
+    noDarks: false,
+    noBias: false,
   }
   catalog.cameras[camera.id] = camera
   return camera
 }
 
-function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): OpticalTrain {
-  const existing = Object.values(catalog.opticalTrains).find(
-    (t) => t.cameraId === camera.id && t.telescopeId === telescope.id,
-  )
+function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope, night: NightDate): OpticalTrain {
+  const existing = Object.values(catalog.opticalTrains).find((t) => t.cameraId === camera.id && t.telescopeId === telescope.id)
   if (existing) return existing
   // Trains created from headers stay "detected" until Confirm equipment promotes them (D11).
+  const id = `otr_${stableHash(`${camera.id}|${telescope.id}`)}`
   const train: OpticalTrain = {
-    id: `otr_${stableHash(`${camera.id}|${telescope.id}`)}`,
+    id,
     name: `${telescope.name} / ${camera.name}`,
     source: "detected",
     cameraId: camera.id,
@@ -279,9 +291,69 @@ function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): Optic
     effectiveFocalLengthMm: telescope.focalLengthMm,
     notes: "",
     filterIds: [],
+    rotator: false,
+    versionId: `rv_${stableHash(`${id}|1`)}`,
+    versionFrom: night,
+    history: [],
   }
   catalog.opticalTrains[train.id] = train
   return train
+}
+
+// ---------------------------------------------------------------------------
+// Rig versions (PLAN-EQ-FR-07, LIB-FR-26)
+// ---------------------------------------------------------------------------
+
+/** The rig's current version as a record: its top-level optics. */
+export function currentRigVersion(rig: OpticalTrain): RigVersion {
+  return {
+    id: rig.versionId,
+    from: rig.versionFrom,
+    cameraId: rig.cameraId,
+    telescopeId: rig.telescopeId,
+    reducerId: rig.reducerId ?? null,
+    effectiveFocalLengthMm: rig.effectiveFocalLengthMm,
+    filterIds: rig.filterIds,
+    rotator: rig.rotator,
+  }
+}
+
+/** Every version of the rig, oldest first. */
+export function rigVersions(rig: OpticalTrain): RigVersion[] {
+  return [...rig.history, currentRigVersion(rig)]
+}
+
+/** The version in effect on a night: the newest that started on or before it, else the oldest. */
+export function rigVersionAt(rig: OpticalTrain, night: NightDate): RigVersion {
+  const versions = rigVersions(rig)
+  return [...versions].reverse().find((v) => v.from <= night) ?? versions[0]!
+}
+
+/** A version by id, current or earlier. */
+export function rigVersionById(rig: OpticalTrain, versionId: RigVersionId): RigVersion | undefined {
+  return rigVersions(rig).find((v) => v.id === versionId)
+}
+
+/**
+ * The rig and version a session was captured with (LIB-FR-26): its settled
+ * rig and recorded version, or the version in effect on its night while it
+ * has none recorded. Null without a settled rig.
+ */
+export function sessionRigVersion(catalog: Catalog, session: Session): { rigId: OpticalTrainId; version: RigVersion } | null {
+  const settled = session.equipment.status === "confirmed" || session.equipment.status === "associated"
+  const rig = settled && session.equipment.value ? catalog.opticalTrains[session.equipment.value] : undefined
+  if (!rig) return null
+  const recorded = session.rigVersionId ? rigVersionById(rig, session.rigVersionId) : undefined
+  return { rigId: rig.id, version: recorded ?? rigVersionAt(rig, session.night) }
+}
+
+/** The version a session records once its rig settles: kept while the rig stays the same, so a later rig edit never remaps it. */
+export function capturedRigVersionId(catalog: Catalog, session: Session): RigVersionId | null {
+  const settled = session.equipment.status === "confirmed" || session.equipment.status === "associated"
+  const rig = settled && session.equipment.value ? catalog.opticalTrains[session.equipment.value] : undefined
+  if (!rig) return null
+  if (session.rigVersionId && rigVersionById(rig, session.rigVersionId)) return session.rigVersionId
+  return rigVersionAt(rig, session.night).id
 }
 
 /** A header value as data, or "Missing" when the header lacks it. */
@@ -314,7 +386,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     ? telescopes.find((t) => matchesName(header.telescope!, [t.name, ...t.aliases]))
     : undefined
   if (named) {
-    const train = trainFor(catalog, camera, named)
+    const train = trainFor(catalog, camera, named, nightOf(header.dateObs))
     evidence.push({ source: "equipment-record", label: trainLabel, value: verbatim(train.name), agrees: true })
     return { value: train.id, status: "associated", evidence, confirmedAt: null }
   }
@@ -322,7 +394,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     ? telescopes.find((t) => Math.abs(t.focalLengthMm - header.focalLengthMm!) / t.focalLengthMm < 0.02)
     : undefined
   if (byFocal) {
-    const train = trainFor(catalog, camera, byFocal)
+    const train = trainFor(catalog, camera, byFocal, nightOf(header.dateObs))
     const telescopeEvidence = evidence[1]!
     telescopeEvidence.agrees = false
     evidence.push({ source: "equipment-record", label: trainLabel, value: msg("indexing_train_focal_match", { name: train.name }), agrees: null })
@@ -338,7 +410,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
       apertureMm: null,
     }
     catalog.telescopes[telescope.id] = telescope
-    const train = trainFor(catalog, camera, telescope)
+    const train = trainFor(catalog, camera, telescope, nightOf(header.dateObs))
     evidence.push({ source: "equipment-record", label: trainLabel, value: msg("indexing_train_detected", { name: train.name }), agrees: true })
     return { value: train.id, status: "associated", evidence, confirmedAt: null }
   }
@@ -376,6 +448,7 @@ function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): S
   }
   if (session.target.status !== "confirmed") next.target = associateTarget(catalog, next, now)
   if (session.equipment.status !== "confirmed") next.equipment = associateEquipment(catalog, first.observed)
+  next.rigVersionId = capturedRigVersionId(catalog, next.equipment.value === session.equipment.value ? next : { ...next, rigVersionId: null })
   return next
 }
 
@@ -397,6 +470,154 @@ function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Ass
   return sameBytes
 }
 
+// ---------------------------------------------------------------------------
+// Framing (D-W107, LIB-FR-04)
+// ---------------------------------------------------------------------------
+
+/** Where a frame points: its centre, ROTATANG and the field its rig sees (the larger side, degrees). */
+export interface Framing {
+  ra: number
+  dec: number
+  rotationDeg: number | null
+  fieldDeg: number | null
+}
+
+/** The framing a header records; null without RA/DEC. */
+export function framingOf(h: FrameHeader): Framing | null {
+  if (h.ra === null || h.dec === null) return null
+  const fieldDeg = h.focalLengthMm && h.pixelSizeUm ? (((Math.max(h.widthPx, h.heightPx) * h.pixelSizeUm) / 1000 / h.focalLengthMm) * 180) / Math.PI : null
+  return { ra: h.ra, dec: h.dec, rotationDeg: h.rotationDeg, fieldDeg }
+}
+
+/**
+ * The same framing (D-W107, PRJ-FR-31): the centres within `centrePct` of
+ * the field and ROTATANG within `rotationDeg`, a meridian flip (180°)
+ * counting as the same. Missing pointing or field evidence never splits
+ * (provisional, LIB-FR-04).
+ */
+export function sameFraming(a: Framing | null, b: Framing | null, margins: Pick<MatchingSettings["framing"], "centrePct" | "rotationDeg">): boolean {
+  if (!a || !b) return true
+  const field = a.fieldDeg ?? b.fieldDeg
+  if (field !== null && angularSeparationDeg(a.ra, a.dec, b.ra, b.dec) > (field * margins.centrePct) / 100) return false
+  if (a.rotationDeg !== null && b.rotationDeg !== null) {
+    const d = Math.abs(a.rotationDeg - b.rotationDeg) % 180
+    if (Math.min(d, 180 - d) > margins.rotationDeg) return false
+  }
+  return true
+}
+
+/**
+ * Frames of one capture key split by framing, in arrival order: each frame
+ * joins the first framing whose first frame it matches, else starts the
+ * next ("framing 2"). Import review previews the same split (LIB-AC-31).
+ */
+export function splitByFraming<T>(items: T[], framing: (item: T) => Framing | null, margins: Pick<MatchingSettings["framing"], "centrePct" | "rotationDeg">): T[][] {
+  const groups: Array<{ anchor: Framing | null; items: T[] }> = []
+  for (const item of items) {
+    const f = framing(item)
+    const group = groups.find((g) => sameFraming(g.anchor, f, margins))
+    if (group) {
+      group.items.push(item)
+      group.anchor ??= f
+    } else groups.push({ anchor: f, items: [item] })
+  }
+  return groups.map((g) => g.items)
+}
+
+/** A session's framing: its mean pointing and rotation, with its first frame's field. */
+export function sessionFraming(catalog: Catalog, session: Session): Framing | null {
+  if (!session.pointing) return null
+  const first = session.assetIds.map((id) => catalog.assets[id]).find((a) => a !== undefined)
+  return { ra: session.pointing.ra, dec: session.pointing.dec, rotationDeg: session.pointing.rotationDeg, fieldDeg: first ? (framingOf(first.observed)?.fieldDeg ?? null) : null }
+}
+
+// ---------------------------------------------------------------------------
+// Library masters (CAL-FR-14)
+// ---------------------------------------------------------------------------
+
+/**
+ * A master file in a Calibration location joins the library (CAL-FR-14): a
+ * new dated version of the master whose settings it matches, else a new
+ * master record. Generated masters found elsewhere stay candidates until
+ * adopted (CAL-FR-06).
+ */
+function addLibraryMaster(catalog: Catalog, file: DiskFile, header: FrameHeader): void {
+  const kind = header.imageType.slice("master-".length) as CalibrationKind
+  if (Object.values(catalog.masters).some((m) => m.versions.some((v) => v.path === file.path))) return
+  const facts = factsOf(file, kind)
+  const version: MasterVersion = {
+    id: `mv_${stableHash(file.path)}`,
+    path: file.path,
+    sha256: file.sha256,
+    capturedAt: header.dateObs,
+    frameCount: header.ncombine,
+    origin: { kind: "library", projectId: null, sourcePath: file.path, sessionId: null },
+    adoption: null,
+  }
+  const record = Object.values(catalog.masters).find((m) => !m.hiddenAt && m.state === "adopted" && masterRecordKey(m) === masterRecordKey(facts))
+  if (record) {
+    catalog.masters[record.id] = { ...record, versions: [...record.versions, version].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt)) }
+    return
+  }
+  const train = kind === "flat" ? associateEquipment(catalog, header) : null
+  const rig = train?.status === "associated" && train.value ? catalog.opticalTrains[train.value] : undefined
+  const id = `mst_${stableHash(file.path)}`
+  catalog.masters[id] = {
+    id,
+    kind,
+    cameraName: header.instrument,
+    cameraId: null,
+    widthPx: header.widthPx,
+    heightPx: header.heightPx,
+    binning: header.binning,
+    gain: header.gain,
+    offset: header.offset,
+    exposureS: kind === "dark" || kind === "dark-flat" ? header.exposureS : null,
+    channel: header.filter,
+    opticalTrainId: rig?.id ?? null,
+    rigVersionId: rig ? rigVersionAt(rig, nightOf(header.dateObs)).id : null,
+    ccdTempC: header.ccdTempC,
+    rotationDeg: kind === "flat" ? header.rotationDeg : null,
+    versions: [version],
+    state: "adopted",
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reading files
+// ---------------------------------------------------------------------------
+
+function newSession(id: SessionId, header: FrameHeader, framing: number): Session {
+  return {
+    id,
+    revision: 1,
+    night: nightOf(header.dateObs),
+    imageType: header.imageType,
+    channel: header.filter,
+    exposureS: header.exposureS,
+    binning: header.binning,
+    gain: header.gain,
+    offset: header.offset,
+    ccdTempC: header.ccdTempC,
+    cameraName: header.instrument,
+    telescopeName: header.telescope,
+    assetIds: [],
+    startedAt: header.dateObs,
+    endedAt: header.dateObs,
+    objectLabel: header.object,
+    pointing: null,
+    target: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
+    equipment: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
+    corrections: [],
+    previousSessionIds: [],
+    supersededBy: null,
+    scope: "provisional",
+    framing,
+    rigVersionId: null,
+    calibration: header.imageType === "light" ? emptyCalibration() : null,
+  }
+}
+
 /**
  * Read a batch of files of one location into the catalog. Existing assets
  * keep their identity, session and decisions; changed bytes update the
@@ -405,10 +626,13 @@ function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Ass
  * When one copy's bytes change while another copy keeps the recorded bytes,
  * the asset keeps its identity and the pair reads as conflicting copies
  * (LIB-AC-15): both stay registered and neither is used in place of the
- * other until their bytes agree again (D19).
- * Returns a new catalog object (collections are shallow-copied).
+ * other until their bytes agree again (D19). New light frames join the
+ * session of their capture key and framing: a frame outside every framing
+ * of its key starts the next one (D-W107).
+ * Returns a new catalog object (collections are shallow-copied). Every
+ * ingestion goes through `ingestFiles`, which matches calibration after it.
  */
-export function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime): Catalog {
+function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime, margins: MatchingSettings["framing"]): Catalog {
   const catalog: Catalog = {
     ...source,
     assets: { ...source.assets },
@@ -419,7 +643,8 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     opticalTrains: { ...source.opticalTrains },
     masters: { ...source.masters },
   }
-  const keyToSession = new Map<string, SessionId>()
+  /** Live sessions by capture key, with the framing a new frame is compared against. */
+  const keyToSessions = new Map<string, Array<{ id: SessionId; framing: Framing | null }>>()
   const takenSessionIds = new Set<SessionId>()
   for (const session of Object.values(catalog.sessions)) {
     // A session whose frames are all retired never absorbs new files (D11).
@@ -429,7 +654,10 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         const asset = catalog.assets[id]
         return asset !== undefined && isRetiredAsset(catalog, asset)
       })
-    if (!session.supersededBy && !retired) keyToSession.set(sessionKeyOf(session), session.id)
+    if (!session.supersededBy && !retired) {
+      const key = sessionKeyOf(session)
+      keyToSessions.set(key, [...(keyToSessions.get(key) ?? []), { id: session.id, framing: sessionFraming(catalog, session) }].sort((a, b) => catalog.sessions[a.id]!.framing - catalog.sessions[b.id]!.framing))
+    }
     takenSessionIds.add(session.id)
     for (const previous of session.previousSessionIds) takenSessionIds.add(previous)
     if (session.supersededBy) takenSessionIds.add(session.supersededBy)
@@ -460,66 +688,20 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     const pathId = assetIdForPath(file.path)
     const id = catalog.assets[pathId] ? assetIdForPath(`${location.id}|${file.path}`) : pathId
     const isMaster = header.imageType.startsWith("master-")
-    if (isMaster && location.role === "calibration") {
-      // Masters stored in a Calibration location are library masters.
-      // Generated masters found elsewhere stay candidates until adopted (CAL-FR-06).
-      const masterId = `mst_${stableHash(file.path)}`
-      const kind = header.imageType.slice("master-".length) as CalibrationKind
-      const train = kind === "flat" ? associateEquipment(catalog, header) : null
-      catalog.masters[masterId] = {
-        id: masterId,
-        kind,
-        path: file.path,
-        cameraName: header.instrument,
-        widthPx: header.widthPx,
-        heightPx: header.heightPx,
-        binning: header.binning,
-        gain: header.gain,
-        offset: header.offset,
-        exposureS: kind === "dark" || kind === "dark-flat" ? header.exposureS : null,
-        channel: header.filter,
-        opticalTrainId: train?.status === "associated" ? train.value : null,
-        ccdTempC: header.ccdTempC,
-        frameCount: header.ncombine,
-        createdAt: header.dateObs,
-        state: "adopted",
-        origin: { kind: "library", runId: null, sourcePath: file.path, sessionId: null },
-        adoption: null,
+    if (isMaster && location.role === "calibration") addLibraryMaster(catalog, file, header)
+    let sessionId: SessionId | undefined
+    if (!isMaster) {
+      const key = sessionGroupingKey(header)
+      const framing = header.imageType === "light" ? framingOf(header) : null
+      const sessions = keyToSessions.get(key) ?? []
+      sessionId = sessions.find((s) => sameFraming(s.framing, framing, margins))?.id
+      if (!sessionId) {
+        const n = sessions.length + 1
+        sessionId = freshSessionId(n === 1 ? key : `${key}|framing ${n}`, takenSessionIds)
+        takenSessionIds.add(sessionId)
+        keyToSessions.set(key, [...sessions, { id: sessionId, framing }])
+        catalog.sessions[sessionId] = newSession(sessionId, header, n)
       }
-    }
-    const key = sessionGroupingKey(header)
-    let sessionId = isMaster ? undefined : keyToSession.get(key)
-    if (!sessionId && !isMaster) {
-      sessionId = freshSessionId(key, takenSessionIds)
-      takenSessionIds.add(sessionId)
-      keyToSession.set(key, sessionId)
-      catalog.sessions[sessionId] = {
-        id: sessionId,
-        revision: 1,
-        night: nightOf(header.dateObs),
-        imageType: header.imageType,
-        channel: header.filter,
-        exposureS: header.exposureS,
-        binning: header.binning,
-        gain: header.gain,
-        offset: header.offset,
-        ccdTempC: header.ccdTempC,
-        cameraName: header.instrument,
-        telescopeName: header.telescope,
-        assetIds: [],
-        startedAt: header.dateObs,
-        endedAt: header.dateObs,
-        objectLabel: header.object,
-        pointing: null,
-        target: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
-        equipment: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
-        corrections: [],
-        previousSessionIds: [],
-        supersededBy: null,
-        scope: "provisional",
-      }
-    }
-    if (sessionId) {
       const session = catalog.sessions[sessionId]!
       catalog.sessions[sessionId] = { ...session, assetIds: [...session.assetIds, id] }
       touched.add(sessionId)
@@ -541,6 +723,16 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
   for (const sessionId of touched) catalog.sessions[sessionId] = rebuildSession(catalog, catalog.sessions[sessionId]!, now)
   catalog.calibrationProcesses = routeRawCalibration(catalog, touched, now)
   return catalog
+}
+
+/**
+ * Ingestion (LIB-FR-23, CAL-FR-02): read a batch of files of one location
+ * into the catalog, then match calibration for every light session still
+ * waiting, so later calibration fills what waits and never replaces a pin.
+ * Indexing, Import and a calibration process's Register all go through here.
+ */
+export function ingestFiles(source: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, location: Location, files: DiskFile[], now: IsoDateTime): Catalog {
+  return calibrateSessions(readFiles(source, location, files, now, settings.matching.framing), disk, settings, now)
 }
 
 /**
@@ -630,15 +822,15 @@ export function settleLocationScan(
   return catalog
 }
 
-/** Synchronous full index of the given locations (seed construction). */
-export function indexLocationsSync(source: Catalog, disk: Disk, locationIds: string[], now: IsoDateTime): Catalog {
+/** Synchronous full index of the given locations (seed construction), through the same ingestion as the index operation. */
+export function indexLocationsSync(source: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, locationIds: string[], now: IsoDateTime): Catalog {
   let catalog = source
   for (const locationId of locationIds) {
     const location = catalog.locations[locationId]
     if (!location) continue
     const listing = listLocation(disk, location)
     if (listing.offline) continue
-    catalog = readFiles(catalog, location, listing.readable, now)
+    catalog = ingestFiles(catalog, disk, settings, location, listing.readable, now)
     catalog = settleLocationScan(catalog, disk, locationId, new Set(listing.readable.map((f) => f.path)), now)
   }
   return catalog
