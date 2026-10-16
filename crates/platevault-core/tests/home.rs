@@ -103,7 +103,14 @@ async fn top_line_counts_match_session_filters() {
     let indexed = indexed().await;
     let catalog = indexed.library.catalog();
     let counts = catalog.session_filter_counts().await.unwrap();
-    assert_eq!(counts, SessionFilterCounts { needs_target: 3, not_in_any_project: 2 });
+    let query =
+        SessionQuery { filter: Some(SessionFilter::NeedsCalibration), ..SessionQuery::default() };
+    let needs_calibration = catalog.list_sessions(&query).await.unwrap().len() as u64;
+    assert!(needs_calibration > 0, "no calibration was ingested, so sessions wait for it");
+    assert_eq!(
+        counts,
+        SessionFilterCounts { needs_target: 3, not_in_any_project: 2, needs_calibration }
+    );
     let home = dashboard(&indexed.library, false).await;
     assert_eq!(home.top_line, counts);
     for (filter, rows, expected) in [

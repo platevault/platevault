@@ -15,8 +15,8 @@ use crate::{
     AdoptionDestination, AdoptionOperation, AdoptionReview, AdoptionSource, AdoptionState,
     CalibrationAssignment, CalibrationHandoff, CalibrationPlan, CalibrationPolicy,
     CalibrationReadiness, CalibrationViewPlan, CandidateRef, CustodyFact, DecisionItem,
-    ExpectedSession, GroupCalibrationReadiness, InputKind, LibraryError,
-    ProjectCalibrationEvidence, Requirement, RequirementKey, Revision,
+    ExpectedSession, GroupCalibrationReadiness, InputKind, InputRef, LibraryError,
+    ProjectCalibrationEvidence, Requirement, RequirementKey, Revision, SessionCalibration,
 };
 
 impl Library {
@@ -270,5 +270,50 @@ impl Library {
     /// See [`persistence_library::Catalog::calibration_custody_facts`].
     pub async fn calibration_custody_facts(&self) -> Result<Vec<CustodyFact>, LibraryError> {
         self.catalog().calibration_custody_facts(&Rules).await
+    }
+
+    /// Match the calibration of every session whose matching is pending
+    /// (LIB-FR-23 to LIB-FR-25): the library calls this after each scan and
+    /// import commit and when it opens, and the shell after a rig
+    /// confirmation. Frames a match binds are hashed with the disk probe.
+    ///
+    /// # Errors
+    /// See [`persistence_library::Catalog::match_pending_calibration`].
+    pub async fn match_pending_calibration(&self) -> Result<Vec<Uuid>, LibraryError> {
+        self.catalog().match_pending_calibration(&Rules, InventoryProbe::default()).await
+    }
+
+    /// Matching after a commit. Import and scans never wait on calibration
+    /// (LIB-FR-24): a failure leaves the sessions pending for the next
+    /// commit or start, and is logged rather than failing the commit's
+    /// caller.
+    pub(crate) async fn match_calibration_after_commit(&self) {
+        if let Err(error) = self.match_pending_calibration().await {
+            tracing::warn!(%error, "calibration matching failed; the sessions stay pending");
+        }
+    }
+
+    /// Reassign a session's calibration kind to a raw set or master the
+    /// user picked, checked against the session with the calibration rules.
+    ///
+    /// # Errors
+    /// See [`persistence_library::Catalog::reassign_calibration`].
+    pub async fn reassign_calibration(
+        &self,
+        session_id: Uuid,
+        kind: InputKind,
+        input: InputRef,
+        expected: Revision,
+    ) -> Result<SessionCalibration, LibraryError> {
+        self.catalog()
+            .reassign_calibration(
+                session_id,
+                kind,
+                input,
+                expected,
+                &Rules,
+                InventoryProbe::default(),
+            )
+            .await
     }
 }

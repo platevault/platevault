@@ -134,10 +134,12 @@ impl F4 {
     }
 
     async fn settle(&mut self) {
+        // Ingestion recorded the light session's calibration (CAL); the test
+        // settles it by hand.
         ok(
             &mut self.conn,
             "INSERT INTO session_calibration (session_id, generation, matching_pending, updated_at) \
-             VALUES (?1, 1, 0, ?2)",
+             VALUES (?1, 1, 0, ?2) ON CONFLICT (session_id) DO UPDATE SET matching_pending = 0",
             &[&self.session, AT],
         )
         .await;
@@ -331,7 +333,7 @@ async fn the_admission_contract_reports_readiness_calibration_and_basis() {
     let admission = catalog.session_admission(session).await.unwrap();
     assert_eq!(admission.intake.readiness(), SessionReadiness::NeedsReview);
     assert_eq!(admission.intake.unreviewed_frames, 2);
-    assert_eq!(admission.calibration.generation, 0, "no calibration record yet");
+    assert_eq!(admission.calibration.generation, 1, "ingestion recorded it, every kind unresolved");
     assert_eq!(
         admission.blockers,
         [
@@ -350,7 +352,10 @@ async fn the_admission_contract_reports_readiness_calibration_and_basis() {
     assert_eq!(admission.blockers, Vec::<AdmissionBlocker>::new());
     assert!(matches!(admission.calibration.bias, PinState::Declined { .. }));
     let basis = catalog.check_admission(project, group, session, None).await.unwrap();
-    assert_eq!(basis.calibration_generation, 4, "every kind change advanced the generation");
+    assert_eq!(
+        basis.calibration_generation, 5,
+        "the pending flag and every kind change advanced the generation"
+    );
     let same = catalog.check_admission(project, group, session, Some(&basis)).await.unwrap();
     assert_eq!(same, basis);
     let stale = AdmissionBasis { calibration_generation: 1, ..basis };
@@ -731,13 +736,15 @@ async fn entry_names_are_reserved_for_life() {
 #[tokio::test]
 async fn a_calibration_record_holds_every_kind_and_pins_agree_with_their_columns() {
     let mut f4 = F4::new().await;
-    ok(
-        &mut f4.conn,
-        "INSERT INTO session_calibration (session_id, generation, matching_pending, updated_at) \
-         VALUES (?1, 1, 1, ?2)",
-        &[&f4.session, AT],
+    // Ingestion recorded the light session with matching pending (CAL).
+    let recorded: (i64, i64) = sqlx::query_as(
+        "SELECT generation, matching_pending FROM session_calibration WHERE session_id = ?1",
     )
-    .await;
+    .bind(&f4.session)
+    .fetch_one(&mut f4.conn)
+    .await
+    .unwrap();
+    assert_eq!(recorded, (1, 1));
     let kinds: Vec<String> = sqlx::query_scalar(
         "SELECT kind FROM session_calibration_kinds WHERE session_id = ?1 AND state = 'unresolved' \
          ORDER BY kind",

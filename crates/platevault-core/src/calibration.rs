@@ -18,12 +18,14 @@ use time::macros::format_description;
 use time::Date;
 
 use crate::{
-    light_groups, CalibrationDecision, CalibrationPolicy, CalibrationRules, CalibrationViewBasis,
-    CalibrationViewPlan, CandidateEvaluation, CandidateRef, CaptureEvidence, CaptureMetadata,
-    Classification, CriterionId, CriterionResult, EffectiveDecision, Evaluation, EvidenceField,
-    EvidenceId, EvidenceRow, InputCandidate, InputEvidence, InputForm, InputKind, LightEvidence,
-    LightGroup, MasterBasis, MasterEvidence, NativePath, Requirement, RequirementState, Resolution,
-    Tolerance, UnresolvedReason, Verdict,
+    canonical_decimal, light_groups, CalibrationDecision, CalibrationPolicy, CalibrationRules,
+    CalibrationViewBasis, CalibrationViewPlan, CandidateEvaluation, CandidateRef, CaptureEvidence,
+    CaptureMetadata, Classification, CriterionId, CriterionResult, EffectiveDecision, Evaluation,
+    EvidenceField, EvidenceId, EvidenceRow, FlatRules, InputCandidate, InputEvidence, InputForm,
+    InputKind, KindMatch, LightEvidence, LightGroup, MasterBasis, MasterEvidence, MatchCamera,
+    MatchCaution, MatchOffer, NativePath, PinTarget, Requirement, RequirementState, Resolution,
+    RigVersion, RotatorPresence, SessionInput, SessionLight, Tolerance, UnresolvedReason, Verdict,
+    WorkflowSettings,
 };
 
 /// The calibration rules the product uses.
@@ -50,6 +52,16 @@ impl CalibrationRules for Rules {
 
     fn plan(&self, basis: &CalibrationViewBasis) -> CalibrationViewPlan {
         plan(basis)
+    }
+
+    fn match_session(
+        &self,
+        kind: InputKind,
+        light: &SessionLight,
+        inputs: &[SessionInput],
+        settings: &WorkflowSettings,
+    ) -> KindMatch {
+        match_session(kind, light, inputs, settings)
     }
 }
 
@@ -333,6 +345,337 @@ fn night_row(light: &CaptureEvidence, input: &CaptureEvidence) -> EvidenceRow {
     EvidenceRow {
         note: Some(note),
         ..shown(EvidenceId::NightDistance, light, input, EvidenceField::Night)
+    }
+}
+
+// ── Session matching (F4: CAL-FR-19 to CAL-FR-22, D-W102 to D-W104, D-W114) ─
+
+/// One offered input and what it ranks by.
+struct Ranked {
+    /// A caution keeps it from being pinned automatically.
+    blocked: bool,
+    /// A raw set ranks after a master (CAL-FR-04).
+    raw: bool,
+    /// Days (nights for flats) between its capture and the lights.
+    days: Option<u32>,
+    /// The largest rotation difference, flats only.
+    rotation: Option<f64>,
+    offer: MatchOffer,
+}
+
+/// Every input of `kind` that passes the hard checks, best first: pinnable
+/// before cautioned, masters before raw sets, then the closest capture, then
+/// the smallest rotation (flats, provisional). A pinnable top input that ties
+/// with the next is only suggested.
+fn match_session(
+    kind: InputKind,
+    light: &SessionLight,
+    inputs: &[SessionInput],
+    settings: &WorkflowSettings,
+) -> KindMatch {
+    let mut ranked: Vec<Ranked> = inputs
+        .iter()
+        .filter(|input| input.kind == kind)
+        .filter_map(|input| session_offer(kind, light, input, settings))
+        .collect();
+    ranked.sort_by(|left, right| {
+        session_rank(left, right)
+            .then_with(|| left.offer.target.input.id().cmp(&right.offer.target.input.id()))
+    });
+    if let [first, second, ..] = ranked.as_mut_slice() {
+        if !first.blocked && session_rank(first, second) == Ordering::Equal {
+            first.offer.cautions.push(MatchCaution::RankingTie);
+        }
+    }
+    KindMatch { kind, offers: ranked.into_iter().map(|ranked| ranked.offer).collect() }
+}
+
+fn session_rank(left: &Ranked, right: &Ranked) -> Ordering {
+    left.blocked
+        .cmp(&right.blocked)
+        .then(left.raw.cmp(&right.raw))
+        .then_with(|| distance_order(left.days, right.days))
+        .then_with(|| match (left.rotation, right.rotation) {
+            (Some(a), Some(b)) => a.total_cmp(&b),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        })
+}
+
+/// The criteria of one input against the session; `None` when a hard check
+/// fails, which is never offered.
+fn session_offer(
+    kind: InputKind,
+    light: &SessionLight,
+    input: &SessionInput,
+    settings: &WorkflowSettings,
+) -> Option<Ranked> {
+    let (lights, other) = (&light.capture, &input.capture);
+    let evidence =
+        InputEvidence { kind: input.kind, form: input.input.form(), capture: other.clone() };
+    let mut criteria = vec![
+        image_type(kind, &evidence),
+        session_camera(light, input),
+        pair(
+            CriterionId::Dimensions,
+            lights,
+            other,
+            EvidenceField::Width,
+            EvidenceField::Height,
+            "x",
+        ),
+        pair(
+            CriterionId::Binning,
+            lights,
+            other,
+            EvidenceField::BinningX,
+            EvidenceField::BinningY,
+            "x",
+        ),
+    ];
+    let mut rotation = None;
+    let mut shown_rows = Vec::new();
+    if kind == InputKind::Flat {
+        criteria.push(exact(CriterionId::Channel, lights, other, EvidenceField::Filter));
+        criteria.push(optical_train(lights, other));
+        criteria.push(rig_version(light, input));
+        let (row, degrees) = flat_rotation(light, input, &settings.flats);
+        criteria.push(row);
+        rotation = degrees;
+    } else {
+        criteria.push(exact(CriterionId::Gain, lights, other, EvidenceField::Gain));
+        criteria.push(exact(CriterionId::Offset, lights, other, EvidenceField::Offset));
+        if kind == InputKind::Dark {
+            criteria.push(exact(CriterionId::Exposure, lights, other, EvidenceField::Exposure));
+        }
+        criteria.push(exact(
+            CriterionId::SetTemperature,
+            lights,
+            other,
+            EvidenceField::SetTemperature,
+        ));
+        criteria.push(readout_mode(lights, other));
+        shown_rows.push(shown(
+            EvidenceId::MeasuredTemperature,
+            lights,
+            other,
+            EvidenceField::MeasuredTemperature,
+        ));
+    }
+    if criteria.iter().any(|row| row.verdict == Verdict::Incompatible) {
+        return None;
+    }
+    let days = days_apart(light.night, input.captured);
+    let window = match kind {
+        InputKind::Flat => settings.flats.window_nights,
+        InputKind::Dark | InputKind::Bias => settings.dark_bias.window_days,
+    };
+    shown_rows.push(age_row(light.night, input.captured, days, window));
+    let evaluation = Evaluation::new(criteria, shown_rows);
+    let mut cautions = Vec::new();
+    let unknown = evaluation.blocking();
+    if !unknown.is_empty() {
+        cautions.push(MatchCaution::CriterionUnknown { criteria: unknown });
+    }
+    match days {
+        Some(days) if days <= window => {}
+        Some(days) => cautions.push(MatchCaution::OutsideWindow { days, window }),
+        None => cautions.push(MatchCaution::AgeUnknown),
+    }
+    if let Some(degrees) = rotation.filter(|degrees| *degrees > settings.flats.fine_within_deg) {
+        cautions.push(MatchCaution::RotationWarning { degrees: canonical_decimal(degrees) });
+    }
+    if !input.available {
+        cautions.push(MatchCaution::Unavailable);
+    }
+    let target = PinTarget {
+        input: input.input,
+        captured: input.captured,
+        files: input.files.clone(),
+        evaluation,
+    };
+    Some(Ranked {
+        blocked: !cautions.is_empty(),
+        raw: input.input.form() != InputForm::Master,
+        days,
+        rotation,
+        offer: MatchOffer { target, cautions },
+    })
+}
+
+/// The physical camera when both sides name one; with several cameras of a
+/// model and none named, unknown; otherwise the headers (R7).
+fn session_camera(light: &SessionLight, input: &SessionInput) -> CriterionResult {
+    let side = |camera: MatchCamera| match camera {
+        MatchCamera::Known { camera_id } => Some((camera_id.to_string(), "camera".to_owned())),
+        MatchCamera::Ambiguous | MatchCamera::Unlinked => None,
+    };
+    match (light.camera, input.camera) {
+        (MatchCamera::Known { camera_id: lights }, MatchCamera::Known { camera_id: other }) => {
+            let verdict = if lights == other { Verdict::Compatible } else { Verdict::Incompatible };
+            let note = (verdict == Verdict::Incompatible).then(|| "another camera".to_owned());
+            CriterionResult {
+                note,
+                ..row(CriterionId::Camera, verdict, side(light.camera), side(input.camera))
+            }
+        }
+        (MatchCamera::Ambiguous, _) | (_, MatchCamera::Ambiguous) => {
+            let header = camera(&light.capture, &input.capture);
+            if header.verdict == Verdict::Incompatible {
+                return header;
+            }
+            CriterionResult {
+                verdict: Verdict::Unknown,
+                note: Some("several cameras are this model: name the camera".to_owned()),
+                ..header
+            }
+        }
+        _ => camera(&light.capture, &input.capture),
+    }
+}
+
+/// Flats only: the version of the lights' rig the flats were taken with,
+/// the one a raw set recorded or else the one their date falls in. Any other
+/// version, a remount included, is incompatible (CAL-FR-19).
+fn rig_version(light: &SessionLight, input: &SessionInput) -> CriterionResult {
+    type Side = Option<(String, String)>;
+    let result = |verdict: Verdict, lights: Side, flats: Side, note: &str| CriterionResult {
+        note: Some(note.to_owned()),
+        ..row(CriterionId::RigVersion, verdict, lights, flats)
+    };
+    let Some(rig) = &light.rig else {
+        return result(Verdict::Unknown, None, None, "the lights' rig is not confirmed");
+    };
+    let side = |version: &RigVersion| {
+        Some((version.valid_from.to_string(), format!("rig version {}", version.id)))
+    };
+    let lights = rig.version.as_ref();
+    let flats = match input.rig_version_id {
+        Some(id) => {
+            let Some(version) = rig.versions.iter().find(|version| version.id == id) else {
+                let other = Some((id.to_string(), "rig version".to_owned()));
+                let note = "a version of another rig";
+                return result(Verdict::Incompatible, lights.and_then(side), other, note);
+            };
+            Some(version)
+        }
+        None => RigVersion::for_night(&rig.versions, input.captured),
+    };
+    match (lights, flats) {
+        (Some(lights), Some(flats)) if lights.id == flats.id => {
+            result(Verdict::Compatible, side(lights), side(flats), "the same rig version")
+        }
+        (Some(lights), Some(flats)) => result(
+            Verdict::Incompatible,
+            side(lights),
+            side(flats),
+            "another rig version: the rig changed between them",
+        ),
+        (None, None) if rig.versions.is_empty() => {
+            result(Verdict::Compatible, None, None, "the rig has no recorded versions")
+        }
+        _ => result(Verdict::Unknown, lights.and_then(side), None, "the rig version is unknown"),
+    }
+}
+
+/// Flats only: the largest ROTATANG difference over the flats' frames. Fine
+/// within the fine angle, a warning up to the offered angle, never offered
+/// beyond it; a missing angle reads unknown unless the rig has no rotator.
+/// The angles are the caller's settings; their defaults, fine within 2° and
+/// offered up to 5°, are the owner's approved starting values (decision
+/// record §8, 2026-10-15/16; CAL-FR-20, CAL-AC-26).
+fn flat_rotation(
+    light: &SessionLight,
+    input: &SessionInput,
+    rules: &FlatRules,
+) -> (CriterionResult, Option<f64>) {
+    let rotator = light
+        .rig
+        .as_ref()
+        .and_then(|rig| rig.version.as_ref())
+        .map_or(RotatorPresence::Unknown, |version| version.rotator);
+    let angles: Option<Vec<f64>> = input.rotator_deg.iter().copied().collect();
+    let angles = angles.filter(|angles| !angles.is_empty());
+    let lights = light.rotator_deg.map(|deg| (canonical_decimal(deg), "ROTATANG".to_owned()));
+    let flats = angles.as_ref().map(|angles| {
+        let mut shown: Vec<String> = angles.iter().map(|deg| canonical_decimal(*deg)).collect();
+        shown.dedup();
+        (shown.join(", "), "ROTATANG".to_owned())
+    });
+    let result = |verdict: Verdict, note: String| CriterionResult {
+        note: Some(note),
+        ..row(CriterionId::Rotation, verdict, lights.clone(), flats.clone())
+    };
+    match (light.rotator_deg, &angles) {
+        (Some(lights), Some(angles)) => {
+            let widest = angles.iter().map(|deg| angle_between(lights, *deg)).fold(0.0, f64::max);
+            let widest = (widest * 100.0).round() / 100.0;
+            let degrees = canonical_decimal(widest);
+            let row = if widest <= rules.fine_within_deg {
+                result(Verdict::Compatible, format!("{degrees}° apart"))
+            } else if widest <= rules.offered_within_deg {
+                result(Verdict::Compatible, format!("{degrees}° apart: a warning, confirm it"))
+            } else {
+                result(
+                    Verdict::Incompatible,
+                    format!(
+                        "{degrees}° apart: over {}°",
+                        canonical_decimal(rules.offered_within_deg)
+                    ),
+                )
+            };
+            (row, Some(widest))
+        }
+        _ if !rotator.needs_angle() => {
+            (result(Verdict::Compatible, "the rig has no rotator".to_owned()), None)
+        }
+        _ => (result(Verdict::Unknown, "the rotation is unknown".to_owned()), None),
+    }
+}
+
+/// The smaller angle between two rotator angles in degrees.
+fn angle_between(a: f64, b: f64) -> f64 {
+    let apart = (a - b).rem_euclid(360.0);
+    apart.min(360.0 - apart)
+}
+
+/// Darks and bias: the readout mode, compatible when neither side records one.
+fn readout_mode(light: &CaptureEvidence, input: &CaptureEvidence) -> CriterionResult {
+    let result = exact(CriterionId::ReadoutMode, light, input, EvidenceField::ReadoutMode);
+    if result.light_value.is_none() && result.input_value.is_none() {
+        return CriterionResult {
+            verdict: Verdict::Compatible,
+            note: Some("neither side records a readout mode".to_owned()),
+            ..result
+        };
+    }
+    result
+}
+
+fn days_apart(light: Option<Date>, input: Option<Date>) -> Option<u32> {
+    u32::try_from((light? - input?).whole_days().unsigned_abs()).ok()
+}
+
+/// Both capture dates and their distance against the window (CAL-FR-03).
+fn age_row(
+    light: Option<Date>,
+    input: Option<Date>,
+    days: Option<u32>,
+    window: u32,
+) -> EvidenceRow {
+    let note = match days {
+        Some(days) if days <= window => {
+            format!("{days} days apart, inside the {window}-day window")
+        }
+        Some(days) => format!("{days} days apart, outside the {window}-day window"),
+        None => "a capture date is unknown".to_owned(),
+    };
+    EvidenceRow {
+        evidence: EvidenceId::NightDistance,
+        light_value: light.map(|date| date.to_string()),
+        input_value: input.map(|date| date.to_string()),
+        note: Some(note),
     }
 }
 

@@ -10,13 +10,16 @@ use uuid::Uuid;
 
 use crate::{ExpectedSession, Project, Revision};
 
-/// The lengths of the "Needs a Target" and "Not in any Project" lists, which
-/// Home's top line reports as "N sessions need a Target · M not in any Project".
+/// The lengths of the "Needs a Target", "Not in any Project" and "Needs
+/// calibration" lists, which Home's top line and Pending work report.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionFilterCounts {
     pub needs_target: u64,
     pub not_in_any_project: u64,
+    /// Sessions whose calibration is not settled, or whose pinned file
+    /// changed or went missing (LIB-FR-17, LIB-FR-24).
+    pub needs_calibration: u64,
 }
 
 /// The session's rig that Add to Project adds because the Project lacks it.

@@ -895,6 +895,9 @@ async fn register(
         offers::mark_adopted(conn, result_id, &review.source.sha256, &master.provenance.adopted_at)
             .await?;
     }
+    // Processing offers of these bytes read adopted, and sessions still
+    // waiting are matched again (CAL-FR-06, LIB-FR-25).
+    super::master_adopted(conn, &review.source.sha256).await?;
     let updated = sqlx::query(
         "UPDATE adoption_operations SET state = 'completed', phase = 'registered', \
          finished_at = ?1, master_id = ?2 WHERE id = ?3 AND state = 'running'",
@@ -1144,6 +1147,15 @@ mod tests {
         }
         fn plan(&self, _: &CalibrationViewBasis) -> CalibrationViewPlan {
             unreachable!("adoption plans no View")
+        }
+        fn match_session(
+            &self,
+            _: InputKind,
+            _: &platevault_model::SessionLight,
+            _: &[platevault_model::SessionInput],
+            _: &platevault_model::WorkflowSettings,
+        ) -> platevault_model::KindMatch {
+            unreachable!("adoption matches no session")
         }
     }
 

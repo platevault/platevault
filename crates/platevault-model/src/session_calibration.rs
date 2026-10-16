@@ -21,7 +21,8 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    require_sha256, Evaluation, InputKind, InputRef, LibraryError, ObservationFingerprint, Revision,
+    require_sha256, Evaluation, InputKind, InputRef, LibraryError, ObservationFingerprint,
+    PendingChange, ProjectLifecycle, Revision,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -312,6 +313,27 @@ impl SessionCalibration {
             })
             .collect()
     }
+
+    /// The calibration changes since a View was applied with `applied`
+    /// (VSEL-FR-12, LIB-FR-25): each kind whose settled pin is no longer the
+    /// applied one, in kind order, `to: None` when it is not settled now.
+    /// Computed on read; nothing is written into the Project.
+    #[must_use]
+    pub fn changes_since(&self, applied: &SettledCalibration) -> Vec<PendingChange> {
+        [InputKind::Bias, InputKind::Dark, InputKind::Flat]
+            .into_iter()
+            .filter_map(|kind| {
+                let from = applied.kind(kind);
+                let to = self.kind(kind).settled();
+                (to.as_ref() != Some(from)).then(|| PendingChange::CalibrationChanged {
+                    session_id: self.session_id,
+                    kind,
+                    from: from.clone(),
+                    to,
+                })
+            })
+            .collect()
+    }
 }
 
 /// Whether a pin's files still hold what it recorded (D-W113). Computed on
@@ -331,6 +353,78 @@ impl PinHealth {
     pub const fn blocks_apply(self) -> bool {
         !matches!(self, Self::Intact)
     }
+}
+
+/// The health of each pinned kind of one session; a kind that is not pinned
+/// reads intact.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationHealth {
+    pub bias: PinHealth,
+    pub dark: PinHealth,
+    pub flat: PinHealth,
+}
+
+impl CalibrationHealth {
+    pub const INTACT: Self =
+        Self { bias: PinHealth::Intact, dark: PinHealth::Intact, flat: PinHealth::Intact };
+
+    #[must_use]
+    pub const fn kind(&self, kind: InputKind) -> PinHealth {
+        match kind {
+            InputKind::Bias => self.bias,
+            InputKind::Dark => self.dark,
+            InputKind::Flat => self.flat,
+        }
+    }
+
+    /// The pinned kinds whose files changed or went missing, in kind order.
+    #[must_use]
+    pub fn drifted_kinds(&self) -> Vec<InputKind> {
+        [InputKind::Bias, InputKind::Dark, InputKind::Flat]
+            .into_iter()
+            .filter(|kind| self.kind(*kind).blocks_apply())
+            .collect()
+    }
+}
+
+/// One session's calibration as its details show it: each kind's state and
+/// each pin's health, and why it waits in Needs calibration.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionCalibrationStatus {
+    pub calibration: SessionCalibration,
+    pub health: CalibrationHealth,
+    pub needs: Vec<CalibrationNeed>,
+}
+
+/// A session in the Needs calibration queue with why it is there.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionNeeds {
+    pub session_id: Uuid,
+    pub needs: Vec<CalibrationNeed>,
+}
+
+/// A Project that holds a calibration input through its sessions or its
+/// Closed snapshot.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationInputProject {
+    pub project_id: Uuid,
+    pub name: String,
+    pub lifecycle: ProjectLifecycle,
+}
+
+/// Who uses a master or raw set (CAL-FR-16/17, provisional): Hide and Move
+/// to Trash are refused while any Project is listed, and otherwise their
+/// confirmation lists the sessions pinned to it, which then need
+/// calibration again.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationInputUse {
+    pub projects: Vec<CalibrationInputProject>,
+    pub sessions: Vec<Uuid>,
 }
 
 /// One reason a session is in the Library's Needs calibration queue
