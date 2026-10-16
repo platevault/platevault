@@ -203,18 +203,31 @@ pub(crate) fn probe_fingerprint_in(
     Ok(fingerprint(file_id, &meta, &volume, modified_ns))
 }
 
-/// A location root's same-session continuity [`Stamp`], taken when new-capture
+/// A location root's same-session continuity evidence, taken when new-capture
 /// discovery starts watching it: the same folder on the same mounted volume
 /// keeps it, while an unmounted, remounted or replaced root does not.
+///
+/// Besides the root's [`Stamp`], which the walker compares its folders
+/// against, it holds the root's folder ID ([`identity::FolderId`]). On
+/// Windows the stamp holds only the creation time, which a replacement
+/// folder can share (NTFS can carry it over to a folder created under a
+/// name that was just renamed away), so the folder ID tells the two apart.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct RootStamp(Stamp);
+pub(crate) struct RootStamp {
+    stamp: Stamp,
+    folder: Option<identity::FolderId>,
+}
 
 /// The stamp of the real folder at `root`, or `None` when it is absent,
-/// unreadable, a link, a junction or not a folder. One no-follow `stat`.
+/// unreadable, a link, a junction or not a folder. One no-follow `stat`, and
+/// on Windows a query of a handle on the folder itself for its folder ID.
 pub(crate) fn root_stamp(root: &Path) -> Option<RootStamp> {
     let meta = fs::symlink_metadata(root).ok()?;
-    (meta.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&meta))
-        .then(|| RootStamp(identity::stamp(&meta)))
+    if !meta.is_dir() || fs_pathsafe::is_link_or_junction_metadata(&meta) {
+        return None;
+    }
+    let folder = identity::folder_id(root, &meta).ok()?;
+    Some(RootStamp { stamp: identity::stamp(&meta), folder })
 }
 
 /// What an entry below a location root is to the walker, decided from its
@@ -285,7 +298,7 @@ pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry 
         let Ok(meta) = fs::symlink_metadata(&path) else {
             return Entry::Other;
         };
-        let entry = classify(&meta, relative, &stamp.0);
+        let entry = classify(&meta, relative, &stamp.stamp);
         if components.peek().is_none() {
             return entry;
         }
@@ -342,7 +355,7 @@ pub(crate) fn frame_paths(
     let mut pending = vec![Rc::new(Folder {
         relative: PathBuf::new(),
         path: root.to_path_buf(),
-        stamp: stamp.0,
+        stamp: stamp.stamp,
         parent: None,
         excluded: Cell::new(false),
     })];
@@ -350,7 +363,7 @@ pub(crate) fn frame_paths(
         if canceled.load(Ordering::Acquire) {
             return Ok(listed);
         }
-        match list_folder(&folder, &stamp.0) {
+        match list_folder(&folder, &stamp.stamp) {
             Ok(Some(FolderListing { frames, folders, complete })) => {
                 listed.frames.extend(frames);
                 listed.folders.extend(folders.iter().map(|child| child.relative.clone()));
@@ -1211,5 +1224,56 @@ mod swapped_folders {
             assert!(!lists_fully(&root, stamp, folder), "{folder:?} listed through the root link");
             assert!(!opens(&root, stamp, folder), "{folder:?} opened through the root link");
         }
+    }
+}
+
+/// A root's continuity stamp tells apart two folders whose [`Stamp`] matches,
+/// as on Windows a folder created at the same time as the root it replaced
+/// does, by their folder IDs.
+#[cfg(test)]
+mod root_stamps {
+    use super::*;
+
+    #[test]
+    fn folders_with_one_stamp_but_two_folder_ids_have_two_root_stamps() {
+        let dir = tempfile::tempdir().unwrap();
+        let stamp = identity::stamp(&fs::symlink_metadata(dir.path()).unwrap());
+        let folder =
+            |index| RootStamp { stamp, folder: Some(identity::FolderId { volume: 7, index }) };
+
+        assert_eq!(folder(1), folder(1));
+        assert_ne!(folder(1), folder(2), "a replacement with the same stamp passed as the root");
+    }
+
+    /// The root is renamed away and a new folder, given the old one's
+    /// creation time, takes its name: only the folder ID differs.
+    #[cfg(windows)]
+    #[test]
+    fn a_root_replaced_by_a_folder_created_at_the_same_time_has_another_stamp() {
+        use std::os::windows::fs::{FileTimesExt, OpenOptionsExt};
+        /// `FILE_WRITE_ATTRIBUTES`, which setting a time needs.
+        const WRITE_ATTRIBUTES: u32 = 0x0100;
+        /// `FILE_FLAG_BACKUP_SEMANTICS`, which opening a folder needs.
+        const BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir(&root).unwrap();
+        let watched = root_stamp(&root).unwrap();
+        let created = fs::symlink_metadata(&root).unwrap().created().unwrap();
+
+        fs::rename(&root, dir.path().join("moved")).unwrap();
+        fs::create_dir(&root).unwrap();
+        let replacement = fs::OpenOptions::new()
+            .access_mode(WRITE_ATTRIBUTES)
+            .custom_flags(BACKUP_SEMANTICS)
+            .open(&root)
+            .unwrap();
+        replacement.set_times(fs::FileTimes::new().set_created(created)).unwrap();
+        drop(replacement);
+
+        let now = fs::symlink_metadata(&root).unwrap();
+        assert_eq!(now.created().unwrap(), created, "the replacement has the root's creation time");
+        assert_eq!(identity::stamp(&now), watched.stamp, "its stamp alone matches the root's");
+        assert_ne!(root_stamp(&root), Some(watched), "the replacement passed as the root");
     }
 }

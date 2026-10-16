@@ -35,7 +35,8 @@
 //! - Every sweep each root is `stat`ed once, without following links, and so
 //!   is the root of each location whose live events a debounce tick checks,
 //!   before any path they name is read. A watched root that is gone or no
-//!   longer the same folder (replaced by a link, say) is dropped at once,
+//!   longer the same folder (replaced by a link or by another folder, which
+//!   on Windows only its folder ID tells apart) is dropped at once,
 //!   releasing its OS watch, and nothing below it is read through it. An
 //!   absent root costs that one `stat` per sweep; a present one is checked
 //!   against its registered identity. A root refused because it is not the

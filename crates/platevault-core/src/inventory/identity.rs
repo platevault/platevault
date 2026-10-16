@@ -185,6 +185,45 @@ pub(super) fn stamp(meta: &Metadata) -> Stamp {
     }
 }
 
+/// A folder's identity on its mounted volume: the device and inode numbers on
+/// Unix, and on Windows the volume serial and file index of a handle on the
+/// folder itself, which `Metadata` does not expose there. Same-session
+/// continuity evidence like [`Stamp`], never persisted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct FolderId {
+    pub(super) volume: u64,
+    pub(super) index: u64,
+}
+
+/// The [`FolderId`] of the folder at `path`, whose no-follow metadata is
+/// `meta`. Windows opens the folder itself, never a reparse target, and
+/// refuses one that turned into a link or junction; elsewhere `meta` holds
+/// it. `None` on a platform with neither.
+///
+/// # Errors
+/// The Windows handle could not be opened or queried.
+// Only the Windows branch can fail; the shared signature keeps callers uniform.
+#[cfg_attr(not(windows), allow(clippy::unnecessary_wraps))]
+pub(super) fn folder_id(path: &Path, meta: &Metadata) -> std::io::Result<Option<FolderId>> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let _ = path;
+        Ok(Some(FolderId { volume: meta.dev(), index: meta.ino() }))
+    }
+    #[cfg(windows)]
+    {
+        let _ = meta;
+        let info = windows_handle::information(path)?;
+        Ok(Some(FolderId { volume: info.volume_serial_number(), index: info.file_index() }))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (path, meta);
+        Ok(None)
+    }
+}
+
 /// Remount-stable file ID of an entry, recorded only where the volume
 /// qualifies its file IDs as stable.
 ///
