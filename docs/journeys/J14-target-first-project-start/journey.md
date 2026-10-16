@@ -101,13 +101,25 @@ Done means:
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Expected behavior follows specs 063 to 072 at head and workflow decisions D-W93 to D-W106. No implementation has been validated against the F4 Project model.
+- G1: Not validated. The rebuilt application does not exist. Expected behavior follows specs 063 to 072 at head and workflow decisions D-W93 to D-W116. No implementation has been validated against the F4 Project model.
 - G2: Unresolved implementation qualification: S1 assumes NGC 7000's catalogued major axis is about 2°. The bundled catalogue's size value has not been checked, so the exact coverage behind "fits" is unverified. Blocks readiness.
-
-
+- G4: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S2b now asserts that Start run auto-names the run `NGC 7000 RedCat` and that Rename on the run header renames it to `NGC7000-HOO-Siril` without touching a file or the selection.
+- G5: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S6 now asserts Edit details (name, notes) on the Project header and in the Projects row menu, and that both renames keep the Project–Target link and the run's name.
 - G6: Out of scope for this journey: editing mosaic panel groups (J33) and removing a subject or rig from the suggestion criteria (J20/S9).
+- G7: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W94's rig list that only decides suggestions (S2a, S5, S7), D-W96's matching rule and its "captured" count of every matching suggestion (S2a, S2b, S5, S7), and D-W100's rule that the first Apply builds the View with no separate Start processing (S2b). If the owner changes one, the steps that cite it change.
 
 ## Delta log
+- **Δ2** 2026-10-06 · S1, S2, S5, S6, S7, +S8 · behavior-change
+  Every processing run now lives in a Project. Starting a run from a Target first asks for Create Project or Add to Project, the Project is prefilled from the Target, and the run is created inside it. The Targets list (My targets, search, rig selector, Fit) replaces the planner columns, and Add to Project from Not in any Project adds the session's rig with a note. The legacy wizard defects of v1 no longer apply.
+  Evidence: D-W1, D-W8, D-W17, D-W23, D-W33, D-W37, D-W50, D-W59, D-W60 and VSEL-FR-01, VSEL-AC-16, PRJ-FR-01, PRJ-FR-19, LIB-FR-17, PLAN-TGT-FR-01, PLAN-TGT-FR-11 at e4476231; D-W65, D-W66 ("captured" is candidates plus run members) and PRJ-FR-02, PRJ-FR-04, PRJ-FR-21, root FR-023 at d45a22ad; rig names `RedCat` and `Esprit` from J15/S3 and S3a · by: agent (intent-gated, user instruction)
+- **Δ3** 2026-10-12 · S1, S2, +S2a, +S2b, S5, S6, S7 · behavior-change
+  A Target page no longer starts a run: it offers Add to Plan, Add to Project (previewed first) and New Project. The journey now adds NGC 7000 to the existing Project `Cygnus HOO` (P2) and starts the run there from the Start run sheet; old steps 3 (start a run with no Project) and 4 (create the prefilled Project) are retired.
+  The Targets search stars a result from its row menu, with no Add button, and Filters shows a chip per rig filter graded good tonight. Home's top line is gone, so S7 reads the Sessions box. P1 follows J19 v3 (Targets Confirmed or Associated by pointing). G3 is retired; G6 records what stays out of scope.
+  Evidence: HARNESS-V5-IA.md §Screens S1, S3, S10 ("Target detail: … Add to Plan, Add to Project (previewed first) or New Project"), S12; HARNESS-V5-FEEDBACK-R1.md §B "Start run sheet", §Round 5 "Home has no issues strip", "Click a result to act", "OBJECT is a label, never evidence", P-PLAN2 (apps/prototype/design/ on ui-harness-v5 @ b5e813a5); J19 v3; user instruction 2026-10-12 · by: JourneysV5.U2Projects (intent-gated)
+- **Δ4** 2026-10-12 · S2, S2b, S6 · behavior-change
+  Start run auto-names the run `NGC 7000 RedCat`, and S2b renames it to `NGC7000-HOO-Siril` with Rename on the run header. S6 renames the Project with Edit details (name, notes) on the Project header and back again from the Projects row menu.
+  S2 opens the Target page by clicking its search result, because a result already in My targets opens. G4 and G5 are dissolved.
+  Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Rename runs and Projects", "Clicking a result" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)
 - **Δ5** 2026-10-15 · S2, S2a, S2b, S5, S6, S7, S8 · behavior-change
   The Project holds sessions in groups by rig and framing; users add sessions explicitly, and Apply builds the Project's View from originals. Processing no longer uses a separate run, revisions or run folders.
   Evidence: D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, FR-033 to FR-035, LIB-FR-17, LIB-FR-20, LIB-FR-23, PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-05, PRJ-FR-07 to PRJ-FR-09, PRJ-FR-27, PRJ-FR-31, VSEL-FR-03, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16 · by: SpecF4Writer2 (intent-gated)
