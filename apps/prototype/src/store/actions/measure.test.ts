@@ -20,10 +20,10 @@ function runToEnd(id: string) {
 }
 
 describe("measureHandler", () => {
-  it("measures a run's frames, re-uses valid records, and settles with every frame accounted for", () => {
+  it("measures a session's frames, re-uses valid records, and settles with every frame accounted for", () => {
     const { catalog } = store.getState()
-    const run = Object.values(catalog.runs).find((r) => (r.revisions.at(-1)?.included.length ?? 0) > 0)!
-    const ids: AssetId[] = run.revisions.at(-1)!.included
+    const session = Object.values(catalog.sessions).find((s) => s.imageType === "light" && s.assetIds.length >= 4 && s.assetIds.length <= 60)!
+    const ids: AssetId[] = session.assetIds
     // Forget the records of half the frames, so the operation measures some and re-hashes the rest.
     const forgotten = ids.filter((_, i) => i % 2 === 0)
     store.setState((s) => {
@@ -31,7 +31,7 @@ describe("measureHandler", () => {
       for (const id of forgotten) delete measurements[id]
       return { ...s, catalog: { ...s.catalog, measurements } }
     })
-    const id = startMeasurement(run.id, ids)!
+    const id = startMeasurement(session.id, ids)!
     expect(id).not.toBeNull()
     const started = store.getState().operations[id]!
     expect(started.kind).toBe("measure")
@@ -53,6 +53,6 @@ describe("measureHandler", () => {
   })
 
   it("starts nothing when there is nothing to measure", () => {
-    expect(startMeasurement(Object.keys(store.getState().catalog.runs)[0]!, [])).toBeNull()
+    expect(startMeasurement(Object.keys(store.getState().catalog.sessions)[0]!, [])).toBeNull()
   })
 })

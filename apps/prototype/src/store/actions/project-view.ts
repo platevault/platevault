@@ -334,15 +334,18 @@ function undo(project: Project, change: PendingChange): Project {
  * ones named. A change that came from the Library or a session's
  * calibration is refused: it is fixed at its source, or by removing the
  * session. Groups the Project made since Apply that are left empty go.
+ * Refused on a Closed Project, which has no pending changes to discard.
  */
 export function discardChanges(projectId: ProjectId, changeIds: string[] | "all"): CommitResult {
   const state = store.getState()
   const project = state.catalog.projects[projectId]
   if (!project) return MISSING
   const label = msg("project_label_discard")
+  const closed = closedRefusal(project, label)
+  if (closed) return closed
   const changes = pendingChanges(state, project).filter((c) => changeIds === "all" || changeIds.includes(c.id))
   const fixedAtSource = changeIds === "all" ? [] : changes.filter((c) => !isDiscardable(c))
-  if (fixedAtSource.length > 0) return closedRefusal(project, label) ?? refuse(msg("store_refused", { label }), fixedAtSource.map((c) => joinRefs([c.label, msg("project_reason_fix_at_source")], ": ")), viewHref(projectId))
+  if (fixedAtSource.length > 0) return refuse(msg("store_refused", { label }), fixedAtSource.map((c) => joinRefs([c.label, msg("project_reason_fix_at_source")], ": ")), viewHref(projectId))
   const own = changes.filter(isDiscardable)
   if (own.length === 0) return { ok: true }
   return editProject(projectId, label, project.revision, (p) => {

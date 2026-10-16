@@ -1,18 +1,15 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { groupFlowState, groupStepLink } from "@/domain/derive"
+import { liveLightSessions, sessionReadiness } from "@/domain/derive"
+import { wrapUpFlowState, wrapUpStepLink } from "@/domain/project-view"
 import { createSeed } from "@/domain/seed"
-import type { Run } from "@/domain/types"
+import type { Project } from "@/domain/types"
 import { m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
-import { groupFlow, type GroupFlowHost } from "./flows"
-import { removeRunSessions } from "./runs"
+import { sessionIntake, wrapUpFlow, type WrapUpSelection } from "./flows"
 
-// The run group's Proceed acts on every live panel (§5.2) on the demo IC 5070 mosaic: Panel 1 waits at Results, Panel 2 is Partial at Prepare, Panel 3's run is in the Trash.
-const GROUP = "grp_ic5070"
-const P1 = "run_ic5070_p1"
-const P2 = "run_ic5070_p2"
-const P3 = "run_ic5070_p3"
+// The demo's "M 31 LRGB": Wrap up's Clean up is done, Trash and Archive are still to do.
+const M31 = "prj_m31"
 
 let demo: PrototypeState
 beforeAll(() => {
@@ -22,71 +19,66 @@ beforeEach(() => {
   store.replace(structuredClone(demo))
 })
 
-const run = (id: string): Run => store.getState().catalog.runs[id]!
-const group = () => store.getState().catalog.runGroups[GROUP]!
-const noPrepare: GroupFlowHost = { prepare: { start: () => ({ ok: true }) } }
-const flow = (host: GroupFlowHost = noPrepare) => groupFlow(store.getState(), group(), m, host)
-const current = () => groupFlowState(store.getState(), group()).current
+const project = (): Project => store.getState().catalog.projects[M31]!
+const nothing: WrapUpSelection = { offered: 0, selected: 0, start: () => [] }
+const flow = (selection: WrapUpSelection = nothing) => wrapUpFlow(store.getState(), project(), m, selection)
+const stepState = (id: string) => flow().steps.find((s) => s.id === id)?.state
 
-function editRun(id: string, patch: Partial<Run>) {
-  store.setState((s) => ({ ...s, catalog: { ...s.catalog, runs: { ...s.catalog.runs, [id]: { ...s.catalog.runs[id]!, ...patch } } } }))
-}
-
-/** Panel 2's preparation reads Prepared, so both panels wait at Results. */
-function prepareP2() {
-  store.setState((s) => {
-    const preparations = { ...s.catalog.preparations }
-    for (const prep of Object.values(preparations)) if (prep.runId === P2) preparations[prep.id] = { ...prep, state: "prepared", unverified: null }
-    return { ...s, catalog: { ...s.catalog, preparations } }
-  })
-}
-
-describe("run group Proceed fans out over the live panels (§5.2)", () => {
-  it("Select saves every panel's draft", async () => {
-    const sessionOf = (id: string) => run(id).revisions.at(-1)!.sessions[0]!.sessionId
-    expect(removeRunSessions(P1, [sessionOf(P1)]).ok).toBe(true)
-    expect(removeRunSessions(P2, [sessionOf(P2)]).ok).toBe(true)
-    const revisions = [run(P1).revisions.length, run(P2).revisions.length]
-    const select = flow()
-    expect(current()).toBe("select")
-    expect(select.next).toEqual(groupStepLink(group(), "calibrate"))
-    expect(await select.proceed!.run()).toEqual({ ok: true })
-    expect([run(P1).draft, run(P2).draft]).toEqual([null, null])
-    expect([run(P1).revisions.length, run(P2).revisions.length]).toEqual(revisions.map((n) => n + 1))
-    expect(current()).toBe("prepare")
+describe("Wrap up as a flow (C3, F2, F4, F5)", () => {
+  it("records a step with nothing left as Finished and moves on to the next one", async () => {
+    expect(flow().current).toBe("trash")
+    const trash = flow()
+    expect(trash.next).toEqual(wrapUpStepLink(M31, "archive"))
+    expect(await trash.proceed!.run()).toEqual({ ok: true })
+    expect(stepState("trash")).toBe("finished")
+    expect(flow().current).toBe("archive")
   })
 
-  it("Calibrate records every panel's calibration", async () => {
-    editRun(P1, { calibration: [] })
-    editRun(P2, { calibration: [] })
-    expect(current()).toBe("calibrate")
-    expect(await flow().proceed!.run()).toEqual({ ok: true })
-    expect(run(P1).calibration.length).toBeGreaterThan(0)
-    expect(run(P2).calibration.length).toBeGreaterThan(0)
-    expect(current()).toBe("prepare")
-  })
-
-  it("Prepare runs the host's Prepare all with its confirm", async () => {
-    const start = vi.fn(() => ({ ok: true }) as const)
-    const confirm = { title: "Prepare all?", confirm: { label: "Prepare all" } }
-    const proceed = flow({ prepare: { start, confirm } }).proceed!
-    expect(proceed.confirm).toBe(confirm)
+  it("records a step with nothing selected as Skipped, and starts the selection's work otherwise", async () => {
+    expect(await flow({ offered: 3, selected: 0, start: () => [] }).proceed!.run()).toEqual({ ok: true })
+    expect(stepState("trash")).toBe("skipped")
+    expect(await flow().reopen!("trash").run()).toEqual({ ok: true })
+    const start = vi.fn(() => ["op_cleanup_m31"])
+    const selection: WrapUpSelection = { offered: 3, selected: 2, start, confirm: { title: "Move 2 files to Trash?", confirm: { label: "Move to Trash" } } }
+    const proceed = flow(selection).proceed!
+    expect(proceed.confirm).toBe(selection.confirm)
     expect(await proceed.run()).toEqual({ ok: true })
     expect(start).toHaveBeenCalledTimes(1)
+    // The operation it started has already succeeded, so the step reads Finished (F2).
+    expect(stepState("trash")).toBe("finished")
   })
 
-  it("Finish all panels finishes every live panel's run, after a confirm listing each panel's run view", async () => {
-    prepareP2()
-    expect(current()).toBe("results")
-    const proceed = flow().proceed!
-    expect(proceed.label).toBe("Finish all panels")
-    expect(proceed.confirm?.groups?.map((g) => g.label)).toEqual(["Panel 1", "Panel 2"])
-    expect(proceed.confirm?.groups?.every((g) => g.rows.length > 0)).toBe(true)
-    expect(await proceed.run()).toEqual({ ok: true })
-    expect([run(P1).completion, run(P2).completion]).toEqual(["complete", "complete"])
-    expect(run(P3).completion).not.toBe("complete")
-    const finished = flow()
-    expect(finished.proceed).toBeNull()
-    expect(finished.steps.find((s) => s.id === "results")?.state).toBe("finished")
+  it("closes the Project with Close project, after which every step is read-only", async () => {
+    expect(await flow().proceed!.run()).toEqual({ ok: true })
+    const archive = flow()
+    expect(archive.current).toBe("archive")
+    expect(archive.proceed!.label).toBe(m.stepflow_close_project())
+    expect(archive.proceed!.confirm?.title).toBe(m.stepflow_close_project_title({ name: project().name }))
+    expect(await archive.proceed!.run()).toEqual({ ok: true })
+    expect(project().state).toBe("closed")
+    expect(wrapUpFlowState(store.getState(), project()).closed).toBe(true)
+    const closed = flow()
+    expect(closed.proceed).toBeNull()
+    expect(closed.next).toBeNull()
+  })
+
+  it("reopens an earlier step until Close; the later settled steps read Redo", async () => {
+    expect(await flow().proceed!.run()).toEqual({ ok: true })
+    const reopen = flow().reopen!("cleanup")
+    expect(reopen.unavailable).toBeUndefined()
+    expect(await reopen.run()).toEqual({ ok: true })
+    expect(flow().current).toBe("cleanup")
+    expect(stepState("trash")).toBe("redo")
+  })
+})
+
+describe("session intake as a flow (§5.3)", () => {
+  it("blocks the Target step until the picker holds a Target", () => {
+    const { catalog } = store.getState()
+    const session = liveLightSessions(catalog).find((s) => sessionReadiness(catalog, s) === "needs-target")!
+    const intake = sessionIntake(store.getState(), session, m, { targetId: null, rigId: null })
+    expect(intake.current).toBe("target")
+    expect(intake.steps.find((s) => s.id === "target")).toMatchObject({ state: "blocked", gate: { reason: m.flow_confirm_target() } })
+    expect(intake.proceed!.run()).toMatchObject({ ok: false, reason: "refused" })
   })
 })

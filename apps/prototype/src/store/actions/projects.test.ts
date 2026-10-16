@@ -1,16 +1,20 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { goalProgress, type GoalProgress, planningSite } from "@/domain/derive"
+import { goalProgress, type GoalProgress, isLocked, planningSite } from "@/domain/derive"
 import { upcomingNight } from "@/domain/planning"
 import { createSeed } from "@/domain/seed"
 import { BUILT_IN_GOAL_TEMPLATES, DEFAULT_SUBJECT_CONDITIONS, qualityBarFor } from "@/domain/templates"
 import type { Asset, Project, Session } from "@/domain/types"
-import { nowIso, type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
+import { m, msg, say } from "@/lib/i18n"
+import { type CommitResult, nowIso, type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { markFrames } from "./library"
-import { applyGoalTemplate, closingOnSuccess, createProject, recordWrapUpStep, reopenProject } from "./projects"
+import { discardChanges, startApply } from "./project-view"
+import * as projects from "./projects"
 import { saveGoalTemplate } from "./settings"
 
-// Goal conditions in the store (C7): Close freezes the goal figures, Reopen makes them live, templates carry conditions.
+const { addSessions, applyGoalTemplate, closingOnSuccess, createProject, recordWrapUpStep, renameGroup, reopenWrapUpStep, setGoals, setProjectSettings } = projects
+
+// Goal conditions in the store (C7): Close freezes the goal figures and there is no Reopen; templates carry conditions.
 const M31 = "prj_m31"
 const CYGNUS = "prj_cygnus"
 const HOO_MOSAIC = "gtpl_user_hoo_mosaic"
@@ -34,14 +38,21 @@ beforeEach(() => {
 const project = (id: string): Project => store.getState().catalog.projects[id]!
 const progress = (id: string): GoalProgress[] => goalProgress(store.getState().catalog, project(id))
 /** What the live library gives the Project, whatever its state. */
-const live = (id: string): GoalProgress[] => goalProgress(store.getState().catalog, { ...project(id), state: "open", goalFreeze: null })
+const live = (id: string): GoalProgress[] => goalProgress(store.getState().catalog, { ...project(id), state: "open", snapshot: null })
 const figures = (list: GoalProgress[]) => list.map((p) => ({ goal: p.goal.id, inProject: p.inProject, captured: p.captured, belowBar: p.belowBar, met: p.met }))
 const byGoal = (list: GoalProgress[], id: string) => list.find((p) => p.goal.id === id)!
+const refusedReasons = (result: CommitResult): string[] => {
+  if (result.ok || result.reason !== "refused") throw new Error(`expected a refusal, got ${JSON.stringify(result)}`)
+  return result.reasons
+}
 
-/** M 31's frames of one channel in its run. */
+/** M 31's frames of one channel among the sessions it holds. */
 function m31Frames(channel: string): string[] {
   const { catalog } = store.getState()
-  return catalog.runs.run_m31!.revisions.at(-1)!.included.filter((id) => catalog.sessions[catalog.assets[id]!.sessionId!]!.channel === channel)
+  return project(M31).inputs.flatMap((input) => {
+    const session = catalog.sessions[input.sessionId]!
+    return session.channel === channel ? session.assetIds : []
+  })
 }
 
 /** A later night of M 31 R lands in the library: a copy of the R session with new frames. */
@@ -68,9 +79,9 @@ describe("Close freezes the goal figures (C7)", () => {
     const before = figures(progress(M31))
     closeM31()
     const closed = project(M31)
-    expect(closed.state).toBe("done")
-    expect(closed.goalFreeze?.at).toBe(closed.doneAt)
-    expect(closed.goalFreeze?.goals.map((g) => g.goalId)).toEqual(closed.goals.map((g) => g.id))
+    expect(closed.state).toBe("closed")
+    expect(closed.snapshot?.at).toBe(closed.closedAt)
+    expect(closed.snapshot?.goals.map((g) => g.goalId)).toEqual(closed.goals.map((g) => g.id))
 
     const added = laterRFrames()
     expect(markFrames(m31Frames("G"), "unusable", `/projects/${M31}`).ok).toBe(true)
@@ -91,40 +102,54 @@ describe("Close freezes the goal figures (C7)", () => {
     expect(project(M31).state).toBe("open")
     const transfer = closingOnSuccess({ kind: "archive", step: (s, op) => ({ ...s, operations: { ...s.operations, [op.id]: { ...op, status: "succeeded" } } }) })
     store.setState((s) => transfer.step(s, s.operations[opId]!))
-    expect(project(M31).state).toBe("done")
-    expect(project(M31).goalFreeze?.at).toBe(project(M31).doneAt)
+    expect(project(M31).state).toBe("closed")
+    expect(project(M31).snapshot?.at).toBe(project(M31).closedAt)
     expect(markFrames(m31Frames("B"), "unusable", `/projects/${M31}`).ok).toBe(true)
     expect(figures(progress(M31))).toEqual(before)
   })
 
-  it("refuses goal and template edits while closed", () => {
+  it("freezes the calibration each held session used, so a later reassignment never reaches the Closed Project", () => {
     closeM31()
-    expect(applyGoalTemplate(M31, BUILT_IN_GOAL_TEMPLATES[0]!.id, project(M31).revision).ok).toBe(false)
+    const closed = project(M31)
+    expect(Object.keys(closed.snapshot!.calibration).sort()).toEqual([...new Set(closed.inputs.map((i) => i.sessionId))].sort())
+    for (const input of closed.inputs) expect(closed.snapshot!.calibration[input.sessionId]).toEqual(store.getState().catalog.sessions[input.sessionId]!.calibration)
   })
 })
 
-describe("Reopen makes the goal figures live again (C7)", () => {
-  it("reads the library as it is now", () => {
+describe("there is no Reopen: a Closed Project is locked for good (PRJ-FR-25)", () => {
+  it("offers no Reopen and stays locked", () => {
+    expect("reopenProject" in projects).toBe(false)
     closeM31()
-    const added = laterRFrames()
-    expect(markFrames(m31Frames("G"), "unusable", `/projects/${M31}`).ok).toBe(true)
-    const frozenR = byGoal(progress(M31), "goal_m31_r").captured.frames
-    expect(reopenProject(M31).ok).toBe(true)
-    expect(project(M31)).toMatchObject({ state: "open", doneAt: null, goalFreeze: null })
-    expect(progress(M31).some((p) => p.frozen)).toBe(false)
-    expect(byGoal(progress(M31), "goal_m31_r").captured.frames).toBe(frozenR + added)
-    expect(byGoal(progress(M31), "goal_m31_g")).toMatchObject({ met: false, inProject: { frames: 0, seconds: 0 } })
+    expect(isLocked(project(M31))).toBe(true)
   })
 
-  it("freezes afresh at the next Close", () => {
+  it("refuses every edit, Apply, Discard and Wrap up step, naming the Closed Project, and writes nothing", () => {
     closeM31()
-    expect(reopenProject(M31).ok).toBe(true)
-    expect(markFrames(m31Frames("G"), "unusable", `/projects/${M31}`).ok).toBe(true)
-    const reopened = figures(progress(M31))
-    // After Reopen, Archive reads To do again: Close project closes it once more.
-    expect(recordWrapUpStep(M31, "archive", { kind: "skipped" }).ok).toBe(true)
-    expect(project(M31).state).toBe("done")
-    expect(figures(progress(M31))).toEqual(reopened)
+    const closed = project(M31)
+    const named = say(m, msg("store_reason_project_closed", { project: closed.name }))
+    const session = Object.values(store.getState().catalog.sessions).find((s) => s.imageType === "light" && !closed.inputs.some((i) => i.sessionId === s.id))!
+    const writes: CommitResult[] = [
+      setGoals(M31, [], closed.revision),
+      applyGoalTemplate(M31, BUILT_IN_GOAL_TEMPLATES[0]!.id, closed.revision),
+      addSessions(M31, [session.id]),
+      setProjectSettings(M31, { mode: "symlink" }),
+      renameGroup(M31, closed.groups[0]!.id, "Renamed"),
+      startApply(M31, { fingerprint: "", tickedUnplaced: [] }).result,
+      discardChanges(M31, "all"),
+      reopenWrapUpStep(M31, "trash"),
+      recordWrapUpStep(M31, "archive", { kind: "skipped" }),
+    ]
+    for (const result of writes) expect(refusedReasons(result)).toContain(named)
+    expect(project(M31)).toEqual(closed)
+  })
+})
+
+describe("Project keyword overrides (PRJ-FR-28)", () => {
+  it("refuses keyword names that cannot name View folders and saves valid ones", () => {
+    expect(refusedReasons(setProjectSettings(CYGNUS, { keywords: { group: "GROUP", panel: "group" } }))).toHaveLength(1)
+    expect(project(CYGNUS).settings.keywords).toBeNull()
+    expect(setProjectSettings(CYGNUS, { keywords: { group: "SET", panel: "TILE" } }).ok).toBe(true)
+    expect(project(CYGNUS).settings.keywords).toEqual({ group: "SET", panel: "TILE" })
   })
 })
 
@@ -134,7 +159,7 @@ describe("applying a goal template copies its conditions (C7)", () => {
   it("gives every subject the template's panel balance and a season pre-filled from its visibility", () => {
     expect(applyGoalTemplate(CYGNUS, HOO_MOSAIC, project(CYGNUS).revision).ok).toBe(true)
     const subjects = project(CYGNUS).subjects
-    expect(subjects.map((s) => s.conditions?.panelBalancePct)).toEqual([15, 15])
+    expect(subjects.map((s) => s.conditions?.panelBalancePct)).toEqual(subjects.map(() => 15))
     for (const s of subjects) expect(s.conditions?.window).toMatchObject({ kind: "season", from: tonight() })
     expect(project(CYGNUS).goals.every((g) => g.integrationS === 4 * 3600 && g.qualityBar?.kind === "usable-max-fwhm")).toBe(true)
   })
@@ -142,15 +167,16 @@ describe("applying a goal template copies its conditions (C7)", () => {
   it("copies a Finish by night, and a built-in template's defaults", () => {
     const { id } = saveGoalTemplate({ id: null, name: "Autumn", values: [{ channel: "Ha", integrationS: 3600, frameCount: null, qualityBar: qualityBarFor(null) }], conditions: { panelBalancePct: 20, window: { kind: "finish-by", night: "2026-12-31" } } })
     expect(applyGoalTemplate(CYGNUS, id, project(CYGNUS).revision).ok).toBe(true)
-    expect(project(CYGNUS).subjects.map((s) => s.conditions)).toEqual([0, 1].map(() => ({ panelBalancePct: 20, window: { kind: "finish-by", night: "2026-12-31" } })))
+    const subjects = project(CYGNUS).subjects
+    expect(subjects.map((s) => s.conditions)).toEqual(subjects.map(() => ({ panelBalancePct: 20, window: { kind: "finish-by", night: "2026-12-31" } })))
     expect(applyGoalTemplate(CYGNUS, BUILT_IN_GOAL_TEMPLATES[0]!.id, project(CYGNUS).revision).ok).toBe(true)
-    expect(project(CYGNUS).subjects.map((s) => s.conditions)).toEqual([DEFAULT_SUBJECT_CONDITIONS, DEFAULT_SUBJECT_CONDITIONS])
+    expect(project(CYGNUS).subjects.map((s) => s.conditions)).toEqual(subjects.map(() => DEFAULT_SUBJECT_CONDITIONS))
   })
 
   it("gives a new Project's subjects the conditions of the template its goals came from", () => {
     const template = store.getState().catalog.goalTemplates[HOO_MOSAIC]!
     const targetId = project(CYGNUS).subjects[0]!.targetId
-    const input = { name: "Autumn HOO", notes: "", subjects: [{ targetId, mosaic: null }], rigIds: project(CYGNUS).rigIds, goals: template.values }
+    const input = { name: "Autumn HOO", notes: "", subjects: [targetId], rigIds: project(CYGNUS).rigIds, goals: template.values }
     const withTemplate = createProject({ ...input, templateId: HOO_MOSAIC })
     expect(withTemplate.result.ok).toBe(true)
     expect(project(withTemplate.projectId).subjects[0]!.conditions).toMatchObject({ panelBalancePct: 15, window: { kind: "season", from: tonight() } })
