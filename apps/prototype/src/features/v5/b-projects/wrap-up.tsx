@@ -1,48 +1,54 @@
 /**
- * Wrap up (§5.5, C3, P-WRAP1, P-ARC1): the Project's Wrap up tab, a StepPage
- * driven by the domain's `wrapUpFlowState` through U11's `wrapUpFlow`:
- * Clean up runs → Trash → Archive, strictly in that order. Each step is a
- * selection step: its DataTable preselects the recommended rows, a row
- * expands to its files, and rows that cannot move say why in their Status
- * cell. Proceed confirms the selection with its file groups and starts the
- * step's work; the step reads Finished once that work succeeds (F2). With
- * nothing selected Proceed records the step Skipped, and with nothing left it
+ * Wrap up (§5.5, C3, P-WRAP1, P-ARC1, PRJ-FR-14): the Project's Wrap up
+ * tab, a StepPage driven by the domain's `wrapUpFlowState` through
+ * `wrapUpFlow`: Clean up → Trash → Archive, strictly in that order. Each
+ * step is a selection step over the domain's offers: its DataTable ticks the
+ * recommended rows (Clean up ticks the View's copies and leaves its
+ * symlinks, F1), and rows that cannot move say why in their Status cell.
+ * Proceed confirms the selection with its file groups and starts the step's
+ * work; the step reads Finished once that work succeeds (F2). With nothing
+ * selected Proceed records the step Skipped, and with nothing left it
  * records it Finished ("Nothing to clean up"). Archive's Proceed is Close
- * project…: the Project closes when its transfer succeeds, or at once with
- * nothing to move. A settled step shows its record; an earlier one reopens
- * from the footer until Close (F5). A closed Project's Wrap up is read-only.
+ * project…: the Project closes for good when its transfer succeeds, or at
+ * once with nothing to move (`closingOnSuccess`). A settled step shows its
+ * record; an earlier one reopens from the footer until Close (F5). A closed
+ * Project's Wrap up is read-only. Output is never offered.
  */
-import { useState } from "react"
+import { useNavigate } from "@tanstack/react-router"
+import { CheckCheck, Package, Trash2 } from "lucide-react"
+import { type ReactNode, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { UsedByPreview } from "@/components/app/previews"
+import { ActionButton } from "@/components/app/actions"
 import type { Column, ConfirmSpec, FileRow } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable, type DataTableToolbar } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
+import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
 import { stepEditable } from "@/components/app/step-flow"
 import { StepPage } from "@/components/templates/step-page"
-import { type ArchiveRow, archivePlan, type OfferKind, type OfferRefusal } from "@/domain/archive"
+import { type ArchiveRow, archivePlan, type OfferKind, type OfferRefusal, type TrashOffer } from "@/domain/archive"
 import { fileAt } from "@/domain/disk"
-import { archiveLocations, defaultArchiveLocation, projectRuns, runSetup, type StepLink, wrapUpFlowState } from "@/domain/derive"
+import { archiveLocations, defaultArchiveLocation, type StepLink } from "@/domain/derive"
 import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
+import { entryItems, TRASH_OFFER_KINDS, trashOffers, viewCleanupOffer, wrapUpFlowState } from "@/domain/project-view"
 import type { TrashItem } from "@/domain/storage"
-import type { InputMode, OperationId, Project, Run, WrapUpStepId } from "@/domain/types"
+import type { OperationId, Project, WrapUpStepId } from "@/domain/types"
 import { fileName, formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import { startArchiveTransfer } from "@/store/actions/archive"
 import { type WrapUpSelection, wrapUpFlow } from "@/store/actions/flows"
 import { setProjectArchiveLocation } from "@/store/actions/projects"
-import { startRunViewRemoval } from "@/store/actions/runs"
-import { moveToOsTrash, preparedEntryItems } from "@/store/actions/trash"
+import { moveToOsTrash } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
-import { CheckCheck, Package, Trash2 } from "lucide-react"
-import { useNavigate } from "@tanstack/react-router"
-import { ActionButton } from "@/components/app/actions"
-import { entryItems, OFFER_KINDS, trashOffers } from "./model"
 import type { ProjectChrome } from "./project"
 
-const OFFER_NAME: Record<OfferKind, ReturnType<typeof msg>> = { "rejected-frames": msg("wrapup_offer_rejects"), intermediates: msg("run_results_intermediates"), "duplicate-copies": msg("wrapup_offer_duplicates_label") }
+const OFFER_NAME: Record<OfferKind, ReturnType<typeof msg>> = {
+  "view-cleanup": msg("wrapup_offer_view_label"),
+  "rejected-frames": msg("wrapup_offer_rejects"),
+  "processing-files": msg("wrapup_offer_processing_label"),
+  "duplicate-copies": msg("wrapup_offer_duplicates_label"),
+}
 
 /** The folder holding a path. */
 function folderOf(path: string): string {
@@ -59,68 +65,51 @@ function StatusCell({ status }: { status: { label: string; link?: StepLink } | n
 // The rows of each step
 // ---------------------------------------------------------------------------
 
-interface CleanupRow {
-  id: string
-  run: Run
-  view: InputMode
-  items: TrashItem[]
-  links: number
-  copies: number
-  bytes: number
-  status: { label: string } | null
-}
-
-/** Finished runs whose view was kept (F6): their links are unlinked and their copies go to the OS Trash. */
-function cleanupRows(m: Messages, state: PrototypeState, project: Project): CleanupRow[] {
-  return projectRuns(state.catalog, project.id)
-    .filter((run) => run.completion === "complete")
-    .flatMap((run): CleanupRow[] => {
-      const items = preparedEntryItems(state, run.id)
-      if (items.length === 0) return []
-      const refused = items.find((i) => i.refusedReason)
-      const files = items.filter((i) => !i.refusedReason).map((i) => fileAt(state.disk, i.path))
-      const links = files.filter((f) => f?.linkTarget).length
-      return [
-        {
-          id: run.id,
-          run,
-          view: runSetup(state.catalog, run).inputMode ?? state.settings.defaultRunView,
-          items: items.filter((i) => !i.refusedReason),
-          links,
-          copies: files.length - links,
-          bytes: files.reduce((n, f) => n + (f && !f.linkTarget ? f.sizeBytes : 0), 0),
-          status: refused?.refusedReason ? { label: say(m, refused.refusedReason) } : null,
-        },
-      ]
-    })
-}
-
-function cleanupFiles(state: PrototypeState, row: CleanupRow): FileRow[] {
-  return row.items.map((item) => {
-    const file = fileAt(state.disk, item.path)
-    return file?.linkTarget ? { file: fileName(item.path), from: folderOf(item.path), action: "unlink", size: 0 } : { file: fileName(item.path), from: folderOf(item.path), action: "trash", size: file?.sizeBytes ?? 0 }
-  })
-}
-
-interface TrashRow {
+interface OfferRow {
   id: string
   kind: OfferKind
   label: string
   path: string | null
   detail: string | null
   size: number
+  /** A link in the View: Clean up unlinks it instead of trashing bytes. */
+  link: boolean
+  /** Ticked when the step opens (F1). */
+  preselected: boolean
   items: TrashItem[]
   status: { label: string; link?: StepLink } | null
 }
 
-/** Each offered file of the three groups, then the files that stay, with why (no Project-only rejects: P-REJ2). */
-function trashRows(m: Messages, state: PrototypeState, project: Project): TrashRow[] {
-  const offers = trashOffers(state, project)
-  return OFFER_KINDS.flatMap((kind) => {
-    const offer = offers[kind]
-    const moved = offer.entries.map((entry): TrashRow => ({ id: `${kind}:${entry.key}`, kind, label: entry.label, path: entry.path, detail: entry.detail, size: entry.sizeBytes, items: entryItems(offer, entry), status: null }))
+/** Each offered file of the offers, then the files that stay, with why (no Project-only rejects: P-REJ2). */
+function offerRows(m: Messages, state: PrototypeState, offers: TrashOffer[]): OfferRow[] {
+  return offers.flatMap((offer) => {
+    const moved = offer.entries.map(
+      (entry): OfferRow => ({
+        id: `${offer.kind}:${entry.key}`,
+        kind: offer.kind,
+        label: entry.label,
+        path: entry.path,
+        detail: entry.detail,
+        size: entry.sizeBytes,
+        link: Boolean(fileAt(state.disk, entry.path)?.linkTarget),
+        preselected: entry.preselected,
+        items: entryItems(offer, entry),
+        status: null,
+      }),
+    )
     const kept = offer.refusals.map(
-      (refusal: OfferRefusal): TrashRow => ({ id: `${kind}:kept:${refusal.key}`, kind, label: refusal.label, path: refusal.path, detail: null, size: 0, items: [], status: { label: say(m, refusal.reason), link: refusal.link } }),
+      (refusal: OfferRefusal): OfferRow => ({
+        id: `${offer.kind}:kept:${refusal.key}`,
+        kind: offer.kind,
+        label: refusal.label,
+        path: refusal.path,
+        detail: null,
+        size: 0,
+        link: false,
+        preselected: false,
+        items: [],
+        status: { label: say(m, refusal.reason), link: refusal.link },
+      }),
     )
     return [...moved, ...kept]
   })
@@ -155,11 +144,15 @@ function moveFiles(row: ArchiveRow): FileRow[] {
   return row.moves.map((move) => ({ file: fileName(move.from.path), from: folderOf(move.from.path), to: folderOf(move.to.path), action: "move", size: move.sizeBytes }))
 }
 
+function offerFiles(rows: OfferRow[]): FileRow[] {
+  return rows.map((r) => ({ file: r.label, from: r.path ? folderOf(r.path) : "", action: r.link ? "unlink" : "trash", size: r.size }))
+}
+
 // ---------------------------------------------------------------------------
 // The page
 // ---------------------------------------------------------------------------
 
-/** Each step's selection; null keeps the recommended rows (every row that can move). */
+/** Each step's selection; null keeps the recommended rows. */
 type Picked = Record<WrapUpStepId, string[] | null>
 
 export function WrapUpPage({ project, chrome, step }: { project: Project; chrome: ProjectChrome; step?: string }) {
@@ -167,40 +160,49 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
   const state = useStore((s) => s)
   const [picked, setPicked] = useState<Picked>({ cleanup: null, trash: null, archive: null })
 
-  const cleanup = cleanupRows(m, state, project)
-  const trash = trashRows(m, state, project)
+  const cleanup = offerRows(m, state, [viewCleanupOffer(state, project)])
+  const offers = trashOffers(state, project)
+  const trash = offerRows(m, state, TRASH_OFFER_KINDS.map((kind) => offers[kind]))
   const archive = archiveRows(m, state, project)
   const movable = {
     cleanup: cleanup.filter((r) => !r.status).map((r) => r.id),
     trash: trash.filter((r) => !r.status).map((r) => r.id),
     archive: archive.rows.filter((r) => r.row).map((r) => r.id),
   }
-  const chosen = (id: WrapUpStepId) => (picked[id] ?? movable[id]).filter((rowId) => movable[id].includes(rowId))
+  const recommended = {
+    cleanup: cleanup.filter((r) => !r.status && r.preselected).map((r) => r.id),
+    trash: trash.filter((r) => !r.status && r.preselected).map((r) => r.id),
+    archive: movable.archive,
+  }
+  const chosen = (id: WrapUpStepId) => (picked[id] ?? recommended[id]).filter((rowId) => movable[id].includes(rowId))
+  const href = (id: WrapUpStepId) => `/projects/${project.id}?stage=wrap-up&step=${id}`
 
   /** The selection Proceed acts on, for the step the flow is at. */
   function selectionFor(id: WrapUpStepId): WrapUpSelection {
     const ids = chosen(id)
     if (id === "cleanup") {
       const rows = cleanup.filter((r) => ids.includes(r.id))
+      const links = rows.filter((r) => r.link).length
       const confirm: ConfirmSpec = {
-        title: m.wrapup_cleanup_confirm_title({ count: rows.length }),
-        summary: m.wrapup_cleanup_summary({ links: formatCount(rows.reduce((n, r) => n + r.links, 0)), copies: formatCount(rows.reduce((n, r) => n + r.copies, 0)), size: formatBytes(rows.reduce((n, r) => n + r.bytes, 0)) }),
-        groups: rows.map((r) => ({ label: r.run.name, rows: cleanupFiles(state, r) })),
-        confirm: { label: m.run_clean_up() },
+        title: m.wrapup_cleanup_confirm_items({ count: rows.length }),
+        summary: m.wrapup_cleanup_summary({ links: formatCount(links), copies: formatCount(rows.length - links), size: formatBytes(rows.reduce((n, r) => n + r.size, 0)) }),
+        groups: [{ label: say(m, OFFER_NAME["view-cleanup"]), rows: offerFiles(rows) }],
+        confirm: { label: m.wrapup_clean_up() },
       }
-      return { offered: movable.cleanup.length, selected: rows.length, confirm, start: () => rows.flatMap((r) => startRunViewRemoval(r.run.id).operationId ?? []) }
+      const folders = [project.view?.folderPath, project.previous?.folderPath].filter((f): f is string => Boolean(f))
+      const start = (): OperationId[] => [
+        moveToOsTrash({ kind: "view-cleanup", title: msg("op_offer_to_trash", { offer: OFFER_NAME["view-cleanup"], name: project.name }), projectId: project.id, items: rows.flatMap((r) => r.items), pruneFolders: folders, unit: "entries", href: href("cleanup") }),
+      ]
+      return { offered: movable.cleanup.length, selected: rows.length, confirm, start }
     }
     if (id === "trash") {
       const rows = trash.filter((r) => ids.includes(r.id))
-      const kinds = OFFER_KINDS.filter((kind) => rows.some((r) => r.kind === kind))
+      const kinds = TRASH_OFFER_KINDS.filter((kind) => rows.some((r) => r.kind === kind))
       const confirm: ConfirmSpec = {
         title: m.wrapup_trash_confirm_title({ count: rows.length }),
         summary: formatBytes(rows.reduce((n, r) => n + r.size, 0)),
-        groups: kinds.map((kind) => ({
-          label: say(m, OFFER_NAME[kind]),
-          rows: rows.filter((r) => r.kind === kind).map((r): FileRow => ({ file: r.label, from: r.path ? folderOf(r.path) : "", action: "trash", size: r.size })),
-        })),
-        confirm: { label: m.run_move_to_trash(), kind: "destructive" },
+        groups: kinds.map((kind) => ({ label: say(m, OFFER_NAME[kind]), rows: offerFiles(rows.filter((r) => r.kind === kind)) })),
+        confirm: { label: m.wrapup_move_to_trash(), kind: "destructive" },
       }
       const start = (): OperationId[] =>
         kinds.map((kind) =>
@@ -208,9 +210,8 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
             kind,
             title: msg("op_offer_to_trash", { offer: OFFER_NAME[kind], name: project.name }),
             projectId: project.id,
-            runIds: [],
             items: rows.filter((r) => r.kind === kind).flatMap((r) => r.items),
-            href: `/projects/${project.id}?stage=wrap-up&step=trash`,
+            href: href("trash"),
           }),
         )
       return { offered: movable.trash.length, selected: rows.length, confirm, start }
@@ -220,7 +221,7 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
       offered: movable.archive.length,
       selected: rows.length,
       confirm: { title: "", groups: [{ label: m.wrapup_archive_moves(), rows: rows.flatMap(moveFiles) }], confirm: { label: m.stepflow_close_project() } },
-      start: () => [startArchiveTransfer(project.id, rows, "archive")],
+      start: () => [startArchiveTransfer(project.id, rows)],
     }
   }
 
@@ -235,9 +236,9 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
   const body = settled ? (
     <StepRecord project={project} step={viewing} summary={viewed?.summary ?? null} />
   ) : viewing === "cleanup" ? (
-    <CleanupTable rows={cleanup} select={select("cleanup")} />
+    <OfferTable label={m.wrapup_cleanup_view_title()} rows={cleanup} select={select("cleanup")} empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />} />
   ) : viewing === "trash" ? (
-    <TrashTable rows={trash} select={select("trash")} />
+    <OfferTable label={m.trash_title()} rows={trash} select={select("trash")} empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />} />
   ) : (
     <ArchiveTable project={project} rows={archive.rows} blocked={archive.blocked} select={select("archive")} editable={editable} />
   )
@@ -263,51 +264,27 @@ interface Select {
   onChange: (ids: string[]) => void
 }
 
-function CleanupTable({ rows, select }: { rows: CleanupRow[]; select: Select | null }) {
+/** One step's offers: Clean up's View files, or Trash's three groups in their order. */
+function OfferTable({ label, rows, select, empty }: { label: string; rows: OfferRow[]; select: Select | null; empty: ReactNode }) {
   const m = useMessages()
-  const state = useStore((s) => s)
-  const view = (r: CleanupRow) => (r.view === "symlink" ? m.domain_mode_symlink() : m.domain_mode_copy())
-  const columns: Column<CleanupRow>[] = [
-    { id: "run", header: m.project_run_noun_capital(), cell: (r) => r.run.name, sortValue: (r) => r.run.name, rowHeader: true, truncate: true },
-    { id: "view", header: m.wrapup_col_view(), cell: view, sortValue: view },
-    { id: "items", header: m.wrapup_col_items(), cell: (r) => formatCount(r.items.length), sortValue: (r) => r.items.length, align: "right" },
-    { id: "size", header: m.dialog_col_size(), cell: (r) => formatBytes(r.bytes), sortValue: (r) => r.bytes, align: "right" },
-    { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
-  ]
-  return (
-    <DataTable
-      label={m.wrapup_cleanup_title()}
-      rows={rows}
-      columns={columns}
-      getRowId={(r) => r.id}
-      scroll="none"
-      rowLabel={(r) => r.run.name}
-      expand={{ render: (r) => <FileTable label={r.run.name} rows={cleanupFiles(state, r)} /> }}
-      selection={select ? { ...select, rowLabel: (r) => r.run.name, isSelectable: (r) => !r.status, countLabel: (count) => m.project_runs_count({ count }) } : undefined}
-      empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />}
-    />
-  )
-}
-
-function TrashTable({ rows, select }: { rows: TrashRow[]; select: Select | null }) {
-  const m = useMessages()
-  const columns: Column<TrashRow>[] = [
+  const kinds = [...new Set(rows.map((r) => r.kind))]
+  const columns: Column<OfferRow>[] = [
     { id: "item", header: m.dialog_col_file(), cell: (r) => r.label, sortValue: (r) => r.label, rowHeader: true, truncate: true },
     { id: "detail", header: m.wrapup_col_detail(), cell: (r) => r.detail ?? "–", sortValue: (r) => r.detail, truncate: true },
     { id: "from", header: m.dialog_col_from(), cell: (r) => (r.path ? folderOf(r.path) : "–"), sortValue: (r) => r.path, truncate: true },
-    { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
+    { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status || r.size === 0 ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
     { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
   ]
   return (
     <DataTable
-      label={m.trash_title()}
+      label={label}
       rows={rows}
       columns={columns}
       getRowId={(r) => r.id}
       scroll="none"
-      groups={{ key: (r) => r.kind, label: (kind, group) => m.wrapup_group_line({ name: say(m, OFFER_NAME[kind as OfferKind]), count: group.length }), compare: (a, b) => OFFER_KINDS.indexOf(a as OfferKind) - OFFER_KINDS.indexOf(b as OfferKind) }}
+      groups={kinds.length > 1 ? { key: (r) => r.kind, label: (kind, group) => m.wrapup_group_line({ name: say(m, OFFER_NAME[kind as OfferKind]), count: group.length }), compare: (a, b) => kinds.indexOf(a as OfferKind) - kinds.indexOf(b as OfferKind) } : undefined}
       selection={select ? { ...select, rowLabel: (r) => r.label, isSelectable: (r) => !r.status, countLabel: (count) => m.wrapup_items({ count }) } : undefined}
-      empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />}
+      empty={empty}
     />
   )
 }

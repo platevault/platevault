@@ -7,7 +7,7 @@
  * Search params are loose string maps so screens can add keys without a
  * foundation change. Documented keys: `/projects/$projectId?stage=` (the
  * Project tab: sessions, calibrate, view, output or wrap-up; Wrap up takes
- * `&step=`), `?add=goal` (open Add goal), `?candidates=unreviewed`;
+ * `&step=`), `?add=goal` (open Add goal);
  * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
  * planning values use; tonight when absent or past), `?project=`;
  * `/settings/locations?duplicates=review` (the Duplicates review sheet);

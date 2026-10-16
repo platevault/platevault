@@ -1,26 +1,23 @@
 /**
  * Slice B shell contribution (see `src/app/shell-contract.ts`): the New
- * Project and Start run dialog hosts, and their palette actions. The Project
- * actions follow the Project the route has open; Wrap up and the mosaic
- * editor are Project pages, not dialogs.
+ * Project dialog host and the palette actions. The Project actions follow
+ * the Project the route has open: Apply… while it is open, Wrap up once it
+ * can be worked on or the Project is closed. Wrap up and the Project's tabs
+ * are Project pages, not dialogs.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { useActiveRoute } from "@/app/active-route"
 import { useMessages } from "@/app/preferences"
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
 import { openSheet } from "@/app/ui-state"
-import { wrapUpFlowState } from "@/domain/derive"
+import { isLocked } from "@/domain/derive"
+import { wrapUpSummary } from "@/domain/project-view"
 import { useStore } from "@/store/core"
 import { NewProjectDialog } from "./new-project"
-import { StartRunHost } from "./start-run"
+import { openApplySheet } from "./view-step"
 
 function Dialogs() {
-  return (
-    <>
-      <NewProjectDialog />
-      <StartRunHost />
-    </>
-  )
+  return <NewProjectDialog />
 }
 
 function useCommands(): PaletteCommand[] {
@@ -28,26 +25,27 @@ function useCommands(): PaletteCommand[] {
   const navigate = useNavigate()
   const m = useMessages()
   const project = useStore((s) => (active.projectId ? s.catalog.projects[active.projectId] : undefined))
-  const wrapUp = useStore((s) => (project ? wrapUpFlowState(s, project).available || project.state === "done" : false))
+  const wrapUp = useStore((s) => (project ? isLocked(project) || wrapUpSummary(s, project).available : false))
   const commands: PaletteCommand[] = [
     { id: "b:new-project", label: m.newproject_open_ellipsis(), group: "Actions", keywords: "create project campaign subjects rigs goals", run: () => openSheet({ kind: "new-project" }) },
   ]
-  if (project?.state === "open") {
-    commands.push({ id: "b:start-run", label: m.startrun_in_project_ellipsis({ name: project.name }), group: "Actions", keywords: "new processing run subject rig profile", run: () => openSheet({ kind: "start-run", projectId: project.id }) })
+  if (project && !isLocked(project))
     commands.push({
-      id: "b:new-mosaic",
-      label: m.mosaic_new_in_project_ellipsis({ name: project.name }),
+      id: "b:apply",
+      label: m.project_apply_in_project({ name: project.name }),
       group: "Actions",
-      keywords: "mosaic panels field run group",
-      run: () => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: "new" } }),
+      keywords: "apply view build folder changes symlinks copies",
+      run: () => {
+        openApplySheet(project.id)
+        void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { stage: "view" } })
+      },
     })
-  }
   if (project && wrapUp)
     commands.push({
       id: "b:wrap-up",
       label: m.wrapup_project({ name: project.name }),
       group: "Actions",
-      keywords: "clean up trash rejects intermediates duplicates archive done",
+      keywords: "clean up trash rejects processing duplicates archive close",
       run: () => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { stage: "wrap-up" } }),
     })
   return commands

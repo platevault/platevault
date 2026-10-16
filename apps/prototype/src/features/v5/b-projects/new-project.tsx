@@ -3,15 +3,15 @@
  * TargetPicker across My targets, the catalogues and SIMBAD (D-W17), the
  * rigs (D-W37), and goals per channel, typed or prefilled from a goal
  * template through "Add goal ▾ › From template ▸" (D-W30, D-W47). The
- * template's conditions reach every subject (C7, `templateId`). A mosaic
- * subject is added on the Project page, in the mosaic editor, where the
- * rig's field of view lays out its panels.
+ * template's conditions reach every subject (C7, `templateId`). A mosaic is
+ * not chosen here: marking a group as a mosaic panel on the Project page
+ * makes the Project a mosaic (PRJ-FR-29).
  *
  * Opened with `openSheet({ kind: "new-project", fromSessionId?, targetId? })`:
  * a session prefills its Target and rig, a Target prefills itself as a
  * subject. Creating writes catalog records only: the Project and, for a
- * subject new to the library, its Target record (PRJ-FR-05). No run starts,
- * no file moves.
+ * subject new to the library, its Target record (PRJ-FR-05). It holds no
+ * session and builds no View until the user adds sessions and applies.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { X } from "lucide-react"
@@ -63,7 +63,7 @@ function initialDraft(fromSessionId: string | undefined, targetId: string | unde
   const { catalog } = store.getState()
   const prefill = fromSessionId ? prefillFromSession(fromSessionId) : null
   const picks: SubjectPick[] = []
-  for (const id of [...(prefill?.subjects.map((s) => s.targetId) ?? []), ...(targetId ? [targetId] : [])]) {
+  for (const id of [...(prefill?.subjects ?? []), ...(targetId ? [targetId] : [])]) {
     const target = catalog.targets[id]
     if (target && !picks.some((p) => p.name === target.name)) picks.push(pickFromTarget(target))
   }
@@ -100,11 +100,11 @@ function NewProjectForm({ open, fromSessionId, targetId }: { open: boolean; from
   }
 
   function create(): CommitResult {
-    const subjects = []
+    const subjects: string[] = []
     for (const pick of picks) {
       const resolved = resolvePick(pick)
       if (!resolved.ok) return { ok: false, reason: "write-failed", message: resolved.message }
-      subjects.push({ targetId: resolved.targetId, mosaic: null })
+      subjects.push(resolved.targetId)
     }
     const { result, projectId } = createProject({ name, notes, subjects, rigIds, goals: values, templateId })
     if (result.ok) void navigate({ to: "/projects/$projectId", params: { projectId } })
