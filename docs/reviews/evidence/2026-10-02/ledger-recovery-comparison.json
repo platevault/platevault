@@ -1,0 +1,3386 @@
+{
+ "bead": "astro-plan-p0ds",
+ "generated_at": "2026-10-16T07:58:00Z",
+ "scope": "Isolated, read-only comparison. No store was restored, imported, pulled, pushed or written; no bead was created, closed or updated for any recovered item.",
+ "verdict": "None of the 180 bead-shaped ids exists in the live ledger or in any surviving store, history or raw storage chunk examined. Nothing is recoverable from a store; all 180 stay unresolved.",
+ "counts": {
+  "commit_strings_absent_from_oct2_export": 183,
+  "bead_shaped": 180,
+  "bead_shaped_roots": 116,
+  "bead_shaped_children": 64,
+  "non_id": 3,
+  "confirmed_missing": 180,
+  "implied_missing_ancestors": 18,
+  "recoverable_from_stores": 0,
+  "unresolved_in_183_scope": 198,
+  "supplementary_bead_shaped_outside_183": 28,
+  "august_rows_absent_from_live_found_in_isolated_clones": 26
+ },
+ "census_183": {
+  "baseline_commit": "94a3dc958c13e297baf501aa2721efa2c2628622",
+  "rule": "Distinct matches of astro-plan-[a-z0-9]+(\\.[0-9]+)* in full commit messages reachable from the baseline, minus ids present in the recovered 2026-10-02 export, loaded directly from that file. Reproduces the reviewed figure exactly: 243 distinct, 183 absent.",
+  "oct2_export": {
+   "file": ".audit-smoke/ledger-refreshed.jsonl in ~/tmp/worktree-backups/review-application-local-20261002.files.tgz",
+   "archive_sha256": "89f3bbc3c2c9835f252536a7a726aec42e3e523b82417cae458d47b6e04ec7ed",
+   "export_sha256": "d1d9bf0c7a00d8b292f4090794197930bfc096bebb2e1f8d2f5bf0882f2960ba",
+   "issues": 1670,
+   "max_created_at": "2026-10-02T11:56:06Z"
+  },
+  "classification_rule": "Bead-shaped: astro-plan- followed by a 3-6 character base36 hash, optionally with numeric .N children, used as a bead reference in context. Non-id: the whole token is a path, repository name or a longer id the pattern truncated.",
+  "non_id": [
+   {
+    "string": "astro-plan-archive",
+    "class": "non_id_path_or_repo_name",
+    "reason": "every occurrence is part of a path or repository name: .astro-plan-archive, /.astro-plan-archive",
+    "tokens": [
+     ".astro-plan-archive",
+     "/.astro-plan-archive"
+    ],
+    "commits": [
+     "11d9a249d43f03e3b952bf49e4ceaae99e21e9ad",
+     "34e59139885222b443225b49882ec43929c86214",
+     "8111f016f3d13b63fbfd698da67306d1e6012d33",
+     "cd814907ba6a24edeac4900932564551e160a7c1"
+    ],
+    "first_commit_date": "2026-07-04T19:55:44+04:00"
+   },
+   {
+    "string": "astro-plan-catalogs",
+    "class": "non_id_word",
+    "reason": "dictionary word, longer than any live hash id",
+    "tokens": [
+     "astro-plan-catalogs",
+     "~/dev/astro-plan-catalogs"
+    ],
+    "commits": [
+     "329c6d11d412033ceea10713e272289922530d49",
+     "8bac3bcba6c1d00215ec8b7c9b4d4cfbd36a3a8b"
+    ],
+    "first_commit_date": "2026-06-11T12:08:07+04:00"
+   },
+   {
+    "string": "astro-plan-wisp",
+    "class": "non_id_truncated_wisp_reference",
+    "reason": "regex stopped at the hyphen; full tokens are wisp ids astro-plan-wisp-7bj, astro-plan-wisp-7sm, astro-plan-wisp-9ui, astro-plan-wisp-b52, astro-plan-wisp-h1v",
+    "tokens": [
+     "astro-plan-wisp-7bj",
+     "astro-plan-wisp-7sm",
+     "astro-plan-wisp-9ui",
+     "astro-plan-wisp-b52",
+     "astro-plan-wisp-h1v"
+    ],
+    "commits": [
+     "1505b8d43eee7bc27ff7151ff13cd025586d90b7",
+     "2aa4a537f15afcafe086591d29751f009dda883b",
+     "4948b3ece5948f7912c54f8b975fd53c81bc7de2",
+     "506e7dc33490f718a38977457282c7c0c6e0a185",
+     "846a170c020100ab8ca582e739824c84f119c0e4",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ],
+    "first_commit_date": "2026-08-22T00:52:03+04:00"
+   }
+  ]
+ },
+ "confirmed_missing": {
+  "definition": "Bead-shaped id referenced by a baseline commit, absent from the live export (2026-10-16), the 2026-10-02 export, every source's current rows, every commit of every source's history, and every decoded storage chunk.",
+  "ids": [
+   {
+    "id": "astro-plan-00yw0",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T02:33:27+04:00",
+    "last_commit_date": "2026-08-23T02:33:27+04:00",
+    "trailers": [],
+    "commits": [
+     "992fdf4a7a63057f57a595f2b80c1f8570f06f90"
+    ]
+   },
+   {
+    "id": "astro-plan-0g8e",
+    "kind": "root",
+    "first_commit_date": "2026-08-20T22:38:00+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "62bdfc6216b6fb9b86f9d666ab3d0a6d17416edd",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-0sgb.1",
+    "kind": "child",
+    "first_commit_date": "2026-08-21T19:39:18+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "47afd6b96a6a2dbae31527744310d7bb5abd564c",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-0vvzm",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T22:48:26+04:00",
+    "last_commit_date": "2026-08-24T22:48:26+04:00",
+    "trailers": [],
+    "commits": [
+     "8634e27f4c2f651f30e0459b0b5ff67ebe0133bb"
+    ]
+   },
+   {
+    "id": "astro-plan-0zog4",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:26:50+04:00",
+    "last_commit_date": "2026-08-23T23:26:50+04:00",
+    "trailers": [],
+    "commits": [
+     "a1d50d34f6188aec6447ae5a3e3ab20e41e9df95"
+    ]
+   },
+   {
+    "id": "astro-plan-1k9kn",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T14:28:01+04:00",
+    "last_commit_date": "2026-08-24T14:28:01+04:00",
+    "trailers": [],
+    "commits": [
+     "baaadf3bca83bd1b3d412420f5392943e64c1a79"
+    ]
+   },
+   {
+    "id": "astro-plan-2add",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T14:51:17+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "8361a5c45c081192c2193c14d29ff2396351eda4",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-2cy4e",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T16:41:33+04:00",
+    "last_commit_date": "2026-08-24T16:41:33+04:00",
+    "trailers": [],
+    "commits": [
+     "9bd824eb37ab55758d6529f24aa1aaa7d7ac92d8"
+    ]
+   },
+   {
+    "id": "astro-plan-2l1c",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T17:35:10+04:00",
+    "last_commit_date": "2026-08-17T17:35:10+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "aa6ab48ad2bee1aae33320d3407de7e6f4f98a10"
+    ]
+   },
+   {
+    "id": "astro-plan-2ppxa",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T12:59:59+04:00",
+    "last_commit_date": "2026-08-24T12:59:59+04:00",
+    "trailers": [],
+    "commits": [
+     "8a0137a9d23fb43f62ec1d48de555dbd53804da0"
+    ]
+   },
+   {
+    "id": "astro-plan-3fmqq",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.1.12",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [
+     "Closes",
+     "Refs"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.1.13",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.1.14",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.1.16",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [
+     "Closes"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.1.26",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.11.26",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T09:32:10+04:00",
+    "last_commit_date": "2026-08-22T09:32:10+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "5623176a0b7b465ebe66016f88d050effa88fd9a"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.12.21",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T16:20:43+04:00",
+    "last_commit_date": "2026-08-22T16:20:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "506e7dc33490f718a38977457282c7c0c6e0a185"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.12.31",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T16:44:12+04:00",
+    "last_commit_date": "2026-08-23T16:44:12+04:00",
+    "trailers": [],
+    "commits": [
+     "63a0b2d5f6977c54123fdf825fa8936eb6b9fd93"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.12.32",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T16:44:12+04:00",
+    "last_commit_date": "2026-08-23T16:44:12+04:00",
+    "trailers": [],
+    "commits": [
+     "63a0b2d5f6977c54123fdf825fa8936eb6b9fd93"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.13.26",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [
+     "Closes"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.13.28",
+    "kind": "child",
+    "first_commit_date": "2026-08-24T08:24:43+04:00",
+    "last_commit_date": "2026-08-24T08:24:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "855c63e3a505594bcde250866983443b54772d36"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.13.37",
+    "kind": "child",
+    "first_commit_date": "2026-08-24T08:24:43+04:00",
+    "last_commit_date": "2026-08-24T08:24:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "855c63e3a505594bcde250866983443b54772d36"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.13.41",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T23:55:17+04:00",
+    "last_commit_date": "2026-08-23T23:55:17+04:00",
+    "trailers": [],
+    "commits": [
+     "079da65357bd0fb1c38227ef3b62c7487e8756b9"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.15.5",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T09:32:10+04:00",
+    "last_commit_date": "2026-08-22T09:32:10+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "5623176a0b7b465ebe66016f88d050effa88fd9a"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.15.8",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T18:07:06+04:00",
+    "last_commit_date": "2026-08-23T18:07:06+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "5253d6822ceabb17174d790877bb996135d13bb2"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.10",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.11",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.12",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.13",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.14",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.18",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.19",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.20",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.16.21",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.17.11",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.17.16",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.17.20",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T18:07:06+04:00",
+    "last_commit_date": "2026-08-23T18:07:06+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "5253d6822ceabb17174d790877bb996135d13bb2"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.17.26",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.17.7",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.17.9",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.18.18",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.18.20",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.19.18",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T19:52:29+04:00",
+    "last_commit_date": "2026-08-23T19:52:29+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "c8b2e53512f878296ef08177bd48d73abefed8e7"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.2.20",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T21:18:47+04:00",
+    "last_commit_date": "2026-08-22T21:18:47+04:00",
+    "trailers": [],
+    "commits": [
+     "4948b3ece5948f7912c54f8b975fd53c81bc7de2"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.2.25",
+    "kind": "child",
+    "first_commit_date": "2026-08-24T08:24:43+04:00",
+    "last_commit_date": "2026-08-24T08:24:43+04:00",
+    "trailers": [],
+    "commits": [
+     "855c63e3a505594bcde250866983443b54772d36"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.2.30",
+    "kind": "child",
+    "first_commit_date": "2026-08-24T08:24:43+04:00",
+    "last_commit_date": "2026-08-24T08:24:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "855c63e3a505594bcde250866983443b54772d36"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.2.31",
+    "kind": "child",
+    "first_commit_date": "2026-08-24T08:24:43+04:00",
+    "last_commit_date": "2026-08-24T08:24:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "855c63e3a505594bcde250866983443b54772d36"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.2.35",
+    "kind": "child",
+    "first_commit_date": "2026-08-24T08:24:43+04:00",
+    "last_commit_date": "2026-08-24T08:24:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "855c63e3a505594bcde250866983443b54772d36"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.3.13",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T16:44:12+04:00",
+    "last_commit_date": "2026-08-23T16:44:12+04:00",
+    "trailers": [],
+    "commits": [
+     "63a0b2d5f6977c54123fdf825fa8936eb6b9fd93"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.4.17",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T16:20:43+04:00",
+    "last_commit_date": "2026-08-22T16:20:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "506e7dc33490f718a38977457282c7c0c6e0a185"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.4.18",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T16:20:43+04:00",
+    "last_commit_date": "2026-08-22T16:20:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "506e7dc33490f718a38977457282c7c0c6e0a185"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.4.28",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T16:44:12+04:00",
+    "last_commit_date": "2026-08-23T16:44:12+04:00",
+    "trailers": [],
+    "commits": [
+     "63a0b2d5f6977c54123fdf825fa8936eb6b9fd93"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.5.11",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T19:57:17+04:00",
+    "last_commit_date": "2026-08-22T19:57:17+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "4e29bf2da92851b518aa1f8a6d45cdb752e5e7d8"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.5.16",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T19:07:57+04:00",
+    "last_commit_date": "2026-08-22T19:07:57+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "2aa4a537f15afcafe086591d29751f009dda883b"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.5.17",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T19:07:57+04:00",
+    "last_commit_date": "2026-08-22T19:07:57+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "2aa4a537f15afcafe086591d29751f009dda883b"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.5.20",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [
+     "Closes"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.5.21",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T19:07:57+04:00",
+    "last_commit_date": "2026-08-22T19:07:57+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "2aa4a537f15afcafe086591d29751f009dda883b"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.6.12",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T08:05:22+04:00",
+    "last_commit_date": "2026-08-23T08:05:22+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "66cd01ad80752484f298724f1ad496c3e583373b"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.6.14",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T08:05:22+04:00",
+    "last_commit_date": "2026-08-23T08:05:22+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "66cd01ad80752484f298724f1ad496c3e583373b"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.6.24",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T16:20:43+04:00",
+    "last_commit_date": "2026-08-22T16:20:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "506e7dc33490f718a38977457282c7c0c6e0a185"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.19",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T19:57:17+04:00",
+    "last_commit_date": "2026-08-22T19:57:17+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "4e29bf2da92851b518aa1f8a6d45cdb752e5e7d8"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.20",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T19:57:17+04:00",
+    "last_commit_date": "2026-08-22T19:57:17+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "4e29bf2da92851b518aa1f8a6d45cdb752e5e7d8"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.21",
+    "kind": "child",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.23",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-23T12:03:21+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5",
+     "f08ac36658593d73cc4bfab655cfe4347e78bb56"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.28",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.40",
+    "kind": "child",
+    "first_commit_date": "2026-08-21T20:09:03+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "a4b62f570cd1ca592fcffa198598c368ca9dfec7"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.41",
+    "kind": "child",
+    "first_commit_date": "2026-08-21T19:37:40+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "94e79262f1f7bc6d5e58458a868ffb104cc3ade2",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.8.48",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.9.10",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T20:26:46+04:00",
+    "last_commit_date": "2026-08-22T20:26:46+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "55229d8d9cc0ac5842df236ed2998396bcf9a746"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.9.12",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T20:26:46+04:00",
+    "last_commit_date": "2026-08-22T20:26:46+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "55229d8d9cc0ac5842df236ed2998396bcf9a746"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.9.18",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.9.21",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T16:20:43+04:00",
+    "last_commit_date": "2026-08-22T16:20:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "506e7dc33490f718a38977457282c7c0c6e0a185"
+    ]
+   },
+   {
+    "id": "astro-plan-3v3r.9.29",
+    "kind": "child",
+    "first_commit_date": "2026-08-22T20:26:46+04:00",
+    "last_commit_date": "2026-08-22T20:26:46+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "55229d8d9cc0ac5842df236ed2998396bcf9a746"
+    ]
+   },
+   {
+    "id": "astro-plan-3y8tt",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T21:15:45+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "03d61d21b70c9a7cf6fcd38c4304cb2db1093497",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-4et4m",
+    "kind": "root",
+    "first_commit_date": "2026-08-25T00:19:39+04:00",
+    "last_commit_date": "2026-08-25T00:19:39+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "1892fec7066081516f61df47d469129389d2b06e"
+    ]
+   },
+   {
+    "id": "astro-plan-4z2dm",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T19:07:57+04:00",
+    "last_commit_date": "2026-08-22T19:07:57+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "2aa4a537f15afcafe086591d29751f009dda883b"
+    ]
+   },
+   {
+    "id": "astro-plan-53b8",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T20:20:07+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "d3d4c10d7f4f3ee6620361e2f1ece06ed3cbb9d1"
+    ]
+   },
+   {
+    "id": "astro-plan-551nn",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T23:10:43+04:00",
+    "last_commit_date": "2026-08-22T23:10:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "7ace131bd4a284725a0b7aefddc04584903beb3f"
+    ]
+   },
+   {
+    "id": "astro-plan-5jf0w",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T13:26:34+04:00",
+    "last_commit_date": "2026-08-23T13:26:34+04:00",
+    "trailers": [],
+    "commits": [
+     "2bbc66505cfd512c408cbaec253554b3e9fee736"
+    ]
+   },
+   {
+    "id": "astro-plan-5jfcc",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-5u4wl",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:34:07+04:00",
+    "last_commit_date": "2026-08-24T20:34:07+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "ca39a6de3374c7070716dffc26f39349e2142221"
+    ]
+   },
+   {
+    "id": "astro-plan-5xxy",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T16:39:57+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "44dd637cb6378b72bd02e7a0974309d088699257",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-61v2y",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T22:47:45+04:00",
+    "last_commit_date": "2026-08-24T07:48:02+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "54615f80e58bc66cfda7ac83cf4150b140e764fa",
+     "f91e60feec7a143891bc541d73a0df243b6a5547"
+    ]
+   },
+   {
+    "id": "astro-plan-68c7",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T02:14:19+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "99638c67c39732a6738013f254c824e3564151d4"
+    ]
+   },
+   {
+    "id": "astro-plan-6kpeh",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:55:17+04:00",
+    "last_commit_date": "2026-08-23T23:55:17+04:00",
+    "trailers": [],
+    "commits": [
+     "079da65357bd0fb1c38227ef3b62c7487e8756b9"
+    ]
+   },
+   {
+    "id": "astro-plan-6lt63",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T10:45:24+04:00",
+    "last_commit_date": "2026-08-23T10:45:24+04:00",
+    "trailers": [],
+    "commits": [
+     "b8afe491707fa394bdcf7f578cf638af0d3f2d95"
+    ]
+   },
+   {
+    "id": "astro-plan-7ejk7",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T08:05:22+04:00",
+    "last_commit_date": "2026-08-23T08:05:22+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "66cd01ad80752484f298724f1ad496c3e583373b"
+    ]
+   },
+   {
+    "id": "astro-plan-7rsk0",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T12:51:23+04:00",
+    "last_commit_date": "2026-08-24T12:51:23+04:00",
+    "trailers": [],
+    "commits": [
+     "c7f23e22b013fe0b1930ce1b9ef121092157e86b"
+    ]
+   },
+   {
+    "id": "astro-plan-7wu52",
+    "kind": "root",
+    "first_commit_date": "2026-08-25T09:37:30+04:00",
+    "last_commit_date": "2026-08-25T09:37:30+04:00",
+    "trailers": [],
+    "commits": [
+     "94a3dc958c13e297baf501aa2721efa2c2628622"
+    ]
+   },
+   {
+    "id": "astro-plan-8hng",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T22:21:59+04:00",
+    "last_commit_date": "2026-08-17T22:21:59+04:00",
+    "trailers": [],
+    "commits": [
+     "9c482d65b4a0239421cf67a4e70c05e8f16f7e51"
+    ]
+   },
+   {
+    "id": "astro-plan-8vxx1",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T12:59:59+04:00",
+    "last_commit_date": "2026-08-24T12:59:59+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "8a0137a9d23fb43f62ec1d48de555dbd53804da0"
+    ]
+   },
+   {
+    "id": "astro-plan-8zz72",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:56:06+04:00",
+    "last_commit_date": "2026-08-23T23:56:06+04:00",
+    "trailers": [],
+    "commits": [
+     "0848787a47f0cd9c23db3707ee6f680dde63a337"
+    ]
+   },
+   {
+    "id": "astro-plan-95zbx",
+    "kind": "root",
+    "first_commit_date": "2026-08-25T09:37:30+04:00",
+    "last_commit_date": "2026-08-25T09:37:30+04:00",
+    "trailers": [],
+    "commits": [
+     "94a3dc958c13e297baf501aa2721efa2c2628622"
+    ]
+   },
+   {
+    "id": "astro-plan-9aq6",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T14:51:17+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "0adcdf76fa323f58009fff8b4e6c8d39d73f0849",
+     "8361a5c45c081192c2193c14d29ff2396351eda4",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-9lkf",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T16:04:05+04:00",
+    "last_commit_date": "2026-08-17T16:04:05+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "c2baf1149a0549f20ed8e0b81b503efccc92c109"
+    ]
+   },
+   {
+    "id": "astro-plan-9n5kh",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T13:26:34+04:00",
+    "last_commit_date": "2026-08-23T13:26:34+04:00",
+    "trailers": [],
+    "commits": [
+     "2bbc66505cfd512c408cbaec253554b3e9fee736"
+    ]
+   },
+   {
+    "id": "astro-plan-9nn9m",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T14:28:01+04:00",
+    "last_commit_date": "2026-08-24T14:28:01+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "baaadf3bca83bd1b3d412420f5392943e64c1a79"
+    ]
+   },
+   {
+    "id": "astro-plan-9sf74",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T09:32:10+04:00",
+    "last_commit_date": "2026-08-22T09:32:10+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "5623176a0b7b465ebe66016f88d050effa88fd9a"
+    ]
+   },
+   {
+    "id": "astro-plan-9tbwc",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T18:26:59+04:00",
+    "last_commit_date": "2026-08-24T18:26:59+04:00",
+    "trailers": [],
+    "commits": [
+     "25e6b7018088e3a1de8011bd9a41f5939a3e8621"
+    ]
+   },
+   {
+    "id": "astro-plan-a8tlf",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:34:07+04:00",
+    "last_commit_date": "2026-08-25T00:19:39+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "1892fec7066081516f61df47d469129389d2b06e",
+     "ca39a6de3374c7070716dffc26f39349e2142221"
+    ]
+   },
+   {
+    "id": "astro-plan-aa2zq",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T21:15:45+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "03d61d21b70c9a7cf6fcd38c4304cb2db1093497",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-ajy4v",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T19:07:57+04:00",
+    "last_commit_date": "2026-08-22T19:07:57+04:00",
+    "trailers": [],
+    "commits": [
+     "2aa4a537f15afcafe086591d29751f009dda883b"
+    ]
+   },
+   {
+    "id": "astro-plan-ar2gp",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T14:28:01+04:00",
+    "last_commit_date": "2026-08-24T14:28:01+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "baaadf3bca83bd1b3d412420f5392943e64c1a79"
+    ]
+   },
+   {
+    "id": "astro-plan-b3vlb",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:34:07+04:00",
+    "last_commit_date": "2026-08-24T20:34:07+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "ca39a6de3374c7070716dffc26f39349e2142221"
+    ]
+   },
+   {
+    "id": "astro-plan-b80cl",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T13:27:42+04:00",
+    "last_commit_date": "2026-08-22T13:27:42+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "b9a3330f43a6e1a33d7a18dd1688160fd2804db5"
+    ]
+   },
+   {
+    "id": "astro-plan-bd2a1",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T08:05:22+04:00",
+    "last_commit_date": "2026-08-23T08:05:22+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "66cd01ad80752484f298724f1ad496c3e583373b"
+    ]
+   },
+   {
+    "id": "astro-plan-ce12b",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T12:03:21+04:00",
+    "last_commit_date": "2026-08-23T12:03:21+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "f08ac36658593d73cc4bfab655cfe4347e78bb56"
+    ]
+   },
+   {
+    "id": "astro-plan-cfbe",
+    "kind": "root",
+    "first_commit_date": "2026-08-19T22:00:19+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "40895276c010fb3716faf2a2b21dcf86ad3e5ba2",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "da89da269cf2df1223c8d45bb90dd7bb289741b1"
+    ]
+   },
+   {
+    "id": "astro-plan-co45d",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T12:59:59+04:00",
+    "last_commit_date": "2026-08-24T12:59:59+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "8a0137a9d23fb43f62ec1d48de555dbd53804da0"
+    ]
+   },
+   {
+    "id": "astro-plan-cricc",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:56:06+04:00",
+    "last_commit_date": "2026-08-23T23:56:06+04:00",
+    "trailers": [],
+    "commits": [
+     "0848787a47f0cd9c23db3707ee6f680dde63a337"
+    ]
+   },
+   {
+    "id": "astro-plan-d8cyr",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T20:26:46+04:00",
+    "last_commit_date": "2026-08-22T20:26:46+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "55229d8d9cc0ac5842df236ed2998396bcf9a746"
+    ]
+   },
+   {
+    "id": "astro-plan-de13a",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T14:28:01+04:00",
+    "last_commit_date": "2026-08-24T14:28:01+04:00",
+    "trailers": [],
+    "commits": [
+     "baaadf3bca83bd1b3d412420f5392943e64c1a79"
+    ]
+   },
+   {
+    "id": "astro-plan-dq9r3",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-dsga8",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:34:07+04:00",
+    "last_commit_date": "2026-08-24T20:34:07+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "ca39a6de3374c7070716dffc26f39349e2142221"
+    ]
+   },
+   {
+    "id": "astro-plan-e4w3k",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-f1sr",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T00:50:18+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "5003678276e6d17b7846b05df8b6814b7749e115",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-f6qg1",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T18:07:06+04:00",
+    "last_commit_date": "2026-08-23T18:07:06+04:00",
+    "trailers": [],
+    "commits": [
+     "5253d6822ceabb17174d790877bb996135d13bb2"
+    ]
+   },
+   {
+    "id": "astro-plan-g39cq",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T19:19:06+04:00",
+    "last_commit_date": "2026-08-25T00:19:39+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "1892fec7066081516f61df47d469129389d2b06e",
+     "a52c637f2b4a778089e403392b5b19acd06c36a9"
+    ]
+   },
+   {
+    "id": "astro-plan-gfv5m",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T10:01:49+04:00",
+    "last_commit_date": "2026-08-22T10:01:49+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "5ab93e9f52c869c092fe9c7d64253085d8b18a4c"
+    ]
+   },
+   {
+    "id": "astro-plan-goim4",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T10:01:49+04:00",
+    "last_commit_date": "2026-08-22T10:01:49+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "5ab93e9f52c869c092fe9c7d64253085d8b18a4c"
+    ]
+   },
+   {
+    "id": "astro-plan-hgh6",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T08:58:27+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "348c5c1f99652ff64e7484551aad1af3956f28da",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-hsp5p",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T23:03:09+04:00",
+    "last_commit_date": "2026-08-24T23:03:09+04:00",
+    "trailers": [],
+    "commits": [
+     "082b9a5a6fda58df8a5604eedc02901b3bdef3b0"
+    ]
+   },
+   {
+    "id": "astro-plan-hyk0",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T14:27:14+04:00",
+    "last_commit_date": "2026-08-17T16:31:36+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "4d5916f9c41e6719b0fe8b04784852b4f08b9b8d",
+     "6fa1e4a6752338aed561dd8545598f594dda749a"
+    ]
+   },
+   {
+    "id": "astro-plan-i09vh",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T10:45:24+04:00",
+    "last_commit_date": "2026-08-23T10:45:24+04:00",
+    "trailers": [],
+    "commits": [
+     "b8afe491707fa394bdcf7f578cf638af0d3f2d95"
+    ]
+   },
+   {
+    "id": "astro-plan-i0z00",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-ibk5",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T00:00:14+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "f3e86013acae0f050932c6fe84dc23d7a39e3f4d"
+    ]
+   },
+   {
+    "id": "astro-plan-ij9km",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-is352",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T12:51:23+04:00",
+    "last_commit_date": "2026-08-24T12:51:23+04:00",
+    "trailers": [],
+    "commits": [
+     "c7f23e22b013fe0b1930ce1b9ef121092157e86b"
+    ]
+   },
+   {
+    "id": "astro-plan-j14r",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T23:17:19+04:00",
+    "last_commit_date": "2026-08-17T23:17:19+04:00",
+    "trailers": [],
+    "commits": [
+     "da88eed1180ce4efd165499f203f937ae857e9e4"
+    ]
+   },
+   {
+    "id": "astro-plan-jlqf8",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:34:07+04:00",
+    "last_commit_date": "2026-08-24T20:34:07+04:00",
+    "trailers": [],
+    "commits": [
+     "ca39a6de3374c7070716dffc26f39349e2142221"
+    ]
+   },
+   {
+    "id": "astro-plan-ka563",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T19:57:17+04:00",
+    "last_commit_date": "2026-08-22T19:57:17+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "4e29bf2da92851b518aa1f8a6d45cdb752e5e7d8"
+    ]
+   },
+   {
+    "id": "astro-plan-krqge",
+    "kind": "root",
+    "first_commit_date": "2026-08-25T06:40:44+04:00",
+    "last_commit_date": "2026-08-25T06:40:44+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "83bfd4718a888247af5e03c50f447ebc308e9ad9"
+    ]
+   },
+   {
+    "id": "astro-plan-l1iy7",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-l2s06",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T13:30:01+04:00",
+    "last_commit_date": "2026-08-24T14:36:06+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "b747f21c8a58b115e10a76f8bc098bb8e5862f85",
+     "da71a9c4427600bc43b1f802b4b3e589b3eeaabd"
+    ]
+   },
+   {
+    "id": "astro-plan-lbfho",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-lg8ok",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T18:26:59+04:00",
+    "last_commit_date": "2026-08-24T18:26:59+04:00",
+    "trailers": [],
+    "commits": [
+     "25e6b7018088e3a1de8011bd9a41f5939a3e8621"
+    ]
+   },
+   {
+    "id": "astro-plan-lm03w",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T13:26:34+04:00",
+    "last_commit_date": "2026-08-23T13:26:34+04:00",
+    "trailers": [],
+    "commits": [
+     "2bbc66505cfd512c408cbaec253554b3e9fee736"
+    ]
+   },
+   {
+    "id": "astro-plan-ltlo",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T00:00:21+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "a6bb3f076d4580cf122241a0c3967826e7a0923e"
+    ]
+   },
+   {
+    "id": "astro-plan-lygtb",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T19:19:06+04:00",
+    "last_commit_date": "2026-08-24T19:19:06+04:00",
+    "trailers": [],
+    "commits": [
+     "a52c637f2b4a778089e403392b5b19acd06c36a9"
+    ]
+   },
+   {
+    "id": "astro-plan-mgsi1",
+    "kind": "root",
+    "first_commit_date": "2026-08-25T00:19:39+04:00",
+    "last_commit_date": "2026-08-25T00:19:39+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "1892fec7066081516f61df47d469129389d2b06e"
+    ]
+   },
+   {
+    "id": "astro-plan-mlcyq",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:56:06+04:00",
+    "last_commit_date": "2026-08-23T23:56:06+04:00",
+    "trailers": [],
+    "commits": [
+     "0848787a47f0cd9c23db3707ee6f680dde63a337"
+    ]
+   },
+   {
+    "id": "astro-plan-mum3b",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T16:20:43+04:00",
+    "last_commit_date": "2026-08-22T16:20:43+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "506e7dc33490f718a38977457282c7c0c6e0a185"
+    ]
+   },
+   {
+    "id": "astro-plan-mv02",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T00:00:14+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "f3e86013acae0f050932c6fe84dc23d7a39e3f4d"
+    ]
+   },
+   {
+    "id": "astro-plan-n6zv",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T02:14:43+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "5125044776861e443659e5a8d2451babdfb23e13",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-nbraz",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:34:07+04:00",
+    "last_commit_date": "2026-08-24T20:34:07+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "ca39a6de3374c7070716dffc26f39349e2142221"
+    ]
+   },
+   {
+    "id": "astro-plan-npd4q",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T18:35:49+04:00",
+    "last_commit_date": "2026-08-24T18:35:49+04:00",
+    "trailers": [],
+    "commits": [
+     "7fcea527be6ace470a0729ef1f0945eb8412f1e1"
+    ]
+   },
+   {
+    "id": "astro-plan-o1om",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T08:45:06+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "64c4ba031a93ccf20a33c6dc32e507e354785676",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-p2hs1",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T14:41:54+04:00",
+    "last_commit_date": "2026-08-22T14:41:54+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "13353a0661e08285a1604bddc26fa518eaddbbb5"
+    ]
+   },
+   {
+    "id": "astro-plan-p3vor",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T16:44:12+04:00",
+    "last_commit_date": "2026-08-24T13:30:01+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "63a0b2d5f6977c54123fdf825fa8936eb6b9fd93",
+     "da71a9c4427600bc43b1f802b4b3e589b3eeaabd"
+    ]
+   },
+   {
+    "id": "astro-plan-pao6z",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-pe8j8",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T13:26:34+04:00",
+    "last_commit_date": "2026-08-23T13:26:34+04:00",
+    "trailers": [],
+    "commits": [
+     "2bbc66505cfd512c408cbaec253554b3e9fee736"
+    ]
+   },
+   {
+    "id": "astro-plan-ps48",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T13:22:32+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-pssh",
+    "kind": "root",
+    "first_commit_date": "2026-08-19T22:00:19+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "40895276c010fb3716faf2a2b21dcf86ad3e5ba2",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-pwr7",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T16:04:05+04:00",
+    "last_commit_date": "2026-08-17T16:04:05+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "c2baf1149a0549f20ed8e0b81b503efccc92c109"
+    ]
+   },
+   {
+    "id": "astro-plan-q18u",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T20:20:07+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "d3d4c10d7f4f3ee6620361e2f1ece06ed3cbb9d1"
+    ]
+   },
+   {
+    "id": "astro-plan-qos8v",
+    "kind": "root",
+    "first_commit_date": "2026-08-25T00:19:39+04:00",
+    "last_commit_date": "2026-08-25T00:19:39+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "1892fec7066081516f61df47d469129389d2b06e"
+    ]
+   },
+   {
+    "id": "astro-plan-qyp2s",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T19:07:57+04:00",
+    "last_commit_date": "2026-08-22T19:07:57+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "2aa4a537f15afcafe086591d29751f009dda883b"
+    ]
+   },
+   {
+    "id": "astro-plan-rar3",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T20:20:07+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "d3d4c10d7f4f3ee6620361e2f1ece06ed3cbb9d1"
+    ]
+   },
+   {
+    "id": "astro-plan-rcvr",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T21:15:45+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "03d61d21b70c9a7cf6fcd38c4304cb2db1093497",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c"
+    ]
+   },
+   {
+    "id": "astro-plan-siyk",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T23:39:13+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "5f15a992b2705e3b2fd8b8fcc9e3146de4da53f5",
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "99638c67c39732a6738013f254c824e3564151d4"
+    ]
+   },
+   {
+    "id": "astro-plan-skfwo",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T22:48:26+04:00",
+    "last_commit_date": "2026-08-24T22:48:26+04:00",
+    "trailers": [],
+    "commits": [
+     "8634e27f4c2f651f30e0459b0b5ff67ebe0133bb"
+    ]
+   },
+   {
+    "id": "astro-plan-ta7kn",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-tmwtz",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-23T12:08:43+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4"
+    ]
+   },
+   {
+    "id": "astro-plan-tpndp",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T14:28:01+04:00",
+    "last_commit_date": "2026-08-24T14:28:01+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "baaadf3bca83bd1b3d412420f5392943e64c1a79"
+    ]
+   },
+   {
+    "id": "astro-plan-ts1z",
+    "kind": "root",
+    "first_commit_date": "2026-08-17T18:08:09+04:00",
+    "last_commit_date": "2026-08-17T20:55:36+04:00",
+    "trailers": [],
+    "commits": [
+     "63305d736795ae8da13dcafa0a118ca9bf7c12c7",
+     "a0c0c09fd2a79259e6ca8d48ed6521a80b1ba24d"
+    ]
+   },
+   {
+    "id": "astro-plan-vi96h",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T12:59:59+04:00",
+    "last_commit_date": "2026-08-24T12:59:59+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "8a0137a9d23fb43f62ec1d48de555dbd53804da0"
+    ]
+   },
+   {
+    "id": "astro-plan-vj6x",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T14:48:59+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "a4368c75797027d8ed512df9f29d45bd696ce9ed"
+    ]
+   },
+   {
+    "id": "astro-plan-vuubi",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:56:06+04:00",
+    "last_commit_date": "2026-08-23T23:56:06+04:00",
+    "trailers": [],
+    "commits": [
+     "0848787a47f0cd9c23db3707ee6f680dde63a337"
+    ]
+   },
+   {
+    "id": "astro-plan-w6xop",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T20:39:45+04:00",
+    "last_commit_date": "2026-08-24T20:39:45+04:00",
+    "trailers": [],
+    "commits": [
+     "09766094be71cdaef778738840ca480a383a94f3"
+    ]
+   },
+   {
+    "id": "astro-plan-wgrd4",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T20:26:46+04:00",
+    "last_commit_date": "2026-08-22T20:26:46+04:00",
+    "trailers": [
+     "Merge-Bead"
+    ],
+    "commits": [
+     "55229d8d9cc0ac5842df236ed2998396bcf9a746"
+    ]
+   },
+   {
+    "id": "astro-plan-wo2ju",
+    "kind": "root",
+    "first_commit_date": "2026-08-22T19:57:17+04:00",
+    "last_commit_date": "2026-08-22T19:57:17+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "4e29bf2da92851b518aa1f8a6d45cdb752e5e7d8"
+    ]
+   },
+   {
+    "id": "astro-plan-xthfd",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T14:32:50+04:00",
+    "last_commit_date": "2026-08-24T14:32:50+04:00",
+    "trailers": [
+     "Discovered"
+    ],
+    "commits": [
+     "de30f13c80be5f1066abdeb138a0b38a0c044b77"
+    ]
+   },
+   {
+    "id": "astro-plan-ydnh1",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T23:26:50+04:00",
+    "last_commit_date": "2026-08-23T23:26:50+04:00",
+    "trailers": [],
+    "commits": [
+     "a1d50d34f6188aec6447ae5a3e3ab20e41e9df95"
+    ]
+   },
+   {
+    "id": "astro-plan-ytx7",
+    "kind": "root",
+    "first_commit_date": "2026-08-21T14:44:26+04:00",
+    "last_commit_date": "2026-08-22T13:22:32+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "99221b1e04fb7a2dfa4d715c350c8b7b6558a77c",
+     "e7f2176713b8ffdd56b76a7b0fdef44085a5a244"
+    ]
+   },
+   {
+    "id": "astro-plan-yzhd9",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T19:19:06+04:00",
+    "last_commit_date": "2026-08-24T19:19:06+04:00",
+    "trailers": [],
+    "commits": [
+     "a52c637f2b4a778089e403392b5b19acd06c36a9"
+    ]
+   },
+   {
+    "id": "astro-plan-z7997",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T07:48:02+04:00",
+    "last_commit_date": "2026-08-24T12:51:23+04:00",
+    "trailers": [
+     "Closes-Bead",
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "c7f23e22b013fe0b1930ce1b9ef121092157e86b",
+     "f91e60feec7a143891bc541d73a0df243b6a5547"
+    ]
+   },
+   {
+    "id": "astro-plan-zboex",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T12:08:43+04:00",
+    "last_commit_date": "2026-08-24T14:32:50+04:00",
+    "trailers": [
+     "Refs"
+    ],
+    "commits": [
+     "846a170c020100ab8ca582e739824c84f119c0e4",
+     "de30f13c80be5f1066abdeb138a0b38a0c044b77"
+    ]
+   },
+   {
+    "id": "astro-plan-zn8pj",
+    "kind": "root",
+    "first_commit_date": "2026-08-24T18:35:49+04:00",
+    "last_commit_date": "2026-08-24T18:35:49+04:00",
+    "trailers": [],
+    "commits": [
+     "7fcea527be6ace470a0729ef1f0945eb8412f1e1"
+    ]
+   },
+   {
+    "id": "astro-plan-zojet",
+    "kind": "root",
+    "first_commit_date": "2026-08-23T13:26:34+04:00",
+    "last_commit_date": "2026-08-23T13:26:34+04:00",
+    "trailers": [
+     "Tracks-Bead"
+    ],
+    "commits": [
+     "2bbc66505cfd512c408cbaec253554b3e9fee736"
+    ]
+   }
+  ],
+  "implied_missing_ancestors": [
+   "astro-plan-0sgb",
+   "astro-plan-3v3r",
+   "astro-plan-3v3r.1",
+   "astro-plan-3v3r.11",
+   "astro-plan-3v3r.12",
+   "astro-plan-3v3r.13",
+   "astro-plan-3v3r.15",
+   "astro-plan-3v3r.16",
+   "astro-plan-3v3r.17",
+   "astro-plan-3v3r.18",
+   "astro-plan-3v3r.19",
+   "astro-plan-3v3r.2",
+   "astro-plan-3v3r.3",
+   "astro-plan-3v3r.4",
+   "astro-plan-3v3r.5",
+   "astro-plan-3v3r.6",
+   "astro-plan-3v3r.8",
+   "astro-plan-3v3r.9"
+  ],
+  "wisp_ids_behind_non_id_astro-plan-wisp": [
+   "astro-plan-wisp-7bj",
+   "astro-plan-wisp-7sm",
+   "astro-plan-wisp-9ui",
+   "astro-plan-wisp-b52",
+   "astro-plan-wisp-h1v"
+  ]
+ },
+ "recoverable": {
+  "from_stores": [],
+  "note": "Only git evidence survives for the 180 ids: the referencing commits, their trailers (Tracks-Bead, Refs, Merge-Bead, Closes-Bead, Closes, Discovered) and message text. That supports reconstruction, not recovery; it proves neither the bead record nor its status, claims, comments or dependencies."
+ },
+ "august_rows_found_only_in_isolated_clones": [
+  {
+   "source": "claude-embedded",
+   "ids": [
+    "astro-plan-mol-0vu",
+    "astro-plan-mol-17n",
+    "astro-plan-mol-18t",
+    "astro-plan-mol-277",
+    "astro-plan-mol-3ll",
+    "astro-plan-mol-654",
+    "astro-plan-mol-6c5",
+    "astro-plan-mol-6ig",
+    "astro-plan-mol-7fs",
+    "astro-plan-mol-840",
+    "astro-plan-mol-87a",
+    "astro-plan-mol-906",
+    "astro-plan-mol-9pq",
+    "astro-plan-mol-9w1",
+    "astro-plan-mol-aq7",
+    "astro-plan-mol-daa",
+    "astro-plan-mol-evb",
+    "astro-plan-mol-hof",
+    "astro-plan-mol-i8j",
+    "astro-plan-mol-ioj",
+    "astro-plan-mol-jvr",
+    "astro-plan-mol-k36",
+    "astro-plan-mol-lql",
+    "astro-plan-mol-nq6",
+    "astro-plan-mol-w7t",
+    "astro-plan-mol-z3a"
+   ],
+   "issues": 26,
+   "statuses": {
+    "closed": 23,
+    "open": 2,
+    "blocked": 1
+   },
+   "comments": 11,
+   "dependencies": 56,
+   "dependencies_outside_set": 0,
+   "labels": 45,
+   "collides_with_live": false,
+   "context": "Design-system molecule poured 2026-08-26 in the ~/tmp/platevault-claude clone; not referenced by any commit on main."
+  },
+  {
+   "source": "sol-dolt",
+   "issues": 23,
+   "prefix": "platevault-sol-mol",
+   "context": "Separate prefix; the run prompt said not to track that work in beads."
+  },
+  {
+   "source": "cleanroom-pv",
+   "issues": 25,
+   "prefix": "pv-mol",
+   "context": "Separate prefix and database pv."
+  }
+ ],
+ "sources": [
+  {
+   "id": "backup-20261016",
+   "description": "Live store backup chain (.beads/backup), incl. the 2026-09-14 native archive 44alf643l42lceaq4l1mdf30eau9f7k6.darc",
+   "origin": "/Users/sjors/personal/dev/platevault/.beads/backup",
+   "isolated_copy": "/tmp/ledger-forensics/stores/backup-20261016",
+   "head": [
+    {
+     "hash": "9bjoeeps4ncc879geg8qb0eeaek9mrmg",
+     "latest": "2026-10-16 11:15:11.117",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [
+    {
+     "hash": "n7levi7b21uaea3qps6snji9urtarq7u",
+     "latest": "2026-10-16 10:53:00.97",
+     "name": "remotes/origin/main"
+    }
+   ],
+   "dolt_remotes_in_copy": [],
+   "commits": 4603,
+   "first_commit": "2026-07-20 15:22:42.373",
+   "last_commit": "2026-10-16 11:15:11.117",
+   "commits_2026_07_31_to_2026_09_15": 0,
+   "issues": 2261,
+   "max_created_at": "2026-10-16 06:52:57",
+   "max_updated_at": "2026-10-16 07:13:07",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-p0ds",
+    "astro-plan-qwvo"
+   ],
+   "copy_fidelity": {
+    "source": "/Users/sjors/personal/dev/platevault/.beads/backup",
+    "copy": "/tmp/ledger-forensics/backup-copy/live-beads-backup-20261016",
+    "source_digest_now": "93c9ed3e75caea3b51b1ef5e9c4b7cbf31e23c61f15b960bf458a40516214317",
+    "copy_digest": "86b1c2821499ce22bdf9c921962424f0b54bf335fbc5214154219e8401f7cec0",
+    "files": 100,
+    "bytes": 208310444,
+    "identical_now": false,
+    "note": "The live backup kept syncing after the copy, so today's source digest differs. At copy time the manifest sha256 f29632124e04c2bc38eb9e40394214387e8df3492c9b11c040bddeccf507eb5d and the 2026-09-14 archive sha256 24268b060245ac449573c68653e7755e842c9aa424bb65ad1ebb74e34b00badb matched the source."
+   }
+  },
+  {
+   "id": "remote-pre-migration-b8d4879",
+   "description": "Dolt remote refs/dolt/data at git commit b8d4879b2c2b8e1e858000d3314ee3bbc240a93a (last push before the 2026-09-19 migration, pushed 2026-09-17)",
+   "origin": "https://github.com/platevault/platevault.git refs/dolt/data history",
+   "isolated_copy": "/tmp/ledger-forensics/stores/remote-pre-migration-b8d4879",
+   "head": [
+    {
+     "hash": "70j69uqd1dq5siav1fdv1ngk8verjdnc",
+     "latest": "2026-09-17 11:37:20.59",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 4397,
+   "first_commit": "2026-07-20 15:22:42.373",
+   "last_commit": "2026-09-17 11:37:20.59",
+   "commits_2026_07_31_to_2026_09_15": 0,
+   "issues": 1662,
+   "max_created_at": "2026-07-30 07:10:23",
+   "max_updated_at": "2026-07-30 07:40:33",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  {
+   "id": "remote-current-c928cda",
+   "description": "Dolt remote refs/dolt/data at git commit c928cda03083eddeca92d45604a2c46f9a41cfeb (pushed 2026-10-16T07:25:40Z)",
+   "origin": "https://github.com/platevault/platevault.git refs/dolt/data",
+   "isolated_copy": "/tmp/ledger-forensics/stores/remote-current-c928cda",
+   "head": [
+    {
+     "hash": "vq2rkkbp06l3ihv85jnub1qsqmd6272o",
+     "latest": "2026-10-16 11:22:05.614",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 4605,
+   "first_commit": "2026-07-20 15:22:42.373",
+   "last_commit": "2026-10-16 11:22:05.614",
+   "commits_2026_07_31_to_2026_09_15": 0,
+   "issues": 2261,
+   "max_created_at": "2026-10-16 06:52:57",
+   "max_updated_at": "2026-10-16 07:13:07",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-p0ds",
+    "astro-plan-qwvo"
+   ]
+  },
+  {
+   "id": "claude-embedded",
+   "description": "Clone ~/tmp/platevault-claude/.beads embedded store (cloned from the remote on 2026-08-26)",
+   "origin": "/Users/sjors/tmp/platevault-claude/.beads/embeddeddolt/astro_plan",
+   "isolated_copy": "/tmp/ledger-forensics/stores/claude-embedded",
+   "head": [
+    {
+     "hash": "prji5sd6pioa0m51bupa2sl6lg622np8",
+     "latest": "2026-08-26 22:25:16.744",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [
+    {
+     "hash": "54v25a0osc1ipcg2t097rqn8sn6mgqdn",
+     "latest": "2026-07-30 11:40:55.879",
+     "name": "remotes/origin/main"
+    }
+   ],
+   "dolt_remotes_in_copy": [],
+   "commits": 4383,
+   "first_commit": "2026-07-20 15:22:42.373",
+   "last_commit": "2026-08-26 22:25:16.744",
+   "commits_2026_07_31_to_2026_09_15": 2,
+   "issues": 1688,
+   "max_created_at": "2026-08-26 18:25:16",
+   "max_updated_at": "2026-08-26 21:55:30",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ],
+   "copy_fidelity": {
+    "source": "/Users/sjors/tmp/platevault-claude/.beads",
+    "copy": "/tmp/ledger-forensics/carriers/home-tmp/platevault-claude-beads",
+    "source_digest_now": "76082a38147820f66903d5428f19e04a9a0a4d90a28fe3a0f50ba9b4d54df681",
+    "copy_digest": "76082a38147820f66903d5428f19e04a9a0a4d90a28fe3a0f50ba9b4d54df681",
+    "files": 313,
+    "bytes": 424793952,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "claude-backup",
+   "description": "Clone ~/tmp/platevault-claude/.beads/backup",
+   "origin": "/Users/sjors/tmp/platevault-claude/.beads/backup",
+   "isolated_copy": "/tmp/ledger-forensics/stores/claude-backup",
+   "head": [
+    {
+     "hash": "prji5sd6pioa0m51bupa2sl6lg622np8",
+     "latest": "2026-08-26 22:25:16.744",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [
+    {
+     "hash": "54v25a0osc1ipcg2t097rqn8sn6mgqdn",
+     "latest": "2026-07-30 11:40:55.879",
+     "name": "remotes/origin/main"
+    }
+   ],
+   "dolt_remotes_in_copy": [],
+   "commits": 4383,
+   "first_commit": "2026-07-20 15:22:42.373",
+   "last_commit": "2026-08-26 22:25:16.744",
+   "commits_2026_07_31_to_2026_09_15": 2,
+   "issues": 1688,
+   "max_created_at": "2026-08-26 18:25:16",
+   "max_updated_at": "2026-08-26 18:25:16",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ],
+   "copy_fidelity": {
+    "source": "/Users/sjors/tmp/platevault-claude/.beads",
+    "copy": "/tmp/ledger-forensics/carriers/home-tmp/platevault-claude-beads",
+    "source_digest_now": "76082a38147820f66903d5428f19e04a9a0a4d90a28fe3a0f50ba9b4d54df681",
+    "copy_digest": "76082a38147820f66903d5428f19e04a9a0a4d90a28fe3a0f50ba9b4d54df681",
+    "files": 313,
+    "bytes": 424793952,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "sol-dolt",
+   "description": "Retired carrier tmp__platevault-sol, server database astro_plan (prefix platevault-sol)",
+   "origin": "~/.beads/retired-carriers/20260922-201149/tmp__platevault-sol/dolt/astro_plan",
+   "isolated_copy": "/tmp/ledger-forensics/stores/sol-dolt",
+   "head": [
+    {
+     "hash": "bq26ffejamjh29v10for0km5chmn48tr",
+     "latest": "2026-08-27 01:32:50.118",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 71,
+   "first_commit": "2026-08-26 22:44:40.799",
+   "last_commit": "2026-08-27 01:32:50.118",
+   "commits_2026_07_31_to_2026_09_15": 71,
+   "issues": 23,
+   "max_created_at": "2026-08-26 18:50:23",
+   "max_updated_at": "2026-08-26 21:32:50",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/.beads/retired-carriers",
+    "copy": "/tmp/ledger-forensics/carriers/retired-carriers",
+    "source_digest_now": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "copy_digest": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "files": 1075,
+    "bytes": 211853983,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "sol-dropped",
+   "description": "Retired carrier tmp__platevault-sol, dropped database",
+   "origin": "~/.beads/retired-carriers/20260922-201149/tmp__platevault-sol/dolt/.dolt_dropped_databases/astro_plan",
+   "isolated_copy": "/tmp/ledger-forensics/stores/sol-dropped",
+   "head": [
+    {
+     "hash": "r8ipj6tti2mrejob30o1h112avdilds2",
+     "latest": "2026-08-26 22:49:15.335",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 8,
+   "first_commit": "2026-08-26 22:49:11.78",
+   "last_commit": "2026-08-26 22:49:15.335",
+   "commits_2026_07_31_to_2026_09_15": 8,
+   "issues": 0,
+   "max_created_at": null,
+   "max_updated_at": null,
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/.beads/retired-carriers",
+    "copy": "/tmp/ledger-forensics/carriers/retired-carriers",
+    "source_digest_now": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "copy_digest": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "files": 1075,
+    "bytes": 211853983,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "sol-embedded",
+   "description": "Retired carrier tmp__platevault-sol, embedded store",
+   "origin": "~/.beads/retired-carriers/20260922-201149/tmp__platevault-sol/embeddeddolt/astro_plan",
+   "isolated_copy": "/tmp/ledger-forensics/stores/sol-embedded",
+   "head": [
+    {
+     "hash": "nijr8mt0mr8ng3mogsaiv4vej16nv4re",
+     "latest": "2026-08-26 22:44:42.705",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 7,
+   "first_commit": "2026-08-26 22:44:40.799",
+   "last_commit": "2026-08-26 22:44:42.705",
+   "commits_2026_07_31_to_2026_09_15": 7,
+   "issues": 0,
+   "max_created_at": null,
+   "max_updated_at": null,
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/.beads/retired-carriers",
+    "copy": "/tmp/ledger-forensics/carriers/retired-carriers",
+    "source_digest_now": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "copy_digest": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "files": 1075,
+    "bytes": 211853983,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "sol-backup",
+   "description": "Retired carrier tmp__platevault-sol, backup",
+   "origin": "~/.beads/retired-carriers/20260922-201149/tmp__platevault-sol/backup",
+   "isolated_copy": "/tmp/ledger-forensics/stores/sol-backup",
+   "head": [
+    {
+     "hash": "bq26ffejamjh29v10for0km5chmn48tr",
+     "latest": "2026-08-27 01:32:50.118",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 71,
+   "first_commit": "2026-08-26 22:44:40.799",
+   "last_commit": "2026-08-27 01:32:50.118",
+   "commits_2026_07_31_to_2026_09_15": 71,
+   "issues": 23,
+   "max_created_at": "2026-08-26 18:50:23",
+   "max_updated_at": "2026-08-26 21:32:50",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/.beads/retired-carriers",
+    "copy": "/tmp/ledger-forensics/carriers/retired-carriers",
+    "source_digest_now": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "copy_digest": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "files": 1075,
+    "bytes": 211853983,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "cleanroom-pv",
+   "description": "Retired carrier tmp__platevault-clean-room__product, database pv (prefix pv-mol)",
+   "origin": "~/.beads/retired-carriers/20260922-201149/tmp__platevault-clean-room__product/dolt/pv",
+   "isolated_copy": "/tmp/ledger-forensics/stores/cleanroom-pv",
+   "head": [
+    {
+     "hash": "a5839ps1n6cno54i0qdi34trnk17v5rt",
+     "latest": "2026-08-27 17:59:54.878",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 58,
+   "first_commit": "2026-08-27 15:10:49.546",
+   "last_commit": "2026-08-27 17:59:54.878",
+   "commits_2026_07_31_to_2026_09_15": 58,
+   "issues": 25,
+   "max_created_at": "2026-08-27 11:11:03",
+   "max_updated_at": "2026-08-27 13:59:26",
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/.beads/retired-carriers",
+    "copy": "/tmp/ledger-forensics/carriers/retired-carriers",
+    "source_digest_now": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "copy_digest": "f8015dac4c34685b08a5eeaaf66ce1d074715d54979013eea2da4cdd8ef28d4b",
+    "files": 1075,
+    "bytes": 211853983,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "pv-backup-20260826",
+   "description": "~/tmp/platevault-beads-backup-20260826 (backup target written by the sol bd init)",
+   "origin": "/Users/sjors/tmp/platevault-beads-backup-20260826",
+   "isolated_copy": "/tmp/ledger-forensics/stores/pv-backup-20260826",
+   "head": [
+    {
+     "hash": "nijr8mt0mr8ng3mogsaiv4vej16nv4re",
+     "latest": "2026-08-26 22:44:42.705",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 7,
+   "first_commit": "2026-08-26 22:44:40.799",
+   "last_commit": "2026-08-26 22:44:42.705",
+   "commits_2026_07_31_to_2026_09_15": 7,
+   "issues": 0,
+   "max_created_at": null,
+   "max_updated_at": null,
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/tmp/platevault-beads-backup-20260826",
+    "copy": "/tmp/ledger-forensics/carriers/home-tmp/platevault-beads-backup-20260826",
+    "source_digest_now": "e1f0854fbb77e81602306db1b7a67d5ee74d5306144ecfbc193c686337f2a204",
+    "copy_digest": "e1f0854fbb77e81602306db1b7a67d5ee74d5306144ecfbc193c686337f2a204",
+    "files": 3,
+    "bytes": 65008,
+    "identical_now": true
+   }
+  },
+  {
+   "id": "home-beads-backup",
+   "description": "~/.beads/backup (home-level backup, 2026-09-14)",
+   "origin": "/Users/sjors/.beads/backup",
+   "isolated_copy": "/tmp/ledger-forensics/stores/home-beads-backup",
+   "head": [
+    {
+     "hash": "iih1lmg8i8ngnhvij4cqppqluphkdrf3",
+     "latest": "2026-09-14 21:57:06.013",
+     "name": "main"
+    }
+   ],
+   "remote_tracking_refs": [],
+   "dolt_remotes_in_copy": [],
+   "commits": 9,
+   "first_commit": "2026-09-14 21:53:21.271",
+   "last_commit": "2026-09-14 21:57:06.013",
+   "commits_2026_07_31_to_2026_09_15": 9,
+   "issues": 0,
+   "max_created_at": null,
+   "max_updated_at": null,
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "control_ids_found_in_history": [],
+   "copy_fidelity": {
+    "source": "/Users/sjors/.beads/backup",
+    "copy": "/tmp/ledger-forensics/carriers/home-beads-backup",
+    "source_digest_now": "bfa0f2406612841f157323fcc9c89fea5fdfe36b339685c1d7a115d8a350a34e",
+    "copy_digest": "bfa0f2406612841f157323fcc9c89fea5fdfe36b339685c1d7a115d8a350a34e",
+    "files": 4,
+    "bytes": 68942,
+    "identical_now": true
+   }
+  }
+ ],
+ "storage_chunk_scan": {
+  "method": "Every zstd, Snappy and journal chunk in each copied archive (.darc), Noms table file and chunk journal, reachable or not, decompressed and searched for the 180 ids, the 3v3r and 0sgb roots and the five wisp ids, with four live ids as positive controls.",
+  "remote_git_history": "85 refs/dolt/data git commits fetched into an isolated bare repository (current chain from its 2026-10-14 root, plus the pre-migration chain b8d4879 back to July). Pushes by month on the pre-migration chain: 61 in July, 0 in August, 2 on 2026-09-17.",
+  "totals": {
+   "live_backup_copy": {
+    "files": 97,
+    "chunks_decoded": 147244,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 25307
+   },
+   "remote_pre_migration_snapshot": {
+    "files": 129,
+    "chunks_decoded": 119832,
+    "errors": 1,
+    "target_hits": 0,
+    "control_hits": 13845,
+    "note": "errors are scratch-store chunk journals; the original journals were parsed in the journal pass"
+   },
+   "remote_current_snapshot": {
+    "files": 215,
+    "chunks_decoded": 138228,
+    "errors": 1,
+    "target_hits": 0,
+    "control_hits": 21530,
+    "note": "errors are scratch-store chunk journals; the original journals were parsed in the journal pass"
+   },
+   "clone_platevault_claude_backup": {
+    "files": 127,
+    "chunks_decoded": 123802,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 14855
+   },
+   "clone_platevault_claude_embedded_tables": {
+    "files": 127,
+    "chunks_decoded": 118744,
+    "errors": 1,
+    "target_hits": 0,
+    "control_hits": 13374,
+    "note": "errors are scratch-store chunk journals; the original journals were parsed in the journal pass"
+   },
+   "clone_platevault_sol_tables": {
+    "files": 11,
+    "chunks_decoded": 1008,
+    "errors": 1,
+    "target_hits": 0,
+    "control_hits": 0,
+    "note": "errors are scratch-store chunk journals; the original journals were parsed in the journal pass"
+   },
+   "pv_backup_20260826_tables": {
+    "files": 1,
+    "chunks_decoded": 105,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_clean_room_pv_tables": {
+    "files": 1,
+    "chunks_decoded": 0,
+    "errors": 1,
+    "target_hits": 0,
+    "control_hits": 0,
+    "note": "errors are scratch-store chunk journals; the original journals were parsed in the journal pass"
+   },
+   "clone_platevault_claude_embedded_original_tables_and_journal": {
+    "files": 127,
+    "chunks_decoded": 125426,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 15099
+   },
+   "clone_platevault_sol": {
+    "files": 15,
+    "chunks_decoded": 8939,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_clean_room_pv": {
+    "files": 3,
+    "chunks_decoded": 5924,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "pv_backup_20260826": {
+    "files": 1,
+    "chunks_decoded": 105,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "home_beads_backup": {
+    "files": 1,
+    "chunks_decoded": 113,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "remote_git_all_storage_files": {
+    "files": 214,
+    "chunks_decoded": 138228,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 21530
+   }
+  },
+  "supplementary_method": "The 28 supplementary ids, with the same four controls, decompressed and searched in every file of every carrier above and in every scratch store built from them.",
+  "supplementary_totals": {
+   "live_backup_copy": {
+    "files": 97,
+    "chunks_decoded": 147244,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 25307
+   },
+   "remote_git_all_storage_files": {
+    "files": 214,
+    "chunks_decoded": 138228,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 21530
+   },
+   "pv_backup_20260826_tables": {
+    "files": 2,
+    "chunks_decoded": 114,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_platevault_sol_tables": {
+    "files": 17,
+    "chunks_decoded": 8910,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "home_beads_backup_tables": {
+    "files": 2,
+    "chunks_decoded": 122,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_platevault_claude_embedded_tables": {
+    "files": 128,
+    "chunks_decoded": 125435,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 15099
+   },
+   "remote_pre_migration_snapshot": {
+    "files": 130,
+    "chunks_decoded": 119844,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 13845
+   },
+   "remote_current_snapshot": {
+    "files": 216,
+    "chunks_decoded": 138240,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 21530
+   },
+   "live_backup_scratch_store": {
+    "files": 98,
+    "chunks_decoded": 147253,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 25307
+   },
+   "clone_platevault_claude_backup": {
+    "files": 128,
+    "chunks_decoded": 123811,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 14855
+   },
+   "clone_clean_room_pv_tables": {
+    "files": 2,
+    "chunks_decoded": 5890,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_platevault_claude_embedded_original_tables_and_journal": {
+    "files": 254,
+    "chunks_decoded": 249228,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 29954
+   },
+   "clone_platevault_sol": {
+    "files": 15,
+    "chunks_decoded": 8939,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "clone_clean_room_pv": {
+    "files": 3,
+    "chunks_decoded": 5924,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "pv_backup_20260826": {
+    "files": 1,
+    "chunks_decoded": 105,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   },
+   "home_beads_backup": {
+    "files": 1,
+    "chunks_decoded": 113,
+    "errors": 0,
+    "target_hits": 0,
+    "control_hits": 0
+   }
+  }
+ },
+ "parity": [
+  {
+   "a": "live_export",
+   "b": "backup-20261016",
+   "issue_ids_equal": true,
+   "issues": [
+    2261,
+    2261
+   ],
+   "status_differences": 9,
+   "comment_count_differences": 4,
+   "dependencies_only_in_live": 20,
+   "dependencies_only_in_b": 1,
+   "explanation": "Writes after the 2026-10-16T07:15:22Z backup sync: nine claims (07:16:48Z-07:21:31Z, including this bead), four comments (07:18:13Z-07:19:22Z), twenty new edges (07:18:24Z-07:18:25Z), and one related edge astro-plan-9eezk -> astro-plan-5wcib removed after the sync."
+  },
+  {
+   "a": "live_export",
+   "b": "remote-current-c928cda",
+   "issue_ids_equal": true,
+   "issues": [
+    2261,
+    2261
+   ],
+   "status_differences": 9,
+   "comment_count_differences": 4,
+   "dependencies_only_in_b": 1,
+   "explanation": "The same nine claims and four comments sit in the live working set, not yet in a Dolt commit (auto-commit batch). The edge astro-plan-sb7v7 -> astro-plan-3zibn (07:22:05Z) postdates the export."
+  },
+  {
+   "a": "live_export",
+   "b": "oct2_export",
+   "issue_ids_subset": true,
+   "issues": [
+    2261,
+    1670
+   ],
+   "ids_only_in_b": 0,
+   "status_differences": 228,
+   "all_status_differences_later_in_live": true,
+   "dependencies_only_in_b": 22,
+   "explanation": "Removed by the 2026-10-02 30-operation graph correction and later edits; the corrected export leaves 6."
+  },
+  {
+   "a": "live_export",
+   "b": "remote-pre-migration-b8d4879",
+   "issue_ids_subset": true,
+   "issues": [
+    2261,
+    1662
+   ],
+   "ids_only_in_b": 0,
+   "status_differences": 229,
+   "status_differences_later_in_live": 228,
+   "exception": "astro-plan-v85j: closed in live with updated_at 2026-07-26T04:12:14Z, in_progress on the remote. The closure lived only in the working set of a stale store whose history stops at 2026-07-26; commit k1dc5d6ikkthhlbf7benlopvmp7hhj9a preserved it on 2026-09-22 and merge gcsukckg87pc1l32tefqae2bfjus77qh joined it to the remote line.",
+   "dependencies_only_in_b": 22
+  },
+  {
+   "a": "live_export",
+   "b": "claude-embedded",
+   "issue_ids_subset": false,
+   "issues": [
+    2261,
+    1688
+   ],
+   "ids_only_in_b": 26,
+   "explanation": "1662 ids from the remote at 2026-07-30 plus the 26 clone-only design molecules."
+  },
+  {
+   "a": "backup-20261016 history",
+   "b": "2026-09-14 native archive",
+   "explanation": "No manifest survives for the 2026-09-14 state, so it is compared through the lineage: no commits exist between 2026-07-30T07:40:55Z (54v25a0, 1662 ids) and 2026-09-17, and the archive's 118,311 chunks contain none of the target strings."
+  }
+ ],
+ "timeline": [
+  {
+   "at": "2026-07-30",
+   "event": "Last canonical Dolt commit (54v25a0) and last July push to refs/dolt/data (3cb38971, 15:22Z)."
+  },
+  {
+   "at": "2026-08-17..2026-08-25",
+   "event": "72 commits on main reference the 180 ids (Tracks-Bead 69 ids, Refs 32, Merge-Bead 8, Closes-Bead 7, Closes 4, Discovered 1)."
+  },
+  {
+   "at": "2026-08-26T18:25Z",
+   "event": "By this time ~/tmp/platevault-claude has cloned the ledger from the remote; its origin/main is 54v25a0 (2026-07-30)."
+  },
+  {
+   "at": "2026-08-26T18:25:58Z",
+   "event": ".beads/backup is created holding only an empty-schema database (lhpohc74..., 105 chunks, no issue rows)."
+  },
+  {
+   "at": "2026-08-26T18:49Z",
+   "event": "Commits e5f4abf and 3ece25a from the sol clone change the tracked .beads config on main to server mode, port 3307, prefix platevault-sol."
+  },
+  {
+   "at": "2026-09-14",
+   "event": "Native archive 44alf643 written (06:25Z); commit 878cdc8 moves the store to the shared server."
+  },
+  {
+   "at": "2026-09-17",
+   "event": "First commits after the gap (schema migrations, 1 issue) and two pushes (b8d4879: 1662 issues, newest updated 2026-07-30T07:40:33Z)."
+  },
+  {
+   "at": "2026-09-19",
+   "event": "Embedded migration f5bd33b: count parity 1663 before and after."
+  },
+  {
+   "at": "2026-09-22",
+   "event": "Stale store (history to 2026-07-26, 866 issues) preserved by k1dc5d6 and merged with the remote line."
+  }
+ ],
+ "inferences": [
+  "[INFERENCE] The August ids were created in a ledger that never committed into the canonical lineage and never pushed: the lineage has zero commits and the remote zero pushes between 2026-07-30 and 2026-09-17, and the 2026-08-26 clone saw the remote at 2026-07-30.",
+  "[INFERENCE] The most likely carrier is a per-checkout or per-worktree store that was discarded with its directory. No such store survives on this machine: a search of ~/tmp, ~/personal/dev, /private/tmp, ~/Downloads, ~/scratch, ~/agentic and ~/agentic-scratch found no other platevault store, and no August platevault session transcripts remain.",
+  "[INFERENCE] The five astro-plan-wisp-* ids are wisps, which are local-only by design and excluded from exports and remotes, so their absence does not by itself indicate loss."
+ ],
+ "unresolved": [
+  {
+   "ids": "all 180 confirmed_missing ids",
+   "reason": "Existence is evidenced only by commit text; record, status, claims, comments and dependencies are unproven."
+  },
+  {
+   "ids": [
+    "astro-plan-0sgb",
+    "astro-plan-3v3r",
+    "astro-plan-3v3r.1",
+    "astro-plan-3v3r.11",
+    "astro-plan-3v3r.12",
+    "astro-plan-3v3r.13",
+    "astro-plan-3v3r.15",
+    "astro-plan-3v3r.16",
+    "astro-plan-3v3r.17",
+    "astro-plan-3v3r.18",
+    "astro-plan-3v3r.19",
+    "astro-plan-3v3r.2",
+    "astro-plan-3v3r.3",
+    "astro-plan-3v3r.4",
+    "astro-plan-3v3r.5",
+    "astro-plan-3v3r.6",
+    "astro-plan-3v3r.8",
+    "astro-plan-3v3r.9"
+   ],
+   "reason": "Parents implied by child ids; never referenced directly."
+  },
+  {
+   "ids": [
+    "astro-plan-1xlik",
+    "astro-plan-221lo",
+    "astro-plan-3v3r.1.22",
+    "astro-plan-3v3r.1.23",
+    "astro-plan-3v3r.10",
+    "astro-plan-3v3r.10.42",
+    "astro-plan-3v3r.11.24",
+    "astro-plan-3v3r.13.31",
+    "astro-plan-3v3r.13.39",
+    "astro-plan-3v3r.13.42",
+    "astro-plan-3v3r.20.24",
+    "astro-plan-3v3r.20.33",
+    "astro-plan-3v3r.8.39",
+    "astro-plan-6yep",
+    "astro-plan-90u05",
+    "astro-plan-a7fcq",
+    "astro-plan-b7h28",
+    "astro-plan-cia8",
+    "astro-plan-jklcq",
+    "astro-plan-ko0tv",
+    "astro-plan-lilr5",
+    "astro-plan-lxnwv",
+    "astro-plan-qs26q",
+    "astro-plan-qvmqq",
+    "astro-plan-tykek",
+    "astro-plan-ugux2",
+    "astro-plan-vi9sp",
+    "astro-plan-zjf88"
+   ],
+   "reason": "Outside the reviewed 183: 20 from files in the baseline tree, 8 from commit messages on non-main refs (2026-08-24..25). Absent from the current rows, the wisps table where one exists, and the full dolt_history_issues of all 12 sources, and from every decoded chunk of every copied carrier and scratch store (see supplementary_store_queries and storage_chunk_scan.supplementary_totals)."
+  }
+ ],
+ "supplementary_outside_183": {
+  "baseline_tree_94a3dc95": [
+   {
+    "string": "astro-plan-221lo",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.1.22",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.1.23",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.10",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.10.42",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.11.24",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.13.31",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.13.39",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.13.42",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.20.24",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.20.33",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-3v3r.8.39",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-6yep",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-90u05",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-aaaa",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-abcd",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-b7h28",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-cia8",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-hardlink",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-lxnwv",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-mockup",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-project",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-qs26q",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-seed",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-symlink",
+    "kind": "non_id",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-tykek",
+    "kind": "bead_shaped",
+    "first_commit": null
+   },
+   {
+    "string": "astro-plan-ugux2",
+    "kind": "bead_shaped",
+    "first_commit": null
+   }
+  ],
+  "commit_messages_all_refs": [
+   {
+    "string": "astro-plan-1xlik",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-24T23:32:18+04:00",
+     "5f39618cfae998bab29b51f0dda27de5fbf0fbc2"
+    ]
+   },
+   {
+    "string": "astro-plan-a7fcq",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-25T10:37:22+04:00",
+     "d7d011039664a11cddcd00071f3de23638071966"
+    ]
+   },
+   {
+    "string": "astro-plan-jklcq",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-24T23:32:18+04:00",
+     "5f39618cfae998bab29b51f0dda27de5fbf0fbc2"
+    ]
+   },
+   {
+    "string": "astro-plan-ko0tv",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-24T23:32:18+04:00",
+     "5f39618cfae998bab29b51f0dda27de5fbf0fbc2"
+    ]
+   },
+   {
+    "string": "astro-plan-lilr5",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-25T10:37:22+04:00",
+     "d7d011039664a11cddcd00071f3de23638071966"
+    ]
+   },
+   {
+    "string": "astro-plan-qvmqq",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-25T10:01:48+04:00",
+     "ddbc460a49ec3a6e09a9404f9f661376a6392b74"
+    ]
+   },
+   {
+    "string": "astro-plan-vi9sp",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-25T10:01:48+04:00",
+     "ddbc460a49ec3a6e09a9404f9f661376a6392b74"
+    ]
+   },
+   {
+    "string": "astro-plan-zjf88",
+    "kind": "bead_shaped",
+    "first_commit": [
+     "2026-08-25T07:20:30+04:00",
+     "c0f4df6e941fbcd5fe92ce2c2b746362f752ba7e"
+    ]
+   }
+  ]
+ },
+ "supplementary_store_queries": {
+  "backup-20261016": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-p0ds",
+    "astro-plan-qwvo"
+   ]
+  },
+  "remote-pre-migration-b8d4879": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": "no wisps table",
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  "remote-current-c928cda": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": "no wisps table",
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-p0ds",
+    "astro-plan-qwvo"
+   ]
+  },
+  "claude-embedded": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  "claude-backup": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": [
+    "astro-plan-is9s",
+    "astro-plan-kyo7",
+    "astro-plan-qwvo"
+   ]
+  },
+  "sol-dolt": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "sol-dropped": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "sol-embedded": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "sol-backup": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "cleanroom-pv": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "pv-backup-20260826": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  },
+  "home-beads-backup": {
+   "target_ids_in_current_issues": [],
+   "target_ids_in_any_commit_of_history": [],
+   "target_ids_in_wisps": [],
+   "control_ids_found_in_history": []
+  }
+ }
+}
