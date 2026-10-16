@@ -30,13 +30,23 @@ export default {
     // Named colours (`red`, `black`) are raw literals too. The rule leaves
     // transparent, currentColor and the CSS-wide keywords alone.
     'color-named': 'never',
+    // CSS system colours (Canvas, CanvasText, Highlight and the rest, deprecated
+    // ones included) are raw colours too, and color-named does not know them.
+    'declaration-property-value-disallowed-list': {
+      '/^(color|background(-color|-image)?|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?|border-image(-source)?|outline(-color)?|box-shadow|text-shadow|text-decoration(-color)?|text-emphasis(-color)?|caret-color|accent-color|column-rule(-color)?|fill|stroke|stop-color|flood-color|lighting-color|scrollbar-color|filter|backdrop-filter|mask(-image|-border(-source)?)?|list-style(-image)?|shape-outside|-webkit-text-fill-color|-webkit-text-stroke(-color)?|-webkit-tap-highlight-color|--.+)$/i': ['/(^|[\\s,(])(accentcolor|accentcolortext|activetext|buttonborder|buttonface|buttontext|canvas|canvastext|field|fieldtext|graytext|highlight|highlighttext|linktext|mark|marktext|selecteditem|selecteditemtext|visitedtext|activeborder|activecaption|appworkspace|background|buttonhighlight|buttonshadow|captiontext|inactiveborder|inactivecaption|inactivecaptiontext|infobackground|infotext|menu|menutext|scrollbar|threeddarkshadow|threedface|threedhighlight|threedlightshadow|threedshadow|window|windowframe|windowtext)(?=$|[\\s,);!])/i'],
+    },
   },
   ignoreFiles: ['dist/**', 'node_modules/**', '.ds-css/**'],
   overrides: [
     {
       // The generated token stylesheet is where raw colour values live.
       files: ['src/styles/tokens.css'],
-      rules: { 'color-no-hex': null, 'function-disallowed-list': null, 'color-named': null },
+      rules: {
+        'color-no-hex': null,
+        'function-disallowed-list': null,
+        'color-named': null,
+        'declaration-property-value-disallowed-list': null,
+      },
     },
   ],
 };
