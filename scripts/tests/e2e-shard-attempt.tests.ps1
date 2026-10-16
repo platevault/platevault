@@ -115,3 +115,6 @@ if ($failures -gt 0) {
   exit 1
 }
 Write-Output 'all cases passed'
+# Explicit: $LASTEXITCODE still holds the last fake's code, and the Actions
+# pwsh wrapper exits with it when a script ends without `exit`.
+exit 0
