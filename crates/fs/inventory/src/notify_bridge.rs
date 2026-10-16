@@ -89,7 +89,7 @@ pub fn register_watch_paths(
     follow_symlinks: bool,
     fail_fast: bool,
 ) -> Result<WatchRegistrationReport, String> {
-    register(watcher, paths, follow_symlinks, fail_fast, |root| {
+    register(watcher, paths, follow_symlinks, fail_fast, false, |root| {
         fs_pathsafe::real_dirs_under(root, false)
     })
 }
@@ -99,25 +99,35 @@ pub fn register_watch_paths(
 /// ([`fs_pathsafe::real_dirs_on_volume`]): a volume mounted inside the tree
 /// is not watched, as a scan never enters it.
 ///
+/// Each folder is checked, without following links, right before it is
+/// added: one that is no longer a real folder, or is reached through a link
+/// or junction above it (swapped in after the tree was listed), is left out.
+/// Once the batch is applied each one is checked again, so a folder swapped
+/// while the batch registered fails the registration.
+///
 /// # Errors
-/// As [`register_watch_paths`].
+/// As [`register_watch_paths`], and a folder that changed while it was
+/// registered.
 pub fn register_tree_paths(
     watcher: &mut RecommendedWatcher,
     paths: &[Utf8PathBuf],
 ) -> Result<WatchRegistrationReport, String> {
-    register(watcher, paths, false, false, fs_pathsafe::real_dirs_on_volume)
+    register(watcher, paths, false, false, true, fs_pathsafe::real_dirs_on_volume)
 }
 
 /// Register `paths`; without `follow_symlinks`, each one's folders as `dirs`
-/// lists them, the path itself first.
+/// lists them, the path itself first. With `verify`, each folder is checked
+/// around its registration as [`register_tree_paths`] describes.
 fn register(
     watcher: &mut RecommendedWatcher,
     paths: &[Utf8PathBuf],
     follow_symlinks: bool,
     fail_fast: bool,
+    verify: bool,
     dirs: impl Fn(&std::path::Path) -> Vec<std::path::PathBuf>,
 ) -> Result<WatchRegistrationReport, String> {
     let mut report = WatchRegistrationReport::default();
+    let mut recorded = Vec::new();
     let mut batch = watcher.paths_mut();
 
     for path in paths {
@@ -154,6 +164,20 @@ fn register(
         // root itself, there is nothing useful the watcher can do.
         let mut is_root = true;
         for dir in dirs {
+            if verify {
+                // Swapped for a link or junction since it was listed, or
+                // reached through one: what is there now is not in the tree.
+                let Some(identity) = tree_identity(path.as_std_path(), &dir) else {
+                    if is_root {
+                        return Err(format!(
+                            "failed to watch {}: not a real folder",
+                            dir.display()
+                        ));
+                    }
+                    continue;
+                };
+                recorded.push((path.as_std_path(), dir.clone(), identity));
+            }
             match batch.add(&dir, RecursiveMode::NonRecursive) {
                 Ok(()) => {
                     report.watched.push(dir);
@@ -171,7 +195,68 @@ fn register(
     }
 
     batch.commit().map_err(|e| format!("failed to start watching: {e}"))?;
+    if let Some((_, dir, _)) =
+        recorded.iter().find(|(root, dir, identity)| !still_folder(root, dir, identity))
+    {
+        return Err(format!("{} changed while it was registered", dir.display()));
+    }
     Ok(report)
+}
+
+/// A real folder's identity from its no-follow metadata: its device and
+/// inode on Unix; elsewhere only that it is a real folder, since a junction
+/// or symlink put in its place reads as a reparse point. `None` for anything
+/// else, a link or junction included.
+fn folder_identity(path: &std::path::Path) -> Option<FolderIdentity> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if fs_pathsafe::is_link_or_junction_metadata(&meta) || !meta.is_dir() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some(FolderIdentity(meta.dev(), meta.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        Some(FolderIdentity)
+    }
+}
+
+#[cfg(unix)]
+#[derive(Debug, PartialEq, Eq)]
+struct FolderIdentity(u64, u64);
+
+#[cfg(not(unix))]
+#[derive(Debug, PartialEq, Eq)]
+struct FolderIdentity;
+
+/// The identity of `dir` below `root` while every folder from `root` down to
+/// it is a real folder: a folder reached through a link or junction above
+/// it is `None` too, though it may be the same folder moved elsewhere.
+fn tree_identity(root: &std::path::Path, dir: &std::path::Path) -> Option<FolderIdentity> {
+    let relative = dir.strip_prefix(root).ok()?;
+    let mut path = root.to_path_buf();
+    let mut identity = folder_identity(&path)?;
+    for part in relative.components() {
+        path.push(part);
+        identity = folder_identity(&path)?;
+    }
+    Some(identity)
+}
+
+/// Whether `dir` below `root` is still the folder `identity` was recorded
+/// for, or was removed from real folders above it: a watch on a removed
+/// folder holds nothing outside the tree.
+fn still_folder(root: &std::path::Path, dir: &std::path::Path, identity: &FolderIdentity) -> bool {
+    if let Some(now) = tree_identity(root, dir) {
+        return now == *identity;
+    }
+    let parent_real =
+        dir != root && dir.parent().is_some_and(|parent| tree_identity(root, parent).is_some());
+    parent_real
+        && std::fs::symlink_metadata(dir)
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
 }
 
 #[cfg(test)]
@@ -223,5 +308,32 @@ mod tests {
             notify::recommended_watcher(|_: Result<notify::Event, notify::Error>| {}).unwrap();
         let result = register_watch_paths(&mut watcher, &[path], false, false);
         assert!(result.is_err());
+    }
+
+    /// A folder of the tree is swapped for a link to its moved original
+    /// after the tree was listed and before it is registered: the tree
+    /// watcher leaves it out instead of watching what the link points at.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_swapped_for_a_link_before_registration_is_not_watched() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        let root = base.join("Captures");
+        std::fs::create_dir_all(root.join("night/Ha")).unwrap();
+        let moved = base.join("moved");
+        let mut watcher =
+            notify::recommended_watcher(|_: Result<notify::Event, notify::Error>| {}).unwrap();
+        let paths = [Utf8PathBuf::from_path_buf(root.clone()).unwrap()];
+
+        let report = register(&mut watcher, &paths, false, false, true, |root| {
+            let listed = fs_pathsafe::real_dirs_on_volume(root);
+            std::fs::rename(root.join("night"), &moved).unwrap();
+            std::os::unix::fs::symlink(&moved, root.join("night")).unwrap();
+            listed
+        })
+        .unwrap();
+
+        assert_eq!(report.watched, [root]);
+        assert_eq!(report.skipped, [] as [(std::path::PathBuf, String); 0]);
     }
 }
