@@ -159,7 +159,7 @@ first Apply builds the Project's View from the original sessions.
 - G5: (dissolved 2026-10-15): D-W89 leaves the setup checklist off Home, so no setup, import, Project or run outcome ticks an item. S9 to S9b assert the import, Project and Apply outcomes themselves.
 - G6: (dissolved 2026-10-15): Home has no setup checklist under PRJ-FR-17 and D-W89; S6, S7 and S7a now assert the current dashboard sections and their empty states.
 - G7: Rests on provisional items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes the Ready Card-1 session a suggestion of `First light` (S9b), and D-W100's rule that the first Apply builds the View with no separate Start processing (S9b). D-W117's walk details are provisional too. The walk is modal and driven by Next, Back, Skip and Escape (S2, S3). Its stops are Projects, Targets, Sessions, Calibration, Import, Activity, Settings and Home (S2). If the owner changes one, the steps that cite it change.
-- G8: Unresolved product question, open with the owner (D-W118): whether **Mark rest usable** asks for confirmation. S9 confirms it only if PlateVault asks and asserts the outcome after that, which holds under either answer.
+- G8: Unresolved product question, open with the owner (D-W118): whether **Mark rest usable** asks for confirmation. S9 confirms it only if PlateVault asks and asserts the outcome after that, which holds under either answer. Blocks readiness.
 
 ## Delta log
 

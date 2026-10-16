@@ -128,7 +128,9 @@
       },
       {
         "id": "J18",
-        "blocking": []
+        "blocking": [
+          "G8 (product question, open with the owner) whether \"Mark rest usable\" asks for confirmation (D-W118)."
+        ]
       },
       {
         "id": "J19",
