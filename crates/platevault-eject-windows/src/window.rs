@@ -6,8 +6,9 @@
 //! Windows sends a handle registration's notices to the window procedure,
 //! which applies them to the thread's registrations. The thread's message loop
 //! takes the queued roots and the stop request, both posted from other
-//! threads. The thread pumps no messages while it runs a callback, so the
-//! procedure is never re-entered.
+//! threads, and the retry timer's ticks, which run while a root has no
+//! registration. The thread pumps no messages while it runs a callback, so
+//! the procedure is never re-entered.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -21,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{
     ERROR_CLASS_ALREADY_EXISTS, HWND, LPARAM, LRESULT, TRUE, WPARAM,
@@ -28,11 +30,12 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostMessageW,
-    RegisterClassExW, RegisterDeviceNotificationW, UnregisterDeviceNotification,
-    DBT_DEVICEQUERYREMOVE, DBT_DEVICEQUERYREMOVEFAILED, DBT_DEVICEREMOVECOMPLETE,
-    DBT_DEVICEREMOVEPENDING, DBT_DEVTYP_HANDLE, DEVICE_NOTIFY_WINDOW_HANDLE, DEV_BROADCAST_HANDLE,
-    DEV_BROADCAST_HDR, HDEVNOTIFY, HWND_MESSAGE, MSG, WM_APP, WM_DEVICECHANGE, WNDCLASSEXW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer,
+    PostMessageW, RegisterClassExW, RegisterDeviceNotificationW, SetTimer,
+    UnregisterDeviceNotification, DBT_DEVICEQUERYREMOVE, DBT_DEVICEQUERYREMOVEFAILED,
+    DBT_DEVICEREMOVECOMPLETE, DBT_DEVICEREMOVEPENDING, DBT_DEVTYP_HANDLE,
+    DEVICE_NOTIFY_WINDOW_HANDLE, DEV_BROADCAST_HANDLE, DEV_BROADCAST_HDR, HDEVNOTIFY, HWND_MESSAGE,
+    MSG, WM_APP, WM_DEVICECHANGE, WM_TIMER, WNDCLASSEXW,
 };
 
 use crate::registrations::{Notice, Registrations};
@@ -47,6 +50,11 @@ const STOP: u32 = WM_APP + 1;
 const IDS: u32 = WM_APP + 2;
 /// The window class every `RemovalNotices` in the process shares.
 const CLASS: &str = "PlateVaultRemovalNotices";
+/// The timer that retries the roots left without a registration.
+const RETRY_TIMER: usize = 1;
+/// How often a root that could not be opened or registered, or was not
+/// reopened after a refused removal, is tried again.
+const RETRY: Duration = Duration::from_secs(30);
 /// Grants a requested removal; `BROADCAST_QUERY_DENY` would refuse it.
 const GRANT: LRESULT = TRUE as LRESULT;
 #[expect(clippy::cast_possible_truncation, reason = "the struct is a few dozen bytes")]
@@ -58,7 +66,9 @@ const NOTIFICATION_END: usize =
     mem::offset_of!(DEV_BROADCAST_HANDLE, dbch_hdevnotify) + mem::size_of::<HDEVNOTIFY>();
 
 /// A message-only window on its own thread, registered for the removal
-/// notices of the volume holding each root its [`Roots`] give it.
+/// notices of the volume holding each root its [`Roots`] give it. A root
+/// that could not be opened or registered, or was not reopened after a
+/// refused removal, is tried again every 30 s until it registers or leaves.
 ///
 /// Dropping it ends every registration and the thread, and waits for a
 /// callback that is still running.
@@ -85,12 +95,21 @@ impl<K: Clone + Eq + Hash + Send + 'static> RemovalNotices<K> {
     /// # Errors
     /// The thread did not start, or Windows refused the window.
     pub fn start(removal: impl FnMut(&K, Removal) + Send + 'static) -> io::Result<Self> {
+        Self::start_with(RETRY, removal)
+    }
+
+    /// [`start`](Self::start), trying unregistered roots again every `retry`.
+    fn start_with(
+        retry: Duration,
+        removal: impl FnMut(&K, Removal) + Send + 'static,
+    ) -> io::Result<Self> {
         let (queue, queued) = mpsc::channel();
         let (created, window) = mpsc::sync_channel(1);
         let removal: Box<dyn FnMut(&K, Removal) + Send> = Box::new(removal);
+        let retry = u32::try_from(retry.as_millis()).unwrap_or(u32::MAX);
         let thread = thread::Builder::new()
             .name("removal-notices".into())
-            .spawn(move || run(queued, removal, &created))?;
+            .spawn(move || run(queued, removal, retry, &created))?;
         let window = window.recv().unwrap_or_else(|_| {
             Err(io::Error::other("the removal notice thread ended before its window existed"))
         });
@@ -140,10 +159,11 @@ fn post(window: usize, message: u32) -> bool {
 }
 
 /// The window thread: create the window, report it, then serve its messages
-/// until asked to stop.
+/// until asked to stop. Unregistered roots are retried every `retry` ms.
 fn run<K: Clone + Eq + Hash + 'static>(
     queued: mpsc::Receiver<HashMap<K, PathBuf>>,
     removal: Box<dyn FnMut(&K, Removal) + Send>,
+    retry: u32,
     created: &mpsc::SyncSender<io::Result<usize>>,
 ) {
     let window = match create_window() {
@@ -157,7 +177,10 @@ fn run<K: Clone + Eq + Hash + 'static>(
         window,
         registrations: Registrations::new(open_root),
         queued,
+        roots: HashMap::new(),
         removal,
+        retry,
+        retrying: false,
     })));
     let _ = created.send(Ok(window.addr()));
     let mut message = MSG::default();
@@ -173,6 +196,7 @@ fn run<K: Clone + Eq + Hash + 'static>(
         match message.message {
             STOP => break,
             ROOTS => with_handler(|handler| handler.follow()),
+            WM_TIMER if message.wParam == RETRY_TIMER => with_handler(|handler| handler.follow()),
             _ => {
                 // SAFETY: `message` was just filled in by GetMessageW.
                 #[allow(unsafe_code)]
@@ -394,7 +418,38 @@ struct Handler<K> {
     window: HWND,
     registrations: Registrations<K, Notification>,
     queued: mpsc::Receiver<HashMap<K, PathBuf>>,
+    /// The roots last given, which a retry follows again.
+    roots: HashMap<K, PathBuf>,
     removal: Box<dyn FnMut(&K, Removal) + Send>,
+    /// The retry timer's period, in milliseconds.
+    retry: u32,
+    /// Whether the retry timer runs.
+    retrying: bool,
+}
+
+impl<K: Clone + Eq + Hash> Handler<K> {
+    /// Run the retry timer exactly while a root has no registration.
+    fn retry_while_uncovered(&mut self) {
+        let uncovered = !self.registrations.covers(&self.roots);
+        if uncovered == self.retrying {
+            return;
+        }
+        if uncovered {
+            // SAFETY: `self.window` is this thread's live window. Without a
+            // timer procedure the ticks arrive as WM_TIMER in its queue.
+            #[allow(unsafe_code)]
+            let set = unsafe { SetTimer(self.window, RETRY_TIMER, self.retry, None) };
+            // A timer Windows refused is asked for again at the next change.
+            self.retrying = set != 0;
+        } else {
+            // SAFETY: as above; the timer was set on this window.
+            #[allow(unsafe_code)]
+            unsafe {
+                KillTimer(self.window, RETRY_TIMER);
+            }
+            self.retrying = false;
+        }
+    }
 }
 
 impl<K: Clone + Eq + Hash> Handle for Handler<K> {
@@ -402,14 +457,19 @@ impl<K: Clone + Eq + Hash> Handle for Handler<K> {
         if let Some((key, removal)) = self.registrations.notice(id, notice) {
             (self.removal)(&key, removal);
         }
+        // A root not reopened after a refused removal is tried again.
+        self.retry_while_uncovered();
     }
 
     fn follow(&mut self) {
-        // Only the latest roots count.
+        // Only the latest roots count; a retry tick follows the last ones
+        // again.
         if let Some(roots) = self.queued.try_iter().last() {
-            let window = self.window;
-            self.registrations.follow(&roots, |handle| register(window, handle));
+            self.roots = roots;
         }
+        let window = self.window;
+        self.registrations.follow(&self.roots, |handle| register(window, handle));
+        self.retry_while_uncovered();
     }
 
     #[cfg(test)]
@@ -422,7 +482,7 @@ impl<K: Clone + Eq + Hash> Handle for Handler<K> {
 /// tests send as Windows sends them; only a real device removal is left out.
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     use windows_sys::Win32::UI::WindowsAndMessaging::SendMessageW;
 
@@ -533,5 +593,58 @@ mod tests {
         done.recv_timeout(Duration::from_secs(5)).expect("dropped once the callback returned");
         assert_eq!(requested.join().unwrap(), GRANT);
         dropping.join().unwrap();
+    }
+
+    /// A notice window whose unregistered roots are retried every 50 ms,
+    /// reporting each removal on the returned channel.
+    fn retrying() -> (RemovalNotices<&'static str>, mpsc::Receiver<(&'static str, Removal)>) {
+        let (reported, reports) = mpsc::channel();
+        let notices = RemovalNotices::start_with(Duration::from_millis(50), move |key, removal| {
+            let _ = reported.send((*key, removal));
+        })
+        .unwrap();
+        (notices, reports)
+    }
+
+    /// Nothing gives the window its roots again, yet a root that could not
+    /// be opened registers at a retry tick once it can.
+    #[test]
+    fn a_root_that_could_not_be_opened_registers_at_a_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let (card, late) = (dir.path().join("card"), dir.path().join("late"));
+        std::fs::create_dir(&card).unwrap();
+        let (notices, _reports) = retrying();
+        let window = notices.roots.window;
+
+        assert!(notices.roots().watch(HashMap::from([("card", card), ("late", late.clone())])));
+        // Both were followed: the one that opened is registered.
+        assert_eq!(registered(window, 1).len(), 1);
+        assert!(!held(&late));
+        std::fs::create_dir(&late).unwrap();
+        assert_eq!(registered(window, 2).len(), 2, "registered at a retry tick");
+        assert!(held(&late), "its registration holds it open");
+    }
+
+    #[test]
+    fn a_root_not_reopened_after_a_refused_removal_registers_at_a_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("card");
+        std::fs::create_dir(&root).unwrap();
+        let (notices, reports) = retrying();
+        let window = notices.roots.window;
+        assert!(notices.roots().watch(HashMap::from([("card", root.clone())])));
+        let [id] = registered(window, 1)[..] else { panic!("one registration") };
+
+        // The root cannot be opened again when the removal is refused.
+        assert_eq!(notify(window, DBT_DEVICEQUERYREMOVE, id), GRANT);
+        std::fs::remove_dir(&root).unwrap();
+        assert_eq!(notify(window, DBT_DEVICEQUERYREMOVEFAILED, id), GRANT);
+        assert_eq!(reports.try_recv(), Ok(("card", Removal::Requested)));
+        assert_eq!(reports.try_recv(), Ok(("card", Removal::Refused)));
+        assert_eq!(registered(window, 0), [] as [usize; 0], "its registration ended");
+
+        std::fs::create_dir(&root).unwrap();
+        assert_eq!(registered(window, 1).len(), 1, "registered again at a retry tick");
+        assert!(held(&root), "its registration holds it open");
     }
 }

@@ -12,8 +12,10 @@
 //! protocol for a device removal request: it closes once
 //! [`Removal::Requested`] was reported, so the removal can go ahead, opens
 //! again when the removal was [`Removal::Refused`], and the registration ends
-//! once the volume is [`Removal::Removed`]. That bookkeeping is free of Win32,
-//! so every platform tests it; the window exists only on Windows.
+//! once the volume is [`Removal::Removed`]. A root that cannot be opened or
+//! registered, or opened again after a refusal, is tried again every 30 s
+//! until it registers or is no longer given. That bookkeeping is free of
+//! Win32, so every platform tests it; the window exists only on Windows.
 
 /// What Windows reported about the volume holding a registered root.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -56,7 +56,8 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
     /// undecided. Each root without one is opened and given to `register`,
     /// which registers the handle and returns the registration's id and
     /// notification. A root that cannot be opened or registered stays
-    /// unregistered until a later call.
+    /// unregistered until a later call, which [`covers`](Self::covers) tells
+    /// the caller to make.
     pub fn follow(
         &mut self,
         roots: &HashMap<K, PathBuf>,
@@ -109,8 +110,8 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
                     }
                     Err(error) => {
                         // A registration without its handle would miss the
-                        // next request, so it ends; `follow` registers the
-                        // root again.
+                        // next request, so it ends, and the root is left
+                        // uncovered for a later `follow` to register again.
                         tracing::warn!(
                             root = %entry.root.display(),
                             %error,
@@ -122,6 +123,15 @@ impl<K: Clone + Eq + Hash, N> Registrations<K, N> {
             }
             Notice::Removed => self.entries.remove(&id).map(|entry| (entry.key, Removal::Removed)),
         }
+    }
+
+    /// Whether every one of `roots` has a registration: `false` while one
+    /// could not be opened or registered, or was not reopened after a refused
+    /// removal, and a later [`follow`](Self::follow) should try again.
+    pub fn covers(&self, roots: &HashMap<K, PathBuf>) -> bool {
+        roots.iter().all(|(key, root)| {
+            self.entries.values().any(|entry| entry.key == *key && entry.root == *root)
+        })
     }
 
     /// The ids of the registrations held now.
@@ -176,9 +186,14 @@ mod tests {
             root
         }
 
+        /// The roots as `follow` takes them.
+        fn roots(roots: &[(&'static str, &Path)]) -> HashMap<&'static str, PathBuf> {
+            roots.iter().map(|(key, root)| (*key, root.to_path_buf())).collect()
+        }
+
         /// Follow `roots` and return the ids registered for them.
         fn follow(&mut self, roots: &[(&'static str, &Path)]) -> Vec<usize> {
-            let roots = roots.iter().map(|(key, root)| (*key, root.to_path_buf())).collect();
+            let roots = Self::roots(roots);
             let mut registered = Vec::new();
             let (next, ended) = (&mut self.next, &self.ended);
             self.registrations.follow(&roots, |_| {
@@ -187,6 +202,10 @@ mod tests {
                 Ok((*next, Notification { id: *next, ended: Rc::clone(ended) }))
             });
             registered
+        }
+
+        fn covers(&self, roots: &[(&'static str, &Path)]) -> bool {
+            self.registrations.covers(&Self::roots(roots))
         }
 
         fn ended(&self) -> Vec<usize> {
@@ -307,9 +326,12 @@ mod tests {
         let mut harness = Harness::new();
         let root = harness.dir.path().join("card");
         assert_eq!(harness.follow(&[("card", &root)]), NONE);
+        assert!(!harness.covers(&[("card", &root)]), "a later follow must try again");
 
         std::fs::write(&root, b"").unwrap();
         assert_eq!(harness.follow(&[("card", &root)]).len(), 1);
+        assert!(harness.covers(&[("card", &root)]));
+        assert!(harness.covers(&[]));
     }
 
     #[test]
@@ -318,6 +340,7 @@ mod tests {
         let root = harness.root("card");
         let [id] = harness.follow(&[("card", &root)])[..] else { panic!("one registration") };
         harness.registrations.notice(id, Notice::QueryRemove);
+        assert!(harness.covers(&[("card", &root)]), "a released root keeps its registration");
         std::fs::remove_file(&root).unwrap();
 
         // Discovery still reattaches; the root registers again once it opens.
@@ -326,7 +349,9 @@ mod tests {
             Some(("card", Removal::Refused))
         );
         assert_eq!(harness.ended(), [id]);
+        assert!(!harness.covers(&[("card", &root)]), "a later follow must try again");
         std::fs::write(&root, b"").unwrap();
         assert_eq!(harness.follow(&[("card", &root)]).len(), 1);
+        assert!(harness.covers(&[("card", &root)]));
     }
 }
