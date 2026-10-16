@@ -3174,10 +3174,7 @@ async fn a_lost_plan_level_audit_row_is_logged_and_the_apply_still_finishes() {
     assert_ne!(plan.state, "applying", "the run reached its terminal state");
     assert_eq!(
         logged_transitions(&errors, plan_id, &resp.run_id),
-        vec![
-            ("approved".to_owned(), "applying".to_owned()),
-            ("applying".to_owned(), plan.state.clone()),
-        ],
+        vec![("approved".to_owned(), "applying".to_owned()), ("applying".to_owned(), plan.state)],
     );
 }
 

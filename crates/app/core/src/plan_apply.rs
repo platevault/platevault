@@ -166,8 +166,9 @@ struct ActiveRun {
 /// handler, which drops it immediately before the write that takes the plan
 /// out of `applying`. The handler's finalizers (a project manifest write, view
 /// rows) still run under the claim, and a plan that reads finished or paused
-/// claims nothing, so a plan over the same paths, a resume, or a cancel that
-/// reacts to that state is not refused (astro-plan-4bk7e).
+/// claims nothing: a plan over the same paths is not refused as overlapping,
+/// and a resume or cancel of a paused plan finds no run left to signal
+/// (astro-plan-4bk7e).
 struct ActiveRunGuard {
     registry: Arc<DashMap<String, ActiveRun>>,
     plan_id: String,
