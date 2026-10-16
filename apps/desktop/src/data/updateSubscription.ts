@@ -77,6 +77,12 @@ const IDLE_STATE: UpdateState = {
 let current: UpdateState = IDLE_STATE;
 const listeners = new Set<Listener>();
 let subscribed = false;
+/**
+ * Bumped by every start and stop. A start that resumes after a later start
+ * or a stop (React StrictMode runs setup → cleanup → setup) sees its token
+ * is stale and removes its own listener instead of keeping it.
+ */
+let generation = 0;
 let unlisten: (() => void) | null = null;
 
 function setState(next: UpdateState): void {
@@ -128,6 +134,7 @@ export async function installUpdateOnQuit(): Promise<void> {
 export async function startUpdateSubscription(): Promise<void> {
   if (subscribed) return;
   subscribed = true;
+  const token = ++generation;
 
   if (typeof window !== 'undefined' && window.__PV_TEST__?.updateState) {
     setState(window.__PV_TEST__.updateState);
@@ -141,12 +148,14 @@ export async function startUpdateSubscription(): Promise<void> {
     const stop = await listen<UpdateState>(STATUS_EVENT, (event) => {
       setState(event.payload);
     });
-    if (!subscribed) {
+    if (token !== generation) {
       stop();
       return;
     }
     unlisten = stop;
-    setState(unwrap(await commands.updateStatus()));
+    const status = unwrap(await commands.updateStatus());
+    if (token !== generation) return;
+    setState(status);
   } catch (err) {
     console.warn('[updateSubscription] subscribing failed:', err);
     return;
@@ -159,6 +168,7 @@ export async function startUpdateSubscription(): Promise<void> {
 /** Stop mirroring; a later `startUpdateSubscription()` reads the status again. */
 export function stopUpdateSubscription(): void {
   subscribed = false;
+  generation += 1;
   unlisten?.();
   unlisten = null;
   setState(IDLE_STATE);

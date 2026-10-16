@@ -130,6 +130,37 @@ describe('startUpdateSubscription', () => {
     expect(unlisten).toHaveBeenCalledTimes(1);
     expect(getUpdateSnapshot().phase).toBe('idle');
   });
+
+  // React StrictMode runs the effect setup → cleanup → setup while the first
+  // start is still waiting for `listen()`.
+  it('drops the listener of a start that a stop and a new start overtook', async () => {
+    const stale = vi.fn();
+    const fresh = vi.fn();
+    let resolveFirst: (stop: () => void) => void = () => {};
+    mockListen
+      .mockImplementationOnce(
+        () =>
+          new Promise<() => void>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(() => Promise.resolve(fresh));
+
+    const first = startUpdateSubscription();
+    // Let the first start reach `listen()` before the cleanup runs.
+    await vi.waitFor(() => expect(mockListen).toHaveBeenCalledTimes(1));
+    stopUpdateSubscription();
+    await startUpdateSubscription();
+    resolveFirst(stale);
+    await first;
+
+    expect(stale).toHaveBeenCalledTimes(1);
+    expect(fresh).not.toHaveBeenCalled();
+    expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledTimes(1);
+
+    stopUpdateSubscription();
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
 });
 
 // astro-plan-bzzbp: the backend's startup check runs only while "Check for
