@@ -303,18 +303,19 @@ pub(crate) struct Listing {
     pub(crate) frames: Vec<NativePath>,
     /// Every folder entered below the root, listed or not.
     pub(crate) folders: Vec<PathBuf>,
-    /// The folders below the root that could not be listed: what they hold
-    /// is missing from `frames`.
+    /// The folders below the root that could not be listed, or only in part
+    /// (an entry that could not be read or `stat`ed): what they hold is
+    /// missing from `frames`, or may be.
     pub(crate) unlisted: Vec<PathBuf>,
 }
 
 /// Every supported frame below `root`, listed by the walker's rules (no
 /// link, junction or nested foreign volume is entered) without reading a
 /// header: the files the next scan of the location reads. A folder below
-/// the root that cannot be listed is skipped, as a scan would name it
-/// incomplete, and named in [`Listing::unlisted`]. Cancellation ends the
-/// listing with what it found; a listing canceled before it starts touches
-/// nothing.
+/// the root that cannot be listed, or only in part, is skipped or kept with
+/// what it listed, as a scan would name it incomplete, and named in
+/// [`Listing::unlisted`]. Cancellation ends the listing with what it found;
+/// a listing canceled before it starts touches nothing.
 ///
 /// As the scan's walker does, each folder is listed only while it, and every
 /// folder above it, is still the real folder found when it was queued: one
@@ -350,10 +351,13 @@ pub(crate) fn frame_paths(
             return Ok(listed);
         }
         match list_folder(&folder, &stamp.0) {
-            Ok(Some(FolderListing { frames, folders })) => {
+            Ok(Some(FolderListing { frames, folders, complete })) => {
                 listed.frames.extend(frames);
                 listed.folders.extend(folders.iter().map(|child| child.relative.clone()));
                 pending.extend(folders);
+                if !complete {
+                    listed.unlisted.push(folder.relative.clone());
+                }
             }
             // Swapped for a link or junction: what is there now is not below
             // the root, and an event names its path.
@@ -373,11 +377,14 @@ pub(crate) fn frame_paths(
 struct FolderListing {
     frames: Vec<NativePath>,
     folders: Vec<Rc<Folder>>,
+    /// Whether every entry was read and `stat`ed.
+    complete: bool,
 }
 
 /// List `folder` while it and every folder above it are still the real
 /// folders recorded: `None` when one of them changed before or during the
-/// listing.
+/// listing. An entry that cannot be read or `stat`ed, unless it was removed
+/// meanwhile, leaves the listing incomplete.
 ///
 /// # Errors
 /// The folder could not be listed.
@@ -385,12 +392,21 @@ fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<Fold
     if changed_folder(folder).is_some() {
         return Ok(None);
     }
-    let mut listing = FolderListing { frames: Vec::new(), folders: Vec::new() };
-    for entry in fs::read_dir(&folder.path)?.flatten() {
+    let mut listing = FolderListing { frames: Vec::new(), folders: Vec::new(), complete: true };
+    for entry in fs::read_dir(&folder.path)? {
+        let Ok(entry) = entry else {
+            // The read stopped part-way.
+            listing.complete = false;
+            break;
+        };
         let relative = folder.relative.join(entry.file_name());
         let path = folder.path.join(entry.file_name());
-        let Ok(meta) = fs::symlink_metadata(&path) else {
-            continue;
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(error) => {
+                listing.complete &= error.kind() == std::io::ErrorKind::NotFound;
+                continue;
+            }
         };
         match kind(&meta, &relative, root) {
             Kind::Folder(stamp) => listing.folders.push(Rc::new(Folder {
@@ -409,6 +425,20 @@ fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<Fold
     // A listing read through a folder swapped mid-read names entries outside
     // the root.
     Ok(changed_folder(folder).is_none().then_some(listing))
+}
+
+/// Whether `folder` can now be listed in full: it opens, and every entry is
+/// read and `stat`ed (or was removed meanwhile). Links are not followed.
+pub(crate) fn lists_fully(folder: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return false;
+    };
+    entries.into_iter().all(|entry| {
+        entry.is_ok_and(|entry| match fs::symlink_metadata(entry.path()) {
+            Ok(_) => true,
+            Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        })
+    })
 }
 
 /// `SourceUnavailable` unless `root` still carries `stamp`.

@@ -884,11 +884,11 @@ impl Run {
     }
 
     /// At a sweep, restart a watcher that did not start or misses a folder a
-    /// walk can list, through a rescan, once no walk runs. A folder that no
-    /// walk could list, refused by the watcher or skipped by the last walk,
-    /// is listed again first: the location is rescanned once one of them can
-    /// be listed. A non-UTF-8 root is never watched, so its watcher is not
-    /// retried.
+    /// walk can list, through a rescan, once no walk runs. A root that is not
+    /// UTF-8 is never watched, so every sweep walks it again instead. A
+    /// folder that no walk could list in full, refused by the watcher or left
+    /// incomplete by the last walk, is listed again first: the location is
+    /// rescanned once one of them lists in full.
     async fn retry_watcher(&mut self, id: Uuid) {
         let Some(watched) = self.locations.get(&id) else {
             return;
@@ -896,17 +896,16 @@ impl Run {
         if watched.walk.is_some() {
             return;
         }
-        let watchable = watched.root.to_str().is_some();
         let retry = match &watched.live {
             Some(live) if !live.complete => true,
-            None if watchable => true,
-            live => {
+            None => true,
+            Some(live) => {
                 let mut unlisted: Vec<PathBuf> =
                     watched.unlisted.iter().map(|folder| watched.root.join(folder)).collect();
-                unlisted.extend(live.iter().flat_map(|live| live.unlisted.iter().cloned()));
+                unlisted.extend(live.unlisted.iter().cloned());
                 !unlisted.is_empty()
                     && tokio::task::spawn_blocking(move || {
-                        unlisted.iter().any(|folder| std::fs::read_dir(folder).is_ok())
+                        unlisted.iter().any(|folder| inventory::lists_fully(folder))
                     })
                     .await
                     .unwrap_or(false)
@@ -932,18 +931,7 @@ impl Run {
             self.offline.insert(id, Offline { location, refused });
             return;
         }
-        let probe = Arc::clone(&self.probe);
-        let checked = location.clone();
-        let resolved = root.clone();
-        let checked = tokio::task::spawn_blocking(move || {
-            probe.validate(&checked)?;
-            Ok(std::fs::canonicalize(&resolved).ok().filter(|canonical| *canonical != resolved))
-        })
-        .await
-        .unwrap_or_else(|interrupted| {
-            Err(RootRefusal::Unobserved(LibraryError::SourceUnavailable(interrupted.to_string())))
-        });
-        let canonical = match checked {
+        let canonical = match self.check_root(&location, &root).await {
             Ok(canonical) => canonical,
             // Not checked again until the folder at the path changes.
             Err(RootRefusal::Mismatch(error)) => {
@@ -987,6 +975,30 @@ impl Run {
             watched.live = live;
         }
         self.walk(id);
+    }
+
+    /// Check on a blocking thread that `root` is `location`'s registered
+    /// folder, and resolve its canonical path when that differs. A root that
+    /// is not UTF-8, which is counted but not watched, is logged here once.
+    async fn check_root(
+        &self,
+        location: &Location,
+        root: &Path,
+    ) -> Result<Option<PathBuf>, RootRefusal> {
+        if root.to_str().is_none() {
+            tracing::warn!(location = %location.id, root = %root.display(), "new captures: a non-UTF-8 root is counted, not watched; every sweep walks it again");
+        }
+        let probe = Arc::clone(&self.probe);
+        let checked = location.clone();
+        let resolved = root.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            probe.validate(&checked)?;
+            Ok(std::fs::canonicalize(&resolved).ok().filter(|canonical| *canonical != resolved))
+        })
+        .await
+        .unwrap_or_else(|interrupted| {
+            Err(RootRefusal::Unobserved(LibraryError::SourceUnavailable(interrupted.to_string())))
+        })
     }
 
     /// Stop counting a location whose root went away, releasing its watch.
@@ -1078,8 +1090,8 @@ impl Run {
 
     /// Watch every real folder below `root` on its volume.
     async fn attach(&self, root: &Path) -> Option<Live> {
+        // Logged once as the location starts; every sweep walks it instead.
         let Ok(watched) = Utf8PathBuf::from_path_buf(root.to_path_buf()) else {
-            tracing::warn!(root = %root.display(), "new captures: a non-UTF-8 root is counted, not watched");
             return None;
         };
         let capacity = self.settings.capacity;

@@ -870,6 +870,56 @@ async fn a_folder_the_walk_could_not_list_is_walked_once_it_can_be() {
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
 }
 
+/// A folder that lists its names but none of its entries' metadata (read
+/// without search permission, as a network share that errors per entry): the
+/// walk keeps it incomplete, a sweep lists it again rather than rewalking
+/// while it stays so, and walks the location once it lists in full.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_listed_only_in_part_is_walked_once_it_lists_in_full() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let night = root.join("night");
+    frame(&night.join("Ha_001.fits"));
+    let _unlock = Unlock(&night);
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(fs::read_dir(&night).is_ok(), "its names list");
+    assert!(fs::symlink_metadata(night.join("Ha_001.fits")).is_err(), "needs a user, not root");
+    let probe = Arc::new(Probe::default());
+    probe.deaf.store(true, Ordering::SeqCst);
+    let watch = probed(&fx.library, &probe);
+
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    after(&watch, sweeps, 2).await;
+    assert_eq!(walks(&watch), 1, "not walked again while it lists only in part");
+
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o755)).unwrap();
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+}
+
+/// A root that is not UTF-8 cannot be watched (Linux only: macOS refuses
+/// such names), so every sweep walks it again and its count follows.
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_that_is_not_utf8_is_walked_again_at_every_sweep() {
+    use std::os::unix::ffi::OsStrExt;
+    let fx = fixture().await;
+    let root = fx.base.join(std::ffi::OsStr::from_bytes(b"Captures \xff"));
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 1).await;
+    assert_eq!(watchers(&watch), 0, "never watched");
+
+    frame(&root.join("Ha_002.fits"));
+    let counts = count_is(&watch, location.id, 2).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 2, live: false }]);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_released_location_touches_its_volume_no_more_until_reattached() {
     let fx = fixture().await;
