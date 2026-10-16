@@ -121,7 +121,10 @@ the `build` job):
    not installed. SignPath Foundation signs only files built from this
    repository, so they keep their own signatures, if any (`WixUIWixca` carries
    WiX Toolset's). A bin target, sidecar or resource added later fails the
-   leg until it is signed or listed.
+   leg until it is signed or listed. So does a list entry that neither
+   installer carries any more, and an unpacked tree (the NSIS files, the
+   `msiexec /a` files or the MSI's streams) with no PE file in it, which
+   would mean the unpacking failed quietly.
 7. It signs each installer with minisign (`tauri signer sign --app-version`,
    the bundler's key), attests the signed installers, and uploads them and
    their `.sig` files to the GitHub Release.
