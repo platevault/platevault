@@ -175,9 +175,11 @@ pub struct TreeWatch {
 /// not watched yet: it is reported as [`ArtifactEventKind::NeedsRescan`], and
 /// the consumer restarts the watcher over the new folder set and walks the
 /// tree for the files the new folder already holds. So is an event about a
-/// path that is not UTF-8, which cannot be forwarded. The folders are listed
-/// before they are registered, in one batch; one created in between is
-/// missing from [`TreeWatch::folders`].
+/// path that is not UTF-8, which cannot be forwarded. A link or junction at a
+/// path an event names is reported as that path, never followed, so a watched
+/// folder that a link replaced reaches the consumer like one that went away.
+/// The folders are listed before they are registered, in one batch; one
+/// created in between is missing from [`TreeWatch::folders`].
 ///
 /// # Errors
 ///
@@ -201,8 +203,9 @@ enum NewFolders {
     /// watched, on any volume.
     Skip,
     /// [`ArtifactEventKind::NeedsRescan`], because the folder is not watched;
-    /// so does an event about a path that is not UTF-8. Only the folders on
-    /// each path's own volume are watched.
+    /// so does an event about a path that is not UTF-8. A link or junction
+    /// is forwarded as its own path. Only the folders on each path's own
+    /// volume are watched.
     Rescan,
 }
 
@@ -269,9 +272,13 @@ fn forward_path(
         // what changed there.
         return !rescans || send(needs_rescan());
     };
+    // A link is never followed: in a tree its own path is reported, so the
+    // consumer drops what it counted below a folder the link replaced.
+    if rescans && fs_pathsafe::is_link_or_junction(path) {
+        return send(ArtifactFileEvent { path: utf8, kind });
+    }
     if utf8.is_dir() {
-        let unwatched =
-            rescans && brings_folder(event_kind) && !fs_pathsafe::is_link_or_junction(path);
+        let unwatched = rescans && brings_folder(event_kind);
         return !unwatched || send(needs_rescan());
     }
     send(ArtifactFileEvent { path: utf8, kind })
@@ -488,6 +495,30 @@ mod tests {
             true
         });
         assert_eq!(kinds, [ArtifactEventKind::NeedsRescan]);
+        assert_eq!(forwarded(Ok(created)), [] as [ArtifactEventKind; 0]);
+    }
+
+    /// A link that took a watched folder's place is reported as its own path
+    /// to a tree watcher, which follows no link; the artifact watcher still
+    /// forwards no folder event.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_folder_is_reported_to_a_tree_watcher_as_its_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir(&elsewhere).unwrap();
+        let link = dir.path().join("night");
+        std::os::unix::fs::symlink(&elsewhere, &link).unwrap();
+        let created =
+            Event::new(EventKind::Create(notify::event::CreateKind::Any)).add_path(link.clone());
+
+        let mut events = Vec::new();
+        forward(Ok(created.clone()), NewFolders::Rescan, |event| {
+            events.push((event.path, event.kind));
+            true
+        });
+        let link = Utf8PathBuf::from_path_buf(link).unwrap();
+        assert_eq!(events, [(link, ArtifactEventKind::Created)]);
         assert_eq!(forwarded(Ok(created)), [] as [ArtifactEventKind; 0]);
     }
 

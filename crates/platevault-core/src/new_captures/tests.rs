@@ -1048,6 +1048,26 @@ fn counted(location: Location, root: &Path) -> Watched {
     }
 }
 
+/// A counted folder moved out of the location, and a link to it took its
+/// name at once: the OS watcher reports the name when it already is the
+/// link, which is never followed, and the frames below it leave the count.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_link_in_place_of_a_counted_folder_forgets_the_frames_below_it() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("night/Ha_001.fits"));
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 1).await;
+
+    let elsewhere = fx.base.join("elsewhere");
+    fs::rename(root.join("night"), &elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, root.join("night")).unwrap();
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+}
+
 /// A folder holding counted frames moved out, and a frame took its name
 /// before the next debounce tick: the move reported no removal below it.
 #[tokio::test]
