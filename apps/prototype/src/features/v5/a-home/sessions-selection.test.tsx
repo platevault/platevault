@@ -47,6 +47,22 @@ async function select(user: ReturnType<typeof userEvent.setup>, row: SessionRow)
   await user.click(screen.getByRole("checkbox", { name: m.table_select_row({ name: sessionLabel(m, row.session) }) }))
 }
 
+describe("Sessions columns (astro-plan-je4af)", () => {
+  it("starts with Label, Rig and Projects hidden and lists them under Columns, so the table fits 1280 px", async () => {
+    localStorage.clear()
+    const user = renderSessions()
+    const table = await screen.findByRole("table")
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent?.trim())
+      .filter(Boolean)
+    for (const hidden of [m.session_header_label(), m.sessions_column_rig(), m.nav_projects()]) expect(headers).not.toContain(hidden)
+    for (const shown of [m.session_label(), m.sessions_column_target(), m.sessions_column_frames(), m.sessions_column_review(), m.nav_calibration()]) expect(headers).toContain(shown)
+    await user.click(screen.getByRole("button", { name: m.display_menu_columns() }))
+    for (const hidden of [m.session_header_label(), m.sessions_column_rig(), m.nav_projects()]) expect(await screen.findByRole("menuitemcheckbox", { name: hidden })).not.toBeChecked()
+  })
+})
+
 describe("Sessions filters (astro-plan-je4af)", () => {
   it("Needs review and Not in any Project narrow the table to their sessions", async () => {
     const user = renderSessions()

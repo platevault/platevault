@@ -9,7 +9,8 @@
  *   (D-W25, D-W43). Trashed sessions show only under Trashed.
  * - Each row reads its darks, flats and bias (what still needs a choice, or
  *   Pinned) and carries the duplicates badge when its frames have extra
- *   copies (F5).
+ *   copies (F5). Label, Rig and Projects start hidden under Columns ▾
+ *   (kept per table, `sessions`), so the table fits a 1280 px window.
  * - A row opens the session; its ⋯ and context menu offer Review frames
  *   (the intake at its first open step; review stays open once Ready),
  *   Choose Target and Choose rig while it lacks one, then Add to Project ▸
@@ -306,6 +307,8 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
   }
   const pageMenu = withIssueItems(m, [], pageIssues(issueView, "/sessions"))
 
+  // Label, rig and Projects are in the Columns menu (and on the session's details; Review names a rig that needs review),
+  // so the table fits its frame in a 1280 px window in both languages.
   const columns: Column<SessionRow>[] = [
     {
       id: "session",
@@ -320,7 +323,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
         </>
       ),
     },
-    { id: "label", header: m.session_header_label(), truncate: true, sortValue: (r) => r.session.objectLabel ?? "", cell: (r) => r.session.objectLabel ?? "–" },
+    { id: "label", header: m.session_header_label(), truncate: true, hideable: true, defaultHidden: true, sortValue: (r) => r.session.objectLabel ?? "", cell: (r) => r.session.objectLabel ?? "–" },
     {
       id: "target",
       header: m.sessions_column_target(),
@@ -332,6 +335,8 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
       id: "rig",
       header: m.sessions_column_rig(),
       truncate: true,
+      hideable: true,
+      defaultHidden: true,
       sortValue: (r) => (r.rig ? say(m, r.rig) : ""),
       cell: (r) => (r.rig ? say(m, r.rig) : <StatusBadge kind="association" value="unresolved" label={m.sessions_rig_needs_review()} />),
     },
@@ -358,6 +363,8 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
       id: "projects",
       header: m.nav_projects(),
       truncate: true,
+      hideable: true,
+      defaultHidden: true,
       sortValue: (r) => r.projects.map((p) => p.name).join(","),
       cell: (r) => {
         if (r.trashed) return "–"
@@ -399,6 +406,7 @@ export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicate
           label: m.sessions_table_label({ filter: filterLabel(m, filter) }),
           rows: shown,
           columns,
+          columnsId: "sessions",
           getRowId: (r) => r.session.id,
           rowLabel: (r) => sessionLabel(m, r.session),
           rowActions,
