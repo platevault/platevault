@@ -2,11 +2,13 @@
 // Loaded only for *.css.ts, excluding generated src/styles/themes.css.ts.
 // Branch 1: hex and colour functions, case-insensitive, in any string.
 // Branch 2: a string whose whole value is a named colour, under any key.
-// Branch 3: a named colour inside a compound value (string or template) of a
-// colour-bearing CSS property, a custom property (--*) or a computed key
-// (vanilla-extract vars). The colour must follow the start, whitespace, a
-// comma, "(", "/" or a quote, so `${vars.color.red}` and `redPulse` pass;
-// content strings and non-style keys are not checked.
+// Branch 3: a named colour token inside a compound value (string or template)
+// of a colour- or image-bearing CSS property, a custom property (--*) or a
+// computed key (vanilla-extract vars). A token is a whole CSS word: it follows
+// the start, whitespace, a comma, "(" or a quote, and is followed by the end,
+// whitespace, a comma, ")", a quote, ";" or "!". So `${vars.color.red}`,
+// `redPulse`, `red-arrow.svg` and `url(/img/black.png)` pass; content strings
+// and non-style keys are not checked.
 language js
 
 or {
@@ -32,10 +34,10 @@ or {
   JsPropertyObjectMember(name = $key, value = $value) where {
     or {
       $key <: JsComputedMemberName(),
-      $key <: r"(?i)^['\"]?(?:--[a-z0-9_-]+|(?:-?webkit-?)?(?:colou?r|background(?:-?(?:color|image))?|border(?:-?(?:top|right|bottom|left|block|inline)(?:-?(?:start|end))?)?(?:-?color)?|border-?image(?:-?source)?|outline(?:-?color)?|box-?shadow|text-?shadow|text-?decoration(?:-?color)?|text-?emphasis(?:-?color)?|caret-?color|accent-?color|column-?rule(?:-?color)?|fill|stroke|stop-?color|flood-?color|lighting-?color|scrollbar-?color|filter|backdrop-?filter|mask(?:-?(?:image|border))?|text-?fill-?color|text-?stroke(?:-?color)?|tap-?highlight-?color))['\"]?$"
+      $key <: r"(?i)^['\"]?(?:--[a-z0-9_-]+|(?:-?webkit-?)?(?:colou?r|background(?:-?(?:color|image))?|border(?:-?(?:top|right|bottom|left|block|inline)(?:-?(?:start|end))?)?(?:-?color)?|border-?image(?:-?source)?|outline(?:-?color)?|box-?shadow|text-?shadow|text-?decoration(?:-?color)?|text-?emphasis(?:-?color)?|caret-?color|accent-?color|column-?rule(?:-?color)?|fill|stroke|stop-?color|flood-?color|lighting-?color|scrollbar-?color|filter|backdrop-?filter|mask(?:-?(?:image|border(?:-?source)?))?|list-?style(?:-?image)?|shape-?outside|text-?fill-?color|text-?stroke(?:-?color)?|tap-?highlight-?color))['\"]?$"
     },
     $value <: or { JsStringLiteralExpression(), JsTemplateExpression() },
-    $value <: r"(?is).*(?:^|[\s,(/'\"`])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)\b.*",
+    $value <: r"(?is).*(?:^|[\s,('\"`])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)(?:$|[\s,)'\"`;!]).*",
     register_diagnostic(
       span = $value,
       message = "Named colour in a vanilla-extract style (#1334). Use a theme var from styles/themes.css.ts.",
