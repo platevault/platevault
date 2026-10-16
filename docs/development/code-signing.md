@@ -114,25 +114,36 @@ the `build` job):
    7-Zip for the NSIS installer's files and the MSI's streams, `msiexec /a` for
    the files the MSI installs. The check runs both ways round. Each installer
    must carry every signed copy meant for it, byte for byte. Every PE file
-   (executable or DLL) in an installer must be one of those copies, or a
-   third-party file the step lists with its reason: today the NSIS plugins
-   (`nsDialogs`, `nsis_tauri_utils`, `NSISdl`, `StartMenu`, `System`) and
-   WiX's `WixUIWixca` custom action, which run during installation and are
-   not installed. SignPath Foundation signs only files built from this
-   repository, so they keep their own signatures, if any (`WixUIWixca` carries
-   WiX Toolset's). A bin target, sidecar or resource added later fails the
-   leg until it is signed or listed. So does a list entry that neither
+   (executable or DLL) in an installer must be one of those copies, or one of
+   the six named third-party files: the five NSIS plugins (`nsDialogs`,
+   `nsis_tauri_utils`, `NSISdl`, `StartMenu`, `System`) pinned to SHA-256, and
+   WiX's `WixUIWixca` custom action required to have a valid Authenticode
+   signature from `WiX Toolset` issued by `.NET Foundation`. This signed-publisher
+   check remains useful across WiX payload and certificate-renewal updates,
+   unlike pinning its bytes. The five NSIS plugins are unsigned, so their exact
+   hashes are the identity evidence. The reviewed pins and source are Tauri CLI
+   2.12.2's bundled NSIS/WiX payloads; the rehearsal run IDs and observed hashes
+   are recorded with the pins in the workflow. Refresh those hashes only after
+   reviewing a tool update and its new binaries. An update that changes a hash
+   fails until its replacement is explicitly reviewed. SignPath Foundation
+   signs only files built from this repository, so these third-party files keep
+   their own identity evidence. A bin target, sidecar or resource added later
+   fails the leg until it is signed or listed. So does a list entry neither
    installer carries any more, and an unpacked tree (the NSIS files, the
-   `msiexec /a` files or the MSI's streams) with no PE file in it, which
-   would mean the unpacking failed quietly.
+   `msiexec /a` files or the MSI's streams) with no PE file in it, which would
+   mean the unpacking failed quietly.
 7. It signs each installer with minisign (`tauri signer sign --app-version`,
    the bundler's key), attests the signed installers, and uploads them and
    their `.sig` files to the GitHub Release.
 8. The `updater-manifest` job publishes `latest.json` (see below).
 
-Step 2 copies Tauri CLI 2.12.2's bundler, the version `pnpm-lock.yaml` pins:
-the marker, the `NSS` and `MSI` codes, and which bin targets it packs. Check
-them again on any `@tauri-apps/cli` bump; step 6 fails a release whose
+Step 2 copies Tauri CLI 2.12.2's bundler: the marker, `NSS` and `MSI` codes,
+and which bin targets it packs. The workflow reads the resolved CLI version
+from the `apps/desktop` importer in `pnpm-lock.yaml` before the build and fails
+unless it is exactly 2.12.2. A CLI upgrade therefore requires reviewing the
+bundler's marker behavior, the NSS/MSI codes, and the executable selection
+rule before changing the guard; the lockfile cannot silently advance past the
+version whose behavior was checked. Step 6 also fails a release whose
 installers pack an executable step 2 did not send. Step 1 runs the command
 `tauri-action` runs on the other legs, `tauri build` in `apps/desktop` with no
 extra arguments, plus `--no-bundle`.
@@ -295,10 +306,14 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
 6. Verify on the next tagged release:
    - Approve both signing requests in SignPath, each within the hour.
    - The Windows leg's **Bundle the installers around the signed
-     executables** and **Check the signed installers** steps pass. Both accept
-     only a valid signature by SignPath Foundation, so a test-signing policy
-     fails the first of them, before any installer is built (see
-     [Known limits](#known-limits)).
+     executables** and **Check the signed installers** steps pass. Both require
+     a valid signature from `SignPath Foundation` issued by `GlobalSign GCC R45
+     CodeSigning CA 2020`. The issuer is matched as well as the leaf publisher
+     name; see the certificate evidence above. The WixUIWixca stream must also
+     have its valid WiX Toolset/.NET Foundation publisher signature, and each
+     of the five NSIS plugin files must match its pinned SHA-256 in
+     `release-please.yml`. A test-signing policy fails before bundle creation
+     (see [Known limits](#known-limits)).
    - `updater-manifest` publishes `latest.json`. It only does so when the
      minisign signatures verify against the signed installers.
    - On a Windows machine, `Get-AuthenticodeSignature` reports `Valid`, signed
@@ -308,6 +323,13 @@ one release, pass the previous release's config as `--pubkey-conf`, e.g.
      `%LOCALAPPDATA%\PlateVault` for the NSIS installer and
      `C:\Program Files\PlateVault` for the MSI. `uninstall.exe` in the NSIS
      install folder stays unsigned (see [Known limits](#known-limits)).
+   - Rehearsal method: run the temporary workflow on `chore/signing-rehearsal-3`
+     (never merge it). It builds the Windows installers, substitutes a
+     runner-trusted throwaway certificate and updater key for the release
+     secrets, invokes the signed-installer check, emits third-party file hashes
+     and runs mutated copies for the CLI-version, NSIS-hash and WiX-issuer
+     failures. Delete the scratch branch and workflow after recording the
+     passing and negative run IDs. Never use the release signing key.
 
 ## macOS signing (state and path)
 

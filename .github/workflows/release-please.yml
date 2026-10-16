@@ -370,12 +370,12 @@ jobs:
       # they are. The installers also ship the package's other bin targets,
       # such as platevault-library, which the bundler packs unstamped.
       #
-      # This copies Tauri CLI 2.12.2's bundler (the version pnpm-lock.yaml
-      # pins): the marker, the NSS and MSI codes, and get_binaries' rule for
-      # which bin targets it packs. Check all three again on any
-      # @tauri-apps/cli bump. The check after signing fails on an executable
-      # in either installer that SignPath did not sign, so a changed bin rule
-      # stops the release rather than shipping an unsigned file.
+      # This copies Tauri CLI 2.12.2's bundler: the marker, the NSS and MSI
+      # codes, and get_binaries' rule for which bin targets it packs. Check all
+      # three again on a CLI bump. The guard reads the resolved version from
+      # apps/desktop in pnpm-lock.yaml and fails before this build if it differs,
+      # so a lockfile update cannot silently use unchecked codes. The check
+      # after signing also fails on an executable SignPath did not sign.
       #
       # The command is the one tauri-action runs on the other legs, `tauri
       # build` in apps/desktop with no extra arguments, with --no-bundle
@@ -387,6 +387,13 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
+          $lockfile = Get-Content pnpm-lock.yaml -Raw
+          $cli = [regex]::Match($lockfile, "(?ms)^  apps/desktop:\r?\n.*?^      '@tauri-apps/cli':\r?\n        specifier: [^\r\n]+\r?\n        version: ([^\r\n(]+)")
+          $checkedVersion = '2.12.2'
+          if (-not $cli.Success -or $cli.Groups[1].Value -cne $checkedVersion) {
+            $actual = if ($cli.Success) { $cli.Groups[1].Value } else { 'not found' }
+            throw "the NSS/MSI stamp code was checked against Tauri CLI $checkedVersion, but pnpm-lock.yaml resolves $actual; re-check the bundler codes before updating this guard"
+          }
           pnpm --dir apps/desktop exec tauri build --no-bundle
 
           # The bin targets Tauri packs into both installers: every bin of the
@@ -480,6 +487,7 @@ jobs:
           RELEASE_DIR: ${{ steps.windows-app.outputs.release_dir }}
           MAIN_BINARY: ${{ steps.windows-app.outputs.main_binary }}
           AUTHENTICODE_SIGNER: &authenticode-signer SignPath Foundation
+          AUTHENTICODE_ISSUER: &authenticode-issuer GlobalSign GCC R45 CodeSigning CA 2020
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $submitted = (Resolve-Path app-to-sign).Path
@@ -491,8 +499,9 @@ jobs:
             }
             $signature = Get-AuthenticodeSignature -LiteralPath $signed
             $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
-            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
-              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
+            $issuer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $true) }
+            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER -or $issuer -cne $env:AUTHENTICODE_ISSUER) {
+              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER issued by $env:AUTHENTICODE_ISSUER, found: $($signature.Status) by '$signer' issued by '$issuer'. $($signature.StatusMessage)"
             }
           }
 
@@ -562,6 +571,7 @@ jobs:
         shell: pwsh
         env:
           AUTHENTICODE_SIGNER: *authenticode-signer
+          AUTHENTICODE_ISSUER: *authenticode-issuer
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           foreach ($installer in Get-ChildItem -File installers-to-sign) {
@@ -571,8 +581,9 @@ jobs:
             }
             $signature = Get-AuthenticodeSignature -LiteralPath $signed
             $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) }
-            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER) {
-              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER, found: $($signature.Status) by '$signer'. $($signature.StatusMessage)"
+            $issuer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $true) }
+            if ($signature.Status -ne 'Valid' -or $signer -cne $env:AUTHENTICODE_SIGNER -or $issuer -cne $env:AUTHENTICODE_ISSUER) {
+              throw "$signed must carry a valid signature by $env:AUTHENTICODE_SIGNER issued by $env:AUTHENTICODE_ISSUER, found: $($signature.Status) by '$signer' issued by '$issuer'. $($signature.StatusMessage)"
             }
           }
 
@@ -608,18 +619,20 @@ jobs:
           }
           $trees = [ordered]@{ nsis = 'nsis'; msi = 'msi'; 'msi-streams' = 'msi' }
 
-          # Third-party code in the installers. SignPath Foundation signs only
-          # files built from this repository, so these keep their own
-          # signatures, if any. Paths are relative to unpacked/.
-          $nsisPlugin = 'NSIS plugin: third-party code that setup.exe extracts to a temporary folder and loads while it runs; not installed'
-          $wixAction = 'WiX custom action: third-party code that msiexec runs while it installs; not installed'
+          # Third-party identities, paths relative to unpacked/. Pin the
+          # unsigned NSIS plugins by SHA-256; their byte identities change on
+          # tool updates and must be reviewed before refreshing these pins.
+          # WixUIWixca is signed: require a valid signature and its named
+          # publisher, which survives routine WiX payload and cert renewals.
+          $nsisPlugin = 'NSIS plugin: third-party code extracted and loaded while setup runs; not installed'
+          $wixAction = 'WiX custom action: third-party code msiexec runs while installing; not installed'
           $thirdParty = [ordered]@{
-            'nsis/$PLUGINSDIR/nsDialogs.dll' = $nsisPlugin
-            'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = $nsisPlugin
-            'nsis/$PLUGINSDIR/NSISdl.dll' = $nsisPlugin
-            'nsis/$PLUGINSDIR/StartMenu.dll' = $nsisPlugin
-            'nsis/$PLUGINSDIR/System.dll' = $nsisPlugin
-            'msi-streams/Binary.WixUIWixca' = $wixAction
+            'nsis/$PLUGINSDIR/nsDialogs.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_NS_DIALOGS' }
+            'nsis/$PLUGINSDIR/nsis_tauri_utils.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_NSIS_TAURI_UTILS' }
+            'nsis/$PLUGINSDIR/NSISdl.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_NSISDL' }
+            'nsis/$PLUGINSDIR/StartMenu.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_STARTMENU' }
+            'nsis/$PLUGINSDIR/System.dll' = @{ reason = $nsisPlugin; source = 'Tauri CLI 2.12.2 bundled NSIS; rehearsal run RUN_ID'; sha256 = 'REPLACE_SYSTEM' }
+            'msi-streams/Binary.WixUIWixca' = @{ reason = $wixAction; signer = 'WiX Toolset (.NET Foundation)' }
           }
 
           function Test-PortableExecutable([string] $path) {
@@ -652,9 +665,23 @@ jobs:
                 "signed by SignPath: $relative"
               } elseif ($thirdParty.Contains($relative)) {
                 $listed += $relative
-                $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
-                $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
-                "third-party: $relative ($($thirdParty[$relative])); Authenticode $($signature.Status), signed by $signer"
+                $identity = $thirdParty[$relative]
+                if ($identity.ContainsKey('sha256')) {
+                  $actualHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+                  if ($actualHash -cne $identity.sha256) {
+                    $problems += "$relative SHA-256 $actualHash did not match the reviewed pin $($identity.sha256)"
+                  } else {
+                    "third-party: $relative ($($identity.reason)); SHA-256 $actualHash matches pin"
+                  }
+                } else {
+                  $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+                  $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
+                  if ($signature.Status -ne 'Valid' -or $signer -cne $identity.signer) {
+                    $problems += "$relative must carry a valid Authenticode signature by $($identity.signer); found $($signature.Status), '$signer'"
+                  } else {
+                    "third-party: $relative ($($identity.reason)); Authenticode $($signature.Status), signed by $signer"
+                  }
+                }
               } else {
                 $problems += "$relative was not signed by SignPath and is not on the third-party list"
               }
