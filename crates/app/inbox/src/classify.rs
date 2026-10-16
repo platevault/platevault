@@ -2435,6 +2435,90 @@ mod tests {
         assert_eq!(row.override_filter.as_deref(), Some("Ha"));
     }
 
+    /// On macOS and Linux a file named `a\b.fits` sits beside the folder `a`
+    /// holding `b.fits`. Classification must key each by its own wire path and
+    /// read the identity of the file it classified (bd astro-plan-3pvvc).
+    /// Both used to read `a/b.fits`, so a rescan of the root item statted the
+    /// nested file and marked the untouched file's override stale.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn backslash_name_is_classified_apart_from_the_nested_path() {
+        use persistence_inbox::repositories::inbox as inbox_repo;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let nested_dir = root.join("a");
+        std::fs::create_dir_all(&nested_dir).unwrap();
+        write_fits_with_imagetyp(root, "a\\b.fits", "Light Frame");
+        write_fits_with_imagetyp(&nested_dir, "b.fits", "Dark Frame");
+        // A different size, so reading the nested file's identity for the
+        // root-level one shows up as a changed file.
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(nested_dir.join("b.fits"))
+            .unwrap()
+            .write_all(b"a longer file")
+            .unwrap();
+
+        let db = test_db().await;
+        let classify_item = |id: &'static str, force_rescan: bool| {
+            let req = ClassifyRequest {
+                inbox_item_id: id.to_owned(),
+                root_absolute_path: root.to_owned(),
+                force_rescan,
+            };
+            classify(db.pool(), req)
+        };
+        let evidence = |id: &'static str| inbox_repo::list_evidence(db.pool(), id);
+        for (id, relative_path) in [("item-root", ""), ("item-nested", "a")] {
+            repo::insert_inbox_item(
+                db.pool(),
+                &InsertInboxItem {
+                    id,
+                    root_id: "root-1",
+                    relative_path,
+                    file_count: 0,
+                    content_signature: None,
+                    lane: "fits",
+                },
+            )
+            .await
+            .unwrap();
+            classify_item(id, false).await.unwrap();
+        }
+
+        let paths_and_types = |rows: Vec<inbox_repo::InboxEvidenceRow>| {
+            rows.into_iter().map(|e| (e.relative_file_path, e.frame_type)).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            paths_and_types(evidence("item-root").await.unwrap()),
+            [("a\\b.fits".to_owned(), Some("light".to_owned()))]
+        );
+        assert_eq!(
+            paths_and_types(evidence("item-nested").await.unwrap()),
+            [("a/b.fits".to_owned(), Some("dark".to_owned()))]
+        );
+
+        inbox_repo::set_overrides(
+            db.pool(),
+            "item-root",
+            "a\\b.fits",
+            None,
+            Some("Ha"),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        classify_item("item-root", true).await.unwrap();
+
+        let rows = evidence("item-root").await.unwrap();
+        let [row] = rows.as_slice() else { panic!("one evidence row, got {rows:?}") };
+        assert_eq!(row.relative_file_path, "a\\b.fits");
+        assert_eq!(row.override_filter.as_deref(), Some("Ha"), "the override survives the rescan");
+        assert_eq!(row.override_stale, 0, "the file the override names did not change");
+    }
+
     /// spec 041 FR-046: a generic `inbox_file_overrides` entry (set via
     /// `set_file_override`, the reclassify_v2/cone_search path — not the
     /// legacy `set_overrides` evidence columns exercised above) must be

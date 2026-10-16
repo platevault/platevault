@@ -247,10 +247,10 @@ fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<Scann
     })
 }
 
-/// Compute the root-relative path as a forward-slash UTF-8 string for the wire.
+/// Compute the root-relative path as a `/`-separated UTF-8 string for the wire.
 ///
 /// Delegates to `fs_pathsafe::relative_wire_path` (canonical single home
-/// for the backslash→slash normalization, bd astro-plan-kyo7.88).
+/// for the wire separator rule, bd astro-plan-kyo7.88 and astro-plan-3pvvc).
 fn relative_utf8(root: &Path, path: &Path) -> String {
     fs_pathsafe::relative_wire_path(root, path)
 }
@@ -927,6 +927,58 @@ mod tests {
         let master = items[0].masters.first().expect("path inference must still detect a master");
         assert_eq!(master.detection.frame_type, FrameType::Dark);
         assert!(!master.detection.stack_count_evidence, "no header integration count present");
+    }
+
+    /// On macOS and Linux `\` is an ordinary name character. A file named
+    /// `a\b.fits` beside the folder `a` holding `b.fits`, and a folder named
+    /// `c\d` beside the nested `c/d`, must reach scan and classification under
+    /// distinct wire paths, each joining back onto the root as the entry it
+    /// came from (bd astro-plan-3pvvc).
+    #[cfg(unix)]
+    #[test]
+    fn backslash_names_stay_apart_from_nested_paths_through_scan_and_classify() {
+        let tmp = tmpdir();
+        let root = tmp.path();
+        let nested_dir = root.join("a");
+        fs::create_dir_all(&nested_dir).unwrap();
+        // An integration count makes each file a master, so scan reports its path.
+        write_realistic_fits(root, "a\\b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        write_realistic_fits(&nested_dir, "b.fits", Some("DARK"), Some(("STACKCNT", 30)));
+        for folder in [root.join("c\\d"), root.join("c").join("d")] {
+            fs::create_dir_all(&folder).unwrap();
+            write_realistic_fits(&folder, "x.fits", Some("LIGHT"), None);
+        }
+
+        let items = scan_root(root, &ScanOptions::default()).unwrap().items;
+        let folders: Vec<&str> = items.iter().map(|item| item.relative_path.as_str()).collect();
+        assert_eq!(folders, ["", "a", "c/d", "c\\d"]);
+        for item in &items {
+            assert_eq!(root.join(&item.relative_path), item.folder_path, "{}", item.relative_path);
+        }
+
+        let masters: Vec<&ScannedMasterFile> =
+            items.iter().flat_map(|item| &item.masters).collect();
+        let master_paths: Vec<&str> = masters.iter().map(|m| m.relative_path.as_str()).collect();
+        assert_eq!(master_paths, ["a\\b.fits", "a/b.fits"]);
+        for master in &masters {
+            assert_eq!(
+                root.join(&master.relative_path),
+                master.abs_path,
+                "{}",
+                master.relative_path
+            );
+        }
+
+        let norm_table = v1_normalization_table();
+        let files: Vec<&PathBuf> = items.iter().flat_map(|item| &item.fits_files).collect();
+        let classified: Vec<String> = files
+            .iter()
+            .map(|file| crate::classify::classify_one_file(file, root, &norm_table).relative_path)
+            .collect();
+        assert_eq!(classified, ["a\\b.fits", "a/b.fits", "c/d/x.fits", "c\\d/x.fits"]);
+        for (relative_path, file) in classified.iter().zip(files) {
+            assert_eq!(&root.join(relative_path), file, "{relative_path} must name its own file");
+        }
     }
 
     /// Constitution §I regression: a symlinked subdirectory reachable from the
