@@ -2,19 +2,22 @@
  * S3 Project (`/projects/$projectId`; DetailPage with the tabs Sessions ·
  * Calibrate · View · Output · Wrap up, PRJ-FR-07). The header carries the
  * path, the StatusBadge (Open, Closed or Archived), Apply… as the one
- * primary while the Project is open, and the Project ▾ menu: Edit…
- * (unavailable once closed) and Duplicate…. A Closed or Archived Project is
- * locked for good (there is no Reopen): it shows its standing state in the
- * notice slot, reads its frozen goal figures, and Duplicate… continues it
- * (PRJ-FR-25, PRJ-FR-30).
+ * primary while the Project is open, and the Project ▾ menu: Edit… and
+ * Duplicate…. A Closed or Archived Project is locked for good (there is no
+ * Reopen, provisional): Edit… stays in the menu, unavailable with "Project
+ * closed · Duplicate ▸"; it shows its standing state in the notice slot,
+ * reads its frozen goal figures, and Duplicate… continues it (PRJ-FR-25,
+ * PRJ-FR-30, PRJ-AC-34). The Calibrate, View, Output and Wrap up tabs are
+ * unit A's exports, hosted here under their agreed names.
  *
  * Search keys (routes.tsx): `?stage=` picks the tab (sessions by default;
  * wrap-up takes `&step=`, a StepPage); `?add=goal` opens Add goal (the
- * Goals section).
+ * Goals section); `?duplicate=open` opens Duplicate… (the closed Edit…'s
+ * blocker link) and is dropped from the URL at once.
  */
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { Copy, Pencil, RefreshCw } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
@@ -34,7 +37,8 @@ import { useCalibrateSections } from "./calibrate-step"
 import { ProjectDetailsDialog } from "./details-dialog"
 import { DuplicateProjectDialog } from "./duplicate-dialog"
 import { useOutputSections } from "./output-step"
-import { useArchivedSection, useGoalsSection, useGroupsSection, useHeldSection, usePlanningSection, useRigsSection, useSubjectsSection, useSuggestionsSection } from "./project-sections"
+import { useGroupsSection, useHeldSection, usePanelMapSection, useSuggestionsSection } from "./groups"
+import { useArchivedSection, useGoalsSection, usePlanningSection, useRigsSection, useSubjectsSection } from "./project-sections"
 import { openApplySheet, useViewSections } from "./view-step"
 import { WrapUpPage } from "./wrap-up"
 
@@ -48,7 +52,7 @@ export function ProjectPage() {
   const m = useMessages()
   const project = useStore((s) => s.catalog.projects[projectId])
   if (!project) return <MissingRecord title={m.project_missing_title()} backTo="/projects" backLabel={m.project_back_to_projects()} />
-  return <ProjectView project={project} tab={tabOf(search.stage)} step={search.step} />
+  return <ProjectView project={project} tab={tabOf(search.stage)} step={search.step} duplicateLinked={search.duplicate === "open"} />
 }
 
 /** The header every tab of the Project shares: path, status, Apply…, Project ▾ and the closed notice. */
@@ -72,7 +76,9 @@ function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: 
     label: editLabel,
     icon: Pencil,
     opensDialog: true,
-    unavailable: locked ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_closed(), blockers: [] } : undefined,
+    unavailable: locked
+      ? { action: m.actions_blocked({ action: editLabel }), reason: m.project_closed(), blockers: [{ label: m.project_duplicate(), link: { to: "/projects/$projectId", params: { projectId: project.id }, search: { duplicate: "open" } } }] }
+      : undefined,
     run: dialogs.edit,
   }
   const duplicate: Action = { id: "duplicate", label: m.project_duplicate(), icon: Copy, opensDialog: true, run: dialogs.duplicate }
@@ -108,10 +114,18 @@ function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: 
   }
 }
 
-function ProjectView({ project, tab, step }: { project: Project; tab: ProjectTabId; step?: string }) {
+function ProjectView({ project, tab, step, duplicateLinked }: { project: Project; tab: ProjectTabId; step?: string; duplicateLinked: boolean }) {
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const chrome = useProjectChrome(project, tab, { edit: () => setEditing(true), duplicate: () => setDuplicating(true) })
+  // `?duplicate=open` (the closed Edit…'s blocker link) opens Duplicate… once and leaves the URL, so a later Duplicate that
+  // opens the new Project never lands back here.
+  useEffect(() => {
+    if (!duplicateLinked) return
+    setDuplicating(true)
+    void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: ({ duplicate: _, ...rest }: Record<string, string | undefined>) => rest, replace: true } as never)
+  }, [duplicateLinked])
   return (
     <>
       {tab === "wrap-up" ? <WrapUpPage project={project} chrome={chrome} step={step} /> : <TabView project={project} chrome={chrome} tab={tab} />}
@@ -128,10 +142,11 @@ function TabView({ project, chrome, tab }: { project: Project; chrome: ProjectCh
   return <SessionsTab project={project} chrome={chrome} />
 }
 
-/** The Sessions tab: the groups and the sessions they hold, the suggestions, then goals, subjects, rigs, tonight and the archived sessions. */
+/** The Sessions tab: the groups, a mosaic's panel map, the sessions they hold and the suggestions, then goals, subjects, rigs, tonight and the archived sessions. */
 function SessionsTab({ project, chrome }: { project: Project; chrome: ProjectChrome }) {
   const m = useMessages()
   const groups = useGroupsSection(project)
+  const panelMap = usePanelMapSection(project)
   const held = useHeldSection(project)
   const suggestions = useSuggestionsSection(project)
   const goals = useGoalsSection(project)
@@ -140,7 +155,7 @@ function SessionsTab({ project, chrome }: { project: Project; chrome: ProjectChr
   const planning = usePlanningSection(project)
   const archived = useArchivedSection(project)
   const notes: DetailSection | null = project.notes.trim() ? { id: "notes", title: m.newproject_notes(), content: project.notes } : null
-  const sections = [notes, groups, held, suggestions, goals, subjects, rigs, planning, archived].filter((s): s is DetailSection => s !== null)
+  const sections = [notes, groups, panelMap, held, suggestions, goals, subjects, rigs, planning, archived].filter((s): s is DetailSection => s !== null)
   return <DetailPage {...chrome} title={project.name} sections={sections} />
 }
 

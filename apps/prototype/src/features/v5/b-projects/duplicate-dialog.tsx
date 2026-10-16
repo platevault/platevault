@@ -1,15 +1,18 @@
 /**
- * Duplicate… (PRJ-FR-30, D-W112): a new open Project with the parts the user
- * ticks and no files. The copy is fully independent (no link back), reads
- * each session's current calibration pins, and builds its own View on its
- * first Apply. It is also how a Closed Project's work goes on. The write is
- * `duplicateProject`; on success the new Project opens.
+ * Duplicate… (PRJ-FR-30, D-W112, PRJ-AC-43): a new open Project with the
+ * parts the user ticks (each with how much it copies) and no files. The
+ * copy is fully independent (no link back), reads each session's current
+ * calibration pins rather than a Closed Project's frozen snapshot, which the
+ * dialog says, and builds its own View on its first Apply. It is also how a
+ * Closed Project's work goes on. The write is `duplicateProject`; on
+ * success the new Project opens.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ChoiceListField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
+import { isLocked } from "@/domain/derive"
 import type { Project } from "@/domain/types"
 import { type DuplicateChoice, duplicateProject } from "@/store/actions/projects"
 
@@ -29,12 +32,13 @@ export function DuplicateProjectDialog({ project, open, onOpenChange }: { projec
     if (open) setDraft(fresh())
   }
   const partName: Record<Part, string> = {
-    sessions: m.project_duplicate_part_sessions(),
-    groups: m.project_duplicate_part_groups(),
-    goals: m.project_duplicate_part_goals(),
+    sessions: m.project_duplicate_part_count({ part: m.project_duplicate_part_sessions(), count: project.inputs.length }),
+    groups: m.project_duplicate_part_count({ part: m.project_duplicate_part_groups(), count: project.groups.length }),
+    goals: m.project_duplicate_part_count({ part: m.project_duplicate_part_goals(), count: project.goals.length }),
     notes: m.project_duplicate_part_notes(),
     settings: m.project_view_settings(),
   }
+  const description = isLocked(project) ? `${m.project_duplicate_no_files()} ${m.project_duplicate_current_pins()}` : m.project_duplicate_no_files()
   const nameError = draft.name.trim() ? undefined : m.settings_name_required()
   const label = m.project_duplicate()
   const run = () => {
@@ -54,7 +58,7 @@ export function DuplicateProjectDialog({ project, open, onOpenChange }: { projec
       <TextField label={m.newproject_field_name()} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} error={nameError} required autoFocus />
       <ChoiceListField
         label={m.project_duplicate_parts()}
-        description={m.project_duplicate_no_files()}
+        description={description}
         value={draft.parts}
         options={PARTS.map((part) => ({ value: part, label: partName[part] }))}
         onChange={(parts) => setDraft({ ...draft, parts: [...parts] })}

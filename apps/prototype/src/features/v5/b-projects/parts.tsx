@@ -1,20 +1,51 @@
 /**
- * Slice B parts shared by New Project, Add subject and Edit subject: the
- * results a TargetPicker shows for a subject search (My
- * targets, the bundled catalogues and, after a short wait, SIMBAD; D-W17),
- * and the pick each result stands for. A pick of a catalogue or resolver
- * entry becomes a Target record on save (`resolvePick`).
+ * Slice B parts shared by the Project page and its dialogs: how a Project
+ * row names a session, and the subject search behind New Project, Add
+ * subject and Edit subject: the results a TargetPicker shows (My targets,
+ * the bundled catalogues and, after a short wait, SIMBAD; D-W17), and the
+ * pick each result stands for. A pick of a catalogue or resolver entry
+ * becomes a Target record on save (`resolvePick`).
  */
 import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
+import type { Action } from "@/components/app/contracts"
 import type { TargetOption, TargetResultGroup, TargetSource } from "@/components/app/pickers"
-import { myTargets } from "@/domain/derive"
+import { myTargets, sessionTargetId, subjectName } from "@/domain/derive"
+import { sessionFraming } from "@/domain/indexing"
 import { objectTypeRef } from "@/domain/labels"
+import { sessionLongRef } from "@/domain/membership"
 import { BUNDLED_CATALOGUE, type CatalogueEntry, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
-import type { Catalog, Target, TargetId } from "@/domain/types"
-import { formatDec, formatRa } from "@/lib/format"
+import type { Catalog, Project, Session, Target, TargetId } from "@/domain/types"
+import { formatDec, formatDegrees, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { store, useStore } from "@/store/core"
+
+/** "18 Sep · Ha · 300 s", as calibration and View lists name a session. */
+export function sessionLine(m: Messages, session: Session): string {
+  return say(m, sessionLongRef(session))
+}
+
+/** The Project subject a held session counts under, else the name its capture gave it. */
+export function sessionSubjectName(m: Messages, catalog: Catalog, project: Pick<Project, "subjects">, session: Session): string {
+  const subject = project.subjects.find((s) => s.targetId === sessionTargetId(session))
+  return subject ? subjectName(m, catalog, subject) : (session.objectLabel ?? m.project_unknown_subject())
+}
+
+/**
+ * A session's framing evidence as Project rows show it: "ROTATANG 92°",
+ * "Rotation unknown", or "Framing unknown" without a pointing, which the
+ * user places by hand (VSEL-FR-04); never a zero distance.
+ */
+export function framingLine(m: Messages, catalog: Catalog, session: Session): string {
+  const framing = sessionFraming(catalog, session)
+  if (!framing) return m.project_framing_unknown()
+  return framing.rotationDeg === null ? m.project_rotation_unknown() : m.project_rotatang({ angle: formatDegrees(framing.rotationDeg, 0) })
+}
+
+/** An action unavailable for a reason no blocker resolves: "Split into a new group blocked · Select sessions first". */
+export function unavailableFor(m: Messages, action: string, reason: string): NonNullable<Action["unavailable"]> {
+  return { action: m.actions_blocked({ action }), reason, blockers: [] }
+}
 
 /** SIMBAD answers after this wait, so the local results follow the typing at once. */
 const LOOKUP_MS = 600
