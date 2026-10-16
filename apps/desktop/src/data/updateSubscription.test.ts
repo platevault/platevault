@@ -38,7 +38,7 @@ import {
   getUpdateSnapshot,
   installUpdateNow,
   installUpdateOnQuit,
-  offeredInSystemNotification,
+  offerHolder,
   startUpdateSubscription,
   stopUpdateSubscription,
   subscribeUpdate,
@@ -187,6 +187,33 @@ describe('startUpdateSubscription', () => {
     warn.mockRestore();
   });
 
+  // A webview reload reconnects to a running backend; the offer can change
+  // while its snapshot is in flight.
+  it('keeps an offer event that arrives while the offer snapshot is read', async () => {
+    let resolveSnapshot: (offer: UpdateOffer) => void = () => {};
+    mockCommands.updateOffer.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = (offer) => resolve({ status: 'ok', data: offer });
+        }),
+    );
+
+    const started = startUpdateSubscription();
+    await vi.waitFor(() =>
+      expect(mockCommands.updateOffer).toHaveBeenCalledTimes(1),
+    );
+    // The backend answered with the system offer, then the user closed the
+    // notification before the answer reached the webview.
+    pushOffer?.({ version: '0.7.0', channel: 'in-app' });
+    resolveSnapshot({ version: '0.7.0', channel: 'system' });
+    await started;
+
+    expect(getUpdateOfferSnapshot()).toEqual({
+      version: '0.7.0',
+      channel: 'in-app',
+    });
+  });
+
   // React StrictMode runs the effect setup → cleanup → setup while the first
   // start is still waiting for `listen()`.
   it('drops the listener of a start that a stop and a new start overtook', async () => {
@@ -299,38 +326,32 @@ describe('the user choices', () => {
 
 // astro-plan-c72oo: the in-app notice is the fallback for the system
 // notification's offer.
-describe('offeredInSystemNotification', () => {
+describe('offerHolder', () => {
   const available = status({ phase: 'available', version: '0.7.0' });
 
-  it('is true only when the system notification carries this release', () => {
+  it('is the system notification while it carries this release', () => {
     expect(
-      offeredInSystemNotification(available, {
-        version: '0.7.0',
-        channel: 'system',
-      }),
-    ).toBe(true);
+      offerHolder(available, { version: '0.7.0', channel: 'system' }),
+    ).toBe('system');
   });
 
-  it('leaves the offer in-app when permission was denied or buttons are unsupported', () => {
+  it('is the in-app notice once the backend offered this release in-app', () => {
     expect(
-      offeredInSystemNotification(available, {
-        version: '0.7.0',
-        channel: 'in-app',
-      }),
-    ).toBe(false);
-    expect(offeredInSystemNotification(available, NO_OFFER)).toBe(false);
+      offerHolder(available, { version: '0.7.0', channel: 'in-app' }),
+    ).toBe('in-app');
   });
 
-  it('does not hide a release the system notification did not offer', () => {
+  it('is undecided while the backend has not offered this release yet', () => {
+    expect(offerHolder(available, NO_OFFER)).toBe('deciding');
     expect(
-      offeredInSystemNotification(available, {
-        version: '0.6.9',
-        channel: 'system',
-      }),
-    ).toBe(false);
+      offerHolder(available, { version: '0.6.9', channel: 'in-app' }),
+    ).toBe('deciding');
+    expect(
+      offerHolder(available, { version: '0.6.9', channel: 'system' }),
+    ).toBe('deciding');
   });
 
-  it('does not hide the phases after a click', () => {
+  it('is the in-app notice in the phases after a click', () => {
     for (const phase of [
       'downloading',
       'download-failed',
@@ -339,11 +360,11 @@ describe('offeredInSystemNotification', () => {
       'install-on-quit',
     ] as const) {
       expect(
-        offeredInSystemNotification(status({ phase, version: '0.7.0' }), {
+        offerHolder(status({ phase, version: '0.7.0' }), {
           version: '0.7.0',
           channel: 'system',
         }),
-      ).toBe(false);
+      ).toBe('in-app');
     }
   });
 });
@@ -358,6 +379,11 @@ describe('startUpdateSubscription — __PV_TEST__ override', () => {
     await startUpdateSubscription();
 
     expect(getUpdateSnapshot()).toEqual(seeded);
+    // No backend makes a system offer, so the in-app notice holds it.
+    expect(getUpdateOfferSnapshot()).toEqual({
+      version: '99.0.0',
+      channel: 'in-app',
+    });
     expect(mockListen).not.toHaveBeenCalled();
     expect(mockCommands.updateCheckOnStartup).not.toHaveBeenCalled();
   });

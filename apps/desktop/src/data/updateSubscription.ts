@@ -12,9 +12,10 @@
  * chooses Install now or Install on quit.
  *
  * It also mirrors where the backend offered a found release
- * (`update:offer` events, astro-plan-c72oo): when the system notification
- * carries Install now and Install on quit, the in-app notice leaves the
- * `available` phase to it (`offeredInSystemNotification`).
+ * (`update:offer` events, astro-plan-c72oo): while the system notification
+ * carries Install now and Install on quit, or the backend is still deciding
+ * whether it can, the in-app notice leaves the `available` phase to it
+ * (`offerHolder`).
  *
  * - `startUpdateSubscription()` listens first, reads the current status and
  *   offer, then asks for the startup check. The backend runs that check once
@@ -75,18 +76,24 @@ export function canInstall(state: UpdateState): boolean {
 }
 
 /**
- * Whether the system notification carries Install now and Install on quit
- * for `state`'s release, so the in-app notice need not offer them.
+ * Who offers Install now and Install on quit for `state`'s release:
+ * - `system`: the system notification carries both buttons;
+ * - `in-app`: the in-app notice does, because the backend could not offer the
+ *   release in a notification, the notification was answered, closed or
+ *   withdrawn, or the phase is past the offer;
+ * - `deciding`: the backend has not yet decided for this release. It does so
+ *   once the system post is accepted, refused or timed out, so the in-app
+ *   choices wait for that.
  */
-export function offeredInSystemNotification(
+export type OfferHolder = 'system' | 'in-app' | 'deciding';
+
+export function offerHolder(
   state: UpdateState,
   offer: UpdateOffer,
-): boolean {
-  return (
-    state.phase === 'available' &&
-    offer.channel === 'system' &&
-    offer.version === state.version
-  );
+): OfferHolder {
+  if (state.phase !== 'available') return 'in-app';
+  if (offer.version !== state.version) return 'deciding';
+  return offer.channel === 'system' ? 'system' : 'in-app';
 }
 
 type Listener = () => void;
@@ -179,7 +186,10 @@ export async function startUpdateSubscription(): Promise<void> {
   const token = ++generation;
 
   if (typeof window !== 'undefined' && window.__PV_TEST__?.updateState) {
-    setState(window.__PV_TEST__.updateState);
+    const seeded = window.__PV_TEST__.updateState;
+    setState(seeded);
+    // No backend makes a system offer, so the in-app notice holds it.
+    setOffer({ version: seeded.version, channel: 'in-app' });
     return;
   }
   if (IS_MOCK) return;
@@ -196,9 +206,13 @@ export async function startUpdateSubscription(): Promise<void> {
         setState(event.payload);
       }),
     );
+    // Set by an offer event, so an offer snapshot read before the event
+    // does not replace it.
+    let offerPushed = false;
     if (token === generation) {
       stops.push(
         await listen<UpdateOffer>(OFFER_EVENT, (event) => {
+          offerPushed = true;
           setOffer(event.payload);
         }),
       );
@@ -212,7 +226,7 @@ export async function startUpdateSubscription(): Promise<void> {
     const offer = unwrap(await commands.updateOffer());
     if (token !== generation) return;
     setState(status);
-    setOffer(offer);
+    if (!offerPushed) setOffer(offer);
   } catch (err) {
     // A listener whose sibling failed to register is not kept half-wired.
     if (unlisten !== stop) stop();

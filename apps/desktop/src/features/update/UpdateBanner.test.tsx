@@ -33,8 +33,9 @@ vi.mock('@/data/updateSubscription', async (importOriginal) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The backend offered 0.7.0 in-app unless a test says otherwise.
   mockGetUpdateOfferSnapshot.mockReturnValue({
-    version: null,
+    version: '0.7.0',
     channel: 'in-app',
   });
 });
@@ -97,6 +98,16 @@ describe('UpdateBanner', () => {
     mockGetUpdateOfferSnapshot.mockReturnValue({
       version: '0.7.0',
       channel: 'system',
+    });
+    render(<UpdateBanner />);
+
+    expect(screen.queryByTestId('update-banner')).not.toBeInTheDocument();
+  });
+
+  it('holds the choices back while the backend decides where to offer the release', () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'available',
+      version: '0.7.1',
     });
     render(<UpdateBanner />);
 

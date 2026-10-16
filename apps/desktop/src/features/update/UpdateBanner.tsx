@@ -6,10 +6,10 @@
  *
  * Shown in the shell once the startup check finds an update: version, release
  * notes, and the owner-decided choice of Install now or Install on quit.
- * Nothing downloads until one of those is clicked. When the system
- * notification already carries both buttons for that release
- * (astro-plan-c72oo), the notice leaves the offer to it and appears only
- * as the fallback. It follows the download, install and failure phases
+ * Nothing downloads until one of those is clicked. While the system
+ * notification carries both buttons for that release (astro-plan-c72oo), or
+ * the backend is still deciding whether it can, the notice holds back; it
+ * shows as the fallback. It follows the download, install and failure phases
  * afterwards, and "Later" hides it for that version for the rest of the
  * session (Settings > Advanced keeps the same actions).
  */
@@ -20,7 +20,7 @@ import { m } from '@/lib/i18n';
 import {
   getUpdateOfferSnapshot,
   getUpdateSnapshot,
-  offeredInSystemNotification,
+  offerHolder,
   subscribeUpdate,
   type UpdatePhase,
 } from '@/data/updateSubscription';
@@ -46,7 +46,7 @@ export function UpdateBanner() {
   if (
     !SHOWN.has(state.phase) ||
     version === dismissedVersion ||
-    offeredInSystemNotification(state, offer)
+    offerHolder(state, offer) !== 'in-app'
   ) {
     return null;
   }
