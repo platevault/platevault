@@ -7,20 +7,8 @@
 import { correctedExposureS } from "./corrections"
 import { deniedAncestor } from "./indexing"
 import { fieldOfView } from "./sky"
-import type {
-  Asset,
-  AssetCopy,
-  Availability,
-  Catalog,
-  Disk,
-  FrameMeasurement,
-  Location,
-  LocationId,
-  MembershipContent,
-  ObservingSite,
-  Session,
-  TargetId,
-} from "./types"
+import type { InputFrames } from "./membership"
+import type { Asset, AssetCopy, Availability, Catalog, Disk, FrameMeasurement, Location, LocationId, ObservingSite, Session, TargetId } from "./types"
 
 export function locationAvailability(disk: Disk, location: Location): Availability {
   if (location.retiredAt) return "retired"
@@ -247,8 +235,8 @@ export interface MembershipSummary {
   unusable: number
 }
 
-/** Intended included frames and integration by channel (VSEL-FR-08). */
-export function membershipSummary(catalog: Catalog, content: MembershipContent): MembershipSummary {
+/** A Project's included frames and integration by channel (VSEL-FR-08), from its held sessions' frames. */
+export function membershipSummary(catalog: Catalog, content: Pick<InputFrames, "included" | "excluded" | "unresolved">): MembershipSummary {
   const byChannel = new Map<string, FrameTotals>()
   const included = zero()
   let unreviewed = 0

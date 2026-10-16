@@ -77,6 +77,7 @@ export interface OfferRefusal {
   key: string
   label: string
   path: string | null
+  reason: MessageRef
   /** Where the refusal can be resolved: the Project whose View links the item (P-TRASH2). */
   link?: StepLink
 }
