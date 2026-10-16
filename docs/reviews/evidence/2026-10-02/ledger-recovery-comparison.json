@@ -18,7 +18,7 @@
  },
  "census_183": {
   "baseline_commit": "94a3dc958c13e297baf501aa2721efa2c2628622",
-  "rule": "Distinct matches of astro-plan-[a-z0-9]+(\\.[0-9]+)* in full commit messages reachable from the baseline, minus ids present in the 2026-10-02 export. Reproduces the reviewed figure exactly: 243 distinct, 183 absent.",
+  "rule": "Distinct matches of astro-plan-[a-z0-9]+(\\.[0-9]+)* in full commit messages reachable from the baseline, minus ids present in the recovered 2026-10-02 export, loaded directly from that file. Reproduces the reviewed figure exactly: 243 distinct, 183 absent.",
   "oct2_export": {
    "file": ".audit-smoke/ledger-refreshed.jsonl in ~/tmp/worktree-backups/review-application-local-20261002.files.tgz",
    "archive_sha256": "89f3bbc3c2c9835f252536a7a726aec42e3e523b82417cae458d47b6e04ec7ed",
@@ -2825,7 +2825,7 @@
    "comment_count_differences": 4,
    "dependencies_only_in_live": 20,
    "dependencies_only_in_b": 1,
-   "explanation": "Writes after the 2026-10-16T07:15:22Z backup sync: nine claims (07:16:48Z-07:21:31Z, including this bead), four comments (07:18:13Z-07:19:22Z), twenty new edges, and one related edge astro-plan-9eezk -> astro-plan-5wcib removed after the sync."
+   "explanation": "Writes after the 2026-10-16T07:15:22Z backup sync: nine claims (07:16:48Z-07:21:31Z, including this bead), four comments (07:18:13Z-07:19:22Z), twenty new edges (07:18:24Z-07:18:25Z), and one related edge astro-plan-9eezk -> astro-plan-5wcib removed after the sync."
   },
   {
    "a": "live_export",

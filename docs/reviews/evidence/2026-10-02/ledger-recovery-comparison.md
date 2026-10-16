@@ -45,7 +45,7 @@ The 2026-10-02 review evidence the bead cites was never committed to any ref. It
 
 ## Method
 
-1. Rebuilt the census. Commits reachable from `94a3dc95` were matched with `astro-plan-[a-z0-9]+(\.[0-9]+)*`, then checked against the recovered 2026-10-02 export. The result is 243 distinct matches, 183 of them absent, which is the reviewed figure. Each string was classified by its whole token and its context.
+1. Rebuilt the census. Commits reachable from `94a3dc95` were matched with `astro-plan-[a-z0-9]+(\.[0-9]+)*`, then checked against the ids in the recovered 2026-10-02 export (`ledger-refreshed.jsonl`, loaded directly). The result is 243 distinct matches, 183 of them absent, which is the reviewed figure. Each string was classified by its whole token and its context.
 2. Copied every candidate store into `/tmp/ledger-forensics` with `cp -R` and checked the checksums. The copies cover `.beads/backup`, `~/.beads/retired-carriers`, `~/.beads/backup`, `~/tmp/platevault-claude/.beads` and `~/tmp/platevault-beads-backup-20260826`. Scratch stores were built from the copies with every remote and backup removed.
 3. Fetched the remote `refs/dolt/data` into a new bare repository, together with the pre-migration commits `b8d4879` and `65b15c98`. Snapshots and every storage file from that history were materialised.
 4. Ran only `SELECT` queries in each scratch store: branches, log, issue counts, target ids in current rows and in `dolt_history_issues`.
