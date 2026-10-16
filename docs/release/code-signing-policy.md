@@ -2,8 +2,8 @@
 
 This is the code signing policy for PlateVault. It is written to meet the
 [SignPath Foundation conditions for open-source projects](https://signpath.org/terms.html).
-PlateVault does not meet all of them yet; [Open conditions](#open-conditions)
-lists what must be done before the project applies.
+One of them is not met yet; [Open conditions](#open-conditions) says what
+must be done before the project applies.
 
 ## Status
 
@@ -87,13 +87,22 @@ how to turn off or avoid each one.
 
 ## Open conditions
 
-These SignPath conditions are not met yet. Each one blocks the application:
+This SignPath condition is not met yet. It blocks the application:
 
-- **Privacy policy shown during installation.** Neither Windows installer
-  shows the privacy statement yet.
+- **Installation option for the update check.** SignPath asks for options at
+  installation to turn off requests to systems you did not choose. First-run
+  setup does not offer **Check for updates automatically** yet. The first
+  automatic check runs as soon as setup finishes, before you can reach the
+  switch in Settings. The Configuration step of first-run setup needs that
+  switch, next to **Online SIMBAD resolution**.
 
 These SignPath conditions are met:
 
+- **Privacy policy shown during installation.** The NSIS setup.exe and the
+  MSI show a privacy notice
+  ([`apps/desktop/src-tauri/installer/privacy-notice.txt`](../../apps/desktop/src-tauri/installer/privacy-notice.txt))
+  before any file is installed. It summarises
+  [Privacy and network access](../manual/11-privacy.md) and links to it.
 - **Option to disable the update check.** The automatic update check at
   startup can be turned off with **Settings → Advanced → Software Update →
   Check for updates automatically**. With it off, PlateVault contacts GitHub
