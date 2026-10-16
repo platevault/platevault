@@ -24,9 +24,10 @@
  *   own; Escape leaves it.
  */
 import { X } from "lucide-react"
-import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
+import { titleWhenCut } from "@/components/app/cut-title"
 import { useSize } from "@/lib/use-size"
 import { cn } from "@/lib/utils"
 
@@ -232,13 +233,6 @@ function Stage({ panes, empty, strip }: { panes: readonly WorkspacePane[]; empty
       {strip ? <div className="h-28 shrink-0 border-t border-separator px-2 py-1.5">{strip}</div> : null}
     </div>
   )
-}
-
-/** T2 (plan §6.2): a cut-off title shows its full text on hover, and only while it is cut. */
-function titleWhenCut(event: PointerEvent<HTMLElement>) {
-  const element = event.currentTarget
-  if (element.scrollWidth > element.clientWidth) element.title = element.textContent ?? ""
-  else element.removeAttribute("title")
 }
 
 function AsideHeader({ aside }: { aside: WorkspaceAside }) {

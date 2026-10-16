@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { showToast } from "@/components/ui/toast"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
 import type { Action } from "./contracts"
@@ -275,30 +274,17 @@ export function useSaveState(): SaveStateHook {
 /**
  * Renders a value that is not known. Unknown is never shown as zero, empty
  * or absent. Standard labels: "Unknown", "Not measured", "Position unknown",
- * "FOV unknown", "Not set". A reason makes it a button (the tooltip trigger)
- * named "label: reason", so keyboard, pointer and screen-reader users all
- * reach the reason (WCAG 4.1.2).
+ * "FOV unknown", "Not set". A reason follows the label as visible text
+ * ("FOV unknown · Equipment not confirmed"), never in a tooltip (§6.2).
  */
 export function UnknownValue({ label, reason }: { label?: string; reason?: string }) {
   const m = useMessages()
-  const content = (
-    <>
-      <CircleHelp aria-hidden="true" className="size-3.5" />
-      {label ?? m.status_unknown()}
-      {reason ? <span className="sr-only">: {reason}</span> : null}
-    </>
-  )
-  if (!reason) return <span className="inline-flex items-center gap-1 text-muted-foreground">{content}</span>
+  const word = label ?? m.status_unknown()
   return (
-    <Tooltip>
-      <TooltipTrigger
-        type="button"
-        className="inline-flex cursor-help items-center gap-1 rounded-sm text-left text-muted-foreground underline decoration-dotted underline-offset-2"
-      >
-        {content}
-      </TooltipTrigger>
-      <TooltipContent>{reason}</TooltipContent>
-    </Tooltip>
+    <span className="inline-flex items-center gap-1 text-muted-foreground">
+      <CircleHelp aria-hidden="true" className="size-3.5" />
+      {reason ? `${word} · ${reason}` : word}
+    </span>
   )
 }
 

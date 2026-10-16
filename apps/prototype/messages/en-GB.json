@@ -403,7 +403,6 @@
   ],
   "table_select_row": "Select {name}",
   "table_no_rows": "No rows.",
-  "selection_outside_filters": "Selected outside current filters: {count}",
   "selection_region": "Selection",
   "selection_show": "Show selected",
   "selection_clear": "Clear selection",
@@ -557,12 +556,11 @@
       }
     }
   ],
-  "folder_picker_denied_body": "PlateVault cannot list this folder. You can still choose it; indexing reports it as unreadable until access is restored.",
-  "folder_picker_empty": "No folders inside {name}. Choose this folder, or go up one level.",
+  "folder_picker_empty": "No subfolders",
   "folder_picker_list": "Folders in {name}",
   "folder_picker_applications": "Applications",
   "folder_picker_contents": "Contents of {name}",
-  "folder_picker_empty_items": "Nothing to choose in {name}",
+  "folder_picker_empty_items": "Empty folder",
   "folder_picker_live_items": [
     {
       "declarations": [
@@ -4768,6 +4766,9 @@
   "catalogue_previews_blockers_desc": "Why an action is unavailable. Wrapping a focusable-disabled control, the card restates the control's description; without a control it renders the 'reason ▸' trigger of a Refusal (press moves focus into the card).",
   "catalogue_previews_disabled_control": "disabled control, blocker table (hover, focus)",
   "catalogue_previews_own_trigger": "own trigger + actions",
+  "catalogue_previews_blockable_desc": "A control that turns unavailable and back in place, such as an ActionButton: one wrapper in both states, so a focused control keeps its focus.",
+  "catalogue_previews_blockable_toggle": "Archive unavailable",
+  "catalogue_previews_blockable_caption": "available ⇄ unavailable",
   "catalogue_previews_empty_reason": "empty (plain reason, no card)",
   "catalogue_previews_used_by_desc": "'Used by N ▸' is a link to the full list; hover or focus previews the users.",
   "catalogue_previews_with_users": "with users",
@@ -6635,7 +6636,7 @@
   "calibration_choices_no_match": "No match found yet",
   "calibration_choices_offer_suggested": "{source} (needs confirming)",
   "calibration_choices_evidence_of": "Evidence for {name}",
-  "calibration_choices_none_suggested": "None of the selected rows has a suggestion to confirm",
+  "calibration_choices_none_suggested": "No suggestions",
   "calibration_choices_set_no_action": "No calibration",
   "calibration_choices_empty": "No sessions to calibrate",
   "calibration_diagram_lights": "Lights",
@@ -6786,7 +6787,6 @@
       }
     }
   ],
-  "folder_picker_files_help": "Press each file you want; press it again to leave it out.",
   "calibration_import_camera_of": "Camera of {file}",
   "calibration_import_choose_camera": "Choose its camera",
   "calibration_import_cameras_needed": [

@@ -22,6 +22,7 @@ import { type Ref, useId, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import type { Action } from "@/components/app/contracts"
 import { navRowClass } from "@/components/app/nav-list"
+import { titleWhenCut } from "@/components/app/cut-title"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
@@ -93,12 +94,12 @@ function ItemRow({ item, actionRef, onRun }: { item: ChecklistItem; actionRef?: 
     <li className="flex min-h-(--row-h) items-center gap-2 px-3 py-(--row-py)" data-check={item.id} data-done={item.done || undefined}>
       {item.done ? <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-success" /> : <Circle aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className={cn("truncate", item.done && "text-muted-foreground")} title={item.label}>
+        <span className={cn("truncate", item.done && "text-muted-foreground")} onPointerEnter={(event) => titleWhenCut(event, item.label)}>
           {item.label}
           {item.done ? <span className="sr-only"> · {m.status_done()}</span> : null}
         </span>
         {unavailable ? (
-          <span id={reasonId} className="truncate text-xs text-muted-foreground" title={unavailable.reason}>
+          <span id={reasonId} className="truncate text-xs text-muted-foreground" onPointerEnter={titleWhenCut}>
             {unavailable.reason}
           </span>
         ) : null}

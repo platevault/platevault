@@ -255,11 +255,9 @@ export function FolderPicker(props: FolderPickerProps) {
                   : ""}
               </p>
               {denied ? (
-                <Notice tone="warning" title={m.status_access_denied()}>
-                  {m.folder_picker_denied_body()}
-                </Notice>
+                <Notice tone="warning" title={m.status_access_denied()} />
               ) : entries.length === 0 ? (
-                <p className="px-2 py-6 text-center text-sm text-muted-foreground">{choosesFolder ? m.folder_picker_empty({ name: currentName }) : m.folder_picker_empty_items({ name: currentName })}</p>
+                <p className="px-2 py-6 text-center text-sm text-muted-foreground">{choosesFolder ? m.folder_picker_empty() : m.folder_picker_empty_items()}</p>
               ) : (
                 <ul aria-label={choosesFolder ? m.folder_picker_list({ name: currentName }) : m.folder_picker_contents({ name: currentName })} className="space-y-0.5">
                   {entries.map((entry) => (

@@ -5,7 +5,10 @@
  * blocker and user names and the masters are sample data.
  */
 import { Archive } from "lucide-react"
+import { useState } from "react"
 import { useMessages } from "@/app/preferences"
+import { ActionButton } from "@/components/app/actions"
+import { SwitchField } from "@/components/app/fields"
 import { BlockersPreview, MasterPreview, Preview, UsedByPreview } from "@/components/app/previews"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -26,6 +29,8 @@ const DARK_FILE = "masterDark_BIN-1_EXPOSURE-300.00s.xisf"
 
 export function PreviewsCatalogue() {
   const m = useMessages()
+  const [blocked, setBlocked] = useState(true)
+  const archive = { action: m.sessions_cant_archive(), reason: m.sessions_in_a_project({ count: HELD.length }), blockers: HELD, columns: { item: m.session_label(), where: m.project_noun() } }
   return (
     <>
       <ComponentSection components={["BlockersPreview"]} description={m.catalogue_previews_blockers_desc()}>
@@ -54,6 +59,13 @@ export function PreviewsCatalogue() {
             <BlockersPreview action={m.trash_cant()} reason={m.wrapup_used_by_other_reason()} blockers={[]} />
           </Specimen>
         </div>
+      </ComponentSection>
+
+      <ComponentSection components={["Blockable"]} description={m.catalogue_previews_blockable_desc()}>
+        <Specimen caption={m.catalogue_previews_blockable_caption()}>
+          <ActionButton action={{ id: "archive", label: m.wrapup_archive_title(), icon: Archive, run: () => undefined, unavailable: blocked ? archive : undefined }} />
+          <SwitchField label={m.catalogue_previews_blockable_toggle()} checked={blocked} onChange={setBlocked} />
+        </Specimen>
       </ComponentSection>
 
       <ComponentSection components={["UsedByPreview"]} description={m.catalogue_previews_used_by_desc()}>

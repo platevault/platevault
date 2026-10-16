@@ -48,7 +48,7 @@ export function GradeBadgesCatalogue() {
           <GradeBadges grades={[{ band: "OIII", grade: "good" }]} />
         </Specimen>
         <Specimen caption={m.catalogue_grade_badges_none()}>
-          <GradeBadges grades={null} empty={m.tonight_no_window()} />
+          <GradeBadges grades={null} />
         </Specimen>
       </div>
     </ComponentSection>

@@ -94,6 +94,7 @@ import { cn } from "@/lib/utils"
 import { ActionBar, ActionButton, type ActionRunner, isAction, MenuItems, useAction } from "./actions"
 import { isColumnHideable, isColumnShown, useColumnChoice } from "./column-choice"
 import type { Action, Column, MenuItem } from "./contracts"
+import { titleWhenCut } from "./cut-title"
 import { FilterChips } from "./data"
 import { ActionError } from "./feedback"
 import { DisplayMenu } from "./display-menu"
@@ -290,13 +291,6 @@ export type DataTableProps<T> = DataTableBaseProps<T> & DataTableRowProps<T>
 
 /** What the toolbar slot moves focus to after a swap took the focused control away. */
 const SLOT_FOCUSABLE = "button:not([disabled]), input:not([disabled]), [role=checkbox], [tabindex]:not([tabindex='-1'])"
-
-/** T2 (plan §6.2): a cut-off cell shows its full text on hover, and only while it is cut. */
-function titleWhenCut(event: PointerEvent<HTMLElement>) {
-  const element = event.currentTarget
-  if (element.scrollWidth > element.clientWidth) element.title = element.textContent ?? ""
-  else element.removeAttribute("title")
-}
 
 /**
  * A truncated cell's content. The grid's one `minmax(0, 1fr)` track gives it no min-content width, so under

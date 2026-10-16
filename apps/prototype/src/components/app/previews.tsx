@@ -12,6 +12,9 @@
  *   linked to where it can be resolved; with `columns`, a table of item ·
  *   where ▸ ("Session · Project"). Wraps an unavailable control, or
  *   renders its own "reason ▸" trigger beside a refusal line.
+ * - Blockable: a control that turns unavailable and back in place (an
+ *   ActionButton): BlockersPreview while unavailable, inside one wrapper
+ *   that stays the same element, so the control keeps its focus.
  * - UsedByPreview: "Used by 6 sessions ▸", a link to the full list,
  *   previewing the first rows.
  * - MasterPreview: one dated version of a calibration master (CAL-FR-14):
@@ -55,9 +58,11 @@ export interface PreviewProps {
   children: ReactNode
   /** Activating the trigger moves focus into the card, for cards whose links have no other keyboard path. */
   focusOnPress?: boolean
+  /** The card does not open; the trigger stays mounted, so a control inside it keeps its node and focus. */
+  disabled?: boolean
 }
 
-export function Preview({ trigger, title, children, focusOnPress = false }: PreviewProps) {
+export function Preview({ trigger, title, children, focusOnPress = false, disabled = false }: PreviewProps) {
   const [open, setOpen] = useState(false)
   const [presses, setPresses] = useState(0)
   // Typed as the default <a>; it holds whatever element `trigger` renders.
@@ -73,8 +78,9 @@ export function Preview({ trigger, title, children, focusOnPress = false }: Prev
 
   return (
     <HoverCard
-      open={open}
+      open={open && !disabled}
       onOpenChange={(next) => {
+        if (next && disabled) return
         // Closing with focus inside the card (Escape) hands focus back to the trigger, not the page.
         if (!next && popupRef.current?.contains(document.activeElement)) triggerRef.current?.focus()
         setOpen(next)
@@ -84,7 +90,7 @@ export function Preview({ trigger, title, children, focusOnPress = false }: Prev
         ref={triggerRef}
         render={trigger}
         onClick={
-          focusOnPress
+          focusOnPress && !disabled
             ? () => {
                 setOpen(true)
                 setPresses((n) => n + 1)
@@ -155,39 +161,68 @@ export interface BlockersPreviewProps {
   children?: ReactElement<{ "aria-describedby"?: string }>
 }
 
-export function BlockersPreview({ action, reason, blockers, columns, actions, children }: BlockersPreviewProps) {
-  const descriptionId = useId()
-  const list = blockers.length === 0 ? null : columns ? <BlockerTable caption={`${action} · ${reason}`} blockers={blockers} columns={columns} /> : <Rows rows={blockers} />
-  const body = (
+/** The card's body: the blockers as a list, or a table with `columns`, then the actions that resolve them. */
+function BlockersBody({ action, reason, blockers, columns, actions }: Omit<BlockersPreviewProps, "children">) {
+  return (
     <>
-      {list}
+      {blockers.length === 0 ? null : columns ? <BlockerTable caption={`${action} · ${reason}`} blockers={blockers} columns={columns} /> : <Rows rows={blockers} />}
       {actions ? <div className="flex flex-wrap items-center gap-1.5">{actions}</div> : null}
     </>
   )
-  if (!children) {
-    if (blockers.length === 0 && !actions) return <span className="text-muted-foreground">{reason}</span>
-    return (
-      <Preview
-        focusOnPress
-        trigger={
-          <Button variant="ghost" size="xs" className="px-1 text-muted-foreground" data-blockers-trigger="">
-            {reason}
-            <ChevronRight aria-hidden="true" data-icon="inline-end" />
-          </Button>
-        }
-      >
-        {body}
-      </Preview>
-    )
-  }
-  // A disabled control takes no pointer events, so a wrapper is the hover target; focus still bubbles from the control.
-  const describedBy = [children.props["aria-describedby"], descriptionId].filter(Boolean).join(" ")
+}
+
+export function BlockersPreview({ children, ...blocked }: BlockersPreviewProps) {
+  if (children) return <Blockable unavailable={blocked}>{children}</Blockable>
+  if (blocked.blockers.length === 0 && !blocked.actions) return <span className="text-muted-foreground">{blocked.reason}</span>
+  return (
+    <Preview
+      focusOnPress
+      trigger={
+        <Button variant="ghost" size="xs" className="px-1 text-muted-foreground" data-blockers-trigger="">
+          {blocked.reason}
+          <ChevronRight aria-hidden="true" data-icon="inline-end" />
+        </Button>
+      }
+    >
+      <BlockersBody {...blocked} />
+    </Preview>
+  )
+}
+
+export interface BlockableProps {
+  /** Why the control is unavailable now; undefined while it is available. */
+  unavailable: Omit<BlockersPreviewProps, "children"> | undefined
+  /** The control, kept focusable while disabled (`focusableWhenDisabled`). */
+  children: ReactElement<{ "aria-describedby"?: string }>
+}
+
+/**
+ * A control that turns unavailable and available again in place, such as an
+ * ActionButton: BlockersPreview's card and description while `unavailable`
+ * is set, the bare control otherwise. The wrapper is the same element either
+ * way, so the control keeps its DOM node, and focus, across the change.
+ */
+export function Blockable({ unavailable, children }: BlockableProps) {
+  const descriptionId = useId()
+  const text = unavailable ? `${unavailable.action} · ${unavailable.reason}` : undefined
+  const describedBy = [children.props["aria-describedby"], text ? descriptionId : undefined].filter(Boolean).join(" ") || undefined
+  // A disabled control takes no pointer events, so the wrapper is the hover target; focus still bubbles from the control.
+  // While the control is available the wrapper lays out as if absent (display: contents).
+  const trigger = (
+    <span className={unavailable ? "inline-flex" : "contents"} data-blockers-trigger={unavailable ? "" : undefined}>
+      {cloneElement(children, { "aria-describedby": describedBy })}
+    </span>
+  )
   return (
     <>
-      <Preview trigger={<span className="inline-flex" data-blockers-trigger="">{cloneElement(children, { "aria-describedby": describedBy })}</span>} title={`${action} · ${reason}`}>
-        {body}
+      <Preview disabled={!unavailable} trigger={trigger} title={text}>
+        {unavailable ? <BlockersBody {...unavailable} /> : null}
       </Preview>
-      <span id={descriptionId} hidden>{`${action} · ${reason}`}</span>
+      {text ? (
+        <span id={descriptionId} hidden>
+          {text}
+        </span>
+      ) : null}
     </>
   )
 }

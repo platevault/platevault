@@ -425,7 +425,6 @@
   ],
   "table_select_row": "Selecionar {name}",
   "table_no_rows": "Nenhuma linha.",
-  "selection_outside_filters": "Selecionados fora dos filtros atuais: {count}",
   "selection_region": "Seleção",
   "selection_show": "Mostrar selecionados",
   "selection_clear": "Limpar seleção",
@@ -593,12 +592,11 @@
       }
     }
   ],
-  "folder_picker_denied_body": "O PlateVault não consegue listar esta pasta. Você ainda pode escolhê-la; a indexação a relata como ilegível até que o acesso seja restaurado.",
-  "folder_picker_empty": "Nenhuma pasta dentro de {name}. Escolha esta pasta ou suba um nível.",
+  "folder_picker_empty": "Nenhuma subpasta",
   "folder_picker_list": "Pastas em {name}",
   "folder_picker_applications": "Aplicativos",
   "folder_picker_contents": "Conteúdo de {name}",
-  "folder_picker_empty_items": "Nada para escolher em {name}",
+  "folder_picker_empty_items": "Pasta vazia",
   "folder_picker_live_items": [
     {
       "declarations": [
@@ -5132,6 +5130,9 @@
   "catalogue_previews_blockers_desc": "Por que uma ação está indisponível. Em volta de um controle desativado focável, o cartão repete a descrição do controle; sem controle, renderiza o gatilho 'motivo ▸' de uma Refusal (pressionar move o foco para o cartão).",
   "catalogue_previews_disabled_control": "controle desativado, tabela de bloqueios (cursor, foco)",
   "catalogue_previews_own_trigger": "gatilho próprio + ações",
+  "catalogue_previews_blockable_desc": "Um controle que fica indisponível e volta no mesmo lugar, como um ActionButton: o mesmo invólucro nos dois estados, então um controle focado mantém o foco.",
+  "catalogue_previews_blockable_toggle": "Arquivar indisponível",
+  "catalogue_previews_blockable_caption": "disponível ⇄ indisponível",
   "catalogue_previews_empty_reason": "vazio (motivo simples, sem cartão)",
   "catalogue_previews_used_by_desc": "'Usado por N ▸' é um link para a lista completa; cursor ou foco mostra uma prévia dos usuários.",
   "catalogue_previews_with_users": "com usuários",
@@ -7115,7 +7116,7 @@
   "calibration_choices_no_match": "Nenhuma correspondência encontrada ainda",
   "calibration_choices_offer_suggested": "{source} (precisa de confirmação)",
   "calibration_choices_evidence_of": "Evidências de {name}",
-  "calibration_choices_none_suggested": "Nenhuma das linhas selecionadas tem uma sugestão para confirmar",
+  "calibration_choices_none_suggested": "Nenhuma sugestão",
   "calibration_choices_set_no_action": "Sem calibração",
   "calibration_choices_empty": "Nenhuma sessão para calibrar",
   "calibration_diagram_lights": "Lights",
@@ -7280,7 +7281,6 @@
       }
     }
   ],
-  "folder_picker_files_help": "Pressione cada arquivo desejado; pressione de novo para deixá-lo de fora.",
   "calibration_import_camera_of": "Câmera de {file}",
   "calibration_import_choose_camera": "Escolha a câmera",
   "calibration_import_cameras_needed": [

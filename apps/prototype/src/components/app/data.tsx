@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import type { QualityBreakdown } from "@/domain/library"
 import { formatCount, formatDateTime, formatDuration } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { titleWhenCut } from "./cut-title"
 
 export interface KeyValueItem {
   label: string
@@ -58,11 +59,12 @@ export function Stat({ label, value, hint, className }: { label: string; value: 
 /**
  * A filesystem path in monospace. It wraps by default so the whole path is
  * visible to everyone; `truncate` is for dense table cells only, where the
- * row's detail pane must show the full path.
+ * row's detail pane must show the full path, and the cut path shows in full
+ * on hover.
  */
 export function PathText({ path, className, truncate = false }: { path: string; className?: string; truncate?: boolean }) {
   return (
-    <span className={cn("block font-mono text-xs", truncate ? "truncate" : "[overflow-wrap:anywhere]", className)} title={truncate ? path : undefined}>
+    <span className={cn("block font-mono text-xs", truncate ? "truncate" : "[overflow-wrap:anywhere]", className)} onPointerEnter={truncate ? titleWhenCut : undefined}>
       {path}
     </span>
   )

@@ -55,7 +55,7 @@ import { ConfirmDialog } from "./confirm-dialog"
 import type { Action, ActionKind, MenuItem, QuickUndo } from "./contracts"
 import { ActionError, toast } from "./feedback"
 import { useFollowLink } from "./links"
-import { BlockersPreview } from "./previews"
+import { Blockable } from "./previews"
 import { Refusal, refusalFrom } from "./refusal"
 
 // ---------------------------------------------------------------------------
@@ -338,8 +338,9 @@ function ActionTrigger({ action: declared, size = "sm", runner }: Omit<ActionBut
       {actionLabel(action)}
     </Button>
   )
-  // The preview opens on hover and focus, and describes the button with "<action> · <reason>".
-  return unavailable ? <BlockersPreview {...unavailable}>{button}</BlockersPreview> : button
+  // The preview opens on hover and focus, and describes the button with "<action> · <reason>". One wrapper in both states,
+  // so the button keeps its node, and focus, when the action turns unavailable or available again.
+  return <Blockable unavailable={unavailable}>{button}</Blockable>
 }
 
 // ---------------------------------------------------------------------------

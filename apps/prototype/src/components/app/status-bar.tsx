@@ -33,6 +33,7 @@ import type { StepLink } from "@/domain/derive"
 import { cn } from "@/lib/utils"
 import { MenuItems, useAction } from "./actions"
 import type { MenuItem } from "./contracts"
+import { titleWhenCut } from "./cut-title"
 import { useFollowLink } from "./links"
 
 /** Data attributes a host passes through for its own focus moves and tests. */
@@ -178,7 +179,7 @@ export function StatusOperation({ id, title, href, value, word, onCancel, expand
   ) : null
   return (
     <div className={cn("group/op flex min-w-0 items-center gap-1.5", expanded ? "w-full" : "max-w-60")} data-operation={id}>
-      <Link to={href as never} className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={title}>
+      <Link to={href as never} className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} onPointerEnter={titleWhenCut}>
         {title}
       </Link>
       {word || expanded ? (
@@ -378,11 +379,11 @@ export function ListNotice({ id, tone, text, full, href, onNavigate, at, time }:
     <li className="flex min-h-(--row-h) items-center gap-2 px-3 text-sm" data-notice={id}>
       <Glyph aria-hidden="true" className={cn("size-3.5 shrink-0", TONE_TEXT[glyphTone])} />
       {href ? (
-        <Link to={href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={full}>
+        <Link to={href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" onPointerEnter={(event) => titleWhenCut(event, full)}>
           {text}
         </Link>
       ) : (
-        <span className="min-w-0 flex-1 truncate" title={full}>
+        <span className="min-w-0 flex-1 truncate" onPointerEnter={(event) => titleWhenCut(event, full)}>
           {text}
         </span>
       )}

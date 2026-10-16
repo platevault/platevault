@@ -46,8 +46,8 @@ describe("GradeBadges", () => {
     expect(screen.getByRole("img", { name: "OIII good, SII good, Ha marginal" })).toBeDefined()
   })
 
-  it("reads a dash, with the poor grades as its reason, when every filter is poor (byGrade)", () => {
-    render(
+  it("reads a plain dash, no tooltip, when every filter is poor (byGrade)", () => {
+    const { container } = render(
       <GradeBadges
         byGrade
         grades={[
@@ -57,6 +57,7 @@ describe("GradeBadges", () => {
       />,
     )
     expect(screen.queryByRole("img")).toBeNull()
-    expect(screen.getByRole("button", { name: "–: Ha poor, OIII poor" })).toBeDefined()
+    expect(screen.queryByRole("button")).toBeNull()
+    expect(container.textContent).toBe("–")
   })
 })

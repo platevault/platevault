@@ -602,7 +602,6 @@ export function FilesField({ value, onChange, filters, pickerTitle, chooseVerb, 
         open={open}
         onOpenChange={setOpen}
         title={pickerTitle ?? chrome.label}
-        description={m.folder_picker_files_help()}
         mode="files"
         filters={filters}
         initialPath={folder ?? initialPath}

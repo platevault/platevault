@@ -50,7 +50,7 @@ export function StatusCatalogue() {
           </Specimen>
           <Specimen caption={m.catalogue_status_truncated()}>
             <span className="flex w-24">
-              <Pill title={m.apps_badge_writes_unknown()}>{m.apps_badge_writes_unknown()}</Pill>
+              <Pill>{m.apps_badge_writes_unknown()}</Pill>
             </span>
           </Specimen>
         </div>

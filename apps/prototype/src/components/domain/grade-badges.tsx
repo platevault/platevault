@@ -4,11 +4,12 @@
  * marginal warning, poor danger) and an icon repeats it as a shape, so the
  * grade never rests on colour alone. The strip is one image to assistive
  * technology, named "OIII good, Ha marginal". Without a verdict (no window
- * that night) it reads "–", with the reason when the host gives one.
+ * that night) it reads "–": the row says why (its windows and Img time), so
+ * no tooltip repeats it (§6.2).
  *
  * `byGrade` (a table column, Q36): one Pill per grade, good then marginal,
  * each listing its filters ("Ha, OIII"); poor filters are left out. When
- * every filter is poor it reads "–", with the poor grades as the reason.
+ * every filter is poor it reads "–".
  */
 import { Check, CircleDashed, type LucideIcon, X } from "lucide-react"
 import { useMessages } from "@/app/preferences"
@@ -27,7 +28,7 @@ export interface GradeBadge {
 export interface GradeBadgesProps {
   /** One badge per filter, in strip order; null when the night gives no verdict. */
   grades: readonly GradeBadge[] | null
-  /** Why there is no verdict, for the "–". */
+  /** @deprecated No effect: the "–" carries no tooltip (§6.2) and the row already shows why. Removed after wave B. */
   empty?: string
   /** Let the strip wrap onto more lines in a narrow place (a detail panel); a table row keeps it on one line. */
   wrap?: boolean
@@ -53,10 +54,9 @@ export function gradeStripLabel(m: Messages, grades: readonly GradeBadge[]): str
   return grades.map((g) => m.domain_grade_badge({ band: g.band, grade: gradeWord(m, g.grade) })).join(", ")
 }
 
-export function GradeBadges({ grades, empty, wrap = false, byGrade = false }: GradeBadgesProps) {
+export function GradeBadges({ grades, wrap = false, byGrade = false }: GradeBadgesProps) {
   const m = useMessages()
-  if (!grades || grades.length === 0) return <UnknownValue label="–" reason={empty} />
-  if (byGrade && grades.every((g) => g.grade === "poor")) return <UnknownValue label="–" reason={gradeStripLabel(m, grades)} />
+  if (!grades || grades.length === 0 || (byGrade && grades.every((g) => g.grade === "poor"))) return <UnknownValue label="–" />
   // In badge order, so the strip's name reads as it shows.
   const shown = byGrade ? SHOWN_GRADES.flatMap((grade) => grades.filter((g) => g.grade === grade)) : grades
   const badges = byGrade

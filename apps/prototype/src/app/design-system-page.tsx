@@ -97,6 +97,15 @@ function rootToken(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
+/** The z-index table: token, its resolved value, and what sits on it. */
+function zColumns(m: Messages): Column<[token: string, use: string]>[] {
+  return [
+    { id: "token", header: m.ds_token_column(), rowHeader: true, sortValue: ([token]) => token, cell: ([token]) => <span className="font-mono">{token}</span> },
+    { id: "value", header: m.ds_value_column(), align: "right", sortValue: ([token]) => Number.parseFloat(rootToken(token)), cell: ([token]) => rootToken(token) },
+    { id: "use", header: m.ds_use_column(), sortValue: ([, use]) => use, cell: ([, use]) => use },
+  ]
+}
+
 function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: boolean; empty: boolean; grouped: boolean; pinned: boolean; locked: boolean }) {
   const m = useMessages()
   const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light"))
@@ -313,32 +322,7 @@ export function DesignSystemPage() {
               </ul>
             </Section>
             <Section title={m.ds_z_caption()} level={3}>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th scope="col" className="py-1 pr-3 font-normal">
-                      {m.ds_token_column()}
-                    </th>
-                    <th scope="col" className="py-1 pr-3 text-right font-normal">
-                      {m.ds_value_column()}
-                    </th>
-                    <th scope="col" className="py-1 font-normal">
-                      {m.ds_use_column()}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {zScale(m).map(([token, use]) => (
-                    <tr key={token} className="border-b last:border-0">
-                      <th scope="row" className="py-1 pr-3 text-left font-mono font-normal whitespace-nowrap">
-                        {token}
-                      </th>
-                      <td className="py-1 pr-3 text-right tabular-nums">{rootToken(token)}</td>
-                      <td className="py-1 text-muted-foreground">{use}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable label={m.ds_z_caption()} rows={zScale(m)} columns={zColumns(m)} getRowId={([token]) => token} scroll="none" />
             </Section>
           </div>
           <Section title={m.ds_dialog_caption()} level={3}>
@@ -490,7 +474,7 @@ export function DesignSystemPage() {
                 chips={chips}
                 onRemove={(id) => setChipIds((ids) => ids.filter((chip) => chip !== id))}
                 onClear={() => setChipIds([])}
-                matchLabel={`${m.ds_matching_sessions({ count: 1 })} · ${m.selection_outside_filters({ count: 3 })}`}
+                matchLabel={`${m.ds_matching_sessions({ count: 1 })} · ${m.table_selection_hidden({ count: 3, n: "3" })}`}
               />
             </div>
           </div>

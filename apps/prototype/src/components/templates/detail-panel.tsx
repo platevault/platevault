@@ -19,10 +19,11 @@
  *   returns to the open row (`aria-current`), so the list keeps its place.
  */
 import { X } from "lucide-react"
-import { type CSSProperties, type PointerEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
+import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionBar, IconButton } from "@/components/app/actions"
 import type { Action } from "@/components/app/contracts"
+import { titleWhenCut } from "@/components/app/cut-title"
 import { type DisplayGroup, DisplayMenu } from "@/components/app/display-menu"
 import { cn } from "@/lib/utils"
 import { type AdaptiveDock, clampDockWidth, DOCK_MIN_WIDTH_PX, DOCK_WIDTH_PRESETS, type DockPin, presetDockWidth, useAdaptiveDock } from "./dock"
@@ -111,13 +112,6 @@ function focusRow(row: HTMLElement | null | undefined): boolean {
   const target = row.hasAttribute("tabindex") ? row : row.querySelector<HTMLElement>("a[href], button:not([disabled])")
   target?.focus()
   return target != null
-}
-
-/** T2 (plan §6.2): a cut-off title shows its full text on hover, and only while it is cut. */
-function titleWhenCut(event: PointerEvent<HTMLElement>) {
-  const element = event.currentTarget
-  if (element.scrollWidth > element.clientWidth) element.title = element.textContent ?? ""
-  else element.removeAttribute("title")
 }
 
 export interface DetailPanelProps {

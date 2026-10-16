@@ -15,6 +15,7 @@
 import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { titleWhenCut } from "./cut-title"
 import type { Tone } from "./status"
 
 const PILL = "inline-flex h-5 max-w-full shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium whitespace-nowrap ring-1 ring-inset [&>svg]:size-3 [&>svg]:shrink-0"
@@ -28,21 +29,21 @@ const PILL_TONE: Record<Tone, string> = {
   danger: "bg-destructive/12 text-destructive ring-destructive/30",
 }
 
-/** The Pill API: an inert tag, no interactive props. */
+/** The Pill API: an inert tag, no interactive props. A label cut by its width shows in full on hover. */
 export interface PillProps {
   tone?: Tone
   icon?: LucideIcon
   children: ReactNode
-  /** The full text when the label truncates; not a tooltip for extra data. */
-  title?: string
   className?: string
 }
 
-export function Pill({ tone = "neutral", icon: Icon, children, title, className }: PillProps) {
+export function Pill({ tone = "neutral", icon: Icon, children, className }: PillProps) {
   return (
-    <span className={cn(PILL, PILL_TONE[tone], className)} title={title} data-pill={tone}>
+    <span className={cn(PILL, PILL_TONE[tone], className)} data-pill={tone}>
       {Icon ? <Icon aria-hidden="true" /> : null}
-      <span className="truncate">{children}</span>
+      <span className="truncate" onPointerEnter={titleWhenCut}>
+        {children}
+      </span>
     </span>
   )
 }

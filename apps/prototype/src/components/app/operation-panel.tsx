@@ -17,6 +17,7 @@ import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled, pauseOperation, resumeOperation } from "@/store/operations"
+import { titleWhenCut } from "./cut-title"
 import { PathText } from "./data"
 import { StatusBadge, statusMeta } from "./status"
 
@@ -136,7 +137,7 @@ export function OperationLine({ operationId, onRetry, className }: { operationId
   const percent = op.progress.total > 0 ? `${Math.round(Math.min(1, op.progress.done / op.progress.total) * 100)}%` : null
   return (
     <div className={cn("flex h-6 min-w-0 items-center gap-2 text-xs", className)} data-operation-line={op.id}>
-      <span ref={name} tabIndex={-1} className="min-w-0 truncate font-medium outline-none" title={title}>
+      <span ref={name} tabIndex={-1} className="min-w-0 truncate font-medium outline-none" onPointerEnter={titleWhenCut}>
         {title}
       </span>
       <StatusBadge kind="operation" value={op.status} />
