@@ -35,9 +35,9 @@
 # checks no method in the workspace, and a dead method passes this gate
 # unseen. Five consuming builders were found dead by hand in 2026-07:
 # ContractError::with_field_error and ::with_recovery_action (since wired up
-# in #1397), Confidence::with_evidence (crates/domain/core, still uncalled),
-# and two audit-record builders (since deleted). They hid a capability that
-# never reached users, which is the cost of this limit.
+# in #1397), Confidence::with_evidence and two audit-record builders (since
+# deleted). They hid a capability that never reached users, which is the cost
+# of this limit.
 #
 # The ways to close it were weighed once; do not re-run the comparison:
 #   - Grep indented `pub fn` too: trait impls and receiver-dispatched methods
