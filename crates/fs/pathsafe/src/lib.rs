@@ -191,29 +191,54 @@ pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
 ///
 /// Mirrors [`real_dirs_under`]'s gating: a symlinked/junction directory is
 /// never descended into, and a symlinked file is never yielded, unless
-/// `follow_symlinks` is `true`. Used by the raw-frame reconcile walker to
-/// enumerate on-disk frames without ever following a link (spec 048 R6).
+/// `follow_symlinks` is `true`.
+///
+/// Drops the paths the walk could not read, so a file's absence from the
+/// result is not evidence that it is gone; a caller that acts on absence must
+/// use [`real_files_under_reporting`].
 #[must_use]
 pub fn real_files_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
     real_files_under_reporting(root, follow_symlinks).0
 }
 
-/// [`real_files_under`], additionally returning the directories whose
-/// `read_dir` failed.
+/// [`real_files_under`], additionally returning the paths whose state the
+/// walk could not observe.
 ///
-/// Both walkers skip an unreadable directory rather than aborting, which makes
-/// "no files here" ambiguous between empty and unreadable. Callers that must
-/// not read a permission-denied subtree as deletion need the second list;
-/// treat it as unknown state, never as absence.
+/// The walk skips what it cannot read rather than aborting, which makes "no
+/// file here" ambiguous between absent and unreadable. Each path in the
+/// second list is unknown, together with everything below it; treat it as
+/// unknown state, never as absence. It is one of:
+///
+/// - a directory whose `read_dir` failed;
+/// - a directory whose listing failed part-way, so entries may be missing;
+/// - an entry whose metadata could not be read, which may be a file or a
+///   directory. A directory with read but no search permission (mode 644 on
+///   Unix) lists its names but fails this for every entry.
 ///
 /// When `follow_symlinks` is on, directories are deduplicated by their
 /// canonical path so a link pointing at an ancestor terminates instead of
-/// re-entering the subtree forever.
+/// re-entering the subtree forever, and a link whose target cannot be read
+/// (dangling, or on an unmounted drive) is unknown.
 #[must_use]
 pub fn real_files_under_reporting(
     root: &Path,
     follow_symlinks: bool,
 ) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    walk_files(root, follow_symlinks, |dir| {
+        fs::read_dir(dir).map(|entries| entries.map(|entry| entry.map(|entry| entry.path())))
+    })
+}
+
+/// The walk behind [`real_files_under_reporting`], with directory listing
+/// passed in so a test can fail a listing part-way.
+fn walk_files<Entries>(
+    root: &Path,
+    follow_symlinks: bool,
+    list: impl Fn(&Path) -> io::Result<Entries>,
+) -> (Vec<PathBuf>, Vec<PathBuf>)
+where
+    Entries: Iterator<Item = io::Result<PathBuf>>,
+{
     let mut files = Vec::new();
     let mut unreadable = Vec::new();
 
@@ -229,24 +254,54 @@ pub fn real_files_under_reporting(
         {
             continue;
         }
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let Ok(entries) = list(&dir) else {
             unreadable.push(dir);
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !follow_symlinks && is_link_or_junction(&path) {
-                continue;
-            }
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.is_file() {
-                files.push(path);
+        for entry in entries {
+            // A listing error leaves the rest of `dir` unseen. Stop reading
+            // it: a platform may repeat the same error forever.
+            let Ok(path) = entry else {
+                unreadable.push(dir);
+                break;
+            };
+            match walk_kind(&path, follow_symlinks) {
+                Ok(WalkKind::Dir) => stack.push(path),
+                Ok(WalkKind::File) => files.push(path),
+                Ok(WalkKind::Skip) => {}
+                Err(_) => unreadable.push(path),
             }
         }
     }
 
     (files, unreadable)
+}
+
+/// What a file walk does with one listed entry.
+enum WalkKind {
+    Dir,
+    File,
+    /// A gated link, or neither a file nor a directory.
+    Skip,
+}
+
+/// Classify `path` from its own metadata, or from its target's when it is a
+/// link and `follow_symlinks` is on.
+fn walk_kind(path: &Path, follow_symlinks: bool) -> io::Result<WalkKind> {
+    let mut meta = fs::symlink_metadata(path)?;
+    if is_link_or_junction_metadata(&meta) {
+        if !follow_symlinks {
+            return Ok(WalkKind::Skip);
+        }
+        meta = fs::metadata(path)?;
+    }
+    Ok(if meta.is_dir() {
+        WalkKind::Dir
+    } else if meta.is_file() {
+        WalkKind::File
+    } else {
+        WalkKind::Skip
+    })
 }
 
 /// Create a symlink from `source` to `destination`, pointing at a **file**
@@ -388,6 +443,78 @@ mod tests {
         }
         assert_eq!(files, vec![dir.path().join("top.fits")]);
         assert_eq!(unreadable, vec![locked]);
+    }
+
+    /// Regression (astro-plan-5r71): a directory with read but no search
+    /// permission lists its names while every entry's stat fails. The walk
+    /// skipped such entries silently, so they read as absent.
+    #[cfg(unix)]
+    #[test]
+    fn real_files_under_reporting_names_entries_it_cannot_stat() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let listable = dir.path().join("listable");
+        std::fs::create_dir_all(&listable).unwrap();
+        std::fs::write(listable.join("hidden.fits"), b"data").unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+        std::fs::set_permissions(&listable, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let enforced = std::fs::symlink_metadata(listable.join("hidden.fits")).is_err();
+        let (files, unreadable) = real_files_under_reporting(dir.path(), false);
+        std::fs::set_permissions(&listable, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        if !enforced {
+            eprintln!("skipping: this environment can stat below a mode-644 directory (root?)");
+            return;
+        }
+        assert_eq!(files, vec![dir.path().join("top.fits")]);
+        assert_eq!(unreadable, vec![listable.join("hidden.fits")]);
+    }
+
+    /// A listing that fails part-way may have hidden any entry of that
+    /// directory, so the directory itself is unknown; what it did list and
+    /// its readable siblings still count.
+    #[test]
+    fn listing_error_part_way_reports_the_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let partial = dir.path().join("partial");
+        std::fs::create_dir_all(&partial).unwrap();
+        std::fs::write(partial.join("seen.fits"), b"data").unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+
+        let (mut files, unreadable) = walk_files(dir.path(), false, |listed: &Path| {
+            let mut entries: Vec<io::Result<PathBuf>> =
+                fs::read_dir(listed)?.map(|entry| entry.map(|entry| entry.path())).collect();
+            if listed == partial {
+                entries.push(Err(io::Error::other("readdir failed")));
+                entries.push(Ok(partial.join("never-reached.fits")));
+            }
+            Ok(entries.into_iter())
+        });
+        files.sort();
+
+        assert_eq!(files, vec![partial.join("seen.fits"), dir.path().join("top.fits")]);
+        assert_eq!(unreadable, vec![partial]);
+    }
+
+    /// A listed entry whose metadata cannot be read is unknown, never
+    /// absent; here it vanished between the listing and the stat.
+    #[test]
+    fn entry_whose_stat_fails_is_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+        let vanished = dir.path().join("vanished.fits");
+
+        let (files, unreadable) = walk_files(dir.path(), false, |listed: &Path| {
+            let mut entries: Vec<io::Result<PathBuf>> =
+                fs::read_dir(listed)?.map(|entry| entry.map(|entry| entry.path())).collect();
+            entries.push(Ok(vanished.clone()));
+            Ok(entries.into_iter())
+        });
+
+        assert_eq!(files, vec![dir.path().join("top.fits")]);
+        assert_eq!(unreadable, vec![vanished]);
     }
 
     #[test]
