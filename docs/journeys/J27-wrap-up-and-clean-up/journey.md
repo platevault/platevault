@@ -26,7 +26,7 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 - P3: A Copies View on `Scratch` contains 111 entries; `Scratch` has no safe OS Trash.
 - P4: Record a baseline inventory of the isolated account's OS Trash and a manifest of the remaining captures, View entries, Processing files, Output files and adopted master. Compare only new Trash entries against that baseline.
 - P5: A helper outside PlateVault saves a selected copy's original bytes and nanosecond mtime, then changes the original in place to same-size different bytes and restores its mtime; it can restore the saved bytes and mtime later.
-- P6: Forty frames have library quality Unusable; three are in the View of another open Project and four are also held by a Closed Project.
+- P6: Forty frames have library quality Unusable; three are in the View of another open Project and four are also held by a Closed or Archived Project.
 - P7: The Project's `Processing/` contains 118 tool files and the generated source of an adopted master whose library copy is known. Its `Output/` contains two Results.
 - P8: A frame has byte-identical copies in Captures location A and B; B was registered later. The B copy is a source of a Symlinks View in another open Project.
 - P9: A fault control can hold Apply running on a separate open Project until released.
@@ -114,7 +114,7 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 ### S12 — Review rejected-frame Trash offers {#S12}
 
 - **Do:** In the Trash step of Wrap up, review the rejected-frame offer for the 40 Unusable frames in P6.
-- **Expect:** The offer covers 37 frames. The three frames in another open Project are not selectable and name that Project; the four frames also held by a Closed Project are included.
+- **Expect:** The offer covers 37 frames. The three frames in another open Project are not selectable and name that Project; the four frames also held by a Closed or Archived Project are included.
 - **Expect (negative):** Frames still in the View of another open Project are not moved, and no View copy is offered as a rejected original.
 - **Trace:** PRJ-FR-15 · STO-FR-14, STO-FR-15 · STO-AC-18 · D-W43, D-W79, D-W97
 
@@ -132,16 +132,16 @@ The user wraps up the open Project `NGC 7000 HOO` through Clean up, Trash and Ar
 - **Expect (negative):** No file moves before confirmation. `Wrap-2` stays at its source path, and files in `Output/` are neither archived nor trashed.
 - **Trace:** PRJ-FR-14 · STO-FR-06, STO-FR-07, STO-FR-13 · STO-AC-17 · RES-FR-06 · D-W97, D-W98
 
-### S14a — Confirm the Closed Project stays locked {#S14a}
+### S14a - Confirm the finished Project stays locked {#S14a}
 
 - **Do:** Open the Closed or Archived Project's menu and inspect its available actions.
 - **Expect:** The Project is read-only and has no Reopen action. **Duplicate…** is available as the route to continue working from its sessions and settings.
 - **Expect (negative):** Library or calibration changes do not edit the Closed or Archived Project, and it cannot be reopened.
 - **Trace:** PRJ-FR-25, PRJ-FR-30 · STO-FR-13 · D-W96, D-W97
 
-### S14b — Duplicate the closed Project without files {#S14b}
+### S14b - Duplicate the finished Project without files {#S14b}
 
-- **Do:** Choose **Duplicate…** from the Closed Project's menu and open the new Project.
+- **Do:** Choose **Duplicate…** from the Closed or Archived Project's menu and open the new Project.
 - **Expect:** The new open Project has the copied sessions, groups, overrides, goals, notes and settings, but no files. It has no link or "Duplicated from" note; its first Apply builds a new View from the originals.
 - **Expect (negative):** Duplicate… does not copy `View/`, `Processing/` or `Output/` files.
 - **Trace:** PRJ-FR-30 · STO-AC-07 · D-W96, D-W97

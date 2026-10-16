@@ -12,7 +12,7 @@ trace: [HARNESS-V5-IA.md#S1, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S8, HARNESS-V
 
 ## Goal
 
-The user recovers from an interrupted rescan, corrects a session's wrong Target, handles a failed Apply, continues a Closed Project by duplicating it, and undoes mistaken library-quality marks. Each outcome is visible, reversible where the action permits it, and leaves original capture files unchanged. Done means:
+The user recovers from an interrupted rescan, corrects a session's wrong Target, handles a failed Apply, continues a finished Project by duplicating it, and undoes mistaken library-quality marks. Each outcome is visible, reversible where the action permits it, and leaves original capture files unchanged. Done means:
 
 - Quitting during the rescan asks first, and canceling the prompt keeps the rescan running. The interrupted rescan is found in the status bar, Home's Work box and Activity, resumes with Retry, and indexes the new night exactly once.
 - The wrongly confirmed session shows a mismatch warning, is re-confirmed to the right Target, which clears the warning, and Project suggestions follow both times, without changing any file header or the sessions a Project holds.
@@ -128,7 +128,7 @@ Recoveries that other journeys own end to end are referenced, not repeated (G5).
   - status-bar mechanics (J38);
   - an offline location during indexing (J19).
 - G6: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so X makes no Review draft and there is no Discard to define (J22/G9).
-- G7: Unresolved implementation qualification: a live-product replay must verify that a Closed Project offers Duplicate… without Reopen and that the duplicated Project is independent (PRJ-FR-25, PRJ-FR-30). Blocks readiness.
+- G7: Unresolved implementation qualification: a live-product replay must verify that a Closed or Archived Project offers Duplicate… without Reopen and that the duplicated Project is independent (PRJ-FR-25, PRJ-FR-30). Blocks readiness.
 
 ## Delta log
 - **Δ2** 2026-10-12 · S1, S4, S5, S8, S9 · behavior-change

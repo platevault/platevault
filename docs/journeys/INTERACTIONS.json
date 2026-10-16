@@ -208,7 +208,7 @@
       "spec": "068-calibration-inputs CAL-FR-05, CAL-FR-19, CAL-FR-20, CAL-FR-21; 064-library-inventory LIB-FR-23, LIB-FR-25; D-W101, D-W102, D-W103, D-W105, D-W106",
       "action": "Review a suggested flat for a light session, confirm or reassign it, and inspect that session's pinned assignment after calibration arrives later.",
       "expect": "The session shows the chosen flat and its evidence. Calibration imported later fills only sessions still waiting, never replaces a pin, and a user's reassignment is retained.",
-      "negative": "A suggestion remains unpinned until confirmed. Reassignment does not rewrite calibration evidence or silently change another session or a Closed Project."
+      "negative": "A suggestion remains unpinned until confirmed. Reassignment does not rewrite calibration evidence or silently change another session or a Closed or Archived Project."
     },
     {
       "flowStep": "E3",
@@ -334,7 +334,7 @@
       "spec": "070-results-reuse RES-FR-06, RES-FR-07, RES-AC-06, RES-AC-07; 065-project-goals PRJ-FR-14, PRJ-FR-25; D-W93, D-W97, D-W98, D-W100",
       "action": "Close an open Project with an empty Output/ after resolving any pending changes, and try to close it while Apply is running.",
       "expect": "Closing needs neither a Result nor evidence that an external job stopped. Output/ is kept, and Wrap up is refused while Apply is running on that Project.",
-      "negative": "Close does not remove Output/ or claim external processing success. A Closed Project cannot be edited or reopened."
+      "negative": "Close does not remove Output/ or claim external processing success. A Closed or Archived Project cannot be edited or reopened."
     },
     {
       "flowStep": "I2",
@@ -378,7 +378,7 @@
       "journeyStep": "J28/S1, J28/S1a, J28/S2, J28/S3, J28/S4, J28/S5, J28/S6, J28/S7, J28/S7a, J28/S8, J28/S9, J28/S9a, J28/S9b, J28/S9c, J28/S10, J28/S11, J28/S11a, J28/S12, J28/S13, J34/S5, J34/S11",
       "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-11, STO-FR-13, STO-AC-05, STO-AC-07, STO-AC-10, STO-AC-14, STO-AC-17, STO-AC-27, STO-AC-29; 065-project-goals PRJ-FR-14, PRJ-FR-25; 066-view-selection VSEL-FR-09; 064-library-inventory LIB-FR-17; D06, D19, D-W97, D-W100, D-W111, D-W120",
       "action": "From the Project's Wrap up Archive step, plan a verified archive transfer, meet an impostor destination, approve, interrupt and retry, change a source before retirement, repair a blocked reference, resolve the drift, and unplug the archive later. From Sessions, try to select a session an open Project holds and archive a session in no Project.",
-      "expect": "The review lays out destinations by naming templates and keeps a session held by another open Project; a Closed or Archived Project keeps none. Per-item journaled phases show, and a source is retired only after destination and references verify while it still matches its snapshot. The Project becomes Archived only when the Archive transfer succeeds; archived inputs read Offline if disconnected. Archive also repoints the symlinks of a Closed Project's kept View to the moved originals and records it, leaving that Project unchanged. Sessions › Archive… follows the same rule: a session an open Project holds can't be selected, and a session in no Project goes through the same reviewed transfer.",
+      "expect": "The review lays out destinations by naming templates and keeps a session held by another open Project; a Closed or Archived Project keeps none. Per-item journaled phases show, and a source is retired only after destination and references verify while it still matches its snapshot. The Project becomes Archived only when the Archive transfer succeeds; archived inputs read Offline if disconnected. Archive also repoints the symlinks of a Closed or Archived Project's kept View to the moved originals and records it, leaving that Project unchanged. Sessions › Archive… follows the same rule: a session an open Project holds can't be selected, and a session in no Project goes through the same reviewed transfer.",
       "negative": "No source is retired on failure, uncertainty or drift, and drift retains both versions. Retry does not infer from filename presence, and offline inputs are refused rather than omitted. No Reopen or archived-session restore action exists."
     },
     {
@@ -460,7 +460,7 @@
       "spec": "064-library-inventory LIB-FR-23, LIB-FR-24, LIB-FR-25, LIB-FR-26; 068-calibration-inputs CAL-FR-19, CAL-FR-20, CAL-FR-21, CAL-FR-22; D-W101, D-W102, D-W103, D-W104, D-W105, D-W106",
       "action": "Read calibration match states in Import review, leave a session unsettled, later import its missing calibration, and reassign one pinned kind from the session detail.",
       "expect": "Import shows pinned automatically, suggested or not found for every kind; unsettled sessions wait in Needs calibration and cannot be added to a Project. Later calibration fills only waiting sessions, and reassignment creates labelled pending changes on open Projects.",
-      "negative": "Import never waits for calibration, new calibration never replaces a pin, and Closed Projects never receive changes."
+      "negative": "Import never waits for calibration, new calibration never replaces a pin, and Closed or Archived Projects never receive changes."
     },
     {
       "flowStep": "Sessions filters: Needs a Target, Needs review, Needs calibration, Not in any Project, Trashed",
@@ -469,7 +469,7 @@
       "spec": "064-library-inventory LIB-FR-17, LIB-FR-18, LIB-FR-20, LIB-FR-23, LIB-AC-33; 065-project-goals PRJ-FR-16, PRJ-FR-19, PRJ-AC-09; 071-storage-custody STO-FR-14; D-W78, D-W97, D-W105, D-W113",
       "action": "Choose Needs a Target, Needs review, Needs calibration and Not in any Project before and after confirming associations; later choose Trashed to inspect the frame records moved to OS Trash.",
       "expect": "Each filter lists exactly the sessions or frames its rule names. Needs review is the session intake queue. Needs calibration lists every session whose calibration is unsettled, Ready or not, and every session whose pinned calibration file changed or went missing. Not in any Project offers Create Project or Add to Project. Trashed lists frames with last-observed metadata and the operation that trashed them.",
-      "negative": "No filter assigns a session to a Project, and no run or Project Trash filter exists. A Trashed frame appears nowhere else except a Closed Project that held it when trashed."
+      "negative": "No filter assigns a session to a Project, and no run or Project Trash filter exists. A Trashed frame appears nowhere else except a Closed or Archived Project that held it when trashed."
     },
     {
       "flowStep": "Cross-flow: Network volume unmounted",
@@ -512,16 +512,16 @@
       "owner": "065-project-goals",
       "journeyStep": "J20/S3, J20/S4, J34/S12a",
       "spec": "065-project-goals PRJ-FR-30, PRJ-FR-25, PRJ-AC-43; 066-view-selection VSEL-FR-16; D-W93, D-W96, D-W97, D-W100, D-W112",
-      "action": "Choose Duplicate… on an open Project and on a Closed Project, select what to copy, and inspect the new Project before its first Apply.",
+      "action": "Choose Duplicate… on an open Project and on a Closed or Archived Project, select what to copy, and inspect the new Project before its first Apply.",
       "expect": "The duplicate copies the selected sessions, groups and overrides, goals, notes and settings, but no files. It is open and builds its own View through its first Apply. Its sessions use their current calibration pins, not the original's Close snapshot.",
-      "negative": "The duplicate has no Duplicated from note or link to the original, and duplicating a Closed Project does not reopen or edit it."
+      "negative": "The duplicate has no Duplicated from note or link to the original, and duplicating a Closed or Archived Project does not reopen or edit it."
     },
     {
       "flowStep": "Project Wrap up: Clean up → Trash → Archive, then Close project (D-W80, D-W97)",
       "owner": "065-project-goals",
       "journeyStep": "J34/S1, J34/S2, J34/S3, J34/S3a, J34/S3b, J34/S4, J34/S5, J34/S6, J34/S7, J34/S8, J34/S9, J34/S9a, J34/S10, J34/S11, J34/S11a, J34/S12, J34/S12a, J28/S1",
       "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-32, PRJ-FR-25, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16; 070-results-reuse RES-FR-06; D19, D-W80, D-W97, D-W98",
-      "action": "Open Wrap up after all Project changes are applied or discarded. Proceed through Clean up, Trash and Archive in order, then Close project…; inspect refused custody items and the Closed Project menu.",
+      "action": "Open Wrap up after all Project changes are applied or discarded. Proceed through Clean up, Trash and Archive in order, then Close project…; inspect refused custody items and the Closed or Archived Project menu.",
       "expect": "Wrap up is a strict Clean up → Trash → Archive flow, and Archive's Proceed is Close project…. Clean up offers the View and View (previous)/ entries; Trash offers rejected frames, Processing/ files and duplicate copies; Archive transfers selected sessions. Close keeps Output/ and locks the Project; a Closed or Archived Project offers Duplicate, not Reopen.",
       "negative": "No file moves before approval, nothing is permanently deleted, and no file in `Output/`, adopted master or kept duplicate copy is trashed. Close requires no Result and does not infer external success."
     },
@@ -613,7 +613,7 @@
       "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-FR-10, PIX-FR-18; 064-library-inventory LIB-FR-17, LIB-FR-20; D-W78, D-W79, D-W97",
       "action": "Open Review for a session in Needs review, finish review with no Unreviewed frames, and reopen Review on a Ready session.",
       "expect": "Review shows only the session's frames, and Finish review advances to the next session in Needs review. The session becomes Ready when every frame is Usable or Unusable; a later review mark reaches each open Project holding it as a labelled pending change.",
-      "negative": "No Project Review step or cross-panel Review all exists. Review never changes a Closed Project, and calibration or group state does not bypass Finish review."
+      "negative": "No Project Review step or cross-panel Review all exists. Review never changes a Closed or Archived Project, and calibration or group state does not bypass Finish review."
     },
     {
       "flowStep": "Cross-flow: Calibration mismatch",

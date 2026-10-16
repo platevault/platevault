@@ -19,7 +19,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Close project…**, Archive's Proceed, transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another open Project holds it.
 - Sources retire only after the destination and affected references verify, and the View's symlinks follow the archived sessions.
 - `Output/` is kept, and the Project reads Archived after the transfer succeeds.
-- The Closed Project is locked for good: no Reopen, no restore of archived sessions, and no library or calibration change reaches it. **Duplicate…** is the way to continue it.
+- The Archived Project is locked for good: no Reopen, no restore of archived sessions, and no library or calibration change reaches it. **Duplicate…** is the way to continue it.
 
 ## Preconditions
 
@@ -185,16 +185,16 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - **Expect (negative):** Close moves no file in `Output/` and does not change the Project's sessions or goals. No Reopen is offered.
 - **Trace:** HARNESS-V5-IA.md S1, S2, S3, S9 · P-WRAP1 · PRJ-FR-14, PRJ-FR-25 · PRJ-AC-21, PRJ-AC-22, PRJ-AC-34 · RES-FR-06 · D-W80, D-W97
 
-### S12 — Confirm the Closed Project is locked {#S12}
+### S12 - Confirm the Archived Project is locked {#S12}
 
 - **Do:** On the Archived Project page, inspect its menu, Edit… control, Wrap up, goals, sessions and View. In Sessions, change the library quality of one 24 Sep frame, and on the 24 Sep session's calibration choose No darks. Return to the Project.
 - **Expect:**
   - Edit… is disabled with "Project closed · Duplicate ▸", and the menu offers no Reopen or restore action.
   - The Project still reads Archived, and its Wrap up record is read-only. Its View and `Output/` remain available for inspection, and **Open in {app}** still opens the kept View.
-  - Its sessions and goals show the figures frozen at Close, and the calibration it shows for 24 Sep is the one recorded at Close.
+  - Its sessions and goals show the figures frozen at Close, and its calibration for 24 Sep is the one recorded at Close.
   - Its sessions list the six frames still Trashed, marked "Trashed".
   - The Project page lists 18, 24, 26 and 30 Sep as Archived at their `Archive/NGC7000` paths, with no Restore action.
-- **Expect (negative):** The quality change and the No darks choice add no pending change to the Archived Project and change none of its figures. No Reopen or restore action is available.
+  - **Expect (negative):** The quality change and the No darks choice add no pending change to the Archived Project and change none of its figures. No Reopen or restore action is available.
 - **Trace:** HARNESS-V5-IA.md S3, S9 · PRJ-FR-16, PRJ-FR-25 · PRJ-AC-27, PRJ-AC-34 · LIB-AC-30 · CAL-FR-05 · VSEL-FR-12 · STO-FR-13 · D-W69, D-W97, D-W106
 
 ### S12a — Duplicate the Archived Project to continue {#S12a}

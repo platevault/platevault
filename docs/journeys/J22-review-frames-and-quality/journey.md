@@ -24,8 +24,7 @@ Unusable frames. Every Usable frame reads Picked and every rejected frame reads
 session to Project `NGC 7000 HOO` only once it is Ready with settled
 calibration. A later mark on a frame of a session that the open Project holds
 is a pending change labelled with its source, the View stays unchanged until
-Apply, and a Closed Project doesn't change. A frame whose bytes change in place
-stops counting as Usable until its reviewed bytes return. PlateVault writes,
+Apply, and a Closed or Archived Project doesn't change. A frame whose bytes change in place stops counting as Usable until its reviewed bytes return. PlateVault writes,
 moves or trashes no source file.
 
 ## Preconditions
@@ -203,7 +202,7 @@ moves or trashes no source file.
 ### S15b — Restore the reviewed bytes {#S15b}
 
 - **Do:** Restore the P5 frame's original bytes and recorded mtime, index `Astro-T7 captures` again, and reopen the Ready session's Review step.
-- **Expect:** The rehash matches the reviewed digest. The frame reads Picked, NGC 7000 usable Ha integration reads 9h 15m, its earlier cached values read valid again, and its imported values read content unverified again. No Closed Project changes.
+- **Expect:** The rehash matches the reviewed digest. The frame reads Picked, NGC 7000 usable Ha integration reads 9h 15m, its earlier cached values read valid again, and its imported values read content unverified again. No Closed or Archived Project changes.
 - **Expect (negative):** The restoration records no new quality decision. Source bytes equal P4 again.
 - **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14 · J19/G4
 
@@ -237,7 +236,7 @@ moves or trashes no source file.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S8, S9, S10, S13 and S16 now assert X as the way a frame leaves the run: it reads "Rejected · Library" (library Unusable), leaves the draft at once, stays on disk, and U or P brings it back, while "Reject for this Project only" stays in the frame menu (S11b, S13).
 - G7: (dissolved 2026-10-12): answered by Round 6 "Large bulk marks need confirmation"; S10 now asserts ⌥4, ⌘A and P on the 42 Unreviewed frames asking for confirmation, with no frame marked before it is accepted.
 - G8: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, and single-frame and hand-picked marks never ask. S7a asserts the threshold confirmation, S9a a hand-picked two-frame mark with none, and S10 the ⌘A confirmation.
-- G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12).
+- G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed or Archived Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12).
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W96's "captured" count of every matching suggestion (S12). If the owner changes it, S12's captured value changes.
 
 ## Delta log

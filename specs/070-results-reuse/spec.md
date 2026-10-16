@@ -31,7 +31,7 @@ A Project's Results are the files in its `Output/` folder. The user saves finish
 - **RES-AC-05**: Withdrawn (D-W93). There are no product inputs, so no profile needs product-input support.
 - **RES-AC-06**: Given an empty `Output/`, when the user closes the Project, then it closes; no Result is required and no file is removed from `Output/`. (D-W97, D-W98)
 - **RES-AC-07**: Given Apply running on the Project, when the user opens Wrap up, then it is refused and names the running Apply. This rule is provisional, like the Wrap up gate. Otherwise closing needs neither a Result nor evidence that an external job stopped. (D-W97, D-W100)
-- **RES-AC-08**: Withdrawn (D-W94, D-W97). There is no Finished run to reopen, and a Closed Project has no Reopen (provisional).
+- **RES-AC-08**: Withdrawn (D-W94, D-W97). There is no Finished run to reopen, and Closed or Archived Projects have no Reopen (provisional).
 - **RES-AC-09**: Withdrawn (D-W93, D-W98). No Result is accepted or reused, so no acceptance digest exists.
 - **RES-AC-10**: Withdrawn (D-W98). A Result needs no acceptance.
 - **RES-AC-11**: Given a mosaic Project with the panel groups Panel 1 to Panel 4. The user saves each panel's stack in its folder, `Output/Panels/Panel-1/` to `Output/Panels/Panel-4/`, and the assembled image in `Output/`. Then the Output step lists each panel's result under its panel and the assembled image as the mosaic. PlateVault infers no panel from a header or file name. (D-W95, D-W98)
@@ -69,7 +69,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **RES-FR-04**: Withdrawn (D-W98). No Result needs accepting; every file in `Output/` is a Result.
 - **RES-FR-05**: Withdrawn (D-W93). Results are never inputs to a Project, so there is no Results picker, no product input and no composition rule.
 - **RES-FR-06**: Close project… keeps `Output/`. PlateVault never moves or deletes a file in it, and neither Clean up nor Trash lists it (PRJ-FR-14, STO-FR-01). Closing needs no Result and never infers that an external job stopped or succeeded. (D-W26, D-W97, D-W98)
-- **RES-FR-07**: Provisional: one PlateVault operation runs per Project at a time (PREP-FR-19). Copy to Output and the master offer change no Project input, and a Closed Project's Output step is read-only. External launch or exit is never a completion or success signal. (D-W97, D-W100)
+- **RES-FR-07**: Provisional: one PlateVault operation runs per Project at a time (PREP-FR-19). Copy to Output and the master offer change no Project input, and a Closed or Archived Project's Output step is read-only. External launch or exit is never a completion or success signal. (D-W97, D-W100)
 - **RES-FR-08**: In a mosaic, `Output/Panels/` holds a folder for each panel group for that panel's result, and the finished mosaic goes in `Output/` itself. Provisional: the folder takes the group's name under the folder-name rule of PRJ-FR-27, with no `PANEL_` token, so the group "Panel 1" gets `Output/Panels/Panel-1/`. A file belongs to the panel whose folder it was saved in; PlateVault infers no panel from a header or file name. The user assembles the mosaic in their tool; PlateVault assembles nothing, and a mosaic with no assembled image is not incomplete. (D-W95, D-W98, D-W114)
 - **RES-FR-09**: Withdrawn (D-W72).
 - **RES-FR-10**: Withdrawn (D-W94). There are no runs, so there is no Move run to Trash, Restore or Empty Trash.

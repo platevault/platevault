@@ -83,7 +83,7 @@ The user checks the pinned calibration for the sessions in Project `NGC 7000 HOO
 
 - **Do:** Return to Project `NGC 7000 HOO` and inspect Calibrate and the pending changes after the session reassignment.
 - **Expect:** The Project labels the calibration reassignment as a pending change from the session. Calibrate still has no assignment control. The existing View stays unchanged until Apply.
-- **Expect (negative):** A session reassignment does not silently rewrite the View or change a Closed Project.
+- **Expect (negative):** A session reassignment does not silently rewrite the View or change a Closed or Archived Project.
 - **Trace:** CAL-FR-09 · LIB-FR-25 · VSEL-FR-12 · D-W100, D-W106
 
 ### S7a — Inspect dated master versions and age {#S7a}

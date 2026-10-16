@@ -52,7 +52,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 
 - **Do:** Use **Reassign…** on one held session to choose another compatible flat set.
 - **Expect:** The session shows the new pinned assignment. The open Project lists a pending calibration change labelled as a session reassignment.
-- **Expect (negative):** Reassignment does not change the current View before Apply or change a Closed Project.
+- **Expect (negative):** Reassignment does not change the current View before Apply or change a Closed or Archived Project.
 - **Trace:** LIB-FR-25 · CAL-FR-05, CAL-FR-09 · VSEL-FR-12 · D-W101, D-W106
 
 ### S3 — Split a group and move the new session {#S3}

@@ -15,16 +15,16 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 06
 The user opens PlateVault and decides what to do next from Home. Home shows pending ingestions, pending work, open Projects and their next actions, status, tonight and the calendar. Done means:
 
 - Home has no header buttons or summary line. Its sections are Pending ingestions, Pending work, Open work, Status, Tonight and Calendar in the order defined by PRJ-FR-17, with no issues list.
-- Each open Project's Next action follows PRJ-FR-18: review matching sessions that need review; open a Project step waiting on the user, including a suggested session that needs calibration or a failed Apply; plan tonight for an unmet goal with an observing window; otherwise apply changes, open the tool or add sessions. A Closed Project is not in Open work.
+- Each open Project's Next action follows PRJ-FR-18: review matching sessions that need review; open a Project step waiting on the user, including a suggested session that needs calibration or a failed Apply; plan tonight for an unmet goal with an observing window; otherwise apply changes, open the tool or add sessions. A Closed or Archived Project is not in Open work.
 - A Project row opens its Project page.
 - Finishing review of a session can move a Project's Next to its matching suggestion waiting in Needs calibration; Home shows both the queue item and the suggestion.
-- A Closed Project never appears in Open work, and Home offers no Show done control.
+- A Closed or Archived Project never appears in Open work, and Home offers no Show done control.
 - Reading Home and following its actions changes no file or quality state and does not Apply pending Project changes.
 
 ## Preconditions
 
 - P1: A development catalog seeded to the state in P2 to P4 at 2026-10-06 18:00 local time (G2). It reuses the NGC 7000 worked example and the `Veil Mosaic HOO` Project of J33. The rigs are `RedCat` (RedCat 51 + ASI2600MM) and `Esprit` (Esprit 100 + ASI533MC), as J15 creates them. Backyard is the default site. The Targets page, on tonight at Backyard, shows a window for NGC 7000, the Veil Mosaic centre, M 31, IC 1396 and M 33. The seed has finished setup, Activity records a completed import that brought frames into the catalog, the Projects exist, and the `IC 1396 Ha` Project has a View opened in Siril. No processing run is part of the fixture.
-- P2: Four open Projects and one Closed Project:
+- P2: Four open Projects and one Closed or Archived Project:
 
   | Project | Subject | Rig | Goals | Progress | Open work / Next |
   | --- | --- | --- | --- | --- | --- |
@@ -127,10 +127,10 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Expect (negative):** Home has no separate Goals section. IC 1396's goal is met in project, and `M 33` has no goals. No need is computed from "captured".
 - **Trace:** Home dashboard · HARNESS-V5-IA.md S1 Goals · PRJ-FR-04, PRJ-FR-17 · D-W36, D-W39
 
-### S9 — Confirm Closed Projects are not in Open work {#S9}
+### S9 - Confirm finished Projects are not in Open work {#S9}
 
-- **Do:** Read Home's Open work and compare it with the Closed `Pleiades 2025` Project.
-- **Expect:** Open work lists the five open Projects and does not list `Pleiades 2025`, which is Closed.
+- **Do:** Read Home's Open work and compare it with the Closed or Archived `Pleiades 2025` Project.
+- **Expect:** Open work lists the five open Projects and does not list `Pleiades 2025`, which is Closed or Archived.
 - **Expect (negative):** Home offers no Show done control, and reading Open work changes no Project state.
 - **Trace:** PRJ-FR-17, PRJ-FR-32 · PRJ-AC-22 · D-W89, D-W97
 
@@ -177,7 +177,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
   Home shows a Getting started checklist until setup, a first import, a first Project and a first run are done; in this fixture all four are done, so S1 asserts its absence. S4's ⌘A bulk mark may now ask for confirmation, and G6 records that the size that triggers it is undecided.
   Evidence: HARNESS-V5-FEEDBACK-R1.md §Round 6 (user, 2026-10-10) "Onboarding: walk plus checklist", "Large bulk marks need confirmation" (apps/prototype/design/ on ui-harness-v5 @ 4f470775); user answers to the PR #1788 journey questions · by: JourneysV5.R6C (intent-gated)
 - **Δ4** 2026-10-15 · S1, S2, S2a, S3, S4, S5, S6, S7, S8, S9, S10 · behavior-change
-  Home now follows the F4 contract: its sections show pending sessions and suggestions, open Projects and their Next actions, status and planning. Projects replace runs; review, calibration, Apply, View and Output govern the Project flow. Home has no header buttons or Show done, so S5 opens Wrap up from the Project page and S9 lists no Closed Project; P2's `IC 1396 Ha` Next is **Choose its flats first**, and S2 to S4 are retitled for Open work and session intake.
+  Home now follows the F4 contract: its sections show pending sessions and suggestions, open Projects and their Next actions, status and planning. Projects replace runs; review, calibration, Apply, View and Output govern the Project flow. Home has no header buttons or Show done, so S5 opens Wrap up from the Project page and S9 lists no Closed or Archived Project; P2's `IC 1396 Ha` Next is **Choose its flats first**, and S2 to S4 are retitled for Open work and session intake.
   Evidence: D-W89, D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-20/LIB-FR-23, 065 PRJ-FR-17 to PRJ-FR-19, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)
 - **Δ5** 2026-10-16 · S4 · behavior-change
   S4 marks the 48 frames with ⌘A and P, and the mark asks `Mark 48 frames Usable?` before any frame changes. G6 is dissolved.
