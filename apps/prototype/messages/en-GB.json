@@ -855,7 +855,6 @@
   "session_open_calibration": "Open Calibration",
   "session_step_failed": "{step} failed",
   "session_in_os_trash": "In the OS Trash",
-  "session_target_evidence": "Target evidence for {name}",
   "session_rig_evidence": "Rig evidence for {name}",
   "session_needs_target_first": "Needs a Target first",
   "session_none": "None",
@@ -4419,6 +4418,57 @@
     }
   ],
   "sessions_already_archived": "already in the archive",
+  "sessions_cant_join_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session can't join yet",
+        "countPlural=*": "{count} sessions can't join yet"
+      }
+    }
+  ],
+  "sessions_join_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session joins the Project",
+        "countPlural=*": "{count} sessions join the Project"
+      }
+    }
+  ],
+  "sessions_added_to_project": [
+    {
+      "declarations": [
+        "input count",
+        "input project",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Added {count} session to {project}",
+        "countPlural=*": "Added {count} sessions to {project}"
+      }
+    }
+  ],
+  "sessions_none_need_target": "No selected session needs a Target",
+  "sessions_none_need_rig": "No selected session needs a rig",
+  "sessions_review_duplicates": "Review duplicates",
+  "session_source_used": "Used",
+  "session_target_sources": "Target sources for {name}",
   "sessions_unusable_count": [
     {
       "declarations": [
@@ -4703,7 +4753,7 @@
   "catalogue_status_count_desc": "A small number, capped at 99+, with an optional screen-reader label.",
   "catalogue_status_count_caption": "tones · cap · label",
   "catalogue_previews_blockers_desc": "Why an action is unavailable. Wrapping a focusable-disabled control, the card restates the control's description; without a control it renders the 'reason ▸' trigger of a Refusal (press moves focus into the card).",
-  "catalogue_previews_disabled_control": "disabled control (hover, focus)",
+  "catalogue_previews_disabled_control": "disabled control, blocker table (hover, focus)",
   "catalogue_previews_own_trigger": "own trigger + actions",
   "catalogue_previews_empty_reason": "empty (plain reason, no card)",
   "catalogue_previews_used_by_desc": "'Used by N ▸' is a link to the full list; hover or focus previews the users.",
@@ -5924,9 +5974,6 @@
   "session_details": "Details",
   "session_intake_steps": "Intake steps",
   "session_chosen_target": "Chosen Target",
-  "session_pointing_offset": "Pointing offset",
-  "session_from_centre": "{angle} from centre",
-  "session_filing": "Imported as",
   "session_evidence": "Evidence",
   "session_open_equipment": "Open Equipment",
   "session_unknown_filter": "{value} not in the rig's filters",

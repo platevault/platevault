@@ -909,7 +909,6 @@
   "session_open_calibration": "Abrir Calibração",
   "session_step_failed": "{step} falhou",
   "session_in_os_trash": "Na Lixeira do sistema",
-  "session_target_evidence": "Evidências de Alvo de {name}",
   "session_rig_evidence": "Evidências de setup de {name}",
   "session_needs_target_first": "Precisa de um Alvo antes",
   "session_none": "Nenhum",
@@ -4761,6 +4760,63 @@
     }
   ],
   "sessions_already_archived": "já está no arquivo",
+  "sessions_cant_join_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} sessões ainda não podem entrar",
+        "count=*, countPlural=one": "{count} sessão ainda não pode entrar",
+        "count=*, countPlural=*": "{count} sessões ainda não podem entrar"
+      }
+    }
+  ],
+  "sessions_join_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} sessões entram no Projeto",
+        "count=*, countPlural=one": "{count} sessão entra no Projeto",
+        "count=*, countPlural=*": "{count} sessões entram no Projeto"
+      }
+    }
+  ],
+  "sessions_added_to_project": [
+    {
+      "declarations": [
+        "input count",
+        "input project",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "count",
+        "countPlural"
+      ],
+      "match": {
+        "count=0, countPlural=*": "{count} sessões adicionadas a {project}",
+        "count=*, countPlural=one": "{count} sessão adicionada a {project}",
+        "count=*, countPlural=*": "{count} sessões adicionadas a {project}"
+      }
+    }
+  ],
+  "sessions_none_need_target": "Nenhuma sessão selecionada precisa de Alvo",
+  "sessions_none_need_rig": "Nenhuma sessão selecionada precisa de setup",
+  "sessions_review_duplicates": "Revisar duplicatas",
+  "session_source_used": "Em uso",
+  "session_target_sources": "Origens do Alvo de {name}",
   "sessions_unusable_count": [
     {
       "declarations": [
@@ -5061,7 +5117,7 @@
   "catalogue_status_count_desc": "Um número pequeno, limitado a 99+, com rótulo opcional para leitor de tela.",
   "catalogue_status_count_caption": "tons · limite · rótulo",
   "catalogue_previews_blockers_desc": "Por que uma ação está indisponível. Em volta de um controle desativado focável, o cartão repete a descrição do controle; sem controle, renderiza o gatilho 'motivo ▸' de uma Refusal (pressionar move o foco para o cartão).",
-  "catalogue_previews_disabled_control": "controle desativado (cursor, foco)",
+  "catalogue_previews_disabled_control": "controle desativado, tabela de bloqueios (cursor, foco)",
   "catalogue_previews_own_trigger": "gatilho próprio + ações",
   "catalogue_previews_empty_reason": "vazio (motivo simples, sem cartão)",
   "catalogue_previews_used_by_desc": "'Usado por N ▸' é um link para a lista completa; cursor ou foco mostra uma prévia dos usuários.",
@@ -6352,9 +6408,6 @@
   "session_details": "Detalhes",
   "session_intake_steps": "Etapas de entrada",
   "session_chosen_target": "Alvo escolhido",
-  "session_pointing_offset": "Desvio do apontamento",
-  "session_from_centre": "{angle} do centro",
-  "session_filing": "Importada como",
   "session_evidence": "Evidências",
   "session_open_equipment": "Abrir Equipamentos",
   "session_unknown_filter": "{value} fora dos filtros do setup",

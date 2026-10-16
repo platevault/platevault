@@ -1,9 +1,10 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { sessionReadiness, sessionRigId, sessionUnreviewedFrames } from "@/domain/derive"
 import { targetAtPointing } from "@/domain/indexing"
+import { sessionLongLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
 import type { Session } from "@/domain/types"
 import { m } from "@/lib/i18n"
@@ -69,11 +70,18 @@ describe("Session intake gates (U11 sessionIntake)", () => {
     renderIntake(session!.id, "target")
     // Its rig is confirmed and its frames wait for review, so Target is an earlier step: its change is the step's own Confirm Target (F8).
     const confirm = await screen.findByRole("button", { name: m.session_confirm_target() })
-    const value = (label: string) => screen.getAllByRole("term").find((dt) => dt.textContent === label)?.nextElementSibling?.textContent
-    expect(value(m.evidence_source_pointing())).toBe(suggested.name)
-    expect(value(m.session_chosen_target())).toBe(suggested.name)
+    // The Target box lists its sources and marks the winner, here the pointing; no agreement column (SD4).
+    const sources = screen.getByRole("table", { name: m.session_target_sources({ name: sessionLongLabel(m, session!) }) })
+    const row = (source: string) => within(sources).getByRole("rowheader", { name: source }).closest("tr")!
+    expect(row(m.evidence_source_pointing())).toHaveTextContent(suggested.name)
+    expect(within(row(m.evidence_source_pointing())).getByText(m.session_source_used())).toBeInTheDocument()
+    expect(within(sources).queryByRole("columnheader", { name: new RegExp(m.evidence_column_result()) })).toBeNull()
+    expect(within(sources).queryByText(m.evidence_agrees())).toBeNull()
     await user.click(confirm)
     await waitFor(() => expect(store.getState().catalog.sessions[session!.id]!.target).toMatchObject({ status: "confirmed", value: suggested.id }))
+    // Confirmed, the user's choice wins.
+    await waitFor(() => expect(within(row(m.evidence_source_user())).getByText(m.session_source_used())).toBeInTheDocument())
+    expect(within(row(m.evidence_source_pointing())).queryByText(m.session_source_used())).toBeNull()
   })
 
   it("Finish review stays unavailable while a frame is Unreviewed, and writes nothing", async () => {

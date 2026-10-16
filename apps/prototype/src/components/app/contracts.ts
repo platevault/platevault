@@ -24,8 +24,8 @@ export interface Action {
   /** Default "standard". The kind decides the variant, never the flow position. */
   kind?: ActionKind
   run: () => CommitResult | void | Promise<CommitResult | void>
-  /** Unavailable now: the trigger stays focusable but disabled and previews its blockers (BlockersPreview). */
-  unavailable?: { action: string; reason: string; blockers: Blocker[] }
+  /** Unavailable now: the trigger stays focusable but disabled and previews its blockers (BlockersPreview); with `columns`, as a table. */
+  unavailable?: { action: string; reason: string; blockers: Blocker[]; columns?: BlockerColumns }
   /** Opens a ConfirmDialog before `run`. */
   confirm?: ConfirmSpec
   shortcut?: string
@@ -72,6 +72,14 @@ export type MenuItem = Action | { separator: true } | { heading: string } | { su
 export interface Blocker {
   label: string
   link?: StepLink
+  /** The place that holds it ("Cygnus HOO 2026"): the text `link` shows in a blocker table's second column. */
+  where?: string
+}
+
+/** The headers of a blocker table, item · where ▸ ("Session · Project", P7): BlockersPreview then lists the blockers as one. */
+export interface BlockerColumns {
+  item: string
+  where: string
 }
 
 /** The ConfirmDialog an action opens before it runs (P8). */

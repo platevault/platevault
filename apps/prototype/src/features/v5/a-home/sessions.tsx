@@ -9,29 +9,35 @@
  *   (D-W25, D-W43). Trashed sessions show only under Trashed.
  * - Each row reads its darks, flats and bias (what still needs a choice, or
  *   Pinned) and carries the duplicates badge when its frames have extra
- *   copies (F5).
+ *   copies (F5). Label, Rig and Projects start hidden under Columns ▾
+ *   (kept per table, `sessions`), so the table fits a 1280 px window.
  * - A row opens the session; its ⋯ and context menu offer Review frames
  *   (the intake at its first open step; review stays open once Ready),
- *   Choose Target and Add to Project (D-W59), which is unavailable with its
- *   reason until the session is Ready and settled (PRJ-FR-08). A session
+ *   Choose Target and Choose rig while it lacks one, then Add to Project ▸
+ *   (D-W59), which is unavailable with its reason until the session is
+ *   Ready and settled (PRJ-FR-08), and New Project…, as on Targets. A session
  *   with an issue (drift, a changed pinned file) offers Dismiss issue there,
  *   and Restore issue once dismissed; the Issues facet (With issues ·
  *   Dismissed, `?issues=`) is Show dismissed. The Library counts that open
  *   this page ("2 need a Target") are dismissed and restored from the
  *   Sessions ▾ menu (F7, P-ISS1).
- * - Selected sessions offer Confirm calibration (their suggestions become
- *   pins) and No darks, No flats or No bias (for the kinds still waiting or
- *   suggested), each asking first, and Archive… (the reviewed transfer Wrap
- *   up uses, STO-FR-13): refused for a session an open Project holds; a
- *   Closed Project's kept View is repointed. The Unusable facet offers Move
- *   to Trash… for its Unusable frames (library clean-up through the OS Trash
- *   engine).
+ * - The selection replaces the toolbar row at its height, so nothing moves,
+ *   and offers every session action: Review frames, Archive… (the reviewed
+ *   transfer Wrap up uses, STO-FR-13), Confirm calibration (suggestions
+ *   become pins), Choose Target, Choose rig, No darks, No flats or No bias
+ *   (for the kinds still waiting or suggested) and Add to Project ▸. A
+ *   queue's own actions lead under its filter. Archive… is refused for a
+ *   session an open Project holds, previewing those as a Session · Project
+ *   table; a Closed Project's kept View is repointed. The Unusable facet
+ *   offers Move to Trash… for its Unusable frames (library clean-up through
+ *   the OS Trash engine); the Duplicates facet offers Review duplicates…
+ *   (`?duplicates=review`, P-STO2), the dialog the route injects.
  * - After an Import, `?import=<operation>` lists the sessions it filled
  *   first and marks them New.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Archive, Check, CircleSlash, Download, Eye, Layers, ListChecks, Target, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { Archive, Check, CircleSlash, Copy, Download, Eye, Layers, ListChecks, Target, Telescope, Trash2 } from "lucide-react"
+import { type ComponentType, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { ActionButton } from "@/components/app/actions"
@@ -44,9 +50,9 @@ import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { ListPage } from "@/components/templates/list-page"
 import { type ArchivePlan, sessionsArchivePlan, unusableFramesOffer } from "@/domain/archive"
 import { NO_KIND_NAME, PIN_KINDS } from "@/domain/calibration"
-import { formatHours, sessionIntakeEntry, sessionIntakeLink } from "@/domain/derive"
+import { formatHours, sessionIntakeEntry, sessionIntakeLink, type StepLink } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
-import type { PinKind } from "@/domain/types"
+import type { Catalog, PinKind } from "@/domain/types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { type Messages, msg, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
@@ -119,7 +125,37 @@ function noCalibrationAction(m: Messages, selected: SessionRow[], kind: PinKind,
   }
 }
 
-/** Why Archive… is unavailable for the selection (round 6); null when it can run. */
+type Follow = (link: StepLink) => void
+
+/** Review frames: the first of the sessions still in the review queue, else the first one; Finish review then follows the queue (C14). */
+function reviewAction(m: Messages, catalog: Catalog, rows: SessionRow[], follow: Follow): Action {
+  const first = rows.find((r) => r.queued) ?? rows[0]
+  return {
+    id: "review",
+    label: m.session_review_frames(),
+    icon: ListChecks,
+    run: () => {
+      if (first) follow(sessionIntakeEntry(catalog, first.session))
+    },
+  }
+}
+
+/** Choose Target or Choose rig: that intake step of the first session still without one; unavailable when none of them lacks it. */
+function intakeStepAction(m: Messages, rows: SessionRow[], step: "target" | "rig", follow: Follow): Action {
+  const label = step === "target" ? m.session_choose_target() : m.session_choose_rig()
+  const first = rows.find((r) => (step === "target" ? r.needsTarget : r.rig === null))
+  return {
+    id: `choose-${step}`,
+    label,
+    icon: step === "target" ? Target : Telescope,
+    unavailable: first ? undefined : { action: label, reason: step === "target" ? m.sessions_none_need_target() : m.sessions_none_need_rig(), blockers: [] },
+    run: () => {
+      if (first) follow(sessionIntakeLink(first.session.id, step))
+    },
+  }
+}
+
+/** Why Archive… is unavailable for the selection (round 6); null when it can run. Sessions an open Project holds preview as a table, Session · Project ▸. */
 function archiveUnavailable(m: Messages, selected: SessionRow[], plan: ArchivePlan): Action["unavailable"] {
   const action = m.sessions_cant_archive()
   const held = selected.flatMap((r) => {
@@ -127,8 +163,8 @@ function archiveUnavailable(m: Messages, selected: SessionRow[], plan: ArchivePl
     return project ? [{ row: r, project }] : []
   })
   if (held.length > 0) {
-    const blockers = held.map(({ row, project }) => ({ label: sessionLabel(m, row.session), link: { to: "/projects/$projectId", params: { projectId: project.id } } }))
-    return { action, reason: m.sessions_in_a_project({ count: held.length }), blockers }
+    const blockers = held.map(({ row, project }) => ({ label: sessionLabel(m, row.session), where: project.name, link: { to: "/projects/$projectId", params: { projectId: project.id } } }))
+    return { action, reason: m.sessions_in_a_project({ count: held.length }), blockers, columns: { item: m.session_label(), where: m.project_noun() } }
   }
   if (plan.blocked) return { action, reason: say(m, plan.blocked), blockers: [{ label: m.common_locations(), link: { to: "/settings/locations" } }] }
   if (plan.refused.length > 0) return { action, reason: m.wrapup_refused(), blockers: plan.refused.map((r) => ({ label: `${sessionLabel(m, r.session)} · ${say(m, r.reason)}` })) }
@@ -197,7 +233,10 @@ function trashUnusableAction(m: Messages, state: PrototypeState, scope: SessionR
   }
 }
 
-export function SessionsPage() {
+/** The Duplicates review dialog (P-STO2), injected by the route so features stay apart; it opens on `?duplicates=review`. */
+export type DuplicatesReviewDialog = ComponentType<{ open: boolean; onClose: () => void }>
+
+export function SessionsPage({ duplicatesReview: DuplicatesReview }: { duplicatesReview?: DuplicatesReviewDialog }) {
   const search = useSearch({ strict: false }) as SearchParams
   const navigate = useNavigate()
   const follow = useFollowLink()
@@ -238,21 +277,38 @@ export function SessionsPage() {
   const clearSelection = () => setSelected([])
   const unusableScope = shown.some((r) => selected.includes(r.session.id)) ? shown.filter((r) => selected.includes(r.session.id)) : shown
   const trashUnusable = filter === "unusable" ? trashUnusableAction(m, state, unusableScope, clearSelection) : null
+  const reviewDuplicates: Action | null =
+    filter === "duplicates" && DuplicatesReview ? { id: "review-duplicates", label: m.sessions_review_duplicates(), icon: Copy, opensDialog: true, run: () => setParams({ duplicates: "review" }) } : null
 
   const open = (row: SessionRow) => void navigate({ to: "/sessions/$sessionId", params: { sessionId: row.session.id } })
+  // The row offers the session actions that apply to it; the selection offers every one (below).
   const rowActions = (r: SessionRow): MenuItem[] =>
     withIssueItems(m, [
       { id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) },
       ...(r.trashed
         ? []
         : [
-            { id: "review", label: m.session_review_frames(), icon: ListChecks, run: () => follow(sessionIntakeEntry(catalog, r.session)) },
+            reviewAction(m, catalog, [r], follow),
+            ...(r.needsTarget ? [intakeStepAction(m, [r], "target", follow)] : []),
+            ...(r.rig === null ? [intakeStepAction(m, [r], "rig", follow)] : []),
             { separator: true } as const,
-            ...(r.needsTarget ? [{ id: "choose-target", label: m.session_choose_target(), icon: Target, run: () => follow(sessionIntakeLink(r.session.id, "target")) }] : addToProjectItems(m, catalog, r.session.id)),
+            ...addToProjectItems(m, catalog, [r.session.id]),
           ]),
     ], issuesOf(r))
+  /** Every session action for the selection: the queue's own lead there; elsewhere Review frames, Archive… and Confirm suggestions…; the rest and Add to Project ▸ under More. */
+  const selectionActions = (ids: string[]): MenuItem[] => {
+    const picked = rows.filter((r) => ids.includes(r.session.id) && !r.trashed)
+    const review = reviewAction(m, catalog, picked, follow)
+    const target = intakeStepAction(m, picked, "target", follow)
+    const calibration = [confirmCalibrationAction(m, picked, clearSelection), ...PIN_KINDS.map((kind) => noCalibrationAction(m, picked, kind, clearSelection))]
+    const lead = filter === "needs-calibration" ? calibration : filter === "needs-target" ? [target] : [review]
+    const all = [review, archiveAction(m, state, picked, clearSelection), ...calibration.slice(0, 1), target, intakeStepAction(m, picked, "rig", follow), ...calibration.slice(1), ...(trashUnusable ? [trashUnusable] : [])]
+    return [...lead, ...all.filter((action) => !lead.includes(action)), ...addToProjectItems(m, catalog, picked.map((r) => r.session.id))]
+  }
   const pageMenu = withIssueItems(m, [], pageIssues(issueView, "/sessions"))
 
+  // Label, rig and Projects are in the Columns menu (and on the session's details; Review names a rig that needs review),
+  // so the table fits its frame in a 1280 px window in both languages.
   const columns: Column<SessionRow>[] = [
     {
       id: "session",
@@ -267,7 +323,7 @@ export function SessionsPage() {
         </>
       ),
     },
-    { id: "label", header: m.session_header_label(), truncate: true, sortValue: (r) => r.session.objectLabel ?? "", cell: (r) => r.session.objectLabel ?? "–" },
+    { id: "label", header: m.session_header_label(), truncate: true, hideable: true, defaultHidden: true, sortValue: (r) => r.session.objectLabel ?? "", cell: (r) => r.session.objectLabel ?? "–" },
     {
       id: "target",
       header: m.sessions_column_target(),
@@ -279,6 +335,8 @@ export function SessionsPage() {
       id: "rig",
       header: m.sessions_column_rig(),
       truncate: true,
+      hideable: true,
+      defaultHidden: true,
       sortValue: (r) => (r.rig ? say(m, r.rig) : ""),
       cell: (r) => (r.rig ? say(m, r.rig) : <StatusBadge kind="association" value="unresolved" label={m.sessions_rig_needs_review()} />),
     },
@@ -305,6 +363,8 @@ export function SessionsPage() {
       id: "projects",
       header: m.nav_projects(),
       truncate: true,
+      hideable: true,
+      defaultHidden: true,
       sortValue: (r) => r.projects.map((p) => p.name).join(","),
       cell: (r) => {
         if (r.trashed) return "–"
@@ -335,56 +395,54 @@ export function SessionsPage() {
   const facetValue = (value: string | string[] | undefined) => (typeof value === "string" && value ? value : undefined)
 
   return (
-    <ListPage
-      title={m.nav_sessions()}
-      summary={m.sessions_light_count({ count: counts.all })}
-      actions={[{ id: "import", label: m.import_open(), icon: Download, run: () => void navigate({ to: "/import" }) }]}
-      menu={pageMenu.length > 0 ? { label: m.nav_sessions(), items: pageMenu } : undefined}
-      notice={importNotice}
-      table={{
-        label: m.sessions_table_label({ filter: filterLabel(m, filter) }),
-        rows: shown,
-        columns,
-        getRowId: (r) => r.session.id,
-        rowLabel: (r) => sessionLabel(m, r.session),
-        rowActions,
-        onRowClick: open,
-        initialSort: imported.size > 0 ? undefined : { columnId: "session", direction: "desc" },
-        selection: {
-          selected,
-          onChange: setSelected,
+    <>
+      <ListPage
+        title={m.nav_sessions()}
+        summary={m.sessions_light_count({ count: counts.all })}
+        actions={[{ id: "import", label: m.import_open(), icon: Download, run: () => void navigate({ to: "/import" }) }]}
+        menu={pageMenu.length > 0 ? { label: m.nav_sessions(), items: pageMenu } : undefined}
+        notice={importNotice}
+        table={{
+          label: m.sessions_table_label({ filter: filterLabel(m, filter) }),
+          rows: shown,
+          columns,
+          columnsId: "sessions",
+          getRowId: (r) => r.session.id,
           rowLabel: (r) => sessionLabel(m, r.session),
-          isSelectable: (r) => !r.trashed,
-          countLabel: (count) => m.project_sessions_selected({ count }),
-          onShowHidden: () => setParams({ q: undefined, filter: undefined, issues: undefined }),
-        },
-        batchActions: (ids) => {
-          const picked = rows.filter((r) => ids.includes(r.session.id) && !r.trashed)
-          const calibration = [confirmCalibrationAction(m, picked, clearSelection), ...PIN_KINDS.map((kind) => noCalibrationAction(m, picked, kind, clearSelection))]
-          const archive = [archiveAction(m, state, picked, clearSelection), ...(trashUnusable ? [trashUnusable] : [])]
-          // The queue's own actions lead there; elsewhere they follow Archive… under More.
-          return filter === "needs-calibration" ? [...calibration, ...archive] : [...archive, ...calibration]
-        },
-        toolbar: {
-          search: { label: m.sessions_search(), placeholder: m.sessions_search_placeholder(), value: query, onChange: (value) => setParams({ q: value }) },
-          facets: {
-            items: [
-              {
-                id: "filter",
-                label: m.sessions_facet_status(),
-                kind: "single",
-                options: SESSION_FILTERS.map((f) => ({ value: f, label: filterLabel(m, f), count: counts[f] })),
-                value: filter === "all" ? "" : filter,
-              },
-              issuesFacet(m, rows.map(issuesOf), issueFilter),
-            ],
-            onChange: (patch) => setParams({ ...("filter" in patch ? { filter: facetValue(patch.filter) } : {}), ...("issues" in patch ? { issues: facetValue(patch.issues) } : {}) }),
+          rowActions,
+          onRowClick: open,
+          initialSort: imported.size > 0 ? undefined : { columnId: "session", direction: "desc" },
+          selection: {
+            selected,
+            onChange: setSelected,
+            rowLabel: (r) => sessionLabel(m, r.session),
+            isSelectable: (r) => !r.trashed,
+            countLabel: (count) => m.project_sessions_selected({ count }),
+            onShowHidden: () => setParams({ q: undefined, filter: undefined, issues: undefined }),
           },
-          actions: trashUnusable ? [trashUnusable] : [],
-          matchCount: shown.length,
-        },
-        empty: <EmptyState icon={Layers} title={emptyText} action={<ActionButton action={clearAction} />} />,
-      }}
-    />
+          batchActions: selectionActions,
+          toolbar: {
+            search: { label: m.sessions_search(), placeholder: m.sessions_search_placeholder(), value: query, onChange: (value) => setParams({ q: value }) },
+            facets: {
+              items: [
+                {
+                  id: "filter",
+                  label: m.sessions_facet_status(),
+                  kind: "single",
+                  options: SESSION_FILTERS.map((f) => ({ value: f, label: filterLabel(m, f), count: counts[f] })),
+                  value: filter === "all" ? "" : filter,
+                },
+                issuesFacet(m, rows.map(issuesOf), issueFilter),
+              ],
+              onChange: (patch) => setParams({ ...("filter" in patch ? { filter: facetValue(patch.filter) } : {}), ...("issues" in patch ? { issues: facetValue(patch.issues) } : {}) }),
+            },
+            actions: [...(trashUnusable ? [trashUnusable] : []), ...(reviewDuplicates ? [reviewDuplicates] : [])],
+            matchCount: shown.length,
+          },
+          empty: <EmptyState icon={Layers} title={emptyText} action={<ActionButton action={clearAction} />} />,
+        }}
+      />
+      {DuplicatesReview ? <DuplicatesReview open={search.duplicates === "review"} onClose={() => setParams({ duplicates: undefined })} /> : null}
+    </>
   )
 }
