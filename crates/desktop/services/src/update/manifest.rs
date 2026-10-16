@@ -71,6 +71,12 @@ pub fn newer_release(
     let url = Url::parse(&entry.url).map_err(|error| {
         UpdateError::Manifest(format!("the update URL {} is not a URL: {error}", entry.url))
     })?;
+    if url.scheme() != "https" {
+        return Err(UpdateError::Manifest(format!(
+            "the update URL {} is not an HTTPS URL",
+            entry.url
+        )));
+    }
     Ok(Some(Release {
         version_text: manifest.version,
         notes: manifest.notes.filter(|notes| !notes.trim().is_empty()),
