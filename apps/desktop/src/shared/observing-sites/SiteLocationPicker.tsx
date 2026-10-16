@@ -195,10 +195,16 @@ export function SiteLocationPicker({
 
   // The picker only mounts after "Show map", and the notice replaces either
   // the focused map container (tile failures) or a map that never mounted
-  // (Leaflet threw). Move focus to the notice so keyboard and screen-reader
-  // users are not dropped to the page body.
+  // (Leaflet threw). When that leaves focus on the page body, move it to the
+  // notice so keyboard and screen-reader users are not stranded. Focus the
+  // user has since moved elsewhere (e.g. typing in Latitude while tiles fail)
+  // stays where it is.
   useEffect(() => {
-    if (unavailable) unavailableRef.current?.focus({ preventScroll: true });
+    if (!unavailable) return;
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      unavailableRef.current?.focus({ preventScroll: true });
+    }
   }, [unavailable]);
 
   if (unavailable) {

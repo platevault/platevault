@@ -257,6 +257,34 @@ describe('SiteLocationPicker', () => {
     expect(screen.getByText(/map unavailable/i)).toHaveFocus();
   });
 
+  it('leaves focus on a field the user moved to when tiles fail', () => {
+    // The user types coordinates while the map loads offline: the third
+    // tileerror swaps in the notice, but must not pull focus off the field.
+    render(
+      <>
+        <SiteLocationPicker
+          latitudeDeg={null}
+          longitudeDeg={null}
+          onPick={vi.fn()}
+        />
+        <input aria-label="Latitude" />
+      </>,
+    );
+    const latitude = screen.getByLabelText('Latitude');
+    latitude.focus();
+
+    const tiles = MockTileLayer.instances[0];
+    act(() => {
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+    });
+
+    expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    expect(latitude).toHaveFocus();
+    expect(screen.getByText(/map unavailable/i)).not.toHaveFocus();
+  });
+
   it('does not degrade when a tileload resets the error count', () => {
     render(
       <SiteLocationPicker
