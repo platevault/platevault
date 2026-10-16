@@ -4569,8 +4569,6 @@
   "store_reason_name_empty": "Name is empty",
   "store_reason_sha_now": "SHA-256 now {hash}",
   "domain_mode_symlink": "Symlinks",
-  "run_cant_prepare": "Can't prepare",
-  "run_use_copies": "Use copies for this run",
   "settings_default_input_mode": "Default View mode",
   "settings_developer_mode": "Windows Developer Mode",
   "settings_developer_mode_on": "On",
@@ -4796,7 +4794,6 @@
     }
   ],
   "ds_reveal_location": "Reveal location",
-  "ds_prepare_view": "Prepare View",
   "ds_prepare_disabled": [
     {
       "declarations": [
@@ -4821,7 +4818,6 @@
   "ds_offline_body": "{night} counts in captured integration with last-observed values. It is not offered as an available input.",
   "ds_scan_incomplete_title": "Scan scope is incomplete",
   "ds_scan_incomplete_body": "Access denied: {path}. Files there are unknown, not missing.",
-  "ds_symlinks_body": "Symlinks need Windows Developer Mode.",
   "ds_provisional_title": "Totals are provisional",
   "ds_provisional_body": "Indexing is still running; totals cover {volume} captures only.",
   "ds_target_correction": "Target correction",

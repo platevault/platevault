@@ -4921,8 +4921,6 @@
   "store_reason_name_empty": "O nome está vazio",
   "store_reason_sha_now": "SHA-256 agora {hash}",
   "domain_mode_symlink": "Links simbólicos",
-  "run_cant_prepare": "Não é possível preparar",
-  "run_use_copies": "Usar cópias nesta execução",
   "settings_default_input_mode": "Modo padrão da View",
   "settings_developer_mode": "Modo de Desenvolvedor do Windows",
   "settings_developer_mode_on": "Ligado",
@@ -5154,7 +5152,6 @@
     }
   ],
   "ds_reveal_location": "Mostrar local",
-  "ds_prepare_view": "Preparar visualização",
   "ds_prepare_disabled": [
     {
       "declarations": [
@@ -5181,7 +5178,6 @@
   "ds_offline_body": "{night} conta na integração capturada com os últimos valores observados. Não é oferecida como entrada disponível.",
   "ds_scan_incomplete_title": "O escopo da varredura está incompleto",
   "ds_scan_incomplete_body": "Acesso negado: {path}. Os arquivos ali são desconhecidos, não ausentes.",
-  "ds_symlinks_body": "Symlinks precisam do Modo de Desenvolvedor do Windows.",
   "ds_provisional_title": "Os totais são provisórios",
   "ds_provisional_body": "A indexação ainda está em andamento; os totais cobrem só as capturas de {volume}.",
   "ds_target_correction": "Correção de alvo",

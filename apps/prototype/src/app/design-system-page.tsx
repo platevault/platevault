@@ -364,7 +364,7 @@ export function DesignSystemPage() {
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <Button disabled aria-describedby="ds-prepare-reason">
-                {m.ds_prepare_view()}
+                {m.project_apply()}
               </Button>
               <p id="ds-prepare-reason" className="text-xs text-muted-foreground">
                 {m.ds_prepare_disabled({ count: 2 })}
@@ -437,15 +437,13 @@ export function DesignSystemPage() {
               </Notice>
               <Notice
                 tone="refusal"
-                title={m.run_cant_prepare()}
+                title={m.view_refused_developer_mode()}
                 actions={
                   <Button size="sm" variant="outline">
-                    {m.run_use_copies()}
+                    {m.project_use_copies()}
                   </Button>
                 }
-              >
-                {m.ds_symlinks_body()}
-              </Notice>
+              />
               <Notice tone="info" title={m.ds_provisional_title()}>
                 {m.ds_provisional_body({ volume: "Astro-T7" })}
               </Notice>
