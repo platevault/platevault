@@ -97,6 +97,55 @@ impl Camera {
         }
         Ok(())
     }
+
+    /// Which camera calibration headers naming `model` were taken with
+    /// (PLAN-EQ-FR-08): the one camera of that model the rigs hold, or a
+    /// choice among several. Models compare by comparison key.
+    #[must_use]
+    pub fn resolve_model(cameras: &[Self], model: &str) -> CameraResolution {
+        let key = comparison_key(model);
+        if key.is_empty() {
+            return CameraResolution::Unknown;
+        }
+        let mut camera_ids: Vec<Uuid> = cameras
+            .iter()
+            .filter(|camera| camera.model_key() == key)
+            .map(|camera| camera.id)
+            .collect();
+        camera_ids.sort_unstable();
+        match camera_ids.as_slice() {
+            [] => CameraResolution::Unknown,
+            [camera_id] => CameraResolution::Model { camera_id: *camera_id },
+            _ => CameraResolution::Choose { camera_ids },
+        }
+    }
+}
+
+/// How a camera model read from calibration headers names a camera of the
+/// rigs. Only one camera of the model links by model; with several, the
+/// import asks which, and a camera the user confirms is the explicit match.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "resolution", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum CameraResolution {
+    /// The rigs hold no camera of this model.
+    Unknown,
+    /// The rigs hold one camera of this model: it matches with no question.
+    Model { camera_id: Uuid },
+    /// The rigs hold several, in id order: the import asks which, by alias.
+    Choose { camera_ids: Vec<Uuid> },
+}
+
+impl CameraResolution {
+    /// The link a model alone makes: only to the one camera of its model.
+    #[must_use]
+    pub const fn link(&self) -> Option<CameraLink> {
+        match self {
+            Self::Model { camera_id } => {
+                Some(CameraLink { camera_id: *camera_id, basis: CameraBasis::Model })
+            }
+            Self::Unknown | Self::Choose { .. } => None,
+        }
+    }
 }
 
 /// How a calibration session or master names its camera: by model while the
@@ -205,6 +254,26 @@ impl RigVersion {
     #[must_use]
     pub fn starts_new_group(&self, other: &Self) -> bool {
         self.optics != other.optics
+    }
+
+    /// The version of a rig a capture on `night` was taken with: the latest
+    /// one starting on or before that night. A night before the first version
+    /// reads the first, which stands for the rig before any recorded edit.
+    /// An unknown night reads a rig's only version and nothing when it has
+    /// several. `versions` are one rig's, in any order.
+    #[must_use]
+    pub fn for_night(versions: &[Self], night: Option<Date>) -> Option<&Self> {
+        let Some(night) = night else {
+            return match versions {
+                [only] => Some(only),
+                _ => None,
+            };
+        };
+        versions
+            .iter()
+            .filter(|version| version.valid_from <= night)
+            .max_by_key(|version| version.valid_from)
+            .or_else(|| versions.iter().min_by_key(|version| version.valid_from))
     }
 
     /// # Errors
