@@ -102,10 +102,7 @@ pub fn install_bundle(
     signing: &dyn CodeSigning,
     admin_prompt: &str,
 ) -> Result<(), UpdateError> {
-    // Pinned before anything reads the app by path: the privileged install
-    // replaces this entry or nothing (astro-plan-ryj83).
-    let pinned = entry_id(installed)?;
-    let identity = signing.identity(installed)?;
+    let (pinned, identity) = pin_and_identify(installed, signing)?;
     let staging = staging_dir(installed)?;
     tar::Archive::new(GzDecoder::new(payload.reader())).unpack(staging.path())?;
     let update = single_bundle(staging.path())?;
@@ -141,6 +138,20 @@ pub fn install_bundle(
         let _ = std::process::Command::new("/usr/bin/touch").arg(installed).status();
     }
     Ok(())
+}
+
+/// The device and inode of the app at `installed`, then its identity, read
+/// in that order before anything else reads the app by path: the privileged
+/// install replaces the pinned entry or nothing (astro-plan-ryj83). A bundle
+/// swapped in before the pin is the one whose identity the update must
+/// match; one swapped in after it is refused by [`PrivilegedInstall::of`]
+/// and by root, whatever identity was read from it.
+fn pin_and_identify(
+    installed: &Path,
+    signing: &dyn CodeSigning,
+) -> Result<((u64, u64), Identity), UpdateError> {
+    let pinned = entry_id(installed)?;
+    Ok((pinned, signing.identity(installed)?))
 }
 
 /// The device and inode of the entry at `path`, a link itself if it is one.
@@ -336,8 +347,9 @@ const COPY_SECONDS: u32 = 120;
 /// succeeded. The pinned app at any other time, and anything root cannot
 /// identify, stay in its directory, which is then opened to the user and
 /// named on standard error: the app as `KEPT_IN_WORK_DIR` (68), anything
-/// else with 69 or 71. A previous app that cannot be put back is first moved
-/// next to the installed app (`KEPT_NEXT_TO_APP`, 67).
+/// else with 69 unless root was already leaving with 68 or 71. A previous
+/// app that cannot be put back is first moved next to the installed app
+/// (`KEPT_NEXT_TO_APP`, 67).
 #[cfg(target_os = "macos")]
 const PRIVILEGED_INSTALL: &str = r#"ident() { /usr/bin/stat -f %d:%i -- "$1" 2>/dev/null; }
 there() { [ -e "$1" ] || [ -L "$1" ]; }
@@ -359,9 +371,9 @@ cleanup() {
         /bin/rm -rf -- "$entry"
       elif [ "$id" = "$app" ]; then
         keep=$entry status=68
-      elif [ "$status" != 68 ]; then
-        keep=$entry
-        [ "$status" = 71 ] || status=69
+      else
+        [ -n "$keep" ] || keep=$entry
+        case "$status" in 68|71) ;; *) status=69;; esac
       fi
     done
   fi
@@ -742,7 +754,11 @@ mod tests {
     use std::os::unix::fs::MetadataExt as _;
     use std::path::{Path, PathBuf};
 
-    use super::{exchange, keep_backup_if_not_restored, replace, staging_dir_among, swap};
+    use super::{
+        exchange, keep_backup_if_not_restored, pin_and_identify, replace, staging_dir_among, swap,
+        CodeSigning, Identity,
+    };
+    use crate::update::UpdateError;
 
     /// A bundle directory at `path` holding a `version` file.
     fn bundle(path: &Path, version: &str) {
@@ -771,6 +787,43 @@ mod tests {
             .map(|&byte| u8::try_from(byte).unwrap_or(b'?'))
             .collect();
         name == b"apfs"
+    }
+
+    /// Signing whose identity read swaps another bundle in at the app's path,
+    /// as another process of the user's could, after moving the app to
+    /// `moved_to`.
+    struct SwapsWhileRead {
+        moved_to: PathBuf,
+    }
+
+    impl CodeSigning for SwapsWhileRead {
+        fn identity(&self, bundle_path: &Path) -> Result<Identity, UpdateError> {
+            fs::rename(bundle_path, &self.moved_to).expect("move the app away");
+            bundle(bundle_path, "foreign");
+            Ok(Identity::Unsigned)
+        }
+
+        fn satisfies(&self, _bundle: &Path, _requirement: &str) -> Result<bool, UpdateError> {
+            unreachable!("the pin checks no signature")
+        }
+    }
+
+    /// The app is pinned before its identity is read: a bundle swapped in
+    /// during the read leaves the pin naming the app, so the privileged
+    /// install refuses the swap instead of replacing the other bundle.
+    #[test]
+    fn the_app_is_pinned_before_its_identity_is_read() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (installed, moved) = (dir.path().join("App.app"), dir.path().join("moved-away.app"));
+        bundle(&installed, "old");
+        let app = fs::symlink_metadata(&installed).expect("metadata");
+
+        let (pinned, _) =
+            pin_and_identify(&installed, &SwapsWhileRead { moved_to: moved.clone() }).expect("pin");
+
+        assert_eq!(version(&installed), "foreign", "the other bundle was swapped in");
+        assert_eq!(version(&moved), "old");
+        assert_eq!(pinned, (app.dev(), app.ino()), "the pin is the app's, read before the swap");
     }
 
     #[test]
@@ -1466,6 +1519,48 @@ function run(argv) {{
                 install.failure(message),
                 UpdateError::Install(detail) if detail.contains("could not be told")
             ));
+        }
+
+        /// The previous app can be neither put back nor moved next to the
+        /// installed app (68), and its `stat` then fails on the way out, as
+        /// after a file system fault: root keeps it, the only copy, rather
+        /// than deleting what it cannot identify. The fault is put into
+        /// `ident` itself, since this user can make no `stat` fail that
+        /// `[ -e ]` passes.
+        #[test]
+        fn a_kept_app_root_cannot_identify_on_the_way_out_is_kept() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let (installed, _, install) = stage(dir.path());
+            // No exchange, and of the moves only the app's out of its place.
+            let before = r#"  ObjC.import("stdlib");
+  if (argv[0] === "excl" && argv[1] !== "../" + installed) {
+    if (argv[2] !== "../" + installed) $.system("/usr/bin/touch ../stat-fault");
+    return;
+  }"#;
+            let ident = "ident() { /usr/bin/stat";
+            let command = install.command_with(&renames_after(before, false), COPY_SECONDS);
+            assert!(command.contains(ident));
+            let command = command.replacen(
+                ident,
+                r#"ident() { [ "$1" != previous.app ] || [ ! -e ../stat-fault ] || return 1; /usr/bin/stat"#,
+                1,
+            );
+
+            let output = Command::new("/usr/bin/osascript")
+                .arg("-e")
+                .arg(format!("do shell script {}", applescript_string(&command)))
+                .output()
+                .expect("osascript");
+
+            let message = String::from_utf8_lossy(&output.stderr);
+            assert!(message.trim_end().ends_with("(68)"), "{message}");
+            let error = install.failure(message.trim());
+            let UpdateError::PreviousAppNotRestored { kept, .. } = error else {
+                panic!("{error}");
+            };
+            assert_eq!(version(&kept), "old", "the app is kept");
+            assert!(!installed.exists());
+            assert_eq!(entries(kept.parent().expect("root's directory")), ["previous.app"]);
         }
 
         /// A signal between the moves, such as a shutdown, while the previous
