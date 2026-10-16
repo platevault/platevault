@@ -26,7 +26,53 @@ use audit::event_bus::{
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::AppIdentity;
+use crate::locale;
 
+/// The notification text in the locale the webview last selected.
+#[derive(Clone, Debug)]
+struct Wording {
+    messages: Messages,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct Messages {
+    #[serde(rename = "notification_target_resolution_title")]
+    target_resolution_title: String,
+    #[serde(rename = "notification_target_resolution_body")]
+    target_resolution_body: String,
+    #[serde(rename = "notification_plan_apply_title")]
+    plan_apply_title: String,
+    #[serde(rename = "notification_plan_applied_body")]
+    plan_state_applied: String,
+    #[serde(rename = "notification_plan_partially_applied_body")]
+    plan_state_partially_applied: String,
+    #[serde(rename = "notification_plan_failed_body")]
+    plan_state_failed: String,
+    #[serde(rename = "notification_plan_cancelled_body")]
+    plan_state_cancelled: String,
+    #[serde(rename = "notification_workflow_run_title")]
+    workflow_run_title: String,
+    #[serde(rename = "notification_workflow_run_body")]
+    workflow_run_body: String,
+}
+
+impl Wording {
+    fn in_locale(tag: &str) -> Result<Self, String> {
+        let messages = locale::shipped_or_base(tag).messages()?;
+        Ok(Self { messages })
+    }
+
+    fn target_resolution(&self, count: usize) -> Notification {
+        Notification {
+            title: self.messages.target_resolution_title.clone(),
+            body: locale::fill(
+                &self.messages.target_resolution_body,
+                &[("count", &count.to_string())],
+            ),
+        }
+    }
+
+}
 /// How long [`Notifier::notify_before_exit`] waits for the OS to take a
 /// notification: a D-Bus daemon or the Windows toast service answers in
 /// milliseconds, and the app is on its way out.
@@ -35,13 +81,14 @@ const BEFORE_EXIT_WAIT: Duration = Duration::from_secs(2);
 /// One OS notification.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Notification {
-    title: &'static str,
+    title: String,
     body: String,
 }
 
 /// Delivers OS notifications under the application's identity.
 #[derive(Clone, Debug)]
 pub struct Notifier {
+    wording: std::sync::Arc<std::sync::Mutex<Wording>>,
     #[cfg(target_os = "macos")]
     bundle_id: String,
     #[cfg(windows)]
@@ -52,6 +99,9 @@ impl Notifier {
     #[cfg_attr(not(any(target_os = "macos", windows)), allow(unused_variables))]
     pub(crate) fn new(identity: &AppIdentity) -> Self {
         Self {
+            wording: std::sync::Arc::new(std::sync::Mutex::new(
+                Wording::in_locale(locale::base().tag).expect("shipped base catalogue is valid"),
+            )),
             #[cfg(target_os = "macos")]
             bundle_id: identity.macos_bundle_id().to_owned(),
             #[cfg(windows)]
@@ -59,6 +109,21 @@ impl Notifier {
                 exe.parent().and_then(|dir| identity.windows_app_id(dir)).map(str::to_owned)
             }),
         }
+    }
+
+    /// Speak the webview's locale outside it. An unknown tag uses the base
+    /// locale, and a malformed catalogue leaves the previous wording intact.
+    pub fn set_locale(&self, tag: &str) {
+        match Wording::in_locale(tag) {
+            Ok(wording) => {
+                *self.wording.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = wording;
+            }
+            Err(error) => tracing::warn!(%error, tag, "notifications keep their previous language"),
+        }
+    }
+
+    fn wording(&self) -> std::sync::MutexGuard<'_, Wording> {
+        self.wording.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Notify about a finished ingest-resolution drain pass, unless the window
@@ -70,10 +135,8 @@ impl Notifier {
         if !should_notify(focused, summary.resolved > 0) {
             return;
         }
-        self.deliver(&Notification {
-            title: "Target resolution finished",
-            body: format!("Resolved {} queued target(s).", summary.resolved),
-        });
+        let wording = self.wording();
+        self.deliver(&wording.target_resolution(summary.resolved));
     }
 
     /// Show `notification` unless the window is `focused`.
@@ -96,7 +159,7 @@ impl Notifier {
     }
 
     fn deliver(&self, notification: &Notification) {
-        drop(self.show(notification.title, &notification.body));
+        drop(self.show(&notification.title, &notification.body));
     }
 
     /// Hand `summary` and `body` to the OS from a thread of its own: the
@@ -162,7 +225,8 @@ pub(crate) fn spawn_completion_notifier(
         loop {
             match rx.recv().await {
                 Ok(env) => {
-                    if let Some(notification) = notification_for(&env.topic, &env.payload) {
+                    let wording = notifier.wording();
+                    if let Some(notification) = notification_for(&env.topic, &env.payload, &wording) {
                         notifier.completed(focused(), &notification);
                     }
                 }
@@ -179,13 +243,21 @@ pub(crate) fn spawn_completion_notifier(
 
 /// The notification a bus envelope earns, or `None` for every topic and payload
 /// that must stay silent.
-fn notification_for(topic: &str, payload: &serde_json::Value) -> Option<Notification> {
+fn notification_for(topic: &str, payload: &serde_json::Value, wording: &Wording) -> Option<Notification> {
     match topic {
-        TOPIC_PLAN_APPLYING_COMPLETED => {
-            Some(Notification { title: "Plan apply finished", body: plan_apply_body(payload)? })
-        }
+        TOPIC_PLAN_APPLYING_COMPLETED => Some(Notification {
+            title: wording.messages.plan_apply_title.clone(),
+            body: plan_apply_body(payload, wording)?,
+        }),
         TOPIC_WORKFLOW_RUN_COMPLETED => {
-            Some(Notification { title: "Workflow run finished", body: workflow_run_body(payload)? })
+            let event: WorkflowRunCompleted = serde_json::from_value(payload.clone()).ok()?;
+            Some(Notification {
+                title: wording.messages.workflow_run_title.clone(),
+                body: locale::fill(
+                    &wording.messages.workflow_run_body,
+                    &[("name", &event.tool_id), ("count", &event.artifact_ids.len().to_string())],
+                ),
+            })
         }
         _ => None,
     }
@@ -193,36 +265,36 @@ fn notification_for(topic: &str, payload: &serde_json::Value) -> Option<Notifica
 
 /// Summarise a `plan.applying.completed` payload for the notification body, or
 /// `None` when the payload is not a full typed completion.
-///
-/// The topic carries one degraded publisher: when `list_pending_items` fails
-/// twice, `cancel_pending_items` writes an aggregate audit row carrying only
-/// `planId` and `cancelledCount`, and `handle_cancelled` publishes the real
-/// completion afterwards. Defaulting the absent counts would report that
-/// bookkeeping row as `done: 0 applied, 0 failed, 0 skipped` and then notify a
-/// second time with the true summary, so a payload that does not deserialise is
-/// dropped instead.
-fn plan_apply_body(payload: &serde_json::Value) -> Option<String> {
+fn plan_apply_body(payload: &serde_json::Value, wording: &Wording) -> Option<String> {
     let event: PlanApplyingCompleted = serde_json::from_value(payload.clone()).ok()?;
-    Some(format!(
-        "{}: {} applied, {} failed, {} skipped.",
-        event.terminal_state, event.items_applied, event.items_failed, event.items_skipped
-    ))
-}
-
-/// Summarise a `workflow.run_completed` payload, or `None` when it does not
-/// deserialise.
-fn workflow_run_body(payload: &serde_json::Value) -> Option<String> {
-    let event: WorkflowRunCompleted = serde_json::from_value(payload.clone()).ok()?;
-    Some(format!(
-        "{} run recorded: {} new artifact(s) attributed.",
-        event.tool_id,
-        event.artifact_ids.len()
+    let message = match event.terminal_state.as_str() {
+        "applied" => &wording.messages.plan_state_applied,
+        "partially_applied" => &wording.messages.plan_state_partially_applied,
+        "failed" => &wording.messages.plan_state_failed,
+        "cancelled" => &wording.messages.plan_state_cancelled,
+        _ => return None,
+    };
+    Some(locale::fill(
+        message,
+        &[
+            ("applied", &event.items_applied.to_string()),
+            ("failed", &event.items_failed.to_string()),
+            ("skipped", &event.items_skipped.to_string()),
+        ],
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ingest_drain_notification_uses_the_selected_catalogue() {
+        let wording = Wording::in_locale("pt-BR").expect("pt-BR wording");
+        let notification = wording.target_resolution(2);
+        assert_eq!(notification.title, "Resolução de alvos concluída");
+        assert_eq!(notification.body, "2 alvos na fila foram resolvidos.");
+    }
 
     #[test]
     fn focused_window_suppresses_the_notification() {
@@ -245,8 +317,6 @@ mod tests {
         assert!(!should_notify(None, false));
     }
 
-    /// A full typed `PlanApplyingCompleted` payload, as `handle_terminal` and
-    /// `handle_cancelled` publish it.
     fn plan_completion_payload() -> serde_json::Value {
         serde_json::json!({
             "planId": "p-1",
@@ -261,21 +331,36 @@ mod tests {
     }
 
     #[test]
-    fn plan_apply_body_summarises_counts() {
+    fn plan_notification_renders_in_portuguese() {
+        let wording = Wording::in_locale("pt-BR").expect("pt-BR wording");
+        let notification = notification_for(
+            TOPIC_PLAN_APPLYING_COMPLETED,
+            &plan_completion_payload(),
+            &wording,
+        )
+        .expect("plan notification");
+        assert_eq!(notification.title, "Aplicação do plano concluída");
         assert_eq!(
-            plan_apply_body(&plan_completion_payload()).as_deref(),
-            Some("partially_applied: 3 applied, 1 failed, 2 skipped.")
+            notification.body,
+            "Plano parcialmente aplicado: 3 itens aplicados, 1 com falha e 2 ignorados."
+        );
+    }
+
+    #[test]
+    fn plan_apply_body_summarises_counts() {
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        assert_eq!(
+            plan_apply_body(&plan_completion_payload(), &wording).as_deref(),
+            Some("Plan partly applied: 3 items applied, 1 failed and 2 skipped.")
         );
     }
 
     #[test]
     fn the_degraded_bulk_cancel_payload_raises_no_notification() {
-        // `cancel_pending_items` publishes this shape on the same topic when
-        // `list_pending_items` fails twice. Defaulting its absent counts would
-        // announce a successful-looking apply that never happened.
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
         let degraded = serde_json::json!({ "planId": "p-1", "cancelledCount": 4 });
-        assert_eq!(plan_apply_body(&degraded), None);
-        assert_eq!(plan_apply_body(&serde_json::json!({})), None);
+        assert_eq!(plan_apply_body(&degraded, &wording), None);
+        assert_eq!(plan_apply_body(&serde_json::json!({}), &wording), None);
     }
 
     #[test]
@@ -287,15 +372,18 @@ mod tests {
             "completedAt": "2026-08-20T00:00:00Z",
             "artifactIds": ["a-1", "a-2"],
         });
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
         assert_eq!(
-            workflow_run_body(&payload).as_deref(),
-            Some("siril run recorded: 2 new artifact(s) attributed.")
+            notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &payload, &wording)
+                .map(|notification| notification.body),
+            Some("New artifacts attributed by siril: 2.".to_owned())
         );
     }
 
     #[test]
     fn workflow_run_body_rejects_an_untyped_payload() {
-        assert_eq!(workflow_run_body(&serde_json::json!({ "toolId": "siril" })), None);
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        assert_eq!(notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &serde_json::json!({ "toolId": "siril" }), &wording), None);
     }
 
     fn workflow_run_payload() -> serde_json::Value {
@@ -310,37 +398,40 @@ mod tests {
 
     #[test]
     fn the_plan_apply_topic_dispatches_to_the_plan_apply_notification() {
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
         assert_eq!(
-            notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &plan_completion_payload()),
+            notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &plan_completion_payload(), &wording),
             Some(Notification {
-                title: "Plan apply finished",
-                body: "partially_applied: 3 applied, 1 failed, 2 skipped.".to_owned()
+                title: "Plan apply finished".to_owned(),
+                body: "Plan partly applied: 3 items applied, 1 failed and 2 skipped.".to_owned()
             })
         );
     }
 
     #[test]
     fn the_workflow_run_topic_dispatches_to_the_workflow_run_notification() {
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
         assert_eq!(
-            notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload()),
+            notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &workflow_run_payload(), &wording),
             Some(Notification {
-                title: "Workflow run finished",
-                body: "siril run recorded: 1 new artifact(s) attributed.".to_owned()
+                title: "Workflow run finished".to_owned(),
+                body: "New artifacts attributed by siril: 1.".to_owned()
             })
         );
     }
 
     #[test]
     fn an_unsubscribed_topic_raises_no_notification() {
-        // Every other topic on the shared bus reaches this subscriber.
-        assert_eq!(notification_for("plan.applying.started", &plan_completion_payload()), None);
-        assert_eq!(notification_for("manifest.write.success", &workflow_run_payload()), None);
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
+        assert_eq!(notification_for("plan.applying.started", &plan_completion_payload(), &wording), None);
+        assert_eq!(notification_for("manifest.write.success", &workflow_run_payload(), &wording), None);
     }
 
     #[test]
     fn a_subscribed_topic_with_an_undeserialisable_payload_raises_no_notification() {
+        let wording = Wording::in_locale("en-GB").expect("en-GB wording");
         let degraded = serde_json::json!({ "planId": "p-1", "cancelledCount": 4 });
-        assert_eq!(notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &degraded), None);
-        assert_eq!(notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &degraded), None);
+        assert_eq!(notification_for(TOPIC_PLAN_APPLYING_COMPLETED, &degraded, &wording), None);
+        assert_eq!(notification_for(TOPIC_WORKFLOW_RUN_COMPLETED, &degraded, &wording), None);
     }
 }

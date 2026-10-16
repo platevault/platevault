@@ -8,6 +8,8 @@
 //! release was made as `update:offer` events
 //! (`crate::updater::UPDATE_OFFER_EVENT`, astro-plan-c72oo).
 
+use std::sync::Arc;
+
 use contracts_core::updates::{UpdateOffer, UpdateStatus};
 use contracts_core::ContractError;
 use desktop_services::update::offer::Offers;
@@ -105,10 +107,10 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 }
 
 /// `update.set_locale` — the webview's active locale, sent at startup and on
-/// every locale change, for the text the updater shows outside the webview:
-/// the macOS administrator prompt and the notification an install at quit
-/// raises. A tag that is not a shipped locale means the base locale. Without
-/// an updater there is nothing to tell, which is not an error.
+/// every locale change, for text the updater and desktop notifications show
+/// outside the webview: update notices and OS completion notices. A tag that is
+/// not a shipped locale means the base locale. Without an updater or services
+/// there is nothing to tell, which is not an error.
 ///
 /// # Errors
 ///
@@ -119,6 +121,9 @@ pub async fn update_install_on_quit(app: AppHandle) -> Result<(), ContractError>
 pub fn update_set_locale(app: AppHandle, locale: String) -> Result<(), ContractError> {
     if let Some(updater) = app.try_state::<Updater>() {
         updater.set_locale(&locale);
+    }
+    if let Some(services) = app.try_state::<Arc<desktop_services::Services>>() {
+        services.notifier().set_locale(&locale);
     }
     Ok(())
 }
