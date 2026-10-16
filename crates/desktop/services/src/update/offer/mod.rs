@@ -253,7 +253,6 @@ impl Offers {
     /// `locale` names at the time. The returned task does the work: spawn it
     /// on the runtime the port's operations should run on. It ends with
     /// `port`'s status.
-    #[must_use]
     pub fn new<P, S>(
         port: P,
         system: S,

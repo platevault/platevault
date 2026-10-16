@@ -7145,12 +7145,13 @@ export type NonBlockingSummary = {
  *  (astro-plan-c72oo).
  */
 export type OfferChannel = 
-/**  A system notification carries both buttons. */
+/**  A system notification with both buttons is on screen. */
 "system" | 
 /**
  *  The in-app notice carries them: notification permission was denied,
- *  the notification system shows no buttons, or the notification could
- *  not be shown.
+ *  the notification system shows no buttons, the notification could not
+ *  be shown or was not accepted in time, or the user answered or closed
+ *  it, or it was withdrawn.
  */
 "in-app";
 
@@ -10774,7 +10775,7 @@ export type UpdateIngestionSettings = {
 	defaultFilter: string | null,
 };
 
-/**  Where the offer for the release the last check found was made. */
+/**  Where the offer for the release the last check found stands. */
 export type UpdateOffer = {
 	/**  The release offered; `None` until a check has found one. */
 	version: string | null,
