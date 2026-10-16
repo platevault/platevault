@@ -7,7 +7,7 @@
 import { formatCount, formatDecimal } from "@/lib/format"
 import { type MessageRef, msg, nightRef, verbatim } from "@/lib/i18n"
 import type { MoonAvoidance } from "./planning"
-import type { ApplicationProfile, Band, Catalog, GoalChannel, GroupKeywords, InputMode, MatchingSettings, MoonConstraint, OperationUnit, OutputKind, QualityBar, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
+import type { ApplicationProfile, Band, Catalog, GoalChannel, GroupKeywords, InputMode, MatchingSettings, MoonConstraint, OperationUnit, OutputKind, SubjectWindow, WindowRule, WrapUpStepId } from "./types"
 
 /**
  * The catalogue's object types (sky.ts) in the reader's language. A type a
@@ -61,14 +61,6 @@ export const GOAL_CHANNELS: GoalChannel[] = ["L", "R", "G", "B", "Ha", "OIII", "
 
 export function isGoalChannel(value: string): value is GoalChannel {
   return (GOAL_CHANNELS as string[]).includes(value)
-}
-
-/** "Usable", "FWHM ≤ 2.5″", "Usable, FWHM ≤ 2.5″"; the limit in the reader's digits ("2,5″" in pt-BR). */
-export function qualityBarRef(bar: QualityBar | null): MessageRef {
-  if (!bar) return msg("domain_quality_any")
-  if (bar.kind === "usable-only") return msg("status_usable")
-  const arcsec = numberText(bar.maxArcsec)
-  return bar.kind === "max-fwhm" ? msg("domain_quality_max_fwhm", { arcsec }) : msg("domain_quality_usable_max_fwhm", { arcsec })
 }
 
 /** A setting's number in the reader's digits, as precise as it was typed up to two decimals: "10", "3.5", "5.25" ("3,5" in pt-BR). */

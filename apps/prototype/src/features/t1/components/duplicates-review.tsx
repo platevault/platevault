@@ -1,8 +1,8 @@
 /**
  * Duplicates review (P-STO2; plan §4b), a large FormDialog opened by
- * `?duplicates=review` over Settings › Locations (the duplicates issue links
- * there). One table lists the byte-identical copies the latest automatic
- * duplicate scan found that are still live, grouped by frame. The scan
+ * `?duplicates=review` over Sessions › Duplicates, the duplicates issue's
+ * owning filter (F5, F7). One table lists the byte-identical copies the
+ * latest automatic duplicate scan found that are still live, grouped by frame. The scan
  * covers registered library locations only, never a capture card (Round 6),
  * and the copy to keep is preselected (`keepChoice`: the one in the
  * earliest-registered location; a copy that cannot go to the OS Trash is
@@ -12,7 +12,7 @@
  * Trash. Both run through the shared OS Trash engine, so nothing is deleted
  * permanently, and the issue clears as the copies leave. Its More menu
  * dismisses the duplicates issue, and restores it once dismissed (F7,
- * P-ISS1): the issue links here, so this is its page.
+ * P-ISS1), as the Sessions page menu does: the issue links there.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { Copy } from "lucide-react"
@@ -138,7 +138,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
           { label: m.duplicates_movable(), value: m.location_copies_count({ count: movableCopies, n: formatCount(movableCopies) }) },
         ]}
       />
-      <ActionBar actions={[scanAgain]} overflow={withIssueItems(m, [], pageIssues(issueView, "/settings/locations"))} />
+      <ActionBar actions={[scanAgain]} overflow={withIssueItems(m, [], pageIssues(issueView, "/sessions"))} />
       {scanning ? <OperationPanel operationId={scanning.id} itemLimit={0} /> : null}
       {groups.length === 0 ? (
         scanning ? null : <EmptyState icon={Copy} title={findings ? m.storage_no_duplicates() : m.storage_not_scanned()} action={<ActionButton action={scanAgain} />} />

@@ -2,6 +2,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it } from "vitest"
+import { formatHours } from "@/domain/derive"
 import { createSeed } from "@/domain/seed"
 import { qualityBarFor } from "@/domain/templates"
 import type { GoalTemplate } from "@/domain/types"
@@ -61,5 +62,20 @@ describe("Settings › Goal templates (C7)", () => {
 
     const saved = Object.values(store.getState().catalog.goalTemplates).find((t) => t.name === NAME)
     expect(saved!.conditions).toEqual({ panelBalancePct: 15, window: { kind: "season" } })
+  })
+
+  it("counts Usable frames only: the line names the FWHM limit alone, and the amount reads Usable hours or Usable frames", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const line = m.domain_goal_line({ channel: "Ha", amounts: `${formatHours(4 * 3600)} · ${m.domain_quality_max_fwhm({ arcsec: "2.5" })}` })
+    expect(await screen.findByRole("cell", { name: line })).toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(m.status_usable()))).toBeNull()
+
+    await rowAction(user, NAME, m.settings_edit())
+    const goal = within(await screen.findByRole("dialog")).getByRole("group", { name: m.goal_channel_goal({ channel: "Ha" }) })
+    expect(within(goal).getByRole("spinbutton", { name: m.goal_usable_hours() })).toHaveValue(4)
+    await user.click(within(goal).getByRole("button", { name: m.goal_frames() }))
+    expect(within(goal).getByRole("spinbutton", { name: m.goal_usable_frames() })).toHaveValue(4)
+    expect(within(goal).queryByRole("spinbutton", { name: m.goal_usable_hours() })).toBeNull()
   })
 })

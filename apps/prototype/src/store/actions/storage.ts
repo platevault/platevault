@@ -19,8 +19,8 @@ import { addDuplicateScan, ensureTicker, type OperationHandler, patchOperation, 
 import { refuse } from "./shared"
 import { moveToOsTrash } from "./trash"
 
-/** Where the scan and the clean-up link: the Duplicates review over Settings › Locations. */
-export const DUPLICATES_HREF = "/settings/locations?duplicates=review"
+/** Where the scan and the clean-up link: the Duplicates review over Sessions › Duplicates, the duplicates issue's owning filter (F5, F7). */
+export const DUPLICATES_HREF = "/sessions?filter=duplicates&duplicates=review"
 
 /** Frames the scan reads per tick. */
 const FRAMES_PER_TICK = 120

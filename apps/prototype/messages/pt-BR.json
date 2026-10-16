@@ -1305,6 +1305,8 @@
   "project_back_to_projects": "Abrir Projetos",
   "goal_hours": "Horas",
   "goal_frames": "Frames",
+  "goal_usable_hours": "Horas utilizáveis",
+  "goal_usable_frames": "Frames utilizáveis",
   "goal_fwhm_max": "FWHM ≤ ″",
   "project_unknown_subject": "Objeto desconhecido",
   "project_panels": [
@@ -3338,9 +3340,7 @@
   "common_mosaic_panel": "Painel de mosaico",
   "domain_result_assembled_mosaic": "Mosaico montado",
   "domain_result_other": "Outro",
-  "domain_quality_any": "Qualquer qualidade",
   "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
-  "domain_quality_usable_max_fwhm": "Utilizável, FWHM ≤ {arcsec}″",
   "domain_rig_unknown": "Equipamento desconhecido",
   "domain_fov_unknown": "Campo de visão desconhecido",
   "domain_candidate_reason": "Alvo {target} em {rig}",
@@ -5770,6 +5770,7 @@
   "location_col_frames": "Frames",
   "location_col_size": "Tamanho",
   "location_col_free": "Livre no disco",
+  "location_free_of": "{free} de {capacity}",
   "location_offline_count": [
     {
       "declarations": [

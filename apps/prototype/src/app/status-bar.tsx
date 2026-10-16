@@ -146,7 +146,7 @@ function pageName(m: Messages, catalog: Catalog, link: StepLink): string {
     case "/projects/$projectId":
       return catalog.projects[link.params?.projectId ?? ""]?.name ?? m.nav_projects()
     case "/settings/locations":
-      return link.search?.duplicates ? m.status_bar_page_in({ area: m.common_locations(), page: m.sessions_filter_duplicates() }) : m.common_locations()
+      return m.common_locations()
     case "/calibration":
       return m.nav_calibration()
     default:

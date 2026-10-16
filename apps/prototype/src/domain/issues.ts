@@ -136,10 +136,10 @@ export function deriveIssues(world: World, _nowMs: number = Date.now() + world.f
     }
   }
 
-  // Duplicates the latest scan found that are still live: the extra copies (every copy beyond the one each frame keeps) and their bytes.
+  // Duplicates the latest scan found that are still live: the extra copies (every copy beyond the one each frame keeps) and their bytes. Their owning filter is Sessions › Duplicates (F5, F7), where the Duplicates review opens.
   const duplicates = duplicateFindings(world)
   if (duplicates && duplicates.copies > 0) {
-    out.push({ id: "storage:duplicates", group: "storage", kind: "duplicates", severity: "warning", count: duplicates.copies, bytes: duplicates.bytes, name: null, about: null, owner: library, link: { to: "/settings/locations", search: { duplicates: "review" } } })
+    out.push({ id: "storage:duplicates", group: "storage", kind: "duplicates", severity: "warning", count: duplicates.copies, bytes: duplicates.bytes, name: null, about: null, owner: library, link: { to: "/sessions", search: { filter: "duplicates" } } })
   }
 
   // Interrupted or failed work: on its Project's row when it worked on one; a calibration process lists its own failures below.
