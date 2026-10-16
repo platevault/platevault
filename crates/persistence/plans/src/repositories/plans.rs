@@ -407,14 +407,13 @@ pub async fn update_plan_state(pool: &SqlitePool, plan_id: &str, state: &str) ->
     update_plan_state_conn(&mut conn, plan_id, state).await
 }
 
-/// Connection-level variant of [`update_plan_state`], so a caller can make it
-/// one write of its own transaction.
+/// Connection-level variant of [`update_plan_state`]. See [`insert_plan_conn`].
 ///
 /// # Errors
 ///
 /// Returns [`persistence_core::DbError::NotFound`] if no plan with `plan_id` exists.
 /// Returns [`persistence_core::DbError::Database`] on connection failure.
-pub async fn update_plan_state_conn(
+pub(crate) async fn update_plan_state_conn(
     conn: &mut SqliteConnection,
     plan_id: &str,
     state: &str,
@@ -429,6 +428,28 @@ pub async fn update_plan_state_conn(
         return Err(DbError::NotFound(format!("plan {plan_id}")));
     }
     Ok(())
+}
+
+/// Move the plan `plan_id` from `draft` to `ready_for_review`. Returns whether
+/// it moved: `false` when the plan is gone or has left `draft`.
+///
+/// The expected state is in the `WHERE` clause, as in [`set_approved`], so a
+/// draft discarded while its creator was still writing it stays discarded
+/// rather than coming back reviewable with `discarded_at` set.
+///
+/// # Errors
+///
+/// Returns [`persistence_core::DbError::Database`] on connection failure.
+pub async fn set_ready_for_review_conn(
+    conn: &mut SqliteConnection,
+    plan_id: &str,
+) -> DbResult<bool> {
+    let rows =
+        sqlx::query("UPDATE plans SET state = 'ready_for_review' WHERE id = ? AND state = 'draft'")
+            .bind(plan_id)
+            .execute(&mut *conn)
+            .await?;
+    Ok(rows.rows_affected() > 0)
 }
 
 /// Delete the plan `plan_id` while it is still `draft`, with its items
@@ -876,6 +897,26 @@ mod tests {
         let items: Vec<String> =
             sqlx::query_scalar("SELECT id FROM plan_items").fetch_all(db.pool()).await.unwrap();
         assert_eq!(items, ["item-ready"], "the draft's items go with it");
+    }
+
+    #[tokio::test]
+    async fn set_ready_for_review_conn_moves_only_a_draft() {
+        let db = setup_db().await;
+        insert_plan(db.pool(), &sample_plan("p-draft")).await.unwrap();
+        insert_plan(db.pool(), &sample_plan("p-discarded")).await.unwrap();
+        soft_delete_plan(db.pool(), "p-discarded", "2026-01-01T00:00:00Z").await.unwrap();
+
+        let mut conn = db.pool().acquire().await.unwrap();
+        assert!(set_ready_for_review_conn(&mut conn, "p-draft").await.unwrap());
+        assert!(
+            !set_ready_for_review_conn(&mut conn, "p-discarded").await.unwrap(),
+            "a discarded draft is not brought back"
+        );
+        assert!(!set_ready_for_review_conn(&mut conn, "p-gone").await.unwrap());
+        drop(conn);
+
+        assert_eq!(get_plan(db.pool(), "p-draft", false).await.unwrap().state, "ready_for_review");
+        assert_eq!(get_plan(db.pool(), "p-discarded", true).await.unwrap().state, "discarded");
     }
 
     #[tokio::test]

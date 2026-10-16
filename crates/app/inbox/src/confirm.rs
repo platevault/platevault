@@ -152,6 +152,9 @@ pub struct ResolvedDestination {
 ///   non-light item (spec 008 Q27 F-Framing-10).
 /// - `attribution.geometry_unavailable` — `chosen_attribution` requires
 ///   creating a new framing, but this item has no staged pointing/rotation.
+/// - `plan.invalid_state` — the draft plan left `draft` (the user discarded
+///   it) before confirm opened it for review; it stays as it is and the item
+///   stays unconfirmed.
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
@@ -423,6 +426,11 @@ fn stale_master_removed(inbox_item_id: &str) -> ContractError {
 /// refused: no plan is left for a row that is stale or gone. Once the link
 /// commits, neither the scan nor the check deletes the row.
 ///
+/// The plan itself may have left `draft` meanwhile: the user can discard the
+/// draft from the plan list. It moves to `ready_for_review` only from
+/// `draft`; otherwise the transaction rolls back, so the item stays
+/// unconfirmed and the discarded plan stays discarded, and confirm is refused.
+///
 /// `BEGIN IMMEDIATE` takes the write lock before the first statement, so a
 /// scan or the plan listener holding it makes this wait for `busy_timeout`
 /// instead of failing on a read snapshot it cannot upgrade. Every statement
@@ -462,12 +470,25 @@ async fn open_plan_for_review(
         tx.commit().await.map_err(|e| db_internal_ctx(e, "commit the refused plan"))?;
         return Err(err);
     }
+    if !plans_repo::set_ready_for_review_conn(&mut tx, plan_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?
+    {
+        tx.rollback().await.map_err(|e| db_internal_ctx(e, "roll back opening the plan"))?;
+        return Err(ContractError::new(
+            ErrorCode::PlanInvalidState,
+            format!(
+                "Plan {plan_id} left draft while InboxItem {} was being confirmed; \
+                 it was not opened for review",
+                item.id
+            ),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
     inbox_repo::insert_plan_link_conn(&mut tx, &item.id, plan_id)
         .await
         .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
-    plans_repo::update_plan_state_conn(&mut tx, plan_id, PlanState::ReadyForReview.as_str())
-        .await
-        .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?;
     tx.commit().await.map_err(|e| db_internal_ctx(e, "commit the opened plan"))
 }
 
@@ -3694,5 +3715,64 @@ mod tests {
     #[tokio::test]
     async fn a_scan_retiring_the_old_row_mid_confirm_stops_the_plan() {
         assert_no_plan_when_a_scan_lands_mid_confirm(true).await;
+    }
+
+    /// The user discards the draft plan from the plan list while confirm is
+    /// still writing it: a trigger on the plan item insert does what
+    /// `plans.discard` does. Confirm must not bring the plan back as
+    /// `ready_for_review` with `discarded_at` set, nor link the item to it.
+    #[tokio::test]
+    async fn a_draft_discarded_mid_confirm_is_not_opened_for_review() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-discarded",
+            "classified",
+            Some("light"),
+            "sig-discarded",
+            &["light_001.fits"],
+        )
+        .await;
+        sqlx::query(
+            "CREATE TRIGGER user_discards_the_draft AFTER INSERT ON plan_items BEGIN
+                UPDATE plans SET state = 'discarded', discarded_at = '2026-01-01T00:00:00Z'
+                WHERE id = NEW.plan_id;
+            END",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let err = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-discarded".to_owned(),
+                content_signature: "sig-discarded".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .expect_err("a discarded draft must not be opened for review");
+
+        assert_eq!(err.code, ErrorCode::PlanInvalidState);
+        let states: Vec<String> =
+            sqlx::query_scalar("SELECT state FROM plans").fetch_all(db.pool()).await.unwrap();
+        assert_eq!(states, ["discarded"], "the discarded plan stays discarded");
+        assert!(inbox_repo::get_plan_link(db.pool(), "item-discarded").await.unwrap().is_none());
+        let item = inbox_repo::get_inbox_item(db.pool(), "item-discarded").await.unwrap();
+        assert_ne!(item.state, "plan_open", "the item stays unconfirmed");
     }
 }
