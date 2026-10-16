@@ -53,14 +53,19 @@ macro_rules! schema_modules {
 
 /// The catalog schema, applied in this order on every open: `schema.sql` holds
 /// `catalog_meta` and the spec 064 library tables, and each feature module
-/// appends its own idempotent `<feature>.sql`, one file per line.
+/// appends its own idempotent `<feature>.sql`, one file per line. The F4
+/// Project model modules (cameras and rig versions, session intake and
+/// calibration pins, workflow settings, Project inputs, lifecycle, View and
+/// Output) come after the tables they reference.
 #[rustfmt::skip]
 const SCHEMA: &str = schema_modules![
     "schema.sql",
     "naming.sql",
     "rigs.sql",
+    "rig_versions.sql",
     "planning.sql",
     "calibration.sql",
+    "session_intake.sql",
     "trash.sql",
     "projects.sql",
     "measurements.sql",
@@ -76,11 +81,17 @@ const SCHEMA: &str = schema_modules![
     "cleanup.sql",
     "archive.sql",
     "trash_moves.sql",
+    "workflow_settings.sql",
+    "project_inputs.sql",
+    "project_lifecycle.sql",
+    "project_view.sql",
+    "project_output.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
-/// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 16;
+/// version is refused before any module's DDL runs. Version 17 is the F4
+/// greenfield catalog (D-W115): no earlier catalog is upgraded.
+pub const SCHEMA_VERSION: i64 = 17;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -181,6 +192,9 @@ pub use archive::{
 };
 mod trash_moves;
 pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
+// The F4 admission contract (only Ready, calibration-settled sessions join a
+// Project); its `require_admission` runs inside membership-add transactions.
+mod admission;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

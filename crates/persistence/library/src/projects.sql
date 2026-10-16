@@ -14,7 +14,25 @@ CREATE TABLE IF NOT EXISTS projects (
     revision INTEGER NOT NULL CHECK (revision > 0),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    CHECK ((state = 'done') = (done_at IS NOT NULL))
+    -- F4 (D-W94, D-W97): Open until Wrap up closes it, Closing while Close's
+    -- archive transfer runs, then Closed or Archived and locked for good
+    -- (project_lifecycle.sql). `revision` is the desired-state revision every
+    -- edit advances and an Apply sheet records.
+    lifecycle TEXT NOT NULL DEFAULT 'open'
+        CHECK (lifecycle IN ('open', 'closing', 'closed', 'archived')),
+    closed_at TEXT,
+    -- The View step's settings (VSEL-FR-16, PREP-FR-06, PRJ-FR-28): input
+    -- mode, this Project's keyword names (NULL: the Settings defaults), the
+    -- application, and the chosen processing location as native-path JSON
+    -- (NULL until chosen: there is no assumed root).
+    view_mode TEXT NOT NULL DEFAULT 'symlinks' CHECK (view_mode IN ('symlinks', 'copies')),
+    group_keyword TEXT,
+    panel_keyword TEXT,
+    profile_id TEXT REFERENCES profiles (id),
+    processing_parent TEXT,
+    CHECK ((state = 'done') = (done_at IS NOT NULL)),
+    CHECK ((lifecycle = 'open') = (closed_at IS NULL)),
+    CHECK ((group_keyword IS NULL) = (panel_keyword IS NULL))
 ) STRICT;
 
 -- A subject is a saved Target, or a mosaic of that Target with panels. The
@@ -61,6 +79,9 @@ CREATE TABLE IF NOT EXISTS project_goals (
     project_id TEXT NOT NULL REFERENCES projects (id),
     subject_id TEXT NOT NULL,
     panel_id TEXT,
+    -- F4: a goal of a mosaic panel group (PRJ-FR-03, PRJ-FR-29); groups, not
+    -- names, scope panel goals (project_inputs.sql).
+    group_id TEXT,
     kind TEXT NOT NULL CHECK (kind IN ('integration', 'frame_count', 'quality_bar')),
     channel TEXT CHECK (channel IS NULL OR length(trim(channel)) > 0),
     goal_seconds INTEGER CHECK (goal_seconds IS NULL OR goal_seconds > 0),
@@ -69,6 +90,8 @@ CREATE TABLE IF NOT EXISTS project_goals (
     position INTEGER NOT NULL,
     FOREIGN KEY (project_id, subject_id) REFERENCES project_subjects (project_id, id),
     FOREIGN KEY (subject_id, panel_id) REFERENCES subject_panels (subject_id, id),
+    FOREIGN KEY (project_id, group_id) REFERENCES project_groups (project_id, id),
+    CHECK (panel_id IS NULL OR group_id IS NULL),
     CHECK ((kind = 'integration') = (goal_seconds IS NOT NULL)),
     CHECK ((kind = 'frame_count') = (goal_frames IS NOT NULL)),
     CHECK ((kind = 'quality_bar') = (criterion IS NOT NULL)),
