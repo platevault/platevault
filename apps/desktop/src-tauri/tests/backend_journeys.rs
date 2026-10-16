@@ -13,9 +13,14 @@
 //! e2e seed the real-UI harness pre-warms, the inbox plan listener, the
 //! ingest-resolution backstop drain, and the real filesystem.
 //!
-//! Requests are built from the same JSON the journeys sent over IPC and
-//! responses are serialised back to JSON before asserting, so each journey
-//! still proves the commands' wire shapes, not only their Rust types.
+//! Each call is a direct Rust call: [`args`] checks deserialization of the
+//! inner DTO JSON and [`wire`] serializes the returned DTO before assertions.
+//! This does NOT exercise Tauri's invoke handler, runtime command dispatch,
+//! or the frontend's top-level argument keys. `tests/bindings.rs` exports
+//! the production `specta_builder` command set and checks an explicit subset
+//! of command names in generated bindings (not the entire set). Several
+//! commands used below are not in that explicit subset; runtime IPC dispatch
+//! and argument-key coverage are open gaps.
 //!
 //! The real-UI halves stay in the real-UI suite: the fresh-DB redirect to
 //! `/setup` that `first_run_resolve_create_project` used to check is asserted
@@ -169,12 +174,15 @@ fn spawn_ingest_resolution_backstop(pool: sqlx::SqlitePool, bus: EventBus, cache
     });
 }
 
-/// Deserialize a command argument from the JSON the IPC bridge sent.
+/// Deserialize the inner DTO argument from the same JSON payload values the
+/// removed IPC journeys used. Direct command calls do not test Tauri's
+/// top-level argument keys.
 fn args<T: DeserializeOwned>(value: Value) -> T {
-    serde_json::from_value(value).expect("argument JSON must match the command's wire shape")
+    serde_json::from_value(value).expect("argument JSON must match the command DTO shape")
 }
 
-/// The JSON the IPC bridge would have returned for a successful command.
+/// Serialize a successful command response to the JSON shape the old IPC
+/// journeys observed. This does not invoke Tauri's IPC layer.
 fn wire<T: Serialize, E: std::fmt::Debug>(command: &str, result: Result<T, E>) -> Value {
     let value = result.unwrap_or_else(|e| panic!("{command} failed: {e:?}"));
     serde_json::to_value(value).expect("command response must serialize")
@@ -363,18 +371,26 @@ fn any_file_under(root: &Path) -> bool {
 /// Backend REAL: `firstrun.state`, `target.resolve`, `projects.create`,
 /// `projects.list`.
 ///
-/// Was `journeys.rs::first_run_resolve_create_project`. Its one UI read was
-/// the URL landing on `/setup`; the frontend gate takes that redirect exactly
-/// when `firstrun.state` reports no `completedAt` (`apps/desktop/src/app/
-/// first-run.ts`), which is asserted here.
+/// Was `journeys.rs::first_run_resolve_create_project`. The old journey's
+/// only UI read was the URL landing on `/setup`. This test calls
+/// `firstrun.state` directly and checks the fresh DB response omits the
+/// optional `completedAt` field and reports `lastStep = "source_folders"`.
+/// It does not test the frontend redirect; the real-UI suite still does via
+/// journeys that call `settle_first_run_redirect`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn first_run_resolve_create_project() {
     let be = Backend::start().await;
 
     let first_run = wire("firstrun.state", firstrun_state(be.state()).await);
-    assert!(
-        first_run["completedAt"].is_null(),
-        "expected a fresh DB to report first-run setup as incomplete: {first_run}"
+    assert_eq!(
+        first_run.get("completedAt"),
+        None,
+        "a fresh DB must omit the optional completedAt field: {first_run}"
+    );
+    assert_eq!(
+        first_run["lastStep"],
+        "source_folders",
+        "a fresh DB must report the initial setup step: {first_run}"
     );
 
     let resolve = wire(
@@ -1013,6 +1029,9 @@ async fn setup_archived_project(be: &Backend, label: &str) -> (String, tempfile:
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn archive_lifecycle_apply_trash_permanent_delete() {
     let _fake_trash = fs_executor::ops::trash_op::fake::FakeTrashGuard::new();
+    // Process-global seam. This is the only test in this binary using it; no
+    // other backend journey reaches archive trash, so tokio worker threads do
+    // not race another test into this fake or the real OS trash path.
     let be = Backend::start().await;
 
     // ── archive.send_to_trash really removes the file ──────────────────────
