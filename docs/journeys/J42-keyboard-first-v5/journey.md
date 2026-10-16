@@ -75,11 +75,11 @@ Done means:
 
 - **Do:** On Sessions, with the search field empty, press Tab until a session row has focus. Press ↓ twice, then **End**, **Home**, **Page Down** and **Page Up**. Press Space, read the batch bar, and press Space again. Press **⇧F10**, read the menu, then press **Esc**. Press Tab until focus leaves the table, then press Shift+Tab once.
 - **Expect:**
-  - Before the rows, Tab reaches the table's header controls, its select-all and sort buttons, each as its own stop. The next Tab lands on the table's current row, its first row on this first visit.
+  - Tab lands on the table's current row, its first row on this first visit. Provisional (G7): before the rows, Tab first reaches the table's header controls, its select-all and sort buttons, each as its own stop.
   - ↓ moves one row each time, **End** to the last row and **Home** to the first, and **Page Down** and **Page Up** move by one screen of rows. Focus and the current row move together.
   - The first Space selects the focused row, and the batch bar replaces the toolbar with `1 selected`; the second Space clears it, and the toolbar returns.
   - **⇧F10** opens the row's menu, named after the row. **Esc** closes it, and focus is back on the row.
-  - From the row, Tab reaches that row's own controls, its checkbox and `⋯`, and then leaves the table for the status bar. Shift+Tab returns to the row's `⋯`.
+  - From the row, Tab reaches that row's own controls, its checkbox and `⋯`, and the next Tab leaves the table. Shift+Tab returns to the row's `⋯`.
 - **Expect (negative):** No row other than the current one takes a Tab stop. No arrow, Home, End or Page key changes a selection or a record, and opening and closing the menu runs none of its items.
 - **Trace:** FR-026, FR-027, FR-031, FR-037 · D-W91, D-W121 · src/components/app/data-table.tsx (ui-harness-v5 @ d1e721af, astro-plan-2r9ld)
 
@@ -197,11 +197,12 @@ Done means:
 - G4: Out of scope for this journey: frame review's keyboard. There Review's own handler keeps ↑/↓ and Space, and a frame row that takes focus through Home, End, Page Up or Page Down becomes the current frame. The filmstrip view, Compare (C), the review filters (⌥1 to ⌥4), Unreviewed (U), Pick (P, Shift+P), the review shortcuts sheet and palette actions such as theme and language are out of scope too. J22/S11a covers P, Shift+P and the filters with a pointer.
 - G5: Out of scope for this journey: the order in which Tab reaches each region (toolbar, source list, page, status bar), which the v5 design doesn't state, and the focus target after a row is removed. FR-037 sets that target: the next row, or the previous one when the last row goes (provisional), whether a confirmed action, the row's `⋯` or its context menu removed it. No step here removes a row, because no keystroke in this journey trashes, moves or deletes anything.
 - G6: Unresolved implementation qualification: no screen-reader check (VoiceOver on macOS, NVDA on Windows) has confirmed how a table's current row, its selection and its row menu are announced. Blocks readiness.
+- G7: Rests on provisional items, pending the owner's confirmation in PR #1804: D-W121's header Tab stops, the select-all and sort buttons before the rows (S3a), and its previous-row focus after the last row is removed (G5, FR-037). If the owner changes either, the steps that cite it change.
 
 ## Delta log
 - **Δ2** 2026-10-15 · S1, S5, S9, S10, S11, S12, S13, S14 · behavior-change
   The keyboard path now follows the Project's Sessions, Calibrate, View, Output and Wrap up steps. Apply remains pending until the user chooses it; frame review is in session intake.
   Evidence: D-W94 to D-W106, PRJ-FR-07, PRJ-FR-14, PRJ-FR-27, VSEL-FR-14, PREP-FR-06 and RES-FR-01 · by: SpecF4Writer2 (intent-gated)
 - **Δ3** 2026-10-16 · S1, +S3a, S4, S7, S8, +SC6 · behavior-change
-  Each table is one Tab stop on its current row, followed by that row's own controls: ↑ ↓, Home and End and Page Up and Page Down move between rows, Space selects only while single-key shortcuts are on, Enter opens and ⇧F10 opens the row menu. New S3a walks the model on Sessions; S4 and S7 reach their rows with Tab and ↓, and S8 checks Space with the switch off. G4 and G5 follow the implementation, and G6 is new.
+  Each table is one Tab stop on its current row, followed by that row's own controls: ↑ ↓, Home and End and Page Up and Page Down move between rows, Space selects only while single-key shortcuts are on, Enter opens and ⇧F10 opens the row menu. New S3a walks the model on Sessions; S4 and S7 reach their rows with Tab and ↓, and S8 checks Space with the switch off. G4 and G5 follow the implementation, G6 is new, and G7 lists the provisional header Tab stops and previous-row focus.
   Evidence: D-W121 (owner's answer of 2026-10-16 to astro-plan-g3tx4, option B′) in PR #1804, FR-037; DataTable implementation astro-plan-2r9ld on ui-harness-v5 @ d1e721af · by: EncodeOwnerAnswers2 (intent-gated)
