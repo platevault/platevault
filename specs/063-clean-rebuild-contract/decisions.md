@@ -7,13 +7,13 @@ The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific
 
 ## Workflow redesign 2026-10-06
 
-On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. On 2026-10-08 the user added D-W75, which narrows D-W72 for run groups: a trashed panel run stays listed in its group as Trashed (VSEL-FR-19). From 2026-10-12 to 2026-10-14 the owner's harness v5 feedback added D-W76 through D-W92: the renames and the one-Proceed step flow, session intake and the library-wide reject, Wrap up, the Symlinks and Copies modes, the calibration library, applications, naming, Results, Settings and Equipment, Targets and Home, goals, the UI conventions and rows instead of an Issues hub. On 2026-10-14 the F4 grilling added D-W93 through D-W106: the Project replaces processing runs as the processing unit, and calibration is matched at ingestion. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. On 2026-10-08 the user added D-W75, which narrows D-W72 for run groups: a trashed panel run stays listed in its group as Trashed (VSEL-FR-19). From 2026-10-12 to 2026-10-14 the owner's harness v5 feedback added D-W76 through D-W92: the renames and the one-Proceed step flow, session intake and the library-wide reject, Wrap up, the Symlinks and Copies modes, the calibration library, applications, naming, Results, Settings and Equipment, Targets and Home, goals, the UI conventions and rows instead of an Issues hub. On 2026-10-14 the F4 grilling added D-W93 through D-W106: the Project replaces processing runs as the processing unit, and calibration is matched at ingestion. The owner's answers of 2026-10-15/16 added D-W107 through D-W116. They split sessions at intake by framing, add folder tokens for mixed gain or offset, and set the discard and `View (previous)/` rules. They also settle Archive and Duplicate for a Closed Project, pin drift, the defaults, a fresh catalog and the duplicate-copy keeper. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
 
-Stage model (the F4 Project model of D-W93 to D-W106 replaces the run stages of 2026-10-06):
+Stage model (the F4 Project model of D-W93 to D-W116 replaces the run stages of 2026-10-06):
 
-1. A Project is the processing unit (D-W1, D-W94). It names subjects, a rig list and goals, and it holds the sessions the user adds, in groups by rig and framing (D-W9, D-W29, D-W95, D-W96).
-2. Calibration is matched at ingestion and pinned on each light session. A Project adds only settled sessions and checks their calibration read-only (D-W101, D-W105). Every change is pending until Apply, which builds the Project's View from the originals and swaps it in (D-W100). The Results are the files in the Project's `Output/` folder (D-W98).
-3. The user closes the Project through Wrap up: Clean up, then Trash for rejected frames, `Processing/` files and duplicate copies, then Archive, with Close project… as its last step. A Closed Project is locked for good, with no Reopen, and Duplicate continues it (D-W80, D-W97).
+1. A Project is the processing unit (D-W1, D-W94). It has goals and holds the sessions the user adds, in groups by rig and framing (D-W9, D-W29, D-W95, D-W96). *Provisional* (D-W94): it names subjects and a rig list, which decide only its suggestions.
+2. Intake splits a night's frames into sessions by framing, so a group holds whole sessions (D-W107). Calibration is matched at ingestion and pinned on each light session. A Project adds only settled sessions and checks their calibration read-only (D-W101, D-W105). Every change is pending until Apply, which builds the Project's View from the originals and swaps it in (D-W100). The Results are the files in the Project's `Output/` folder (D-W98).
+3. The user closes the Project through Wrap up: Clean up, then Trash for rejected frames, `Processing/` files and duplicate copies, then Archive, with Close project… as its last step. A Closed Project is locked for good, and Duplicate continues it (D-W80, D-W97). *Provisional* (D-W97): there is no Reopen, and Wrap up opens only once no change is pending.
 
 Matching sessions are suggested and never added automatically (D-W96). Goal progress shows "in project" and "captured", and "in project" never exceeds "captured" (D-W36, D-W96). Delivery order: contract amendment, then backend deltas, then the final UI (D-W28).
 
@@ -27,7 +27,7 @@ Owners: LIB, PRJ, VSEL.
 - Unknown evidence is listed for manual selection, never treated as zero distance.
 - Standalone session selection remains explicit; an OBJECT label does not assign a Target or supply coordinates. Superseded in part by D-W1 and D-W8: there is no standalone selection, because every run belongs to a Project. An OBJECT label still assigns no Target and supplies no coordinates, so a session without a confirmed Target is never a candidate.
 - Angular separation may order suggestions but never decides eligibility alone.
-- Amended by D-W94 to D-W96: processing happens only in a Project. Geometry forms a Project's framing groups and orders its suggestions, and a suggestion is a Ready session whose confirmed Target is a subject and whose rig is on the rig list.
+- Amended by D-W94 to D-W96: processing happens only in a Project. Geometry forms a Project's framing groups and orders its suggestions. *Provisional* (D-W96): a suggestion is a Ready session whose confirmed Target is a subject and whose rig is on the rig list.
 
 ### D02
 
@@ -117,7 +117,7 @@ Owners: VSEL, PREP, RES, STO.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
 - Mark Complete is blocked while an app-owned preparation or storage mutation affecting this run is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated run operations do not block it. Amended by D-W72: Move run to Trash is blocked the same way, and also while one of the run's accepted Results is an input to another run.
 - Creating a new membership or preparation revision of a Complete run requires explicit Reopen. Reviewed cleanup, identity-preserving archive reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership.
-- Superseded by D-W94, D-W97 and D-W100: there are no runs, membership revisions or reprepare. Every change is pending until Apply, which builds a complete new View from the originals and swaps it in, keeping the old one as `View (previous)/`; it never moves or reuses entries from the current View. A Closed Project is locked for good, with no Reopen.
+- Superseded by D-W94, D-W97 and D-W100: there are no runs, membership revisions or reprepare. Every change is pending until Apply, which builds a complete new View from the originals and swaps it in, keeping the old one as `View (previous)/`; it never moves or reuses entries from the current View. A Closed Project is locked for good. *Provisional* (D-W97): there is no Reopen.
 
 ### D10
 
@@ -128,8 +128,8 @@ Owners: LIB, PRJ, VSEL.
 - Explicitly linked sessions show captured, library-usable and Project-accepted totals separately. Superseded by D-W34, D-W36, D-W44, D-W66 and D-W72: a Project has no linked sessions. Each goal shows two labelled numbers. "in project" counts the frames in the saved memberships of the Project's runs outside its Trash, minus each run's exclusions and the frames rejected for the Project. "captured" counts all candidates plus the members of those runs, so "in project" never exceeds it.
 - Project-accepted totals count only library-Usable frames not rejected for that Project, and are the fixed basis for marking integration/frame-count goals met. Superseded by D-W36 and D-W42: "in project" is the only basis for goal met and for Home's Next action. A quality-bar goal can restrict counting to Usable frames (D-W29).
 - Exposure/equipment/calibration checks show evidence or unknown. Superseded by D-W29: the exposure-preference and equipment goals are dropped. Missing calibration and exposure mismatch are automatic warnings, not goals, and the mixed-equipment warning is gone because each run uses one rig (D-W37).
-- Reaching a goal does not close the Project. Only the user marks a Project Done (D-W26).
-- Amended by D-W96: each Project counts its own sessions. "in project" counts them, minus the Project's exclusions, and "captured" adds every matching suggestion.
+- Reaching a goal does not close the Project. Only the user marks a Project Done (D-W26). Amended by D-W80 and D-W97: Done becomes Close, and only the user closes a Project, through Wrap up's Close project….
+- Amended by D-W96: each Project counts its own sessions, and "in project" counts them, minus the Project's exclusions. *Provisional* (D-W96): "captured" adds every matching suggestion.
 
 ### D11
 
@@ -179,7 +179,7 @@ Owners: LIB, VSEL, PREP.
 - Catalog corrections can cover grouping metadata such as filter, exposure and equipment, with original evidence retained.
 - A correction creates a new grouping revision; old session identities and fixed run asset membership remain traceable and unchanged.
 - Header corrections are delivered only through verified isolated patched Copy/Clone or supported tool configuration. Amended by D-W81: patched Copies, cloned or not.
-- Amended by D-W94: a correction never changes the sessions a Project holds.
+- Amended by D-W94: the fixed run membership of the second bullet becomes the sessions a Project holds. *Provisional*: a correction never changes them. *Open* (D-W100): whether a correction that re-splits a session a Project holds reaches the open Projects that hold it as a pending change.
 
 ### D16
 
@@ -218,7 +218,7 @@ Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
 - Offline or unreadable means unverified, never matched. Counts keep the labelled last-observed state; every other effect blocks.
 - Drift resolves only when bytes matching the basis return, the user explicitly reviews or accepts the current bytes, or the item is explicitly excluded. Nothing resolves it automatically.
 - D05 and D06 apply this rule to adoption and archive. Metadata-only indexing and captured totals of Unreviewed captures stay as LIB specifies; copies of a retired location (D11) leave totals instead of keeping a last-observed count. Retire location is catalog-only: it reads and changes no file bytes, so no rehash applies. It commits only against its review, the expected location revision and the availability recorded in that review. Calendar export consumes no recorded file. Verification ends at launch; PlateVault claims nothing about inputs while an external application runs.
-- Amended by D-W93 and D-W98: a Result needs no acceptance and is never reused as an input, so the accepted-product bases go, and Apply snapshots the inputs it places.
+- Amended by D-W93 and D-W98: a Result needs no acceptance and is never reused as an input, so the accepted-product bases go. Apply records each copy's digest (D-W100).
 
 ## Verification still required
 
