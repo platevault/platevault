@@ -6692,5 +6692,187 @@
   "catalogue_f4_tree_one_group": "one group, Copies (M 31 LRGB)",
   "catalogue_f4_tree_symlinks": "groups, two cameras, Symlinks (Cygnus HOO 2026)",
   "catalogue_f4_tree_mixed": "what-if, Copies: darks in the nights, NIGHT_…-2",
-  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)"
+  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)",
+  "calibrate_check_title": "Calibration check",
+  "calibrate_mixed_settings_hint": "Provisional: the order of the parts, the exposure part and the flats' gain follow the lights they calibrate.",
+  "calibrate_problems_of": "Sessions to fix in {name}",
+  "calibrate_problems_title": "Sessions to fix before Apply",
+  "output_choose_file_first": "Choose a file in Processing first",
+  "output_copied_from": "Copied from",
+  "output_kind_channel": "Kind and channel",
+  "output_kind_channel_title": "Kind and channel of {name}",
+  "output_name_in_output": "Name in Output",
+  "output_never_overwrites": "A file Output already holds is never overwritten: choose another name.",
+  "output_no_folder": "No Project folder yet. The first Apply makes Output.",
+  "output_saved_at": "Saved",
+  "output_settled": "Settled",
+  "output_source_file": "File in Processing",
+  "output_source_hint": "The chooser opens in Processing and lists image files. The source stays where it is; the copy is verified.",
+  "project_use_copies": "Use copies for this Project",
+  "view_applied_at": "Applied",
+  "view_applied_title": "View on disk",
+  "view_blocker_reassign": "Reassign {kind} on {name}",
+  "view_blocker_unsettled": "Settle the calibration of {name}",
+  "view_changed_copies": "Copies a tool changed",
+  "view_changed_copies_hint": "The new View gets fresh copies from the originals; these stay in View (previous)/ for review.",
+  "view_col_corrected": "Corrected",
+  "view_col_field": "Field",
+  "view_col_recorded": "In the header",
+  "view_corrections_configuration": "{name} reads the corrected values from its configuration. Originals and links are never patched.",
+  "view_corrections_patched": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame gets its own copy with the corrected header, because the application can't read corrections. Originals and links are never patched.",
+        "countPlural=*": "{n} frames get their own copy with the corrected header, because the application can't read corrections. Originals and links are never patched."
+      }
+    }
+  ],
+  "view_entries": "Entries",
+  "view_entries_split": "{lights} lights · {calibration} calibration files",
+  "view_entry_missing": "Missing",
+  "view_folder_exists": "{path} (already holds files)",
+  "view_folder_new": "{path} (new)",
+  "view_footprint": "Footprint",
+  "view_footprint_cloned": "(cloned)",
+  "view_footprint_copied": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame copied",
+        "countPlural=*": "{n} frames copied"
+      }
+    }
+  ],
+  "view_footprint_linked": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} linked",
+        "countPlural=*": "{n} linked"
+      }
+    }
+  ],
+  "view_footprint_links_only": "Linked · 0 B",
+  "view_footprint_some_cloned": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "({n} cloned)",
+        "countPlural=*": "({n} cloned)"
+      }
+    }
+  ],
+  "view_free_on": "{size} free on {volume}",
+  "view_layout_output": "Results (Output/)",
+  "view_layout_tool": "{name}'s working folder",
+  "view_layout_view": "View folder",
+  "view_mode_copy_hint": "Independent copies made from the originals, cloned where the volume can. Each counts its full size.",
+  "view_mode_symlink_hint": "Links to the originals, so the View holds 0 B. Nothing is copied.",
+  "view_new_view": "The new View",
+  "view_no_applications": "No application is located yet: add one in Settings › Applications.",
+  "view_note_add_view": "Add View/ in {name}",
+  "view_note_saspro_two_passes": "The Project mixes dark versions with the same settings: process it in two passes in SASpro, one per version.",
+  "view_note_siril_links": "The sets are symlinks in either input mode.",
+  "view_note_siril_sets": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Processing/Siril/ holds {n} set, with lights/, flats/, darks/ and biases/ linked into View.",
+        "countPlural=*": "Processing/Siril/ holds {n} sets, each with lights/, flats/, darks/ and biases/ linked into View."
+      }
+    }
+  ],
+  "view_note_wbpp_group": "Use {keyword} as a Pre and Post keyword",
+  "view_note_wbpp_output": "Set the output directory to {path}",
+  "view_note_wbpp_pre": "Use {keyword} as a Pre keyword",
+  "view_note_wbpp_reference": "Set the registration reference to \"auto by {keyword}\"",
+  "view_notes_for": "Notes for {name}",
+  "view_offline": "The Project folder's volume isn't connected",
+  "view_offline_footprint": "The footprint and free space show once it is back.",
+  "view_offline_hint": "Nothing in View or View (previous)/ changes until each original is back online.",
+  "view_offline_original": "Offline original",
+  "view_open_entries_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} View entry differs from its Apply snapshot: apply again",
+        "countPlural=*": "{n} View entries differ from their Apply snapshot: apply again"
+      }
+    }
+  ],
+  "view_open_launch_fails": "{name} didn't start: check it in Settings › Applications",
+  "view_open_no_application": "Choose an application first",
+  "view_open_not_located": "{name} isn't located: locate it in Settings › Applications",
+  "view_opened_in": "Opened {path} in {name}",
+  "view_phase_building": "Building View (building)/ from the originals",
+  "view_phase_swapping": "Swapping the new View in",
+  "view_phase_verifying": "Verifying every entry and its original",
+  "view_pin_drift_hint": "The pin stays and nothing else is placed by itself. Reassign it on the session, or restore the file.",
+  "view_previous_empty": "Nothing left in View (previous)",
+  "view_previous_trash_provisional": "Provisional: reviewed before it moves",
+  "view_project_folder": "Project folder",
+  "view_provisional_copy": "Provisional wording.",
+  "view_refused_developer_mode": "Can't apply · symlinks need Windows Developer Mode",
+  "view_reveal": "Reveal View",
+  "view_reveal_previous": "Reveal View (previous)",
+  "view_review_previous_first": "Review View (previous) first",
+  "view_review_previous_hint": "Keep each file, move it into View or move it to the Trash. Apply waits until each is reviewed; a kept file isn't asked about again.",
+  "view_sheet_refresh": "Show the latest",
+  "view_sheet_stale": "The Project changed since this opened",
+  "view_siril_needs_links": "Provisional: Siril's sets in Processing/Siril/ are symlinks in either mode, so Copies doesn't help.",
+  "view_siril_set_counts": "{lights} lights · {flats} flats · {darks} darks · {biases} biases",
+  "view_tree_of": "New View of {name}",
+  "view_use_copies_provisional": "Provisional: Use copies for this Project switches the mode as a pending change.",
+  "view_waiting_hint": "Apply continues by itself once the file is released. Cancel keeps the current View.",
+  "view_your_tool": "your tool",
+  "wrapup_cleanup_hint": "Copies are ticked and go to the OS Trash; links stay unless you tick them. What View (previous)/ still holds is ticked too (provisional). Output is never offered.",
+  "wrapup_close_for_good": "Close project is for good",
+  "wrapup_close_for_good_hint": "A Closed Project can't be reopened, edited or applied again. Its View stays and still opens; Duplicate continues the work.",
+  "wrapup_trash_hint": "Unusable frames, files in Processing and duplicate copies, each with its exact files. Output is never offered.",
+  "view_edit_settings": "Edit View settings",
+  "calibrate_layout_title": "Folder names",
+  "calibrate_mixed_parts": "Mixed settings in folder names"
 }

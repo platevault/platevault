@@ -54,6 +54,7 @@ import { bestWindowTonight, defaultCriteria } from "./planning"
 import { keptCopy, type TrashBlock, trashBlock, type TrashItem, viewLinks } from "./storage"
 import type {
   AppliedView,
+  ApplicationKind,
   AssetId,
   CalibrationChoice,
   CalibrationKind,
@@ -249,7 +250,7 @@ export interface ViewPlan {
   unresolved: Array<{ sessionId: SessionId; assetId: AssetId; path: string | null }>
   /** Pinned calibration files that cannot be read now, or whose source is gone. */
   unreadableCalibration: Array<{ sessionId: SessionId; kind: PinKind; path: string | null }>
-  /** Bytes a build writes: Copies once per original (hard-linked into its other folders, provisional), and every isolated patched copy. */
+  /** Bytes a build writes: every copy entry in full, each an independent file made from its original (never a hard link, D-W81), and every isolated patched copy. */
   bytes: number
 }
 
@@ -464,14 +465,7 @@ export function viewPlan(world: Pick<World, "catalog" | "disk" | "settings">, pr
   entries.sort((a, b) => a.path.localeCompare(b.path))
 
   const mode = project.settings.mode
-  const copiedOriginals = new Set<string>()
-  let bytes = 0
-  for (const entry of entries) {
-    if (!isCopyEntry(mode, entry)) continue
-    if (entry.patches.length === 0 && copiedOriginals.has(entry.originalPath)) continue
-    copiedOriginals.add(entry.originalPath)
-    bytes += entry.sizeBytes
-  }
+  const bytes = entries.reduce((sum, entry) => (isCopyEntry(mode, entry) ? sum + entry.sizeBytes : sum), 0)
   return { entries, layout, unresolved, unreadableCalibration, bytes }
 }
 
@@ -509,14 +503,112 @@ export function viewTree(entries: ReadonlyArray<Pick<PlannedEntry, "path" | "siz
   return root
 }
 
+/** Siril's standard folders in one working set (PREP-FR-17). */
+export type SirilFolder = "lights" | "flats" | "darks" | "biases"
+
+const SIRIL_FOLDER: Record<ViewEntry["role"], SirilFolder> = { light: "lights", flat: "flats", dark: "darks", bias: "biases" }
+
+/** The application whose working sets link into View (PREP-FR-17): its sets are symlinks in either View mode. */
+export const SIRIL_TOOL = "Siril"
+
+/** One Siril working set under `Processing/Siril/`: each of its files a symlink to one View entry. */
+export interface SirilSet {
+  /** The set's folder: "GROUP_RedCat-51_Ha", with "_NIGHT_2026-10-12" when that night's flats differ from the set's other nights. */
+  name: string
+  /** `target` is the entry's path under `View/`. */
+  links: Array<{ folder: SirilFolder; name: string; target: string }>
+}
+
+/**
+ * Siril's working sets for a planned View (PREP-FR-17; provisional): one set
+ * per group and light folder (the filter, with the mixed GAIN_/OFFSET_ and
+ * exposure parts), and one per night when the nights' flats differ. Each
+ * set links its lights and the flats, darks and bias those lights' sessions
+ * have pinned, taken from the night folder of the lights where the View
+ * places them there, else from the shared `Darks/` and `Bias/`.
+ */
+export function sirilSets(catalog: Catalog, project: Project, plan: Pick<ViewPlan, "entries" | "layout">): SirilSet[] {
+  const identities = (sessionId: SessionId, kind: PinKind): Set<string> => {
+    const choice = heldCalibration(catalog, project, sessionId)?.[kind]
+    if (choice?.state !== "pinned") return new Set()
+    const source = choice.source
+    if (source.type === "master") return new Set([`master:${source.masterId}:${source.versionId}`])
+    return new Set((catalog.sessions[source.sessionId]?.assetIds ?? []).map((id) => `asset:${id}`))
+  }
+  type Night = { folder: string; prefix: string; lights: PlannedEntry[]; calibration: PlannedEntry[] }
+  const bases = new Map<string, Map<string, Night>>()
+  for (const entry of plan.entries) {
+    if (entry.role !== "light") continue
+    const parts = entry.path.split("/")
+    const at = parts.indexOf("Lights")
+    if (at < 1) continue
+    const group = plan.layout.groupLevel ? parts[0]! : null
+    const base = [group, parts.slice(at + 1, -1).join("_")].filter(Boolean).join("_") || SIRIL_FOLDER.light
+    const nights = bases.get(base) ?? new Map<string, Night>()
+    const prefix = parts.slice(0, at).join("/")
+    const night = nights.get(prefix) ?? { folder: parts[at - 1]!, prefix, lights: [], calibration: [] }
+    night.lights.push(entry)
+    nights.set(prefix, night)
+    bases.set(base, nights)
+  }
+  const pick = (night: Night, kind: PinKind): PlannedEntry[] => {
+    const wanted = new Set(night.lights.flatMap((l) => (l.sessionId ? [...identities(l.sessionId, kind)] : [])))
+    const matching = plan.entries.filter((e) => e.role === kind && wanted.has(sourceIdentity(e.source)))
+    const inNight = matching.filter((e) => isUnder(e.path, night.prefix))
+    if (inNight.length > 0 || kind === "flat") return inNight
+    const group = night.prefix.includes("/") ? night.prefix.slice(0, night.prefix.indexOf("/")) : null
+    const shared = matching.filter((e) => !/(^|\/)NIGHT_/.test(e.path))
+    return group && plan.layout.perGroupDarks ? shared.filter((e) => isUnder(e.path, group)) : shared
+  }
+  const sets: SirilSet[] = []
+  for (const [base, nights] of bases) {
+    for (const night of nights.values()) night.calibration = PIN_KINDS.flatMap((kind) => pick(night, kind))
+    const flatKey = (night: Night) =>
+      night.calibration
+        .filter((e) => e.role === "flat")
+        .map((e) => sourceIdentity(e.source))
+        .sort()
+        .join("|")
+    const perNight = new Set([...nights.values()].map(flatKey)).size > 1
+    const groups = perNight ? [...nights.values()].map((n) => ({ name: `${base}_${n.folder}`, nights: [n] })) : [{ name: base, nights: [...nights.values()] }]
+    for (const { name, nights: members } of groups) {
+      const links: SirilSet["links"] = []
+      const taken = new Map<SirilFolder, Set<string>>()
+      const seen = new Set<string>()
+      for (const entry of members.flatMap((n) => [...n.lights, ...n.calibration])) {
+        const identity = `${entry.role}:${sourceIdentity(entry.source)}`
+        if (seen.has(identity)) continue
+        seen.add(identity)
+        const folder = SIRIL_FOLDER[entry.role]
+        const used = taken.get(folder) ?? new Set<string>()
+        const own = entry.path.slice(entry.path.lastIndexOf("/") + 1)
+        let chosen = own
+        for (let n = 2; used.has(chosen); n += 1) chosen = suffixed(own, n)
+        used.add(chosen)
+        taken.set(folder, used)
+        links.push({ folder, name: chosen, target: entry.path })
+      }
+      sets.push({ name, links })
+    }
+  }
+  return sets.sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /** What placing one planned entry writes, or why it cannot (PREP-FR-09). */
 export type PlacedEntry = { ok: true; file: DiskFile; entry: ViewEntry } | { ok: false; reason: MessageRef }
 
-/** Whether a volume can hard-link one copy into a second folder; exFAT and network shares copy separately (provisional). */
-function hardLinks(disk: Disk, path: string): boolean {
+/**
+ * Whether a plain copy of `originalPath` written to `path` is a clone (F2,
+ * PREP-AC-25): both sit on one mounted local volume whose file system
+ * clones. The prototype reads a local volume that holds symlinks as one that
+ * clones (APFS); exFAT and network shares write a full copy. A clone is still
+ * an independent file: changing it never changes the original or another
+ * copy, and its logical size is what the footprint counts (D-W81).
+ */
+export function clonesCopy(disk: Disk, originalPath: string, path: string): boolean {
   const volumeId = volumeForPath(disk, path)
   const volume = volumeId ? disk.volumes[volumeId] : undefined
-  return Boolean(volume && volume.symlinks && !volume.network)
+  return Boolean(volume?.mounted && volume.symlinks && !volume.network && volumeForPath(disk, originalPath) === volumeId)
 }
 
 /** A header with the corrected values an isolated patched copy writes (PREP-FR-03). */
@@ -537,12 +629,11 @@ function patchedHeader(header: FrameHeader | null, patches: PlannedEntry["patche
  * One planned entry written under `root` (`View (building)/`) from its
  * original only (PREP-FR-06, PREP-FR-09): a symlink, a copy, or an isolated
  * patched copy. The original must be readable and still hold the bytes the
- * plan read, and nothing may sit at the destination. `sameOriginal` is a
- * copy this build already wrote of the same original: a second Copies
- * entry is hard-linked to it where the volume can, else copied again
- * (provisional). Pure: the caller writes `file` to the disk.
+ * plan read, and nothing may sit at the destination. Every copy is its own
+ * file, cloned where the volume can, never a hard link to an original or to
+ * another copy (D-W81). Pure: the caller writes `file` to the disk.
  */
-export function placeEntry(disk: Disk, planned: PlannedEntry, root: string, mode: InputMode, at: IsoDateTime, sameOriginal: DiskFile | null): PlacedEntry {
+export function placeEntry(disk: Disk, planned: PlannedEntry, root: string, mode: InputMode, at: IsoDateTime): PlacedEntry {
   const denied = deniedAncestor(disk, planned.originalPath)
   if (denied) return { ok: false, reason: msg("op_prep_denied", { path: planned.originalPath }) }
   const source = fileAt(disk, planned.originalPath)
@@ -564,7 +655,6 @@ export function placeEntry(disk: Disk, planned: PlannedEntry, root: string, mode
         header: patchedHeader(source.header, planned.patches),
         pixelTruth: source.pixelTruth,
         sha256: plain ? source.sha256 : fakeSha256(path, 7),
-        inode: plain && sameOriginal && hardLinks(disk, path) ? sameOriginal.inode : undefined,
         modifiedAt: at,
       })
     : makeFile({ path, volumeId, sizeBytes: 0, kind: source.kind, linkTarget: source.path, modifiedAt: at })
@@ -830,7 +920,24 @@ export interface ApplyPlan {
   drift: ViewDrift
   corrections: ReturnType<typeof viewCorrections>
   space: { neededBytes: number; freeBytes: number; twoViews: boolean }
+  /** Siril's working sets the Apply links into `Processing/Siril/` (PREP-FR-17, provisional); null for any other application. */
+  siril: SirilSet[] | null
   refusals: ApplyRefusal[]
+}
+
+/** The application kind of the Project's profile, or null with none chosen. */
+export function projectApplication(catalog: Catalog, project: Pick<Project, "settings">): ApplicationKind | null {
+  return project.settings.profileId ? (catalog.profiles[project.settings.profileId]?.application ?? null) : null
+}
+
+/**
+ * Whether Apply writes symlinks (PREP-FR-15, PREP-FR-17): a Symlinks View,
+ * or a Siril Project in either mode, whose `Processing/Siril/` sets are
+ * symlinks (provisional consequence, PR #1804). Without symlinks (Windows
+ * with Developer Mode off) such an Apply is refused, with no fallback.
+ */
+export function needsSymlinks(catalog: Catalog, project: Pick<Project, "settings">): boolean {
+  return project.settings.mode === "symlink" || projectApplication(catalog, project) === "siril"
 }
 
 function layoutDiff(before: ViewLayout | null, after: ViewLayout): Array<keyof ViewLayout> {
@@ -867,7 +974,7 @@ export function applyPlan(world: World, project: Project): ApplyPlan {
   const leftovers = unreviewedLeftovers(project)
   if (leftovers.length > 0) refusals.push({ kind: "previous-unreviewed", leftovers })
   if (paths && plan.bytes > free) refusals.push({ kind: "space", neededBytes: plan.bytes, freeBytes: free })
-  if (mode === "symlink" && world.settings.developerModeCheck === "off") refusals.push({ kind: "developer-mode" })
+  if (needsSymlinks(catalog, project) && world.settings.developerModeCheck === "off") refusals.push({ kind: "developer-mode" })
   const fingerprint = stableHash(
     JSON.stringify({
       entries: plan.entries.map((e) => [e.path, sourceIdentity(e.source), e.sha256, e.originalPath, e.patches]),
@@ -892,6 +999,7 @@ export function applyPlan(world: World, project: Project): ApplyPlan {
     drift,
     corrections: viewCorrections(catalog, project.inputs, project.settings.profileId ? (catalog.profiles[project.settings.profileId] ?? null) : null),
     space: { neededBytes: plan.bytes, freeBytes: free, twoViews: mode === "copy" },
+    siril: projectApplication(catalog, project) === "siril" ? sirilSets(catalog, project, plan) : null,
     refusals,
   }
 }

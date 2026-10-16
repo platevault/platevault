@@ -12,7 +12,9 @@
  * project…: the Project closes for good when its transfer succeeds, or at
  * once with nothing to move (`closingOnSuccess`). A settled step shows its
  * record; an earlier one reopens from the footer until Close (F5). A closed
- * Project's Wrap up is read-only. Output is never offered.
+ * Project's Wrap up is read-only. Output is never offered. Every offered
+ * row folds out the exact files it moves, unlinks or keeps (astro-plan-
+ * lz898), and Archive says up front that Close is for good: no Reopen.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { CheckCheck, Package, Trash2 } from "lucide-react"
@@ -22,7 +24,7 @@ import { ActionButton } from "@/components/app/actions"
 import type { Column, ConfirmSpec, FileRow } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { DataTable, type DataTableToolbar } from "@/components/app/data-table"
-import { EmptyState } from "@/components/app/feedback"
+import { EmptyState, Notice } from "@/components/app/feedback"
 import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
 import { stepEditable } from "@/components/app/step-flow"
@@ -236,11 +238,20 @@ export function WrapUpPage({ project, chrome, step }: { project: Project; chrome
   const body = settled ? (
     <StepRecord project={project} step={viewing} summary={viewed?.summary ?? null} />
   ) : viewing === "cleanup" ? (
-    <OfferTable label={m.wrapup_cleanup_view_title()} rows={cleanup} select={select("cleanup")} empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />} />
+    <>
+      <p>{m.wrapup_cleanup_hint()}</p>
+      <OfferTable label={m.wrapup_cleanup_view_title()} rows={cleanup} select={select("cleanup")} empty={<EmptyState icon={CheckCheck} title={m.flow_nothing_to_clean_up()} action={null} />} />
+    </>
   ) : viewing === "trash" ? (
-    <OfferTable label={m.trash_title()} rows={trash} select={select("trash")} empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />} />
+    <>
+      <p>{m.wrapup_trash_hint()}</p>
+      <OfferTable label={m.trash_title()} rows={trash} select={select("trash")} empty={<EmptyState icon={Trash2} title={m.wrapup_nothing_to_trash()} action={null} />} />
+    </>
   ) : (
-    <ArchiveTable project={project} rows={archive.rows} blocked={archive.blocked} select={select("archive")} editable={editable} />
+    <>
+      {project.state === "open" ? <Notice tone="info" title={m.wrapup_close_for_good()}>{m.wrapup_close_for_good_hint()}</Notice> : null}
+      <ArchiveTable project={project} rows={archive.rows} blocked={archive.blocked} select={select("archive")} editable={editable} />
+    </>
   )
 
   return (
@@ -264,9 +275,10 @@ interface Select {
   onChange: (ids: string[]) => void
 }
 
-/** One step's offers: Clean up's View files, or Trash's three groups in their order. */
+/** One step's offers: Clean up's View files, or Trash's three groups in their order. Each row folds out the exact files it moves (lz898). */
 function OfferTable({ label, rows, select, empty }: { label: string; rows: OfferRow[]; select: Select | null; empty: ReactNode }) {
   const m = useMessages()
+  const disk = useStore((s) => s.disk)
   const kinds = [...new Set(rows.map((r) => r.kind))]
   const columns: Column<OfferRow>[] = [
     { id: "item", header: m.dialog_col_file(), cell: (r) => r.label, sortValue: (r) => r.label, rowHeader: true, truncate: true },
@@ -275,6 +287,16 @@ function OfferTable({ label, rows, select, empty }: { label: string; rows: Offer
     { id: "size", header: m.dialog_col_size(), cell: (r) => (r.status || r.size === 0 ? "–" : formatBytes(r.size)), sortValue: (r) => r.size, align: "right" },
     { id: "status", header: m.dialog_col_status(), cell: (r) => <StatusCell status={r.status} />, sortValue: (r) => r.status?.label ?? null, truncate: true },
   ]
+  /** The files one row hands to the OS Trash or unlinks; a row that stays shows its one file and why. */
+  const files = (r: OfferRow): FileRow[] =>
+    r.status
+      ? r.path
+        ? [{ file: fileName(r.path), from: folderOf(r.path), action: "keep", size: fileAt(disk, r.path)?.sizeBytes ?? 0, status: r.status }]
+        : []
+      : r.items.map((item) => {
+          const file = fileAt(disk, item.path)
+          return { file: fileName(item.path), from: folderOf(item.path), action: file?.linkTarget ? "unlink" : "trash", size: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), status: item.refusedReason ? { label: say(m, item.refusedReason) } : undefined }
+        })
   return (
     <DataTable
       label={label}
@@ -282,6 +304,8 @@ function OfferTable({ label, rows, select, empty }: { label: string; rows: Offer
       columns={columns}
       getRowId={(r) => r.id}
       scroll="none"
+      rowLabel={(r) => r.label}
+      expand={{ isExpandable: (r) => files(r).length > 0, render: (r) => <FileTable label={r.label} rows={files(r)} /> }}
       groups={kinds.length > 1 ? { key: (r) => r.kind, label: (kind, group) => m.wrapup_group_line({ name: say(m, OFFER_NAME[kind as OfferKind]), count: group.length }), compare: (a, b) => kinds.indexOf(a as OfferKind) - kinds.indexOf(b as OfferKind) } : undefined}
       selection={select ? { ...select, rowLabel: (r) => r.label, isSelectable: (r) => !r.status, countLabel: (count) => m.wrapup_items({ count }) } : undefined}
       empty={empty}
@@ -339,7 +363,7 @@ function ArchiveTable({ project, rows, blocked, select, editable }: { project: P
 /** The files a row moves, one level under it: File · From · To · Size. */
 function FileTable({ label, rows }: { label: string; rows: FileRow[] }) {
   const m = useMessages()
-  const action = (r: FileRow) => (r.action === "unlink" ? m.dialog_to_unlink() : r.action === "move" ? (r.to ?? "–") : m.dialog_to_trash())
+  const action = (r: FileRow) => (r.action === "keep" ? (r.status?.label ?? m.status_keep()) : r.action === "unlink" ? m.dialog_to_unlink() : r.action === "move" ? (r.to ?? "–") : m.dialog_to_trash())
   const columns: Column<FileRow & { key: string }>[] = [
     { id: "file", header: m.dialog_col_file(), cell: (r) => r.file, sortValue: (r) => r.file, rowHeader: true, truncate: true },
     { id: "from", header: m.dialog_col_from(), cell: (r) => r.from, sortValue: (r) => r.from, truncate: true },

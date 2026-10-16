@@ -20,9 +20,10 @@
  */
 import type { ReactNode } from "react"
 import { Box } from "@/components/app/box"
-import type { Action } from "@/components/app/contracts"
+import type { Action, MenuItem } from "@/components/app/contracts"
 import type { PageNotice } from "@/components/app/feedback"
 import { PageHeader, type PathItem } from "@/components/app/page"
+import { m } from "@/lib/i18n"
 import { DetailDock, type PageDetail } from "./detail-panel"
 import { asStandard, headerActions, headerBar, type ObjectMenu, type PageViews, ViewTabs } from "./parts"
 
@@ -35,6 +36,8 @@ export interface DetailSection {
   count?: number
   /** Standard actions in the Box header ("Add session…"); a primary one renders as standard. */
   actions?: Action[]
+  /** Less frequent actions under the Box header's More menu ("Rescan"). */
+  more?: MenuItem[]
   /** A BoxTable or a KeyValueList. */
   content: ReactNode
   /** The content meets the Box edge (a BoxTable); default false (padded). */
@@ -69,7 +72,7 @@ export function DetailPage({ path, title, level = 1, status, actions, menu, view
       title={section.title}
       count={section.count}
       flush={section.flush}
-      actions={headerActions(asStandard(section.actions))}
+      actions={headerActions(asStandard(section.actions), section.more?.length ? { label: m.common_more(), items: section.more } : undefined)}
     >
       {section.content}
     </Box>
