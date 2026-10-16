@@ -1427,6 +1427,9 @@ const mockHandlers = {
   update_install_on_quit: async () => {
     return null;
   },
+  update_set_locale: async () => {
+    return null;
+  },
   native_menu_set_labels: async () => {
     // Mock mode has no native menu to relabel.
     return null;

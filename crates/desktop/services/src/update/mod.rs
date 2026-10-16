@@ -21,9 +21,20 @@
 //! - **Linux**: an `AppImage` replaces itself; a deb or rpm is installed with
 //!   `pkexec`, so the polkit prompt appears only after the user chose Install.
 //!
+//! An install step that runs as root, behind polkit or the macOS
+//! administrator prompt, checks the payload again once it holds those rights
+//! (astro-plan-ryj83; see `install`). The Windows installers, which UAC
+//! elevates, are not re-checked after the prompt: the handle the app verified
+//! keeps ordinary writers out until they exit, but not code that runs as the
+//! user.
+//!
 //! Nothing is downloaded until the user chooses Install now or Install on
 //! quit. A check never downloads, and the startup check runs only while
 //! "Check for updates automatically" is on.
+//!
+//! What the updater says outside the webview, the macOS administrator prompt
+//! and the notification an install at quit raises, follows the webview's
+//! locale ([`Updater::set_locale`]).
 
 mod http;
 mod install;
@@ -31,6 +42,7 @@ mod manifest;
 mod signature;
 #[cfg(test)]
 mod tests;
+mod wording;
 
 use std::fmt;
 use std::future::Future;
@@ -49,7 +61,9 @@ use self::http::{Http, Source};
 use self::install::{InstallMode, Installed, Installer, OsInstaller};
 use self::manifest::Release;
 use self::signature::{Staged, TrustedKey};
+use self::wording::{Notice, Wording};
 use crate::channels::Latest;
+use crate::locale::{self, ShippedLocale};
 
 /// The longest an install at quit may hold the quit. Long enough for the
 /// slowest legitimate case, a deb or rpm install waiting on its polkit
@@ -160,6 +174,10 @@ pub trait UpdateHost: Send + Sync + 'static {
     fn relaunch(&self);
     /// Exit the app: an installer took over, or the install at quit is over.
     fn exit(&self);
+    /// Show an OS notification of `title` and `body`, for what an install
+    /// must tell the user while the app quits, and return once the OS has it
+    /// or after a short wait: [`Self::exit`] follows.
+    fn notify(&self, title: &str, body: &str);
 }
 
 /// What the host does with a quit request, from [`Updater::on_quit_requested`].
@@ -291,6 +309,8 @@ struct Inner {
     state: Mutex<State>,
     status: watch::Sender<UpdateStatus>,
     startup_checked: AtomicBool,
+    /// What the updater says outside the webview, in the webview's locale.
+    wording: Mutex<Wording>,
 }
 
 /// The update flow. Every transition happens under the state lock, so an
@@ -434,6 +454,7 @@ impl Updater {
             source: Box::new(source),
             host: Box::new(host),
             quit_install_ceiling: QUIT_INSTALL_CEILING,
+            wording: Wording::in_locale(locale::base().tag).map_err(UpdateError::Config)?,
         }))
     }
 
@@ -452,8 +473,31 @@ impl Updater {
                 state: Mutex::new(State::Idle),
                 status,
                 startup_checked: AtomicBool::new(false),
+                wording: Mutex::new(parts.wording),
             }),
         }
+    }
+
+    /// Speak the webview's locale, `tag`, outside it: in the macOS
+    /// administrator prompt and the notification an install at quit raises.
+    /// The webview sends its locale at start and on every change; a tag that
+    /// is not a shipped locale means the base locale.
+    pub fn set_locale(&self, tag: &str) {
+        match Wording::in_locale(tag) {
+            Ok(wording) => *self.wording() = wording,
+            Err(error) => tracing::warn!(%error, tag, "the updater keeps its previous language"),
+        }
+    }
+
+    /// The locale [`Self::set_locale`] last chose, for other text the backend
+    /// shows about updates.
+    #[must_use]
+    pub fn locale(&self) -> &'static ShippedLocale {
+        self.wording().locale()
+    }
+
+    fn wording(&self) -> MutexGuard<'_, Wording> {
+        self.inner.wording.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The status the UI should show now.
@@ -492,9 +536,10 @@ impl Updater {
             State::InstallOnQuit { release, staged } => {
                 let staged = Arc::clone(staged);
                 let release = release.clone();
+                let admin_prompt = self.wording().admin_prompt(&release.version_text);
                 self.set(&mut state, State::Installing { release, run: Run::AtQuit });
                 drop(state);
-                self.spawn_install_on_quit(staged);
+                self.spawn_install_on_quit(staged, admin_prompt);
                 QuitDecision::Defer
             }
             State::Installing { run: Run::Now { quit_held }, .. } => {
@@ -623,8 +668,9 @@ impl Updater {
     async fn install_staged_now(&self, release: Release, staged: Arc<Staged>) {
         let inner = Arc::clone(&self.inner);
         let payload = Arc::clone(&staged);
+        let admin_prompt = self.wording().admin_prompt(&release.version_text);
         let installed = tokio::task::spawn_blocking(move || {
-            inner.installer.install(payload.reverify()?, InstallMode::Now)
+            inner.installer.install(payload.reverify()?, InstallMode::Now, &admin_prompt)
         })
         .await
         .unwrap_or_else(|error| {
@@ -653,6 +699,12 @@ impl Updater {
                 tracing::warn!(version = %release.version_text, %error, quit_held, "update install failed");
             }
         }
+        // A held quit leaves no window to show the error in.
+        let notice = installed
+            .as_ref()
+            .err()
+            .filter(|_| quit_held)
+            .and_then(|error| self.notice_for_quit(error));
         let relaunch = match installed {
             Ok(installed) => installed == Installed::Relaunch && !quit_held,
             Err(_) if quit_held => false,
@@ -663,6 +715,15 @@ impl Updater {
         };
         *state = State::Exiting;
         drop(state);
+        self.leave(notice.as_ref(), relaunch);
+    }
+
+    /// Hand the process back to the host once Install now is over: show
+    /// `notice` first, if there is one, then relaunch or exit.
+    fn leave(&self, notice: Option<&Notice>, relaunch: bool) {
+        if let Some(notice) = notice {
+            self.inner.host.notify(&notice.title, &notice.body);
+        }
         if relaunch {
             self.inner.host.relaunch();
         } else {
@@ -670,24 +731,39 @@ impl Updater {
         }
     }
 
-    /// Run the install at quit on its own thread, with a watchdog that exits
-    /// at the ceiling should the install still hold the quit.
-    fn spawn_install_on_quit(&self, staged: Arc<Staged>) {
+    /// What a failed install must tell the user when the app exits right
+    /// after it, which leaves no window to show the error in: only a previous
+    /// app that could not be put back, since nothing is then at the installed
+    /// path, and the notice says where it is (astro-plan-gffqm). Any other
+    /// failure left the installed app as it was, and the next launch offers
+    /// the update again.
+    fn notice_for_quit(&self, error: &UpdateError) -> Option<Notice> {
+        let UpdateError::PreviousAppNotRestored { kept, .. } = error else {
+            return None;
+        };
+        Some(self.wording().previous_app_kept(kept))
+    }
+
+    /// Run the install at quit on its own thread, asking for administrator
+    /// rights with `admin_prompt` if it must, with a watchdog that exits at
+    /// the ceiling should the install still hold the quit.
+    fn spawn_install_on_quit(&self, staged: Arc<Staged>, admin_prompt: String) {
         let installing = self.clone();
         let install = std::thread::Builder::new().name("update-install-on-quit".to_owned()).spawn(
             move || {
-                let installed = staged
-                    .reverify()
-                    .and_then(|payload| installing.inner.installer.install(payload, InstallMode::OnQuit));
-                if let Err(error) = installed {
+                let installed = staged.reverify().and_then(|payload| {
+                    installing.inner.installer.install(payload, InstallMode::OnQuit, &admin_prompt)
+                });
+                let notice = installed.err().and_then(|error| {
                     tracing::warn!(%error, "update install at quit failed; the next launch offers the update again");
-                }
-                installing.exit_after_quit_install();
+                    installing.notice_for_quit(&error)
+                });
+                installing.exit_after_quit_install(notice.as_ref());
             },
         );
         if let Err(error) = install {
             tracing::warn!(%error, "cannot start the update install at quit; quitting without it");
-            self.exit_after_quit_install();
+            self.exit_after_quit_install(None);
             return;
         }
         let watchdog = self.clone();
@@ -695,7 +771,7 @@ impl Updater {
         let spawned = std::thread::Builder::new().name("update-install-watchdog".to_owned()).spawn(
             move || {
                 std::thread::sleep(ceiling);
-                if watchdog.exit_after_quit_install() {
+                if watchdog.exit_after_quit_install(None) {
                     tracing::warn!(?ceiling, "update install at quit passed its ceiling; exiting");
                 }
             },
@@ -705,15 +781,18 @@ impl Updater {
         }
     }
 
-    /// End the install at quit and exit, once: `true` for the caller that did.
-    fn exit_after_quit_install(&self) -> bool {
+    /// End the install at quit and exit, once, showing `notice` first: `true`
+    /// for the caller that did. The state leaves the install before the
+    /// notice, so the watchdog cannot exit while the notice is still being
+    /// delivered.
+    fn exit_after_quit_install(&self, notice: Option<&Notice>) -> bool {
         let mut state = self.lock();
         if !matches!(*state, State::Installing { run: Run::AtQuit, .. }) {
             return false;
         }
         *state = State::Exiting;
         drop(state);
-        self.inner.host.exit();
+        self.leave(notice, false);
         true
     }
 
@@ -772,4 +851,5 @@ struct Parts {
     installer: Box<dyn Installer>,
     host: Box<dyn UpdateHost>,
     quit_install_ceiling: Duration,
+    wording: Wording,
 }

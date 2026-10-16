@@ -1646,6 +1646,8 @@
   "update_error_file_system": "its files couldn't be written or read.",
   "update_error_unsupported": "this copy of PlateVault can't update itself.",
   "update_error_previous_app_not_restored": "the previous version couldn't be put back. It's saved at {path}.",
+  "update_admin_prompt": "PlateVault needs an administrator's name and password to install update {version}.",
+  "update_notification_install_failed_title": "Update not installed",
   "menu_about": "About PlateVault",
   "menu_settings": "Settings…",
   "menu_quit": "Quit PlateVault",

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Desktop backend services that need no UI framework: OS notifications,
-//! process logging, the log viewer stream and job-progress feeds.
+//! process logging, the log viewer stream, job-progress feeds, the updater
+//! and the shipped locales' catalogues for text the backend shows itself.
 //!
 //! The host owns the event loop and the windows and adapts these services to
 //! its UI. It starts [`Services`] once, passes window state in as plain values
@@ -14,6 +15,7 @@
 
 pub mod channels;
 pub mod jobs;
+pub mod locale;
 pub mod log_stream;
 mod logging;
 pub mod notifications;

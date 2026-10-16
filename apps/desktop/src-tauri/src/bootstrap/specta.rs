@@ -145,7 +145,7 @@ use crate::commands::tools::{
 };
 use crate::commands::update::{
     update_check, update_check_on_startup, update_install_now, update_install_on_quit,
-    update_status,
+    update_set_locale, update_status,
 };
 
 /// Shared base for specta builder — chain common config and all production
@@ -313,6 +313,7 @@ macro_rules! app_commands {
             update_check,
             update_install_now,
             update_install_on_quit,
+            update_set_locale,
             // audit
             audit_list,
             audit_export,

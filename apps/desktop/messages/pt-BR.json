@@ -1586,6 +1586,8 @@
   "update_error_file_system": "não foi possível gravar ou ler os arquivos da atualização.",
   "update_error_unsupported": "esta cópia do PlateVault não consegue se atualizar.",
   "update_error_previous_app_not_restored": "não foi possível restaurar a versão anterior. Ela está salva em {path}.",
+  "update_admin_prompt": "O PlateVault precisa do nome e da senha de um administrador para instalar a atualização {version}.",
+  "update_notification_install_failed_title": "Atualização não instalada",
   "menu_about": "Sobre o PlateVault",
   "menu_settings": "Configurações…",
   "menu_quit": "Encerrar PlateVault",
