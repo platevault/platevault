@@ -18,7 +18,7 @@ import { SelectField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
 import { StatusBadge } from "@/components/app/status"
 import { sessionLabel } from "@/domain/membership"
-import type { AssetId, Catalog, MeasurementImport, MeasurementImportRow } from "@/domain/types"
+import type { AssetId, Catalog, MeasurementImport, MeasurementImportRow, SessionId } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime, formatDecimal } from "@/lib/format"
 import type { Messages } from "@/lib/i18n"
 import { useStore } from "@/store/core"
@@ -69,7 +69,7 @@ function ColumnMapping() {
   return <DataTable label={m.importdlg_column_mapping()} rows={CSV_COLUMNS} columns={columns} getRowId={(c) => c.name} scroll="none" />
 }
 
-export function ImportDialog({ scopeKey, href, viewAssetIds, open, onOpenChange }: { scopeKey: string; href: string; viewAssetIds: ReadonlySet<AssetId>; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ImportDialog({ sessionId, href, viewAssetIds, open, onOpenChange }: { sessionId: SessionId; href: string; viewAssetIds: ReadonlySet<AssetId>; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const { locale } = usePreferences()
   const disk = useStore((s) => s.disk)
@@ -97,7 +97,7 @@ export function ImportDialog({ scopeKey, href, viewAssetIds, open, onOpenChange 
           id: "import-rows",
           label: m.importdlg_import_rows({ count: matched.length }),
           kind: "primary",
-          run: () => (path ? importMeasurements(scopeKey, href, path, mapped, viewAssetIds) : undefined),
+          run: () => (path ? importMeasurements(sessionId, href, path, mapped, viewAssetIds) : undefined),
         }
   const flow: StepFlow = {
     steps: [
@@ -204,7 +204,7 @@ export function ImportedMeasurementsDialog({ records, href, open, onOpenChange }
                 { label: m.importdlg_col_file(), value: record.path, mono: true },
                 { label: m.importdlg_imported_at(), value: formatDateTime(record.importedAt) },
                 { label: m.importdlg_matched(), value: m.importdlg_attached_summary({ count: record.matched }) },
-                ...(record.outsideRun > 0 ? [{ label: m.importdlg_outside(), value: formatCount(record.outsideRun) }] : []),
+                ...(record.outsideSession > 0 ? [{ label: m.importdlg_outside(), value: formatCount(record.outsideSession) }] : []),
               ]}
             />
             {record.rows.length > 0 ? (

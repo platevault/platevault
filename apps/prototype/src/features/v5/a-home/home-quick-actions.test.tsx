@@ -3,15 +3,13 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { Toaster } from "@/components/ui/toast"
-import { latestRevision, liveAssetIds } from "@/domain/derive"
+import { findInput, liveAssetIds } from "@/domain/derive"
 import { pendingWork } from "@/domain/home"
 import { sessionLongLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
-import type { LocationId, Run, SessionId } from "@/domain/types"
+import type { LocationId } from "@/domain/types"
 import { LocationsPage } from "@/features/t1/settings/locations-page"
-import { RunPage } from "@/features/v5/c-runs/run"
 import { TargetsPage } from "@/features/v5/e-targets-plan-settings/targets"
-import { formatNight } from "@/lib/format"
 import { m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { setFault } from "@/store/simulation"
@@ -36,7 +34,8 @@ function renderHome() {
   })
   const routes = [
     createRoute({ getParentRoute: () => root, path: "/", component: HomePage }),
-    createRoute({ getParentRoute: () => root, path: "/projects/$projectId/runs/$runId/$step", component: RunPage }),
+    // The Project page is another unit's: a placeholder shows where Open page lands.
+    createRoute({ getParentRoute: () => root, path: "/projects/$projectId", component: () => null }),
     createRoute({ getParentRoute: () => root, path: "/targets", component: TargetsPage }),
     createRoute({ getParentRoute: () => root, path: "/settings/locations", component: LocationsPage }),
   ]
@@ -62,34 +61,30 @@ afterAll(() => {
   Element.prototype.scrollIntoView = original.scrollIntoView
 })
 
-describe("Home: Add to run under the Quick actions switch, Open page", () => {
-  const holds = (run: Run, sessionId: SessionId) => (run.draft ?? latestRevision(run))?.sessions.some((s) => s.sessionId === sessionId) ?? false
-
-  beforeEach(() => {
-    // Clear the rows ahead of Ready to add, as home.test.tsx does: trash the sessions without a Target, review the rest as Usable.
+describe("Home: Add to Project under the Quick actions switch, Open page", () => {
+  it("adds the ready suggestion to its Project and opens the Project's Sessions tab, with no Undo notice", async () => {
+    // Clear the rows ahead of Ready to add, as home.test.tsx does: trash the sessions that need a Target or calibration or sit in no Project, review the rest as Usable.
     const state = demoState()
     for (const w of pendingWork(state)) {
-      if (w.kind === "needs-target") for (const id of state.catalog.sessions[w.session.id]!.assetIds) state.catalog.assets[id] = { ...state.catalog.assets[id]!, trashed: { at: AT, episodeId: "trash_home_test" } }
+      if (w.kind === "needs-target" || w.kind === "needs-calibration" || w.kind === "not-in-project")
+        for (const id of state.catalog.sessions[w.session.id]!.assetIds) state.catalog.assets[id] = { ...state.catalog.assets[id]!, trashed: { at: AT, episodeId: "trash_home_test" } }
       if (w.kind !== "unreviewed") continue
       for (const id of liveAssetIds(state.catalog, w.session)) state.catalog.assets[id] = { ...state.catalog.assets[id]!, quality: { value: "usable", decidedAt: AT, basisSha256: state.catalog.assets[id]!.sha256 } }
     }
+    const ready = pendingWork(state).find((w) => w.kind === "ready-to-add")
+    if (ready?.kind !== "ready-to-add") throw new Error("the demo has no session ready to add")
     store.replace(state)
     setFault("quickActions", "open-page")
-  })
-
-  it("adds the session to the draft and opens the run's Select step with its row ticked, with no Undo notice", async () => {
-    const run = Object.values(store.getState().catalog.runs).find((r) => r.name === "NGC 7000 OIII deep")!
-    const session = store.getState().catalog.sessions.ses_k30zg8!
+    const project = store.getState().catalog.projects[ready.projectId]!
     const user = userEvent.setup()
     const router = renderHome()
     const pending = await screen.findByRole("table", { name: m.home_pending_work() })
-    const row = within(pending).getByRole("rowheader", { name: sessionLongLabel(m, session) }).closest("tr")!
+    const row = within(pending).getByRole("rowheader", { name: sessionLongLabel(m, ready.session) }).closest("tr")!
 
-    await user.click(within(row).getByRole("button", { name: m.target_add_to_named({ name: run.name }) }))
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/projects/${run.projectId}/runs/${run.id}/select`))
-    expect(holds(store.getState().catalog.runs[run.id]!, session.id)).toBe(true)
-    const select = await screen.findByRole("table", { name: m.run_select_sessions_label({ name: run.name }) })
-    expect(within(select).getByRole("checkbox", { name: m.table_select_row({ name: `${formatNight(session.night)} ${session.channel}` }) })).toBeChecked()
+    await user.click(within(row).getByRole("button", { name: m.target_add_to_named({ name: project.name }) }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/projects/${project.id}`))
+    expect(router.state.location.search).toEqual({ stage: "sessions" })
+    expect(findInput(store.getState().catalog.projects[project.id]!, ready.session.id)).toBeDefined()
     noUndo()
   })
 })

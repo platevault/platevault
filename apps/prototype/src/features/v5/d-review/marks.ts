@@ -1,9 +1,9 @@
 /**
  * Mark routing for Review (D-W54, PIX-FR-14, PIX-FR-17, P-REJ2). P, X and U
  * set library quality through `markFrames`, which is library-wide: X marks a
- * frame Unusable everywhere and takes it out of every open run's draft. The
- * store refuses a mark while an unfinished run's prepared view holds the
- * session (C10). Each call returns one result for the whole mark.
+ * frame Unusable everywhere. A mark is never refused because a Project holds
+ * the session; open Projects get it as a pending change on their View. Each
+ * call returns one result for the whole mark.
  */
 import type { QualityValue } from "@/domain/types"
 import { m } from "@/lib/i18n"

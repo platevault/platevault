@@ -8,7 +8,7 @@
  * Pure derivation over the store; nothing here writes. Trashed frames are
  * never listed (LIB-FR-18, PIX-AC-19).
  */
-import { type FlowGate, frameQuality, type FrameQuality, liveAssetIds, reviewLockGate } from "@/domain/derive"
+import { frameQuality, type FrameQuality, liveAssetIds } from "@/domain/derive"
 import { assetAvailability, type AssetAvailability } from "@/domain/library"
 import type { Asset, MetricKey, Metric, Operation, Session, SessionId } from "@/domain/types"
 import { m } from "@/lib/i18n"
@@ -51,15 +51,12 @@ export interface ReviewFrame {
 }
 
 export interface ReviewScope {
-  /** Key for the frame UI state, the measurement operation and recorded imports: `session:<id>`. */
-  key: string
+  /** The session under review: its id keys the frame UI state, the measurement operation and recorded imports. */
   session: Session
   frames: ReviewFrame[]
   ops: Operation[]
   /** Where a mark, a measurement or an import is recorded from (activity links). */
   href: string
-  /** Why marks are refused, and where it resolves: a session an unfinished run's prepared view holds (C10). */
-  lock: FlowGate | null
 }
 
 function byKey(metrics: Metric[]): Partial<Record<MetricKey, Metric>> {
@@ -73,16 +70,11 @@ export function bucketOf(quality: FrameQuality): ReviewBucket {
   return "unreviewed"
 }
 
-export function contextKey(context: ReviewContext): string {
-  return `session:${context.sessionId}`
-}
-
 export function reviewScope(state: PrototypeState, context: ReviewContext): ReviewScope | null {
   const { catalog, disk } = state
   const session = catalog.sessions[context.sessionId]
   if (!session) return null
-  const key = contextKey(context)
-  const op = latestMeasureOp(state, key)
+  const op = latestMeasureOp(state, session.id)
   const assets = [...new Set(liveAssetIds(catalog, session))]
     .map((id) => catalog.assets[id])
     .filter((asset): asset is Asset => asset !== undefined && !asset.trashed)
@@ -109,7 +101,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       order,
     }
   })
-  return { key, session, frames, ops: op ? [op] : [], href: `/sessions/${session.id}?step=review`, lock: reviewLockGate(state, session.id) }
+  return { session, frames, ops: op ? [op] : [], href: `/sessions/${session.id}?step=review` }
 }
 
 /** The bucket a frame lands in after a library mark. */

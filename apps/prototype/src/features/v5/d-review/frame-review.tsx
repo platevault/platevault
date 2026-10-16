@@ -18,8 +18,8 @@
  *   single-key setting (WCAG 2.1.4). They are listed on the Help page.
  * - The host (the intake StepPage) owns Finish review; the workspace's own
  *   Finish command and ⌘↵ call `onFinished`, once no frame is Unreviewed.
- * - Marks are refused while an unfinished run's prepared view holds the
- *   session (C10); every mark control then names why and where it resolves.
+ *   Marks are always allowed: a Project holding the session gets them as
+ *   pending changes.
  */
 import { useSearch } from "@tanstack/react-router"
 import { ArrowLeftRight, ChevronLeft, ChevronRight, Expand, FolderOpen, ImageOff, Minimize, X } from "lucide-react"
@@ -56,7 +56,7 @@ import { ImportDialog, ImportedMeasurementsDialog } from "./import-dialog"
 import { Inspector, type InspectorTab } from "./inspector"
 import { MARK_WORD, markAnnouncement, markLibrary } from "./marks"
 import { MeasureStatus } from "./measure-bar"
-import { bucketAfterMark, contextKey, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewBucket, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
+import { bucketAfterMark, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewBucket, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
 import { displayName, NAME_PRESETS, namePreset } from "./names"
 import { setReviewPrefs, type TableHeight, useReviewPrefs } from "./prefs"
 import { QualityLabel, qualityWord } from "./quality"
@@ -98,8 +98,8 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const m = useMessages()
   const state = useStore((s) => s)
   const { catalog, disk } = state
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the context is rebuilt by its parent every render; its key identifies it.
-  const scope = useMemo(() => reviewScope(state, context), [state, contextKey(context)])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the context is rebuilt by its parent every render; its session identifies it.
+  const scope = useMemo(() => reviewScope(state, context), [state, context.sessionId])
   const prefs = useReviewPrefs()
   const search: Record<string, unknown> = useSearch({ strict: false })
   const runner = useAction()
@@ -129,7 +129,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const gridCols = useRef(4)
   const overlayMode = useRef(false)
 
-  const key = scope?.key ?? ""
+  const sessionId = context.sessionId
   const frames = scope?.frames ?? []
   const template = namePreset(prefs.namePreset).template
   const names = useMemo(() => new Map(frames.map((f) => [f.asset.id, displayName(catalog, f, template)])), [frames, catalog, template])
@@ -143,7 +143,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   }
   const shown = frames.filter((f) => filter === "all" || f.bucket === filter)
   const ordered = sort ? sortRows(shown, allColumns, sort) : shown
-  const storedActive = state.slices.d.frames[key]?.activeAssetId ?? null
+  const storedActive = state.slices.d.frames[sessionId]?.activeAssetId ?? null
   const current = ordered.find((f) => f.asset.id === storedActive) ?? ordered[0] ?? null
   const index = current ? ordered.indexOf(current) : -1
   const selectedFrames = frames.filter((f) => selected.has(f.asset.id))
@@ -151,8 +151,6 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const targets = selectedFrames.length > 1 ? selectedFrames : current ? [current] : []
   const reference = compare ? (frames.find((f) => f.asset.id === refId) ?? null) : null
   const unreviewed = scope ? (scope.session ? sessionUnreviewedFrames(catalog, scope.session) : frames.filter((f) => f.bucket === "unreviewed").length) : 0
-  const lock = scope?.lock ?? null
-  const blocked = (action: string): Action["unavailable"] => (lock ? { action, reason: say(m, lock.reason), blockers: lock.blockers.map((b) => ({ label: say(m, b.label), link: b.link })) } : undefined)
 
   const fileOf = (f: ReviewFrame | null) => (f && f.availability === "available" ? currentFile(disk, catalog, f.asset) : undefined)
   const field = useMemo(() => (current ? frameField(current.asset.id, fileOf(current)) : null), [current?.asset.id, current?.asset.sha256, current?.availability])
@@ -164,7 +162,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
 
   function select(id: AssetId) {
     if (!scope) return
-    setFrameUi(scope.key, { activeAssetId: id })
+    setFrameUi(scope.session.id, { activeAssetId: id })
   }
 
   function step(delta: number) {
@@ -230,7 +228,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
       id: `mark-${value}`,
       label: markLabel[value],
       shortcut: markKey[value],
-      unavailable: list.length === 0 ? { action: markLabel[value], reason: m.review_no_current_frame(), blockers: [] } : blocked(markLabel[value]),
+      unavailable: list.length === 0 ? { action: markLabel[value], reason: m.review_no_current_frame(), blockers: [] } : undefined,
       confirm: bulk ? { title: m.review_bulk_mark_title(said), confirm: { label: m.store_label_mark_frames(said) } } : undefined,
       quick: bulk ? { oneClick: { undo: () => marksBefore(list, value) }, openPage: "keep" } : undefined,
       run: () => mark(value, list, always),
@@ -318,7 +316,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     setFilter((was) => (was === "all" || was === f.bucket ? was : "all"))
     select(linked)
     // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per linked frame.
-  }, [linked, scope?.key])
+  }, [linked, sessionId])
 
   useEffect(() => {
     setStar(null)
@@ -502,7 +500,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
   const pickRest: Action = {
     id: "pick-rest",
     label: m.review_pick_rest(),
-    unavailable: unreviewed === 0 ? { action: m.review_pick_rest(), reason: m.review_pick_rest_none(), blockers: [] } : blocked(m.review_pick_rest()),
+    unavailable: unreviewed === 0 ? { action: m.review_pick_rest(), reason: m.review_pick_rest_none(), blockers: [] } : undefined,
     confirm: { title: m.review_pick_rest_title({ count: unreviewed, n: formatCount(unreviewed) }), confirm: { label: m.review_pick_rest_confirm({ count: unreviewed, n: formatCount(unreviewed) }) } },
     // Owner tick A4: its Undo sets the frames it picks back to Unreviewed.
     quick: { oneClick: { undo: () => restUnreviewed() }, openPage: "keep" },
@@ -720,14 +718,14 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
     }
   }
 
-  const records = Object.values(catalog.measurementImports).filter((record) => record.runId === scope.key)
+  const records = Object.values(catalog.measurementImports).filter((record) => record.sessionId === scope.session.id)
   const status = [
     <>
       {m.review_shown_of({ count: ordered.length, total: frames.length })}
       {selected.size > 0 ? ` · ${m.status_bar_selected({ count: selected.size })}` : null}
       {hiddenSelected > 0 ? ` (${m.review_hidden_count({ count: hiddenSelected })})` : null}
     </>,
-    <MeasureStatus scope={scope} frames={frames} currentId={current?.asset.id ?? null} blocked={blocked(m.measure_frames_action())} />,
+    <MeasureStatus scope={scope} frames={frames} currentId={current?.asset.id ?? null} />,
     revealed ? (
       <>
         <PathText path={revealed} truncate />
@@ -803,7 +801,7 @@ export function ReviewWorkspace({ context, onFinished }: ReviewWorkspaceProps) {
         }
       />
       <ThresholdDialog threshold={threshold} onThreshold={setThreshold} frames={shown} onApply={applyThreshold} onClose={() => setThreshold(null)} />
-      <ImportDialog scopeKey={scope.key} href={scope.href} viewAssetIds={new Set(frames.map((f) => f.asset.id))} open={importOpen} onOpenChange={setImportOpen} />
+      <ImportDialog sessionId={scope.session.id} href={scope.href} viewAssetIds={new Set(frames.map((f) => f.asset.id))} open={importOpen} onOpenChange={setImportOpen} />
       <ImportedMeasurementsDialog records={records} href={scope.href} open={importsOpen} onOpenChange={setImportsOpen} />
       {runner.dialog}
     </>

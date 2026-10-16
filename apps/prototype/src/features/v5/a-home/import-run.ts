@@ -1,19 +1,21 @@
 /**
  * S13 Import as an operation (slice A, D-W11, D-W24). The "import" handler
  * copies each planned file to its destination, verifies the copy's SHA-256
- * against the source, then reads the copies into the library: lights become
- * sessions with the Targets the preview chose confirmed (P-IMP2; an
- * Unclassified session waits for File into Target), each new raw calibration
- * session becomes a calibration process awaiting Stack (P-CAL3, through
- * `readFiles`), and a master in structured calibration storage is a library
- * master. A source that vanishes mid-copy (card pulled, share dropped)
+ * against the source, then reads the copies into the library through the
+ * one ingestion (`ingestFiles`): lights become sessions, split by framing,
+ * with their calibration matched and pinned (LIB-FR-23; Import never waits
+ * for it) and the Targets the preview chose confirmed (P-IMP2; an
+ * Unclassified session waits for File into Target), each new raw
+ * calibration session becomes a calibration process awaiting Stack (P-CAL3),
+ * and a master in structured calibration storage is a library master. A
+ * source that vanishes mid-copy (card pulled, share dropped)
  * pauses the import as Interrupted with its queue intact; Retry resumes it
  * once the source is back. Move hands the verified sources to the foundation
  * OS Trash engine ("import-move" episode) once every copy has verified; a
  * source whose copy failed is never trashed. Also: saving an Import source.
  */
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
-import { bundledTarget, readFiles } from "@/domain/indexing"
+import { bundledTarget, ingestFiles } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
 import { formatBytes, formatCount } from "@/lib/format"
@@ -121,7 +123,7 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
       const file = fileAt(state.disk, item.dest)
       return file?.header ? [{ ...file, header: { ...file.header, imageType: item.type } }] : []
     })
-    catalog = readFiles(catalog, location, files, now)
+    catalog = ingestFiles(catalog, state.disk, state.settings, location, files, now)
   }
   const destPaths = new Map(payload.copied.map((q) => [q.dest, q]))
   const assets = { ...catalog.assets }
@@ -203,7 +205,6 @@ function requestTrash(opId: OperationId, payload: ImportPayload) {
       kind: "import-move",
       title: msg("op_import_move_sources_title"),
       projectId: null,
-      runIds: [],
       items: payload.copied.map((c) => ({ path: c.src })),
       href: `/sessions?import=${opId}`,
     })

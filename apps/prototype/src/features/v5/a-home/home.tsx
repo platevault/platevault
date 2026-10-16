@@ -11,9 +11,10 @@
  * - Pending ingestions: per Captures location, new files since its last
  *   scan, a location never scanned or whose last scan did not finish, a
  *   stopped or failed import (Retry), or a running one with its progress.
- * - Pending work: sessions that need a Target, wait for review, sit in no
- *   Project or are ready to add to a run; Finished runs awaiting Clean up,
- *   with the space each frees.
+ * - Pending work: sessions that need a Target, wait for review, wait in the
+ *   Library's Needs calibration queue (LIB-FR-23), sit in no Project or are
+ *   ready to add to a Project (a suggestion that is Ready and settled; it is
+ *   never added by itself, PRJ-FR-09).
  * - Open work: open Projects and calibration processes, where each stands
  *   and its next step, deadline or season first with "N nights left".
  * - Status: locations (online, free space) and background
@@ -25,13 +26,13 @@
  *   that night.
  *
  * Problems show on the row they affect (`issueCopy` words them as Issues
- * does). Row actions are Action descriptors. Add to run, Add to Plan, Scan
- * and Rescan follow the prototype's Quick actions switch (astro-plan-zzjlz):
- * One-click runs them here, Add to run and Add to Plan with an Undo notice;
- * Open page opens the page that owns each, at that item. Everything else
- * opens its page. Status lists no job that can pause (only scans and imports
- * can, and they show in Pending ingestions), so its jobs only open where
- * their work lives.
+ * does). Row actions are Action descriptors. Add to Project, Add to Plan,
+ * Scan and Rescan follow the prototype's Quick actions switch
+ * (astro-plan-zzjlz): One-click runs them here, Add to Project and Add to
+ * Plan with an Undo notice; Open page opens the page that owns each, at that
+ * item. Everything else opens its page. Status lists no job that can pause
+ * (only scans and imports can, and they show in Pending ingestions), so its
+ * jobs only open where their work lives.
  */
 import { FolderPlus, Import, MapPin } from "lucide-react"
 import { useMemo } from "react"
@@ -54,33 +55,32 @@ import { DetailPage, type DetailSection } from "@/components/templates/detail-pa
 import { CALIBRATION_STEP_NAME, type ProcessStatus } from "@/domain/calibration-process"
 import {
   calibrationStepLink,
+  findGroup,
   findSubject,
   formatHours,
   liveLightSessions,
   planningSite,
   projectLink,
-  runCandidates,
-  runStepLink,
   sessionIntakeEntry,
   sessionIntakeLink,
   type StepLink,
   subjectName,
   type World,
 } from "@/domain/derive"
-import { cleanUpLink, homeStatus, type IngestionRow, type LocationStatus, openWork, type OpenWork, operationLink, pendingIngestions, type PendingWork, pendingWork } from "@/domain/home"
+import { homeStatus, type IngestionRow, type LocationStatus, openWork, type OpenWork, operationLink, pendingIngestions, type PendingWork, pendingWork } from "@/domain/home"
 import type { Issue } from "@/domain/issues"
 import { sessionLongLabel } from "@/domain/membership"
 import { type GoalOutlook, goalHorizon, goalsTonight, type NightOutlook, nightOutlooks } from "@/domain/outlook"
 import { nightPlan, upcomingNight } from "@/domain/planning"
-import type { Catalog, NightDate, ObservingSite, Operation, Project, TargetId } from "@/domain/types"
+import { projectTabLink } from "@/domain/project-view"
+import type { Catalog, NightDate, ObservingSite, Operation, Project, ProjectGroupId, TargetId } from "@/domain/types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
-import { getLocale, type Messages, msg, say } from "@/lib/i18n"
+import { getLocale, type Messages, say } from "@/lib/i18n"
 import { dayInWeek, WEEK_START } from "@/lib/week"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
-import { addRunSessions, removeRunSessions } from "@/store/actions/runs"
+import { addSessions, removeSessions } from "@/store/actions/projects"
 import { nowIso, useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
-import { runToJoin } from "./session-model"
 
 /** Rows a section shows before "All N ›" (C8). */
 const ROWS = 5
@@ -135,16 +135,16 @@ function allAction(m: Messages, follow: Follow, id: string, count: number, link:
   return count > ROWS ? [{ id: `${id}-all`, label: m.home_all({ count: formatCount(count) }), run: () => follow(link) }] : []
 }
 
-/** The goal's subject, with its panel for a mosaic panel's goal: "IC 5070 · Panel 2". */
-function goalSubject(m: Messages, catalog: Catalog, project: Project, subjectId: string, panelId: string | null): string {
+/** The goal's subject, with its panel group for a mosaic panel's goal: "IC 5070 · Panel 2". */
+function goalSubject(m: Messages, catalog: Catalog, project: Project, subjectId: string, groupId: ProjectGroupId | null): string {
   const subject = findSubject(project, subjectId)
   const name = subject ? subjectName(m, catalog, subject) : m.plan_unknown_target()
-  const panel = panelId ? subject?.mosaic?.panels.find((p) => p.id === panelId) : undefined
-  return panel ? m.home_panel({ name, n: panel.n }) : name
+  const group = findGroup(project, groupId)
+  return group?.panel ? `${name} · ${group.name}` : name
 }
 
 function goalName(m: Messages, catalog: Catalog, g: GoalOutlook): string {
-  return m.home_goal_item({ subject: goalSubject(m, catalog, g.subject.project, g.progress.goal.subjectId, g.progress.goal.panelId), channel: g.progress.goal.channel })
+  return m.home_goal_item({ subject: goalSubject(m, catalog, g.subject.project, g.progress.goal.subjectId, g.progress.goal.groupId), channel: g.progress.goal.channel })
 }
 
 /** The row's problems, worded as Issues words them, each a link to where it is fixed. */
@@ -186,7 +186,7 @@ export function HomePage() {
       title: m.home_pending_work(),
       count: work.length,
       flush: true,
-      actions: pendingAllActions(m, follow, work, catalog),
+      actions: pendingAllActions(m, follow, work),
       content: <PendingTable rows={work} follow={follow} />,
     },
     {
@@ -313,12 +313,12 @@ function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follo
 
 /**
  * "All N ›" per kind of pending work the first rows leave out, each to its
- * owning page filtered to those items: Sessions by facet, a run to its
- * Project, Clean up to its Project's Clean up.
+ * owning page filtered to those items: Sessions by facet, a ready session
+ * to its Project's Sessions tab.
  */
-function pendingAllActions(m: Messages, follow: Follow, work: PendingWork[], catalog: Catalog): Action[] {
+function pendingAllActions(m: Messages, follow: Follow, work: PendingWork[]): Action[] {
   const shown = new Set(work.slice(0, ROWS).map(workKey))
-  const kinds: PendingWork["kind"][] = ["needs-target", "unreviewed", "not-in-project", "ready-to-add", "clean-up"]
+  const kinds: PendingWork["kind"][] = ["needs-target", "unreviewed", "needs-calibration", "not-in-project", "ready-to-add"]
   return kinds.flatMap((kind): Action[] => {
     const rows = work.filter((w) => w.kind === kind)
     const hidden = rows.filter((w) => !shown.has(workKey(w)))
@@ -327,66 +327,57 @@ function pendingAllActions(m: Messages, follow: Follow, work: PendingWork[], cat
     const group: Record<PendingWork["kind"], () => string> = {
       "needs-target": m.sessions_filter_needs_target,
       unreviewed: m.status_needs_review,
+      "needs-calibration": m.sessions_filter_needs_calibration,
       "not-in-project": m.sessions_filter_not_in_project,
       "ready-to-add": m.home_group_ready,
-      "clean-up": m.wrapup_cleanup_title,
     }
     const link: StepLink =
-      first.kind === "needs-target"
-        ? { to: "/sessions", search: { filter: "needs-target" } }
-        : first.kind === "unreviewed"
-          ? { to: "/sessions", search: { filter: "needs-review" } }
-          : first.kind === "not-in-project"
-            ? { to: "/sessions", search: { filter: "not-in-project" } }
-            : first.kind === "ready-to-add"
-              ? projectLink(first.projectId)
-              : cleanUpLink({ catalog }, first.run, first.project)
+      first.kind === "ready-to-add"
+        ? projectTabLink(first.projectId, "sessions")
+        : { to: "/sessions", search: { filter: first.kind === "unreviewed" ? "needs-review" : first.kind } }
     return [{ id: `home-pending-all-${kind}`, label: m.home_all_group({ group: group[kind](), count: formatCount(rows.length) }), run: () => follow(link) }]
   })
 }
 
 function workKey(w: PendingWork): string {
-  return w.kind === "clean-up" ? `clean-up:${w.run.id}` : `${w.kind}:${w.session.id}${w.kind === "ready-to-add" ? `:${w.projectId}` : ""}`
+  return `${w.kind}:${w.session.id}${w.kind === "ready-to-add" ? `:${w.projectId}` : ""}`
 }
 
 function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const firstRun = useStore((s) => liveLightSessions(s.catalog).length === 0)
-  const name = (w: PendingWork) => (w.kind === "clean-up" ? w.run.name : sessionLongLabel(m, w.session))
+  const name = (w: PendingWork) => sessionLongLabel(m, w.session)
   const needs = (w: PendingWork): string => {
     switch (w.kind) {
       case "needs-target":
         return m.sessions_filter_needs_target()
       case "unreviewed":
         return m.session_frames_unreviewed({ count: w.frames, frames: formatCount(w.frames) })
+      case "needs-calibration":
+        return m.sessions_filter_needs_calibration()
       case "not-in-project":
         return m.sessions_filter_not_in_project()
-      case "ready-to-add": {
-        const run = runToJoin(catalog, w.projectId, w.session.id)
-        return m.home_ready_for({ name: run?.name ?? catalog.projects[w.projectId]?.name ?? "–" })
-      }
-      case "clean-up":
-        return w.bytes > 0 ? m.home_clean_up_frees({ bytes: formatBytes(w.bytes) }) : m.home_clean_up_links({ count: w.entries, n: formatCount(w.entries) })
+      case "ready-to-add":
+        return m.home_ready_for({ name: catalog.projects[w.projectId]?.name ?? "–" })
     }
   }
-  const page = (w: PendingWork): StepLink => (w.kind === "clean-up" ? cleanUpLink({ catalog }, w.run, w.project) : { to: "/sessions/$sessionId", params: { sessionId: w.session.id } })
+  const page = (w: PendingWork): StepLink => ({ to: "/sessions/$sessionId", params: { sessionId: w.session.id } })
   const primary = (w: PendingWork): Action | null => {
     switch (w.kind) {
       case "needs-target":
         return { id: "choose-target", label: m.session_choose_target(), run: () => follow(sessionIntakeLink(w.session.id, "target")) }
       case "unreviewed":
         return { id: "review", label: m.session_review_frames(), run: () => follow(sessionIntakeEntry(catalog, w.session)) }
+      case "needs-calibration":
       case "not-in-project":
         return { id: "open-session", label: m.project_open_session(), run: () => follow(page(w)) }
       case "ready-to-add":
-        return addToRunAction(m, catalog, w)
-      case "clean-up":
-        return { id: "clean-up", label: m.wrapup_cleanup_title(), run: () => follow(page(w)) }
+        return addToProjectAction(m, catalog, w)
     }
   }
   const columns: Column<PendingWork>[] = [
-    { id: "item", header: m.home_column_item(), rowHeader: true, truncate: true, sortValue: name, cell: name },
+    { id: "item", header: m.session_label(), rowHeader: true, truncate: true, sortValue: name, cell: name },
     { id: "needs", header: m.home_column_needs(), sortValue: needs, cell: needs },
   ]
   return (
@@ -397,7 +388,7 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
       getRowId={workKey}
       rowLabel={name}
       primaryRowAction={primary}
-      rowActions={(w) => [{ id: "open", label: w.kind === "clean-up" ? m.wrapup_cleanup_title() : m.project_open_session(), run: () => follow(page(w)) }]}
+      rowActions={(w) => [{ id: "open", label: m.project_open_session(), run: () => follow(page(w)) }]}
       onRowClick={(w) => follow(page(w))}
       empty={
         firstRun ? <EmptyState icon={Import} title={m.home_import_to_start()} action={<ActionButton action={{ id: "import", label: m.import_open(), opensDialog: true, run: () => follow({ to: "/import" }) }} />} /> : m.home_nothing_to_sort()
@@ -407,24 +398,22 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
 }
 
 /**
- * Add to the open run's draft. One-click adds it with an Undo notice that
- * takes the session out again; Open page adds it and opens the run's Select
- * step, where its row is ticked. Without an open run, Start run… asks for the rest.
+ * Add a ready suggestion to its Project (PRJ-FR-08, PRJ-FR-09): it joins the
+ * group its optics and framing place it in. One-click adds it with an Undo
+ * notice that takes it out again; Open page adds it and opens the Project's
+ * Sessions tab.
  */
-function addToRunAction(m: Messages, catalog: Catalog, w: Extract<PendingWork, { kind: "ready-to-add" }>): Action {
-  const run = runToJoin(catalog, w.projectId, w.session.id)
-  if (!run) return { id: "start-run", label: m.startrun_open_ellipsis(), opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: w.projectId }) }
+function addToProjectAction(m: Messages, catalog: Catalog, w: Extract<PendingWork, { kind: "ready-to-add" }>): Action {
+  const project = catalog.projects[w.projectId]
+  const projectName = project?.name ?? "–"
   return {
-    id: "add-to-run",
-    label: m.target_add_to_named({ name: run.name }),
+    id: "add-to-project",
+    label: m.target_add_to_named({ name: projectName }),
     quick: {
-      oneClick: { undo: () => ({ message: m.home_added_to_draft({ session: sessionLongLabel(m, w.session), run: run.name }), run: () => removeRunSessions(run.id, [w.session.id]) }) },
-      openPage: { link: runStepLink(run, "select"), commit: true },
+      oneClick: { undo: () => ({ message: m.session_added_to_project({ session: sessionLongLabel(m, w.session), project: projectName }), run: () => removeSessions(w.projectId, [w.session.id]) }) },
+      openPage: { link: projectTabLink(w.projectId, "sessions"), commit: true },
     },
-    run: () => {
-      const reason = runCandidates(catalog, run).find((c) => c.session.id === w.session.id)?.reason ?? msg("home_candidate_of", { name: run.name })
-      return addRunSessions(run.id, [w.session.id], { kind: "candidate", detail: reason })
-    },
+    run: () => addSessions(w.projectId, [w.session.id]),
   }
 }
 
@@ -534,7 +523,6 @@ function LocationsTable({ rows, follow }: { rows: LocationStatus[]; follow: Foll
 
 function JobsTable({ jobs, follow }: { jobs: Operation[]; follow: Follow }) {
   const m = useMessages()
-  const world = useStore((s) => s)
   const title = (op: Operation) => say(m, op.title)
   const percent = (op: Operation) => (op.progress.total > 0 ? Math.min(100, Math.round((op.progress.done / op.progress.total) * 100)) : null)
   const columns: Column<Operation>[] = [
@@ -581,7 +569,7 @@ function TonightTable({ ctx, goals, nextGood, anyGoal }: { ctx: HomeContext; goa
   const name = (g: GoalOutlook) => goalName(m, catalog, g)
   const targetLink = (targetId: TargetId): StepLink => ({ to: "/targets/$targetId", params: { targetId } })
   const columns: Column<GoalOutlook>[] = [
-    { id: "goal", header: m.home_column_goal(), rowHeader: true, truncate: true, sortValue: name, cell: (g) => goalSubject(m, catalog, g.subject.project, g.progress.goal.subjectId, g.progress.goal.panelId) },
+    { id: "goal", header: m.home_column_goal(), rowHeader: true, truncate: true, sortValue: name, cell: (g) => goalSubject(m, catalog, g.subject.project, g.progress.goal.subjectId, g.progress.goal.groupId) },
     {
       id: "grade",
       header: m.home_column_grade(),

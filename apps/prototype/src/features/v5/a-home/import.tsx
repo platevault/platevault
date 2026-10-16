@@ -15,8 +15,11 @@
  *   a blocking row (F3).
  * - Import runs as an operation: the page turns read-only and shows its
  *   progress and outcome. A source that vanishes pauses it as Interrupted
- *   until Retry. Import ends by opening the first imported session the review
- *   queue holds (C14), or Sessions with the imported sessions marked.
+ *   until Retry. Its calibration fills only sessions still waiting; sessions
+ *   set to No that it matches are offered, unticked, under "Also use for
+ *   these sessions" (LIB-FR-25). Import ends by opening the first imported
+ *   session the review queue holds (C14), or Sessions with the imported
+ *   sessions marked.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Check, Download, FolderOpen, FolderSearch, HardDrive, Layers, ListChecks, Plus, RotateCcw, Save } from "lucide-react"
@@ -34,12 +37,14 @@ import { Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { stepEditable } from "@/components/app/step-flow"
 import { StepPage } from "@/components/templates/step-page"
+import { type ArrivalUse, type CalSource, calibrationArrival, KIND_NAME, rawSource, sourceRef, versionSource } from "@/domain/calibration"
 import { importReviewLink, type StepLink } from "@/domain/derive"
 import { removableDevices } from "@/domain/devices"
 import { sessionLongLabel } from "@/domain/membership"
-import type { Operation } from "@/domain/types"
+import type { CalibrationSource, Operation, SessionId } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
+import { alsoUseCalibration } from "@/store/actions/calibration"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { settleGrowingFiles } from "@/store/simulation"
@@ -389,6 +394,65 @@ function OutcomeStep({ state, op }: { state: PrototypeState; op: Operation }) {
       ) : (
         <ActionBar actions={actions} />
       )}
+      {settled ? <AlsoUseSection state={state} payload={payload} /> : null}
     </>
+  )
+}
+
+/** The calibration an import brought in, as sources a session can pin: its new master versions and raw calibration sessions. */
+function importedSources(state: PrototypeState, payload: ImportPayload): CalSource[] {
+  const { catalog, disk } = state
+  const dests = new Set(payload.copied.map((c) => c.dest))
+  const masters = Object.values(catalog.masters).flatMap((master) => master.versions.filter((v) => dests.has(v.path)).map((v) => versionSource(catalog, master, v)))
+  const raws = payload.sessionIds.flatMap((id) => {
+    const session = catalog.sessions[id]
+    return session && session.imageType !== "light" ? [rawSource(catalog, disk, session)] : []
+  })
+  return [...masters, ...raws].filter((s): s is CalSource => s !== null)
+}
+
+/** "Also use for these sessions" (LIB-FR-25): sessions set to No for a kind that the imported calibration matches, offered unticked. */
+function AlsoUseSection({ state, payload }: { state: PrototypeState; payload: ImportPayload }) {
+  const m = useMessages()
+  const [selected, setSelected] = useState<string[]>([])
+  const uses = calibrationArrival(state.catalog, state.settings, importedSources(state, payload)).noSessions
+  if (uses.length === 0) return null
+  const id = (u: ArrivalUse) => `${u.session.id}|${u.kind}`
+  const label = (u: ArrivalUse) => sessionLongLabel(m, u.session)
+  const source = (u: ArrivalUse) => say(m, sourceRef(state.catalog, state.disk, u.candidate.source.source))
+  const columns: Column<ArrivalUse>[] = [
+    { id: "session", header: m.session_label(), rowHeader: true, truncate: true, sortValue: label, cell: label },
+    { id: "kind", header: m.run_col_kind(), sortValue: (u) => u.kind, cell: (u) => say(m, KIND_NAME[u.kind]) },
+    { id: "source", header: m.evidence_column_source(), truncate: true, sortValue: source, cell: source },
+  ]
+  const alsoUse = (ids: string[]): Action => ({
+    id: "also-use",
+    label: m.import_also_use(),
+    run: () => {
+      const bySource = new Map<string, { source: CalibrationSource; sessionIds: SessionId[] }>()
+      for (const u of uses.filter((use) => ids.includes(id(use)))) {
+        const entry = bySource.get(u.candidate.source.key) ?? { source: u.candidate.source.source, sessionIds: [] }
+        bySource.set(u.candidate.source.key, { ...entry, sessionIds: [...entry.sessionIds, u.session.id] })
+      }
+      for (const { source: pin, sessionIds } of bySource.values()) {
+        const result = alsoUseCalibration(pin, sessionIds)
+        if (!result.ok) return result
+      }
+      setSelected([])
+    },
+  })
+  return (
+    <Section title={m.import_also_use_title()}>
+      <DataTable
+        label={m.import_also_use_title()}
+        rows={uses}
+        columns={columns}
+        getRowId={id}
+        rowLabel={label}
+        selection={{ selected, onChange: setSelected, rowLabel: label }}
+        batchActions={(ids) => [alsoUse(ids)]}
+        scroll="none"
+      />
+    </Section>
   )
 }

@@ -4,10 +4,12 @@
  *
  * - Copy or Move, and the destination per role with its space and
  *   writability (each a chip in the gate when it refuses).
- * - The destinations table: lights become sessions, each filed under the
- *   Target its pointing suggests (P-IMP2; OBJECT is only a hint), which the
- *   row's menu changes or files as Unclassified; raw calibration frames go to
- *   a calibration process (P-CAL3); masters go to the Calibration library.
+ * - The destinations table: lights become sessions, split by framing as
+ *   intake splits them (a second framing reads "framing 2", D-W107), each
+ *   filed under the Target its pointing suggests (P-IMP2; OBJECT is only a
+ *   hint), which the row's menu changes or files as Unclassified; raw
+ *   calibration frames go to a calibration process (P-CAL3); masters go to
+ *   the Calibration library.
  * - Held files (Unclassified until typed; still being written until they
  *   settle) and skipped files (duplicates by SHA-256, imported before, a
  *   destination name taken, not an image).
@@ -144,10 +146,11 @@ function DestinationSection({ state, plan, editable }: { state: PrototypeState; 
   )
 }
 
-/** An incoming light session in words: "1 Oct · Ha · 300 s". */
+/** An incoming light session in words: "1 Oct · Ha · 300 s", with "framing 2" for a later framing of the same capture (D-W107). */
 function incomingLabel(m: Messages, g: DestinationGroup): string {
   const header = g.items[0]!.file.header!
-  return [formatNight(nightOf(header.dateObs), true), header.filter ?? m.palette_session_no_filter(), formatExposure(header.exposureS)].join(" · ")
+  const framing = g.session && g.session.framing > 1 ? [m.domain_session_framing({ n: g.session.framing })] : []
+  return [formatNight(nightOf(header.dateObs), true), header.filter ?? m.palette_session_no_filter(), formatExposure(header.exposureS), ...framing].join(" · ")
 }
 
 function GroupsSection({ state, plan, editable }: { state: PrototypeState; plan: ImportPlan; editable: boolean }) {

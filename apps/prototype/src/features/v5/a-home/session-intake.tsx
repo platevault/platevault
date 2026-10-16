@@ -1,7 +1,9 @@
 /**
  * Session intake as a StepPage (§5.3, P-REV2, C10, C14, C15): Target → Rig
  * → Review on `/sessions/$sessionId?step=`, driven by the store's
- * `sessionIntake` flow. A session joins a Project or run only once Ready.
+ * `sessionIntake` flow. A session joins a Project only once Ready (and
+ * settled). Review is always allowed: a Project holding the session gets
+ * its marks as pending changes.
  *
  * - Target: the Target the picker holds, preselected from the session's own
  *   association or its pointing (P-IMP2); OBJECT shows as a label, never as
@@ -89,7 +91,6 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
   const viewing = stepOf(search.step) ?? built.current
   const flow = withHostWork(m, state, session, built, targetId)
   const { proceed } = useFlowActions(flow)
-  const lockedBy = sessionIntakeState(state, session).lockedBy
 
   const body =
     viewing === "target" ? (
@@ -116,7 +117,6 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
       viewing={viewing}
       stepsLabel={m.session_intake_steps()}
       fill={viewing === "review"}
-      notice={viewing === "review" && lockedBy.length > 0 ? { tone: "info", title: m.flow_review_locked(), detail: lockedBy.map((r) => r.name).join(", ") } : null}
       step={body}
     />
   )
