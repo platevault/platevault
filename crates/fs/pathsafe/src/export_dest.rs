@@ -109,8 +109,8 @@ pub enum ExportWriteError {
     /// export's own unfinished file is still there. It is never removed by
     /// name, because another process can put its own entry at that name, so a
     /// retry to that name is refused until the user deletes it. `emptied`
-    /// says whether it was truncated and synced; otherwise it holds a partial
-    /// copy.
+    /// says that truncating it and syncing that succeeded; otherwise it may
+    /// still hold part of the export.
     LeftUnfinished {
         path: PathBuf,
         source: io::Error,
@@ -124,7 +124,11 @@ impl fmt::Display for ExportWriteError {
             Self::Rejected(rejected) => f.write_str(rejected.message()),
             Self::Io(e) => e.fmt(f),
             Self::LeftUnfinished { path, source, emptied } => {
-                let file = if *emptied { "an empty file" } else { "a partly written file" };
+                let file = if *emptied {
+                    "an empty file"
+                } else {
+                    "a file that may still hold part of the export"
+                };
                 write!(f, "the export failed ({source}) and {file} remains at {}", path.display())
             }
         }
@@ -298,9 +302,11 @@ fn link_or_copy(mut temp: NamedTempFile, final_path: &Path) -> Result<(), Export
 /// user learns that a file remains there and where. Removing it would go by
 /// name, and between any check of the name and the removal another process
 /// can put its own entry there. When the name no longer holds the export's
-/// file at that point, the failure is a plain [`ExportWriteError::Io`]: the
-/// entry there is someone else's, and the error must not send the user to
-/// delete it. That check only shapes the report, never an action on the name.
+/// file at that point, the failure is a plain [`ExportWriteError::Io`], so the
+/// error does not send the user to delete an entry that is someone else's.
+/// That inode check narrows the window but cannot close it: an entry swapped
+/// in after the check is still reported as the export's leftover. The check
+/// only shapes the report, never an action on the name.
 /// `before_cleanup` runs right before the cleanup; tests race it through it.
 #[cfg(unix)]
 fn copy_into_new<R: io::Read + io::Seek>(
