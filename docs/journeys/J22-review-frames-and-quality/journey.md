@@ -153,8 +153,8 @@ moves or trashes no source file.
 
 ### S11a — Cull with hotkeys {#S11a}
 
-- **Do:** In the table make F1 current and press **X**. Press **⌥3**, then **⌥1**. Make F1 current again. Turn auto-advance off and press **P**, then **Shift+P**. Turn auto-advance back on.
-- **Expect:** **X** applies at once: F1 reads "Rejected · Library", and F2 becomes current. Project `NGC 7000 HOO` shows one pending removal labelled with the Library rejection as its source; its View is unchanged until Apply. **⌥3** lists F1 and the six rejected 30 Sep frames, and **⌥1** lists every frame. With auto-advance off, **P** makes F1 Picked again, F1 stays current, and the Project's pending removal for F1 clears. **Shift+P** keeps F1 Picked and makes F2 current.
+- **Do:** Open the Ready 28 Sep session and reopen its Review step. In the table make F1 current and press **X**. Press **⌥3**, then **⌥1**. Make F1 current again. Turn auto-advance off and press **P**, then **Shift+P**. Turn auto-advance back on.
+- **Expect:** **X** applies at once: F1 reads "Rejected · Library", and F2 becomes current. Project `NGC 7000 HOO` shows one pending removal labelled with the Library rejection as its source; its View is unchanged until Apply. **⌥3** lists F1 only, because 28 Sep has no other rejected frame, and **⌥1** lists every frame of the session. With auto-advance off, **P** makes F1 Picked again, F1 stays current, and the Project's pending removal for F1 clears. **Shift+P** keeps F1 Picked and makes F2 current.
 - **Expect (negative):** No single-frame P, X or U mark asks for confirmation. F1's file stays on disk and nothing goes to the OS Trash. The Project's View does not change before Apply.
 - **Trace:** PIX-FR-13, PIX-FR-14, PIX-FR-18 · PIX-AC-12 · LIB-FR-20 · VSEL-FR-12, VSEL-FR-15 · D-W78, D-W79, D-W100
 
@@ -172,10 +172,10 @@ moves or trashes no source file.
 - **Expect (negative):** Meeting a goal does not close the Project and changes no quality state.
 - **Trace:** flow B2 · PRJ-FR-04 · PRJ-AC-03 · D10, D-W36, D-W66
 
-### S13 — Narrow one rejection to this Project in the grid {#S13}
+### S13 — Reject a frame in the grid and pick it again {#S13}
 
-- **Do:** Press **G**, then **⌥3**. Select F1, the rejected 28 Sep frame, and press **P**. Return to the table view. Leave Review, reopen the Ready 28 Sep session's Review step, and press **X** on F1.
-- **Expect:** After **P**, F1 reads Picked. When Review is reopened and **X** is pressed, F1 reads "Rejected · Library" in the session and its library quality changes immediately. The open Project shows a pending removal labelled with its source, while the View stays unchanged until Apply. The table and grid keep the same selection, current frame, filter and sort; cached thumbnails show no pending state.
+- **Do:** Reopen the Ready 28 Sep session's Review step. Press **G**, make F1 current and press **X**, then press **⌥3**. Return to the table view. Leave Review, reopen the 28 Sep session's Review step, make F1 current and press **P**.
+- **Expect:** In the grid, **X** applies at once: F1 reads "Rejected · Library" in the session, and its library quality changes immediately. The open Project shows a pending removal labelled with its source, while the View stays unchanged until Apply. **⌥3** lists F1, the session's only rejected frame. The table and grid keep the same selection, current frame, filter and sort; cached thumbnails show no pending state. After Review is reopened, **P** makes F1 Picked again, and the Project's pending removal for F1 clears.
 - **Expect (negative):** There is no Project-only rejection, run draft, or saved membership revision. The library rejection does not change the View before Apply, and no file moves.
 - **Trace:** PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-14, PIX-FR-18 · PIX-AC-12, PIX-AC-16 · LIB-FR-20 · VSEL-FR-12, VSEL-FR-15 · PRJ-FR-04 · D-W78, D-W79, D-W100
 
@@ -225,7 +225,7 @@ moves or trashes no source file.
 - SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
 - SC8: Measurement starts exactly three times, at S1, S4 and S15a, each time from **Measure frames**. Opening Review and the corner inspector (S7b) start 0 measurements, and S7b shows exactly 9 tiles.
 - SC9: The ⌘A **P** on 42 frames at S10 and the threshold **X** at S7a ask for confirmation, and zero frames are marked before a confirmation is accepted or after one is cancelled. Zero single-frame or hand-picked marks ask (S8, S9, S9a, S11a, S13, S16).
-- SC10: 0 files are moved or sent to the OS Trash by any step: the six rejected frames (S8) and F1 (S11a) stay on disk.
+- SC10: 0 files are moved or sent to the OS Trash by any step: the six rejected frames (S8) and F1 (S11a, S13) stay on disk.
 
 ## Known gaps
 
