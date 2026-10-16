@@ -195,6 +195,9 @@ pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 // The F4 admission contract (only Ready, calibration-settled sessions join a
 // Project); its `require_admission` runs inside membership-add transactions.
 mod admission;
+// One PlateVault operation per Project: Apply, Copy to Output and Wrap up
+// reserve the Project before any file effect (PREP-FR-19).
+mod project_operations;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
