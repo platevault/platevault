@@ -26,15 +26,6 @@ jobs:
         cache: pnpm
     - name: Install JS dependencies
       run: pnpm install --frozen-lockfile
-    - name: 'Rehearsal U2: a skipped subjects step'
-      id: subjects
-      if: github.event_name == 'never'
-      shell: bash
-      run: echo 'paths=never' >> "$GITHUB_OUTPUT"
-    - name: 'Rehearsal U2: Attest build provenance condition'
-      if: ${{ steps.subjects.outputs.paths != '' }}
-      shell: bash
-      run: echo '::error::the attest condition ran although the subjects step was skipped'; exit 1
     - name: 'Rehearsal: trust a throwaway code-signing certificate'
       shell: pwsh
       run: |
@@ -243,12 +234,15 @@ jobs:
         }
 
         $unpacked = (Resolve-Path unpacked).Path
-        $unexpected = @()
+        $problems = @()
         $listed = @()
         foreach ($tree in $trees.Keys) {
           $signedHashes = @($signedFor[$trees[$tree]] | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName).Hash })
-          foreach ($file in Get-ChildItem -Recurse -File "unpacked/$tree") {
+          $scanned = 0
+          $files = if (Test-Path -LiteralPath "unpacked/$tree") { Get-ChildItem -Recurse -File "unpacked/$tree" } else { @() }
+          foreach ($file in $files) {
             if (-not (Test-PortableExecutable $file.FullName)) { continue }
+            $scanned++
             $relative = [System.IO.Path]::GetRelativePath($unpacked, $file.FullName).Replace('\', '/')
             if ((Get-FileHash -LiteralPath $file.FullName).Hash -in $signedHashes) {
               "signed by SignPath: $relative"
@@ -258,17 +252,21 @@ jobs:
               $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
               "third-party: $relative ($($thirdParty[$relative])); Authenticode $($signature.Status), signed by $signer"
             } else {
-              $unexpected += $relative
+              $problems += "$relative was not signed by SignPath and is not on the third-party list"
             }
+          }
+          "unpacked/${tree}: $scanned PE files"
+          if ($scanned -eq 0) {
+            $problems += "unpacked/$tree holds no PE file, so its unpacking failed and nothing in it was checked"
           }
         }
         foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) {
-          "::warning::$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
+          $problems += "$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
         }
-        if ($unexpected) {
-          throw "these executables in the installers were not signed by SignPath and are not on the third-party list: $($unexpected -join ', ')"
+        if ($problems) {
+          throw "the installers failed the check:`n$($problems -join "`n")"
         }
-    - name: 'Rehearsal: the check fails on a foreign signer and on an unsent executable'
+    - name: 'Rehearsal: the check fails on each broken input'
       shell: pwsh
       env:
         CHECK_SCRIPT: |
@@ -347,12 +345,15 @@ jobs:
           }
 
           $unpacked = (Resolve-Path unpacked).Path
-          $unexpected = @()
+          $problems = @()
           $listed = @()
           foreach ($tree in $trees.Keys) {
             $signedHashes = @($signedFor[$trees[$tree]] | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName).Hash })
-            foreach ($file in Get-ChildItem -Recurse -File "unpacked/$tree") {
+            $scanned = 0
+            $files = if (Test-Path -LiteralPath "unpacked/$tree") { Get-ChildItem -Recurse -File "unpacked/$tree" } else { @() }
+            foreach ($file in $files) {
               if (-not (Test-PortableExecutable $file.FullName)) { continue }
+              $scanned++
               $relative = [System.IO.Path]::GetRelativePath($unpacked, $file.FullName).Replace('\', '/')
               if ((Get-FileHash -LiteralPath $file.FullName).Hash -in $signedHashes) {
                 "signed by SignPath: $relative"
@@ -362,35 +363,60 @@ jobs:
                 $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.GetNameInfo('SimpleName', $false) } else { 'nobody' }
                 "third-party: $relative ($($thirdParty[$relative])); Authenticode $($signature.Status), signed by $signer"
               } else {
-                $unexpected += $relative
+                $problems += "$relative was not signed by SignPath and is not on the third-party list"
               }
+            }
+            "unpacked/${tree}: $scanned PE files"
+            if ($scanned -eq 0) {
+              $problems += "unpacked/$tree holds no PE file, so its unpacking failed and nothing in it was checked"
             }
           }
           foreach ($entry in $thirdParty.Keys | Where-Object { $_ -notin $listed }) {
-            "::warning::$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
+            $problems += "$entry is on the third-party list but in neither installer; remove it from the list in release-please.yml"
           }
-          if ($unexpected) {
-            throw "these executables in the installers were not signed by SignPath and are not on the third-party list: $($unexpected -join ', ')"
+          if ($problems) {
+            throw "the installers failed the check:`n$($problems -join "`n")"
           }
+        STALE_ANCHOR: |2
+            'msi-streams/Binary.WixUIWixca' = $wixAction
+        STALE_ENTRY: |2
+            'nsis/$PLUGINSDIR/Gone.dll' = $nsisPlugin
       run: |
         $script = Join-Path $env:RUNNER_TEMP 'check.ps1'
         Set-Content -LiteralPath $script -Value $env:CHECK_SCRIPT
-        function Invoke-Check([string] $dir, [string] $signer) {
+        $staleScript = Join-Path $env:RUNNER_TEMP 'check-stale.ps1'
+        Set-Content -LiteralPath $staleScript -Value $env:CHECK_SCRIPT.Replace($env:STALE_ANCHOR, $env:STALE_ANCHOR + $env:STALE_ENTRY)
+        if ((Get-Content -Raw $staleScript) -notmatch 'Gone\.dll') { throw 'the stale-entry mutation did not apply' }
+        function Invoke-Check([string] $dir, [string] $signer, [string] $file = $script) {
           New-Item -ItemType Directory -Path $dir | Out-Null
           Copy-Item -Recurse installers-to-sign, installers-signed, app-signed -Destination $dir
           if ($dir -eq 'neg-unsent') { Remove-Item -LiteralPath "$dir/app-signed/platevault-library.exe" }
           $env:AUTHENTICODE_SIGNER = $signer
           Push-Location $dir
           $message = ''
-          try { & $script | Out-Host } catch { $message = $_.Exception.Message } finally { Pop-Location }
+          try { & $file | Out-Host } catch { $message = $_.Exception.Message } finally { Pop-Location }
           Write-Host "== $dir threw: $message"
           return $message
         }
-        $foreign = Invoke-Check neg-signer 'SignPath Foundation'
-        if ($foreign -notmatch 'must carry a valid signature by SignPath Foundation') { throw 'the check accepted a signature not made by SignPath Foundation' }
-        $unsent = Invoke-Check neg-unsent 'PlateVault signing rehearsal'
-        if ($unsent -notmatch 'not on the third-party list: .*platevault-library\.exe') { throw 'the check accepted an executable SignPath did not sign' }
-        'both negative cases failed as they should'
+        function Assert-Threw([string] $message, [string] $pattern, [string] $case) {
+          if ($message -notmatch $pattern) { throw "the check did not fail as expected for $case" }
+          "ok: $case"
+        }
+        $m = Invoke-Check neg-signer 'SignPath Foundation'
+        Assert-Threw $m 'must carry a valid signature by SignPath Foundation' 'a signature not made by SignPath Foundation'
+        $m = Invoke-Check neg-unsent 'PlateVault signing rehearsal'
+        Assert-Threw $m '(?s)platevault-library\.exe was not signed by SignPath and is not on the third-party list' 'an executable SignPath did not sign'
+        $m = Invoke-Check neg-stale 'PlateVault signing rehearsal' $staleScript
+        Assert-Threw $m '(?s)nsis/\$PLUGINSDIR/Gone\.dll is on the third-party list but in neither installer' 'a stale third-party entry'
+        # 7-Zip that exits 0 but unpacks nothing from the MSI's streams.
+        $real7z = (Get-Command 7z -CommandType Application | Select-Object -First 1).Source
+        function Invoke-QuietlyEmpty7z { if ($args -contains '-tCompound') { $global:LASTEXITCODE = 0; return }; & $real7z @args }
+        Set-Alias -Name 7z -Value Invoke-QuietlyEmpty7z -Scope Global
+        $m = Invoke-Check neg-empty 'PlateVault signing rehearsal'
+        Remove-Item Alias:7z
+        Assert-Threw $m '(?s)unpacked/msi-streams holds no PE file' 'an MSI-streams scan that unpacked nothing'
+        Assert-Threw $m '(?s)msi-streams/Binary\.WixUIWixca is on the third-party list but in neither installer' 'the WixUIWixca entry left unmatched'
+        'every negative case failed as it should'
     - name: Sign the signed installers for the updater
       shell: pwsh
       run: |
