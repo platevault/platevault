@@ -58,7 +58,7 @@ export function folderItems(state: Pick<PrototypeState, "disk">, folder: string)
   const files = filesUnder(state.disk, folder)
   if (files.length > 0) return files.map((file) => ({ path: file.path }))
   const volume = Object.values(state.disk.volumes).find((v) => isUnder(folder, v.mountPath))
-  return volume && !volume.mounted ? [{ path: folder, refusedReason: msg("domain_trash_offline", { name: volume.name }) }] : []
+  return volume && !volume.mounted ? [{ path: folder, refusedReason: msg("issue_location_offline", { name: volume.name }) }] : []
 }
 
 /** One file a trash review names: an item, the digest the library recorded for it when the item's asset does not carry it (a master version), and why it stays, if it does. */

@@ -113,10 +113,10 @@ export function trashRefusal(disk: Disk, path: string): MessageRef | null {
   if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return msg("domain_trash_read_only")
   const volumeId = volumeForPath(disk, path)
   const volume = volumeId ? disk.volumes[volumeId] : undefined
-  if (!volume) return msg("domain_trash_no_volume")
-  if (!volume.mounted) return msg("domain_trash_offline", { name: volume.name })
-  if (volume.trash === "unsupported") return msg("domain_trash_unsupported")
-  if (!fileAt(disk, path)) return msg("domain_trash_not_found")
+  if (!volume) return msg("location_volume_unknown")
+  if (!volume.mounted) return msg("issue_location_offline", { name: volume.name })
+  if (volume.trash === "unsupported") return msg("import_no_os_trash")
+  if (!fileAt(disk, path)) return msg("status_not_found")
   return null
 }
 
