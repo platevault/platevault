@@ -132,7 +132,9 @@ failure-output = "immediate-final"
 # `threads-required = 2` was removed by `astro-plan-cws` once a full Windows
 # run under `test-threads = 2` met `astro-plan-1oe`'s TRY-1 bar (no
 # 0x80070057, no "bridge never became ready", no redb lock error, no flaky
-# test). If those signatures come back, the isolation regressed: restore
+# test): run 38896453498, jobs 116962278442 / 116962278458 / 116962278508,
+# 5 + 12 + 13 passed on the first try with journeys overlapping. If those
+# signatures come back, the isolation regressed: restore
 # `threads-required = 2` here and reopen #1204 with the shard logs.
 [[profile.e2e.overrides]]
 platform = 'cfg(windows)'
