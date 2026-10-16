@@ -33,7 +33,7 @@ export function HelpPage() {
       <Section title={m.help_tips()} level={3}>
         <KeyValueList
           items={[
-            { label: m.help_tip_marks(), value: m.help_tip_marks_value() },
+            { label: m.help_tip_marks(), value: m.help_tip_marks_library() },
             { label: m.help_tip_auto_advance(), value: m.help_tip_auto_advance_value() },
             { label: m.help_tip_pan(), value: m.help_tip_pan_value() },
             { label: m.help_tip_threshold(), value: m.help_tip_threshold_value() },

@@ -384,6 +384,8 @@ export function arrivalFiles(): DiskFile[] {
 /**
  * What a removable device holds when it connects (S13 Import, `connectDevice`).
  * The ASIAIR card: new NGC 7000 lights with the last file still being written,
+ * OIII lights whose last 4 frames the mount re-pointed 0.6° north (import
+ * review splits them off as "framing 2" and can merge them back, LIB-AC-31),
  * flats, a set without IMAGETYP (held as Unclassified), a log file, and the
  * 2 Oct Ha session imported from it before (byte-identical duplicates of
  * library frames); its Autorun and Plan folders are the ASIAIR layout. The
@@ -399,7 +401,8 @@ export function deviceFiles(disk: Disk, volumeId: VolumeId): DiskFile[] {
   const site = SITE_COORDS.backyard
   const files = [
     ...captureSet({ volumeId: card, dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_Ha_20261006", count: 16, start: "2026-10-06T19:30:00Z", imageType: "light", exposureS: 300, filter: "Ha", object: "NGC 7000", rig: REDCAT, pointing, site, growingLast: true }),
-    ...captureSet({ volumeId: card, dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_OIII_20261006", count: 12, start: "2026-10-06T21:10:00Z", imageType: "light", exposureS: 300, filter: "OIII", object: "NGC 7000", rig: REDCAT, pointing, site }),
+    ...captureSet({ volumeId: card, dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_OIII_20261006", count: 8, start: "2026-10-06T21:10:00Z", imageType: "light", exposureS: 300, filter: "OIII", object: "NGC 7000", rig: REDCAT, pointing, site }),
+    ...captureSet({ volumeId: card, dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_OIII_B_20261006", count: 4, start: "2026-10-06T22:00:00Z", imageType: "light", exposureS: 300, filter: "OIII", object: "NGC 7000", rig: REDCAT, pointing: { ...pointing, dec: pointing.dec + 0.6 }, site }),
     ...captureSet({ volumeId: card, dir: "Autorun/Flat", prefix: "Flat_RedCat_Ha_20261007", count: 20, start: "2026-10-07T05:20:00Z", imageType: "flat", exposureS: 1.5, filter: "Ha", object: null, rig: REDCAT, pointing: null, site: null }),
     // IMAGETYP missing: the files are held as Unclassified until typed.
     ...captureSet({ volumeId: card, dir: "Plan/M 33", prefix: "Capture_M33_120s_L_20261006", count: 6, start: "2026-10-06T23:40:00Z", imageType: "unknown", exposureS: 120, filter: "L", object: "M 33", rig: REDCAT, pointing: { ra: 23.462, dec: 30.66, rotationDeg: rot }, site, truth: () => ({ starCount: 1700, background: 860, saturatedStars: 1 }) }),

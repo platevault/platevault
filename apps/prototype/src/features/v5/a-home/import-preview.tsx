@@ -5,17 +5,27 @@
  * - Copy or Move, and the destination per role with its space and
  *   writability (each a chip in the gate when it refuses).
  * - The destinations table: lights become sessions, split by framing as
- *   intake splits them (a second framing reads "framing 2", D-W107), each
- *   filed under the Target its pointing suggests (P-IMP2; OBJECT is only a
- *   hint), which the row's menu changes or files as Unclassified; raw
- *   calibration frames go to a calibration process (P-CAL3); masters go to
- *   the Calibration library.
+ *   intake splits them (a second framing reads "framing 2", D-W107); the
+ *   row's menu merges a capture's framings into one session and re-splits
+ *   them (LIB-AC-31). Each session files under the Target its pointing
+ *   suggests (P-IMP2; OBJECT is only a hint), which the row's menu changes
+ *   or files as Unclassified; raw calibration frames go to a calibration
+ *   process (P-CAL3); masters go to the Calibration library. Its
+ *   Calibration column reads each session's darks, flats and bias as the
+ *   import's ingestion will leave them (pinned automatically, suggested or
+ *   not found), and each calibration set what it would calibrate ("Used
+ *   for", provisional).
+ * - Calibration: the new sessions' choices (CalibrationChoices on the
+ *   what-if): Confirm, Choose ▸ and No darks/flats/bias are kept in the
+ *   draft and applied once the frames are read; Add calibration files…
+ *   adds a folder to the batch. Leaving a kind for later never blocks
+ *   Import: the session waits in Needs calibration (LIB-FR-23).
  * - Held files (Unclassified until typed; still being written until they
  *   settle) and skipped files (duplicates by SHA-256, imported before, a
  *   destination name taken, not an image).
  */
-import { Check, Eye, FolderSearch, Undo2 } from "lucide-react"
-import { useState } from "react"
+import { Check, Eye, FolderPlus, FolderSearch, Merge, RotateCcw, Split, Undo2, X } from "lucide-react"
+import { useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { ActionBar } from "@/components/app/actions"
@@ -23,20 +33,24 @@ import type { Action, Column, ConfirmSpec, MenuItem } from "@/components/app/con
 import { KeyValueList } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
 import { SegmentedField, SelectField } from "@/components/app/fields"
+import { FolderPicker } from "@/components/app/folder-picker"
 import { FormDialog } from "@/components/app/form-dialog"
 import { Section } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
 import { type TargetOption, TargetPicker } from "@/components/app/pickers"
 import { StatusBadge } from "@/components/app/status"
-import { nightOf } from "@/domain/indexing"
+import { CalibrationChoices, type CalibrationChoiceRow, calibrationChoiceRows } from "@/components/domain/calibration-choices"
+import { isUnder, nightOf } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
-import type { DiskFile, ImageType, LocationId, TargetId } from "@/domain/types"
+import type { CalibrationSource, Catalog, DiskFile, ImageType, LocationId, PinKind, Session, TargetId } from "@/domain/types"
 import { formatBytes, formatCount, formatExposure, formatNight } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
-import { type PrototypeState, updateSlice } from "@/store/core"
-import type { ImportDraft } from "@/store/slices/a"
-import { type DestinationGroup, destinationLocations, type ImportPlan, routeLabel, TYPEABLE, typeLabel } from "./import-model"
+import { joinRefs, type MessageRef, type Messages, msg } from "@/lib/i18n"
+import type { SessionKind } from "@/store/actions/calibration"
+import { nowIso, type PrototypeState, updateSlice } from "@/store/core"
+import type { ImportCalibrationChoice, ImportDraft } from "@/store/slices/a"
+import { type DestinationGroup, destinationLocations, type ImportPlan, type ImportPreview, previewImport, routeLabel, TYPEABLE, typeLabel, withChoice } from "./import-model"
+import { CalibrationSummary } from "./session"
 
 function setDraft(patch: Partial<ImportDraft>) {
   updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, ...patch } }))
@@ -56,6 +70,23 @@ function setTyped(paths: string[], type: ImageType | null) {
     }
     return { ...a, importDraft: { ...a.importDraft, typed } }
   })
+}
+
+/** Merge framings (true) or Re-split (false): the capture's framings import as one session, or split by the Settings margins (D-W107). */
+function setMerged(captureKey: string, merged: boolean) {
+  updateSlice("a", (a) => {
+    const rest = a.importDraft.merged.filter((key) => key !== captureKey)
+    return { ...a, importDraft: { ...a.importDraft, merged: merged ? [...rest, captureKey] : rest } }
+  })
+}
+
+/** Keep a calibration choice for these incoming sessions' kinds until the import reads their frames. */
+function setChoices(picks: Array<{ sessionKey: string; kind: PinKind }>, choice: ImportCalibrationChoice) {
+  updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, calibration: picks.reduce((c, p) => withChoice(c, p.sessionKey, p.kind, choice), a.importDraft.calibration) } }))
+}
+
+function setExtraFolders(change: (folders: string[]) => string[]) {
+  updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, extraFolders: change(a.importDraft.extraFolders) } }))
 }
 
 /** "Captures and Calibration": the destination location names as one phrase. */
@@ -89,11 +120,15 @@ export function importConfirm(m: Messages, plan: ImportPlan, draft: ImportDraft)
 }
 
 export function PreviewStep({ state, plan, draft, editable }: { state: PrototypeState; plan: ImportPlan; draft: ImportDraft; editable: boolean }) {
+  // The what-if ingestion re-runs only when the library, the disk, the settings or the plan change (the page memoises the plan).
+  const { catalog, disk, settings } = state
+  const preview = useMemo(() => previewImport({ catalog, disk, settings }, plan, draft, nowIso()), [catalog, disk, settings, plan, draft])
   return (
     <>
       <ModeSection plan={plan} draft={draft} editable={editable} />
       <DestinationSection state={state} plan={plan} editable={editable} />
-      <GroupsSection state={state} plan={plan} editable={editable} />
+      <GroupsSection state={state} plan={plan} preview={preview} editable={editable} />
+      <CalibrationSection state={state} plan={plan} draft={draft} preview={preview} editable={editable} />
       <HeldSection plan={plan} draft={draft} editable={editable} />
       <SkippedSection state={state} plan={plan} />
     </>
@@ -153,12 +188,49 @@ function incomingLabel(m: Messages, g: DestinationGroup): string {
   return [formatNight(nightOf(header.dateObs), true), header.filter ?? m.palette_session_no_filter(), formatExposure(header.exposureS), ...framing].join(" · ")
 }
 
-function GroupsSection({ state, plan, editable }: { state: PrototypeState; plan: ImportPlan; editable: boolean }) {
+/** "Ha · 12 Oct": a session a calibration set would calibrate. */
+function usedForName(m: Messages, session: Session): string {
+  return `${session.channel ?? m.palette_session_no_filter()} · ${formatNight(session.night, true)}`
+}
+
+function GroupsSection({ state, plan, preview, editable }: { state: PrototypeState; plan: ImportPlan; preview: ImportPreview; editable: boolean }) {
   const m = useMessages()
   const [changing, setChanging] = useState<DestinationGroup | null>(null)
   const name = (g: DestinationGroup) => (g.session ? incomingLabel(m, g) : `${g.location.displayName}/${g.relative}`)
+  const incoming = (g: DestinationGroup): Session | undefined => {
+    const id = g.session ? preview.sessionOf.get(g.session.key) : undefined
+    return id ? preview.world.catalog.sessions[id] : undefined
+  }
+  const calibration = (g: DestinationGroup) => {
+    if (g.session) {
+      const session = incoming(g)
+      return session?.calibration ? <CalibrationSummary calibration={session.calibration} disk={preview.world.disk} incoming /> : "–"
+    }
+    const used = preview.usedFor.get(g.key) ?? []
+    if (used.length === 0) return m.import_used_for_none()
+    return (
+      <>
+        {m.import_used_for({ sessions: used.map((s) => usedForName(m, s)).join(", ") })} <Pill tone="muted">{m.status_provisional()}</Pill>
+      </>
+    )
+  }
   const columns: Column<DestinationGroup>[] = [
     { id: "folder", header: m.import_column_folder(), rowHeader: true, truncate: true, sortValue: (g) => `${g.route}|${g.relative}`, cell: (g) => `${g.location.displayName}/${g.relative}` },
+    {
+      id: "session",
+      header: m.session_label(),
+      sortValue: (g) => (g.session ? incomingLabel(m, g) : ""),
+      cell: (g) => {
+        if (!g.session) return "–"
+        return g.session.merged ? (
+          <>
+            {incomingLabel(m, g)} <Pill tone="info">{m.import_framings_merged({ count: g.session.framings })}</Pill>
+          </>
+        ) : (
+          incomingLabel(m, g)
+        )
+      },
+    },
     {
       id: "target",
       header: m.sessions_column_target(),
@@ -179,16 +251,42 @@ function GroupsSection({ state, plan, editable }: { state: PrototypeState; plan:
     { id: "frames", header: m.sessions_column_frames(), align: "right", sortValue: (g) => g.items.length, cell: (g) => formatCount(g.items.length) },
     { id: "size", header: m.import_column_size(), align: "right", sortValue: (g) => g.bytes, cell: (g) => formatBytes(g.bytes) },
     { id: "into", header: m.import_column_into(), sortValue: (g) => g.route, cell: (g) => (g.fallbacks.length > 0 ? <>{routeLabel(m, g.route)} <Pill tone="warning">{m.import_fallback()}</Pill></> : routeLabel(m, g.route)) },
+    { id: "calibration", header: m.nav_calibration(), sortValue: (g) => (g.session ? (incoming(g)?.calibration ? 1 : 0) : (preview.usedFor.get(g.key)?.length ?? 0)), cell: calibration },
   ]
   const actions = (g: DestinationGroup): MenuItem[] => {
     const session = g.session
     if (!editable || !session) return []
+    const framing: MenuItem[] = session.merged
+      ? [{ id: "resplit", label: m.import_resplit_framings(), icon: Split, run: () => setMerged(session.captureKey, false) }]
+      : session.framings > 1
+        ? [{ id: "merge", label: m.import_merge_framings({ count: session.framings }), icon: Merge, run: () => setMerged(session.captureKey, true) }]
+        : []
     return [
       ...(session.suggested && session.target?.id !== session.suggested.id ? [{ id: "use-suggested", label: m.session_file_into({ name: session.suggested.name }), icon: Check, run: () => chooseTarget(session.key, session.suggested!.id) }] : []),
       { id: "change-target", label: m.session_choose_target(), icon: FolderSearch, opensDialog: true, run: () => setChanging(g) },
       ...(session.target ? [{ id: "unclassified", label: m.import_file_unclassified(), run: () => chooseTarget(session.key, null) }] : []),
+      ...(framing.length > 0 ? [{ separator: true } as const, ...framing] : []),
     ]
   }
+  const details = (g: DestinationGroup) => (
+    <KeyValueList
+      items={[
+        ...(g.fallbacks.length > 0 ? [{ label: m.import_fallback(), value: m.import_fallback_used({ tokens: g.fallbacks.map((f) => `{${f}}`).join(", ") }) }] : []),
+        ...(g.session && g.session.unpointed > 0
+          ? [
+              {
+                label: m.import_no_pointing(),
+                value: (
+                  <>
+                    {m.import_no_pointing_stays({ count: g.session.unpointed })} <Pill tone="muted">{m.status_provisional()}</Pill>
+                  </>
+                ),
+              },
+            ]
+          : []),
+      ]}
+    />
+  )
   return (
     <Section title={m.import_preview()}>
       <DataTable
@@ -198,11 +296,113 @@ function GroupsSection({ state, plan, editable }: { state: PrototypeState; plan:
         getRowId={(g) => g.key}
         rowLabel={name}
         rowActions={actions}
-        expand={{ isExpandable: (g) => g.fallbacks.length > 0, render: (g) => m.import_fallback_used({ tokens: g.fallbacks.map((f) => `{${f}}`).join(", ") }) }}
+        expand={{ isExpandable: (g) => g.fallbacks.length > 0 || (g.session?.unpointed ?? 0) > 0, render: details }}
         scroll="none"
         empty={m.import_nothing_to_import()}
       />
       {changing?.session ? <TargetDialog state={state} group={changing} label={incomingLabel(m, changing)} onClose={() => setChanging(null)} /> : null}
+    </Section>
+  )
+}
+
+/** Whether a calibration source is in the library already, not one this import brings. */
+function inLibrary(catalog: Catalog, source: CalibrationSource): boolean {
+  return source.type === "master" ? (catalog.masters[source.masterId]?.versions.some((v) => v.id === source.versionId) ?? false) : catalog.sessions[source.sessionId] !== undefined
+}
+
+/**
+ * A what-if row for import review: the session and a source this import
+ * brings are not in the library yet, so they read as text ("· in this
+ * import") rather than links.
+ */
+function incomingRow(catalog: Catalog, row: CalibrationChoiceRow): CalibrationChoiceRow {
+  const batch = (label: MessageRef) => joinRefs([label, msg("import_in_this_import")], " · ")
+  const held = row.choice.state === "pinned" || row.choice.state === "suggested" ? row.choice.source : null
+  const fromBatch = held !== null && !inLibrary(catalog, held)
+  return {
+    ...row,
+    sessionLink: catalog.sessions[row.sessionId] ? row.sessionLink : null,
+    source: fromBatch && row.source ? batch(row.source) : row.source,
+    sourceLink: fromBatch ? null : row.sourceLink,
+    offers: row.offers.map((offer) => (inLibrary(catalog, offer.source) ? offer : { ...offer, label: batch(offer.label) })),
+  }
+}
+
+/**
+ * The new sessions' darks, flats and bias as the import will leave them, with
+ * the choices review can make before it runs: Confirm, Choose ▸ and No are
+ * kept in the draft (the what-if shows them at once) and applied once the
+ * frames are read. Add calibration files… adds a folder to the batch.
+ */
+function CalibrationSection({ state, plan, draft, preview, editable }: { state: PrototypeState; plan: ImportPlan; draft: ImportDraft; preview: ImportPreview; editable: boolean }) {
+  const m = useMessages()
+  const [selected, setSelected] = useState<string[]>([])
+  const [adding, setAdding] = useState(false)
+  const keyOf = new Map([...preview.sessionOf].map(([key, id]) => [id, key]))
+  const sessionIds = [...new Set(plan.groups.flatMap((g) => (g.session ? (preview.sessionOf.get(g.session.key) ?? []) : [])))]
+  const extras = plan.folders.filter((f) => f.extra)
+  if (sessionIds.length === 0 && extras.length === 0) return null
+  const rows = calibrationChoiceRows(preview.world, sessionIds).map((r) => incomingRow(state.catalog, r))
+  const keep = (picks: SessionKind[], choice: ImportCalibrationChoice) => {
+    setChoices(
+      picks.flatMap((p) => {
+        const sessionKey = keyOf.get(p.sessionId)
+        return sessionKey ? [{ sessionKey, kind: p.kind }] : []
+      }),
+      choice,
+    )
+    setSelected([])
+    return { ok: true } as const
+  }
+  const chosen = Object.values(draft.calibration).some((c) => Object.keys(c).length > 0)
+  const actions: Action[] = editable
+    ? [
+        { id: "add-calibration", label: m.import_add_calibration_files_ellipsis(), icon: FolderPlus, opensDialog: true, run: () => setAdding(true) },
+        ...(chosen ? [{ id: "reset-calibration", label: m.import_reset_calibration(), icon: RotateCcw, run: () => setDraft({ calibration: {} }) }] : []),
+      ]
+    : []
+  const folderColumns: Column<(typeof extras)[number]>[] = [
+    { id: "folder", header: m.import_column_folder(), rowHeader: true, truncate: true, sortValue: (f) => f.path, cell: (f) => f.path },
+    { id: "state", header: m.import_column_state(), sortValue: (f) => Number(f.online), cell: (f) => <StatusBadge kind="availability" value={f.online ? "online" : "offline"} /> },
+  ]
+  return (
+    <Section title={m.nav_calibration()} description={m.import_calibration_description()} actions={actions.length > 0 ? <ActionBar actions={actions} /> : undefined}>
+      {extras.length > 0 ? (
+        <DataTable
+          label={m.import_added_folders()}
+          rows={extras}
+          columns={folderColumns}
+          getRowId={(f) => f.path}
+          rowLabel={(f) => f.path}
+          rowActions={(f) => (editable ? [{ id: "remove-folder", label: m.import_remove_folder(), icon: X, run: () => setExtraFolders((all) => all.filter((p) => p !== f.path)) }] : [])}
+          scroll="none"
+        />
+      ) : null}
+      {sessionIds.length > 0 ? (
+        <CalibrationChoices
+          label={m.import_calibration_of_sessions()}
+          rows={rows}
+          groupBySession
+          changeable={editable}
+          selection={{ selected, onChange: setSelected }}
+          onConfirm={(picks) => keep(picks, { state: "confirm" })}
+          onNo={(picks) => keep(picks, { state: "none" })}
+          onPick={(pick) => keep([pick], { state: "pick", source: pick.source })}
+          onAddFiles={() => setAdding(true)}
+        />
+      ) : null}
+      <FolderPicker
+        open={adding}
+        onOpenChange={(open) => !open && setAdding(false)}
+        title={m.import_add_calibration_title()}
+        description={m.import_add_calibration_description()}
+        initialPath={plan.sourcePath}
+        chooseVerb={m.verb_add()}
+        onChoose={(path) => {
+          setExtraFolders((all) => [...all.filter((p) => p !== path), path])
+          setAdding(false)
+        }}
+      />
     </Section>
   )
 }
@@ -258,10 +458,11 @@ interface HeldRow {
 
 function HeldSection({ plan, draft, editable }: { plan: ImportPlan; draft: ImportDraft; editable: boolean }) {
   const m = useMessages()
-  const rel = (path: string) => path.slice(plan.sourcePath.length + 1) || path
+  // Relative to the source; a file of an added folder shows its full path.
+  const rel = (path: string) => (isUnder(path, plan.sourcePath) ? path.slice(plan.sourcePath.length + 1) || path : path)
   const typed = new Map<string, HeldRow>()
   for (const [path, type] of Object.entries(draft.typed)) {
-    if (!path.startsWith(plan.sourcePath)) continue
+    if (!plan.folders.some((f) => isUnder(path, f.path))) continue
     const key = `${folderOf(path)}|${type}`
     const row = typed.get(key) ?? { key: `typed:${key}`, kind: "typed" as const, folder: rel(folderOf(path)), paths: [], type, objectLabel: null }
     row.paths.push(path)

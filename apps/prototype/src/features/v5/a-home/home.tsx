@@ -12,9 +12,11 @@
  *   scan, a location never scanned or whose last scan did not finish, a
  *   stopped or failed import (Retry), or a running one with its progress.
  * - Pending work: sessions that need a Target, wait for review, wait in the
- *   Library's Needs calibration queue (LIB-FR-23), sit in no Project or are
- *   ready to add to a Project (a suggestion that is Ready and settled; it is
- *   never added by itself, PRJ-FR-09).
+ *   Library's Needs calibration queue (LIB-FR-23, which reads the kinds
+ *   still to choose), sit in no Project or are ready to add to a Project (a
+ *   suggestion that is Ready and settled, with its duplicates badge, F5; it
+ *   is never added by itself, PRJ-FR-09). One group per kind, each header
+ *   counting all of that kind ("Needs calibration · 2").
  * - Open work: open Projects and calibration processes, where each stands
  *   and its next step, deadline or season first with "N nights left".
  * - Status: locations (online, free space) and background
@@ -48,6 +50,7 @@ import { issueCopy } from "@/components/app/issue-row"
 import { Pill } from "@/components/app/pill"
 import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
+import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { GradeBadges } from "@/components/domain/grade-badges"
 import { type CalendarNight, NightCalendar } from "@/components/domain/night-calendar"
 import { siteTimeRange, siteTime } from "@/components/domain/sky-lines"
@@ -73,6 +76,7 @@ import { sessionLongLabel } from "@/domain/membership"
 import { type GoalOutlook, goalHorizon, goalsTonight, type NightOutlook, nightOutlooks } from "@/domain/outlook"
 import { nightPlan, upcomingNight } from "@/domain/planning"
 import { projectTabLink } from "@/domain/project-view"
+import { sessionDuplicateCopies } from "@/domain/storage"
 import type { Catalog, NightDate, ObservingSite, Operation, Project, ProjectGroupId, TargetId } from "@/domain/types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
 import { getLocale, type Messages, say } from "@/lib/i18n"
@@ -81,6 +85,7 @@ import { addToPlan, removeFromPlan } from "@/store/actions/planning"
 import { addSessions, removeSessions } from "@/store/actions/projects"
 import { nowIso, useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
+import { CalibrationSummary } from "./session"
 
 /** Rows a section shows before "All N ›" (C8). */
 const ROWS = 5
@@ -311,6 +316,20 @@ function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follo
 
 // Pending work -----------------------------------------------------------------
 
+/** The kinds of pending work, in the order Home lists them. */
+const PENDING_KINDS: PendingWork["kind"][] = ["needs-target", "unreviewed", "needs-calibration", "not-in-project", "ready-to-add"]
+
+function pendingGroup(m: Messages, kind: PendingWork["kind"]): string {
+  const group: Record<PendingWork["kind"], () => string> = {
+    "needs-target": m.sessions_filter_needs_target,
+    unreviewed: m.status_needs_review,
+    "needs-calibration": m.sessions_filter_needs_calibration,
+    "not-in-project": m.sessions_filter_not_in_project,
+    "ready-to-add": m.home_group_ready,
+  }
+  return group[kind]()
+}
+
 /**
  * "All N ›" per kind of pending work the first rows leave out, each to its
  * owning page filtered to those items: Sessions by facet, a ready session
@@ -318,24 +337,16 @@ function IngestionsTable({ rows, follow }: { rows: IngestionRow[]; follow: Follo
  */
 function pendingAllActions(m: Messages, follow: Follow, work: PendingWork[]): Action[] {
   const shown = new Set(work.slice(0, ROWS).map(workKey))
-  const kinds: PendingWork["kind"][] = ["needs-target", "unreviewed", "needs-calibration", "not-in-project", "ready-to-add"]
-  return kinds.flatMap((kind): Action[] => {
+  return PENDING_KINDS.flatMap((kind): Action[] => {
     const rows = work.filter((w) => w.kind === kind)
     const hidden = rows.filter((w) => !shown.has(workKey(w)))
     const first = hidden[0]
     if (!first) return []
-    const group: Record<PendingWork["kind"], () => string> = {
-      "needs-target": m.sessions_filter_needs_target,
-      unreviewed: m.status_needs_review,
-      "needs-calibration": m.sessions_filter_needs_calibration,
-      "not-in-project": m.sessions_filter_not_in_project,
-      "ready-to-add": m.home_group_ready,
-    }
     const link: StepLink =
       first.kind === "ready-to-add"
         ? projectTabLink(first.projectId, "sessions")
         : { to: "/sessions", search: { filter: first.kind === "unreviewed" ? "needs-review" : first.kind } }
-    return [{ id: `home-pending-all-${kind}`, label: m.home_all_group({ group: group[kind](), count: formatCount(rows.length) }), run: () => follow(link) }]
+    return [{ id: `home-pending-all-${kind}`, label: m.home_all_group({ group: pendingGroup(m, kind), count: formatCount(rows.length) }), run: () => follow(link) }]
   })
 }
 
@@ -343,12 +354,21 @@ function workKey(w: PendingWork): string {
   return `${w.kind}:${w.session.id}${w.kind === "ready-to-add" ? `:${w.projectId}` : ""}`
 }
 
+/**
+ * The first rows of pending work, in one group per kind whose header counts
+ * every row of that kind ("Needs calibration · 2", LIB-AC-25): the Needs
+ * calibration queue counts apart from frame review. A needs-calibration row
+ * reads which kinds still need a choice; a suggestion carries the
+ * duplicates badge (F5).
+ */
 function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow }) {
   const m = useMessages()
-  const catalog = useStore((s) => s.catalog)
-  const firstRun = useStore((s) => liveLightSessions(s.catalog).length === 0)
+  const state = useStore((s) => s)
+  const { catalog, disk } = state
+  const duplicates = sessionDuplicateCopies(state)
+  const firstRun = liveLightSessions(catalog).length === 0
   const name = (w: PendingWork) => sessionLongLabel(m, w.session)
-  const needs = (w: PendingWork): string => {
+  const needsText = (w: PendingWork): string => {
     switch (w.kind) {
       case "needs-target":
         return m.sessions_filter_needs_target()
@@ -362,6 +382,17 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
         return m.home_ready_for({ name: catalog.projects[w.projectId]?.name ?? "–" })
     }
   }
+  const needs = (w: PendingWork) => {
+    const count = duplicates.get(w.session.id) ?? 0
+    if (w.kind === "needs-calibration" && w.session.calibration) return <CalibrationSummary calibration={w.session.calibration} disk={disk} />
+    if (w.kind === "ready-to-add" && count > 0)
+      return (
+        <>
+          {needsText(w)} <DuplicatesBadge count={count} />
+        </>
+      )
+    return needsText(w)
+  }
   const page = (w: PendingWork): StepLink => ({ to: "/sessions/$sessionId", params: { sessionId: w.session.id } })
   const primary = (w: PendingWork): Action | null => {
     switch (w.kind) {
@@ -370,6 +401,7 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
       case "unreviewed":
         return { id: "review", label: m.session_review_frames(), run: () => follow(sessionIntakeEntry(catalog, w.session)) }
       case "needs-calibration":
+        return { id: "choose-calibration", label: m.home_choose_calibration(), run: () => follow(page(w)) }
       case "not-in-project":
         return { id: "open-session", label: m.project_open_session(), run: () => follow(page(w)) }
       case "ready-to-add":
@@ -378,15 +410,25 @@ function PendingTable({ rows, follow }: { rows: PendingWork[]; follow: Follow })
   }
   const columns: Column<PendingWork>[] = [
     { id: "item", header: m.session_label(), rowHeader: true, truncate: true, sortValue: name, cell: name },
-    { id: "needs", header: m.home_column_needs(), sortValue: needs, cell: needs },
+    { id: "needs", header: m.home_column_needs(), sortValue: needsText, cell: needs },
   ]
+  const shown = rows.slice(0, ROWS)
   return (
     <BoxTable
       label={m.home_pending_work()}
-      rows={rows.slice(0, ROWS)}
+      rows={shown}
       columns={columns}
       getRowId={workKey}
       rowLabel={name}
+      groups={
+        shown.length > 0
+          ? {
+              key: (w) => w.kind,
+              label: (kind) => m.home_pending_group({ group: pendingGroup(m, kind as PendingWork["kind"]), count: formatCount(rows.filter((w) => w.kind === kind).length) }),
+              compare: (a, b) => PENDING_KINDS.indexOf(a as PendingWork["kind"]) - PENDING_KINDS.indexOf(b as PendingWork["kind"]),
+            }
+          : undefined
+      }
       primaryRowAction={primary}
       rowActions={(w) => [{ id: "open", label: m.project_open_session(), run: () => follow(page(w)) }]}
       onRowClick={(w) => follow(page(w))}

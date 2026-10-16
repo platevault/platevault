@@ -1,16 +1,21 @@
 /**
  * Slice A: S1 Home, S12 Sessions, S13 Import. Owned by the slice A screen
  * agent. Holds Home's Show closed filter (D-W48), the Import draft (source,
- * Copy or Move, destinations, the frame types typed for Unclassified holds
- * and the Target chosen per incoming session, P-IMP2) and the last started
- * Import or Add folder operation, and registers the "import" operation
- * handler (D-W11, D-W24).
+ * Copy or Move, destinations, the frame types typed for Unclassified holds,
+ * the Target chosen per incoming session (P-IMP2), the captures whose
+ * framings import as one session (D-W107), the calibration folders added to
+ * the batch and the calibration choices made in review (LIB-FR-23)) and the
+ * last started Import or Add folder operation, and registers the "import"
+ * operation handler (D-W11, D-W24).
  */
-import type { ImageType, ImportSourceId, LocationId, OperationId, TargetId } from "@/domain/types"
+import type { CalibrationSource, ImageType, ImportSourceId, LocationId, OperationId, PinKind, TargetId } from "@/domain/types"
 import { importHandler } from "@/features/v5/a-home/import-run"
 import type { SliceDefinition } from "./index"
 
 export type ImportSourceChoice = { kind: "saved"; id: ImportSourceId } | { kind: "folder"; path: string }
+
+/** A calibration choice made in import review for one kind of an incoming session; applied once its frames are imported. */
+export type ImportCalibrationChoice = { state: "confirm" } | { state: "none" } | { state: "pick"; source: CalibrationSource }
 
 export interface ImportDraft {
   source: ImportSourceChoice | null
@@ -24,10 +29,22 @@ export interface ImportDraft {
   typed: Record<string, ImageType>
   /** Target chosen per incoming light session, by its grouping key; null is Unclassified, absent takes the pointing's Target (P-IMP2). */
   targets: Record<string, TargetId | null>
+  /** Capture keys whose framings import as one session (Merge framings); removing one re-splits it (D-W107). */
+  merged: string[]
+  /** Folders added to the batch ("Add calibration files…"), read beside the source. */
+  extraFolders: string[]
+  /** Calibration chosen in review, by incoming session key and kind; a kind not listed is left to matching (LIB-FR-23). */
+  calibration: Record<string, Partial<Record<PinKind, ImportCalibrationChoice>>>
 }
 
 export function emptyImportDraft(): ImportDraft {
-  return { source: null, newOnly: true, mode: "copy", capturesLocationId: null, calibrationLocationId: null, typed: {}, targets: {} }
+  return { source: null, newOnly: true, mode: "copy", capturesLocationId: null, calibrationLocationId: null, typed: {}, targets: {}, merged: [], extraFolders: [], calibration: {} }
+}
+
+/** The draft with the review's per-file and per-session choices cleared: a new source, or an import that started, begins from matching again. */
+export function withoutReviewChoices(draft: ImportDraft): ImportDraft {
+  const { typed, targets, merged, extraFolders, calibration } = emptyImportDraft()
+  return { ...draft, typed, targets, merged, extraFolders, calibration }
 }
 
 export interface AState {
@@ -40,7 +57,7 @@ export interface AState {
 
 export const aSlice: SliceDefinition<AState> = {
   id: "a",
-  version: 4,
+  version: 5,
   initial: () => ({ showClosed: false, importDraft: emptyImportDraft(), lastImport: null }),
   operations: [importHandler],
 }

@@ -2,13 +2,17 @@
  * Session intake as a StepPage (§5.3, P-REV2, C10, C14, C15): Target → Rig
  * → Review on `/sessions/$sessionId?step=`, driven by the store's
  * `sessionIntake` flow. A session joins a Project only once Ready (and
- * settled). Review is always allowed: a Project holding the session gets
- * its marks as pending changes.
+ * settled). Review is always allowed, also once the session is Ready
+ * (reopening review): an open Project holding the session gets its marks
+ * as pending changes, labelled as the Library's, until its next Apply; a
+ * Closed one keeps its Close snapshot. The Review step's notice names both.
  *
  * - Target: the Target the picker holds, preselected from the session's own
  *   association or its pointing (P-IMP2); OBJECT shows as a label, never as
  *   evidence. Proceed confirms it, or files an Unclassified session's frames
- *   under it (File into Target, with its moves in the confirm).
+ *   under it (File into Target, with its moves in the confirm). A Target
+ *   associated by agreeing pointing already counts as settled
+ *   (`sessionTargetId`), labelled provisional.
  * - Rig: the rig select with its header evidence; a FILTER value the rig does
  *   not list links to Equipment.
  * - Both list the corrections intake recorded, recorded beside corrected (C15).
@@ -34,11 +38,12 @@ import { EvidenceList } from "@/components/app/evidence-list"
 import { SelectField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { type TargetOption, TargetPicker } from "@/components/app/pickers"
+import type { PageNotice } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
 import { useFlowActions } from "@/components/app/step-flow"
 import { StepPage } from "@/components/templates/step-page"
 import type { CorrectedValue, SessionIntakeStepId } from "@/domain/derive"
-import { isTrashedSession, rigFilterFor, SESSION_INTAKE_STEPS, sessionIntakeState, sessionReadiness, sessionRigId, sessionTargetId, sessionUnreviewedFrames } from "@/domain/derive"
+import { isLocked, isTrashedSession, rigFilterFor, SESSION_INTAKE_STEPS, sessionIntakeState, sessionReadiness, sessionRigId, sessionTargetId, sessionUnreviewedFrames } from "@/domain/derive"
 import { pointingAgainst, targetAtPointing } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
@@ -49,7 +54,8 @@ import { sessionIntake } from "@/store/actions/flows"
 import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget, filingMoves } from "@/store/actions/library"
 import { type PrototypeState, useStore } from "@/store/core"
 import { addToProjectItems } from "./parts"
-import { ReadinessBadge, SessionPage } from "./session"
+import { AssociatedTargetNote, ReadinessBadge, SessionPage } from "./session"
+import { projectsHolding } from "./session-model"
 
 /** The intake Review step's body: the review workspace for one session (`SessionReview`, injected by the route). */
 export type SessionReviewBody = ComponentType<SessionReviewProps>
@@ -113,6 +119,7 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
         label: m.session_label(),
         items: [{ id: "details", label: m.session_details(), icon: Eye, run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: session.id } }) }, { separator: true }, ...addToProjectItems(m, state.catalog, session.id)],
       }}
+      notice={viewing === "review" ? holdersNotice(m, state, session) : null}
       flow={flow}
       viewing={viewing}
       stepsLabel={m.session_intake_steps()}
@@ -120,6 +127,23 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
       step={body}
     />
   )
+}
+
+/**
+ * Review's notice when Projects hold the session (VSEL-FR-12, LIB-AC-30):
+ * marks are never refused; open Projects get them as pending changes until
+ * their next Apply, and Closed ones keep their Close snapshot.
+ */
+function holdersNotice(m: Messages, state: PrototypeState, session: Session): PageNotice | null {
+  const holders = projectsHolding(state.catalog, session.id)
+  if (holders.length === 0) return null
+  const open = holders.filter((p) => !isLocked(p)).map((p) => p.name)
+  const closed = holders.filter((p) => isLocked(p)).map((p) => p.name)
+  return {
+    tone: "info",
+    title: m.intake_review_held_title({ count: holders.length }),
+    detail: [...(open.length > 0 ? [m.intake_review_held_open({ names: open.join(", ") })] : []), ...(closed.length > 0 ? [m.intake_review_held_closed({ names: closed.join(", ") })] : [])].join(" "),
+  }
 }
 
 /**
@@ -184,7 +208,7 @@ function TargetStep({ state, session, targetId, onTarget, current }: { state: Pr
           columns={2}
           items={[
             { label: m.session_chosen_target(), value: target?.name ?? m.session_none() },
-            { label: m.session_target_status(), value: <StatusBadge kind="association" value={session.target.status} /> },
+            { label: m.session_target_status(), value: session.target.status === "associated" ? <AssociatedTargetNote /> : <StatusBadge kind="association" value={session.target.status} /> },
             { label: m.evidence_source_pointing(), value: pointed ? pointed.name : m.session_none() },
             {
               label: m.session_pointing_offset(),

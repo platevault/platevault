@@ -6103,6 +6103,175 @@
   "import_file_unclassified": "Arquivar como Não classificado",
   "import_change_target_title": "Alvo de {name}",
   "import_use_this_target": "Usar Alvo",
+  "import_used_for": "Usado para: {sessions}",
+  "import_used_for_none": "Nenhuma sessão aguarda",
+  "import_framings_merged": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} enquadramento unido",
+        "countPlural=*": "{count} enquadramentos unidos"
+      }
+    }
+  ],
+  "import_merge_framings": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Unir {count} enquadramento",
+        "countPlural=*": "Unir {count} enquadramentos"
+      }
+    }
+  ],
+  "import_resplit_framings": "Separar de novo por enquadramento",
+  "import_no_pointing": "Sem apontamento",
+  "import_no_pointing_stays": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame sem RA/DEC fica nesta sessão",
+        "countPlural=*": "{count} frames sem RA/DEC ficam nesta sessão"
+      }
+    }
+  ],
+  "import_in_this_import": "nesta importação",
+  "import_add_calibration_files_ellipsis": "Adicionar arquivos de calibração…",
+  "import_reset_calibration": "Redefinir escolhas",
+  "import_calibration_description": "A importação não espera pela calibração. Um tipo deixado para depois aguarda em Calibração pendente.",
+  "import_added_folders": "Pastas adicionadas a esta importação",
+  "import_remove_folder": "Remover pasta",
+  "import_calibration_of_sessions": "Calibração das novas sessões",
+  "import_add_calibration_title": "Adicionar arquivos de calibração",
+  "import_add_calibration_description": "Escolha uma pasta de darks, flats, bias ou masters: os arquivos dela entram nesta importação.",
+  "import_needs_calibration_count": "Calibração pendente · {count}",
+  "session_associated_counts": "Pelo apontamento, conta como confirmado",
+  "calibration_summary_suggested": "{kind} sugerido",
+  "calibration_summary_waiting": "{kind} aguardando",
+  "calibration_summary_not_found": "{kind} não encontrado",
+  "session_rig_version_from": "Desde {night}",
+  "sessions_filter_duplicates": "Duplicatas",
+  "session_project_snapshot_kept": "Mantém o instantâneo do fechamento",
+  "session_project_not_applied": "Ainda não aplicado",
+  "session_project_pending": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} alteração pendente",
+        "countPlural=*": "{count} alterações pendentes"
+      }
+    }
+  ],
+  "session_open_pending": "Abrir alterações pendentes",
+  "duplicates_badge": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} cópia duplicada",
+        "countPlural=*": "{count} cópias duplicadas"
+      }
+    }
+  ],
+  "sessions_empty_duplicates": "Nenhuma sessão tem cópias duplicadas",
+  "sessions_confirm_suggestions": "Confirmar sugestões",
+  "sessions_confirm_calibration_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Confirmar as sugestões de {count} sessão?",
+        "countPlural=*": "Confirmar as sugestões de {count} sessões?"
+      }
+    }
+  ],
+  "sessions_confirm_calibration_summary": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sugestão passa a ser fixada por você",
+        "countPlural=*": "{count} sugestões passam a ser fixadas por você"
+      }
+    }
+  ],
+  "sessions_no_choice_none": "Todas as sessões selecionadas já têm este tipo resolvido",
+  "sessions_set_no_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Definir {choice} para {count} sessão?",
+        "countPlural=*": "Definir {choice} para {count} sessões?"
+      }
+    }
+  ],
+  "sessions_set_no_summary": "Cada uma conta como resolvida sem ele, sem pedir motivo. Escolher ▸ numa sessão fixa um depois.",
+  "intake_review_held_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Em {count} Projeto",
+        "countPlural=*": "Em {count} Projetos"
+      }
+    }
+  ],
+  "intake_review_held_open": "Projetos abertos recebem suas marcações como alterações pendentes até o próximo Aplicar: {names}.",
+  "intake_review_held_closed": "Projetos fechados mantêm o instantâneo do fechamento: {names}.",
+  "home_pending_group": "{group} · {count}",
+  "home_choose_calibration": "Escolher calibração",
+  "help_tip_marks_library": "P, X e U marcam o frame na biblioteca, e todo Projeto lê a mesma marcação: um Projeto aberto a recebe como alteração pendente, um fechado mantém o seu instantâneo.",
+  "catalogue_f4_duplicates_desc": "O selo de uma linha de sessão quando a última verificação de duplicatas encontrou cópias extras idênticas dos seus frames. Só exibição.",
+  "catalogue_f4_duplicates_counts": "uma cópia extra, e doze",
   "import_column_files": "Arquivos",
   "import_column_state": "Estado",
   "import_skip_imported_before": "Importados antes",

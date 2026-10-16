@@ -12,7 +12,7 @@ import { filesUnder, freeBytes, trashRefusal, volumeForPath } from "./disk"
 import { projectLink, type StepLink, type World } from "./derive"
 import { isUnder } from "./indexing"
 import { type MessageRef, msg } from "@/lib/i18n"
-import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Project } from "./types"
+import type { Asset, AssetCopy, AssetId, Catalog, Disk, DiskFile, Location, LocationRole, Operation, Project, SessionId } from "./types"
 
 export interface Footprint {
   /** Bytes the View holds itself: its copies, each inode once; symlinks count zero. */
@@ -246,6 +246,23 @@ export function duplicateFindings(world: World): DuplicateFindings | null {
     .filter((g): g is DuplicateGroup => g !== null)
     .sort(byExtraBytes)
   return { scan, groups, copies: groups.reduce((n, g) => n + g.copies.length - 1, 0), bytes: groups.reduce((n, g) => n + g.extraBytes, 0) }
+}
+
+/**
+ * F5: per session, the extra copies (every copy beyond the one each frame
+ * keeps) of its frames that the latest duplicate scan found and that are
+ * still live, SHA-256-confirmed and in registered library storage
+ * (`duplicateFindings`). Trashed frames never count. The Duplicates facet
+ * and the row badge wherever session rows appear read it; totals count each
+ * logical frame once regardless.
+ */
+export function sessionDuplicateCopies(world: World): Map<SessionId, number> {
+  const out = new Map<SessionId, number>()
+  for (const group of duplicateFindings(world)?.groups ?? []) {
+    const sessionId = world.catalog.assets[group.assetId]?.sessionId
+    if (sessionId) out.set(sessionId, (out.get(sessionId) ?? 0) + group.copies.length - 1)
+  }
+  return out
 }
 
 /** The duplicate scan that is running now, if any. */
