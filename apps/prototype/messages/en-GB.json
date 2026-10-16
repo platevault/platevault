@@ -19,7 +19,6 @@
   "verb_stack": "Stack",
   "common_more": "More",
   "common_locations": "Locations",
-  "common_runs": "Runs",
   "common_loading": "Loading",
   "prototype_label": "Prototype",
   "key_escape": "Esc",
@@ -145,10 +144,6 @@
       }
     }
   ],
-  "issues_group_work": "Work",
-  "issues_group_drift": "Drift",
-  "issues_dismissed": "Dismissed ({count})",
-  "issues_restore_all": "Restore all",
   "issue_needs_target": [
     {
       "declarations": [
@@ -253,11 +248,7 @@
   "status_bar_working": "Working",
   "status_bar_idle": "Idle",
   "status_bar_notifications": "Notifications",
-  "step_select": "Select",
   "step_review": "Review",
-  "step_calibrate": "Calibrate",
-  "step_prepare": "Prepare",
-  "step_results": "Results",
   "status_online": "Online",
   "status_offline": "Offline",
   "status_unreadable": "Unreadable",
@@ -302,25 +293,17 @@
   "status_uncertain": "Uncertain",
   "status_ready": "Ready",
   "status_not_started": "Not started",
-  "status_draft": "Draft",
   "status_saved": "Saved",
-  "status_prepared": "Prepared",
-  "status_unverified": "Unverified",
-  "status_complete": "Complete",
   "status_open": "Open",
   "status_archived": "Archived",
   "status_trashed": "Trashed",
   "status_suggested": "Suggested",
   "status_accepted": "Accepted",
-  "status_rejected": "Rejected",
   "status_exception": "Exception",
   "status_deferred": "Deferred",
   "status_compatible": "Compatible",
   "status_incompatible": "Incompatible",
   "status_unknown": "Unknown",
-  "status_tool_recorded": "Tool-recorded",
-  "status_user_linked": "User-linked",
-  "status_unknown_lineage": "Unknown lineage",
   "status_candidate": "Candidate",
   "status_written": "Written",
   "status_state_unknown": "State unknown",
@@ -1195,7 +1178,6 @@
   "projects_no_subjects": "No subjects",
   "projects_col_state": "State",
   "projects_col_goals": "Goals",
-  "startrun_open_ellipsis": "Start run…",
   "wrapup_action": "Wrap up",
   "trash_title": "Trash",
   "projects_count": [
@@ -1221,7 +1203,6 @@
   "goal_hours": "Hours",
   "goal_frames": "Frames",
   "goal_fwhm_max": "FWHM ≤ ″",
-  "startrun_title": "Start run",
   "project_unknown_subject": "Unknown subject",
   "project_panels": [
     {
@@ -1328,21 +1309,6 @@
       }
     }
   ],
-  "project_used_by_runs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "used by {count} run",
-        "countPlural=*": "used by {count} runs"
-      }
-    }
-  ],
   "project_subjects_of": "Subjects of {name}",
   "project_col_kind": "Kind",
   "project_open_in": "Open in {name}",
@@ -1425,7 +1391,6 @@
     }
   ],
   "newproject_create": "Create Project",
-  "startrun_profile_other": "Other app",
   "wrapup_offer_rejects": "Unusable frames",
   "wrapup_offer_duplicates_label": "Duplicates",
   "wrapup_offer_processing": [
@@ -1469,21 +1434,6 @@
   "wrapup_skip": "Skip",
   "wrapup_undo": "Undo",
   "wrapup_cleanup_title": "Clean up runs",
-  "wrapup_cleanup_confirm_title": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Clean up {count} run?",
-        "countPlural=*": "Clean up {count} runs?"
-      }
-    }
-  ],
   "wrapup_cleanup_confirm_items": [
     {
       "declarations": [
@@ -1568,14 +1518,6 @@
     }
   ],
   "wrapup_used_by_other_reason": "used by another Project",
-  "mosaic_left_out": "Left out",
-  "mosaic_field_label": "Mosaic field: click a panel to include or exclude it",
-  "mosaic_add_slot": "Add panel {side} of Panel {n}",
-  "mosaic_excluded": "excluded",
-  "mosaic_side_east": "east",
-  "mosaic_side_west": "west",
-  "mosaic_side_north": "north",
-  "mosaic_side_south": "south",
   "project_lookup_sesame": "CDS Sesame (SIMBAD)",
   "tonight_limit": "Moon ≥ {separation}° · ≤ {illumination}%",
   "tonight_avoidance": "Moon ≥ {separation}° at full · {width} d",
@@ -1745,7 +1687,6 @@
   "plan_lead_unit_minutes": "Minutes",
   "plan_lead_unit_hours": "Hours",
   "plan_lead_unit_days": "Days",
-  "plan_lead_invalid": "Enter a whole number, up to 7 days",
   "plan_reminders_site": "Site",
   "plan_reminders_next": "Next reminder",
   "plan_export_events": "Events",
@@ -1908,7 +1849,6 @@
   "calibration_stack_again": "Stack again",
   "calibration_trash_raws": "Trash raws",
   "common_trash_named_title": "Move {name} to Trash?",
-  "calibration_show_master": "Show master",
   "calibration_process": "Process",
   "calibration_no_raw_sessions": "No raw sessions",
   "calibration_processes_caption": "Calibration processes",
@@ -1932,13 +1872,11 @@
   "calibration_key_exposure": "Exposure",
   "calibration_key_temp": "Temp",
   "calibration_origin_indexed": "Indexed",
-  "calibration_origin_results": "Run Results",
   "calibration_origin_stacked": "Stacked",
   "calibration_origin_imported": "Imported",
   "calibration_used_by": "Used by",
   "calibration_open_raw_session": "Open raw session",
   "calibration_master": "Master",
-  "calibration_run": "Run",
   "calibration_masters_count": [
     {
       "declarations": [
@@ -2004,7 +1942,6 @@
   "common_move_to_trash": "Move to Trash",
   "run_trash_blocked": "Move to Trash blocked",
   "run_trash_title": "Move {name} to the Trash?",
-  "run_actions_for": "Actions for {name}",
   "run_remove": "Remove",
   "run_col_night": "Night",
   "run_col_channel": "Channel",
@@ -2012,34 +1949,15 @@
   "run_col_integration": "Integration",
   "run_col_kind": "Kind",
   "run_col_size": "Size",
-  "run_cal_auto_assign": "Auto-assign",
   "run_cal_no_sessions": "No sessions",
   "run_cal_kind_dark": "dark",
   "run_cal_kind_flat": "flat",
   "run_cal_kind_bias": "bias",
-  "run_wrap_up": "Wrap up",
-  "run_files_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} file",
-        "countPlural=*": "{count} files"
-      }
-    }
-  ],
   "run_col_file": "File",
   "run_col_project": "Project",
   "run_results_intermediates": "Intermediates",
   "run_read_only_because": "Read-only · {reason}",
-  "run_layout_group": "Group",
   "run_layout_output_folder": "Output folder",
-  "run_prepare_title": "Prepare {name}?",
   "run_profile_not_verified": "Not verified",
   "run_profile_read_only": "Read-only",
   "run_open_in": "Open in {app}",
@@ -2050,27 +1968,10 @@
   "run_field_filter": "Filter",
   "run_field_exposure": "Exposure",
   "run_field_focal_length": "Focal length",
-  "run_check_mode": "Run view",
   "run_check_space": "Free space",
   "run_entry_offline": "Offline: {name} is not connected",
-  "run_entry_its_volume": "its volume",
   "run_cleanup_volume_offline": "{name} is offline",
   "rungroup_panels_label": "Panels of {name}",
-  "rungroup_blocked_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} blocked",
-        "countPlural=*": "{count} blocked"
-      }
-    }
-  ],
   "location_role_captures_description": "Light frames",
   "location_role_captures_add": "Add capture location",
   "location_role_captures_picker": "Choose a capture folder",
@@ -2633,7 +2534,6 @@
   "apps_badge_read_only": "Read-only inputs",
   "apps_badge_writes_unknown": "Input writes unknown",
   "apps_badge_write_prone": "Writes into inputs",
-  "apps_evidence": "Evidence",
   "apps_corrected_values": "Corrected values",
   "apps_corrected_through": "Through configuration",
   "apps_corrected_not_through": "Not through configuration",
@@ -2654,7 +2554,6 @@
   "template_add_channel": "Add a channel",
   "template_hours_or_frames": "Hours or frames needed · {channels}",
   "template_goals": "Goals",
-  "template_table_caption": "{group} goal templates",
   "template_table_caption_built_in": "Built-in goal templates",
   "template_table_caption_yours": "Your goal templates",
   "template_column_template": "Template",
@@ -4277,21 +4176,6 @@
   "plan_move_up": "Move up",
   "plan_move_down": "Move down",
   "project_col_step": "Step",
-  "calibration_used_by_runs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Used by {count} run",
-        "countPlural=*": "Used by {count} runs"
-      }
-    }
-  ],
   "calibration_restore_master": "Restore master",
   "calibration_restored_master": "Restored {name}",
   "duplicates_scanned": "Scanned {date}",
@@ -4614,7 +4498,6 @@
   "equipment_rig_suggested": "{telescope} · {camera}",
   "equipment_error_choose": "Choose one",
   "equipment_error_reducer": "0.2–3×",
-  "equipment_error_night": "Enter a night as YYYY-MM-DD",
   "common_enter_number": "Enter a number",
   "equipment_reducer_field": "Reducer (×)",
   "equipment_source": "Source",
@@ -4808,9 +4691,6 @@
   "catalogue_previews_used_by_desc": "'Used by N ▸' is a link to the full list; hover or focus previews the users.",
   "catalogue_previews_with_users": "with users",
   "catalogue_previews_empty_link": "empty (link only)",
-  "catalogue_previews_master_desc": "A master's name is a link to it in the Calibration library; hover or focus previews its kind, camera, gain · offset, temperature, exposure, frames, night, age and how many runs use it. The card holds no controls, so it takes no focus.",
-  "catalogue_previews_master_young": "younger than the age limit, used by 2 runs",
-  "catalogue_previews_master_old": "past the age limit, unused",
   "catalogue_previews_master_compact": "compact: an icon link beside a picker that already shows the name; the card takes the name as its title",
   "catalogue_previews_preview_desc": "Preview is the L2 host the previews share; HoverCard is the L1 primitive on Base UI preview-card.",
   "catalogue_previews_with_title": "Preview with title",
@@ -4823,7 +4703,6 @@
   "catalogue_shell_goal": "{target} · {channel} {hours} h",
   "catalogue_shell_nav_desc": "One source list for the sidebar and Settings. Current row: selected fill and aria-current. Holds: a leading bar and semibold. Menu rows open a named menu beside the list. Collapsed: an icon rail with tooltips and badge dots.",
   "catalogue_shell_checklist_desc": "Sidebar footer, above Activity and Settings. Opens a non-modal checklist to the right: the page stays usable; Escape or an outside click closes it. An unavailable step shows its reason under the label.",
-  "catalogue_shell_issue_desc": "One issue with its one action and Dismiss ×. A run's next step (blocked run, calibration to review) has no ×. Dismissed rows are muted with Restore. Focus stays in the list as a row leaves.",
   "catalogue_shell_theme_desc": "Mode first (Light, Dark, Match system), then the themes of that mode. Applies at once to the whole app. The menu form goes in a toolbar menu's Theme submenu.",
   "catalogue_shell_sidebar_current": "sidebar · current Sessions",
   "catalogue_shell_sidebar_recent": "sidebar · recent Project open (Recent › Projects holds)",
@@ -5027,7 +4906,7 @@
   "simulation_this_project_title": "This Project: {name}",
   "simulation_actions_title": "Actions",
   "simulation_quick_actions": "Quick actions",
-  "simulation_quick_actions_detail": "One-click runs Restore run, Reopen run, marks on more than 20 frames, Pick the rest, and Home's Add to run, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
+  "simulation_quick_actions_detail": "One-click runs marks on more than 20 frames, Pick the rest, and Home's Add to Project, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
   "simulation_quick_one_click": "One-click",
   "simulation_quick_open_page": "Open page",
   "ds_operation_title": "Operation",
@@ -5113,7 +4992,7 @@
   "simulation_no_site_detail": "Planning sees no saved site: Home Tonight, Plan and Targets show \"Add an observing site in Settings\"",
   "simulation_no_developer_mode": "Windows without Developer Mode",
   "simulation_developer_mode_on": "Developer Mode turned on in Windows settings; PlateVault sees it at its next check",
-  "simulation_developer_mode_off": "Symlinks need Developer Mode: Prepare refuses Symlinks, Settings › Applications and Home show the check",
+  "simulation_developer_mode_off": "Symlinks need Developer Mode: Apply refuses Symlinks, Settings › Applications and Home show the check",
   "simulation_clock_title": "Clock",
   "simulation_clock_set": "PlateVault time: {time} (set by this control; kept after reload).",
   "simulation_clock_system": "PlateVault time: {time} (system clock).",
@@ -5129,7 +5008,7 @@
   "simulation_reset_empty": "Reset to empty library",
   "simulation_confirm_empty_title": "Reset to an empty library?",
   "simulation_confirm_demo_change": "Replace the catalog with the demo library ({projects})",
-  "simulation_confirm_empty_change": "Remove every location, session, Project and run; onboarding starts again",
+  "simulation_confirm_empty_change": "Remove every location, session and Project; onboarding starts again",
   "simulation_sheet_description": "Prototype controls. They change the simulated disk outside PlateVault; PlateVault notices on its next read.",
   "simulation_rerun_wbpp": "Rerun WBPP",
   "simulation_view_file_held": "A tool holds a file in View",
@@ -5257,8 +5136,6 @@
   "calendar_legend_dark": "Hours of darkness",
   "calendar_legend_goals": "Goals it suits",
   "calendar_legend_planned": "Targets planned",
-  "catalogue_domain_mosaic_desc": "Panels north up, east left. A panel is a checkbox and takes a dragged session; a dashed slot adds a panel.",
-  "catalogue_domain_mosaic_layout": "2 × 2, one excluded, slots shown",
   "catalogue_domain_map_desc": "OpenStreetMap tiles in a lazy chunk. The marker follows the fields; a click or a drag reports a position.",
   "catalogue_domain_histogram_readout": "readout line",
   "catalogue_domain_review_desc": "Review visuals: the corner tiles, the frame thumbnails as a strip and a grid, the session plots and a star's cutouts.",
@@ -5281,8 +5158,6 @@
   "stepflow_proceed": "Proceed",
   "stepflow_skip": "Skip",
   "stepflow_reopen_step": "Reopen step",
-  "stepflow_finish_run": "Finish run",
-  "stepflow_finish_run_title": "Finish {name}?",
   "stepflow_close_project": "Close project",
   "stepflow_close_project_title": "Close {name}?",
   "stepflow_finish_review": "Finish review",
@@ -5360,8 +5235,6 @@
   "catalogue_stepflow_case_optional": "optional step: Skip",
   "catalogue_stepflow_case_last": "last step: the flow's verb",
   "catalogue_stepflow_case_finished": "finished flow",
-  "catalogue_stepflow_run_heading": "Run flow",
-  "catalogue_stepflow_run_caption": "Steps are links, and Proceed opens the next one. Calibrate's gate holds Proceed until Auto-assign. Prepare and Finish run ask first; after Finish run every step is read-only.",
   "catalogue_stepflow_wrapup_heading": "Wrap up (strict order)",
   "catalogue_stepflow_wrapup_caption": "Steps are local buttons. Proceed with nothing selected skips the step. A later step stays read-only until the ones before it are finished or skipped; an earlier step reopens until Close project.",
   "catalogue_stepflow_review_heading": "Session review",
@@ -5468,7 +5341,6 @@
   "help_tips": "Tips",
   "help_guide": "Guide",
   "help_tip_marks": "Marks",
-  "help_tip_marks_value": "P, X and U mark the frame in the library, in every Project. Reject for this Project only stays in this Project.",
   "help_tip_auto_advance": "Auto-advance",
   "help_tip_auto_advance_value": "P, X or U moves on to the next frame.",
   "help_tip_pan": "Pan",
@@ -5582,14 +5454,11 @@
   "calibration_settings": "Calibration settings",
   "calibration_settings_saved": "Calibration settings saved",
   "calibration_unit_days": "days",
-  "calibration_master_age_help": "Darks, bias and dark flats older than this read Old. Flats never age.",
   "calibration_replace_file": "Master file",
   "calibration_replace_file_help": "A FITS or XISF master of the same kind.",
   "calibration_import_none_imported": "No master imported",
   "calibration_import_partly": "{imported} imported · {refused} not imported",
   "calibration_import_select_files": "Select at least one file",
-  "calibration_import_folder_help": "Lists the folder's FITS and XISF masters with their match.",
-  "calibration_import_files": "Master files in {folder}",
   "calibration_files_selected": [
     {
       "declarations": [
@@ -5736,8 +5605,6 @@
   "project_apply_unplaced": "Files PlateVault didn't place",
   "project_apply_unplaced_hint": "Ticked files move into the new View. The rest stay in View (previous)/.",
   "project_apply_waiting": "Waiting for a tool to release a file in View",
-  "project_calibration_of": "Calibration of {name}",
-  "project_calibration_title": "Calibration by session",
   "project_change_application": "Application changed",
   "project_change_calibration": "{kind} changed for {session}",
   "project_change_fix_at_source": "Open where it's fixed",
@@ -5919,7 +5786,6 @@
   "project_output_empty": "Nothing in Output yet. Save finished images there, or use Copy to Output.",
   "project_output_hide_offer": "Hide",
   "project_output_masters": "Masters found in Processing",
-  "project_output_no_processing": "Nothing in Processing to copy",
   "project_output_of": "Output of {name}",
   "project_output_offer_again": "Offer again",
   "project_output_offline": "The Output folder's volume isn't connected",
@@ -5959,21 +5825,6 @@
   "project_tab_output": "Output",
   "project_tab_sessions": "Sessions",
   "project_tab_view": "View",
-  "project_view_entries": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} entry",
-        "countPlural=*": "{count} entries"
-      }
-    }
-  ],
   "project_view_location": "Processing location",
   "project_view_location_fixed": "Fixed by the first Apply",
   "project_view_mode": "Input mode",
@@ -6279,7 +6130,6 @@
   "import_sources": "Sources",
   "import_review_sessions": "Review sessions",
   "calibration_open_master": "Open master",
-  "calibration_shown_master": "{name} is back in Masters",
   "calibration_add_version": "Add version",
   "calibration_add_version_moves_none": "Adding a version moves no session: each keeps the version it pins, and only sessions still waiting can take the new one.",
   "calibration_choice_none": "No",
@@ -6311,21 +6161,6 @@
   "import_match": "Match",
   "import_also_use": "Also use",
   "calibration_also_use_title": "Also use for these sessions",
-  "equipment_used_by_rigs": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "Used by {count} rig",
-        "countPlural=*": "Used by {count} rigs"
-      }
-    }
-  ],
   "equipment_used_by_projects": [
     {
       "declarations": [
@@ -6377,7 +6212,6 @@
   "equipment_no_reducers": "No reducers",
   "equipment_pixel_size_short": "Pixel size",
   "equipment_optics": "Optics",
-  "equipment_rig_parts": "Parts",
   "equipment_add_reducer": "Add reducer",
   "equipment_reducers": "Reducers",
   "equipment_reducer": "Reducer",
@@ -6676,7 +6510,6 @@
   "shortcuts_page_rows": "Move one screen of rows",
   "shortcuts_open_row": "Open the focused row",
   "shortcuts_select_row": "Select or clear the focused row",
-  "settings_shortcuts_help": "?, /, [, G sequences and Space on a table row. ⌘K and Ctrl+K always work.",
   "calibration_origin": "Origin",
   "calibration_origin_generated": "Generated in Processing",
   "calibration_version": "Version",

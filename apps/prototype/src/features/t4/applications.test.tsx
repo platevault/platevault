@@ -51,7 +51,7 @@ describe("Settings › Applications (cmvgf)", () => {
     renderPage()
     await user.click(await screen.findByRole("button", { name: m.table_row_details({ name: "PixInsight / WBPP" }) }))
     expect(await screen.findByText(m.apps_corrected_values())).toBeInTheDocument()
-    expect(screen.queryByText(m.apps_evidence())).toBeNull()
+    expect(screen.queryByText(m.seed_apps_evidence_pixinsight())).toBeNull()
   })
 
   it("refuses a group keyword a View folder already uses, inline under its field, and Save stays unavailable", async () => {

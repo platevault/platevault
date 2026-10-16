@@ -42,7 +42,7 @@ const slowly = (): Promise<CommitResult> => new Promise((resolve) => setTimeout(
 
 /** The demo set: every kind, a dialog opener, a confirm, an unavailable action, a refusal, a failure and a slow run. */
 function demoActions(m: Messages, names: string[]) {
-  const start: Action = { id: "start", label: m.startrun_title(), icon: Play, kind: "primary", run: slowly }
+  const start: Action = { id: "start", label: m.newproject_create(), icon: Play, kind: "primary", run: slowly }
   const rename: Action = { id: "rename", label: m.run_rename(), icon: Pencil, opensDialog: true, shortcut: `${MOD_LABEL}R`, run: done }
   const rescan: Action = { id: "rescan", label: m.location_rescan(), icon: RefreshCw, run: slowly }
   const copyPath: Action = { id: "copy-path", label: m.session_copy_path(), icon: Copy, shortcut: `⇧${MOD_LABEL}C`, run: done }
@@ -115,14 +115,14 @@ function RoleMatrix() {
               <div key={variant} className="contents">
                 <span className="text-muted-foreground">{role(m)}</span>
                 <Button variant={variant} size={size}>
-                  {m.startrun_title()}
+                  {m.newproject_create()}
                 </Button>
                 <Button variant={variant} size={size} disabled focusableWhenDisabled>
-                  {m.startrun_title()}
+                  {m.newproject_create()}
                 </Button>
                 <Button variant={variant} size={size} aria-busy="true">
                   <Spinner aria-hidden="true" data-icon="inline-start" className={SPINNER_SIZE[size]} />
-                  {m.startrun_title()}
+                  {m.newproject_create()}
                 </Button>
               </div>
             ))}
@@ -190,7 +190,7 @@ function Menus({ actions }: { actions: DemoActions }) {
   const { rename, rescan, copyPath, archive, remove, trash } = actions
   const items: MenuItem[] = [
     actions.delete,
-    { heading: m.calibration_run() },
+    { heading: m.calibration_master() },
     rename,
     copyPath,
     { submenu: m.verb_open(), items: [{ id: "pixinsight", label: m.run_open_in({ app: "PixInsight" }), run: done }, { id: "siril", label: m.run_open_in({ app: "Siril" }), run: done }] },
@@ -206,11 +206,11 @@ function Menus({ actions }: { actions: DemoActions }) {
     <div className="space-y-2">
       <Part heading={m.catalogue_actions_menu_heading()} caption={m.catalogue_actions_menu_caption({ delete: actions.delete.label })} />
       <div className="flex flex-wrap items-start gap-3">
-        <ActionMenu label={m.calibration_run()} items={items} />
+        <ActionMenu label={m.calibration_master()} items={items} />
         <ContextMenuDemo items={items} />
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {m.catalogue_actions_menu_empty()}
-          <ActionMenu label={m.calibration_run()} items={[{ heading: m.calibration_run() }, { separator: true }]} />
+          <ActionMenu label={m.calibration_master()} items={[{ heading: m.calibration_master() }, { separator: true }]} />
         </span>
       </div>
     </div>

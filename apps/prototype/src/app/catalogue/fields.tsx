@@ -102,7 +102,7 @@ function NumberAndChoiceFields() {
           ]}
         />
         <SegmentedField
-          label={m.run_check_mode()}
+          label={m.project_view_mode()}
           value={mode}
           onChange={setMode}
           options={[

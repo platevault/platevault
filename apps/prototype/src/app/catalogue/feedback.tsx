@@ -52,7 +52,7 @@ export function FeedbackCatalogue() {
           <Specimen caption={m.catalogue_feedback_refused_blockers_actions()}>
             <Refusal
               action={m.project_refusal_remove_rig()}
-              reason={m.project_used_by_runs({ count: 2 })}
+              reason={m.equipment_used_by_projects({ count: 2 })}
               blockers={blockers.slice(0, 2)}
               actions={
                 <Button size="xs" variant="outline">

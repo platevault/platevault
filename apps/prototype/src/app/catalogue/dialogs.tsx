@@ -42,7 +42,7 @@ function frames(count: number, filter: string, action: FileRow["action"], to?: s
 function trashGroups(m: Messages, defaultOpen: boolean): ConfirmGroup[] {
   const rejects = frames(6, "L", "trash")
   rejects[1] = { ...rejects[1]!, status: { label: m.run_profile_read_only() } }
-  rejects[3] = { ...rejects[3]!, status: { label: m.calibration_used_by_runs({ count: 1 }), link: { to: "/projects" } } }
+  rejects[3] = { ...rejects[3]!, status: { label: m.equipment_used_by_projects({ count: 1 }), link: { to: "/projects" } } }
   const intermediates: FileRow[] = ["registered", "calibrated", "integrated"].map((stage) => ({ file: `M31_L_${stage}.xisf`, from: WORK, action: "trash", size: 402_653_184 }))
   return [
     { label: m.wrapup_offer_rejects(), rows: rejects, defaultOpen },

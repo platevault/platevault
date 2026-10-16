@@ -132,37 +132,17 @@ export const STATUS = {
     skipped: s(m.status_skipped, "muted", CircleSlash),
     uncertain: s(m.status_uncertain, "warning", CircleHelp),
   },
-  view: {
-    draft: s(m.status_draft, "muted", CircleDashed),
-    saved: s(m.status_saved, "neutral", Check),
-    prepared: s(m.status_prepared, "success", CheckCheck),
-    unverified: s(m.status_unverified, "warning", TriangleAlert),
-    complete: s(m.status_complete, "success", ShieldCheck),
-  },
   /** A Project's lifecycle (PRJ-FR-14, PRJ-FR-25): `ProjectState`, so a badge takes `project.state`. */
   project: {
     open: s(m.status_open, "info", CircleDot),
     closed: s(m.status_closed, "success", ShieldCheck),
     archived: s(m.status_archived, "neutral", Archive),
   },
-  /** A processing run's lifecycle (RES-FR-06, D-W72). */
-  run: {
-    open: s(m.status_open, "neutral", CircleDot),
-    complete: s(m.status_complete, "success", ShieldCheck),
+  /** A record's custody: a session or frame in the OS Trash. */
+  record: {
     trashed: s(m.status_trashed, "muted", Trash2),
   },
-  preparation: {
-    running: s(m.status_running, "info", Loader),
-    prepared: s(m.status_prepared, "success", CheckCheck),
-    // Partial reads the same as the step rail's Partial gate: the dashed circle, never the warning triangle.
-    partial: s(m.status_partial, "warning", CircleDashed),
-    failed: s(m.status_failed, "danger", CircleX),
-    canceled: s(m.status_canceled, "muted", CircleSlash),
-    paused: s(m.status_paused, "neutral", Pause),
-    /** Entries failed re-verification at Open. */
-    unverified: s(m.status_unverified, "warning", TriangleAlert),
-  },
-  /** A run step's gate (domain/derive GateState): each state its own glyph shape, so colour only reinforces. The triangle stays for warnings. */
+  /** A step's gate (domain/derive GateState): each state its own glyph shape, so colour only reinforces. The triangle stays for warnings. */
   gate: {
     done: s(m.status_done, "success", CircleCheck),
     ready: s(m.status_ready, "info", CircleArrowRight),
@@ -206,16 +186,6 @@ export const STATUS = {
     compatible: s(m.status_compatible, "success", Check),
     incompatible: s(m.status_incompatible, "danger", CircleX),
     unknown: s(m.status_unknown, "warning", CircleHelp),
-  },
-  lineage: {
-    "tool-recorded": s(m.status_tool_recorded, "info", Link2),
-    "user-linked": s(m.status_user_linked, "neutral", Link2),
-    unknown: s(m.status_unknown_lineage, "muted", CircleHelp),
-  },
-  acceptance: {
-    candidate: s(m.status_candidate, "muted", CircleDashed),
-    accepted: s(m.status_accepted, "success", Check),
-    rejected: s(m.status_rejected, "neutral", Ban),
   },
   processing: {
     pending: s(m.status_pending, "muted", Clock),

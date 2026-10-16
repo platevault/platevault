@@ -18,7 +18,7 @@ export function PaletteCatalogue() {
       label: m.palette_group_actions(),
       items: [
         { id: "act:shortcuts", label: m.shortcuts_show(), group: m.palette_group_actions(), shortcut: "?", run: () => undefined },
-        { id: "act:blocked", label: m.startrun_open_ellipsis(), group: m.palette_group_actions(), unavailable: m.onboarding_check_project() },
+        { id: "act:blocked", label: m.newproject_open_ellipsis(), group: m.palette_group_actions(), unavailable: m.onboarding_check_project() },
       ],
     },
   ]

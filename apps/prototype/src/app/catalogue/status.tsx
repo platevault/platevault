@@ -12,7 +12,7 @@ import { PROJECT_TAB_NAME } from "@/domain/project-view"
 import { say } from "@/lib/i18n"
 import { ComponentSection, Specimen } from "./specimen"
 
-const ABSORBED: StatusKind[] = ["gate", "profile", "executable", "check", "write", "preparation"]
+const ABSORBED: StatusKind[] = ["gate", "profile", "executable", "check", "write"]
 const TONES: Tone[] = ["neutral", "muted", "info", "success", "warning", "danger"]
 
 export function StatusCatalogue() {
@@ -39,7 +39,7 @@ export function StatusCatalogue() {
           <Specimen caption={m.catalogue_status_tones()}>
             {TONES.map((tone) => (
               <Pill key={tone} tone={tone}>
-                {m.common_runs()}
+                {m.nav_projects()}
               </Pill>
             ))}
           </Specimen>
@@ -61,7 +61,7 @@ export function StatusCatalogue() {
           {TONES.map((tone) => (
             <CountBadge key={tone} tone={tone} count={3} />
           ))}
-          <CountBadge count={140} tone="danger" label={m.rungroup_blocked_count({ count: 140 })} />
+          <CountBadge count={140} tone="danger" label={m.shell_nav_projects_badge({ count: 140 })} />
         </Specimen>
       </ComponentSection>
     </>

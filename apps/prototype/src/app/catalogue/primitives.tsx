@@ -439,7 +439,7 @@ function Choices() {
         <div className="space-y-2">
           {[false, true].map((disabled) => (
             <Specimen key={String(disabled)} caption={disabled ? m.catalogue_primitives_state_disabled() : m.catalogue_primitives_state_default()}>
-              <RadioGroup aria-label={m.run_check_mode()} value={mode} onValueChange={(value) => setMode(String(value))} disabled={disabled} className="w-auto">
+              <RadioGroup aria-label={m.project_view_mode()} value={mode} onValueChange={(value) => setMode(String(value))} disabled={disabled} className="w-auto">
                 <label className="inline-flex items-center gap-1.5 text-sm">
                   <RadioGroupItem value="symlink" />
                   {m.domain_mode_symlink()}

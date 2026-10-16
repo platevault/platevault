@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { ComponentSection, Specimen } from "./specimen"
 
-// eslint-disable-next-line alm/no-user-string -- sample runs: target and filter names with a night
-const RUNS = [{ label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" } }, { label: "NGC 7000 · OIII · 2026-09-02", link: { to: "/projects" } }, { label: "IC 1396 · SII · 2026-08-28" }]
+// eslint-disable-next-line alm/no-user-string -- sample Projects: Target and filter names with a night
+const PROJECTS = [{ label: "M 42 · Ha · 2026-09-14", link: { to: "/projects" } }, { label: "NGC 7000 · OIII · 2026-09-02", link: { to: "/projects" } }, { label: "IC 1396 · SII · 2026-08-28" }]
 
 // A master dark as the Calibration library records it, with two dated versions, and its file name.
 const OLDER = { id: "mv_older", capturedAt: "2026-05-02T22:10:00.000Z", frameCount: 30, origin: { kind: "library", projectId: null, sourcePath: "", sessionId: null } } as const
@@ -29,7 +29,7 @@ export function PreviewsCatalogue() {
       <ComponentSection components={["BlockersPreview"]} description={m.catalogue_previews_blockers_desc()}>
         <div className="space-y-3">
           <Specimen caption={m.catalogue_previews_disabled_control()}>
-            <BlockersPreview action={m.sessions_cant_archive()} reason={m.refusal_blockers({ count: 2 })} blockers={RUNS.slice(0, 2)}>
+            <BlockersPreview action={m.sessions_cant_archive()} reason={m.refusal_blockers({ count: 2 })} blockers={PROJECTS.slice(0, 2)}>
               <Button variant="outline" size="sm" disabled focusableWhenDisabled>
                 <Archive aria-hidden="true" data-icon="inline-start" />
                 {m.wrapup_archive_title()}
@@ -39,8 +39,8 @@ export function PreviewsCatalogue() {
           <Specimen caption={m.catalogue_previews_own_trigger()}>
             <BlockersPreview
               action={m.project_refusal_remove_rig()}
-              reason={m.project_used_by_runs({ count: 3 })}
-              blockers={RUNS}
+              reason={m.equipment_used_by_projects({ count: 3 })}
+              blockers={PROJECTS}
               actions={
                 <Button size="xs" variant="outline">
                   {m.verb_review()}
@@ -57,10 +57,10 @@ export function PreviewsCatalogue() {
       <ComponentSection components={["UsedByPreview"]} description={m.catalogue_previews_used_by_desc()}>
         <div className="space-y-3">
           <Specimen caption={m.catalogue_previews_with_users()}>
-            <UsedByPreview label={m.calibration_used_by_runs({ count: RUNS.length })} link={{ to: "/projects" }} items={RUNS} />
+            <UsedByPreview label={m.equipment_used_by_projects({ count: PROJECTS.length })} link={{ to: "/projects" }} items={PROJECTS} />
           </Specimen>
           <Specimen caption={m.catalogue_previews_empty_link()}>
-            <UsedByPreview label={m.calibration_used_by_runs({ count: 0 })} link={{ to: "/projects" }} items={[]} />
+            <UsedByPreview label={m.equipment_used_by_projects({ count: 0 })} link={{ to: "/projects" }} items={[]} />
           </Specimen>
         </div>
       </ComponentSection>
@@ -91,8 +91,8 @@ export function PreviewsCatalogue() {
           </Specimen>
           <Specimen caption="HoverCard (L1)">
             <HoverCard>
-              <HoverCardTrigger render={<Button variant="link" size="xs" />}>{m.common_runs()}</HoverCardTrigger>
-              <HoverCardContent>{m.project_used_by_runs({ count: 3 })}</HoverCardContent>
+              <HoverCardTrigger render={<Button variant="link" size="xs" />}>{m.nav_projects()}</HoverCardTrigger>
+              <HoverCardContent>{m.equipment_used_by_projects({ count: 3 })}</HoverCardContent>
             </HoverCard>
           </Specimen>
         </div>

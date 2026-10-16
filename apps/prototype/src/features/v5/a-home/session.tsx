@@ -131,7 +131,7 @@ function intakeActions(m: Messages, follow: (link: ReturnType<typeof sessionInta
 /** Where intake stands, as one status word: Ready, or the step it still needs (C10). The Sessions list, the detail and the intake show the same. */
 export function ReadinessBadge({ readiness, unreviewed, trashed }: { readiness: SessionReadiness; unreviewed: number; trashed: boolean }) {
   const m = useMessages()
-  if (trashed) return <StatusBadge kind="run" value="trashed" />
+  if (trashed) return <StatusBadge kind="record" value="trashed" />
   if (readiness === "ready") return <StatusBadge kind="gate" value="ready" />
   const label = readiness === "needs-target" ? m.sessions_filter_needs_target() : readiness === "needs-rig" ? m.sessions_rig_needs_review() : m.flow_frames_unreviewed({ count: unreviewed })
   return <StatusBadge kind="gate" value="review" label={label} />
@@ -288,7 +288,7 @@ function FramesTable({ state, assets, session, reviewable }: { state: PrototypeS
       header: m.session_column_quality(),
       sortValue: quality,
       cell: (a) => {
-        if (a.trashed) return <StatusBadge kind="run" value="trashed" />
+        if (a.trashed) return <StatusBadge kind="record" value="trashed" />
         const applies = qualityApplicability(a)
         return applies === "applicable" ? <StatusBadge kind="quality" value={a.quality.value} /> : <StatusBadge kind="quality" value={applies} />
       },

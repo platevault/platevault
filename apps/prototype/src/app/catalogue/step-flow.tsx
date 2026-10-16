@@ -2,12 +2,12 @@
  * Catalogue entry (R9-COMPOSITION-PLAN §8.3, P11, §5): StepStrip and
  * StepFooter.
  *
- * - "Step states" renders fixed flows: every step state, a later step
- *   (read-only), an earlier step (reopen), a reopened flow (redo), an optional
- *   step (Skip) and a finished flow. Their steps are plain text.
- * - Three working flows then run on local state. Each step pane keeps one
+ * - "Step states" renders fixed flows on a session's intake steps: every
+ *   step state, a later step (read-only), an earlier step (reopen), a
+ *   reopened flow (redo), an optional step (Skip) and a finished flow. Their
+ *   steps are plain text.
+ * - Two working flows then run on local state. Each step pane keeps one
  *   height, so a step change moves nothing.
- *   - Run: router links, and Proceed opens the next step's link.
  *   - Wrap up: strict order, local step buttons.
  *   - Session review: router links. Finish review opens the next session
  *     that needs review (C14).
@@ -135,9 +135,10 @@ interface Row {
   size: number
 }
 
-const SAMPLE_RUNS = [
-  { id: "r1", target: "M 42", filter: "Ha", night: "2026-09-14", size: 1_040_000_000 },
-  { id: "r2", target: "NGC 7000", filter: "OIII", night: "2026-09-02", size: 412_000_000 },
+/** A Project's View folders, which Clean up offers (F1). */
+const SAMPLE_VIEWS = [
+  { id: "v1", name: "M 42 · View", size: 1_040_000_000 },
+  { id: "v2", name: "M 42 · View (previous)", size: 412_000_000 },
 ] as const
 
 const SAMPLE_SESSIONS = [
@@ -147,7 +148,6 @@ const SAMPLE_SESSIONS = [
 ] as const
 
 const PROJECT = "M 42"
-const RUN = "M 42 · Ha"
 
 function sessionName(session: (typeof SAMPLE_SESSIONS)[number]): string {
   return `${session.target} · ${formatNight(session.night, true)}`
@@ -164,28 +164,27 @@ function rowsColumns(m: Messages, header: string) {
 // Step states: fixed flows
 // ---------------------------------------------------------------------------
 
-function runSteps(m: Messages) {
+function intakeSteps(m: Messages) {
   return [
-    { id: "select", label: m.step_select(), summary: m.session_count({ count: 3 }) },
-    { id: "calibrate", label: m.step_calibrate(), summary: m.session_count({ count: 3 }) },
-    { id: "prepare", label: m.step_prepare(), summary: m.run_files_count({ count: 12 }) },
-    { id: "results", label: m.step_results(), summary: m.run_files_count({ count: 4 }) },
+    { id: "target", label: m.sessions_column_target(), summary: SAMPLE_SESSIONS[0].target },
+    { id: "rig", label: m.sessions_column_rig(), summary: SAMPLE_SESSIONS[0].rig },
+    { id: "review", label: m.step_review(), summary: m.review_frames_count({ count: SAMPLE_SESSIONS[0].frames }) },
   ]
 }
 
 const noop = () => undefined
 
 function fixedFlow(m: Messages, states: StepState[], current: string, options: { finished?: boolean; gate?: FlowStep["gate"]; optional?: string } = {}): StepFlow {
-  const steps = runSteps(m).map((step, index): FlowStep => {
+  const steps = intakeSteps(m).map((step, index): FlowStep => {
     const state = states[index] ?? "todo"
     return { ...step, state, optional: step.id === options.optional, gate: state === "blocked" ? options.gate : null }
   })
-  const last = current === "results"
+  const last = current === "review"
   return {
-    steps: options.finished ? steps.map((step) => (step.id === "results" ? { ...step, summary: m.stepflow_finished_on({ date: formatNight(nowIso().slice(0, 10), true) }) } : step)) : steps,
+    steps: options.finished ? steps.map((step) => (step.id === "review" ? { ...step, summary: m.stepflow_finished_on({ date: formatNight(nowIso().slice(0, 10), true) }) } : step)) : steps,
     current,
     ordered: true,
-    proceed: options.finished ? null : { id: "proceed", label: last ? m.stepflow_finish_run() : m.stepflow_proceed(), opensDialog: last, run: noop },
+    proceed: options.finished ? null : { id: "proceed", label: last ? m.stepflow_finish_review() : m.stepflow_proceed(), run: noop },
     next: null,
     skip: { id: "skip", label: m.stepflow_skip(), run: noop },
     reopen: (stepId) => ({ id: `reopen-${stepId}`, label: m.stepflow_reopen_step(), run: noop }),
@@ -207,77 +206,19 @@ function StateSpecimen({ caption, flow, viewing }: { caption: string; flow: Step
 function StepStates() {
   const m = useMessages()
   const gate = { reason: m.catalogue_stepflow_unresolved({ count: 2 }), blockers: SAMPLE_SESSIONS.slice(0, 2).map((session) => ({ label: sessionName(session) })) }
-  const progress = fixedFlow(m, ["finished", "skipped", "current", "todo"], "prepare")
+  const progress = fixedFlow(m, ["finished", "current", "todo"], "rig")
   return (
     <Section level={3} title={m.catalogue_stepflow_states_heading()} description={m.catalogue_stepflow_states_caption()}>
       <div className="space-y-3">
         <StateSpecimen caption={m.catalogue_stepflow_case_progress()} flow={progress} />
-        <StateSpecimen caption={m.catalogue_stepflow_case_blocked()} flow={fixedFlow(m, ["finished", "blocked", "todo", "todo"], "calibrate", { gate })} />
-        <StateSpecimen caption={m.catalogue_stepflow_case_locked()} flow={progress} viewing="results" />
-        <StateSpecimen caption={m.catalogue_stepflow_case_earlier()} flow={progress} viewing="select" />
-        <StateSpecimen caption={m.catalogue_stepflow_case_reopened()} flow={fixedFlow(m, ["current", "redo", "redo", "todo"], "select")} />
-        <StateSpecimen caption={m.catalogue_stepflow_case_optional()} flow={fixedFlow(m, ["finished", "current", "todo", "todo"], "calibrate", { optional: "calibrate" })} />
-        <StateSpecimen caption={m.catalogue_stepflow_case_last()} flow={fixedFlow(m, ["finished", "finished", "finished", "current"], "results")} />
-        <StateSpecimen caption={m.catalogue_stepflow_case_finished()} flow={fixedFlow(m, ["finished", "finished", "finished", "finished"], "results", { finished: true })} />
+        <StateSpecimen caption={m.catalogue_stepflow_case_blocked()} flow={fixedFlow(m, ["finished", "blocked", "todo"], "rig", { gate })} />
+        <StateSpecimen caption={m.catalogue_stepflow_case_locked()} flow={progress} viewing="review" />
+        <StateSpecimen caption={m.catalogue_stepflow_case_earlier()} flow={progress} viewing="target" />
+        <StateSpecimen caption={m.catalogue_stepflow_case_reopened()} flow={fixedFlow(m, ["current", "redo", "todo"], "target")} />
+        <StateSpecimen caption={m.catalogue_stepflow_case_optional()} flow={fixedFlow(m, ["finished", "skipped", "current"], "review", { optional: "rig" })} />
+        <StateSpecimen caption={m.catalogue_stepflow_case_last()} flow={fixedFlow(m, ["finished", "finished", "current"], "review")} />
+        <StateSpecimen caption={m.catalogue_stepflow_case_finished()} flow={fixedFlow(m, ["finished", "finished", "finished"], "review", { finished: true })} />
       </div>
-    </Section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Run: links, a gate, commit steps and the terminal Finish run…
-// ---------------------------------------------------------------------------
-
-const RUN_STEPS = ["select", "calibrate", "prepare", "results"] as const
-
-function RunDemo() {
-  const m = useMessages()
-  const navigate = useNavigate()
-  const search = useCatalogueSearch()
-  const [progress, setProgress] = useState(() => start(RUN_STEPS))
-  const [assigned, setAssigned] = useState(false)
-  const linkFor = (stepId: string) => catalogueLink(search, { run: stepId })
-  const finished = progress.finishedOn !== null
-  const at = RUN_STEPS.indexOf(progress.current as (typeof RUN_STEPS)[number])
-  const last = at === RUN_STEPS.length - 1
-  const gate = progress.current === "calibrate" && !assigned ? { reason: m.catalogue_stepflow_unresolved({ count: 2 }), blockers: SAMPLE_SESSIONS.slice(0, 2).map((session) => ({ label: sessionName(session) })) } : null
-  const summaries = runSteps(m).map((step) =>
-    step.id === "results" && progress.finishedOn ? { ...step, summary: m.stepflow_finished_on({ date: formatNight(progress.finishedOn, true) }) } : step,
-  )
-  const proceedRun = () => setProgress((p) => advance(p, RUN_STEPS, "finished"))
-  const proceed: Action | null = finished
-    ? null
-    : last
-      ? { id: "finish-run", label: m.stepflow_finish_run(), run: proceedRun, confirm: { title: m.stepflow_finish_run_title({ name: RUN }), confirm: { label: m.stepflow_finish_run() } } }
-      : progress.current === "prepare"
-        ? { id: "proceed", label: m.stepflow_proceed(), run: proceedRun, confirm: { title: m.run_prepare_title({ name: RUN }), summary: m.run_files_count({ count: 12 }), confirm: { label: m.step_prepare() } } }
-        : { id: "proceed", label: m.stepflow_proceed(), run: proceedRun }
-  const flow: StepFlow = {
-    steps: flowSteps(progress, summaries, gate),
-    current: progress.current,
-    ordered: true,
-    proceed,
-    next: last || finished ? null : linkFor(RUN_STEPS[at + 1] ?? progress.current),
-    reopen: (stepId) => ({ id: `reopen-${stepId}`, label: m.stepflow_reopen_step(), run: () => setProgress((p) => reopen(p, RUN_STEPS, stepId)) }),
-    linkFor,
-  }
-  const viewing = flow.steps.some((step) => step.id === search.run) ? (search.run ?? progress.current) : progress.current
-  const editable = stepEditable(flow, viewing)
-  const restart: Action = {
-    id: "restart-run",
-    label: m.catalogue_stepflow_restart(),
-    run: () => {
-      setProgress(start(RUN_STEPS))
-      setAssigned(false)
-      void navigate({ to: "/design-system", search: catalogueLink(search, { run: null }).search as never })
-    },
-  }
-  return (
-    <Section level={3} title={m.catalogue_stepflow_run_heading()} description={m.catalogue_stepflow_run_caption()} actions={<ActionButton action={restart} />}>
-      <StepPane strip={<StepStrip flow={flow} viewing={viewing} label={m.catalogue_stepflow_run_heading()} />} footer={<StepFooter flow={flow} viewing={viewing} />}>
-        <BodyState editable={editable} />
-        {viewing === "calibrate" && editable ? <ActionButton action={{ id: "auto-assign", label: m.run_cal_auto_assign(), run: () => setAssigned(true) }} /> : null}
-      </StepPane>
     </Section>
   )
 }
@@ -291,10 +232,10 @@ type WrapUpStep = (typeof WRAP_UP_STEPS)[number]
 
 function wrapUpRows(m: Messages): Record<WrapUpStep, Row[]> {
   return {
-    cleanup: SAMPLE_RUNS.map((run) => ({ id: run.id, name: `${run.target} · ${run.filter} · ${formatNight(run.night)}`, size: run.size })),
+    cleanup: SAMPLE_VIEWS.map((view) => ({ id: view.id, name: view.name, size: view.size })),
     trash: [
       { id: "unusable", name: m.wrapup_offer_rejects(), size: 2_300_000_000 },
-      { id: "intermediates", name: m.run_results_intermediates(), size: 5_800_000_000 },
+      { id: "processing", name: m.wrapup_offer_processing_label(), size: 5_800_000_000 },
     ],
     archive: SAMPLE_SESSIONS.map((session) => ({ id: session.id, name: sessionName(session), size: session.size })),
   }
@@ -312,7 +253,7 @@ function WrapUpDemo() {
   const chosen = rows[current].filter((row) => selected[current].includes(row.id))
   const bytes = chosen.reduce((sum, row) => sum + row.size, 0)
   const labels: Record<WrapUpStep, string> = { cleanup: m.wrapup_cleanup_title(), trash: m.trash_title(), archive: m.wrapup_archive_title() }
-  const headers: Record<WrapUpStep, string> = { cleanup: m.calibration_run(), trash: m.run_layout_group(), archive: m.review_col_session() }
+  const headers: Record<WrapUpStep, string> = { cleanup: m.project_col_folder(), trash: m.dialog_col_file(), archive: m.review_col_session() }
 
   // Proceed with nothing selected records the step as Skipped (F4); otherwise it confirms the operation first.
   const record = () => {
@@ -322,7 +263,7 @@ function WrapUpDemo() {
     if (next) setViewing(next)
   }
   const confirms: Record<WrapUpStep, Action["confirm"]> = {
-    cleanup: { title: m.wrapup_cleanup_confirm_title({ count: chosen.length }), summary: formatBytes(bytes), confirm: { label: m.wrapup_cleanup_title() } },
+    cleanup: { title: m.wrapup_cleanup_confirm_items({ count: chosen.length }), summary: formatBytes(bytes), confirm: { label: m.wrapup_cleanup_title() } },
     trash: { title: m.catalogue_stepflow_trash_title({ count: chosen.length }), summary: m.wrapup_items_to_trash({ count: chosen.length, size: formatBytes(bytes) }), confirm: { label: m.common_move_to_trash(), kind: "destructive" } },
     archive: { title: m.stepflow_close_project_title({ name: PROJECT }), summary: m.wrapup_sessions_to_move({ count: chosen.length }), confirm: { label: m.stepflow_close_project() } },
   }
@@ -590,7 +531,6 @@ export function StepFlowCatalogue() {
     <ComponentSection components={["StepStrip", "StepFooter"]} description={m.catalogue_stepflow_desc()}>
       <div className="space-y-6">
         <StepStates />
-        <RunDemo />
         <WrapUpDemo />
         <ReviewDemo />
         <DialogDemo />

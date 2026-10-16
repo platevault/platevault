@@ -1,10 +1,10 @@
 {
   "plan": "design/R9-COMPOSITION-PLAN.md §4 (census columns and routes), §7.1 W0.4, §8 (rules); notes in design/R10-WAVE0.md",
-  "base": "7d1cc820e205f95daa3184444da8cd0803e6c92d",
-  "captured": "2026-10-12",
+  "base": "2b68c9c7 (ui-v5-f4-x, F4 Project model; replaces the W0 run-era routes)",
+  "captured": "2026-10-16",
   "census": {
     "script": "scripts/census.browser.js",
-    "setup": "Vite dev server (React dev build), headless Chromium 1440x900, en-GB, demo library loaded through Welcome > Load demo library > confirm. Each route is a full load of http://127.0.0.1:<port>/#<route>, measured 1.3 s after #main appears.",
+    "setup": "Vite dev server (React dev build), headless Chromium 1440x900, en-GB, demo seed loaded fresh (persisted store reset to the demo seed). Each route is a full load of http://127.0.0.1:<port>/#<route>, measured 1.3 s after #main appears. F4: no run, run group, Project Trash or mosaic editor routes; a Project's tabs are ?stage=. Page errors were not recorded in this capture.",
     "columns": {
       "btn": "Button elements in #main",
       "combos": "distinct Button variant/size combinations (combosByRole counts each)",
@@ -31,9 +31,9 @@
         "btn": 3,
         "combos": 3,
         "combosByRole": {
-          "default/default": 1,
-          "ghost/default": 1,
-          "outline/sm": 1
+          "outline/sm": 1,
+          "ghost/sm": 1,
+          "default/sm": 1
         },
         "headerActions": [],
         "dt": 0,
@@ -41,8 +41,8 @@
         "rawBy": {},
         "sort": 0,
         "headers": 0,
-        "ttl": 1,
-        "ttlTruncation": 1,
+        "ttl": 0,
+        "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
         "noteMarker": 0,
@@ -50,346 +50,50 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
         "route": "/setup/locations",
         "page": "SetupLocationsPage",
         "h1": "Choose locations",
-        "btn": 6,
-        "combos": 3,
+        "btn": 5,
+        "combos": 2,
         "combosByRole": {
-          "outline/default": 4,
-          "ghost/sm": 1,
-          "default/default": 1
+          "outline/sm": 4,
+          "default/sm": 1
         },
         "headerActions": [],
-        "dt": 0,
+        "dt": 3,
         "raw": 0,
         "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 1,
-        "ttlTruncation": 1,
+        "sort": 9,
+        "headers": 12,
+        "ttl": 0,
+        "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
         "noteMarker": 0,
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 6,
+        "overflowX": 0
       },
       {
         "route": "/setup/indexing",
         "page": "SetupIndexingPage",
         "h1": "Index your captures",
-        "btn": 3,
-        "combos": 3,
-        "combosByRole": {
-          "outline/default": 1,
-          "ghost/default": 1,
-          "default/default": 1
-        },
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 1,
-        "ttlTruncation": 1,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/",
-        "page": "HomePage",
-        "h1": "Home",
-        "btn": 22,
-        "combos": 5,
-        "combosByRole": {
-          "outline/sm": 5,
-          "default/sm": 1,
-          "ghost/icon-xs": 2,
-          "outline/xs": 11,
-          "ghost/xs": 3
-        },
-        "headerActions": [
-          "Plan tonight (outline/sm)",
-          "New Project… (outline/sm)",
-          "Import… (default/sm)"
-        ],
-        "dt": 2,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 6,
-        "headers": 9,
-        "ttl": 32,
-        "ttlTruncation": 6,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 3,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/import",
-        "page": "ImportRoute (sheet over Home)",
-        "h1": "Home",
-        "btn": 22,
-        "combos": 5,
-        "combosByRole": {
-          "outline/sm": 5,
-          "default/sm": 1,
-          "ghost/icon-xs": 2,
-          "outline/xs": 11,
-          "ghost/xs": 3
-        },
-        "headerActions": [
-          "Plan tonight (outline/sm)",
-          "New Project… (outline/sm)",
-          "Import… (default/sm)"
-        ],
-        "dt": 2,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 6,
-        "headers": 9,
-        "ttl": 32,
-        "ttlTruncation": 6,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 3,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/import?step=source",
-        "page": "ImportFlowPage (W0 stub)",
-        "h1": "Import",
-        "btn": 0,
-        "combos": 0,
-        "combosByRole": {},
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 0,
-        "ttlTruncation": 0,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects",
-        "page": "ProjectsPage",
-        "h1": "Projects",
-        "btn": 4,
+        "btn": 2,
         "combos": 2,
         "combosByRole": {
-          "default/sm": 1,
-          "outline/sm": 3
+          "ghost/sm": 1,
+          "default/sm": 1
         },
-        "headerActions": [
-          "New Project (default/sm)"
-        ],
+        "headerActions": [],
         "dt": 1,
         "raw": 0,
         "rawBy": {},
-        "sort": 4,
-        "headers": 5,
-        "ttl": 6,
-        "ttlTruncation": 0,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus",
-        "page": "ProjectPage",
-        "h1": "Cygnus HOO 2026",
-        "btn": 9,
-        "combos": 2,
-        "combosByRole": {
-          "ghost/sm": 3,
-          "outline/sm": 6
-        },
-        "headerActions": [
-          "Edit details… (ghost/sm)"
-        ],
-        "dt": 2,
-        "raw": 3,
-        "rawBy": {
-          "SimpleTable": 3
-        },
-        "sort": 4,
-        "headers": 24,
-        "ttl": 57,
-        "ttlTruncation": 1,
-        "tip": 2,
-        "helpTip": 0,
-        "noteMarker": 2,
-        "pill": 0,
-        "handRolled": 3,
-        "handRolledBy": {
-          "SubjectsSection": 1,
-          "Refusal": 2
-        },
-        "menus": 9,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_m31?stage=wrap-up",
-        "page": "ProjectPage Wrap up",
-        "h1": "M 31 LRGB",
-        "btn": 7,
-        "combos": 2,
-        "combosByRole": {
-          "ghost/sm": 6,
-          "outline/sm": 1
-        },
-        "headerActions": [
-          "Edit details… (ghost/sm)"
-        ],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 1,
-        "ttlTruncation": 1,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 1,
-        "handRolled": 2,
-        "handRolledBy": {
-          "Refusal": 2
-        },
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus?candidates=unreviewed",
-        "page": "ProjectPage candidates",
-        "h1": "Candidate frames",
-        "btn": 10,
-        "combos": 5,
-        "combosByRole": {
-          "outline/sm": 2,
-          "ghost/icon-sm": 1,
-          "outline/icon-sm": 3,
-          "outline/xs": 3,
-          "secondary/xs": 1
-        },
-        "headerActions": [
-          "Done (outline/sm)"
-        ],
-        "dt": 0,
-        "raw": 2,
-        "rawBy": {
-          "FrameTable": 1,
-          "MetricTable": 1
-        },
-        "sort": 10,
-        "headers": 12,
-        "ttl": 138,
-        "ttlTruncation": 127,
-        "tip": 7,
-        "helpTip": 1,
-        "noteMarker": 6,
-        "pill": 0,
-        "handRolled": 133,
-        "handRolledBy": {
-          "FrameTable": 133
-        },
-        "menus": 2,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus?mosaic=new",
-        "page": "MosaicEditor",
-        "h1": "New mosaic",
-        "btn": 3,
-        "combos": 3,
-        "combosByRole": {
-          "outline/sm": 1,
-          "default/sm": 1,
-          "outline/default": 1
-        },
-        "headerActions": [
-          "Cancel (outline/sm)",
-          "Start group (default/sm)"
-        ],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 0,
-        "ttlTruncation": 0,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus/trash",
-        "page": "ProjectTrashPage",
-        "h1": "Trash",
-        "btn": 3,
-        "combos": 2,
-        "combosByRole": {
-          "destructive/sm": 1,
-          "outline/sm": 2
-        },
-        "headerActions": [
-          "Empty Trash… (destructive/sm)"
-        ],
-        "dt": 1,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 3,
+        "sort": 5,
         "headers": 6,
         "ttl": 0,
         "ttlTruncation": 0,
@@ -400,32 +104,113 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
-        "route": "/projects/prj_cygnus/runs/run_ngc_oiii/select",
-        "page": "RunPage Select",
-        "h1": "NGC 7000 OIII deep",
-        "btn": 5,
-        "combos": 4,
+        "route": "/",
+        "page": "HomePage",
+        "h1": "Home",
+        "btn": 20,
+        "combos": 3,
         "combosByRole": {
-          "outline/sm": 1,
-          "ghost/sm": 2,
-          "default/xs": 1,
+          "outline/xs": 11,
+          "outline/sm": 6,
+          "link/xs": 3
+        },
+        "headerActions": [],
+        "dt": 6,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 15,
+        "headers": 21,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 23,
+        "overflowX": 0
+      },
+      {
+        "route": "/import",
+        "page": "ImportPage",
+        "h1": "Import",
+        "btn": 3,
+        "combos": 2,
+        "combosByRole": {
+          "outline/sm": 2,
           "default/sm": 1
         },
-        "headerActions": [
-          "Complete… (outline/sm)",
-          "Rename… (ghost/sm)",
-          "Move to Trash (ghost/sm)"
-        ],
+        "headerActions": [],
         "dt": 1,
         "raw": 0,
         "rawBy": {},
         "sort": 6,
-        "headers": 8,
-        "ttl": 9,
+        "headers": 7,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 3,
+        "overflowX": 0
+      },
+      {
+        "route": "/import?step=preview",
+        "page": "ImportPage preview",
+        "h1": "Import",
+        "btn": 20,
+        "combos": 4,
+        "combosByRole": {
+          "outline/sm": 2,
+          "ghost/icon-sm": 11,
+          "link/xs": 6,
+          "default/sm": 1
+        },
+        "headerActions": [],
+        "dt": 4,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 17,
+        "headers": 21,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 14,
+        "overflowX": 0
+      },
+      {
+        "route": "/projects",
+        "page": "ProjectsPage",
+        "h1": "Projects",
+        "btn": 7,
+        "combos": 4,
+        "combosByRole": {
+          "default/sm": 1,
+          "ghost/icon-sm": 1,
+          "ghost/sm": 1,
+          "outline/xs": 4
+        },
+        "headerActions": [
+          "New Project… (default/sm)"
+        ],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 7,
+        "headers": 9,
+        "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
@@ -434,74 +219,86 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 5,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
-        "route": "/projects/prj_cygnus/runs/run_ngc_oiii/review",
-        "page": "RunPage Review",
-        "h1": "NGC 7000 OIII deep",
+        "route": "/projects/prj_cygnus",
+        "page": "ProjectPage Sessions",
+        "h1": "Cygnus HOO 2026",
         "btn": 13,
-        "combos": 7,
+        "combos": 2,
         "combosByRole": {
-          "outline/sm": 2,
-          "ghost/sm": 2,
-          "ghost/icon-sm": 1,
-          "outline/icon-sm": 3,
-          "outline/xs": 3,
-          "secondary/xs": 1,
-          "ghost/xs": 1
+          "default/sm": 1,
+          "outline/sm": 12
         },
         "headerActions": [
-          "Complete… (outline/sm)",
-          "Rename… (ghost/sm)",
-          "Move to Trash (ghost/sm)"
+          "Apply… (default/sm)"
+        ],
+        "dt": 6,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 34,
+        "headers": 40,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 17,
+        "overflowX": 0
+      },
+      {
+        "route": "/projects/prj_cygnus?stage=calibrate",
+        "page": "ProjectPage Calibrate",
+        "h1": "Cygnus HOO 2026",
+        "btn": 7,
+        "combos": 2,
+        "combosByRole": {
+          "default/sm": 1,
+          "link/xs": 6
+        },
+        "headerActions": [
+          "Apply… (default/sm)"
         ],
         "dt": 0,
-        "raw": 2,
-        "rawBy": {
-          "FrameTable": 1,
-          "MetricTable": 1
-        },
-        "sort": 10,
-        "headers": 12,
-        "ttl": 70,
-        "ttlTruncation": 51,
-        "tip": 8,
-        "helpTip": 1,
-        "noteMarker": 7,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 0,
+        "headers": 0,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
         "pill": 0,
-        "handRolled": 57,
-        "handRolledBy": {
-          "FrameTable": 57
-        },
-        "menus": 2,
-        "overflowX": 0,
-        "pageErrors": 0
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 1,
+        "overflowX": 0
       },
       {
-        "route": "/projects/prj_cygnus/runs/run_ngc_osc/calibrate",
-        "page": "RunPage Calibrate",
-        "h1": "NGC 7000 dual-band Esprit",
-        "btn": 4,
-        "combos": 3,
+        "route": "/projects/prj_cygnus?stage=view",
+        "page": "ProjectPage View",
+        "h1": "Cygnus HOO 2026",
+        "btn": 5,
+        "combos": 2,
         "combosByRole": {
-          "outline/sm": 1,
-          "ghost/sm": 2,
-          "ghost/xs": 1
+          "default/sm": 1,
+          "outline/sm": 4
         },
         "headerActions": [
-          "Complete… (outline/sm)",
-          "Rename… (ghost/sm)",
-          "Move to Trash (ghost/sm)"
+          "Apply… (default/sm)"
         ],
         "dt": 1,
         "raw": 0,
         "rawBy": {},
-        "sort": 1,
-        "headers": 4,
-        "ttl": 14,
-        "ttlTruncation": 4,
+        "sort": 2,
+        "headers": 3,
+        "ttl": 0,
+        "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
         "noteMarker": 0,
@@ -509,285 +306,26 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 4,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
-        "route": "/projects/prj_cygnus/runs/run_ngc_test/prepare",
-        "page": "RunPage Prepare",
-        "h1": "NGC 7000 Ha quick look",
-        "btn": 5,
-        "combos": 4,
+        "route": "/projects/prj_cygnus?stage=output",
+        "page": "ProjectPage Output",
+        "h1": "Cygnus HOO 2026",
+        "btn": 2,
+        "combos": 2,
         "combosByRole": {
           "default/sm": 1,
-          "outline/xs": 2,
-          "default/xs": 1,
           "outline/sm": 1
         },
         "headerActions": [
-          "Restore (default/sm)"
+          "Apply… (default/sm)"
         ],
-        "dt": 0,
+        "dt": 2,
         "raw": 0,
         "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 20,
-        "ttlTruncation": 9,
-        "tip": 6,
-        "helpTip": 2,
-        "noteMarker": 4,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 1,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus/runs/run_ngc_test/results",
-        "page": "RunPage Results",
-        "h1": "NGC 7000 Ha quick look",
-        "btn": 6,
-        "combos": 3,
-        "combosByRole": {
-          "default/sm": 1,
-          "outline/xs": 4,
-          "default/xs": 1
-        },
-        "headerActions": [
-          "Restore (default/sm)"
-        ],
-        "dt": 1,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 1,
-        "headers": 4,
-        "ttl": 11,
-        "ttlTruncation": 1,
-        "tip": 2,
-        "helpTip": 1,
-        "noteMarker": 1,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 2,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus/runs/run_ngc_hoo/done",
-        "page": "RunPage Done",
-        "h1": "NGC 7000 HOO RedCat",
-        "btn": 4,
-        "combos": 3,
-        "combosByRole": {
-          "ghost/sm": 2,
-          "outline/xs": 1,
-          "default/xs": 1
-        },
-        "headerActions": [
-          "Rename… (ghost/sm)",
-          "Move to Trash (ghost/sm)"
-        ],
-        "dt": 1,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 2,
-        "headers": 3,
-        "ttl": 85,
-        "ttlTruncation": 0,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus/groups/grp_ic5070/select",
-        "page": "RunGroupPage Select",
-        "h1": "IC 5070 mosaic",
-        "btn": 1,
-        "combos": 1,
-        "combosByRole": {
-          "default/xs": 1
-        },
-        "headerActions": [],
-        "dt": 1,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 2,
-        "headers": 6,
-        "ttl": 9,
-        "ttlTruncation": 0,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 1,
-        "handRolledBy": {
-          "GroupSelect": 1
-        },
-        "menus": 1,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/projects/prj_cygnus/groups/grp_ic5070/prepare",
-        "page": "RunGroupPage Prepare",
-        "h1": "IC 5070 mosaic",
-        "btn": 4,
-        "combos": 2,
-        "combosByRole": {
-          "outline/xs": 2,
-          "default/xs": 2
-        },
-        "headerActions": [],
-        "dt": 1,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 2,
-        "headers": 5,
-        "ttl": 30,
-        "ttlTruncation": 18,
-        "tip": 6,
-        "helpTip": 2,
-        "noteMarker": 4,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/targets",
-        "page": "TargetsPage My",
-        "h1": "Targets",
-        "btn": 3,
-        "combos": 2,
-        "combosByRole": {
-          "ghost/icon-sm": 2,
-          "outline/default": 1
-        },
-        "headerActions": [
-          "Previous night (ghost/icon-sm)",
-          "Next night (ghost/icon-sm)",
-          "Save preset (outline/default)"
-        ],
-        "dt": 0,
-        "raw": 1,
-        "rawBy": {
-          "TargetsPage": 1
-        },
         "sort": 9,
         "headers": 11,
-        "ttl": 88,
-        "ttlTruncation": 0,
-        "tip": 2,
-        "helpTip": 1,
-        "noteMarker": 1,
-        "pill": 5,
-        "handRolled": 24,
-        "handRolledBy": {
-          "Segmented": 3,
-          "TargetsPage": 21
-        },
-        "menus": 11,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/targets?mode=browse&cat=Messier",
-        "page": "TargetsPage Browse",
-        "h1": "Targets",
-        "btn": 3,
-        "combos": 2,
-        "combosByRole": {
-          "ghost/icon-sm": 2,
-          "outline/default": 1
-        },
-        "headerActions": [
-          "Previous night (ghost/icon-sm)",
-          "Next night (ghost/icon-sm)",
-          "Save preset (outline/default)"
-        ],
-        "dt": 0,
-        "raw": 1,
-        "rawBy": {
-          "TargetsPage": 1
-        },
-        "sort": 9,
-        "headers": 11,
-        "ttl": 126,
-        "ttlTruncation": 0,
-        "tip": 2,
-        "helpTip": 1,
-        "noteMarker": 1,
-        "pill": 1,
-        "handRolled": 54,
-        "handRolledBy": {
-          "Segmented": 3,
-          "TargetsPage": 51
-        },
-        "menus": 17,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/targets?view=planned",
-        "page": "TargetsPage Planned",
-        "h1": "Targets",
-        "btn": 3,
-        "combos": 2,
-        "combosByRole": {
-          "ghost/icon-sm": 2,
-          "outline/sm": 1
-        },
-        "headerActions": [
-          "Previous night (ghost/icon-sm)",
-          "Next night (ghost/icon-sm)"
-        ],
-        "dt": 0,
-        "raw": 1,
-        "rawBy": {
-          "TargetsPage": 1
-        },
-        "sort": 1,
-        "headers": 7,
-        "ttl": 19,
-        "ttlTruncation": 0,
-        "tip": 2,
-        "helpTip": 1,
-        "noteMarker": 1,
-        "pill": 1,
-        "handRolled": 3,
-        "handRolledBy": {
-          "Segmented": 3
-        },
-        "menus": 2,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/targets/tgt_ic5070",
-        "page": "TargetPage",
-        "h1": "This Target is not in the catalog",
-        "btn": 1,
-        "combos": 1,
-        "combosByRole": {
-          "default/sm": 1
-        },
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
         "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
@@ -796,30 +334,150 @@
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 7,
+        "overflowX": 0
       },
       {
-        "route": "/sessions",
-        "page": "SessionsPage",
-        "h1": "Sessions",
-        "btn": 25,
+        "route": "/projects/prj_m31?stage=wrap-up",
+        "page": "ProjectPage Wrap up",
+        "h1": "M 31 LRGB",
+        "btn": 75,
         "combos": 2,
         "combosByRole": {
-          "outline/sm": 1,
-          "outline/xs": 24
+          "ghost/icon-sm": 74,
+          "default/sm": 1
+        },
+        "headerActions": [],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 5,
+        "headers": 5,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 1,
+        "overflowX": 0
+      },
+      {
+        "route": "/projects/prj_ic5070",
+        "page": "ProjectPage mosaic",
+        "h1": "IC 5070 mosaic",
+        "btn": 11,
+        "combos": 2,
+        "combosByRole": {
+          "default/sm": 1,
+          "outline/sm": 10
         },
         "headerActions": [
-          "Import… (outline/sm)"
+          "Apply… (default/sm)"
+        ],
+        "dt": 6,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 34,
+        "headers": 40,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 18,
+        "overflowX": 0
+      },
+      {
+        "route": "/targets",
+        "page": "TargetsPage My",
+        "h1": "Targets",
+        "btn": 3,
+        "combos": 3,
+        "combosByRole": {
+          "ghost/sm": 1,
+          "outline/sm": 1,
+          "ghost/icon-sm": 1
+        },
+        "headerActions": [
+          "Today (ghost/sm)",
+          "Moon limits… (outline/sm)"
         ],
         "dt": 1,
         "raw": 0,
         "rawBy": {},
-        "sort": 6,
-        "headers": 6,
-        "ttl": 45,
-        "ttlTruncation": 19,
+        "sort": 8,
+        "headers": 9,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 11,
+        "overflowX": 0
+      },
+      {
+        "route": "/targets?mode=browse&cat=Messier",
+        "page": "TargetsPage Browse",
+        "h1": "Targets",
+        "btn": 4,
+        "combos": 3,
+        "combosByRole": {
+          "ghost/sm": 2,
+          "outline/sm": 1,
+          "ghost/icon-sm": 1
+        },
+        "headerActions": [
+          "Today (ghost/sm)",
+          "Moon limits… (outline/sm)"
+        ],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 8,
+        "headers": 9,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 21,
+        "overflowX": 0
+      },
+      {
+        "route": "/targets?view=planned",
+        "page": "TargetsPage Planned",
+        "h1": "Targets",
+        "btn": 4,
+        "combos": 2,
+        "combosByRole": {
+          "ghost/sm": 1,
+          "outline/sm": 3
+        },
+        "headerActions": [
+          "Today (ghost/sm)",
+          "Moon limits… (outline/sm)",
+          "Reminders… (outline/sm)",
+          "Export calendar… (outline/sm)"
+        ],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 0,
+        "headers": 8,
+        "ttl": 0,
+        "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
         "noteMarker": 0,
@@ -827,89 +485,109 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 3,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
+      },
+      {
+        "route": "/targets/tgt_3bg4tx",
+        "page": "TargetPage",
+        "h1": "IC 5070",
+        "btn": 3,
+        "combos": 2,
+        "combosByRole": {
+          "outline/sm": 2,
+          "default/sm": 1
+        },
+        "headerActions": [
+          "New Project… (outline/sm)",
+          "Add to Plan (default/sm)"
+        ],
+        "dt": 4,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 15,
+        "headers": 18,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 11,
+        "overflowX": 0
+      },
+      {
+        "route": "/sessions",
+        "page": "SessionsPage",
+        "h1": "Sessions",
+        "btn": 1,
+        "combos": 1,
+        "combosByRole": {
+          "outline/sm": 1
+        },
+        "headerActions": [
+          "Import (outline/sm)"
+        ],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 8,
+        "headers": 9,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 26,
+        "overflowX": 0
       },
       {
         "route": "/sessions/ses_9ddkg4",
         "page": "SessionPage",
         "h1": "2 Oct · Ha · 300 s",
-        "btn": 4,
-        "combos": 1,
+        "btn": 7,
+        "combos": 3,
         "combosByRole": {
-          "outline/sm": 4
+          "outline/sm": 3,
+          "ghost/icon-sm": 2,
+          "link/xs": 2
         },
         "headerActions": [
-          "Create Project (outline/sm)"
+          "Review frames (outline/sm)"
         ],
-        "dt": 1,
-        "raw": 2,
-        "rawBy": {
-          "EvidenceList": 2
-        },
-        "sort": 3,
-        "headers": 14,
-        "ttl": 22,
-        "ttlTruncation": 1,
-        "tip": 9,
+        "dt": 3,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 14,
+        "headers": 17,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 8,
         "helpTip": 0,
-        "noteMarker": 9,
+        "noteMarker": 8,
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 1,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/sessions/ses_9ddkg4?view=review",
-        "page": "SessionPage review",
-        "h1": "2 Oct · Ha · 300 s",
-        "btn": 9,
-        "combos": 5,
-        "combosByRole": {
-          "outline/sm": 1,
-          "ghost/icon-sm": 1,
-          "outline/icon-sm": 3,
-          "outline/xs": 3,
-          "secondary/xs": 1
-        },
-        "headerActions": [],
-        "dt": 0,
-        "raw": 2,
-        "rawBy": {
-          "FrameTable": 1,
-          "MetricTable": 1
-        },
-        "sort": 8,
-        "headers": 10,
-        "ttl": 25,
-        "ttlTruncation": 14,
-        "tip": 7,
-        "helpTip": 0,
-        "noteMarker": 7,
-        "pill": 0,
-        "handRolled": 17,
-        "handRolledBy": {
-          "FrameTable": 17
-        },
-        "menus": 2,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 14,
+        "overflowX": 0
       },
       {
         "route": "/sessions/ses_9ddkg4?step=target",
-        "page": "SessionIntakePage (W0 stub)",
-        "h1": "Session",
+        "page": "SessionIntakePage Target",
+        "h1": "2 Oct · Ha · 300 s",
         "btn": 0,
         "combos": 0,
         "combosByRole": {},
         "headerActions": [],
-        "dt": 0,
+        "dt": 1,
         "raw": 0,
         "rawBy": {},
-        "sort": 0,
-        "headers": 0,
+        "sort": 4,
+        "headers": 4,
         "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
@@ -918,51 +596,68 @@
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 1,
+        "overflowX": 0
+      },
+      {
+        "route": "/sessions/ses_9ddkg4?step=review",
+        "page": "SessionIntakePage Review",
+        "h1": "2 Oct · Ha · 300 s",
+        "btn": 9,
+        "combos": 2,
+        "combosByRole": {
+          "outline/sm": 8,
+          "default/sm": 1
+        },
+        "headerActions": [],
+        "dt": 2,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 11,
+        "headers": 12,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 1,
+        "helpTip": 0,
+        "noteMarker": 1,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 13,
+        "overflowX": 0
       },
       {
         "route": "/calibration",
         "page": "CalibrationPage",
         "h1": "Calibration",
-        "btn": 6,
-        "combos": 3,
+        "btn": 1,
+        "combos": 1,
         "combosByRole": {
-          "ghost/default": 1,
-          "outline/default": 1,
-          "outline/xs": 4
+          "default/sm": 1
         },
         "headerActions": [
-          "Settings (ghost/default)",
-          "Import masters (outline/default)"
+          "Import masters… (default/sm)"
         ],
-        "dt": 3,
-        "raw": 1,
-        "rawBy": {
-          "ProcessesBox": 1
-        },
-        "sort": 0,
-        "headers": 26,
-        "ttl": 36,
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 7,
+        "headers": 8,
+        "ttl": 0,
         "ttlTruncation": 0,
-        "tip": 4,
+        "tip": 0,
         "helpTip": 0,
-        "noteMarker": 4,
-        "pill": 14,
-        "handRolled": 15,
-        "handRolledBy": {
-          "Refusal": 1,
-          "OpenMaster": 14
-        },
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 22,
+        "overflowX": 0
       },
       {
         "route": "/calibration/processes/cpr_ses_113la3t/stack",
-        "page": "CalibrationProcessPage (W0 stub)",
-        "h1": "Process",
+        "page": "CalibrationProcessPage",
+        "h1": "Flat OIII · 26 Sep",
         "btn": 0,
         "combos": 0,
         "combosByRole": {},
@@ -980,29 +675,26 @@
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 1,
+        "overflowX": 0
       },
       {
         "route": "/activity",
         "page": "ActivityPage",
         "h1": "Activity",
-        "btn": 9,
+        "btn": 10,
         "combos": 2,
         "combosByRole": {
-          "outline/sm": 8,
-          "ghost/sm": 1
+          "ghost/icon-sm": 7,
+          "outline/sm": 3
         },
         "headerActions": [],
-        "dt": 0,
-        "raw": 1,
-        "rawBy": {
-          "ActivityPage": 1
-        },
-        "sort": 0,
-        "headers": 4,
-        "ttl": 7,
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 3,
+        "headers": 5,
+        "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
@@ -1010,9 +702,8 @@
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 6,
+        "overflowX": 0
       },
       {
         "route": "/settings/appearance",
@@ -1029,36 +720,36 @@
         "rawBy": {},
         "sort": 0,
         "headers": 0,
-        "ttl": 1,
+        "ttl": 0,
         "ttlTruncation": 0,
-        "tip": 1,
-        "helpTip": 1,
+        "tip": 0,
+        "helpTip": 0,
         "noteMarker": 0,
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
         "route": "/settings/locations",
         "page": "Settings locations",
         "h1": "Settings",
         "btn": 17,
-        "combos": 2,
+        "combos": 3,
         "combosByRole": {
-          "outline/sm": 16,
-          "ghost/sm": 1
+          "outline/sm": 1,
+          "ghost/icon-sm": 8,
+          "outline/xs": 8
         },
         "headerActions": [],
-        "dt": 0,
+        "dt": 1,
         "raw": 0,
         "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 2,
-        "ttlTruncation": 1,
+        "sort": 4,
+        "headers": 5,
+        "ttl": 0,
+        "ttlTruncation": 0,
         "tip": 0,
         "helpTip": 0,
         "noteMarker": 0,
@@ -1066,28 +757,24 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 9,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
         "route": "/settings/equipment",
         "page": "Settings equipment",
         "h1": "Settings",
-        "btn": 30,
-        "combos": 3,
+        "btn": 13,
+        "combos": 2,
         "combosByRole": {
-          "outline/sm": 9,
-          "ghost/sm": 3,
-          "ghost/xs": 18
+          "outline/sm": 7,
+          "ghost/icon-sm": 6
         },
         "headerActions": [],
-        "dt": 2,
-        "raw": 3,
-        "rawBy": {
-          "RigBlock": 3
-        },
-        "sort": 9,
-        "headers": 24,
+        "dt": 5,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 23,
+        "headers": 28,
         "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
@@ -1096,29 +783,51 @@
         "pill": 0,
         "handRolled": 0,
         "handRolledBy": {},
-        "menus": 5,
-        "overflowX": 0,
-        "pageErrors": 0
+        "menus": 19,
+        "overflowX": 0
       },
       {
         "route": "/settings/goal-templates",
         "page": "Settings goal-templates",
         "h1": "Settings",
-        "btn": 7,
-        "combos": 3,
+        "btn": 1,
+        "combos": 1,
         "combosByRole": {
-          "default/default": 1,
-          "ghost/xs": 5,
-          "outline/default": 1
+          "outline/sm": 1
         },
         "headerActions": [],
-        "dt": 0,
-        "raw": 1,
-        "rawBy": {
-          "TemplateBox": 1
+        "dt": 2,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 8,
+        "headers": 10,
+        "ttl": 0,
+        "ttlTruncation": 0,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 6,
+        "overflowX": 0
+      },
+      {
+        "route": "/settings/naming",
+        "page": "Settings naming",
+        "h1": "Settings",
+        "btn": 3,
+        "combos": 2,
+        "combosByRole": {
+          "outline/sm": 2,
+          "default/sm": 1
         },
-        "sort": 0,
-        "headers": 3,
+        "headerActions": [],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 4,
+        "headers": 4,
         "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
@@ -1128,65 +837,7 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/settings/naming",
-        "page": "Settings naming",
-        "h1": "Settings",
-        "btn": 15,
-        "combos": 3,
-        "combosByRole": {
-          "outline/sm": 1,
-          "default/sm": 1,
-          "outline/xs": 13
-        },
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 11,
-        "ttlTruncation": 0,
-        "tip": 1,
-        "helpTip": 1,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 16,
-        "handRolledBy": {
-          "NamingSettingsPage": 8,
-          "Editor": 8
-        },
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/settings/calibration",
-        "page": "Settings calibration",
-        "h1": "Settings",
-        "btn": 0,
-        "combos": 0,
-        "combosByRole": {},
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 1,
-        "ttlTruncation": 1,
-        "tip": 1,
-        "helpTip": 1,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
         "route": "/settings/sites",
@@ -1196,13 +847,13 @@
         "combos": 2,
         "combosByRole": {
           "outline/sm": 1,
-          "ghost/xs": 1
+          "outline/xs": 1
         },
         "headerActions": [],
         "dt": 1,
         "raw": 0,
         "rawBy": {},
-        "sort": 3,
+        "sort": 7,
         "headers": 8,
         "ttl": 0,
         "ttlTruncation": 0,
@@ -1213,8 +864,7 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 2,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
         "route": "/settings/targets",
@@ -1223,63 +873,7 @@
         "btn": 1,
         "combos": 1,
         "combosByRole": {
-          "default/default": 1
-        },
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 0,
-        "ttlTruncation": 0,
-        "tip": 1,
-        "helpTip": 1,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/settings/applications",
-        "page": "Settings applications",
-        "h1": "Settings",
-        "btn": 6,
-        "combos": 2,
-        "combosByRole": {
-          "ghost/sm": 1,
-          "outline/sm": 5
-        },
-        "headerActions": [],
-        "dt": 0,
-        "raw": 0,
-        "rawBy": {},
-        "sort": 0,
-        "headers": 0,
-        "ttl": 0,
-        "ttlTruncation": 0,
-        "tip": 5,
-        "helpTip": 1,
-        "noteMarker": 4,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/settings/about",
-        "page": "Settings about",
-        "h1": "Settings",
-        "btn": 14,
-        "combos": 2,
-        "combosByRole": {
-          "outline/default": 2,
-          "outline/sm": 12
+          "outline/sm": 1
         },
         "headerActions": [],
         "dt": 0,
@@ -1296,12 +890,39 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
-        "route": "/settings/help",
-        "page": "HelpPage (W0 stub)",
+        "route": "/settings/applications",
+        "page": "Settings applications",
+        "h1": "Settings",
+        "btn": 7,
+        "combos": 3,
+        "combosByRole": {
+          "outline/sm": 2,
+          "ghost/icon-sm": 3,
+          "outline/xs": 2
+        },
+        "headerActions": [],
+        "dt": 1,
+        "raw": 0,
+        "rawBy": {},
+        "sort": 5,
+        "headers": 6,
+        "ttl": 1,
+        "ttlTruncation": 1,
+        "tip": 0,
+        "helpTip": 0,
+        "noteMarker": 0,
+        "pill": 0,
+        "handRolled": 0,
+        "handRolledBy": {},
+        "menus": 3,
+        "overflowX": 0
+      },
+      {
+        "route": "/settings/about",
+        "page": "Settings about",
         "h1": "Settings",
         "btn": 0,
         "combos": 0,
@@ -1321,63 +942,23 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       },
       {
-        "route": "/design-system",
-        "page": "DesignSystemPage",
-        "h1": "Design system reference",
-        "btn": 25,
-        "combos": 10,
+        "route": "/settings/help",
+        "page": "Settings help",
+        "h1": "Settings",
+        "btn": 2,
+        "combos": 1,
         "combosByRole": {
-          "default/default": 4,
-          "outline/default": 2,
-          "secondary/default": 1,
-          "ghost/default": 1,
-          "destructive/default": 1,
-          "link/default": 1,
-          "default/sm": 1,
-          "outline/sm": 10,
-          "ghost/icon-xs": 3,
-          "ghost/sm": 1
+          "outline/sm": 2
         },
         "headerActions": [],
         "dt": 1,
-        "raw": 2,
-        "rawBy": {
-          "DesignSystemPage": 1,
-          "EvidenceList": 1
-        },
-        "sort": 6,
-        "headers": 11,
-        "ttl": 1,
-        "ttlTruncation": 1,
-        "tip": 0,
-        "helpTip": 0,
-        "noteMarker": 0,
-        "pill": 0,
-        "handRolled": 0,
-        "handRolledBy": {},
-        "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
-      },
-      {
-        "route": "/no-such-page",
-        "page": "NotFoundPage",
-        "h1": "This page does not exist",
-        "btn": 1,
-        "combos": 1,
-        "combosByRole": {
-          "default/sm": 1
-        },
-        "headerActions": [],
-        "dt": 0,
         "raw": 0,
         "rawBy": {},
-        "sort": 0,
-        "headers": 0,
+        "sort": 1,
+        "headers": 2,
         "ttl": 0,
         "ttlTruncation": 0,
         "tip": 0,
@@ -1387,8 +968,7 @@
         "handRolled": 0,
         "handRolledBy": {},
         "menus": 0,
-        "overflowX": 0,
-        "pageErrors": 0
+        "overflowX": 0
       }
     ]
   },
