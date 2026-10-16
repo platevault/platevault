@@ -20,7 +20,7 @@ mod delegate;
 pub use categories::Action;
 
 use std::ptr::NonNull;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use block2::RcBlock;
 use objc2::rc::Retained;
@@ -28,7 +28,8 @@ use objc2::runtime::Bool;
 use objc2_foundation::{NSArray, NSBundle, NSError, NSString};
 use objc2_user_notifications::{
     UNAlertStyle, UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent,
-    UNNotificationRequest, UNNotificationSetting, UNNotificationSettings, UNUserNotificationCenter,
+    UNNotification, UNNotificationRequest, UNNotificationSetting, UNNotificationSettings,
+    UNUserNotificationCenter,
 };
 
 /// The authorization status the framework reports.
@@ -132,6 +133,38 @@ impl NotificationCenter {
         self.0.removeDeliveredNotificationsWithIdentifiers(&identifiers);
     }
 
+    /// Remove every notification in `category` from the screen and from
+    /// Notification Center, and drop those still waiting to be shown, then
+    /// call `done`: a notification posted after `done` is not among them.
+    pub fn withdraw_category(&self, category: &str, done: impl FnOnce() + Send + 'static) {
+        let done = Arc::new(once(move |()| done()));
+        let category = category.to_owned();
+        let block = RcBlock::new(move |delivered: NonNull<NSArray<UNNotification>>| {
+            // SAFETY: the framework passes a valid array that lives for the
+            // duration of this completion handler.
+            #[allow(unsafe_code)]
+            let delivered = unsafe { delivered.as_ref() };
+            let center = UNUserNotificationCenter::currentNotificationCenter();
+            let shown =
+                in_category(&category, delivered.iter().map(|shown| described(&shown.request())));
+            center.removeDeliveredNotificationsWithIdentifiers(&identifiers(&shown));
+            let done = Arc::clone(&done);
+            let category = category.clone();
+            let pending = RcBlock::new(move |pending: NonNull<NSArray<UNNotificationRequest>>| {
+                // SAFETY: as above.
+                #[allow(unsafe_code)]
+                let pending = unsafe { pending.as_ref() };
+                let waiting =
+                    in_category(&category, pending.iter().map(|request| described(&request)));
+                UNUserNotificationCenter::currentNotificationCenter()
+                    .removePendingNotificationRequestsWithIdentifiers(&identifiers(&waiting));
+                done(());
+            });
+            center.getPendingNotificationRequestsWithCompletionHandler(&pending);
+        });
+        self.0.getDeliveredNotificationsWithCompletionHandler(&block);
+    }
+
     /// Ask the user for alert and sound permission. Reports whether it was
     /// granted, or the framework's error text.
     pub fn request_authorization(&self, done: impl FnOnce(Result<bool, String>) + Send + 'static) {
@@ -195,6 +228,26 @@ impl NotificationCenter {
     }
 }
 
+/// A request's identifier and category identifier.
+fn described(request: &UNNotificationRequest) -> (String, String) {
+    (request.identifier().to_string(), request.content().categoryIdentifier().to_string())
+}
+
+/// The identifiers of the `(identifier, category)` notifications in
+/// `category`.
+fn in_category(
+    category: &str,
+    notifications: impl Iterator<Item = (String, String)>,
+) -> Vec<String> {
+    notifications.filter(|(_, of)| of == category).map(|(identifier, _)| identifier).collect()
+}
+
+fn identifiers(identifiers: &[String]) -> Retained<NSArray<NSString>> {
+    let identifiers: Vec<_> =
+        identifiers.iter().map(|identifier| NSString::from_str(identifier)).collect();
+    NSArray::from_retained_slice(&identifiers)
+}
+
 /// A completion handler the framework may hold as `Fn`, calling `done` once.
 fn once<T>(done: impl FnOnce(T) + Send + 'static) -> impl Fn(T) + 'static {
     let slot = Mutex::new(Some(done));
@@ -212,4 +265,25 @@ fn error_text(error: *mut NSError) -> Option<String> {
     #[allow(unsafe_code)]
     let error = unsafe { error.as_ref() }?;
     Some(error.localizedDescription().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::in_category;
+
+    #[test]
+    fn withdrawing_a_category_picks_its_notifications_only() {
+        let notifications = [
+            ("update-offer-0.6.9", "update-offer"),
+            ("reminder-window-3", ""),
+            ("update-offer", "update-offer"),
+            ("other", "other-category"),
+        ]
+        .into_iter()
+        .map(|(identifier, category)| (identifier.to_owned(), category.to_owned()));
+        assert_eq!(
+            in_category("update-offer", notifications),
+            ["update-offer-0.6.9", "update-offer"]
+        );
+    }
 }

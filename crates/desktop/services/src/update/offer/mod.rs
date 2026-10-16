@@ -19,8 +19,10 @@
 //! notice visible:
 //!
 //! - macOS: `System` for the Alert notification style, which stays until
-//!   the user acts. The Banner style leaves the screen by itself, and Focus
-//!   sends it to Notification Center, so a banner is a heads-up.
+//!   the user acts, posted while the app is in the background. Posted while
+//!   the app is frontmost, any notification shows as a banner. The Banner
+//!   style leaves the screen by itself, and Focus sends it to Notification
+//!   Center, so a banner is a heads-up.
 //! - Windows: a heads-up until the app can read whether the user turned its
 //!   toasts off (`ToastNotifier.Setting`, decision D2 pending).
 //! - Linux and the other freedesktop systems: a heads-up. The notification
@@ -251,10 +253,16 @@ type Platform = windows::ToastOffer;
 #[cfg(all(unix, not(target_os = "macos")))]
 type Platform = xdg::XdgOffer;
 
-/// This platform's [`SystemOffer`], posting under `identity`.
+/// Reads whether the app's main window is frontmost: `None` when that is
+/// not known.
+pub type Focus = Box<dyn Fn() -> Option<bool> + Send + Sync>;
+
+/// This platform's [`SystemOffer`], posting under `identity`. `focused` is
+/// read at each post: macOS shows a notification posted while the app is
+/// frontmost as a banner that leaves the screen, whatever the user's style.
 #[must_use]
-pub fn platform(identity: &AppIdentity) -> impl SystemOffer {
-    Platform::new(identity)
+pub fn platform(identity: &AppIdentity, focused: Focus) -> impl SystemOffer {
+    Platform::new(identity, focused)
 }
 
 /// Whether the in-app notice offers `action` for `version` in `status`,

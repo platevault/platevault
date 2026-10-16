@@ -22,7 +22,7 @@
 use notify_rust::{Notification, Timeout};
 
 use super::notify::{show, show_blocking};
-use super::{Delivery, OfferText, Refusal, Responder, SystemOffer};
+use super::{Delivery, Focus, OfferText, Refusal, Responder, SystemOffer};
 use crate::AppIdentity;
 
 /// The capability a server advertises when it shows action buttons.
@@ -32,8 +32,9 @@ const ACTIONS: &str = "actions";
 pub struct XdgOffer;
 
 impl XdgOffer {
-    /// The server names the sender after the executable.
-    pub const fn new(_identity: &AppIdentity) -> Self {
+    /// The server names the sender after the executable. The notification
+    /// is a heads-up wherever the app's window is, so focus is not read.
+    pub fn new(_identity: &AppIdentity, _focused: Focus) -> Self {
         Self
     }
 }
