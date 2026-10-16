@@ -374,6 +374,23 @@ pub fn relative_wire_path(root: &Path, path: &Path) -> String {
     wire_path(rel)
 }
 
+/// The last name in `wire`, the text a [`wire_path`] call produced: what
+/// follows its last separator, or all of it when it has none.
+///
+/// The separators follow [`wire_path`]. On macOS and Linux only `/`
+/// separates, so `folder/a\b.fits` names `a\b.fits`. On Windows `\` never
+/// belongs to a name, so it separates as well; wire text holds none, but text
+/// written into a wire column without passing [`wire_path`] still splits
+/// there (bd `astro-plan-3pvvc`).
+///
+/// Use it on wire text only. A native path splits by its own platform's
+/// rules (`Path::file_name`).
+#[must_use]
+pub fn wire_file_name(wire: &str) -> &str {
+    let last = if cfg!(windows) { wire.rfind(['/', '\\']) } else { wire.rfind('/') };
+    last.map_or(wire, |idx| &wire[idx + 1..])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -714,5 +731,29 @@ mod tests {
             relative_wire_path(Path::new(r"C:\inbox"), Path::new(r"C:\inbox\a\b.fits")),
             "a/b.fits"
         );
+    }
+
+    #[test]
+    fn wire_file_name_is_the_text_after_the_last_slash() {
+        assert_eq!(wire_file_name("masters/darks/300/master.xisf"), "master.xisf");
+        assert_eq!(wire_file_name("master.xisf"), "master.xisf");
+        assert_eq!(wire_file_name(""), "");
+    }
+
+    /// On macOS and Linux a `\` in wire text is part of a name.
+    #[cfg(unix)]
+    #[test]
+    fn wire_file_name_keeps_a_unix_backslash_in_the_name() {
+        assert_eq!(wire_file_name("folder/a\\b.fits"), "a\\b.fits");
+        assert_eq!(wire_file_name("a\\b.fits"), "a\\b.fits");
+        assert_eq!(wire_file_name("c\\d/x.fits"), "x.fits");
+    }
+
+    /// On Windows a `\` only ever separates.
+    #[cfg(windows)]
+    #[test]
+    fn wire_file_name_splits_on_a_windows_backslash() {
+        assert_eq!(wire_file_name(r"folder\a\b.fits"), "b.fits");
+        assert_eq!(wire_file_name(r"c\d/x.fits"), "x.fits");
     }
 }

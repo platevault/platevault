@@ -748,6 +748,37 @@ async fn generate_raw_frame_plan_skips_missing_selected_frames() {
     assert_eq!(resp.item_count, 1, "the missing frame must not become a plan item (FR-022)");
 }
 
+/// bd astro-plan-3pvvc: on macOS and Linux a `\` in a frame's stored path is
+/// part of its file name, so the plan item names the whole file.
+#[cfg(unix)]
+#[tokio::test]
+async fn raw_frame_plan_item_keeps_a_backslash_in_the_file_name() {
+    use app_core_targets::frame_writer::upsert_frame_record;
+
+    let (db, _bus, _lock) = setup().await;
+    insert_root(db.pool(), "root-1", "/tmp/lib").await;
+    let frame =
+        upsert_frame_record(db.pool(), "root-1", "lights/a\\b.fits", 1000, "t0", "classified")
+            .await
+            .unwrap();
+    insert_acquisition_session(db.pool(), "sess-1", &[&frame]).await;
+
+    let resp = generate_raw_frame_plan(
+        db.pool(),
+        &RawFrameCleanupGenerateRequest {
+            selected_frame_ids: vec![frame],
+            title: None,
+            destructive_destination: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].name, "a\\b.fits");
+}
+
 // ── Unreadable frame attribution refuses cleanup (astro-plan-l2s06) ──────────
 
 /// Writes a `frame_ids` value the `json_valid` guards reject. The helper above
