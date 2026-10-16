@@ -929,12 +929,12 @@ async fn discard_reverts_only_the_projects_own_edits() {
     let before = desired(&world).await;
     let after = discard(&world, before.revision).await.unwrap();
     assert_eq!(after.revision, before.revision + 1, "one edit, one revision");
-    assert_eq!(shape(&after), shape(&applied), "back to what the View was built from");
     assert_eq!(
         world.catalog().project_pending_changes(world.project).await.unwrap(),
         library,
         "only the Library's changes stay pending"
     );
+    assert_eq!(shape(&after), shape(&applied), "back to what the View was built from");
     assert_eq!(World::tree(&world.view()), tree, "a discard never touches the View");
     let error = discard(&world, after.revision).await.unwrap_err();
     assert!(refusal(&error).contains("no edit of its own"), "{error}");
