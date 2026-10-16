@@ -24,7 +24,7 @@
  * Trash of `View (previous)/`.
  */
 import { CopyCheck, Eye, FolderOpen, Pencil, Trash2, Undo2 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { DeveloperModeActions } from "@/app/developer-mode"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
@@ -91,6 +91,14 @@ function closeApplySheet(projectId: ProjectId) {
     const { [projectId]: _, ...rest } = c.apply
     return { ...c, apply: rest }
   })
+}
+
+/**
+ * The page header's Apply…. The sheet and a running Apply return focus to it (WCAG 2.4.3): Apply… on another tab opens
+ * the sheet on this one, so the button that opened it is gone, and a settled Apply takes its section and Cancel away.
+ */
+function applyTrigger(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('header[data-chrome] [data-action="apply"]')
 }
 
 function setTicked(projectId: ProjectId, sheet: ApplySheet, ticked: readonly string[]) {
@@ -456,6 +464,8 @@ function ApplySheetDialog({ project, sheet }: { project: Project; sheet: ApplySh
     <FormDialog
       open
       onOpenChange={(next) => !next && closeApplySheet(project.id)}
+      focusAfterConfirm={applyTrigger}
+      focusAfterCancel={applyTrigger}
       title={m.common_apply_named({ name: project.name })}
       size="lg"
       confirm={{
@@ -617,6 +627,13 @@ export function useViewSections(project: Project): DetailSection[] {
   const profileName = useStore((s) => (project.settings.profileId ? (s.catalog.profiles[project.settings.profileId]?.name ?? null) : null))
   const editable = !isLocked(project)
   const [editing, setEditing] = useState(false)
+  // Focus was on Cancel (or anywhere in the running section) when the Apply settled: it lands on Apply…, not the page body.
+  const ranApply = useRef<string | null>(null)
+  useEffect(() => {
+    const lost = document.activeElement === null || document.activeElement === document.body
+    if (ranApply.current && !running && lost) applyTrigger()?.focus()
+    ranApply.current = running
+  }, [running])
   const discardLabel = m.project_discard()
 
   const changeColumns: Column<PendingChange>[] = [

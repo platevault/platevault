@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router"
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { closeSheet } from "@/app/ui-state"
@@ -10,7 +10,7 @@ import type { Project } from "@/domain/types"
 import { m } from "@/lib/i18n"
 import { SCHEMA_VERSION, store } from "@/store/core"
 import { isSettled } from "@/store/operations"
-import { PROJECT_VIEW_HANDLERS, startApply } from "@/store/actions/project-view"
+import { applyPhase, PROJECT_VIEW_HANDLERS, startApply } from "@/store/actions/project-view"
 import { setWindowsWithoutDeveloperMode } from "@/store/simulation"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { ProjectPage } from "./project"
@@ -28,10 +28,10 @@ beforeEach(() => {
 const project = (id: string): Project => store.getState().catalog.projects[id]!
 const setProject = (id: string, patch: Partial<Project>) => store.setState((s) => ({ ...s, catalog: { ...s.catalog, projects: { ...s.catalog.projects, [id]: { ...s.catalog.projects[id]!, ...patch } } } }))
 
-function renderView(projectId: string) {
+function renderView(projectId: string, search = "?stage=view") {
   const root = createRootRoute()
   const route = createRoute({ getParentRoute: () => root, path: "/projects/$projectId", component: ProjectPage, validateSearch: (s: Record<string, unknown>) => s })
-  const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [`/projects/${projectId}?stage=view`] }) })
+  const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [`/projects/${projectId}${search}`] }) })
   render(<RouterProvider router={router} />)
 }
 
@@ -103,6 +103,28 @@ describe("the Apply sheet (VSEL-AC-30/34, PREP-AC-29)", () => {
     const plan = applyPlan(store.getState(), project(CYGNUS))
     const notes = toolNotes(m, "pixinsight-wbpp", "PixInsight / WBPP", plan, "GROUP")
     expect(notes).toEqual(expect.arrayContaining([m.view_note_wbpp_pre({ keyword: "NIGHT" }), m.view_note_wbpp_group({ keyword: "GROUP" }), m.view_note_wbpp_reference({ keyword: "GROUP" }), m.view_note_wbpp_output({ path: "Processing/WBPP/" })]))
+  })
+
+  it("returns focus to Apply… on Escape when Apply… on the Sessions tab opened the sheet on the View tab (WCAG 2.4.3)", async () => {
+    renderView(CYGNUS, "")
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: `${m.project_apply()}…` }))
+    await screen.findByRole("dialog", { name: m.common_apply_named({ name: project(CYGNUS).name }) })
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(screen.getByRole("button", { name: `${m.project_apply()}…` })).toHaveFocus()
+  })
+
+  it("moves focus to Apply… when Cancel ends an Apply waiting for a held file, not to the page body (PREP-FR-18)", async () => {
+    store.setState((s) => ({ ...s, faults: { ...s.faults, viewFileHeld: true } }))
+    renderView(CYGNUS)
+    const plan = applyPlan(store.getState(), project(CYGNUS))
+    const { operationId } = startApply(CYGNUS, { fingerprint: plan.fingerprint, tickedUnplaced: plan.drift.unplaced.map((f) => f.path) })
+    for (let i = 0; i < 200 && applyPhase(store.getState().operations[operationId!]!) !== "waiting"; i++) store.setState((s) => apply.step(s, s.operations[operationId!]!))
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: m.verb_cancel() }))
+    await waitFor(() => expect(screen.queryByRole("heading", { name: m.project_apply_waiting() })).toBeNull())
+    expect(screen.getByRole("button", { name: `${m.project_apply()}…` })).toHaveFocus()
   })
 })
 
