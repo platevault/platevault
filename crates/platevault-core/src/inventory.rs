@@ -257,7 +257,7 @@ pub(crate) enum Entry {
 }
 
 /// One entry by the walker's rules, from its no-follow metadata. The scan
-/// ([`Walk::visit`]) and new-capture discovery ([`classify`]) both decide by
+/// ([`Walk::visit`]) and new-capture discovery ([`entry_of`]) both decide by
 /// it, so discovery counts exactly the files the next scan reads.
 enum Kind {
     /// A link or junction: never followed.
@@ -312,9 +312,11 @@ pub(crate) fn entry_at(root: &Path, stamp: RootStamp, relative: &Path) -> Entry 
 /// [`Entry::Unobserved`]. Each folder above the entry is checked only before
 /// the lookup steps into it, so, as the walker does ([`changed_folder`]), the
 /// root and every folder above the entry are checked again once the lookup
-/// ended: when one of them is no longer the real folder recorded on the way
-/// down (swapped for a link or junction meanwhile, which a later step
-/// followed), the result is not the tree's and is [`Entry::Unobserved`].
+/// ended: when the root no longer carries `stamp` (its folder ID included,
+/// as [`root_stamp`] reads it) or a folder above the entry is no longer the
+/// real folder recorded on the way down (swapped for a link or junction
+/// meanwhile, which a later step followed), the result is not the tree's and
+/// is [`Entry::Unobserved`].
 pub(crate) fn entry_at_with(
     root: &Path,
     stamp: RootStamp,
@@ -350,7 +352,7 @@ pub(crate) fn entry_at_with(
         Entry::Other
     };
     let mut path = root.to_path_buf();
-    let unchanged = still_folder(&path, &stamp.stamp)
+    let unchanged = root_stamp(root) == Some(stamp)
         && relative.components().zip(&above).all(|(part, recorded)| {
             path.push(part);
             still_folder(&path, recorded)

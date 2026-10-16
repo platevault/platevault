@@ -202,6 +202,11 @@ struct Probe {
     /// the metadata of the given path; its error is that read's error, as a
     /// share's brief I/O error is. It can also change the tree mid-lookup.
     before_stat: Mutex<Option<StatHook>>,
+    /// Canonical paths resolved, or failed to.
+    canonicals: AtomicUsize,
+    /// How many of the next canonical paths cannot be resolved, as when a
+    /// linked folder above the root briefly cannot be read.
+    uncanonical: AtomicUsize,
 }
 
 /// A path, and what to do just before its metadata is read.
@@ -288,6 +293,14 @@ impl RootProbe for Probe {
             }
             fs::symlink_metadata(path)
         })
+    }
+
+    fn canonical(&self, root: &Path) -> std::io::Result<PathBuf> {
+        self.canonicals.fetch_add(1, Ordering::SeqCst);
+        if take_one(&self.uncanonical) {
+            return Err(std::io::Error::other("a linked folder above the root did not answer"));
+        }
+        OsProbe.canonical(root)
     }
 }
 
@@ -529,14 +542,19 @@ async fn a_folder_created_while_the_watcher_starts_is_watched_after_the_walk() {
 
     // The start-up walk enters a folder the watcher did not list, so the
     // watcher starts again over it and the walk is redone.
-    eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) == 2).await;
+    eventually("the watcher restarted", || probe.watches.load(Ordering::SeqCst) >= 2).await;
     let counts = count_is(&watch, location.id, 1).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
-    assert_eq!(walks(&watch), 2);
     frame(&root.join("2026-10-15/Ha_002.fits"));
     count_is(&watch, location.id, 2).await;
+    // `FSEvents` may also report the folder's creation, made just before the
+    // first watcher started, to the second one, which restarts once more.
+    // Either way it settles.
     after(&watch, sweeps, 1).await;
-    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), (2, 2), "settled");
+    let settled = (probe.watches.load(Ordering::SeqCst), walks(&watch));
+    assert!(matches!(settled, (2, 2) | (3, 3)), "restarted {settled:?}");
+    after(&watch, sweeps, 2).await;
+    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), settled, "settled");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -871,6 +889,26 @@ async fn a_root_that_could_not_be_checked_is_checked_again_at_the_next_sweep() {
     assert_eq!(probe.validations.load(Ordering::SeqCst), 2, "refused once, then checked again");
 }
 
+/// The root's canonical path cannot be resolved once, as when a linked
+/// folder above it briefly does not answer: it is not watched without it,
+/// since `FSEvents` would name its events by that path, but checked again
+/// and counted at the next sweep.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_whose_canonical_path_fails_is_checked_again_at_the_next_sweep() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("Ha_001.fits"));
+    let probe = Arc::new(Probe::default());
+    probe.uncanonical.store(1, Ordering::SeqCst);
+    let watch = probed(&fx.library, &probe);
+
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    assert_eq!(probe.canonicals.load(Ordering::SeqCst), 2, "failed once, then resolved again");
+    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), (1, 1));
+}
+
 /// A folder the walk cannot list. When it becomes readable no event need
 /// bring its files in (`FSEvents` may report the change of mode, inotify
 /// reports none below a folder it could not watch), so the watchers here
@@ -931,6 +969,33 @@ async fn a_folder_listed_only_in_part_is_walked_once_it_lists_in_full() {
     fs::set_permissions(&night, fs::Permissions::from_mode(0o755)).unwrap();
     let counts = count_is(&watch, location.id, 1).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+}
+
+/// An event names a frame in a folder that lists only in part, whose entries
+/// cannot be `stat`ed: the lookup is unobserved, but the sweep already lists
+/// that folder again, so the event asks for no walk of its own.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unobserved_path_in_a_folder_listed_only_in_part_asks_for_no_walk() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let night = root.join("night");
+    frame(&night.join("Ha_001.fits"));
+    let _unlock = Unlock(&night);
+    fs::set_permissions(&night, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(fs::symlink_metadata(night.join("Ha_001.fits")).is_err(), "needs a user, not root");
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    let watch = probed(&fx.library, &probe);
+    count_is(&watch, location.id, 0).await;
+
+    events.try_send(named(night.join("Ha_001.fits"), ArtifactEventKind::Modified)).unwrap();
+    eventually("the event was looked up", || probe.entries.load(Ordering::SeqCst) == 1).await;
+    after(&watch, sweeps, 2).await;
+    assert_eq!(walks(&watch), 1, "walked again for a path the sweep already covers");
 }
 
 /// A counted folder made unreadable leaves the count, as the next scan
