@@ -1169,6 +1169,8 @@ export type TrashEpisodeKind =
   | "previous-leftovers"
   /** A calibration process's raws after their master registered (P-CAL3). */
   | "calibration-raws"
+  /** A library master's files, every version, moved by Move to Trash once no Project uses it (CAL-FR-17). */
+  | "calibration-master"
   /** PlateVault's own unregistered copy at an adoption's fixed destination, moved after review so the adoption can retry (CAL-FR-06). */
   | "unregistered-copy"
 
