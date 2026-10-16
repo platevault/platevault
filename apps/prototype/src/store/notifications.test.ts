@@ -15,7 +15,7 @@ const notice = (delivery: ReminderNotice["delivery"]): ReminderNotice => ({ deli
 
 describe("reminders in the notification bell (PLAN-AC-15)", () => {
   it("lists a delivered reminder as an unread notice and a missed window in Activity only", () => {
-    recordActivity({ kind: "reminder-missed", title: msg("plan_reminder_missed_closed"), detail: null, operationId: null, href: "/targets?view=planned", reminder: notice("missed") })
+    recordActivity({ kind: "reminder-missed", title: msg("plan_reminder_missed_closed", { name: "M 33" }), detail: null, operationId: null, href: "/targets?view=planned", reminder: notice("missed") })
     recordActivity({ kind: "reminder", title: msg("plan_reminders_gathered", { names: "M 31" }), detail: null, operationId: null, href: "/targets?view=planned", reminder: notice("coalesced") })
     const { result } = renderHook(() => useNotices())
 
@@ -26,7 +26,7 @@ describe("reminders in the notification bell (PLAN-AC-15)", () => {
   })
 
   it("never counts a missed window as unread, even after marking the history read", () => {
-    recordActivity({ kind: "reminder-missed", title: msg("plan_reminder_missed_closed"), detail: null, operationId: null, href: null, reminder: notice("missed") })
+    recordActivity({ kind: "reminder-missed", title: msg("plan_reminder_missed_closed", { name: "M 33" }), detail: null, operationId: null, href: null, reminder: notice("missed") })
     const { result } = renderHook(() => useNotices())
     expect(result.current.unread).toEqual([])
     act(() => markNoticesRead())

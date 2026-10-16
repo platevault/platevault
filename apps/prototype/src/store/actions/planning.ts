@@ -140,8 +140,9 @@ export function checkReminders(launch = false): ReminderDelivery | null {
     const href = plannedHref(nightOf(w))
     recordActivity({
       kind: "reminder-missed",
-      title: msg(check === "startup" ? "plan_reminder_missed_closed" : "plan_reminder_missed_suspended"),
-      detail: msg("plan_reminder_target_detail", { name: nameOf(w), night: nightRef(nightOf(w)), site: site.name }),
+      // The Target in the title keeps each Activity row's name (and its "Actions for …" menu) distinct.
+      title: msg(check === "startup" ? "plan_reminder_missed_closed" : "plan_reminder_missed_suspended", { name: nameOf(w) }),
+      detail: msg("plan_reminder_detail", { night: nightRef(nightOf(w)), site: site.name }),
       operationId: null,
       href,
       reminder: { delivery: "missed", windows: noticeWindows([w]), names: [nameOf(w)], more: 0, href },

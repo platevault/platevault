@@ -93,7 +93,8 @@ describe("start-up and resume reminders (PLAN-AC-15)", () => {
     const entries = reminderEntries()
     const missed = entries.filter((e) => e.kind === "reminder-missed")
     expect(missed).toHaveLength(2)
-    expect(missed.every((e) => say(m, e.title) === "Missed while PlateVault was closed" && e.reminder?.delivery === "missed")).toBe(true)
+    expect(missed.every((e) => e.reminder?.delivery === "missed")).toBe(true)
+    expect(missed.map((e) => say(m, e.title)).sort()).toEqual([a.name, b.name].sort().map((name) => `Missed while PlateVault was closed: ${name}`))
     expect(missed.map((e) => e.reminder?.names[0]).sort()).toEqual([a.name, b.name].sort())
 
     const notices = entries.filter((e) => e.kind === "reminder")
@@ -164,7 +165,7 @@ describe("start-up and resume reminders (PLAN-AC-15)", () => {
     const delivery = checkReminders()
     expect(delivery?.check).toBe("resume")
     expect(delivery?.missed.map((w) => w.targetId).sort()).toEqual([a.id, b.id].sort())
-    expect(reminderEntries().filter((e) => e.kind === "reminder-missed").every((e) => say(m, e.title) === "Missed while PlateVault was suspended")).toBe(true)
+    expect(reminderEntries().filter((e) => e.kind === "reminder-missed").every((e) => say(m, e.title).startsWith("Missed while PlateVault was suspended: "))).toBe(true)
   })
 
   it("does nothing while reminders are off", () => {
