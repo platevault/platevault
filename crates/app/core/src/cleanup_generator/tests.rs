@@ -18,9 +18,9 @@ use contracts_core::protection::{
     PlanProtectionCheckRequest, ProtectionLevel, SourceProtectionSetRequest,
 };
 use persistence_core::Database;
-use persistence_plans::repositories::artifacts::{InsertArtifact, insert_artifact_if_absent};
+use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
 use persistence_plans::repositories::plans as plans_repo;
-use persistence_plans::repositories::projects::{InsertProject, insert_project};
+use persistence_plans::repositories::projects::{insert_project, InsertProject};
 use sqlx::SqlitePool;
 
 async fn setup() -> (Database, EventBus, std::sync::MutexGuard<'static, ()>) {

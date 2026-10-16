@@ -370,9 +370,9 @@ pub(crate) async fn generate_restore_generic(
 mod tests {
     use super::*;
     use persistence_core::Database;
-    use persistence_plans::repositories::artifacts::{InsertArtifact, insert_artifact_if_absent};
+    use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
     use persistence_plans::repositories::plans as plans_repo;
-    use persistence_plans::repositories::projects::{InsertProject, insert_project};
+    use persistence_plans::repositories::projects::{insert_project, InsertProject};
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");
