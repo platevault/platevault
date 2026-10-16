@@ -860,6 +860,16 @@ export const commands = {
 	 */
 	updateStatus: () => typedError<UpdateStatus, ContractError_Serialize>(__TAURI_INVOKE("update_status")),
 	/**
+	 *  `update.offer` — where the Install now and Install on quit offer for the
+	 *  release the last check found was made: the system notification, or the
+	 *  in-app notice. Later changes arrive as `update:offer` events.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateOffer: () => typedError<UpdateOffer, ContractError_Serialize>(__TAURI_INVOKE("update_offer")),
+	/**
 	 *  `update.check_on_startup` — the check at app start, run once per process
 	 *  and only when `automatic` ("Check for updates automatically") is on.
 	 * 
@@ -7130,6 +7140,20 @@ export type NonBlockingSummary = {
 	unprotectedCount: number,
 };
 
+/**
+ *  Where the Install now and Install on quit offer for a release is made
+ *  (astro-plan-c72oo).
+ */
+export type OfferChannel = 
+/**  A system notification carries both buttons. */
+"system" | 
+/**
+ *  The in-app notice carries them: notification permission was denied,
+ *  the notification system shows no buttons, or the notification could
+ *  not be shown.
+ */
+"in-app";
+
 /**  Section-level flags (`onboarding_flags` singleton). */
 export type OnboardingFlagsDto = {
 	orientationDone: boolean,
@@ -10748,6 +10772,13 @@ export type UpdateIngestionSettings = {
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,
 	defaultFilter: string | null,
+};
+
+/**  Where the offer for the release the last check found was made. */
+export type UpdateOffer = {
+	/**  The release offered; `None` until a check has found one. */
+	version: string | null,
+	channel: OfferChannel,
 };
 
 export type UpdateOpticalTrain = {

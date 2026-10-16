@@ -11,11 +11,12 @@
  * modules resolve and are mocked here.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { UpdateStatus } from '@/bindings/index';
+import type { UpdateOffer, UpdateStatus } from '@/bindings/index';
 
 const { mockCommands, mockGetVersion, mockListen } = vi.hoisted(() => ({
   mockCommands: {
     updateStatus: vi.fn(),
+    updateOffer: vi.fn(),
     updateCheckOnStartup: vi.fn(),
     updateCheck: vi.fn(),
     updateInstallNow: vi.fn(),
@@ -33,9 +34,11 @@ import {
   canInstall,
   checkForUpdate,
   getRunningVersion,
+  getUpdateOfferSnapshot,
   getUpdateSnapshot,
   installUpdateNow,
   installUpdateOnQuit,
+  offeredInSystemNotification,
   startUpdateSubscription,
   stopUpdateSubscription,
   subscribeUpdate,
@@ -43,15 +46,20 @@ import {
 import { resetPreferences, setPreference } from './preferences';
 
 const STATUS_EVENT = 'update:status';
+const OFFER_EVENT = 'update:offer';
 
 function status(partial: Partial<UpdateStatus>): UpdateStatus {
   return { phase: 'idle', version: null, body: null, error: null, ...partial };
 }
 
+const NO_OFFER: UpdateOffer = { version: null, channel: 'in-app' };
+
 const ok = <T>(data: T) => Promise.resolve({ status: 'ok' as const, data });
 
 /** The handler the subscription registered for STATUS_EVENT. */
 let push: ((status: UpdateStatus) => void) | null = null;
+/** The handler the subscription registered for OFFER_EVENT. */
+let pushOffer: ((offer: UpdateOffer) => void) | null = null;
 const unlisten = vi.fn();
 
 beforeEach(() => {
@@ -60,13 +68,16 @@ beforeEach(() => {
   delete (window as Window & { __PV_TEST__?: unknown }).__PV_TEST__;
   resetPreferences();
   push = null;
+  pushOffer = null;
   mockListen.mockImplementation(
-    (event: string, handler: (event: { payload: UpdateStatus }) => void) => {
+    (event: string, handler: (event: { payload: unknown }) => void) => {
       if (event === STATUS_EVENT) push = (payload) => handler({ payload });
+      if (event === OFFER_EVENT) pushOffer = (payload) => handler({ payload });
       return Promise.resolve(unlisten);
     },
   );
   mockCommands.updateStatus.mockImplementation(() => ok(status({})));
+  mockCommands.updateOffer.mockImplementation(() => ok(NO_OFFER));
   mockCommands.updateCheckOnStartup.mockImplementation(() => ok(null));
   mockCommands.updateCheck.mockImplementation(() => ok(null));
   mockCommands.updateInstallNow.mockImplementation(() => ok(null));
@@ -78,15 +89,19 @@ afterEach(() => {
 });
 
 describe('startUpdateSubscription', () => {
-  it('listens before it reads the current status, then asks for the startup check', async () => {
+  it('listens before it reads the current status and offer, then asks for the startup check', async () => {
     const order: string[] = [];
-    mockListen.mockImplementation(() => {
-      order.push('listen');
+    mockListen.mockImplementation((event: string) => {
+      order.push(`listen ${event}`);
       return Promise.resolve(unlisten);
     });
     mockCommands.updateStatus.mockImplementation(() => {
       order.push('status');
       return ok(status({ phase: 'available', version: '0.7.0' }));
+    });
+    mockCommands.updateOffer.mockImplementation(() => {
+      order.push('offer');
+      return ok<UpdateOffer>({ version: '0.7.0', channel: 'system' });
     });
     mockCommands.updateCheckOnStartup.mockImplementation(() => {
       order.push('startup check');
@@ -95,10 +110,20 @@ describe('startUpdateSubscription', () => {
 
     await startUpdateSubscription();
 
-    expect(order).toEqual(['listen', 'status', 'startup check']);
+    expect(order).toEqual([
+      `listen ${STATUS_EVENT}`,
+      `listen ${OFFER_EVENT}`,
+      'status',
+      'offer',
+      'startup check',
+    ]);
     expect(getUpdateSnapshot()).toEqual(
       status({ phase: 'available', version: '0.7.0' }),
     );
+    expect(getUpdateOfferSnapshot()).toEqual({
+      version: '0.7.0',
+      channel: 'system',
+    });
   });
 
   it('mirrors every pushed status and notifies subscribers', async () => {
@@ -113,22 +138,53 @@ describe('startUpdateSubscription', () => {
     unsubscribe();
   });
 
+  it('mirrors every pushed offer and notifies subscribers', async () => {
+    await startUpdateSubscription();
+    const seen = vi.fn();
+    const unsubscribe = subscribeUpdate(seen);
+
+    pushOffer?.({ version: '0.7.0', channel: 'system' });
+
+    expect(getUpdateOfferSnapshot()).toEqual({
+      version: '0.7.0',
+      channel: 'system',
+    });
+    expect(seen).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
   it('is idempotent', async () => {
     await startUpdateSubscription();
     await startUpdateSubscription();
 
-    expect(mockListen).toHaveBeenCalledTimes(1);
+    // One listener for the status, one for the offer.
+    expect(mockListen).toHaveBeenCalledTimes(2);
     expect(mockCommands.updateCheckOnStartup).toHaveBeenCalledTimes(1);
   });
 
-  it('stops listening and returns to idle when stopped', async () => {
+  it('stops listening and returns to idle and no offer when stopped', async () => {
     await startUpdateSubscription();
     push?.(status({ phase: 'available', version: '0.7.0' }));
+    pushOffer?.({ version: '0.7.0', channel: 'system' });
 
     stopUpdateSubscription();
 
-    expect(unlisten).toHaveBeenCalledTimes(1);
+    expect(unlisten).toHaveBeenCalledTimes(2);
     expect(getUpdateSnapshot().phase).toBe('idle');
+    expect(getUpdateOfferSnapshot()).toEqual(NO_OFFER);
+  });
+
+  it('does not keep the status listener when the offer listener fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockListen
+      .mockImplementationOnce(() => Promise.resolve(unlisten))
+      .mockImplementationOnce(() => Promise.reject(new Error('no IPC')));
+
+    await startUpdateSubscription();
+
+    expect(unlisten).toHaveBeenCalledTimes(1);
+    expect(mockCommands.updateCheckOnStartup).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   // React StrictMode runs the effect setup → cleanup → setup while the first
@@ -237,6 +293,57 @@ describe('the user choices', () => {
       'installing',
     ] as const) {
       expect(canInstall(status({ phase }))).toBe(false);
+    }
+  });
+});
+
+// astro-plan-c72oo: the in-app notice is the fallback for the system
+// notification's offer.
+describe('offeredInSystemNotification', () => {
+  const available = status({ phase: 'available', version: '0.7.0' });
+
+  it('is true only when the system notification carries this release', () => {
+    expect(
+      offeredInSystemNotification(available, {
+        version: '0.7.0',
+        channel: 'system',
+      }),
+    ).toBe(true);
+  });
+
+  it('leaves the offer in-app when permission was denied or buttons are unsupported', () => {
+    expect(
+      offeredInSystemNotification(available, {
+        version: '0.7.0',
+        channel: 'in-app',
+      }),
+    ).toBe(false);
+    expect(offeredInSystemNotification(available, NO_OFFER)).toBe(false);
+  });
+
+  it('does not hide a release the system notification did not offer', () => {
+    expect(
+      offeredInSystemNotification(available, {
+        version: '0.6.9',
+        channel: 'system',
+      }),
+    ).toBe(false);
+  });
+
+  it('does not hide the phases after a click', () => {
+    for (const phase of [
+      'downloading',
+      'download-failed',
+      'installing',
+      'install-failed',
+      'install-on-quit',
+    ] as const) {
+      expect(
+        offeredInSystemNotification(status({ phase, version: '0.7.0' }), {
+          version: '0.7.0',
+          channel: 'system',
+        }),
+      ).toBe(false);
     }
   });
 });

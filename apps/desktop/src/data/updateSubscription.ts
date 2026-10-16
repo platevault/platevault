@@ -11,9 +11,14 @@
  * choices to the `update_*` commands. Nothing downloads until the user
  * chooses Install now or Install on quit.
  *
- * - `startUpdateSubscription()` listens first, reads the current status,
- *   then asks for the startup check. The backend runs that check once per
- *   process, and only while "Check for updates automatically" is on
+ * It also mirrors where the backend offered a found release
+ * (`update:offer` events, astro-plan-c72oo): when the system notification
+ * carries Install now and Install on quit, the in-app notice leaves the
+ * `available` phase to it (`offeredInSystemNotification`).
+ *
+ * - `startUpdateSubscription()` listens first, reads the current status and
+ *   offer, then asks for the startup check. The backend runs that check once
+ *   per process, and only while "Check for updates automatically" is on
  *   (AppPreferences `checkUpdatesAutomatically`, astro-plan-bzzbp).
  * - `checkForUpdate()` is the manual check; it works with the setting off.
  * - `installUpdateNow()` downloads, verifies, installs and relaunches (on
@@ -21,12 +26,13 @@
  *   downloads and verifies now; the backend installs when the app quits.
  *
  * In mock/test mode (VITE_USE_MOCKS=true) there is no backend: every action
- * is a no-op and the phase stays 'idle'.
+ * is a no-op, the phase stays 'idle' and the offer stays in-app.
  */
 
 import { type IpcResult, unwrap } from '@/api/ipc';
 import {
   commands,
+  type UpdateOffer,
   type UpdatePhase,
   type UpdateStatus,
 } from '@/bindings/index';
@@ -36,6 +42,9 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
 /** Backend → webview status pushes. Mirrors `updater::UPDATE_STATUS_EVENT`. */
 const STATUS_EVENT = 'update:status';
+
+/** Backend → webview offer pushes. Mirrors `updater::UPDATE_OFFER_EVENT`. */
+const OFFER_EVENT = 'update:offer';
 
 // E2E test-injection seam: a journey spec can set this before navigation to
 // seed a specific update phase without a backend updater. Only consulted in
@@ -49,7 +58,7 @@ declare global {
   }
 }
 
-export type { UpdatePhase };
+export type { UpdateOffer, UpdatePhase };
 export type UpdateState = UpdateStatus;
 
 /** Phases from which the user may choose Install now or Install on quit. */
@@ -65,6 +74,21 @@ export function canInstall(state: UpdateState): boolean {
   return INSTALLABLE.has(state.phase);
 }
 
+/**
+ * Whether the system notification carries Install now and Install on quit
+ * for `state`'s release, so the in-app notice need not offer them.
+ */
+export function offeredInSystemNotification(
+  state: UpdateState,
+  offer: UpdateOffer,
+): boolean {
+  return (
+    state.phase === 'available' &&
+    offer.channel === 'system' &&
+    offer.version === state.version
+  );
+}
+
 type Listener = () => void;
 
 const IDLE_STATE: UpdateState = {
@@ -74,26 +98,44 @@ const IDLE_STATE: UpdateState = {
   error: null,
 };
 
+const NO_OFFER: UpdateOffer = { version: null, channel: 'in-app' };
+
 let current: UpdateState = IDLE_STATE;
+let currentOffer: UpdateOffer = NO_OFFER;
 const listeners = new Set<Listener>();
 let subscribed = false;
 /**
  * Bumped by every start and stop. A start that resumes after a later start
  * or a stop (React StrictMode runs setup → cleanup → setup) sees its token
- * is stale and removes its own listener instead of keeping it.
+ * is stale and removes its own listeners instead of keeping them.
  */
 let generation = 0;
 let unlisten: (() => void) | null = null;
 
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
 function setState(next: UpdateState): void {
   current = next;
-  for (const listener of listeners) listener();
+  notify();
+}
+
+function setOffer(next: UpdateOffer): void {
+  currentOffer = next;
+  notify();
 }
 
 export function getUpdateSnapshot(): UpdateState {
   return current;
 }
 
+/** Where the backend offered the release the last check found. */
+export function getUpdateOfferSnapshot(): UpdateOffer {
+  return currentOffer;
+}
+
+/** Called on every status and offer change. */
 export function subscribeUpdate(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -128,8 +170,8 @@ export async function installUpdateOnQuit(): Promise<void> {
 }
 
 /**
- * Start mirroring the backend's update status (idempotent), then ask for the
- * startup check, which honours "Check for updates automatically".
+ * Start mirroring the backend's update status and offer (idempotent), then
+ * ask for the startup check, which honours "Check for updates automatically".
  */
 export async function startUpdateSubscription(): Promise<void> {
   if (subscribed) return;
@@ -142,21 +184,38 @@ export async function startUpdateSubscription(): Promise<void> {
   }
   if (IS_MOCK) return;
 
+  const stops: Array<() => void> = [];
+  const stop = () => {
+    for (const stopOne of stops.splice(0)) stopOne();
+  };
   try {
     // Listen before reading, so no change between the two is lost.
     const { listen } = await import('@tauri-apps/api/event');
-    const stop = await listen<UpdateState>(STATUS_EVENT, (event) => {
-      setState(event.payload);
-    });
+    stops.push(
+      await listen<UpdateState>(STATUS_EVENT, (event) => {
+        setState(event.payload);
+      }),
+    );
+    if (token === generation) {
+      stops.push(
+        await listen<UpdateOffer>(OFFER_EVENT, (event) => {
+          setOffer(event.payload);
+        }),
+      );
+    }
     if (token !== generation) {
       stop();
       return;
     }
     unlisten = stop;
     const status = unwrap(await commands.updateStatus());
+    const offer = unwrap(await commands.updateOffer());
     if (token !== generation) return;
     setState(status);
+    setOffer(offer);
   } catch (err) {
+    // A listener whose sibling failed to register is not kept half-wired.
+    if (unlisten !== stop) stop();
     console.warn('[updateSubscription] subscribing failed:', err);
     return;
   }
@@ -171,6 +230,7 @@ export function stopUpdateSubscription(): void {
   generation += 1;
   unlisten?.();
   unlisten = null;
+  currentOffer = NO_OFFER;
   setState(IDLE_STATE);
 }
 
