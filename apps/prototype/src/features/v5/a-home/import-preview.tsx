@@ -215,21 +215,21 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
     )
   }
   const columns: Column<DestinationGroup>[] = [
-    { id: "folder", header: m.import_column_folder(), rowHeader: true, truncate: true, sortValue: (g) => `${g.route}|${g.relative}`, cell: (g) => `${g.location.displayName}/${g.relative}` },
+    // A light session reads as itself ("6 Oct · OIII · 300 s · framing 2"), a calibration set as its folder; each row's folder sits in its details, so the table fits from 1280 px.
     {
-      id: "session",
-      header: m.session_label(),
-      sortValue: (g) => (g.session ? incomingLabel(m, g) : ""),
-      cell: (g) => {
-        if (!g.session) return "–"
-        return g.session.merged ? (
+      id: "item",
+      header: m.import_destination(),
+      rowHeader: true,
+      truncate: true,
+      sortValue: (g) => `${g.route}|${name(g)}`,
+      cell: (g) =>
+        g.session?.merged ? (
           <>
-            {incomingLabel(m, g)} <Pill tone="info">{m.import_framings_merged({ count: g.session.framings })}</Pill>
+            {name(g)} <Pill tone="info">{m.import_framings_merged({ count: g.session.framings })}</Pill>
           </>
         ) : (
-          incomingLabel(m, g)
-        )
-      },
+          name(g)
+        ),
     },
     {
       id: "target",
@@ -247,10 +247,23 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
         )
       },
     },
-    { id: "type", header: m.import_column_type(), sortValue: (g) => g.type, cell: (g) => (g.items.some((i) => i.typed) ? m.import_type_typed({ type: typeLabel(m, g.type) }) : typeLabel(m, g.type)) },
+    {
+      id: "type",
+      header: m.import_column_type(),
+      sortValue: (g) => g.type,
+      cell: (g) => {
+        const type = g.items.some((i) => i.typed) ? m.import_type_typed({ type: typeLabel(m, g.type) }) : typeLabel(m, g.type)
+        return g.fallbacks.length > 0 ? (
+          <>
+            {type} <Pill tone="warning">{m.import_fallback()}</Pill>
+          </>
+        ) : (
+          type
+        )
+      },
+    },
     { id: "frames", header: m.sessions_column_frames(), align: "right", sortValue: (g) => g.items.length, cell: (g) => formatCount(g.items.length) },
     { id: "size", header: m.import_column_size(), align: "right", sortValue: (g) => g.bytes, cell: (g) => formatBytes(g.bytes) },
-    { id: "into", header: m.import_column_into(), sortValue: (g) => g.route, cell: (g) => (g.fallbacks.length > 0 ? <>{routeLabel(m, g.route)} <Pill tone="warning">{m.import_fallback()}</Pill></> : routeLabel(m, g.route)) },
     { id: "calibration", header: m.nav_calibration(), sortValue: (g) => (g.session ? (incoming(g)?.calibration ? 1 : 0) : (preview.usedFor.get(g.key)?.length ?? 0)), cell: calibration },
   ]
   const actions = (g: DestinationGroup): MenuItem[] => {
@@ -271,6 +284,8 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
   const details = (g: DestinationGroup) => (
     <KeyValueList
       items={[
+        { label: m.import_column_folder(), value: `${g.location.displayName}/${g.relative}` },
+        { label: m.import_column_into(), value: routeLabel(m, g.route) },
         ...(g.fallbacks.length > 0 ? [{ label: m.import_fallback(), value: m.import_fallback_used({ tokens: g.fallbacks.map((f) => `{${f}}`).join(", ") }) }] : []),
         ...(g.session && g.session.unpointed > 0
           ? [
@@ -296,7 +311,7 @@ function GroupsSection({ state, plan, preview, editable }: { state: PrototypeSta
         getRowId={(g) => g.key}
         rowLabel={name}
         rowActions={actions}
-        expand={{ isExpandable: (g) => g.fallbacks.length > 0 || (g.session?.unpointed ?? 0) > 0, render: details }}
+        expand={{ render: details }}
         scroll="none"
         empty={m.import_nothing_to_import()}
       />
