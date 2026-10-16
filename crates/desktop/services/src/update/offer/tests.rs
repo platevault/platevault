@@ -158,12 +158,10 @@ fn offer(version: &str, channel: OfferChannel) -> UpdateOffer {
 /// Wait until the published offer is `expected`.
 async fn published(offers: &Offers, expected: &UpdateOffer) {
     let mut feed = offers.feed();
-    let wait = async {
-        while feed.next().await.expect("the offer feed ended") != *expected {}
-    };
-    tokio::time::timeout(OFFER_DEADLINE * 2, wait)
-        .await
-        .unwrap_or_else(|_| panic!("{expected:?} was not published; the offer is {:?}", offers.current()));
+    let wait = async { while feed.next().await.expect("the offer feed ended") != *expected {} };
+    tokio::time::timeout(OFFER_DEADLINE * 2, wait).await.unwrap_or_else(|_| {
+        panic!("{expected:?} was not published; the offer is {:?}", offers.current())
+    });
 }
 
 /// The offer task over fakes, running.
@@ -367,16 +365,15 @@ fn a_button_identifier_is_a_choice_and_anything_else_a_dismissal() {
 
 #[test]
 fn the_buttons_are_allowed_where_the_in_app_notice_offers_them() {
-    let status = |phase| UpdateStatus {
-        phase,
-        version: Some("0.7.0".to_owned()),
-        body: None,
-        error: None,
-    };
+    let status =
+        |phase| UpdateStatus { phase, version: Some("0.7.0".to_owned()), body: None, error: None };
     for phase in [UpdatePhase::Available, UpdatePhase::DownloadFailed, UpdatePhase::InstallFailed] {
         for action in OfferAction::ALL {
             assert!(allows(&status(phase), "0.7.0", action), "{phase:?} {action:?}");
-            assert!(!allows(&status(phase), "0.6.9", action), "{phase:?} {action:?} for another release");
+            assert!(
+                !allows(&status(phase), "0.6.9", action),
+                "{phase:?} {action:?} for another release"
+            );
         }
     }
     assert!(allows(&status(UpdatePhase::InstallOnQuit), "0.7.0", OfferAction::InstallNow));

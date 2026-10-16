@@ -74,8 +74,11 @@ impl Categories {
 
     /// Every registered category, as the framework takes them.
     fn built(&self) -> Retained<NSSet<UNNotificationCategory>> {
-        let built: Vec<_> =
-            self.0.iter().map(|(identifier, category)| build(identifier, &category.actions)).collect();
+        let built: Vec<_> = self
+            .0
+            .iter()
+            .map(|(identifier, category)| build(identifier, &category.actions))
+            .collect();
         NSSet::from_retained_slice(&built)
     }
 }
@@ -150,7 +153,10 @@ mod tests {
 
     fn with_offer(chosen: Arc<Mutex<Vec<String>>>) -> Categories {
         let mut categories = Categories::default();
-        let button = |identifier: &str| Action { identifier: identifier.to_owned(), title: identifier.to_owned() };
+        let button = |identifier: &str| Action {
+            identifier: identifier.to_owned(),
+            title: identifier.to_owned(),
+        };
         categories.insert(
             OFFER,
             vec![button("install-now"), button("install-on-quit")],
@@ -164,7 +170,10 @@ mod tests {
         // Reminders post with no category, which the framework reports as "".
         let categories = with_offer(Arc::default());
         assert_eq!(categories.presentation(""), UNNotificationPresentationOptions::empty());
-        assert_eq!(Categories::default().presentation(""), UNNotificationPresentationOptions::empty());
+        assert_eq!(
+            Categories::default().presentation(""),
+            UNNotificationPresentationOptions::empty()
+        );
     }
 
     #[test]

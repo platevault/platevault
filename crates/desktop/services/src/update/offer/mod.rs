@@ -173,7 +173,10 @@ pub enum Refusal {
 /// What the offer task handles, in order.
 enum Event {
     Status(UpdateStatus),
-    Response { version: String, response: Response },
+    Response {
+        version: String,
+        response: Response,
+    },
     /// The update status ended with the updater.
     Ended,
 }
@@ -336,8 +339,7 @@ where
     }
 
     async fn on_status(&mut self, status: UpdateStatus) {
-        let available =
-            status.version.clone().filter(|_| status.phase == UpdatePhase::Available);
+        let available = status.version.clone().filter(|_| status.phase == UpdatePhase::Available);
         self.latest = status;
         match available {
             Some(version) if self.offered.as_ref() == Some(&version) => {

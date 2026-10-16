@@ -25,7 +25,9 @@ pub fn show(
     let handle = notification.show().map_err(|error| Refusal::Failed(error.to_string()))?;
     std::thread::Builder::new()
         .name("update-offer".to_owned())
-        .spawn(move || handle.wait_for_action(|identifier| responder.respond_identifier(identifier)))
+        .spawn(move || {
+            handle.wait_for_action(|identifier| responder.respond_identifier(identifier))
+        })
         .map(drop)
         .map_err(|error| Refusal::Failed(error.to_string()))
 }

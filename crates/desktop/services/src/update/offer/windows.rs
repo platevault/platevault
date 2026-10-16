@@ -42,7 +42,9 @@ impl ToastOffer {
 impl SystemOffer for ToastOffer {
     async fn post(&self, text: &OfferText, responder: Responder) -> Result<(), Refusal> {
         let Some(app_id) = &self.app_id else {
-            return Err(Refusal::Failed("no installer registered this copy's AppUserModelID".to_owned()));
+            return Err(Refusal::Failed(
+                "no installer registered this copy's AppUserModelID".to_owned(),
+            ));
         };
         let mut toast = Notification::new();
         toast.app_id(app_id).urgency(Urgency::Critical);
