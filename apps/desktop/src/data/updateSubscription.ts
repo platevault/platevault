@@ -199,16 +199,19 @@ export async function startUpdateSubscription(): Promise<void> {
     for (const stopOne of stops.splice(0)) stopOne();
   };
   try {
-    // Listen before reading, so no change between the two is lost.
+    // Listen before reading, so no change between the two is lost. Each
+    // listener marks that its event arrived, so a snapshot read before the
+    // event does not replace it: every change is pushed, so the last event
+    // is the newest value.
     const { listen } = await import('@tauri-apps/api/event');
+    let statusPushed = false;
+    let offerPushed = false;
     stops.push(
       await listen<UpdateState>(STATUS_EVENT, (event) => {
+        statusPushed = true;
         setState(event.payload);
       }),
     );
-    // Set by an offer event, so an offer snapshot read before the event
-    // does not replace it.
-    let offerPushed = false;
     if (token === generation) {
       stops.push(
         await listen<UpdateOffer>(OFFER_EVENT, (event) => {
@@ -225,7 +228,7 @@ export async function startUpdateSubscription(): Promise<void> {
     const status = unwrap(await commands.updateStatus());
     const offer = unwrap(await commands.updateOffer());
     if (token !== generation) return;
-    setState(status);
+    if (!statusPushed) setState(status);
     if (!offerPushed) setOffer(offer);
   } catch (err) {
     // A listener whose sibling failed to register is not kept half-wired.

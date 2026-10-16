@@ -214,6 +214,30 @@ describe('startUpdateSubscription', () => {
     });
   });
 
+  it('keeps a status event that arrives while the snapshots are read', async () => {
+    let resolveOffer: (offer: UpdateOffer) => void = () => {};
+    mockCommands.updateStatus.mockImplementation(() =>
+      ok(status({ phase: 'available', version: '0.7.0' })),
+    );
+    mockCommands.updateOffer.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOffer = (offer) => resolve({ status: 'ok', data: offer });
+        }),
+    );
+
+    const started = startUpdateSubscription();
+    await vi.waitFor(() =>
+      expect(mockCommands.updateOffer).toHaveBeenCalledTimes(1),
+    );
+    // The status snapshot was taken; then the download started.
+    push?.(status({ phase: 'downloading', version: '0.7.0' }));
+    resolveOffer({ version: '0.7.0', channel: 'in-app' });
+    await started;
+
+    expect(getUpdateSnapshot().phase).toBe('downloading');
+  });
+
   // React StrictMode runs the effect setup → cleanup → setup while the first
   // start is still waiting for `listen()`.
   it('drops the listener of a start that a stop and a new start overtook', async () => {
