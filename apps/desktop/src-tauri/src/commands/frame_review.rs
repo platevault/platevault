@@ -18,8 +18,8 @@ use platevault_core::library::Library;
 use platevault_core::{
     ConfirmedImport, CutoutRequest, DisplayName, FrameDetail, FramePreview, FrameStars, FrameState,
     ImportReview, MeasurementRun, NameTemplate, NativePath, PreviewTile, RegionsRequest,
-    ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort, Revision,
-    RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry, TileRequest,
+    ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort, RowResolution,
+    SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry, TileRequest,
 };
 use serde::Serialize;
 use tauri::State;
@@ -350,27 +350,24 @@ pub async fn pix_display_names(
     library.frame_review().display_names(&assets, &names).await.map_err(fail(None))
 }
 
-/// One P, X, U, Reject for this Project only or Clear Project reject. In an
-/// open run it goes through the run's Review step, moving the draft member in
-/// the same transaction; otherwise it writes the library or Project-only
-/// decision alone. In a run group's Review all it routes through the frame's
-/// panel run, against that run's draft revision.
+/// One P, X or U library-quality mark. It is durable and library-wide; no
+/// run draft or Project-only reject is written (D-W78, D-W79). A context
+/// naming a run or a run group is still checked: a trashed run has no Review
+/// step, and a group's frame must belong to one of its panel runs.
 ///
 /// # Errors
-/// `Conflict` for a stale draft, asset or Project decision; `InvalidInput`
-/// for a run in the Trash, a non-member, a Review all frame no single panel
-/// run holds, or a Retired or Trashed copy; `IdentityConflict` when a P or X
-/// mark finds changed bytes.
+/// `InvalidInput` for a run in the Trash, a Project-only mark or a group frame
+/// no panel run holds; `NotFound` for an unknown run, group or asset;
+/// `IdentityConflict` when a P or X mark finds changed bytes.
 #[tauri::command]
 pub async fn pix_review_mark(
     library: State<'_, Arc<Library>>,
     context: ReviewContext,
-    expected_draft_revision: Revision,
     mark: ReviewMark,
 ) -> Reply<ReviewMarked> {
     library
         .frame_review()
-        .review_mark(context, expected_draft_revision, &mark)
+        .review_mark(context, &mark)
         .await
         .map_err(fail(Some(context_id(context))))
 }
