@@ -10,7 +10,9 @@
 //! handlers' Rust calls, and the platform reminder notifier with the system
 //! clock is attached before any command runs. [`CaptureWatch`] counts new
 //! captures in every online Captures location (a start-up walk and a live
-//! folder watcher each) and is stopped in the exit step. The one window is
+//! folder watcher each) and is stopped in the exit step. On Windows the
+//! removal notices of each watched removable volume reach it, so the drive
+//! can eject, and they end after it stops. The one window is
 //! labelled `library`, so it holds `capabilities/library.json` (plus the dev
 //! bridge grant with `dev-tools`) and none of the legacy `default.json`.
 //! Nothing from the legacy composition root runs here: no `AppState`, legacy
@@ -72,7 +74,8 @@ pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 /// Every startup failure: a refused bridge address, invalid provider
 /// configuration, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
-/// cannot be read when the notifier attaches, or the Tauri runtime itself.
+/// cannot be read when the notifier attaches, a removal notice window that
+/// Windows refuses, or the Tauri runtime itself.
 #[expect(clippy::too_many_lines, reason = "the handler list holds one labelled block per feature")]
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
@@ -352,10 +355,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     ));
     app.manage(library);
     app.manage(captures);
-    app.run(|handle, event| {
+    // Windows ejects a removable Captures drive only once discovery's watcher
+    // lets go of it (astro-plan-ef440).
+    #[cfg(windows)]
+    let mut eject = Some(crate::eject::EjectNotices::start(app.handle())?);
+    app.run(move |handle, event| {
         // No watcher outlives the app: every OS watch is released before exit.
         if let tauri::RunEvent::Exit = event {
             tauri::async_runtime::block_on(handle.state::<CaptureWatch>().shutdown());
+            // Once discovery stopped, so no removal request waits on it.
+            #[cfg(windows)]
+            drop(eject.take());
         }
     });
     Ok(())

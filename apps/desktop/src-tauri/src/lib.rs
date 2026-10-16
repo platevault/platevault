@@ -18,6 +18,10 @@ pub mod updater;
 pub mod watcher;
 
 mod bootstrap;
+// Windows eject support for the library shell's capture watch. Tests build it
+// on every platform for its root selection.
+#[cfg(any(windows, test))]
+mod eject;
 
 use std::sync::Arc;
 

@@ -83,6 +83,11 @@ futures-util = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 platevault_notify_macos = { path = "../../../crates/platevault-notify-macos" }
 
+# astro-plan-ef440: a removable Captures drive ejects while discovery watches
+# it, through the Windows removal notices of the dedicated FFI crate.
+[target.'cfg(windows)'.dependencies]
+platevault_eject_windows = { path = "../../../crates/platevault-eject-windows" }
+
 [dev-dependencies]
 # The `test` feature gates the `tauri::test` module (mock runtime, IPC
 # helpers). Only dev-dependencies pull it in so release builds stay clean.

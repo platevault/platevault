@@ -1525,6 +1525,7 @@ dependencies = [
  "persistence_plans",
  "persistence_targets",
  "platevault_core",
+ "platevault_eject_windows",
  "platevault_notify_macos",
  "semver",
  "serde",
@@ -4861,6 +4862,15 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "winapi-util",
+]
+
+[[package]]
+name = "platevault_eject_windows"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
