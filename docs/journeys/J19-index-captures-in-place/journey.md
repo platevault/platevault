@@ -138,12 +138,12 @@ opens on Home, the control-panel dashboard. Done means:
 
 - **Do:** In Sessions, read the filter counts, then choose the **Needs a Target** filter, then **Not in any Project**. Open Home and read its Pending work section. Choose the status bar's ⚠ counter, then its ℹ counter.
 - **Expect:**
-  - The filters read All 7, Needs a Target 1, Needs review 0, Needs calibration 5, Not in any Project 6 and Trashed 0. Needs review reads 0 because no session has a confirmed Target and rig yet. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17).
-  - **Needs a Target** lists exactly 24 Sep, and its row offers **Choose Target**.
-  - **Not in any Project** lists exactly 12 Sep, 18 Sep, 26 Sep, 28 Sep, 30 Sep and the other-camera session. Each row reads `No Project` and offers **Add to Project**. Its menu reads `No open Project` and offers **Create Project…**.
-  - Home's Pending work reports the same counts: 24 Sep as needing a Target, the five S7a sessions as needing calibration and six as not in a Project, with no session needing review.
-  - The ⚠ counter reads 1 and opens Sessions filtered to Needs a Target.
-  - The ℹ counter opens a menu naming `Sessions · 6` (`6 not in a Project`), which opens Sessions filtered to Not in any Project, and `Calibration · <n>` for the S7a processes waiting to stack.
+  - The filters read All 7, Needs calibration 5 and Trashed 0. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17). The Needs a Target, Needs review and Not in any Project counts aren't asserted here, because they depend on G11.
+  - **Needs a Target** lists 24 Sep, which has no Target, and its row offers **Choose Target**. Whether it also lists the sessions whose Target is associated by pointing is G11's question.
+  - **Not in any Project** doesn't list 24 Sep. Each row it lists reads `No Project` and offers **Add to Project**, and its menu reads `No open Project` and offers **Create Project…**. Which sessions it lists depends on G11.
+  - Home's Pending work reports the same counts as the Sessions filters, with 24 Sep among the sessions needing a Target and the five S7a sessions as needing calibration.
+  - The ⚠ counter opens Sessions filtered to the rows its warnings affect, 24 Sep among them.
+  - The ℹ counter opens a menu naming `Calibration · <n>` for the S7a processes waiting to stack. Whether it also names `Sessions · <n>` for sessions not in a Project depends on G11.
 - **Expect (negative):** Neither filter assigns a session to a Project. No session is suggested to any Project, because no Project exists. Home shows no Sessions box, issues strip or summary line, and no counter opens a list of issues.
 - **Trace:** cross-flow "Missing OBJECT" · LIB-FR-17 · LIB-AC-18 · PRJ-FR-17, PRJ-FR-19 · PRJ-AC-20 · D-W33, D-W43, D-W78, D-W89, D-W92, D-W105 · HARNESS-V5-IA.md §Screens S12 · HARNESS-V5-FEEDBACK-R1.md §Round 5 (P-SB3, Home has no issues strip)
 
@@ -160,7 +160,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
 - **Do:** In 24 Sep's Target box, choose NGC 7000 and click **Confirm Target**. Do the same for 26 Sep. Choose **Confirm rig** with rig `RedCat` for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep.
-- **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label, and 28 Sep's rig no longer reads Needs review. Each of the six sessions reads rig `RedCat` Confirmed. **Needs a Target** now reads 0 with `None need a Target`, and **Not in any Project** lists all seven. The status bar's ⚠ counter disappears.
+- **Expect:** 24 Sep's Target picker opens on `Choose a Target`, with no Target chosen. After each confirmation, the Target box reads NGC 7000 Confirmed next to the original evidence. 26 Sep still displays its `Cygnus field` label, and 28 Sep's rig no longer reads Needs review. Each of the six sessions reads rig `RedCat` Confirmed. **Needs a Target** lists neither 24 nor 26 Sep, **Not in any Project** lists both, and 24 Sep's row no longer carries a Needs a Target warning. Whether 12, 18, 28 and 30 Sep and the other-camera session, whose Target is still associated by pointing, read Needs a Target or Not in any Project depends on G11.
 - **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change. No picker offers or preselects a Target from an OBJECT label.
 - **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · HARNESS-V5-IA.md §Screens S12 (Confirm Target / Confirm rig) · S9b (names the rigs)
 
@@ -214,7 +214,7 @@ opens on Home, the control-panel dashboard. Done means:
 - SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed. Indexing pinned the raw darks and bias on the six RedCat sessions, the Ha flats on 18 Sep and the OIII flats on 30 Sep, so 2 sessions are settled and 5 are not, 26 Sep among them with the OIII flats suggested. After S10a the 26 Sep session's flats are pinned, its calibration is settled, and **Needs calibration** lists 4 sessions.
 - SC6: At the end, 0 frames read Usable (S8).
 - SC7: A failing catalog write never reads Saved (S11).
-- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs a Target 1, Needs review 0, Needs calibration 5, Not in any Project 6 and Trashed 0, Home's Pending work reports the same counts, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target. After S10, **Needs a Target** lists 0 sessions.
+- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs calibration 5 and Trashed 0, Needs a Target lists 24 Sep, and Home's Pending work reports the same counts as the filters. After S10, **Needs a Target** lists neither 24 nor 26 Sep. G11 leaves the other counts open.
 - SC9: With no saved site, 0 windows and 0 Img time values are computed (S6a).
 - SC10: 0 Targets are taken from an OBJECT label: no evidence list names OBJECT at S9, and 24 Sep's picker opens with no Target chosen at S10.
 - SC11: At S15 the status bar reads `2 of 3 online`, and 0 duplicate-copies issues are raised after indexing (S8).
@@ -230,6 +230,7 @@ opens on Home, the control-panel dashboard. Done means:
 - G7: Out of scope for this journey: the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes. Release-build verification evidence is required. Blocks readiness until it exists.
 - G9: Unresolved implementation qualification (carried from G2 unchanged): same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
 - G10: Unresolved product question: Round 6 defines My targets as "yours plus favourites", while HARNESS-V5-IA.md S10 says "the ★ favourites plus open-Project subjects". Neither says whether a Target that only has indexed sessions (NGC 7000 at S6a, associated by pointing, with no ★ and no Project) is "yours". S6a keeps the IA reading: My targets holds no Target, and NGC 7000's search result is added on a click. Blocks readiness.
+- G11: Unresolved product question, open with the owner: does a Target associated by agreeing pointing evidence count as confirmed for Needs a Target, Not in any Project and Ready? The v5 design assumes it does: `sessionTargetId` and `sessionReadiness` in the prototype's `src/domain/derive.ts` treat an associated Target as settled. LIB-FR-17 and LIB-FR-20 say "confirmed Target", and the F4 backend contract computes readiness from `SessionIntake.target_confirmed`, so they need an explicit confirmation. S9a and S10 therefore assert only what holds under either answer and leave the Needs a Target, Needs review and Not in any Project counts open, as SC8 does. J14, J20, J28 and J35 assume the design's answer and depend on it too. Blocks readiness.
 
 ## Delta log
 
