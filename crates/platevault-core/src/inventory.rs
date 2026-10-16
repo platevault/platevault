@@ -427,24 +427,51 @@ fn list_folder(folder: &Rc<Folder>, root: &Stamp) -> std::io::Result<Option<Fold
     Ok(changed_folder(folder).is_none().then_some(listing))
 }
 
+/// `read` applied to `relative`, a folder below `root` (whose stamp is
+/// `stamp`; empty for the root itself), while the root still carries
+/// `stamp` and every folder from the root down to it is a real folder on
+/// the root's volume, checked without following links before the read and
+/// after it: a folder, or one above it, swapped for a link or junction is
+/// never read through. `None` when a check failed.
+fn read_real_folder<T>(
+    root: &Path,
+    stamp: RootStamp,
+    relative: &Path,
+    read: impl FnOnce(&Path) -> T,
+) -> Option<T> {
+    let in_tree = || {
+        root_stamp(root) == Some(stamp)
+            && (relative.as_os_str().is_empty() || entry_at(root, stamp, relative) == Entry::Folder)
+    };
+    if !in_tree() {
+        return None;
+    }
+    let outcome = read(&root.join(relative));
+    in_tree().then_some(outcome)
+}
+
+/// Whether `relative`, a folder below `root` (whose stamp is `stamp`), opens
+/// for listing, by [`read_real_folder`]'s checks: no link is followed.
+pub(crate) fn opens(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
+    read_real_folder(root, stamp, relative, |folder| fs::read_dir(folder).is_ok()) == Some(true)
+}
+
 /// Whether `relative`, a folder below `root` (whose stamp is `stamp`), can
 /// now be listed in full: it opens, and every entry is read and `stat`ed (or
-/// was removed meanwhile). Links are not followed: the folder, and every
-/// folder above it, must be a real folder on the root's volume, before the
-/// read and after it, so a folder swapped for a link is never listed.
+/// was removed meanwhile). [`read_real_folder`] checks it, so a folder
+/// swapped for a link is never listed.
 pub(crate) fn lists_fully(root: &Path, stamp: RootStamp, relative: &Path) -> bool {
-    if entry_at(root, stamp, relative) != Entry::Folder {
-        return false;
-    }
-    let Ok(entries) = fs::read_dir(root.join(relative)) else {
-        return false;
-    };
-    entries.into_iter().all(|entry| {
-        entry.is_ok_and(|entry| match fs::symlink_metadata(entry.path()) {
-            Ok(_) => true,
-            Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+    let listed = read_real_folder(root, stamp, relative, |folder| {
+        fs::read_dir(folder).is_ok_and(|entries| {
+            entries.into_iter().all(|entry| {
+                entry.is_ok_and(|entry| match fs::symlink_metadata(entry.path()) {
+                    Ok(_) => true,
+                    Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+                })
+            })
         })
-    }) && entry_at(root, stamp, relative) == Entry::Folder
+    });
+    listed == Some(true)
 }
 
 /// `SourceUnavailable` unless `root` still carries `stamp`.
@@ -1141,9 +1168,10 @@ mod swapped_folders {
         assert_eq!(frames(&filter, &root), None, "listed through a link above it");
     }
 
-    /// A folder a walk could not list in full is probed again at a sweep;
-    /// once it, or a folder above it, is swapped for a link, the probe does
-    /// not read through the link.
+    /// A folder a walk could not list in full is probed again at a sweep,
+    /// and a folder the watcher refused is checked for whether it opens;
+    /// once it, or a folder above it, is swapped for a link, neither reads
+    /// through the link.
     #[test]
     fn a_folder_swapped_for_a_link_is_never_probed_through_it() {
         let dir = tempfile::tempdir().unwrap();
@@ -1151,11 +1179,35 @@ mod swapped_folders {
         fs::create_dir_all(root.join("night/Ha")).unwrap();
         let stamp = root_stamp(&root).unwrap();
         assert!(lists_fully(&root, stamp, Path::new("night/Ha")));
+        assert!(opens(&root, stamp, Path::new("night/Ha")));
 
         let moved = dir.path().join("moved");
         fs::rename(root.join("night"), &moved).unwrap();
         symlink(&moved, root.join("night")).unwrap();
-        assert!(!lists_fully(&root, stamp, Path::new("night/Ha")), "probed through a parent link");
-        assert!(!lists_fully(&root, stamp, Path::new("night")), "probed through the link");
+        for folder in ["night/Ha", "night"] {
+            let folder = Path::new(folder);
+            assert!(!lists_fully(&root, stamp, folder), "{folder:?} listed through a link");
+            assert!(!opens(&root, stamp, folder), "{folder:?} opened through a link");
+        }
+    }
+
+    /// The root itself swapped for a link to its moved original: nothing
+    /// below it is probed through the link, the root included.
+    #[test]
+    fn nothing_is_probed_through_a_root_swapped_for_a_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Captures");
+        fs::create_dir_all(root.join("night")).unwrap();
+        let stamp = root_stamp(&root).unwrap();
+        assert!(opens(&root, stamp, Path::new("")), "the root itself opens");
+
+        let moved = dir.path().join("moved");
+        fs::rename(&root, &moved).unwrap();
+        symlink(&moved, &root).unwrap();
+        for folder in ["night", ""] {
+            let folder = Path::new(folder);
+            assert!(!lists_fully(&root, stamp, folder), "{folder:?} listed through the root link");
+            assert!(!opens(&root, stamp, folder), "{folder:?} opened through the root link");
+        }
     }
 }

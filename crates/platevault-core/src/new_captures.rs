@@ -32,13 +32,16 @@
 //!   [`Library`] (register, reselect, remap, retire) is applied at once;
 //!   anything else the catalog lists differently, a removal included, at the
 //!   next sweep.
-//! - Every sweep each root is `stat`ed once, without following links. A
-//!   watched root that is gone or no longer the same folder is dropped at
-//!   once, releasing its OS watch. An absent root costs that one `stat` per
-//!   sweep; a present one is checked against its registered identity. A root
-//!   refused because it is not the registered folder is checked again only
-//!   after its `stat` changes, and one whose identity could not be observed
-//!   (a volume query that failed) at the next sweep.
+//! - Every sweep each root is `stat`ed once, without following links, and so
+//!   is the root of each location whose live events a debounce tick checks,
+//!   before any path they name is read. A watched root that is gone or no
+//!   longer the same folder (replaced by a link, say) is dropped at once,
+//!   releasing its OS watch, and nothing below it is read through it. An
+//!   absent root costs that one `stat` per sweep; a present one is checked
+//!   against its registered identity. A root refused because it is not the
+//!   registered folder is checked again only after its `stat` changes, and
+//!   one whose identity could not be observed (a volume query that failed)
+//!   at the next sweep.
 //! - An OS watcher error or lost-events notice, a full event channel, a new
 //!   folder (which the watcher does not cover yet) or a path that is not
 //!   UTF-8 restarts that location's watcher and walks it again. So does a walk
@@ -52,7 +55,9 @@
 //!   now, and walks the location again once one can, since a folder that
 //!   becomes readable raises no event that brings its files in.
 //! - A volume mounted inside a location is neither walked nor watched, and a
-//!   walk never lists through a folder swapped for a link or junction.
+//!   walk never lists through a folder swapped for a link or junction. Nor
+//!   does a sweep's check of a folder no walk could list in full, or of one
+//!   the OS refused to watch.
 //! - A finished scan of a location re-reads the paths the catalog holds there,
 //!   so the files it indexed leave the count.
 //! - Windows ejects a volume only once no process holds a handle on it, and
@@ -339,6 +344,10 @@ pub(crate) trait RootProbe: Send + Sync + 'static {
         stamp: RootStamp,
         canceled: &AtomicBool,
     ) -> Result<Listing, LibraryError>;
+
+    /// What a path a live event named below the root is, by the indexer's
+    /// rules ([`inventory::entry_at`]).
+    fn entry(&self, root: &Path, stamp: RootStamp, relative: &Path) -> Entry;
 }
 
 struct OsProbe;
@@ -363,6 +372,10 @@ impl RootProbe for OsProbe {
         canceled: &AtomicBool,
     ) -> Result<Listing, LibraryError> {
         inventory::frame_paths(root, stamp, canceled)
+    }
+
+    fn entry(&self, root: &Path, stamp: RootStamp, relative: &Path) -> Entry {
+        inventory::entry_at(root, stamp, relative)
     }
 }
 
@@ -980,7 +993,7 @@ impl Run {
         );
         // Named before its watcher holds anything on the volume.
         self.publish_roots();
-        let live = self.attach(&root).await;
+        let live = self.attach(&root, stamp).await;
         if let Some(watched) = self.locations.get_mut(&id) {
             watched.live = live;
         }
@@ -1098,8 +1111,9 @@ impl Run {
         self.stamp(watched.root.clone()).await == Some(stamp)
     }
 
-    /// Watch every real folder below `root` on its volume.
-    async fn attach(&self, root: &Path) -> Option<Live> {
+    /// Watch every real folder below `root`, whose stamp is `stamp`, on its
+    /// volume.
+    async fn attach(&self, root: &Path, stamp: RootStamp) -> Option<Live> {
         // Logged once as the location starts; every sweep walks it instead.
         let Ok(watched) = Utf8PathBuf::from_path_buf(root.to_path_buf()) else {
             return None;
@@ -1108,20 +1122,19 @@ impl Run {
         let probe = Arc::clone(&self.probe);
         let started = tokio::task::spawn_blocking(move || {
             let TreeWatch { events, guard, folders, refused } = probe.watch(&watched, capacity)?;
-            let folders = folders
-                .iter()
-                .filter_map(|folder| folder.strip_prefix(&watched).ok())
-                .map(Path::to_path_buf)
-                .collect();
+            let relative =
+                |folder: &PathBuf| folder.strip_prefix(&watched).ok().map(Path::to_path_buf);
+            let folders = folders.iter().filter_map(relative).collect();
             // The walk skips a folder it cannot list, as a scan does, so the
-            // watcher misses nothing the count holds there.
-            let refused_count = refused.len();
+            // watcher misses nothing the count holds there. Whether it opens
+            // is checked without following links: a refused folder swapped
+            // for one is no folder of the tree, and no walk lists it.
             let unlisted: Vec<PathBuf> = refused
-                .into_iter()
-                .filter(|folder| std::fs::read_dir(folder).is_err())
-                .filter_map(|folder| folder.strip_prefix(&watched).ok().map(Path::to_path_buf))
+                .iter()
+                .filter_map(relative)
+                .filter(|folder| !inventory::opens(watched.as_std_path(), stamp, folder))
                 .collect();
-            let complete = unlisted.len() == refused_count;
+            let complete = unlisted.len() == refused.len();
             Ok((events, guard, folders, complete, unlisted))
         })
         .await
@@ -1233,8 +1246,11 @@ impl Run {
             }
         }
         for (id, root_touched, touched) in queued {
-            self.recheck(id, touched).await;
-            if root_touched && !self.unchanged(id).await {
+            // `recheck` checks the root before any path below it; one that
+            // only an event about the root named is checked here.
+            if !touched.is_empty() {
+                self.recheck(id, touched).await;
+            } else if root_touched && !self.unchanged(id).await {
                 self.go_offline(id);
                 continue;
             }
@@ -1253,8 +1269,10 @@ impl Run {
     }
 
     /// Bring a location's count up to date for paths live events named, each
-    /// read on a blocking thread. Checks that were interrupted are redone by a
-    /// walk, as events the OS lost are.
+    /// read on a blocking thread once the root was checked there: a root that
+    /// is no longer the folder its watch started on (replaced by a link, say)
+    /// takes the location offline, and no path below it is read. Checks that
+    /// were interrupted are redone by a walk, as events the OS lost are.
     async fn recheck(&mut self, id: Uuid, touched: HashSet<PathBuf>) {
         if touched.is_empty() {
             return;
@@ -1263,22 +1281,29 @@ impl Run {
             return;
         };
         let (root, stamp) = (watched.root.clone(), watched.stamp);
+        let probe = Arc::clone(&self.probe);
         let entries = tokio::task::spawn_blocking(move || {
-            touched
-                .into_iter()
-                .map(|relative| {
-                    let entry = inventory::entry_at(&root, stamp, &relative);
-                    (relative, entry)
-                })
-                .collect::<Vec<_>>()
+            (probe.stamp(&root) == Some(stamp)).then(|| {
+                touched
+                    .into_iter()
+                    .map(|relative| {
+                        let entry = probe.entry(&root, stamp, &relative);
+                        (relative, entry)
+                    })
+                    .collect::<Vec<_>>()
+            })
         })
         .await;
+        if matches!(entries, Ok(None)) {
+            self.go_offline(id);
+            return;
+        }
         let Some(watched) = self.locations.get_mut(&id) else {
             return;
         };
         match entries {
             Ok(entries) => {
-                for (relative, entry) in &entries {
+                for (relative, entry) in entries.iter().flatten() {
                     watched.recheck(relative, *entry);
                 }
             }
@@ -1302,10 +1327,12 @@ impl Run {
         // The old OS watch closes, off the runtime, as the new folder set
         // registers.
         self.unwatch(id, live);
-        let Some(root) = self.locations.get(&id).map(|watched| watched.root.clone()) else {
+        let Some((root, stamp)) =
+            self.locations.get(&id).map(|watched| (watched.root.clone(), watched.stamp))
+        else {
             return;
         };
-        let live = self.attach(&root).await;
+        let live = self.attach(&root, stamp).await;
         if let Some(watched) = self.locations.get_mut(&id) {
             watched.live = live;
         }

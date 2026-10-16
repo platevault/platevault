@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use camino::Utf8Path;
-use fs_inventory::artifact_watcher::TreeWatch;
+use camino::{Utf8Path, Utf8PathBuf};
+use fs_inventory::artifact_watcher::{ArtifactEventKind, ArtifactFileEvent, TreeWatch};
 use uuid::Uuid;
 
 use super::{
@@ -193,6 +193,11 @@ struct Probe {
     /// Whether the watchers it starts deliver no event while they watch, as
     /// when a folder becomes readable without one.
     deaf: AtomicBool,
+    /// Events the test sends, delivered by the next watcher it starts in
+    /// place of the OS's.
+    feed: Mutex<Option<tokio::sync::mpsc::Receiver<ArtifactFileEvent>>>,
+    /// How many paths that live events named were read below a root.
+    entries: AtomicUsize,
 }
 
 /// Take one from `counter` unless it is zero.
@@ -248,6 +253,9 @@ impl RootProbe for Probe {
             // The watcher still holds its folders; its events go nowhere.
             started.events = tokio::sync::mpsc::channel(1).1;
         }
+        if let Some(fed) = self.feed.lock().unwrap().take() {
+            started.events = fed;
+        }
         Ok(started)
     }
 
@@ -259,6 +267,11 @@ impl RootProbe for Probe {
     ) -> Result<Listing, LibraryError> {
         self.list_gate.pass();
         OsProbe.list(root, stamp, canceled)
+    }
+
+    fn entry(&self, root: &Path, stamp: RootStamp, relative: &Path) -> Entry {
+        self.entries.fetch_add(1, Ordering::SeqCst);
+        OsProbe.entry(root, stamp, relative)
     }
 }
 
@@ -1236,6 +1249,65 @@ async fn a_link_in_place_of_a_counted_folder_forgets_the_frames_below_it() {
     std::os::unix::fs::symlink(&elsewhere, root.join("night")).unwrap();
     let counts = count_is(&watch, location.id, 0).await;
     assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+}
+
+/// The root is replaced by a link to another tree while live events name it
+/// and a path below it, as the root's own watch reports the move: the
+/// location goes offline, and no path below the replaced root is read
+/// through the link.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_replaced_by_a_link_is_never_read_through() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    frame(&root.join("night/Ha_001.fits"));
+    let (events, fed) = tokio::sync::mpsc::channel(16);
+    let probe = Arc::new(Probe::default());
+    *probe.feed.lock().unwrap() = Some(fed);
+    // No sweep after the start: only the events find the replaced root.
+    let settings = Settings { sweep: Duration::from_secs(3600), ..FAST };
+    let probe_dyn = Arc::clone(&probe) as Arc<dyn RootProbe>;
+    let watch = CaptureWatch::start_with(&fx.library, settings, probe_dyn);
+    count_is(&watch, location.id, 1).await;
+
+    let elsewhere = fx.base.join("elsewhere");
+    frame(&elsewhere.join("night/Ha_002.fits"));
+    fs::rename(&root, fx.base.join("moved")).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &root).unwrap();
+    let named = |path: PathBuf, kind| ArtifactFileEvent {
+        path: Utf8PathBuf::from_path_buf(path).unwrap(),
+        kind,
+    };
+    events.try_send(named(root.join("night/Ha_002.fits"), ArtifactEventKind::Created)).unwrap();
+    events.try_send(named(root.clone(), ArtifactEventKind::Modified)).unwrap();
+
+    until(&watch, <[NewCaptureCount]>::is_empty).await;
+    assert_eq!(probe.entries.load(Ordering::SeqCst), 0, "a path was read through the root's link");
+}
+
+/// A folder the OS refused to watch was swapped for a link to a readable
+/// folder before discovery checked whether it opens: it is no folder of the
+/// tree, and no walk lists it, so the watcher stays live and is not
+/// restarted for it.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_refused_folder_swapped_for_a_link_is_not_opened_through_it() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let elsewhere = fx.base.join("elsewhere");
+    frame(&elsewhere.join("Ha_901.fits"));
+    std::os::unix::fs::symlink(&elsewhere, root.join("night")).unwrap();
+    let probe = Arc::new(Probe::default());
+    *probe.refused.lock().unwrap() = Some(root.join("night"));
+    let watch = probed(&fx.library, &probe);
+
+    let counts = count_is(&watch, location.id, 0).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    after(&watch, sweeps, 2).await;
+    let started = (probe.watches.load(Ordering::SeqCst), walks(&watch));
+    assert_eq!(started, (1, 1), "restarted for a folder only a link reaches");
 }
 
 /// A folder holding counted frames moved out, and a frame took its name
