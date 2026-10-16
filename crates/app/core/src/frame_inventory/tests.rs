@@ -107,6 +107,8 @@ async fn reconcile_run_backfills_zero_size_and_reports_missing() {
     assert_eq!(resp.present, 1);
     assert_eq!(resp.newly_missing, 1);
     assert_eq!(resp.size_backfilled, 1);
+    assert_eq!((resp.unknown, resp.incomplete), (0, false), "the whole root was readable");
+    assert_eq!(resp.unreadable_paths, Vec::<String>::new());
 
     let (size, state): (i64, String) =
         sqlx::query_as("SELECT size_bytes, state FROM file_record WHERE relative_path = ?")
@@ -461,4 +463,87 @@ async fn relink_unknown_frame_id_returns_frame_not_found() {
     };
     let err = relink_frame(db.pool(), &bus, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::FrameNotFound);
+}
+
+// ── astro-plan-5r71: an unreadable folder is unknown, never absent ────────────
+
+/// Regression: a reconcile pass marked every frame below a folder it could
+/// not read (mode 000) or stat into (mode 644) missing and emitted
+/// `frame.missing` for it, as if the user had deleted it.
+#[cfg(unix)]
+#[tokio::test]
+async fn reconcile_run_leaves_frames_below_unreadable_folders_unchanged() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = tempfile::tempdir().unwrap();
+    for folder in ["locked", "listable", "readable"] {
+        std::fs::create_dir_all(dir.path().join(folder)).unwrap();
+        std::fs::write(dir.path().join(folder).join("light.fits"), vec![0u8; 64]).unwrap();
+    }
+    let db = test_db().await;
+    let pool = db.pool();
+    insert_root(pool, "root-1", dir.path().to_str().unwrap()).await;
+    let bus = audit::bus::EventBus::with_pool(pool.clone());
+    let record = |path: &'static str, size: i64| {
+        upsert_frame_record(pool, "root-1", path, size, "t0", "classified")
+    };
+    let locked = record("locked/light.fits", 64).await.unwrap();
+    let listable = record("listable/light.fits", 64).await.unwrap();
+    let readable = record("readable/light.fits", 0).await.unwrap();
+    let gone = record("readable/gone.fits", 64).await.unwrap();
+    let members = [locked.as_str(), listable.as_str(), readable.as_str(), gone.as_str()];
+    insert_acquisition_session(pool, "sess-1", &members).await;
+
+    let mode = |folder: &str, mode: u32| {
+        std::fs::set_permissions(dir.path().join(folder), std::fs::Permissions::from_mode(mode))
+            .unwrap();
+    };
+    mode("locked", 0o000);
+    mode("listable", 0o644);
+    // Root ignores the mode bits; there is nothing to prove then.
+    let enforced = std::fs::read_dir(dir.path().join("locked")).is_err()
+        && std::fs::symlink_metadata(dir.path().join("listable/light.fits")).is_err();
+    let req = InventoryReconcileRunRequest {
+        root_id: "root-1".to_owned(),
+        reason: ReconcileReason::Scheduled,
+    };
+    let resp = run_reconcile(pool, &bus, &req).await;
+    mode("locked", 0o755);
+    mode("listable", 0o755);
+    if !enforced {
+        return;
+    }
+    let resp = resp.unwrap();
+
+    assert_eq!(resp.newly_missing, 1, "only the frame absent from a readable folder");
+    assert_eq!(resp.present, 1);
+    assert_eq!(resp.size_backfilled, 1, "readable siblings still reconcile");
+    assert_eq!(resp.unknown, 2);
+    assert!(resp.incomplete);
+    assert_eq!(resp.unreadable_paths, ["listable/light.fits", "locked"]);
+    let state = |id: String| async move {
+        sqlx::query_scalar::<_, String>("SELECT state FROM file_record WHERE id = ?")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(state(locked.clone()).await, "classified");
+    assert_eq!(state(listable.clone()).await, "classified");
+    assert_eq!(state(gone.clone()).await, "missing");
+
+    let missing_events: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM events WHERE topic = 'frame.missing'")
+            .fetch_all(pool)
+            .await
+            .unwrap();
+    assert_eq!(missing_events.len(), 1, "{missing_events:?}");
+    assert!(missing_events[0].contains(&gone));
+
+    let frame_ids: String =
+        sqlx::query_scalar("SELECT frame_ids FROM acquisition_session WHERE id = 'sess-1'")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(serde_json::from_str::<Vec<String>>(&frame_ids).unwrap(), members);
 }

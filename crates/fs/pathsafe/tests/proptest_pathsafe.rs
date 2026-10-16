@@ -9,7 +9,8 @@
 //! 2. `real_dirs_under` on a real tempdir always includes the root when root
 //!    is not a link — containment invariant (every returned path starts with
 //!    the root prefix).
-//! 3. `real_files_under` containment: every returned path starts with root.
+//! 3. `real_files_under_reporting` containment: every returned path starts
+//!    with root, and a fully readable tree reports nothing unreadable.
 //! 4. `real_dirs_under(root, false)` never returns a path outside root
 //!    (anti-traversal invariant — result set is root-contained).
 //! 5. `real_dirs_under` with `follow_symlinks=false` is idempotent: calling it
@@ -19,7 +20,7 @@
 
 use std::path::Path;
 
-use fs_pathsafe::{is_link_or_junction, real_dirs_under, real_files_under};
+use fs_pathsafe::{is_link_or_junction, real_dirs_under, real_files_under_reporting};
 use proptest::prelude::*;
 
 // ── Invariant 1: no panic on arbitrary path strings ────────────────────────
@@ -111,21 +112,23 @@ proptest! {
     }
 }
 
-// ── Invariant 3: real_files_under containment ─────────────────────────────
+// ── Invariant 3: real_files_under_reporting containment ───────────────────
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
-    /// Every path returned by `real_files_under(root, false)` must start with
-    /// `root` and refer to an actual file.
+    /// Every path returned by `real_files_under_reporting(root, false)` must
+    /// start with `root` and refer to an actual file, and a fully readable
+    /// tree has no unreadable path.
     #[test]
-    fn real_files_under_containment(depth in 0u8..=2, n_files in 0usize..=3) {
+    fn real_files_under_reporting_containment(depth in 0u8..=2, n_files in 0usize..=3) {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_path_buf();
         build_nested_dirs(&root, depth);
         write_files(&root, n_files);
 
-        let files = real_files_under(&root, false);
+        let (files, unreadable) = real_files_under_reporting(&root, false);
+        prop_assert!(unreadable.is_empty(), "readable tree reported {unreadable:?}");
 
         for f in &files {
             prop_assert!(
@@ -163,26 +166,27 @@ proptest! {
     }
 }
 
-// ── Invariant: real_files_under is idempotent ─────────────────────────────
+// ── Invariant: real_files_under_reporting is idempotent ───────────────────
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
-    /// `real_files_under(root, false)` must return the same set on repeated calls.
+    /// `real_files_under_reporting(root, false)` must return the same files on
+    /// repeated calls.
     #[test]
-    fn real_files_under_is_idempotent(depth in 0u8..=2, n_files in 0usize..=3) {
+    fn real_files_under_reporting_is_idempotent(depth in 0u8..=2, n_files in 0usize..=3) {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().to_path_buf();
         build_nested_dirs(&root, depth);
         write_files(&root, n_files);
 
-        let mut first = real_files_under(&root, false);
-        let mut second = real_files_under(&root, false);
+        let mut first = real_files_under_reporting(&root, false).0;
+        let mut second = real_files_under_reporting(&root, false).0;
 
         first.sort();
         second.sort();
 
-        prop_assert_eq!(first, second, "real_files_under returned different results on second call");
+        prop_assert_eq!(first, second, "real_files_under_reporting returned different files on second call");
     }
 }
 

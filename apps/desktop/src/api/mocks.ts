@@ -2973,6 +2973,9 @@ const mockHandlers = {
       newlyMissing: missing.length,
       recovered: 0,
       sizeBackfilled: 0,
+      unknown: 0,
+      incomplete: false,
+      unreadablePaths: [],
       progressPct: 100,
     };
   },

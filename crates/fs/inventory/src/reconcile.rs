@@ -15,19 +15,23 @@
 //! is the walk + diff primitive those triggers will call into.
 //!
 //! Symlink/junction gating (spec 048 T004/R6) is applied via
-//! [`fs_pathsafe::real_files_under`] so a linked subtree is never
+//! [`fs_pathsafe::real_files_under_reporting`] so a linked subtree is never
 //! traversed unless the root has explicitly enabled it.
 //!
 //! Because a gated or unreachable root yields an *empty* disk listing, the
 //! pass first proves the root is walkable via [`fs_pathsafe::probe_root`] and
 //! aborts with [`RootUnavailable`] otherwise. Without that guard an unmounted
 //! drive reads as "every frame deleted".
+//!
+//! The same holds for any part of the root the walk cannot read. A frame
+//! below such a path is [`FrameOutcome::Unknown`], never `Missing`, and the
+//! report names the path in [`ReconcileReport::unreadable_paths`].
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 pub use fs_pathsafe::RootUnavailable;
-use fs_pathsafe::{probe_root, real_files_under};
+use fs_pathsafe::{probe_root, real_files_under_reporting, relative_wire_path};
 
 /// One inventoried frame's identity + expected size, as recorded in
 /// `file_record` for the root being reconciled.
@@ -54,6 +58,10 @@ pub enum FrameOutcome {
     /// how to apply this per the root's `reconcile.mode` (US2 T021) — this
     /// module only reports the fact.
     Missing,
+    /// Presence could not be determined: the frame is at or below a path the
+    /// walk could not read. The caller must leave the record as it is,
+    /// because an unreadable path is not evidence that a frame was deleted.
+    Unknown,
 }
 
 /// One row's outcome, paired back with its `file_record.id` for the caller.
@@ -68,6 +76,10 @@ pub struct FrameReconcileEntry {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReconcileReport {
     pub entries: Vec<FrameReconcileEntry>,
+    /// Root-relative, forward-slash paths the walk could not read, sorted and
+    /// deduplicated; `""` is the root itself. Each covers everything below
+    /// it. Empty when the walk saw the whole root.
+    pub unreadable_paths: Vec<String>,
 }
 
 impl ReconcileReport {
@@ -83,13 +95,19 @@ impl ReconcileReport {
         self.entries.iter().filter(|e| matches!(e.outcome, FrameOutcome::Missing))
     }
 
+    /// Entries whose presence the pass could not determine.
+    #[must_use = "iterate the returned entries"]
+    pub fn unknown(&self) -> impl Iterator<Item = &FrameReconcileEntry> {
+        self.entries.iter().filter(|e| matches!(e.outcome, FrameOutcome::Unknown))
+    }
+
     /// Present entries whose real on-disk size differs from what was
     /// recorded — the backfill/correction set (spec 048 FR-006, T015).
     #[must_use = "iterate the returned corrections"]
     pub fn size_corrections(&self) -> impl Iterator<Item = (&FrameReconcileEntry, i64)> {
         self.entries.iter().filter_map(|e| match e.outcome {
             FrameOutcome::Present { real_size_bytes } => Some((e, real_size_bytes)),
-            FrameOutcome::Missing => None,
+            FrameOutcome::Missing | FrameOutcome::Unknown => None,
         })
     }
 }
@@ -98,7 +116,7 @@ impl ReconcileReport {
 /// against disk.
 ///
 /// This function performs **read-only** filesystem access (`stat`/`readdir`
-/// via [`fs_pathsafe::real_files_under`]) and never mutates a file.
+/// via [`fs_pathsafe::real_files_under_reporting`]) and never mutates a file.
 /// Symlinked/junction subtrees are never traversed unless
 /// `follow_symlinks` is `true` for this root (spec 048 R6/FR-017).
 ///
@@ -106,6 +124,12 @@ impl ReconcileReport {
 /// auto-followed (spec 048 R3/FR-012a): it is reported `Missing` at its old
 /// path, exactly like a deleted frame. The file at its new path is simply
 /// not inventoried by this pass (inventory is only written at plan apply).
+///
+/// A frame at or below a path the walk could not read (an unreadable folder,
+/// a folder without search permission, an entry whose metadata cannot be
+/// read, a listing that failed part-way) is [`FrameOutcome::Unknown`], and
+/// the path is reported in [`ReconcileReport::unreadable_paths`]. A frame
+/// absent from a folder the walk read completely is `Missing`.
 ///
 /// # Errors
 ///
@@ -123,38 +147,41 @@ pub fn reconcile_root(
 ) -> Result<ReconcileReport, RootUnavailable> {
     probe_root(root_path, follow_symlinks)?;
 
+    let (files, unreadable) = real_files_under_reporting(root_path, follow_symlinks);
     // Hashed rather than scanned per frame: a linear `any()` here made the pass
     // O(frames x files) (10k frames took ~7.5s). `Path`'s `Hash` and `PartialEq`
     // are both defined component-wise, so set membership and `==` agree on the
     // Windows casing/separator normalisation `components()` performs.
-    let disk_files: HashSet<PathBuf> =
-        real_files_under(root_path, follow_symlinks).into_iter().collect();
+    let disk_files: HashSet<PathBuf> = files.into_iter().collect();
+    let unknown: HashSet<&Path> = unreadable.iter().map(PathBuf::as_path).collect();
+    let mut unreadable_paths: BTreeSet<String> =
+        unreadable.iter().map(|path| relative_wire_path(root_path, path)).collect();
 
-    let entries = known
-        .iter()
-        .map(|frame| {
-            let candidate = root_path.join(&frame.relative_path);
-            let outcome = if disk_files.contains(&candidate) {
-                let real_size_bytes =
-                    std::fs::metadata(&candidate).map(|m| i64::try_from(m.len()).unwrap_or(0));
-                match real_size_bytes {
-                    Ok(size) => FrameOutcome::Present { real_size_bytes: size },
-                    // Race: file vanished between the directory listing and
-                    // the stat call — treat as missing rather than guessing.
-                    Err(_) => FrameOutcome::Missing,
-                }
+    let mut entries = Vec::with_capacity(known.len());
+    for frame in known {
+        let candidate = root_path.join(&frame.relative_path);
+        let outcome = if disk_files.contains(&candidate) {
+            if let Ok(meta) = std::fs::metadata(&candidate) {
+                FrameOutcome::Present { real_size_bytes: i64::try_from(meta.len()).unwrap_or(0) }
             } else {
-                FrameOutcome::Missing
-            };
-            FrameReconcileEntry {
-                id: frame.id.clone(),
-                relative_path: frame.relative_path.clone(),
-                outcome,
+                // Listed by the walk, but no longer readable: it may have
+                // vanished or lost permission since. Neither is evidence.
+                unreadable_paths.insert(relative_wire_path(root_path, &candidate));
+                FrameOutcome::Unknown
             }
-        })
-        .collect();
+        } else if !unknown.is_empty() && candidate.ancestors().any(|path| unknown.contains(path)) {
+            FrameOutcome::Unknown
+        } else {
+            FrameOutcome::Missing
+        };
+        entries.push(FrameReconcileEntry {
+            id: frame.id.clone(),
+            relative_path: frame.relative_path.clone(),
+            outcome,
+        });
+    }
 
-    Ok(ReconcileReport { entries })
+    Ok(ReconcileReport { entries, unreadable_paths: unreadable_paths.into_iter().collect() })
 }
 
 #[cfg(test)]
@@ -185,7 +212,7 @@ mod tests {
     /// component-wise `Path` comparison it replaced while `Hash` and
     /// `PartialEq` stay consistent across redundant separators and `.`
     /// segments. A recorded `relative_path` carrying either must still match
-    /// the plainly-joined path `real_files_under` yields.
+    /// the plainly-joined path `real_files_under_reporting` yields.
     #[test]
     fn redundant_separators_and_cur_dir_segments_still_match_on_disk() {
         let dir = tempfile::tempdir().unwrap();
@@ -294,7 +321,7 @@ mod tests {
         symlink(&real_root, &linked_root).unwrap();
 
         // `Path::is_dir()` follows the link and would accept this root, but
-        // `real_files_under` refuses to descend it and returns nothing.
+        // `real_files_under_reporting` refuses to descend it and returns nothing.
         assert!(linked_root.is_dir());
         let err =
             reconcile_root(&linked_root, &[known("f1", "light_001.fits", 4)], false).unwrap_err();
@@ -325,5 +352,67 @@ mod tests {
             reconcile_root(&scan_root, &[known("f1", "linked/flat_001.fits", 4)], false).unwrap();
 
         assert_eq!(report.entries[0].outcome, FrameOutcome::Missing);
+    }
+
+    /// Regression (astro-plan-5r71): a frame below a folder the walk cannot
+    /// read (mode 000), or cannot stat into (mode 644: names listed, no
+    /// search permission), was reported Missing, which marks it deleted.
+    #[cfg(unix)]
+    #[test]
+    fn frames_below_unreadable_folders_are_unknown_not_missing() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        for folder in ["locked", "listable", "readable"] {
+            std::fs::create_dir_all(dir.path().join(folder)).unwrap();
+            std::fs::write(dir.path().join(folder).join("light.fits"), vec![0u8; 64]).unwrap();
+        }
+        let mode = |folder: &str, mode: u32| {
+            std::fs::set_permissions(
+                dir.path().join(folder),
+                std::fs::Permissions::from_mode(mode),
+            )
+            .unwrap();
+        };
+        mode("locked", 0o000);
+        mode("listable", 0o644);
+        // Root ignores the mode bits; there is nothing to prove then.
+        let enforced = std::fs::read_dir(dir.path().join("locked")).is_err()
+            && std::fs::symlink_metadata(dir.path().join("listable/light.fits")).is_err();
+
+        let report = reconcile_root(
+            dir.path(),
+            &[
+                known("f1", "locked/light.fits", 64),
+                known("f2", "listable/light.fits", 64),
+                known("f3", "readable/light.fits", 64),
+                known("f4", "readable/gone.fits", 64),
+                // Absent too, but nobody can tell: unknown, not absent.
+                known("f5", "locked/sub/never-there.fits", 64),
+                // The mode-644 listing names every entry, so this absence is real.
+                known("f6", "listable/never-there.fits", 64),
+            ],
+            false,
+        );
+        mode("locked", 0o755);
+        mode("listable", 0o755);
+        if !enforced {
+            return;
+        }
+
+        let report = report.unwrap();
+        let outcomes: Vec<_> = report.entries.iter().map(|e| e.outcome.clone()).collect();
+        assert_eq!(
+            outcomes,
+            [
+                FrameOutcome::Unknown,
+                FrameOutcome::Unknown,
+                FrameOutcome::Present { real_size_bytes: 64 },
+                FrameOutcome::Missing,
+                FrameOutcome::Unknown,
+                FrameOutcome::Missing,
+            ]
+        );
+        assert_eq!(report.unreadable_paths, ["listable/light.fits", "locked"]);
     }
 }

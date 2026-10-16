@@ -472,3 +472,111 @@ fn exceeds_windows_long_path_limit_is_true_at_and_above_260() {
     assert!(exceeds_windows_long_path_limit(&"a".repeat(260)));
     assert!(exceeds_windows_long_path_limit(&"a".repeat(261)));
 }
+
+// ── astro-plan-g2co: the link-capability probe never touches user entries ──
+
+/// Seed project `p1` at `<dir>/proj` with one selected light frame stored in
+/// root `root1` at `dir`, and return the project path.
+async fn seed_one_light_project(db: &Database, dir: &std::path::Path) -> String {
+    let root = dir.to_str().unwrap();
+    let project_path = format!("{root}/proj");
+    std::fs::create_dir_all(&project_path).unwrap();
+    insert_project(db, "p1", "ready", &project_path).await;
+    insert_root(db, "root1", root).await;
+    std::fs::write(format!("{root}/light1.fits"), b"x").unwrap();
+    insert_file_record(db, "frame1", "root1", "light1.fits").await;
+    insert_acquisition_session(db, "sess1", "root1", &["frame1"]).await;
+    link_project_source(db, "p1", "sess1").await;
+    project_path
+}
+
+/// Every entry directly in `dir` with its link target or file bytes, read
+/// without following a link.
+fn snapshot(dir: &str) -> Vec<(String, Option<std::path::PathBuf>, Option<Vec<u8>>)> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let meta = std::fs::symlink_metadata(&path).unwrap();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if meta.file_type().is_symlink() {
+                (name, Some(std::fs::read_link(&path).unwrap()), None)
+            } else if meta.is_file() {
+                (name, None, Some(std::fs::read(&path).unwrap()))
+            } else {
+                (name, None, None)
+            }
+        })
+        .collect();
+    entries.sort();
+    entries
+}
+
+/// Regression: generation probed fixed names in the project folder, which
+/// truncated a symlinked user file and deleted user entries before any plan
+/// was approved.
+#[cfg(unix)]
+#[tokio::test]
+async fn generation_leaves_entries_at_the_former_probe_names_unchanged() {
+    let db = setup().await;
+    let dir = tempfile::tempdir().unwrap();
+    let project_path = seed_one_light_project(&db, dir.path()).await;
+    let outside = tempfile::tempdir().unwrap();
+    let user_file = outside.path().join("user.txt");
+    std::fs::write(&user_file, b"user data").unwrap();
+    let at = |name: &str| std::path::Path::new(&project_path).join(name);
+    std::os::unix::fs::symlink(&user_file, at(".astro-plan-symlink-probe-target")).unwrap();
+    std::os::unix::fs::symlink(&user_file, at(".astro-plan-hardlink-probe-target")).unwrap();
+    std::fs::write(at(".astro-plan-symlink-probe-link"), b"keep").unwrap();
+    std::fs::write(at(".astro-plan-hardlink-probe-link"), b"keep").unwrap();
+    let before = snapshot(&project_path);
+
+    let resp = generate_source_view(db.pool(), &req("p1")).await.unwrap();
+
+    assert!(!resp.used_copy_fallback, "the project volume supports hardlinks");
+    assert_eq!(
+        snapshot(&project_path),
+        before,
+        "generation must leave the project folder as it was"
+    );
+    assert_eq!(std::fs::read(&user_file).unwrap(), b"user data");
+}
+
+/// The probe must test the folder the view is written to, not the project
+/// folder: here only the chosen destination cannot hold a link.
+#[cfg(unix)]
+#[tokio::test]
+async fn generation_probes_link_support_where_the_view_is_written() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let db = setup().await;
+    let dir = tempfile::tempdir().unwrap();
+    seed_one_light_project(&db, dir.path()).await;
+    let locked = dir.path().join("locked");
+    std::fs::create_dir(&locked).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).unwrap();
+    // Root ignores the mode bits; there is nothing to prove then.
+    let enforced = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(locked.join("sentinel"))
+        .is_err();
+    let mut request = req("p1");
+    request.destination_override = Some(format!("{}/view", locked.to_str().unwrap()));
+    request.copy_opt_in = true;
+
+    let resp = generate_source_view(db.pool(), &request).await;
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    if !enforced {
+        return;
+    }
+
+    let resp = resp.unwrap();
+    assert!(resp.used_copy_fallback, "a folder that cannot hold a link falls back to a copy");
+    assert!(resp
+        .warnings
+        .iter()
+        .any(|w| w.code
+            == contracts_core::source_view_generate::GenerationWarningCode::CapabilityDrift));
+    assert_eq!(snapshot(locked.to_str().unwrap()), Vec::new());
+}

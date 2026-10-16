@@ -6346,6 +6346,21 @@ export type InventoryReconcileRunResponse = {
 	newlyMissing: number,
 	recovered: number,
 	sizeBackfilled: number,
+	/**
+	 *  Recorded frames at or below an unreadable path, so their presence is
+	 *  unknown. The pass leaves their records, events and session membership
+	 *  unchanged.
+	 */
+	unknown: number,
+	/**  The walk could not read part of the root; `unreadable_paths` names it. */
+	incomplete: boolean,
+	/**
+	 *  Root-relative, forward-slash paths the walk could not read, sorted;
+	 *  `""` is the root itself. Each is a folder it could not list in full or
+	 *  an entry whose metadata it could not read, and covers everything below
+	 *  it. Empty exactly when `incomplete` is `false`.
+	 */
+	unreadablePaths: string[],
 	progressPct: number,
 };
 
