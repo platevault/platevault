@@ -474,51 +474,124 @@ pub(super) fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
     lookup(vars, "PV_DATA_DIR").map(PathBuf::from)
 }
 
-#[cfg(target_os = "windows")]
-pub(super) fn find_leveldb_dir(root: &Path) -> Option<PathBuf> {
+/// The file the app's final `RunEvent::Exit` hook writes into its data root
+/// on an orderly exit (`apps/desktop/src-tauri/src/clean_shutdown.rs`'s
+/// `MARKER_FILE`, consumed again at the next boot).
+pub(super) fn clean_shutdown_marker(vars: &[(&'static str, String)]) -> Option<PathBuf> {
+    app_data_dir(vars).map(|dir| dir.join(".clean-shutdown"))
+}
+
+/// Whether anything accepts a TCP connection on loopback `port` right now.
+///
+/// Blocks for at most 250 ms: a live loopback listener accepts at once, while
+/// Windows retries a refused loopback connect for about two seconds before
+/// failing, so "not accepted within 250 ms" is read as "nothing listening".
+pub(super) fn port_accepts(port: u16) -> bool {
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(250)).is_ok()
+}
+
+/// Every Chromium `localStorage` store under a WebView2 user-data folder:
+/// the `Local Storage/leveldb` directory of each profile. The profile's other
+/// LevelDB stores (IndexedDB, Service Worker, …) hold no `localStorage`.
+pub(super) fn local_storage_dirs(root: &Path) -> Vec<PathBuf> {
+    let mut stores = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if path.file_name().is_some_and(|name| name == "leveldb") {
-                    return Some(path);
-                }
+        for path in entries.flatten().map(|entry| entry.path()).filter(|path| path.is_dir()) {
+            if path.file_name().is_some_and(|name| name == "leveldb")
+                && dir.file_name().is_some_and(|name| name == "Local Storage")
+            {
+                stores.push(path);
+            } else {
                 pending.push(path);
             }
         }
     }
-    None
+    stores
 }
 
-/// Sum the sizes of all `.ldb` and `.log` data files in `leveldb_dir`.
+/// Whether any of `stores` holds `fragment` inside a stored value.
 ///
-/// Used by [`E2eApp::wait_for_webview_storage_flush`] to detect when
-/// WebView2's WAL has stopped growing (a stable size across consecutive
-/// polls means the commit is complete).  Returns 0 on any I/O error —
-/// a safe fallback that keeps the stability counter from accidentally
-/// advancing while the directory is unreadable.
-#[cfg(target_os = "windows")]
-pub(super) fn leveldb_data_size(leveldb_dir: &Path) -> u64 {
-    std::fs::read_dir(leveldb_dir)
-        .ok()
-        .map(|entries| {
-            entries
-                .flatten()
-                .filter_map(|e| {
-                    let path = e.path();
-                    if !path.is_file() {
-                        return None;
-                    }
-                    let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
-                    if matches!(ext, "ldb" | "log") {
-                        path.metadata().ok().map(|m| m.len())
-                    } else {
-                        None
-                    }
-                })
-                .sum()
+/// Chromium stores a `localStorage` value as a one-byte format tag followed
+/// by Latin-1 or UTF-16LE text, so both encodings are searched. Every write
+/// lands first in a store's write-ahead log (`*.log`), searched with its
+/// block framing removed ([`leveldb_log_records`]); a fresh profile keeps its
+/// writes there until a later open compacts them into tables. Tables
+/// (`*.ldb`) are searched raw, which only finds values in uncompressed blocks.
+pub(super) fn local_storage_on_disk_contains(stores: &[PathBuf], fragment: &str) -> bool {
+    let latin1: Option<Vec<u8>> = fragment.chars().map(|c| u8::try_from(c).ok()).collect();
+    let utf16: Vec<u8> = fragment.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let needles: Vec<&[u8]> = latin1.iter().map(Vec::as_slice).chain([utf16.as_slice()]).collect();
+    stores
+        .iter()
+        .filter_map(|store| std::fs::read_dir(store).ok())
+        .flat_map(|entries| entries.flatten().map(|entry| entry.path()))
+        .filter_map(|path| {
+            let ext = path.extension()?.to_str()?;
+            let bytes = std::fs::read(&path).ok()?;
+            match ext {
+                "log" => Some(leveldb_log_records(&bytes)),
+                "ldb" => Some(bytes),
+                _ => None,
+            }
         })
-        .unwrap_or(0)
+        .any(|data| needles.iter().any(|needle| contains(&data, needle)))
+}
+
+/// The record payloads of a LevelDB write-ahead log with its block framing
+/// removed (LevelDB's `doc/log_format.md`). The log is a run of 32 KiB
+/// blocks, each holding records `checksum: u32, length: u16 LE, type: u8`
+/// plus `length` bytes, and a write that crosses a block boundary is split
+/// into fragments — a raw search could miss a value straddling one.
+fn leveldb_log_records(log: &[u8]) -> Vec<u8> {
+    const BLOCK: usize = 32 * 1024;
+    const HEADER: usize = 7;
+    let mut payload = Vec::with_capacity(log.len());
+    for block in log.chunks(BLOCK) {
+        let mut rest = block;
+        // A block tail shorter than a header is zero padding.
+        while rest.len() >= HEADER {
+            let len = usize::from(u16::from_le_bytes([rest[4], rest[5]]));
+            // Type 0 marks space never written (preallocated or padding).
+            if rest[6] == 0 {
+                break;
+            }
+            // A record running past its block is a torn tail write.
+            let Some(data) = rest.get(HEADER..HEADER + len) else { break };
+            payload.extend_from_slice(data);
+            rest = &rest[HEADER + len..];
+        }
+    }
+    payload
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
+}
+
+/// The files in each of `stores`, with sizes, for a failure message.
+pub(super) fn describe_stores(stores: &[PathBuf]) -> String {
+    if stores.is_empty() {
+        return "no `Local Storage/leveldb` directory yet".to_owned();
+    }
+    stores
+        .iter()
+        .map(|store| {
+            let files: Vec<String> = std::fs::read_dir(store)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| {
+                            let size = entry.metadata().map_or(0, |m| m.len());
+                            format!("{} ({size} B)", entry.file_name().to_string_lossy())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            format!("{}: [{}]", store.display(), files.join(", "))
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
