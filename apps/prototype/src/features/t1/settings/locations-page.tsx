@@ -9,13 +9,17 @@
  * archive locations may be registered; the Default archive location is the
  * Archive step's default destination. `?locationId=` opens one location,
  * `?add=<role>` starts adding one, `?duplicates=review` opens the Duplicates
- * review (the duplicates issue links there).
+ * review (the duplicates issue links there). A location that is offline or
+ * unreadable offers Dismiss issue in its menu, then Restore issue once
+ * dismissed (F7, P-ISS1); every location always shows, so the menu is where
+ * a dismissed issue comes back.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { FolderPlus, Play, RotateCw } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
+import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { EmptyState, type PageNotice, useSaveState } from "@/components/app/feedback"
@@ -31,6 +35,7 @@ import type { Location, LocationRole } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { AddLocationFlow } from "../components/add-location-flow"
 import { DuplicatesReview } from "../components/duplicates-review"
 import { blockedByErrors } from "@/components/app/form-dialog"
@@ -139,6 +144,7 @@ export function LocationsPage() {
   const [editing, setEditing] = useState<Location | null>(null)
   const actions = useLocationActions({ href: HREF, notify: "runner" })
   const { save, indicator } = useSaveState()
+  const issueView = useIssues()
 
   const indexingIds = indexingLocationIds(operations)
   const rows: LocationRow[] = Object.values(catalog.locations).map((location) => {
@@ -208,16 +214,20 @@ export function LocationsPage() {
     if (row.availability === "retired") return []
     const { location } = row
     const noFrames = { action: m.location_locate_or_remap(), reason: m.location_remap_no_frames({ name: location.displayName }), blockers: [] }
-    return [
-      rescan(row),
-      ...(location.role === "archive" && defaultArchiveId !== location.id ? [{ id: "make-default", label: m.settings_make_default(), run: () => makeDefault(location) }] : []),
-      { id: "edit", label: m.settings_edit(), opensDialog: true, run: () => setEditing(location) },
-      { id: "locate", label: m.location_locate_or_remap(), opensDialog: true, unavailable: row.frames === 0 ? noFrames : undefined, run: () => actions.locate(location) },
-      { id: "choose-again", label: m.location_choose_folder_again(), opensDialog: true, run: () => actions.chooseAgain(location) },
-      { separator: true },
-      retire(row),
-      remove(row),
-    ]
+    return withIssueItems(
+      m,
+      [
+        rescan(row),
+        ...(location.role === "archive" && defaultArchiveId !== location.id ? [{ id: "make-default", label: m.settings_make_default(), run: () => makeDefault(location) }] : []),
+        { id: "edit", label: m.settings_edit(), opensDialog: true, run: () => setEditing(location) },
+        { id: "locate", label: m.location_locate_or_remap(), opensDialog: true, unavailable: row.frames === 0 ? noFrames : undefined, run: () => actions.locate(location) },
+        { id: "choose-again", label: m.location_choose_folder_again(), opensDialog: true, run: () => actions.chooseAgain(location) },
+        { separator: true },
+        retire(row),
+        remove(row),
+      ],
+      rowIssues(issueView, { kind: "location", id: location.id }),
+    )
   }
 
   const columns: Column<LocationRow>[] = [

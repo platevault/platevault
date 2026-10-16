@@ -4,7 +4,11 @@
  * its state and its one Up next action (D-W1, D-W35, D-W48, PRJ-FR-18). The
  * State facet (Open · Closed · Archived) starts on Open, so closed Projects
  * stay out of the way until asked for (§5.6). A row opens its Project; its ⋯
- * menu and right click hold the rest: Edit…, Duplicate… and Wrap up.
+ * menu and right click hold the rest: Edit…, Duplicate… and Wrap up, then
+ * Dismiss issue for each issue on the row (the Project's own and those of
+ * the sessions it holds) and Restore issue once dismissed; the Issues facet
+ * is Show dismissed (F7, P-ISS1). A Project's own waiting work (Apply
+ * refused, View (previous) to review) cannot be dismissed.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { Copy, Eye, FolderKanban, PackageCheck, Pencil, Plus } from "lucide-react"
@@ -13,16 +17,19 @@ import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
+import { type IssueFilter, issuesFacet, matchesIssueFilter, type OwnIssues, parseIssueFilter, withIssueItems } from "@/components/app/issue-actions"
 import { EmptyState } from "@/components/app/feedback"
 import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { ListPage } from "@/components/templates/list-page"
 import { goalProgress, isLocked, isMosaic, type NextAction, panelGroups, PROJECT_STATUS_NAME, rigName, subjectName } from "@/domain/derive"
+import { projectIssues } from "@/domain/home"
 import { pendingChanges, projectNext, wrapUpSummary } from "@/domain/project-view"
 import { matchesQuery } from "@/domain/sky"
 import type { Project, ProjectState } from "@/domain/types"
 import { type Messages, say } from "@/lib/i18n"
 import { nowIso, type PrototypeState, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { ProjectDetailsDialog } from "./details-dialog"
 import { DuplicateProjectDialog } from "./duplicate-dialog"
 
@@ -68,10 +75,15 @@ export function ProjectsPage() {
   const rows = useStore((s) => rowsOf(m, s))
   const [query, setQuery] = useState("")
   const [state, setState] = useState<string>("open")
+  const [issueFilter, setIssueFilter] = useState<IssueFilter | "">("")
   const [editing, setEditing] = useState<Project | null>(null)
   const [duplicating, setDuplicating] = useState<Project | null>(null)
+  const issueView = useIssues()
+  const issuesOf = (r: Row): OwnIssues => ({ live: projectIssues(r.project, issueView.issues), dismissed: projectIssues(r.project, issueView.dismissed) })
   // An empty search matches every row (`matchesQuery` reads an empty query as no match).
-  const shown = rows.filter((r) => (state === "" || r.project.state === state) && (query.trim() === "" || matchesQuery([r.project.name, ...r.subjects], query)))
+  const shown = rows.filter(
+    (r) => (state === "" || r.project.state === state) && matchesIssueFilter(issuesOf(r), issueFilter) && (query.trim() === "" || matchesQuery([r.project.name, ...r.subjects], query)),
+  )
 
   const open = (r: Row, search: Record<string, string> = {}) => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search })
   const newProject: Action = { id: "new-project", label: m.newproject_title(), icon: Plus, kind: "primary", opensDialog: true, run: () => openSheet({ kind: "new-project" }) }
@@ -104,16 +116,19 @@ export function ProjectsPage() {
 
   const rowActions = (r: Row): MenuItem[] => {
     const next = nextAction(r)
-    return [
-      { id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) },
-      ...(next ? [next] : []),
-      { separator: true },
-      ...(isLocked(r.project) ? [] : [{ id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setEditing(r.project) }]),
-      { id: "duplicate", label: m.project_duplicate(), icon: Copy, opensDialog: true, run: () => setDuplicating(r.project) },
-      ...(r.wrapUp ? [{ id: "wrap-up", label: m.wrapup_action(), icon: PackageCheck, run: () => open(r, { stage: "wrap-up" }) }] : []),
-    ]
+    return withIssueItems(
+      m,
+      [
+        { id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) },
+        ...(next ? [next] : []),
+        { separator: true },
+        ...(isLocked(r.project) ? [] : [{ id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setEditing(r.project) }]),
+        { id: "duplicate", label: m.project_duplicate(), icon: Copy, opensDialog: true, run: () => setDuplicating(r.project) },
+        ...(r.wrapUp ? [{ id: "wrap-up", label: m.wrapup_action(), icon: PackageCheck, run: () => open(r, { stage: "wrap-up" }) }] : []),
+      ],
+      issuesOf(r),
+    )
   }
-
   const facets: Facet[] = [
     {
       id: "state",
@@ -122,10 +137,12 @@ export function ProjectsPage() {
       value: state,
       options: STATES.map((value) => ({ value, label: say(m, PROJECT_STATUS_NAME[value]), count: rows.filter((r) => r.project.state === value).length })),
     },
+    issuesFacet(m, rows.map(issuesOf), issueFilter),
   ]
   const clear = () => {
     setQuery("")
     setState("")
+    setIssueFilter("")
   }
   const live = (project: Project) => rows.find((r) => r.project.id === project.id)?.project ?? project
 
@@ -145,7 +162,13 @@ export function ProjectsPage() {
           rowActions,
           toolbar: {
             search: { label: m.projects_search(), placeholder: m.projects_search_placeholder(), value: query, onChange: setQuery },
-            facets: { items: facets, onChange: (patch) => typeof patch.state === "string" && setState(patch.state) },
+            facets: {
+              items: facets,
+              onChange: (patch) => {
+                if (typeof patch.state === "string") setState(patch.state)
+                if ("issues" in patch) setIssueFilter(parseIssueFilter(patch.issues))
+              },
+            },
             matchCount: shown.length,
           },
           empty:

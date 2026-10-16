@@ -3,7 +3,9 @@
  * Calibrate · View · Output · Wrap up, PRJ-FR-07). The header carries the
  * path, the StatusBadge (Open, Closed or Archived), Apply… as the one
  * primary while the Project is open, and the Project ▾ menu: Edit… and
- * Duplicate…. A Closed or Archived Project is locked for good (there is no
+ * Duplicate…, then Dismiss issue for each of the Project's own issues (a
+ * master offered, failed work) and Restore issue once dismissed (F7,
+ * P-ISS1). A Closed or Archived Project is locked for good (there is no
  * Reopen, provisional): Edit… stays in the menu, unavailable with "Project
  * closed · Duplicate ▸"; it shows its standing state in the notice slot,
  * reads its frozen goal figures, and Duplicate… continues it (PRJ-FR-25,
@@ -21,6 +23,7 @@ import { type ReactNode, useEffect, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
 import { ActionButton } from "@/components/app/actions"
+import { rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import type { Action } from "@/components/app/contracts"
 import type { PageNotice } from "@/components/app/feedback"
 import type { PathItem } from "@/components/app/page"
@@ -33,6 +36,7 @@ import type { Project } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { useCalibrateSections } from "./calibrate-step"
 import { ProjectDetailsDialog } from "./details-dialog"
 import { DuplicateProjectDialog } from "./duplicate-dialog"
@@ -67,6 +71,7 @@ export interface ProjectChrome {
 
 function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: () => void; duplicate: () => void }): ProjectChrome {
   const m = useMessages()
+  const issueView = useIssues()
   const navigate = useNavigate()
   const tabs = useStore((s) => projectTabs(s, project))
   const locked = isLocked(project)
@@ -97,7 +102,7 @@ function useProjectChrome(project: Project, tab: ProjectTabId, dialogs: { edit: 
     path: [{ label: m.nav_projects(), link: { to: "/projects" } }],
     status: <StatusBadge kind="project" value={project.state} label={say(m, PROJECT_STATUS_NAME[project.state])} />,
     actions: locked ? [] : [apply],
-    menu: { label: m.project_noun(), items: [edit, duplicate] },
+    menu: { label: m.project_noun(), items: withIssueItems(m, [edit, duplicate], rowIssues(issueView, { kind: "project", id: project.id })) },
     notice: locked
       ? {
           tone: "info",

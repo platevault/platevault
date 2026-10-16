@@ -28,7 +28,9 @@
  *   that night.
  *
  * Problems show on the row they affect (`issueCopy` words them as Issues
- * does). Row actions are Action descriptors. Add to Project, Add to Plan,
+ * does), except the ones dismissed: they count nowhere until restored on
+ * their own row (F7, P-ISS1). Row actions are Action descriptors. Add to
+ * Project, Add to Plan,
  * Scan and Rescan follow the prototype's Quick actions switch
  * (astro-plan-zzjlz): One-click runs them here, Add to Project and Add to
  * Plan with an Undo notice; Open page opens the page that owns each, at that
@@ -84,6 +86,7 @@ import { dayInWeek, WEEK_START } from "@/lib/week"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
 import { addSessions, removeSessions } from "@/store/actions/projects"
 import { nowIso, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import { startIndexing } from "@/store/operations"
 import { CalibrationSummary } from "./session"
 
@@ -176,6 +179,8 @@ export function HomePage() {
   const work = useMemo(() => pendingWork(world), [world])
   const open = useMemo(() => openWork(world, nowMs, tonight), [world, nowMs, tonight])
   const status = useMemo(() => homeStatus(world, nowMs), [world, nowMs])
+  // One "All N ›" beside the title fits the 1280 px column in every language; the others go under the section's More (the ActionBar overflow).
+  const pendingAll = pendingAllActions(m, follow, work)
 
   const sections: DetailSection[] = [
     {
@@ -191,7 +196,8 @@ export function HomePage() {
       title: m.home_pending_work(),
       count: work.length,
       flush: true,
-      actions: pendingAllActions(m, follow, work),
+      actions: pendingAll.slice(0, 1),
+      more: pendingAll.slice(1),
       content: <PendingTable rows={work} follow={follow} />,
     },
     {
@@ -472,6 +478,9 @@ const PROCESS_STATUS: Record<ProcessStatus, (m: Messages) => string> = {
 
 function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
   const m = useMessages()
+  const { dismissed } = useIssues()
+  const hidden = new Set(dismissed.map((issue) => issue.id))
+  const counting = (r: OpenWork) => r.issues.filter((issue) => !hidden.has(issue.id))
   const name = (r: OpenWork) => (r.kind === "project" ? r.project.name : say(m, r.view.name))
   const stands = (r: OpenWork): string => {
     if (r.kind === "calibration") return PROCESS_STATUS[r.view.status](m)
@@ -493,6 +502,7 @@ function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
       sortValue: (r) => r.window?.nightsLeft ?? null,
       cell: (r) => {
         const step = next(r)
+        const issues = counting(r)
         return (
           <>
             {r.window ? (
@@ -501,8 +511,8 @@ function OpenWorkTable({ rows, follow }: { rows: OpenWork[]; follow: Follow }) {
               </>
             ) : null}
             {stands(r)}
-            {r.issues.length > 0 ? " · " : step ? ` · ${m.home_next_step({ step: step.label })}` : null}
-            <Problems issues={r.issues} />
+            {issues.length > 0 ? " · " : step ? ` · ${m.home_next_step({ step: step.label })}` : null}
+            <Problems issues={issues} />
           </>
         )
       },

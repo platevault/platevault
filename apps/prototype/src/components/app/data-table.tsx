@@ -471,6 +471,7 @@ export function DataTable<T>({
 
   // When the current row goes (an action removed it, a filter hid it), the next row takes its place, else
   // the previous one, and takes focus when focus went with the row (APG). A new open row from the host wins.
+  // With no row left, focus goes to the first control of the toolbar row, as after a batch action (WCAG 2.4.3).
   const committed = useRef<{ row: string | null; activeRowId: string | null | undefined }>({ row: null, activeRowId })
   useLayoutEffect(() => {
     const previous = committed.current
@@ -478,7 +479,11 @@ export function DataTable<T>({
     if (previous.row === null || shownIds.includes(previous.row)) return
     const next = previous.activeRowId !== activeRowId && currentRowId !== null ? rowElement(currentRowId) : rowOrSuccessor(previous.row)
     const id = next?.dataset.row
-    if (next === null || id === undefined) return
+    if (next === null) {
+      if (rowsHadFocus.current && focusLost()) slotFirst()?.focus()
+      return
+    }
+    if (id === undefined) return
     if (id !== currentRowId) setFocusedRow({ id, activeRowId })
     if (rowsHadFocus.current && focusLost()) next.focus()
   })

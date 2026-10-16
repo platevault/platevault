@@ -10,13 +10,16 @@
  * go (`trashBlock`, P-TRASH2) and its row leads to that Project. Per frame: Move
  * others to Trash, confirmed with its files; for every frame: Move all to
  * Trash. Both run through the shared OS Trash engine, so nothing is deleted
- * permanently, and the issue clears as the copies leave.
+ * permanently, and the issue clears as the copies leave. Its More menu
+ * dismisses the duplicates issue, and restores it once dismissed (F7,
+ * P-ISS1): the issue links here, so this is its page.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { Copy } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { ActionBar, ActionButton } from "@/components/app/actions"
+import { pageIssues, withIssueItems } from "@/components/app/issue-actions"
 import type { Action, Column, FileRow, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { DataTable } from "@/components/app/data-table"
@@ -29,6 +32,7 @@ import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import { cleanUpDuplicates, startDuplicateScan } from "@/store/actions/storage"
 import { useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 
 /** One copy of one frame, as a table row. */
 interface CopyRow {
@@ -51,6 +55,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
   const scanning = useStore((s) => runningDuplicateScan(s.operations))
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
+  const issueView = useIssues()
   const links = useMemo(() => viewLinks(catalog, disk), [catalog, disk])
   // The copy to keep per frame, once the user picks one; the preselection otherwise.
   const [picked, setPicked] = useState<Record<string, string>>({})
@@ -133,7 +138,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
           { label: m.duplicates_movable(), value: m.location_copies_count({ count: movableCopies, n: formatCount(movableCopies) }) },
         ]}
       />
-      <ActionBar actions={[scanAgain]} />
+      <ActionBar actions={[scanAgain]} overflow={withIssueItems(m, [], pageIssues(issueView, "/settings/locations"))} />
       {scanning ? <OperationPanel operationId={scanning.id} itemLimit={0} /> : null}
       {groups.length === 0 ? (
         scanning ? null : <EmptyState icon={Copy} title={findings ? m.storage_no_duplicates() : m.storage_not_scanned()} action={<ActionButton action={scanAgain} />} />

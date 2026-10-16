@@ -13,7 +13,12 @@
  * - A row opens the session; its ⋯ and context menu offer Review frames
  *   (the intake at its first open step; review stays open once Ready),
  *   Choose Target and Add to Project (D-W59), which is unavailable with its
- *   reason until the session is Ready and settled (PRJ-FR-08).
+ *   reason until the session is Ready and settled (PRJ-FR-08). A session
+ *   with an issue (drift, a changed pinned file) offers Dismiss issue there,
+ *   and Restore issue once dismissed; the Issues facet (With issues ·
+ *   Dismissed, `?issues=`) is Show dismissed. The Library counts that open
+ *   this page ("2 need a Target") are dismissed and restored from the
+ *   Sessions ▾ menu (F7, P-ISS1).
  * - Selected sessions offer Confirm calibration (their suggestions become
  *   pins) and No darks, No flats or No bias (for the kinds still waiting or
  *   suggested), each asking first, and Archive… (the reviewed transfer Wrap
@@ -30,6 +35,7 @@ import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { ActionButton } from "@/components/app/actions"
+import { issuesFacet, matchesIssueFilter, type OwnIssues, pageIssues, parseIssueFilter, rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import type { Action, Column, FileRow, MenuItem } from "@/components/app/contracts"
 import { EmptyState, type PageNotice } from "@/components/app/feedback"
 import { Pill } from "@/components/app/pill"
@@ -48,6 +54,7 @@ import { offerFileRows, startArchiveTransfer } from "@/store/actions/archive"
 import { confirmCalibration, type SessionKind, setNoCalibration } from "@/store/actions/calibration"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { type PrototypeState, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import type { ImportPayload } from "./import-run"
 import { addToProjectItems } from "./parts"
 import { CalibrationSummary, ReadinessBadge } from "./session"
@@ -199,6 +206,9 @@ export function SessionsPage() {
   const rows = sessionRows(state)
   const { catalog } = state
   const filter = parseFilter(search.filter)
+  const issueFilter = parseIssueFilter(search.issues)
+  const issueView = useIssues()
+  const issuesOf = (r: SessionRow): OwnIssues => rowIssues(issueView, { kind: "session", id: r.session.id })
   const query = search.q ?? ""
   const importId = search.import
   const importOp = importId ? state.operations[importId] : undefined
@@ -219,7 +229,7 @@ export function SessionsPage() {
 
   const needle = query.trim().toLowerCase()
   const shown = rows.filter((r) => {
-    if (!matchesFilter(r, filter)) return false
+    if (!matchesFilter(r, filter) || !matchesIssueFilter(issuesOf(r), issueFilter)) return false
     if (!needle) return true
     return [r.session.objectLabel, r.targetName, r.rig && say(m, r.rig), r.session.channel, formatNight(r.session.night, true), r.session.cameraName].some((v) => v?.toLowerCase().includes(needle))
   })
@@ -230,16 +240,18 @@ export function SessionsPage() {
   const trashUnusable = filter === "unusable" ? trashUnusableAction(m, state, unusableScope, clearSelection) : null
 
   const open = (row: SessionRow) => void navigate({ to: "/sessions/$sessionId", params: { sessionId: row.session.id } })
-  const rowActions = (r: SessionRow): MenuItem[] => [
-    { id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) },
-    ...(r.trashed
-      ? []
-      : [
-          { id: "review", label: m.session_review_frames(), icon: ListChecks, run: () => follow(sessionIntakeEntry(catalog, r.session)) },
-          { separator: true } as const,
-          ...(r.needsTarget ? [{ id: "choose-target", label: m.session_choose_target(), icon: Target, run: () => follow(sessionIntakeLink(r.session.id, "target")) }] : addToProjectItems(m, catalog, r.session.id)),
-        ]),
-  ]
+  const rowActions = (r: SessionRow): MenuItem[] =>
+    withIssueItems(m, [
+      { id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) },
+      ...(r.trashed
+        ? []
+        : [
+            { id: "review", label: m.session_review_frames(), icon: ListChecks, run: () => follow(sessionIntakeEntry(catalog, r.session)) },
+            { separator: true } as const,
+            ...(r.needsTarget ? [{ id: "choose-target", label: m.session_choose_target(), icon: Target, run: () => follow(sessionIntakeLink(r.session.id, "target")) }] : addToProjectItems(m, catalog, r.session.id)),
+          ]),
+    ], issuesOf(r))
+  const pageMenu = withIssueItems(m, [], pageIssues(issueView, "/sessions"))
 
   const columns: Column<SessionRow>[] = [
     {
@@ -316,15 +328,18 @@ export function SessionsPage() {
 
   const clearAction: Action = needle
     ? { id: "clear-search", label: m.sessions_clear_search(), run: () => setParams({ q: undefined }) }
-    : filter === "all"
+    : filter === "all" && !issueFilter
       ? { id: "import", label: m.import_open(), run: () => void navigate({ to: "/import" }) }
-      : { id: "show-all", label: m.sessions_show_all(), run: () => setParams({ filter: undefined }) }
+      : { id: "show-all", label: m.sessions_show_all(), run: () => setParams({ filter: undefined, issues: undefined }) }
+  const emptyText = needle ? m.sessions_no_match() : issueFilter === "dismissed" ? m.issues_filter_none_dismissed() : issueFilter === "with-issues" ? m.issues_none() : emptyTitle(m, filter)
+  const facetValue = (value: string | string[] | undefined) => (typeof value === "string" && value ? value : undefined)
 
   return (
     <ListPage
       title={m.nav_sessions()}
       summary={m.sessions_light_count({ count: counts.all })}
       actions={[{ id: "import", label: m.import_open(), icon: Download, run: () => void navigate({ to: "/import" }) }]}
+      menu={pageMenu.length > 0 ? { label: m.nav_sessions(), items: pageMenu } : undefined}
       notice={importNotice}
       table={{
         label: m.sessions_table_label({ filter: filterLabel(m, filter) }),
@@ -341,7 +356,7 @@ export function SessionsPage() {
           rowLabel: (r) => sessionLabel(m, r.session),
           isSelectable: (r) => !r.trashed,
           countLabel: (count) => m.project_sessions_selected({ count }),
-          onShowHidden: () => setParams({ q: undefined, filter: undefined }),
+          onShowHidden: () => setParams({ q: undefined, filter: undefined, issues: undefined }),
         },
         batchActions: (ids) => {
           const picked = rows.filter((r) => ids.includes(r.session.id) && !r.trashed)
@@ -361,13 +376,14 @@ export function SessionsPage() {
                 options: SESSION_FILTERS.map((f) => ({ value: f, label: filterLabel(m, f), count: counts[f] })),
                 value: filter === "all" ? "" : filter,
               },
+              issuesFacet(m, rows.map(issuesOf), issueFilter),
             ],
-            onChange: (patch) => setParams({ filter: typeof patch.filter === "string" && patch.filter ? patch.filter : undefined }),
+            onChange: (patch) => setParams({ ...("filter" in patch ? { filter: facetValue(patch.filter) } : {}), ...("issues" in patch ? { issues: facetValue(patch.issues) } : {}) }),
           },
           actions: trashUnusable ? [trashUnusable] : [],
           matchCount: shown.length,
         },
-        empty: <EmptyState icon={Layers} title={needle ? m.sessions_no_match() : emptyTitle(m, filter)} action={<ActionButton action={clearAction} />} />,
+        empty: <EmptyState icon={Layers} title={emptyText} action={<ActionButton action={clearAction} />} />,
       }}
     />
   )

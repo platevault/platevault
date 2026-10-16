@@ -32,6 +32,12 @@
  * ▾" object menu with Calibration settings… (keep raw frames, Old masters
  * after). Search parameters: `view`, `process` (opens Processes on that
  * row), `master` (opens its details) and `filter=dismissed` (Hidden).
+ *
+ * Issues (F7, P-ISS1): a master's drift and a process's failure are on their
+ * rows, whose ⋯ and context menu offer Dismiss issue, then Restore issue
+ * once dismissed; the Issues facet of Masters and Processes is Show
+ * dismissed. The Library's "1 to stack" is dismissed and restored from the
+ * Calibration ▾ menu.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Inbox, Layers, SearchX, Sparkles } from "lucide-react"
@@ -39,6 +45,7 @@ import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
 import { ActionButton } from "@/components/app/actions"
+import { issuesFacet, matchesIssueFilter, pageIssues, parseIssueFilter, rowIssues, withIssueItems } from "@/components/app/issue-actions"
 import { Box } from "@/components/app/box"
 import type { Action, Column, Facet, FileRow, MenuItem } from "@/components/app/contracts"
 import { KeyValueList, type KeyValueItem } from "@/components/app/data"
@@ -62,6 +69,7 @@ import { type Messages, msg, say } from "@/lib/i18n"
 import { hideMaster, restoreMaster, setMasterCamera, trashMaster } from "@/store/actions/calibration"
 import { adoptionCheck, adoptProcessingMaster } from "@/store/actions/project-view"
 import { type CommitResult, store, useStore } from "@/store/core"
+import { useIssues } from "@/store/issues"
 import {
   libraryMasters,
   type MasterCandidate,
@@ -187,6 +195,7 @@ export function CalibrationPage() {
   const [importing, setImporting] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [addingVersion, setAddingVersion] = useState<CalibrationMaster | null>(null)
+  const issueView = useIssues()
 
   const requested = VIEWS.find((v) => v === search.view)
   const view: View = requested ?? (search.process ? "processes" : search.filter === "dismissed" ? "hidden" : "masters")
@@ -204,6 +213,9 @@ export function CalibrationPage() {
   const needle = query.trim().toLowerCase()
   const open = detailId ? catalog.masters[detailId] : undefined
   const facet = (id: string) => filters[id] ?? ""
+  const issueFilter = parseIssueFilter(facet("issues"))
+  const masterIssues = (master: CalibrationMaster) => rowIssues(issueView, { kind: "master", id: master.id })
+  const processIssues = (p: ProcessView) => rowIssues(issueView, { kind: "process", id: p.process.id })
   const clearFilters = () => {
     setQuery("")
     setFilters({})
@@ -228,7 +240,7 @@ export function CalibrationPage() {
   const importAction: Action = { id: "import-masters", label: m.calibration_import_masters(), kind: "primary", opensDialog: true, run: () => setImporting(true) }
   const menu: ObjectMenu = {
     label: m.nav_calibration(),
-    items: [{ id: "calibration-settings", label: m.calibration_settings(), opensDialog: true, run: () => setEditingSettings(true) }],
+    items: withIssueItems(m, [{ id: "calibration-settings", label: m.calibration_settings(), opensDialog: true, run: () => setEditingSettings(true) }], pageIssues(issueView, "/calibration")),
   }
   const header = { title: m.nav_calibration(), actions: [importAction], menu, views }
   const toolbarFacets = (items: Facet[]) => ({ items, onChange: (patch: Record<string, string | string[]>) => setFilters((current) => ({ ...current, ...(patch as Record<string, string>) })) })
@@ -453,13 +465,13 @@ export function CalibrationPage() {
   // --- Processes view --------------------------------------------------------
 
   if (view === "processes") {
-    const shown = processes.filter((p) => say(m, p.name).toLowerCase().includes(needle))
+    const shown = processes.filter((p) => say(m, p.name).toLowerCase().includes(needle) && matchesIssueFilter(processIssues(p), issueFilter))
     const openProcess = (p: ProcessView) => follow({ to: "/calibration/processes/$processId/$step", params: { processId: p.process.id, step: p.current ?? "raws" } })
     const rowActions = (p: ProcessView): MenuItem[] => {
       const items: MenuItem[] = [{ id: "open-process", label: m.calibration_open_process(), run: () => openProcess(p) }]
       if (p.session) items.push({ id: "open-session", label: m.calibration_open_raw_session(), run: () => follow(sessionLink(p.session!.id)) })
       if (p.master) items.push({ id: "open-master", label: m.calibration_open_master(), run: () => setDetailId(p.master!.id) })
-      return items
+      return withIssueItems(m, items, processIssues(p))
     }
     return (
       <>
@@ -481,7 +493,11 @@ export function CalibrationPage() {
               ) : (
                 noMatch
               ),
-            toolbar: { search: { label: m.calibration_search_processes(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery }, matchCount: shown.length },
+            toolbar: {
+              search: { label: m.calibration_search_processes(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery },
+              facets: toolbarFacets([issuesFacet(m, processes.map(processIssues), issueFilter)]),
+              matchCount: shown.length,
+            },
           }}
           detail={detail}
         />
@@ -536,6 +552,7 @@ export function CalibrationPage() {
       (facet("temp") === "" || temperature(master) === facet("temp")) &&
       (facet("gain") === "" || gainOffset(master) === facet("gain")) &&
       (facet("state") === "" || stateOf(master).includes(facet("state"))) &&
+      matchesIssueFilter(masterIssues(master), issueFilter) &&
       haystack(m, catalog, master).includes(needle),
   )
   const stateOptions = [
@@ -548,8 +565,9 @@ export function CalibrationPage() {
     { id: "temp", label: m.domain_criterion_temperature(), kind: "single", value: facet("temp"), options: facetOptions(library, temperature, byNumber) },
     { id: "gain", label: m.session_gain_offset(), kind: "single", value: facet("gain"), options: facetOptions(library, gainOffset, byNumber) },
     { id: "state", label: m.calibration_state(), kind: "single", value: facet("state"), options: stateOptions },
+    issuesFacet(m, library.map(masterIssues), issueFilter),
   ]
-  const rowActions = (master: CalibrationMaster): MenuItem[] => [details(master), addVersion(master), ...masterLinks(master), { separator: true }, hide(master), trash(master)]
+  const rowActions = (master: CalibrationMaster): MenuItem[] => withIssueItems(m, [details(master), addVersion(master), ...masterLinks(master), { separator: true }, hide(master), trash(master)], masterIssues(master))
 
   return (
     <>
