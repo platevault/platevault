@@ -16,7 +16,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - The user chooses `Archive/NGC7000` and reviews every source and destination path.
 - After **Close project…**, each session transfers only after its destination hash and affected View references verify. The Project reads Closing until the operation succeeds, then Archived.
 - The symlinks of its View follow the transferred sessions.
-- 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it. Being another Project's suggestion does not keep 30 Sep.
+- 28 Sep stays on `Astro-T7` because another open Project holds it. Being another Project's suggestion does not keep 30 Sep.
 - An interrupted, failing or drifted item retains its source and recorded phase in Activity.
 - `4 Oct M 33`, which belongs to no Project, goes from Sessions to the Default `Archive/Long-term` through a reviewed transfer, and Sessions doesn't let the user select 28 Sep, which an open Project holds.
 - Retiring an offline archive location changes no files. Its copies read Retired and are not available inputs.
@@ -199,7 +199,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
 - SC8: Retiring changes 0 files and 0 copies read Missing (S12). After S13 captured integration rises by exactly 11h 30m, the 18, 26 and 30 Sep lights, so no capture is counted twice and no retired association transfers.
 - SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
-- SC10: 0 of the 56 28 Sep files are copied, moved or retired from S1 through S9a; the session stays on `Astro-T7` because another Project that is not Closed holds it.
+- SC10: 0 of the 56 28 Sep files are copied, moved or retired from S1 through S9a; the session stays on `Astro-T7` because another open Project holds it.
 - SC11: Make default moves 0 files, and the archive goes to the Project's chosen `Archive/NGC7000`, with 0 to paths under the Default `Archive/Long-term` (S1a, S5).
 - SC12: Archiving `4 Oct M 33` from Sessions moves exactly 16 files, all to the Default `Archive/Long-term`, retires 0 sources before their destination verifies and changes 0 Projects. Closing its review first moves 0 files, and 28 Sep can't be selected there (S9b, S9c).
 - SC13: All 20 symlinks of the View that Closed Project `NGC 7000 first light` kept point to `Archive/NGC7000` after S9a, Activity records 1 repoint for it, and its sessions, goals, snapshot and Wrap up record change 0 times (S4, S9a).

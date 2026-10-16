@@ -16,7 +16,7 @@ The user wraps up Project `NGC 7000 HOO` after its View changes have been applie
 - Wrap up opens only when no Project change is pending and offers Clean up → Trash → Archive in order.
 - The user skips Clean up, so the Project's Symlinks View stays in place.
 - Trash moves the rejected frames, the `Processing/` files and the duplicate copies to the OS Trash.
-- **Close project…**, Archive's Proceed, transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it.
+- **Close project…**, Archive's Proceed, transfers 18, 24, 26 and 30 Sep to `Archive/NGC7000`. 28 Sep stays on `Astro-T7` because another open Project holds it.
 - Sources retire only after the destination and affected references verify, and the View's symlinks follow the archived sessions.
 - `Output/` is kept, and the Project reads Archived after the transfer succeeds.
 - The Closed Project is locked for good: no Reopen, no restore of archived sessions, and no library or calibration change reaches it. **Duplicate…** is the way to continue it.
