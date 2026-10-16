@@ -44,11 +44,10 @@ pub enum LogError {
     Export { code: LogExportErrorCode, message: String },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
-    /// The export failed and left its own unfinished file at `path`, the
-    /// destination under its canonicalized parent
-    /// (`ExportWriteError::LeftUnfinished`).
-    #[error("{message}")]
-    UnfinishedExport { path: std::path::PathBuf, message: String },
+    /// The export failed and left its own unfinished file under its canonical
+    /// destination parent (`ExportWriteError::LeftUnfinished`).
+    #[error("{0}")]
+    UnfinishedExport(fs_pathsafe::export_dest::UnfinishedFile),
 }
 
 impl LogError {
@@ -91,9 +90,7 @@ impl From<LogError> for ContractError {
             LogError::Io(e) => {
                 Self::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
             }
-            LogError::UnfinishedExport { path, message } => {
-                crate::errors::export_unfinished_file(&path, message)
-            }
+            LogError::UnfinishedExport(file) => crate::errors::export_unfinished_file(file),
         }
     }
 }
@@ -332,10 +329,7 @@ pub async fn export_entries(
                 message: format!("{}: {}", rejected.message(), dest.display()),
             },
             ExportWriteError::Io(e) => LogError::Io(e),
-            ExportWriteError::LeftUnfinished(file) => {
-                let message = file.to_string();
-                LogError::UnfinishedExport { path: file.into_path(), message }
-            }
+            ExportWriteError::LeftUnfinished(file) => LogError::UnfinishedExport(file),
         })?;
 
     Ok((validated.path().to_string_lossy().into_owned(), count, bytes))
@@ -707,17 +701,22 @@ mod tests {
     /// from a plain I/O error and the canonical path reaches the details.
     #[test]
     fn an_unfinished_export_carries_its_code_and_canonical_path() {
-        let err = ContractError::from(LogError::UnfinishedExport {
-            path: std::path::PathBuf::from("/private/tmp/real/log.json"),
-            message: "left at /private/tmp/real/log.json".to_owned(),
-        });
+        let temp = tempfile::tempdir().expect("tempdir");
+        let canonical_parent = temp.path().canonicalize().expect("canonical parent");
+        let path = canonical_parent.join("log.json");
+        let file = fs_pathsafe::export_dest::UnfinishedFile::for_test(
+            path.clone(),
+            std::io::Error::other("write failed"),
+            true,
+        );
+        let err = ContractError::from(LogError::UnfinishedExport(file));
 
         assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
-        assert_eq!(err.message, "left at /private/tmp/real/log.json");
+        assert!(err.message.contains(path.to_str().expect("utf-8 temp path")));
         assert_eq!(
             err.details,
             contracts_core::JsonAny::from(serde_json::json!({
-                "path": "/private/tmp/real/log.json"
+                "path": path.to_string_lossy()
             }))
         );
     }

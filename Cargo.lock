@@ -177,9 +177,11 @@ dependencies = [
  "anyhow",
  "audit",
  "contracts_core",
+ "fs_pathsafe",
  "persistence_core",
  "serde_json",
  "sqlx",
+ "tempfile",
 ]
 
 [[package]]

@@ -163,15 +163,15 @@ pub fn bus_err(e: audit::bus::BusError) -> ContractError {
 }
 
 /// The `export.unfinished_file` `ContractError` for an export that failed and
-/// left its own unfinished file at `path`
+/// left its own unfinished file at the destination
 /// (`fs_pathsafe::export_dest::ExportWriteError::LeftUnfinished`).
 ///
-/// `details.path` carries the path the backend wrote, under the
-/// canonicalized parent, and the UI shows it: the path the user chose can name
-/// another file once a symlink in it is retargeted. `message` is the backend
-/// diagnostic, never shown to the user.
+/// `details.path` and the diagnostic message are derived from the same
+/// `UnfinishedFile`, so callers cannot report a different dialog path.
 #[must_use]
-pub fn export_unfinished_file(path: &std::path::Path, message: String) -> ContractError {
+pub fn export_unfinished_file(file: fs_pathsafe::export_dest::UnfinishedFile) -> ContractError {
+    let message = file.to_string();
+    let path = file.into_path();
     ContractError::new(ErrorCode::ExportUnfinishedFile, message, ErrorSeverity::Blocking, false)
         .with_details(serde_json::json!({ "path": path.to_string_lossy() }))
 }
@@ -240,19 +240,30 @@ mod tests {
     }
 
     #[test]
-    fn export_unfinished_file_carries_the_leftover_path_in_details() {
-        let err = export_unfinished_file(
-            std::path::Path::new("/private/tmp/real/out.json"),
-            "diagnostic".to_owned(),
+    fn export_unfinished_file_carries_the_path_from_the_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let canonical_parent = temp.path().canonicalize().expect("canonical parent");
+        let path = canonical_parent.join("out.json");
+        let unfinished = fs_pathsafe::export_dest::UnfinishedFile::for_test(
+            path.clone(),
+            std::io::Error::other("write failed"),
+            true,
         );
 
+        let err = export_unfinished_file(unfinished);
+
         assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
-        assert_eq!(err.message, "diagnostic");
-        assert!(!err.retryable);
+        assert_eq!(
+            err.message,
+            format!(
+                "the export failed (write failed) and an empty file remains at {}",
+                path.display()
+            )
+        );
         assert_eq!(
             err.details,
             contracts_core::JsonAny::from(serde_json::json!({
-                "path": "/private/tmp/real/out.json"
+                "path": path.to_string_lossy()
             }))
         );
     }

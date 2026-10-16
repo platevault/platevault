@@ -234,6 +234,39 @@ mod detail_tests {
         assert!(d.code.is_none());
         assert!(d.params.is_none());
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn unfinished_export_mapping_uses_the_leftover_not_the_dialog_path() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real_dir = dir.path().join("real");
+        std::fs::create_dir(&real_dir).expect("real dir");
+        let dialog_dir = dir.path().join("dialog");
+        std::os::unix::fs::symlink(&real_dir, &dialog_dir).expect("dialog symlink");
+        let dialog_path = dialog_dir.join("audit.ndjson");
+        let leftover_path = real_dir.canonicalize().expect("canonical parent").join("audit.ndjson");
+        let file = fs_pathsafe::export_dest::UnfinishedFile::for_test(
+            leftover_path.clone(),
+            std::io::Error::other("write failed"),
+            true,
+        );
+
+        let error = app_core::errors::export_unfinished_file(file);
+
+        assert_eq!(error.code, contracts_core::error_code::ErrorCode::ExportUnfinishedFile);
+        assert_eq!(
+            error.details,
+            contracts_core::JsonAny::from(serde_json::json!({
+                "path": leftover_path.to_string_lossy()
+            }))
+        );
+        assert_ne!(
+            error.details,
+            contracts_core::JsonAny::from(serde_json::json!({
+                "path": dialog_path.to_string_lossy()
+            }))
+        );
+    }
 }
 
 fn build_filter(
@@ -276,10 +309,8 @@ pub async fn audit_list(
     let mut filter = build_filter(filters, pagination);
     // Default limit clamp — same pattern as plans/read.rs:47.
     filter.limit = Some(filter.limit.unwrap_or(100).clamp(1, 500));
-
     let rows = list_audit_entries(pool, &filter).await.map_err(db_err)?;
     let total = count_audit_entries(pool, &filter).await.map_err(db_err)?;
-
     let entries = rows.into_iter().map(row_to_entry).collect();
     Ok(AuditListResponse { entries, total })
 }
@@ -335,7 +366,7 @@ pub async fn audit_export(
             )),
             ExportWriteError::Io(e) => ContractError::internal(format!("write error: {e}")),
             ExportWriteError::LeftUnfinished(file) => {
-                app_core::errors::export_unfinished_file(file.path(), file.to_string())
+                app_core::errors::export_unfinished_file(file)
             }
         })?;
 
@@ -347,13 +378,12 @@ pub async fn audit_export(
 }
 
 // ── entity.names ─────────────────────────────────────────────────────────────
-
+//
 /// `entity.names` — batch display-name lookup for `(entityType, entityId)` refs.
 ///
 /// Resolves project, plan, and target refs in three IN-clause DB queries instead
-/// of one IPC round-trip per unseen ref.  Session names are not included —
-/// callers read those from the inventory-sources query that is already in the
-/// session store.
+/// of one IPC round-trip per unseen ref. Session names are not included — callers
+/// read those from the inventory-sources query that is already in the session store.
 ///
 /// Absent ids (not in the DB) are simply omitted from the response map; the
 /// frontend hook treats absence as "unresolved".

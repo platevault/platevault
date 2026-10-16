@@ -159,6 +159,15 @@ impl UnfinishedFile {
     }
 }
 
+#[cfg(any(test, feature = "test-fixture"))]
+impl UnfinishedFile {
+    /// Construct an unfinished export for tests that verify error mapping.
+    #[must_use]
+    pub fn for_test(path: PathBuf, source: io::Error, emptied: bool) -> Self {
+        Self { path, source, emptied }
+    }
+}
+
 impl fmt::Display for UnfinishedFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let file = if self.emptied {
