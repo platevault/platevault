@@ -619,7 +619,7 @@ mod tests {
         assert!(notices.roots().watch(HashMap::from([("card", card), ("late", late.clone())])));
         // Both were followed: the one that opened is registered.
         assert_eq!(registered(window, 1).len(), 1);
-        assert!(!held(&late));
+        assert!(!late.exists(), "it cannot be opened yet");
         std::fs::create_dir(&late).unwrap();
         assert_eq!(registered(window, 2).len(), 2, "registered at a retry tick");
         assert!(held(&late), "its registration holds it open");
