@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { useEffect, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { m } from "@/lib/i18n"
-import { type SiteLocation, SiteLocationField, SitePicker } from "./pickers"
+import { NightPicker, type SiteLocation, SiteLocationField, SitePicker } from "./pickers"
 
 // Tiles that fail to load (an outage, a blocked provider) are hard to produce in jsdom, and Leaflet needs a
 // layout engine: the map stands in as one that reports itself unavailable as soon as it mounts.
@@ -102,5 +102,45 @@ describe("SitePicker", () => {
     expect(onChange).toHaveBeenLastCalledWith("site_lapalma")
     expect(screen.getByRole("combobox", { name: m.plan_site() })).toHaveTextContent("La Palma")
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+  })
+})
+
+describe("NightPicker", () => {
+  function Night({ onChange, weekJumps }: { onChange: (night: string) => void; weekJumps?: boolean }) {
+    const [night, setNight] = useState("2026-10-20")
+    return (
+      <NightPicker
+        value={night}
+        today="2026-10-17"
+        weekJumps={weekJumps}
+        onChange={(next) => {
+          setNight(next)
+          onChange(next)
+        }}
+      />
+    )
+  }
+
+  it("with weekJumps steps a week with « » and a night with ‹ ›, never before its first night", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Night onChange={onChange} weekJumps />)
+    await user.click(screen.getByRole("button", { name: m.picker_week_next() }))
+    expect(onChange).toHaveBeenLastCalledWith("2026-10-27")
+    await user.click(screen.getByRole("button", { name: m.targets_night_previous() }))
+    expect(onChange).toHaveBeenLastCalledWith("2026-10-26")
+    await user.click(screen.getByRole("button", { name: m.picker_week_previous() }))
+    expect(onChange).toHaveBeenLastCalledWith("2026-10-19")
+    // A week back from the 19th clamps to tonight, the earliest night; then « and ‹ are disabled.
+    await user.click(screen.getByRole("button", { name: m.picker_week_previous() }))
+    expect(onChange).toHaveBeenLastCalledWith("2026-10-17")
+    expect(screen.getByRole("button", { name: m.picker_week_previous() })).toBeDisabled()
+    expect(screen.getByRole("button", { name: m.targets_night_previous() })).toBeDisabled()
+  })
+
+  it("without weekJumps shows night steps only", () => {
+    render(<Night onChange={vi.fn()} />)
+    expect(screen.getByRole("button", { name: m.targets_night_next() })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: m.picker_week_next() })).not.toBeInTheDocument()
   })
 })

@@ -5,7 +5,7 @@ import type { ReactNode } from "react"
 import { describe, expect, it } from "vitest"
 import { Button } from "@/components/ui/button"
 import { m } from "@/lib/i18n"
-import { BlockersPreview, MasterPreview, type MasterPreviewProps } from "./previews"
+import { BlockersPreview, MasterPreview, type MasterPreviewProps, UsedByPreview } from "./previews"
 
 const ORIGIN = { projectId: null, sourcePath: "", sessionId: null }
 const OLDER = { id: "mv_older", capturedAt: "2026-05-02T22:10:00.000Z", frameCount: 30, origin: { kind: "library", ...ORIGIN } } as const
@@ -106,5 +106,26 @@ describe("BlockersPreview", () => {
     for (const header of [m.session_label(), m.project_noun()]) expect(within(table).getByRole("columnheader", { name: new RegExp(header) })).toBeInTheDocument()
     expect(within(table).getByRole("rowheader", { name: "30 Sep OIII" })).toBeInTheDocument()
     expect(within(table).getByRole("link", { name: "Cygnus HOO" })).toHaveAttribute("href", "/projects/prj_cygnus")
+  })
+})
+
+describe("UsedByPreview", () => {
+  it("without a link of its own, links to its first user", async () => {
+    const items = [
+      { label: "RedCat 51", link: { to: "/settings/equipment", search: { rig: "rig_redcat" } } },
+      { label: "Esprit 100", link: { to: "/settings/equipment", search: { rig: "rig_esprit" } } },
+    ]
+    renderInRouter(<UsedByPreview label="2 rigs" items={items} />)
+    expect(await screen.findByRole("link", { name: "2 rigs" })).toHaveAttribute("href", "/settings/equipment?rig=rig_redcat")
+  })
+
+  it("reads – with nowhere to link", async () => {
+    renderInRouter(
+      <p data-testid="cell">
+        <UsedByPreview label="0 rigs" items={[]} />
+      </p>,
+    )
+    expect(await screen.findByTestId("cell")).toHaveTextContent(/^–$/)
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
   })
 })
