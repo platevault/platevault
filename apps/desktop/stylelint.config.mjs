@@ -25,9 +25,8 @@ export default {
     // Hand-written CSS takes colour from tokens only (#1334): a raw literal
     // bypasses theming and the contrast checks run on the token set.
     'color-no-hex': true,
-    'function-disallowed-list': [
-      'rgb', 'rgba', 'hsl', 'hsla', 'hwb', 'lab', 'lch', 'oklab', 'oklch', 'color',
-    ],
+    // Regex with /i: CSS function names are case-insensitive, so RGB() is rgb().
+    'function-disallowed-list': ['/^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i'],
     // Named colours (`red`, `black`) are raw literals too. The rule leaves
     // transparent, currentColor and the CSS-wide keywords alone.
     'color-named': 'never',
