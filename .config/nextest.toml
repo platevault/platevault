@@ -121,10 +121,10 @@ failure-output = "immediate-final"
 # It does NOT cover the runner-image faults tracked by `astro-plan-gl5q`
 # (STATUS_DLL_INIT_FAILED / 0xC0000142). Those kill the harness process during
 # init, before any test starts, so nextest has no test to retry and the retry
-# budget is orthogonal to them. `gl5q` asks for exit-code detection, not
-# retries: a step that recognises 0xC0000142, or any exit with zero test output,
-# and reports "runner failure, re-run". That work is unstarted; do not read this
-# retry budget as protection against it.
+# budget is orthogonal to them. The Windows shard job handles them instead:
+# `scripts/e2e-shard-attempt.ps1` classifies such a death as a runner failure
+# and `.github/workflows/e2e.yml` re-runs the shard once, while a real test
+# failure stays red. Do not read this retry budget as protection against it.
 #
 # If flakes return, that is the answer: raise it back to 2 and reopen the
 # contamination investigation with the shard logs as evidence.

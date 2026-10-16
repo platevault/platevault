@@ -1020,7 +1020,8 @@ jobs:
   # post-fix samples — timings that measure a bug are invalid. Re-evaluate
   # after any fix that changes a test's runtime.
   # Adding a new slow_: measure on 2+ CI runs, add to the table (with run
-  # IDs), re-run LPT, and update the -E expressions below.
+  # IDs), re-run LPT, and update the matrix `filter:` -E expressions below
+  # and their SHARD1/2/3 copies in "Verify shard coverage".
   #
   # Adding a new NON-slow_ test: tests in files that have a binary() catch-all
   # in one shard's -E expression are picked up automatically; tests in files
@@ -1085,7 +1086,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        include:
+          # Shard 1 (~104s): slow_dock_pin (81.1s) + 4 short tests.
+          - shard: 1
+            filter: >-
+              test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db)
+          # Shard 2 (~103s): slow_archive (25.5s) + 11 mid-range tests.
+          - shard: 2
+            filter: >-
+              test(=slow_archive_lifecycle_apply_trash_permanent_delete) | test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | test(=ingestion_sessions_search) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply) | test(=plan_review_apply_with_audit) | test(=lifecycle_integrity)
+          # Shard 3 (~104s): no slow_ test, 13 mid-range tests.
+          - shard: 3
+            filter: >-
+              test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=cleanup_plan_review) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=first_run_resolve_create_project) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -1143,7 +1156,8 @@ jobs:
 
       # Shard-coverage integrity check (shard 1 only — runs once per push).
       # Lists all ignored tests from the archive, then lists the union of all
-      # three shard -E expressions from the same archive, and fails if any test
+      # three shard -E expressions (copies of the matrix `filter:` values;
+      # keep them identical) from the same archive, and fails if any test
       # is uncovered. A new test added to a file with no binary() catch-all
       # (archive_journeys, inbox_ui_journeys, journeys,
       # plan_review_overlay_journeys, settings_journeys, targets_journeys) but
@@ -1176,50 +1190,76 @@ jobs:
             exit 1
           fi
 
-      # Shard 1 (~104s): slow_dock_pin (81.1s) + 4 short tests.
-      - name: Run E2E (shard 1/3)
+      # Runner-death handling (astro-plan-gl5q). An unhealthy windows-latest
+      # runner can kill the shard before any test runs: in job 88420704923 the
+      # step's bash exited -1073741502 (0xC0000142, STATUS_DLL_INIT_FAILED)
+      # after ~45ms with zero output, on a runner that had already logged
+      # actions/partner-runner-images#169 "bash startup failure". Nextest
+      # retries cannot catch that (no test exists yet to retry), and the red
+      # shard looked like a test failure.
+      #
+      # So attempt 1 may fail without failing the job. The step runs under
+      # pwsh through scripts/e2e-shard-attempt.ps1, which classifies the end
+      # as passed / runner-failure / suite-failure and writes `class`. A
+      # runner failure, or a step whose shell died before writing any class,
+      # re-runs the shard once; a suite failure fails the job without a
+      # re-run, so real test failures stay red. Keep the two nextest
+      # invocations identical.
+      - name: Self-test the shard failure classifier
         if: matrix.shard == 1
-        shell: bash
-        env:
-          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: >-
-          cargo nextest run
-          --archive-file e2e-archive.tar.zst
-          --workspace-remap .
-          --profile e2e
-          --run-ignored all
-          --no-tests=fail
-          -E 'test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db)'
+        shell: pwsh
+        run: ./scripts/tests/e2e-shard-attempt.tests.ps1
 
-      # Shard 2 (~103s): slow_archive (25.5s) + 11 mid-range tests.
-      - name: Run E2E (shard 2/3)
-        if: matrix.shard == 2
-        shell: bash
+      - name: Run E2E (shard ${{ matrix.shard }}/3)
+        id: e2e
+        continue-on-error: true
+        shell: pwsh
         env:
           PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          E2E_SHARD_FILTER: ${{ matrix.filter }}
         run: >-
+          ./scripts/e2e-shard-attempt.ps1 -Attempt 1 --
           cargo nextest run
           --archive-file e2e-archive.tar.zst
           --workspace-remap .
           --profile e2e
           --run-ignored all
           --no-tests=fail
-          -E 'test(=slow_archive_lifecycle_apply_trash_permanent_delete) | test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | test(=ingestion_sessions_search) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply) | test(=plan_review_apply_with_audit) | test(=lifecycle_integrity)'
+          -E $env:E2E_SHARD_FILTER
 
-      # Shard 3 (~104s): no slow_ test, 13 mid-range tests.
-      - name: Run E2E (shard 3/3)
-        if: matrix.shard == 3
-        shell: bash
+      - name: Re-run E2E once after a runner failure (shard ${{ matrix.shard }}/3)
+        if: >-
+          steps.e2e.outcome == 'failure'
+          && (steps.e2e.outputs.class == '' || steps.e2e.outputs.class == 'runner-failure')
+        shell: pwsh
         env:
           PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: >-
-          cargo nextest run
-          --archive-file e2e-archive.tar.zst
-          --workspace-remap .
-          --profile e2e
-          --run-ignored all
-          --no-tests=fail
-          -E 'test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=cleanup_plan_review) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=first_run_resolve_create_project) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
+          E2E_SHARD_FILTER: ${{ matrix.filter }}
+          FIRST_CLASS: ${{ steps.e2e.outputs.class }}
+        run: |
+          if (-not $env:FIRST_CLASS) {
+            Write-Output "::warning title=Runner failure, not a test failure::Shard attempt 1 died before its shell started the suite (no class recorded; its exit code is on that step, e.g. -1073741502 = 0xC0000142 STATUS_DLL_INIT_FAILED). Re-running the shard once."
+          }
+          ./scripts/e2e-shard-attempt.ps1 -Attempt 2 -- `
+            cargo nextest run `
+            --archive-file e2e-archive.tar.zst `
+            --workspace-remap . `
+            --profile e2e `
+            --run-ignored all `
+            --no-tests=fail `
+            -E $env:E2E_SHARD_FILTER
+
+      - name: Fail on an E2E suite failure (shard ${{ matrix.shard }}/3)
+        if: >-
+          steps.e2e.outcome == 'failure'
+          && steps.e2e.outputs.class != ''
+          && steps.e2e.outputs.class != 'runner-failure'
+        shell: bash
+        env:
+          FIRST_CLASS: ${{ steps.e2e.outputs.class }}
+        run: |
+          echo "::error::Shard ${{ matrix.shard }}/3 attempt 1 ended as ${FIRST_CLASS}: a real failure, not re-run. See the 'Run E2E' step output."
+          exit 1
 
   # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
   # no xvfb (native display), longer timeout for the 120s-per-attempt
