@@ -175,10 +175,6 @@ pub(super) async fn handle_completed(
         return;
     }
 
-    // TEMPORARY (fail-first evidence, reverted before review): widen the window
-    // between the terminal state commit and the rest of the handler.
-    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-
     append_plan_transition(pool, plan_id, run_id, "applying", &terminal, &at).await;
 
     let _ = bus
