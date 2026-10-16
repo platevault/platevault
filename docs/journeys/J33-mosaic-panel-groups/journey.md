@@ -145,7 +145,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - SC1: The Project holds exactly 7 sessions in four panel groups with 40, 30, 30 and 20 lights; 16 Aug is not a Project session (S1a, S1c).
 - SC2: The Project shows four separate panel-goal sets and a panel map; the weakest panel is visible in Project progress (S2, S2a).
 - SC3: Apply builds four `PANEL_` group folders from the originals. A refused Apply leaves the current View unchanged, and a successful Apply includes the reviewed rename (S8, S9, S10).
-- SC4: Exactly six files appear as Results: five in panel-group folders under `Output/Panels/`, the four panel stacks and `Panel4_OIII_drizzle.xisf` under Panel 2, and one assembled mosaic in `Output/`. The filename of a file in a panel folder does not change its panel attribution; none needs acceptance or has recorded lineage (S11, S12, S14).
+- SC4: Exactly six files appear as Results: five in panel-group folders under `Output/Panels/`, which are the four panel stacks, one per panel folder, and `Panel4_OIII_drizzle.xisf` under Panel 2, and one assembled mosaic in `Output/`. The filename of a file in a panel folder does not change its panel attribution; none needs acceptance or has recorded lineage (S11, S12, S14).
 - SC5: Marking Q1 and Q2 Unusable creates exactly two Library-labelled pending removals; neither the marks nor Apply moves originals, and `Output/` remains unchanged (S13).
 - SC6: Wrap up moves exactly two rejected captures to the OS Trash, leaves `Output/` in place, and permanently deletes zero files (S15).
 
