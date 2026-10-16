@@ -1,7 +1,7 @@
 ---
 id: J24
 title: Build and open a Project View
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -80,7 +80,7 @@ Done means:
 ### S8 — Review the first Apply sheet {#S8}
 
 - **Do:** Open **Apply…** and inspect the proposed inputs, calibration and layout.
-- **Expect:** The sheet names the Project, Siril, Symlinks mode, all 208 light entries, pinned calibration, source paths, counts, footprint, free space and the exact first-Apply changes. Its folder tree puts lights and assigned flats in `NIGHT_2026-09-28/Lights/Ha/` and `NIGHT_2026-09-28/Flats/Ha/`. With one group the `NIGHT_` folders and one-camera `Darks/` and `Bias/` sit at the top level, with no `GROUP_` level. The sheet does not count unknown or omitted inputs as placed.
+- **Expect:** The sheet names the Project, Siril, Symlinks mode, all 208 light entries, pinned calibration, source paths, counts, footprint, free space and the exact first-Apply changes. Its folder tree puts lights and assigned flats in `NIGHT_2026-09-28/Lights/Ha_300s/` and `NIGHT_2026-09-28/Flats/Ha/`. With one group the `NIGHT_` folders and one-camera `Darks/` and `Bias/` sit at the top level, with no `GROUP_` level. The sheet does not count unknown or omitted inputs as placed.
 - **Expect (negative):** Opening the sheet creates no files, changes no original and makes no calibration assignment. The sheet has no per-Project calibration matching controls.
 - **Trace:** VSEL-FR-14, VSEL-FR-16 · PREP-FR-08, PREP-FR-16 · CAL-FR-09 · D-W99, D-W100, D-W101
 
@@ -93,10 +93,10 @@ Done means:
 
 ### S8b — Refuse Apply while a pinned flat file changed {#S8b}
 
-- **Do:** Close the sheet. Outside PlateVault, overwrite the 28 Sep session's pinned master flat with its P9 variant and restore its mtime. Open the 28 Sep session in Sessions, then open **Apply…** again. Restore the flat's P9 backup and reopen **Apply…**.
-- **Expect:** The session still shows the master flat pinned and reads it as changed, with **Reassign…**. The sheet names the changed flat with a link to reassign it on the session, and Apply is refused. After the backup is restored, the reopened sheet names no changed flat, and Apply is available.
-- **Expect (negative):** No other flat is pinned or placed by itself, and the pin is not removed. The View and `View (previous)/` stay unchanged while the flat differs.
-- **Trace:** VSEL-FR-14 · CAL-FR-08 · LIB-FR-23 · VSEL-AC-35, CAL-AC-29 · D-W113
+- **Do:** Close the sheet. Outside PlateVault, overwrite the 28 Sep session's pinned master flat with its P9 variant and restore its mtime. Open the 28 Sep session in Sessions and read the **Needs calibration** filter, then open **Apply…** again. Restore the flat's P9 backup, read **Needs calibration** again and reopen **Apply…**.
+- **Expect:** The session still shows the master flat pinned and reads it as changed, with **Reassign…**, and **Needs calibration** lists it. The sheet names the changed flat with a link to reassign it on the session, and Apply is refused. After the backup is restored, **Needs calibration** no longer lists the session, the reopened sheet names no changed flat, and Apply is available.
+- **Expect (negative):** No other flat is pinned or placed by itself, and the pin is not removed. The View and `View (previous)/` stay unchanged while the flat differs, and the Project keeps the session.
+- **Trace:** VSEL-FR-14 · CAL-FR-08 · LIB-FR-17, LIB-FR-23 · VSEL-AC-35, CAL-AC-29, LIB-AC-33 · D-W113
 
 ### S9 — Build the first View {#S9}
 
@@ -171,7 +171,7 @@ Done means:
 ### S17 — Verify the rebuilt group layout and copies {#S17}
 
 - **Do:** Inspect the new View tree and the Project's Apply details.
-- **Expect:** The tree has `GROUP_` folders for RedCat and `RedCat · 2`, then hyphenated `NIGHT_` folders with `Lights/Ha/` and assigned `Flats/Ha/`. `Darks/` and `Bias/` are shared at the top for the one camera. Copies are fresh copies from originals and are clones on the fixture volume that supports clones. The previous View is removed after its recorded entries are safely removed.
+- **Expect:** The tree has `GROUP_` folders for RedCat and `RedCat · 2`, then hyphenated `NIGHT_` folders with `Lights/Ha_300s/` and assigned `Flats/Ha/`. `Darks/` and `Bias/` are shared at the top for the one camera. Copies are fresh copies from originals and are clones on the fixture volume that supports clones. The previous View is removed after its recorded entries are safely removed.
 - **Expect (negative):** No hard link points to an original, and no Result is inside View or written into Output by Siril.
 - **Trace:** PREP-FR-04, PREP-FR-06, PREP-FR-16 · STO-FR-10 · D-W98, D-W99, D-W100
 
@@ -180,7 +180,7 @@ Done means:
 - SC1: The first Apply installs exactly 208 verified light entries and all pinned calibration inputs, with no original changed (S8, S9).
 - SC2: An offline original is named, Apply is disabled and both View folders stay unchanged until it returns (S8a).
 - SC3: Symlinks is the default, Copies is the only alternative, and Windows with Developer Mode off refuses Symlinks Apply without creating files (S1, S1a).
-- SC4: The first single-group tree has no `GROUP_` level; after the split it has group folders, hyphenated `NIGHT_` folders, filter-value subfolders and the one-camera shared `Darks/` and `Bias/` folders (S7, S8, S17).
+- SC4: The first single-group tree has no `GROUP_` level; after the split it has group folders, hyphenated `NIGHT_` folders, light folders named by filter and exposure, flat folders named by filter and the one-camera shared `Darks/` and `Bias/` folders (S7, S8, S17).
 - SC5: Siril launches 0 times when an executable is missing or an input differs from its Apply snapshot, and launches after the originals are restored and entries verify (S10, S10a, S11).
 - SC6: Group and mode changes leave the current View unchanged until Apply, and the Apply sheet names the move, mode, folder tree, layout note and space for two Views (S12, S13, S14).
 - SC7: While Windows holds a View entry, Apply waits after building; cancel keeps the current View, and releasing the file allows a later Apply to swap in the complete new View (S15, S15a, S16).
@@ -200,7 +200,7 @@ Done means:
 - G9: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S17 now makes revision 2 with "Reject for this Project only" on one 28 Sep frame, whose library quality stays Usable, as in J22/S11b.
 - G10: (dissolved 2026-10-15): D-W94 removes runs and their saved and prepared revisions. A library rejection becomes a labelled pending change on every open Project that holds the frame (D-W100, VSEL-FR-12), so there is no other run's revision to define.
 - G11: Unresolved implementation qualification: the Windows file-handle fixture of P8 does not exist in the rebuilt application yet, and S15, S15a and S16 depend on it. Blocks readiness.
-- G12: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W100's rule that the first Apply builds the View with no separate Start processing (S8, S9), the "Use copies for this Project" refusal copy of PREP-FR-15 (S1a), and D-W95's "re-add View in your tool" layout note (S14). If the owner changes one, the steps that cite it change.
+- G12: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W100's rule that the first Apply builds the View with no separate Start processing (S8, S9), the "Use copies for this Project" refusal copy of PREP-FR-15 (S1a), D-W95's "re-add View in your tool" layout note (S14), and D-W108's exposure part that ends every light folder name, `Ha_300s` (S8, S17). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S4, S6, S7, S8, S9, S10, S12, S13, S14, S15, +S17 · behavior-change
@@ -223,3 +223,6 @@ Done means:
 - **Δ7** 2026-10-16 · +S8b · behavior-change
   When a pinned calibration file changes, the pin stays, the session reads the file as changed, and Apply refuses with a link to reassign it; nothing switches by itself.
   Evidence: D-W113 (owner's answers of 2026-10-15/16) in PR #1804, CAL-FR-08, LIB-FR-23, VSEL-FR-14, VSEL-AC-35, CAL-AC-29 · by: SpecF4Answers (intent-gated)
+- **Δ8** 2026-10-16 · S8, S8b, S17 · behavior-change
+  A session whose pinned flat changed waits in Needs calibration until the file is restored, and the Project keeps it. Light folders end in their exposure, `Lights/Ha_300s/` (provisional), while flat folders keep the filter name.
+  Evidence: D-W108 and D-W113 as amended by the owner's second batch of 2026-10-16 in PR #1804, PREP-FR-16, LIB-FR-17, LIB-FR-23, LIB-AC-33, CAL-AC-29 · by: EncodeOwnerAnswers2 (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J31
 title: Import from a card or folder with Copy or Move and templated paths
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -84,7 +84,7 @@ folder is added in place. Done means:
 - **Do:** Read the full preview without starting the import.
 - **Expect:** The preview lists each incoming light session with its Target, then each planned file with its destination and its route. Lights and raw calibration files keep their original basenames.
   - `2 Oct Ha` (30 lights) reads Target NGC 7000, prefilled from its pointing, with `OBJECT NGC 7000` shown beside it only as a hint.
-  - `2 Oct OIII` (6 lights) has no Target prefilled, because it has no pointing, and shows no OBJECT hint.
+  - `2 Oct OIII` (6 lights) is one session with no framing split, because its lights have no pointing. It has no Target prefilled for the same reason, and it shows no OBJECT hint.
   - The 30 Ha lights are listed under `NGC 7000/Ha/2026-10-02/light/` in `Astro-T7 captures`, routed to Sessions, including the 12 taken after midnight.
   - The 6 OIII lights are not listed under `NGC 7000/` or under any other Target's folder (G8).
   - The 10 flats are listed under `Raw/Flats/Ha/2026-10-02/` and the darks under `Raw/Darks/300s/2026-10-02/` in `Astro-T7 calibration`, routed `Calibration → stack`.
@@ -96,7 +96,7 @@ folder is added in place. Done means:
 
   For each destination volume, the preview shows its free space and the space the import needs, and reads `Writable`. Copy and Move are offered for the whole import. The footer reads `56 frames` with the total size, and the start button reads **Import 56 frames**.
 - **Expect (negative):** Nothing is written before the user starts the import, and the collision is never resolved by overwriting. `2 Oct Ha`'s Target is attributed to its pointing, never to its OBJECT.
-- **Trace:** Import preview · STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-05, STO-IMP-FR-07 · STO-IMP-AC-01, STO-IMP-AC-06, STO-IMP-AC-10 · D-W11, D-W20, D-W24 · HARNESS-V5-IA.md §Screens S13, §Round 2b (P-CAL3: structured storage, Routing) · HARNESS-V5-FEEDBACK-R1.md §Round 6 (P-IMP2) · `templates.ts` DEFAULT_NAMING, resolveNamingTemplate
+- **Trace:** Import preview · STO-IMP-FR-02, STO-IMP-FR-03, STO-IMP-FR-05, STO-IMP-FR-07 · STO-IMP-AC-01, STO-IMP-AC-06, STO-IMP-AC-10 · LIB-FR-04 · LIB-AC-34 · D-W11, D-W20, D-W24, D-W107 · HARNESS-V5-IA.md §Screens S13, §Round 2b (P-CAL3: structured storage, Routing) · HARNESS-V5-FEEDBACK-R1.md §Round 6 (P-IMP2) · `templates.ts` DEFAULT_NAMING, resolveNamingTemplate
 
 ### S4 — Change the light naming template {#S4}
 
@@ -158,14 +158,14 @@ folder is added in place. Done means:
 - **Do:** Connect `Card-2`. Choose it as the source and `Astro-T7 captures` as the Captures location. Read the preview, then open the Target picker of `4 Oct Ha` and choose Unclassified. Choose **Move**, click **Move 12 frames** and confirm. Open the OS Trash.
 - **Expect:**
   - Card-2 appears under Removable devices once connected, read as `USB device` with no recognised layout.
-  - The preview lists `4 Oct Ha` (12 lights) with no Target prefilled, because it has no pointing, and `OBJECT NGC7000` shown beside it only as a hint. Before the choice, none of its lights is listed under `NGC7000/` or `NGC 7000/`.
+  - The preview lists `4 Oct Ha` (12 lights) as one session with no framing split and no Target prefilled, because its lights have no pointing, with `OBJECT NGC7000` shown beside it only as a hint. Before the choice, none of its lights is listed under `NGC7000/` or `NGC 7000/`.
   - After choosing Unclassified, its 12 lights are listed under `unclassified/Ha/2026-10-04/light/` in `Astro-T7 captures`, and the preview names the `{target}` fallback it used.
   - The confirmation `Move 12 frames?` lists `Copies 12 frames (<size>) into Astro-T7 captures`, `Verifies each copy (SHA-256)` and `Sends 12 verified sources on Card-2 to the OS Trash`.
   - The summary reads `12 frames · <size> · 1 session · sources → OS Trash`. A second operation, `Move import sources to the OS Trash`, moves the 12 sources only after every copy verified against its source snapshot.
   - The 12 files are in the OS Trash and can be put back.
   - Sessions lists a new 4 Oct Ha session of 12 frames with no Target, under **Needs a Target**, with `OBJECT NGC7000` shown as a label. Its frames sit under `unclassified/Ha/2026-10-04/light/`.
 - **Expect (negative):** No source is permanently deleted, and no source reached the Trash before its destination verified. OBJECT `NGC7000` sets neither the session's Target nor `{target}`: no `NGC7000/` folder and no `NGC 7000/Ha/2026-10-04/` folder is created, and no file moves after the import.
-- **Trace:** Import · STO-IMP-FR-04, STO-IMP-FR-06 · STO-IMP-AC-03 · D19, D-W11 · HARNESS-V5-IA.md §Screens S13 (Move verifies, then sends the source to the OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected), §Round 5 (OBJECT is a label, never evidence), §Round 6 (P-IMP2: OBJECT shown only as a hint; Unclassified sessions go to an Unclassified folder)
+- **Trace:** Import · STO-IMP-FR-04, STO-IMP-FR-06 · STO-IMP-AC-03 · LIB-FR-04 · LIB-AC-34 · D19, D-W11, D-W107 · HARNESS-V5-IA.md §Screens S13 (Move verifies, then sends the source to the OS Trash) · HARNESS-V5-FEEDBACK-R1.md §Domain and seed (removable devices detected when connected), §Round 5 (OBJECT is a label, never evidence), §Round 6 (P-IMP2: OBJECT shown only as a hint; Unclassified sessions go to an Unclassified folder)
 
 ### S10 — Import from a network share that drops mid-import {#S10}
 
@@ -226,7 +226,7 @@ folder is added in place. Done means:
 - G7: (dissolved 2026-10-12): answered by Round 6 "Import source vanishes mid-import"; S10 now asserts that the import pauses as `Interrupted`, fails no item, and resumes on Retry. Unmounting the share at a known point still needs the fixture tooling that G2 records.
 - G8: Unresolved product question: P-IMP2 prefills a session's Target from its pointing, but Round 6 does not say what the preview shows for a session whose pointing is missing or that no Target's footprint contains (`2 Oct OIII`, `4 Oct Ha`), or whether Import waits for a choice. Options: (a, recommended) Unclassified is preselected, so the import is always available and the user chooses a Target only to file it under that Target; (b) the Target is empty and Import is unavailable until the user chooses a Target or Unclassified, which forces a decision but blocks a quick card dump. S3 and S9 assert only that no Target is prefilled and that no light is listed under a Target's folder; S5a and S9 choose explicitly. Blocks readiness.
 - G9: Unresolved implementation qualification: the Card-1 fixture doesn't fix the calibration evidence of its two light sessions, so no step asserts which Import review state their darks, flats and bias read (LIB-FR-24, STO-IMP-AC-11). Blocks readiness until a fixture fixes them.
-- G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W107's rule that frames with no pointing evidence stay in one session, which keeps `2 Oct OIII` (S6) and `4 Oct Ha` (S9) whole. If the owner changes it, those steps change.
+- G10: (dissolved 2026-10-16): answered by the owner's amendment of D-W107 (LIB-FR-04, LIB-AC-34): frames with no pointing stay in one session, because without pointing there is no framing split. S3 and S9 assert that `2 Oct OIII` and `4 Oct Ha` each read as one session in the preview.
 
 ## Delta log
 
@@ -244,3 +244,6 @@ folder is added in place. Done means:
 - **Δ5** 2026-10-16 · +S10a, S12 · behavior-change
   Intake splits a night's lights into sessions by framing, and the import preview shows each split, which the user can merge or re-split before starting the import. A meridian flip doesn't split. The Goal and Done means name the split, and SC9 counts S10a's two sessions among the 6 imported light sessions.
   Evidence: D-W107 (owner's answers of 2026-10-15/16) in PR #1804, LIB-FR-04, LIB-FR-24, LIB-AC-31, STO-IMP-FR-03 · by: SpecF4Answers (intent-gated)
+- **Δ6** 2026-10-16 · S3, S9 · behavior-change
+  Lights with no pointing stay one session with no framing split: S3 and S9 now assert this for `2 Oct OIII` and `4 Oct Ha`. G10 is dissolved.
+  Evidence: D-W107 as amended by the owner's second batch of 2026-10-16 in PR #1804, LIB-FR-04, LIB-FR-24, LIB-AC-34 · by: EncodeOwnerAnswers2 (intent-gated)

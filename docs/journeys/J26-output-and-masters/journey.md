@@ -1,13 +1,13 @@
 ---
 id: J26
 title: Discover Project Output and adopt a calibration master
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, calibration, projects, activity]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, 071-storage-custody, D04, D05, D09, D13, D19, D-W98, D-W5, D-W94, D-W101, D-W93, D-W100, D-W97, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, P-CAL2, P-CAL3, apps/prototype/src/features/v5/e-targets-plan-settings/calibration.tsx, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, D-W103, D-W113]
+trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, 071-storage-custody, D04, D05, D09, D13, D19, D-W98, D-W5, D-W94, D-W101, D-W93, D-W100, D-W97, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters, HARNESS-V5-IA.md#S5, HARNESS-V5-IA.md#S14, HARNESS-V5-IA.md#round-2b-foundation-status-bar-and-p-cal3-2026-10-09, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed-foundation, HARNESS-V5-FEEDBACK-R1.md#round-1b-decisions-user-2026-10-09, P-CAL2, P-CAL3, apps/prototype/src/features/v5/e-targets-plan-settings/calibration.tsx, apps/prototype/messages/en-GB.json, J36, HARNESS-V5-FEEDBACK-R1.md#round-6, D-W103, D-W113, D-W119]
 ---
 
 ## Goal
@@ -135,14 +135,14 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Do:** Restore the source bytes with the P5 helper and, outside PlateVault, delete the unrelated S8a file from the proposed destination. Review and confirm adoption with the P6 pause armed. When the destination copy is verified and awaiting registration, change the source bytes again and release the pause.
 - **Expect:** The final source recheck detects drift, blocks registration and names the unregistered verified copy at the proposed destination.
 - **Expect (negative):** A master with a changed source is not registered, and PlateVault does not alter the source.
-- **Trace:** CAL-FR-07, CAL-AC-09 · D05, D19 · G4, G9
+- **Trace:** CAL-FR-07, CAL-AC-09 · D05, D19 · G4
 
 ### S9 — Adopt the generated master {#S9}
 
-- **Do:** Restore the P5 source bytes. Outside PlateVault, move the unregistered verified copy that S8c named out of the proposed destination, so the destination is empty. Review the SHA-256 and destination, and confirm **Add to calibration library**.
-- **Expect:** PlateVault rechecks the source against the reviewed digest, copies it, reads back and verifies the copy, and checks the source again before registering the master and its provenance. The generated file remains in `Processing/Siril/`.
-- **Expect (negative):** The master is not registered if any digest check fails, and adoption pins the master on no session and changes no session's pinned calibration.
-- **Trace:** CAL-FR-06, CAL-FR-07, CAL-FR-08 · CAL-AC-05, CAL-AC-07 · D05, D19, D-W98, D-W101 · G9
+- **Do:** Restore the P5 source bytes. Review the SHA-256 and destination, and confirm **Add to calibration library**. When the refusal names the copy at the destination, choose its **Move to Trash**, review the copy's path and SHA-256, and confirm.
+- **Expect:** The first confirmation is refused: the refusal names the unregistered verified copy that S8c left at the master's destination as PlateVault's own and offers **Move to Trash** for it. The move's review names the copy's path and SHA-256. Once the copy is in the OS Trash, adoption retries: PlateVault rechecks the source against the reviewed digest, copies it, reads back and verifies the copy, and checks the source again before registering the master and its provenance at that destination. The generated file remains in `Processing/Siril/`.
+- **Expect (negative):** The copy is never overwritten, reused or registered, and it leaves the destination only through the reviewed move. The master is not registered if any digest check fails, and adoption pins the master on no session and changes no session's pinned calibration.
+- **Trace:** CAL-FR-06, CAL-FR-07, CAL-FR-08 · CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09 · STO-FR-04, STO-FR-12 · D05, D19, D-W98, D-W101, D-W119
 
 ### S9a — Detect drift in the adopted master {#S9a}
 
@@ -173,7 +173,7 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - SC4: Changing Kind or Channel leaves the file listed as a Result and does not record lineage (S5).
 - SC5: The generated master is offered once from `Processing/`; Hide removes the offer and Show hidden with Restore returns the candidate to Calibration (S8).
 - SC6: An occupied master destination changes 0 bytes; a source that drifts after review or before registration registers 0 masters (S8a, S8b, S8c).
-- SC7: Adoption registers the master only after the reviewed source digest, verified destination digest and final source recheck agree (S9).
+- SC7: Adoption registers the master only after the reviewed source digest, verified destination digest and final source recheck agree, and PlateVault's own copy at the destination reaches the OS Trash only through the reviewed move (S9).
 - SC8: A changed adopted master reads drifted and is not offered as a valid input, and no session's calibration changes; restoring the bytes restores the digest without a new adoption (S9a, S9b).
 - SC9: Hide and Restore change 0 bytes and 0 paths for the master file (S9c).
 
@@ -187,7 +187,7 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - G6: (dissolved 2026-10-12): answered by Round 6 "Result revision"; S1 and S1a now assert that tool evidence decides each stack's revision, also against the revision current when it appeared, and that the log, without it, is marked Inferred.
 - G7: (dissolved 2026-10-12): answered by Round 6 "Rename runs and Projects"; S4 now asserts that the run starts as `NGC 7000 RedCat` and is renamed `NGC7000 HOO combine` on the run header, and S7 and S7a read the picker of the existing `28 Sep Ha copy check` instead of starting throwaway runs.
 - G8: (dissolved 2026-10-12): answered by Round 6 "Adopting a master"; S8a to S9 now assert that **Add to library** opens a confirmation naming the destination path and SHA-256 and re-verifies the bytes on confirm, so S8b writes no copy. G9 records what stays open.
-- G9: Unresolved product question: S8c leaves a verified copy, named unregistered, at the one fixed destination `Astro-T7/Calibration/Flats/RedCat/Ha/2026-10-01/MasterFlat_2026-10-01.fit`, and S9 adopts to that same path. CAL-AC-09 keeps that copy unregistered and CAL-AC-08 refuses an occupied path, but neither the design nor Round 6 says whether a later adoption is refused with `Name taken`, registers the existing copy once its bytes re-verify, or replaces PlateVault's own unregistered copy. S9 moves that copy out of the destination before it adopts, so it doesn't depend on the answer, and no step adopts over the copy. Blocks readiness.
+- G9: (dissolved 2026-10-16): answered by the owner's D-W119 (CAL-FR-07, CAL-AC-08). Adoption refuses PlateVault's own unregistered copy at the fixed destination, names it and offers a reviewed Move to Trash, then retries, so S9 clears the destination through PlateVault and adopts there.
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W98's once-only offer of a generated master found in `Processing/`, on the Output step (S8 to S9, SC5). If the owner changes it, those steps change.
 
 ## Delta log
@@ -209,3 +209,6 @@ The user opens the Project's Output step to find its Results, saves finished ima
 - **Δ6** 2026-10-16 · S9a · behavior-change
   No session pins the adopted master, so S9a reads only its drift in the Calibration library and Calibrate. J24/S8b covers a pinned file that changes, which keeps its pin and makes Apply refuse with a link to reassign (D-W113).
   Evidence: D-W113 (owner's answers of 2026-10-15/16) in PR #1804, CAL-FR-08, CAL-AC-10, J24/S8b · by: SpecF4Answers (intent-gated)
+- **Δ7** 2026-10-16 · S8c, S9 · behavior-change
+  S9 no longer moves the copy S8c left by hand: adoption refuses it as PlateVault's own unregistered copy, offers a reviewed Move to Trash, and retries once the copy is in the OS Trash. G9 is dissolved.
+  Evidence: D-W119 (owner's second batch of 2026-10-16) in PR #1804, CAL-FR-07, CAL-AC-08, CAL-AC-09, STO-FR-12 · by: EncodeOwnerAnswers2 (intent-gated)

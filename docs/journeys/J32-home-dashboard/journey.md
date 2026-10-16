@@ -1,7 +1,7 @@
 ---
 id: J32
 title: Work from the Home dashboard and follow each Project's Next action
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -82,10 +82,10 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 
 ### S4 — Finish the session's review and watch Next move {#S4}
 
-- **Do:** Open `2 Oct OIII` from Sessions filtered to Needs review. Mark all 48 frames Usable, completing the bulk-mark confirmation if PlateVault asks (G6), then choose **Finish review**. Return to Home and follow `NGC 7000 HOO`'s Next action.
-- **Expect:** The session's Review step lists the 48 frames; after marking and finishing review they all read Usable and the session becomes Ready. Its calibration is unsettled, so it enters Needs calibration, appears as a suggestion to `NGC 7000 HOO` on Home, and the Project's Next reads **Choose its flats first**.
-- **Expect (negative):** Review changes no Project membership or goal until the user adds the session, and the unsettled session cannot be added. No file changes before Apply.
-- **Trace:** PRJ-FR-08, PRJ-FR-09, PRJ-FR-18 · PRJ-AC-23 · LIB-FR-20, LIB-FR-23 · D-W94, D-W96, D-W100, D-W105
+- **Do:** Open `2 Oct OIII` from Sessions filtered to Needs review. Select all 48 frames with **⌘A** (Ctrl+A off macOS) and press **P**, read the confirmation and confirm it, then choose **Finish review**. Return to Home and follow `NGC 7000 HOO`'s Next action.
+- **Expect:** The session's Review step lists the 48 frames. **P** on the ⌘A selection opens the bulk confirmation `Mark 48 frames Usable?`. After confirming and finishing review, all 48 read Usable and the session becomes Ready. Its calibration is unsettled, so it stays in Needs calibration, appears as a suggestion to `NGC 7000 HOO` on Home, and the Project's Next reads **Choose its flats first**.
+- **Expect (negative):** No frame changes before the confirmation is accepted. Review changes no Project membership or goal until the user adds the session, and the unsettled session cannot be added. No file changes before Apply.
+- **Trace:** PRJ-FR-08, PRJ-FR-09, PRJ-FR-18 · PRJ-AC-23 · LIB-FR-20, LIB-FR-23 · PIX-FR-14 · PIX-AC-21 · D-W94, D-W96, D-W100, D-W105, D-W118
 
 ### S5 — Follow the other Next actions {#S5}
 
@@ -164,7 +164,7 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - G1: Not validated. The rebuilt application does not exist. Expected behavior follows specs 063, 064, 065, 067, 068, 070 and 072 at head and workflow decisions D-W93 to D-W116. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: P1 and P2 need a seeded catalog in a known state at a fixed local time. No fixture builder exists, and the windows depend on Backyard's coordinates. Blocks readiness.
 - G5: Out of scope for this journey: a session that qualifies for more than one Pending work category, and the Status section's Pause, Resume and Retry actions, are not exercised. Blocks readiness until covered by a step or a journey.
-- G6: Unresolved product question: Round 6 asks for confirmation on large bulk marks ("⌘A then P/X/U on many frames", "Mark 120 frames Unusable?") but sets no size, so S4 cannot say whether ⌘A then P on 48 frames asks first. Options: (a, recommended) every mark on a ⌘A selection asks, whatever its count, so S4 reads a "Mark 48 frames Usable?" confirmation and no frame changes before it is confirmed; (b) a fixed count; (c) every mark on more than one frame. Single-frame P, X and U never ask. Mirrors J22/G8. Blocks readiness.
+- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, so S4 reads `Mark 48 frames Usable?` and no frame changes before it is confirmed. Single-frame and hand-picked marks never ask (J22/S9a).
 - G7: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W105's "Choose its flats first" copy (S2, S4, S6), D-W96's matching rule and its "captured" count (S2, S4, S6, S8), and PRJ-FR-18's provisional "Add sessions" Next copy and the step a waiting Project opens at (S2, S6). If the owner changes one, the steps that cite it change.
 
 ## Delta log
@@ -179,3 +179,6 @@ The user opens PlateVault and decides what to do next from Home. Home shows pend
 - **Δ4** 2026-10-15 · S1, S2, S2a, S3, S4, S5, S6, S7, S8, S9, S10 · behavior-change
   Home now follows the F4 contract: its sections show pending sessions and suggestions, open Projects and their Next actions, status and planning. Projects replace runs; review, calibration, Apply, View and Output govern the Project flow. Home has no header buttons or Show done, so S5 opens Wrap up from the Project page and S9 lists no Closed Project; P2's `IC 1396 Ha` Next is **Choose its flats first**, and S2 to S4 are retitled for Open work and session intake.
   Evidence: D-W89, D-W93 to D-W106 in PR #1804, 063 FR-032, 064 LIB-FR-17/LIB-FR-20/LIB-FR-23, 065 PRJ-FR-17 to PRJ-FR-19, 068 CAL-FR-06, 070 RES-FR-11 · by: SpecF4Writer2 (intent-gated)
+- **Δ5** 2026-10-16 · S4 · behavior-change
+  S4 marks the 48 frames with ⌘A and P, and the mark asks `Mark 48 frames Usable?` before any frame changes. G6 is dissolved.
+  Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-AC-21 · by: EncodeOwnerAnswers2 (intent-gated)

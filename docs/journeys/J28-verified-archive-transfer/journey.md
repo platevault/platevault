@@ -1,13 +1,13 @@
 ---
 id: J28
 title: Archive Project sessions with verified transfer from Wrap up and Sessions
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [archive, wrap-up, projects, sessions, view-review, locations, activity, status-bar, issues]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W97, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-STO2, P-SB3, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#S17, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, D-W93, D-W94, D-W100, PRJ-FR-14, PRJ-FR-25, PRJ-FR-30, PREP-FR-10, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-AC-07, VSEL-FR-09, D-W111]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W97, D-W77, D-W80, D-W81, P-WRAP1, P-ARC1, P-STO2, P-SB3, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer, HARNESS-V5-IA.md#S9, HARNESS-V5-IA.md#S12, HARNESS-V5-IA.md#S16, HARNESS-V5-IA.md#S17, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#domain-and-seed, HARNESS-V5-FEEDBACK-R1.md#b-projects, HARNESS-V5-FEEDBACK-R1.md#round-5, HARNESS-V5-FEEDBACK-R1.md#round-6, HARNESS-V5-FEEDBACK-R1.md#input-modes-user-2026-10-10-research-designinput-modes-researchmd, D-W93, D-W94, D-W100, PRJ-FR-14, PRJ-FR-25, PRJ-FR-30, PREP-FR-10, STO-FR-06, STO-FR-07, STO-FR-08, STO-FR-13, STO-AC-07, VSEL-FR-09, D-W111, LIB-FR-17, STO-AC-29, D-W120]
 ---
 
 ## Goal
@@ -18,7 +18,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - The symlinks of its View follow the transferred sessions.
 - 28 Sep stays on `Astro-T7` because another Project that is not Closed holds it. Being another Project's suggestion does not keep 30 Sep.
 - An interrupted, failing or drifted item retains its source and recorded phase in Activity.
-- `4 Oct M 33`, which belongs to no Project, goes from Sessions to the Default `Archive/Long-term` through a reviewed transfer.
+- `4 Oct M 33`, which belongs to no Project, goes from Sessions to the Default `Archive/Long-term` through a reviewed transfer, and Sessions doesn't let the user select 28 Sep, which an open Project holds.
 - Retiring an offline archive location changes no files. Its copies read Retired and are not available inputs.
 - The Closed Project cannot be reopened or have archived sessions restored. **Duplicate…** is the way to continue it.
 
@@ -133,21 +133,22 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 
 ### S9b — Open the archive review from Sessions {#S9b}
 
-- **Do:** In Sessions, choose the **Not in any Project** filter, select `4 Oct M 33` and choose **Archive…**. Read the Destination and the review, then close the review without approving. List `Astro-T7/Captures/M33/2026-10-04/` and `Archive`.
+- **Do:** In Sessions, with every session listed, try to select 28 Sep for **Archive…**. Then choose the **Not in any Project** filter, select `4 Oct M 33` and choose **Archive…**. Read the Destination and the review, then close the review without approving. List `Astro-T7/Captures/M33/2026-10-04/` and `Archive`.
 - **Expect:**
+  - 28 Sep can't be selected for Archive: its row reads `Used by NGC 7000 Ha deep ▸`, because that open Project holds it (P1).
   - **Not in any Project** lists `4 Oct M 33`.
   - The Destination lists `Archive/Long-term`, preselected and marked Default since S1a, and `Archive/NGC7000`.
   - The review is the same reviewed transfer as the Wrap up Archive step's. It lists `4 Oct M 33` with its 16 files, each destination path under `Archive/Long-term`, laid out by the saved naming templates with original basenames, with bytes and source identities. It shows the destination volume identity, its free space and that it is writable.
   - It names no affected Project and proposes no reference update, because the session is in no Project.
 - **Expect (negative):** Nothing transfers: the M 33 files are still at their source paths and match P6, and `Archive` gains no file. The review proposes no other session and no path under `Archive/NGC7000`. Settings › Locations still marks `Archive/Long-term` Default.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Archive… from Sessions": sessions in no Project, same reviewed transfer as Wrap up) · HARNESS-V5-IA.md S12, S16 · P-ARC1 · STO-FR-06 · LIB-FR-17 · G9
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Archive… from Sessions": sessions in no Project, same reviewed transfer as Wrap up) · HARNESS-V5-IA.md S12, S16 · P-ARC1 · STO-FR-06, STO-FR-13 · STO-AC-29 · LIB-FR-17 · D-W120
 
 ### S9c — Archive the session in no Project {#S9c}
 
 - **Do:** In Sessions, choose **Archive…** on `4 Oct M 33` again, keep `Archive/Long-term`, and approve **Archive**. Read the status bar while it runs, the transfer's Activity entry, and the session's row.
 - **Expect:** The transfer runs as one archive operation: the status bar's running work names it with a mini progress bar, and Activity lists it. Each of the 16 items passes copied, durably written, destination hash verified against the source snapshot, and source retired. `4 Oct M 33` then reads Archived at its `Archive/Long-term` path.
 - **Expect (negative):** No source is retired before its destination verifies, and every archived file matches P6. No file goes to `Archive/NGC7000`. No Project, goal or Wrap up step changes.
-- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Archive… from Sessions") · HARNESS-V5-IA.md S17 · STO-FR-06, STO-FR-07 · D06, D19
+- **Trace:** HARNESS-V5-FEEDBACK-R1.md §Round 6 ("Archive… from Sessions") · HARNESS-V5-IA.md S17 · STO-FR-06, STO-FR-07, STO-FR-13 · D06, D19, D-W120
 
 ### S10 — Unplug the archive later {#S10}
 
@@ -200,7 +201,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
 - SC10: 0 of the 56 28 Sep files are copied, moved or retired from S1 through S9a; the session stays on `Astro-T7` because another Project that is not Closed holds it.
 - SC11: Make default moves 0 files, and the archive goes to the Project's chosen `Archive/NGC7000`, with 0 to paths under the Default `Archive/Long-term` (S1a, S5).
-- SC12: Archiving `4 Oct M 33` from Sessions moves exactly 16 files, all to the Default `Archive/Long-term`, retires 0 sources before their destination verifies and changes 0 Projects. Closing its review first moves 0 files (S9b, S9c).
+- SC12: Archiving `4 Oct M 33` from Sessions moves exactly 16 files, all to the Default `Archive/Long-term`, retires 0 sources before their destination verifies and changes 0 Projects. Closing its review first moves 0 files, and 28 Sep can't be selected there (S9b, S9c).
 - SC13: All 20 symlinks of the View that Closed Project `NGC 7000 first light` kept point to `Archive/NGC7000` after S9a, Activity records 1 repoint for it, and its sessions, goals, snapshot and Wrap up record change 0 times (S4, S9a).
 
 ## Known gaps
@@ -213,7 +214,7 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - G6: (dissolved 2026-10-12): answered by Round 6 "Archive… from Sessions"; S9b and S9c now assert that a session in no Project is archived from Sessions through the same reviewed transfer as Wrap up, to the Default `Archive/Long-term`, with nothing moved before approval. Archiving part of a Project from Sessions stays open as G9.
 - G7: (dissolved 2026-10-12): answered by §Input modes "Archiving with links" (Q-ARCHIVE-LINKS) and §Round 7 P-PREP3 (no hard links); S4, S8, S9 and SC4 assert that the symlinks of both `26 Sep symlink check` and `NGC7000-HOO-Siril` are repointed and that no reference-mode choice is offered.
 - G8: Out of scope for this journey: library-wide duplicate copies are J39's. Closed and Archived Projects have no Reopen or restore action (PRJ-FR-25, STO-FR-13), so J34 restores no archived session.
-- G9: Unresolved product question: Round 6 lets Sessions archive sessions that are in no Project. The F4 specs start Archive from the Archive step of a Project's Wrap up (STO-FR-06, STO-FR-13) and name no Sessions entry point. Round 6 also says nothing about a Sessions selection that holds a session of a Project or a session a Project suggests. S9b and S9c follow Round 6 and select only a session in no Project. Blocks readiness until a human decides.
+- G9: (dissolved 2026-10-16): answered by the owner's D-W120 (LIB-FR-17, STO-FR-13): Sessions › Archive… follows the rule of Wrap up's Archive step. S9b asserts that 28 Sep, which an open Project holds, can't be selected, and S9b and S9c archive a session in no Project. A session that only Closed Projects hold, and one that is only a suggestion, are archived under the same rule (STO-AC-29); S4 and S9a cover the repoint of a Closed Project's kept View.
 - G10: (dissolved 2026-10-12): answered by §Round 7 P-PREP3. The entries of `NGC7000-HOO-Siril` are symlinks, so with `Archive` unplugged or retired its run folder holds no readable input. STO-FR-08 and VSEL-FR-09 refuse Open on it as on `26 Sep symlink check`, and S10 and S12 assert both refusals.
 
 ## Delta log
@@ -239,3 +240,6 @@ The user archives the sessions of Project `NGC 7000 HOO` from the Archive step o
 - **Δ7** 2026-10-16 · S4, S9a · behavior-change
   Archive repoints the symlinks of a Closed Project's kept View when it moves their originals, records the repoint and changes nothing else in that Project.
   Evidence: D-W111 (owner's answers of 2026-10-15/16) in PR #1804, FR-011, PRJ-FR-25, STO-FR-06, STO-AC-27 · by: SpecF4Answers (intent-gated)
+- **Δ8** 2026-10-16 · S9b, S9c · behavior-change
+  Archive from Sessions follows the Wrap up rule: a session that an open Project holds can't be selected and names that Project, a session held only by Closed Projects is archived with their kept Views repointed, and a suggestion doesn't count. S9b now tries to select 28 Sep. G9 is dissolved.
+  Evidence: D-W120 (owner's second batch of 2026-10-16) in PR #1804, LIB-FR-17, STO-FR-06, STO-FR-13, STO-AC-29 · by: EncodeOwnerAnswers2 (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J33
 title: Process a mosaic with Project panel groups
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-10-06
 actors: [primary-user]
@@ -98,7 +98,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 
 ### S8 — Review the first Apply {#S8}
 - **Do:** Choose Apply… on View and read the folder tree and space estimate.
-- **Expect:** The Project folder contains `View/`, `Processing/WBPP/` and `Output/`. With four groups, the View tree uses `PANEL_Panel-1/` through `PANEL_Panel-4/`, with hyphenated `NIGHT_` folders, `Lights/<filter>/` and assigned `Flats/<filter>/`. The Apply sheet lists the inputs and calibration layout and reads `Linked · 0 B`.
+- **Expect:** The Project folder contains `View/`, `Processing/WBPP/` and `Output/`. With four groups, the View tree uses `PANEL_Panel-1/` through `PANEL_Panel-4/`, with hyphenated `NIGHT_` folders, light folders named by filter and exposure, such as `Lights/Ha_300s/`, and assigned `Flats/<filter>/`. The Apply sheet lists the inputs and calibration layout and reads `Linked · 0 B`.
 - **Expect (negative):** No file changes before approval. Tools do not write into `Output/`, and no panel-specific processing or Results folder is created.
 - **Trace:** PREP-FR-06, PREP-FR-07, PREP-FR-16, PRJ-FR-28 · D-W98 to D-W100
 
@@ -158,7 +158,7 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - G5: (dissolved 2026-10-12): answered by Round 6 "Result revision"; S11 and S14 now assert that tool evidence (a header input list) decides the revision and that, without it, the revision current when the file appeared applies, marked Inferred.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Mosaic: an excluded panel keeps its goals"; S2 and S2a now assert that Panel 5 keeps its goals on the subject, shown as unmet on the Project's Goals and Home's Goals box, with no panel run, and stays includable in the mosaic editor.
 - G7: (dissolved 2026-10-15): P4 now sets the 17 Aug session to No flats (D-W105), so no master flat without optical-train evidence is needed, and S7 only reads the calibration pinned on each session (D-W101).
-- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: PRJ-FR-31's "Framing unknown" flag for a session without pointing (D-W107, S1b, S1c), and D-W99's provisional WBPP layout (S8, S10). If the owner changes one, the steps that cite it change.
+- G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: PRJ-FR-31's "Framing unknown" flag for a session without pointing (D-W107, S1b, S1c), D-W99's provisional WBPP layout (S8, S10), and D-W108's exposure part that ends every light folder name (S8). If the owner changes one, the steps that cite it change.
 
 ## Delta log
 - **Δ2** 2026-10-12 · S1, +S1a, +S1b, +S1c, S2, S3, S5, +S5a, S7, S8 · behavior-change
@@ -178,3 +178,6 @@ The user organizes the seven in-scope Veil sessions in Project `Veil Mosaic HOO`
 - **Δ6** 2026-10-16 · S1c · behavior-change
   Sessions split at intake by framing, so each panel group holds whole sessions and S1c moves whole sessions only. The overlap and framing defaults are settled.
   Evidence: D-W107 and D-W114 (owner's answers of 2026-10-15/16) in PR #1804, LIB-FR-04, PRJ-FR-08, PRJ-FR-29, PRJ-FR-31, PRJ-AC-47 · by: SpecF4Answers (intent-gated)
+- **Δ7** 2026-10-16 · S8 · behavior-change
+  Light folders end in their exposure, such as `Lights/Ha_300s/` (provisional), while flat folders keep the filter name.
+  Evidence: D-W108 as amended by the owner's second batch of 2026-10-16 in PR #1804, PREP-FR-16, PREP-AC-32 · by: EncodeOwnerAnswers2 (intent-gated)

@@ -1,7 +1,7 @@
 ---
 id: J25
 title: Add sessions and apply Project View changes
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -72,7 +72,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 ### S5 — Review the Apply sheet {#S5}
 
 - **Do:** Re-confirm NGC 7000 for 26 Sep, then open **Apply…** and inspect the changes and folder tree.
-- **Expect:** The sheet lists the 10 Ha frames added, the group move with its from and to names, the calibration reassignment and its source, and the changed group layout with "re-add View in your tool". Its tree shows `GROUP_` levels only because the Project has several groups, hyphenated `NIGHT_` dates, `Lights/<filter>/` and assigned `Flats/<filter>/`. It lists copies that differ from what PlateVault placed, the space needed for two Views in Copies mode, and files PlateVault did not place, each with a tick box.
+- **Expect:** The sheet lists the 10 Ha frames added, the group move with its from and to names, the calibration reassignment and its source, and the changed group layout with "re-add View in your tool". Its tree shows `GROUP_` levels only because the Project has several groups, hyphenated `NIGHT_` dates, light folders named by filter and exposure, such as `Lights/Ha_300s/`, and assigned `Flats/<filter>/`. It lists copies that differ from what PlateVault placed, the space needed for two Views in Copies mode, and files PlateVault did not place, each with a tick box.
 - **Expect (negative):** Nothing moves or changes before Apply succeeds. The new View is planned from the originals and reuses no entry of the current View.
 - **Trace:** VSEL-FR-14, VSEL-FR-15, VSEL-FR-20 · PREP-FR-08, PREP-FR-16 · D-W99, D-W100
 
@@ -121,6 +121,13 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Expect (negative):** No leftover is deleted or moved before the user chooses for it, and Apply does not start while one is unreviewed. The kept note's bytes are unchanged.
 - **Trace:** VSEL-FR-14, VSEL-FR-20 · VSEL-AC-34 · STO-FR-10 · D-W110
 
+### S7d — Open the next Apply without the kept note asked again {#S7d}
+
+- **Do:** On the Sessions step, restore the frame excluded at S7c. Open **Apply…**, read it, then close it without applying.
+- **Expect:** The sheet lists the restored frame as a change. Its list of `View (previous)/` files to review doesn't name the user note kept at S7c, and the note shows no keep, move or Trash choice.
+- **Expect (negative):** Opening and closing the sheet changes nothing in the View or `View (previous)/`, and the note's bytes are unchanged.
+- **Trace:** VSEL-FR-14 · VSEL-AC-34 · STO-FR-10 · D-W110
+
 ## Success criteria
 
 - SC1: Adding the Ha session changes Project membership once by 10 frames, leaves the OIII session out, and changes the View 0 times before Apply (S1, S4).
@@ -132,6 +139,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - SC7: The new duplicate copy conflict raises the count from exactly 10 byte-identical duplicate copies to 9, with 0 files moved and no integration change (S1, S7b).
 - SC8: Discard is offered for the Project's own changes and refused for the calibration reassignment, which changes 0 pins (S4).
 - SC9: With 2 leftovers in `View (previous)/`, Apply stays disabled until both are reviewed; afterwards 1 file is in the OS Trash, 1 stays in `View (previous)/`, and 0 numbered `View (previous)` folders exist (S7c).
+- SC10: The note kept at S7c is offered for review 0 times by the next Apply sheet (S7d).
 
 ## Known gaps
 
@@ -140,7 +148,8 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - G3: Out of scope for this journey: path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 - G4: Out of scope for this journey: adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
 - G5: Covered elsewhere: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are exercised by J39 (S2 to S6); this journey only reads the warning.
-- G6: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W110's rule that a kept file stays in `View (previous)/` and a later Apply asks only about files not yet reviewed (S7c, SC9), D-W96's matching rule and its "captured" count (S1), and D-W95's "re-add View in your tool" note (S5). If the owner changes one, the steps that cite it change.
+- G6: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule and its "captured" count (S1), D-W95's "re-add View in your tool" note (S5), and D-W108's exposure part that ends every light folder name (S5). If the owner changes one, the steps that cite it change.
+- G7: Unresolved product question, open with the owner (D-W110): what the next Apply does with the outgoing View when `View (previous)/` already holds kept files, merging it into that folder with a suffix on name clashes, or moving kept files to a separate folder. S7c's swap and S7d's sheet assert only what holds under either answer: the kept note stays and isn't asked about again, and no numbered `View (previous)` folder appears. Blocks readiness.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S5a · behavior-change
@@ -162,3 +171,6 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Δ7** 2026-10-16 · S4, +S7c · behavior-change
   A Project discards only its own pending edits; a calibration reassignment is fixed on the session or by removing it. The next Apply waits until the user reviews each file `View (previous)/` still holds: keep, move or Trash.
   Evidence: D-W109 and D-W110 (owner's answers of 2026-10-15/16) in PR #1804, VSEL-FR-12, VSEL-FR-14, VSEL-AC-33, VSEL-AC-34, STO-FR-10 · by: SpecF4Answers (intent-gated)
+- **Δ8** 2026-10-16 · S5, +S7d, +SC10 · behavior-change
+  A file the user keeps in `View (previous)/` isn't asked about again: new S7d opens the next Apply sheet and finds no review choice for the note kept at S7c. Light folders end in their exposure (provisional). G6 drops the kept-file rule, and G7 records the open swap rule.
+  Evidence: D-W110 and D-W108 as amended by the owner's second batch of 2026-10-16 in PR #1804, VSEL-FR-14, VSEL-AC-34, STO-FR-10, PREP-FR-16 · by: EncodeOwnerAnswers2 (intent-gated)

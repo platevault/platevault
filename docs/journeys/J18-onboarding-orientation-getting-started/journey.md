@@ -1,7 +1,7 @@
 ---
 id: J18
 title: Get oriented after setup and make a first import, Project and View
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-19
 actors: [astrophotographer]
@@ -11,11 +11,11 @@ trace:
   - specs/056-onboarding-redesign (legacy design of the walk and checklist; PR #1048)
   - specs/056-onboarding-redesign/PENDING_REVIEW_QUESTIONS.md (PQ-004, user directive 2026-07-18: auto-hide when complete, resurface through Settings)
   - specs/063-clean-rebuild-contract/spec.md (FR-020, FR-023)
-  - specs/064-library-inventory/spec.md (LIB-FR-05, LIB-FR-10, LIB-FR-16, LIB-AC-09)
+  - specs/064-library-inventory/spec.md (LIB-FR-05, LIB-FR-10, LIB-FR-16, LIB-FR-21, LIB-FR-27, LIB-AC-09, LIB-AC-35)
   - specs/065-project-goals/spec.md (PRJ-FR-01, PRJ-FR-07, PRJ-FR-17, PRJ-FR-22, PRJ-FR-30)
   - specs/066-view-selection/spec.md (VSEL-FR-01, VSEL-FR-12, VSEL-FR-14, VSEL-FR-16)
   - specs/071-storage-custody/spec.md (STO-IMP-FR-01, STO-IMP-FR-02, STO-IMP-FR-06)
-  - workflow decisions D-W7, D-W11, D-W24, D-W89, D-W93 to D-W106
+  - workflow decisions D-W7, D-W11, D-W24, D-W89, D-W93 to D-W106, D-W117
   - github: platevault/platevault#881
   - product decision 2026-07-18 (user-approved onboarding redesign)
   - HARNESS-V5-FEEDBACK-R1.md#round-6
@@ -46,22 +46,23 @@ first Apply builds the Project's View from the original sessions.
 ### S1 — Orientation walk launches automatically after setup {#S1}
 
 - **Do:** On the Welcome screen, click **Set up locations**. Add `Empty/Captures` as the Captures location and leave Calibration unset. Click **Continue**, then **Start indexing**. When indexing has finished, click **Open library**.
-- **Expect:** Setup closes, and a modal orientation walk opens at its first stop without any further click. Which page setup hands over to, and what the first stop shows, is G4. On the `desktop-ui` lane, the Locations step shows a Windows Developer Mode row reading Off, with **Open Windows settings** and **Check again**, and **Continue** stays available; on the `desktop-ui-macos` lane it shows no such row.
+- **Expect:** Setup closes and hands over to Home, and a modal orientation walk opens at its first stop without any further click. On the `desktop-ui` lane, the Locations step shows a Windows Developer Mode row reading Off, with **Open Windows settings** and **Check again**, and **Continue** stays available; on the `desktop-ui-macos` lane it shows no such row.
 - **Expect (negative):** Neither setup nor the walk creates a demo, sample or placeholder session, Project or Target record anywhere. The walk is only an overlay on an empty, real library. Developer Mode being off blocks no setup step.
-- **Trace:** LIB-FR-01, LIB-FR-03, LIB-FR-10 · PRJ-FR-17, PREP-FR-15 · D-W89 · product decision 2026-07-18 (spec 056 FR-001) · prototype src/features/t1/setup/setup-pages.tsx · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Windows prerequisite": checked in setup) · G4
+- **Trace:** LIB-FR-01, LIB-FR-03, LIB-FR-10, LIB-FR-27 · LIB-AC-35 · PRJ-FR-17, PREP-FR-15 · D-W89, D-W117 · product decision 2026-07-18 (spec 056 FR-001) · prototype src/features/t1/setup/setup-pages.tsx · HARNESS-V5-FEEDBACK-R1.md §Round 7 P-PREP3 ("Windows prerequisite": checked in setup)
 
 ### S2 — Complete the walk end to end {#S2}
 
 - **Do:** Use Next to advance through every stop, then finish the walk at the last stop.
-- **Expect:** Every stop before the last brings its page into view, and Back returns to the prior stop and its page. The last stop points at Home's dashboard (S6) with Home in view. Finishing the last stop closes the walk. Which pages the earlier stops show, and in what order, is G4.
+- **Expect:** The walk has one stop per source-list entry, in source-list order, except that Home's stop comes last. Every stop brings its page into view, and Back returns to the prior stop and its page. The last stop points at Home's dashboard (S6) with Home in view. Finishing the last stop closes the walk.
 - **Expect (negative):** No stop mentions an Inbox, "File into library" or a sidebar Getting started trigger, and no stop points at a page that the v5 source list or toolbar does not offer. While the walk is open, clicking outside its tooltip neither dismisses it nor acts on the underlying page. The walk is modal and is controlled only by Next, Back, Skip and Escape.
-- **Trace:** product decision 2026-07-18 (spec 056 FR-002, FR-003) · LIB-FR-10 · PRJ-FR-17, PRJ-FR-22 · D-W7, D-W11, D-W24, D-W89 · HARNESS-V5-IA.md §Source list · G4
+- **Trace:** product decision 2026-07-18 (spec 056 FR-002, FR-003) · LIB-FR-10, LIB-FR-27 · LIB-AC-35 · PRJ-FR-17, PRJ-FR-22 · D-W7, D-W11, D-W24, D-W89, D-W117 · HARNESS-V5-IA.md §Source list
 
 ### S3 — Skip the walk instead of finishing it {#S3}
 
-- **Do:** From a fresh, not-yet-oriented install, open the walk (S1) and either click Skip on any stop or press Escape.
-- **Expect:** The walk closes immediately from whichever stop it was on.
+- **Do:** From a fresh, not-yet-oriented install, click **Set up locations**, then **Set up later** on the Locations step, and click Skip on any stop of the walk. On a second fresh install, add `Empty/Captures`, click **Continue**, then **Index later**, and press Escape on any stop of the walk.
+- **Expect:** Each exit closes setup and hands over to Home, and the walk opens at its first stop without any further click. Skip and Escape each close the walk immediately from whichever stop it was on.
 - **Expect:** Skipping is recorded as equivalent to finishing for "never auto-runs twice" (S4). Skip and finish are the two terminal outcomes of the same one-time walk.
+- **Trace:** LIB-FR-01, LIB-FR-27 · LIB-AC-01, LIB-AC-35 · D-W117
 
 ### S4 — The walk never auto-runs a second time {#S4}
 
@@ -70,10 +71,10 @@ first Apply builds the Project's View from the original sessions.
 
 ### S5 — Replay the walk from Settings {#S5}
 
-- **Do:** In Settings, use the control that replays the orientation walk (G4).
+- **Do:** Open Settings › Help and use its control that replays the orientation walk.
 - **Expect:** The walk reopens at its first stop, whether it was previously finished or skipped.
 - **Expect (negative):** Replaying the walk creates, changes or removes no location, session, Project or Target, and Home's sections read as they did before the replay.
-- **Trace:** product decision 2026-07-18 (spec 056 FR-005) · G4
+- **Trace:** product decision 2026-07-18 (spec 056 FR-005) · LIB-FR-21, LIB-FR-27 · LIB-AC-35 · D-W86, D-W117
 
 ### S6 — Read the Home dashboard {#S6}
 
@@ -147,13 +148,14 @@ first Apply builds the Project's View from the original sessions.
 - SC4: The held-only `Untyped/` source creates 0 sessions; Card-1 creates exactly one session, which is Ready with No darks, No flats and No bias only after **Finish review**; creating `First light` creates one Project; its first successful Apply builds one View from its selected original sessions, on the `desktop-ui` lane after Developer Mode reads On (S7a, S9, S9a, S9b).
 - SC5: Zero demo, sample or seeded-for-display records exist among sessions, Projects, Targets or Results at any point during or after this journey. Every record traces to a real user action taken during the journey.
 - SC9: Home has no tabs or header buttons, and its Open work row opens the `First light` Project page (S6, S18).
+- SC10: Each of the three ways out of setup, finishing it (S1), Set up later and Index later (S3), hands over to Home and opens the walk exactly once, and the walk's last stop is Home (S2).
 
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist, and the v2 behavior was checked only against the legacy implementation of spec 056. Nothing in this version has been validated.
 - G2: (dissolved 2026-10-12): answered by Round 6 "Onboarding: walk plus checklist", which is now the owning decision; the contract text follows in D-W28 order. S1 to S5 now assert a one-time walk after setup that ends on Home's checklist. S6, S7, S9 to S9c and S17 assert a Getting started checklist on Home with exactly the four items setup, first import, first Project and first run, shown until all four are done. The page groups and gates of the spec 056 design are gone. G4 to G6 hold what Round 6 leaves open.
 - G3: (dissolved 2026-10-15): S9b no longer prepares a run or launches Siril. It applies the Project's first View (D-W94, D-W100), so this journey needs no tool profile and no failing executable; J24/S10 covers the launch refusal.
-- G4: Unresolved product question: Round 6 decides only that there is "an orientation walk after setup". No source answers four things. (1) Which pages the stops show, and in what order. (2) Which page setup hands over to. (3) Whether **Index later** and **Set up later** also launch the walk. (4) Where in Settings the replay control lives. S1, S2 and S5 assert only what holds under every answer. Blocks readiness.
+- G4: (dissolved 2026-10-16): answered by the owner's D-W117 (LIB-FR-27). Every way out of setup hands over to Home and launches the walk once (S1, S3), the walk has one stop per source-list entry in source-list order with Home's stop last (S2), and Settings › Help replays it (S5).
 - G5: (dissolved 2026-10-15): D-W89 leaves the setup checklist off Home, so no setup, import, Project or run outcome ticks an item. S9 to S9b assert the import, Project and Apply outcomes themselves.
 - G6: (dissolved 2026-10-15): Home has no setup checklist under PRJ-FR-17 and D-W89; S6, S7 and S7a now assert the current dashboard sections and their empty states.
 - G7: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes the Ready Card-1 session a suggestion of `First light` (S9b), and D-W100's rule that the first Apply builds the View with no separate Start processing (S9b). If the owner changes either, S9b changes with it.
@@ -205,3 +207,6 @@ steps above were checked against it.
 - **Δ6** 2026-10-15 · S1, S2, S5, S6, S7, S7a, S9, S9a, S9b, S9c, S17, S18 · behavior-change
   The Project is the processing unit: the first Project View is built with Apply, and Results live in Output/. Home now has six sections, no header buttons and no setup checklist, so nothing ticks: SC6 and SC8 are retired, G3 and G5 are dissolved, and S18 opens the first Project from Open work instead of testing the checklist. S9 finishes the Card-1 session's review and sets No darks, No flats and No bias in the import review, so it is Ready with settled calibration before S9b adds it. On Windows, S7a turns Developer Mode on, so S9b's Symlinks Apply isn't refused.
   Evidence: D-W78, D-W81, D-W89, D-W93 to D-W106, PRJ-FR-07, PRJ-FR-17, PRJ-FR-22, LIB-FR-23, LIB-FR-24, VSEL-FR-16, PREP-FR-06, PREP-FR-15, RES-FR-01 · by: SpecF4Writer2 (intent-gated)
+- **Δ7** 2026-10-16 · S1, S2, S3, S5, +SC10 · behavior-change
+  Setup hands over to Home, and every way out of setup, Set up later and Index later included, launches the walk once (S3 now takes those two exits). The walk has one stop per source-list entry, with Home's stop last, and Settings › Help replays it. G4 is dissolved.
+  Evidence: D-W117 (owner's second batch of 2026-10-16) in PR #1804, LIB-FR-21, LIB-FR-27, LIB-AC-35 · by: EncodeOwnerAnswers2 (intent-gated)

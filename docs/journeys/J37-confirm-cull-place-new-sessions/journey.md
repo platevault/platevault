@@ -1,7 +1,7 @@
 ---
 id: J37
 title: Confirm, cull and place a new night's sessions after an import
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-10-12
 actors: [primary-user]
@@ -84,10 +84,10 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Expect:**
   - Intake's Review step opens filtered to Unreviewed, with 35 frames.
   - Each X marks its frame Unusable in the library at once, without a confirmation.
-  - Pressing P on the 32 selected frames asks for confirmation. After confirming, the three X frames read Rejected and the rest read Picked, and the review counts 32 Picked, 3 Rejected and 0 Unreviewed. **Finish review** makes the session Ready.
+  - Pressing P on the 32 frames selected with ⌘A opens the bulk confirmation `Mark 32 frames Usable?`. After confirming, the three X frames read Rejected and the rest read Picked, and the review counts 32 Picked, 3 Rejected and 0 Unreviewed. **Finish review** makes the session Ready.
   - The session detail reads 32 Usable and 3 Unusable frames, still 35 frames in all, and the session reads Ready.
 - **Expect (negative):** While the bulk confirmation is open, the 32 frames still read Unreviewed. The marks change library quality only. The 3 Unusable frames stay on disk: no file is written, moved, renamed or sent to the OS Trash (P5 still matches), and Sessions' Trashed filter still reads 0. No Project-only reject is offered. No Project membership changes because the session has not been added.
-- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-13, PIX-FR-14, PIX-FR-18, PIX-AC-20 · D-W78, D-W79, D-W105
+- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-13, PIX-FR-14, PIX-FR-18, PIX-AC-20, PIX-AC-21 · D-W78, D-W79, D-W105, D-W118
 
 ### S7 — Create a Project prefilled from a session {#S7}
 
@@ -118,7 +118,7 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Do:** Open `4 Oct Ha`'s intake Review step from Sessions. Select all 12 frames with ⌘A, press P, confirm, then choose **Finish review**.
 - **Expect:** Review opens filtered to Unreviewed with 12 frames. P opens the bulk confirmation `Mark 12 frames Usable?`. After confirming, all 12 frames read Picked. **Finish review** makes the session Ready, and the Project suggests it because its confirmed Target and rig match and its calibration is settled.
 - **Expect (negative):** No frame reads Picked before the confirmation is accepted. No Project-only reject is offered, and the Ready session is not added to the Project automatically.
-- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-14, PIX-FR-18, PIX-AC-20 · PRJ-FR-09 · D-W78, D-W79, D-W105
+- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-14, PIX-FR-18, PIX-AC-20, PIX-AC-21 · PRJ-FR-09 · D-W78, D-W79, D-W105, D-W118
 
 ### S10 — Add the other Ready sessions explicitly {#S10}
 
@@ -151,7 +151,7 @@ After import, the user resolves Target and rig associations, reviews new session
 - G3: Unresolved implementation qualification: P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05). The v5 design does not state the equipment-matching rule for a session whose TELESCOP and FOCALLEN match an existing rig. Blocks readiness.
 - G4: Out of scope for this journey, covered elsewhere: reopening a Ready session's Review and its labelled pending changes on open Projects (J22), moving Unusable frames to Trash during Wrap up (J44, J34), status-bar counters opening their owning pages (J38), Home's Open work and Next action (J32), creating rigs and filter lists (J15), first Apply and later View changes (J21, J24, J25), and a failed catalog write while confirming (J19/S11).
 - G5: Out of scope for this journey: a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled. Blocks readiness until covered by a step or a journey.
-- G6: Unresolved product question, shared with J22 G8: Round 6 asks for confirmation on large bulk marks ("Mark 120 frames Unusable?") but sets no size. S6 (32 frames) and S9 (12 frames) assert a confirmation, which holds under option (a) or (c). Options: (a, recommended) every mark on a ⌘A selection asks, whatever its count; (b) a fixed count, which may leave S9's 12 frames unconfirmed; (c) every mark on more than one frame. Single-frame marks never ask. Blocks readiness.
+- G6: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, so S6 (32 frames) and S9 (12 frames) both ask, and single-frame marks such as S6's three X marks never ask.
 - G7: (dissolved 2026-10-15): D-W94 and LIB-FR-12 make confirming a Target a change to the session's catalog association only, so no move review follows it. Imported files stay at the paths listed in the Import preview; this journey verifies that P5 remains unchanged (LIB-FR-12, STO-IMP-FR-02).
 - G8: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule, which makes Ready RedCat sessions with Target NGC 7000 suggestions of `NGC 7000 HOO` (S7, S10), and D-W94's rig list that only decides suggestions (S8). If the owner changes one, the steps that cite it change.
 
@@ -164,3 +164,6 @@ After import, the user resolves Target and rig associations, reviews new session
 - **Δ3** 2026-10-15 · S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11 · behavior-change
   Import never waits for calibration: only Ready sessions with settled calibration can be added. Frame review is the session intake step, and Finish review makes a fully reviewed session Ready. Project membership is explicit, matching sessions remain suggestions, and confirming a Target never moves imported files, so S3 confirms a Target and rig with no move and SC7 expects no changed path. The status bar counters open their Sessions filters, S2 reads Home's Pending work, and Not in any Project reads 9, 8 and 6 as the user adds sessions at S7, S8 and S10.
   Evidence: D-W89, D-W92, D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-17, LIB-FR-20, LIB-FR-23, LIB-FR-24, 065 PRJ-FR-08, PRJ-FR-09, 066 VSEL-FR-03, 067 PIX-FR-18, 068 CAL-FR-02, CAL-FR-09 · by: SpecF4Writer2 (intent-gated)
+- **Δ4** 2026-10-16 · S6, S9 · behavior-change
+  Every mark on a ⌘A selection asks first, whatever its count: S6 reads `Mark 32 frames Usable?` and S9 `Mark 12 frames Usable?`, and single-frame marks never ask. G6 is dissolved.
+  Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-AC-21 · by: EncodeOwnerAnswers2 (intent-gated)

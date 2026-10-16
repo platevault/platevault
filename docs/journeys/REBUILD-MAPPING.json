@@ -89,8 +89,8 @@
     },
     {
       "old": "J18",
-      "successor": "none (J18 is itself a rebuild journey, v4): Round 6 keeps an orientation walk after setup and a four-item Getting started checklist on Home; J19/S1 to J19/S4 own the onboarding Locations step",
-      "recommendation": "Keep as a rebuild journey for the walk and the Home checklist (Round 6, user, 2026-10-10)."
+      "successor": "none (J18 is itself a rebuild journey, v7): Round 6 keeps an orientation walk after setup, whose stops, setup exits and replay D-W117 sets, and D-W89 drops the Getting started checklist from Home; J19/S1 to J19/S4 own the onboarding Locations step",
+      "recommendation": "Keep as a rebuild journey for the orientation walk and the first import, Project and View (Round 6, user, 2026-10-10; D-W89; D-W117)."
     },
     {
       "old": "J30",
@@ -101,7 +101,7 @@
   "readiness": {
     "common": {
       "goalObservableDone": "pass (all 28 rebuild journeys, per the authoring audit of each slice)",
-      "expectsFalsifiable": "pass for every journey except those where a blocker below leaves an Expect undecided or not yet observable: J19 (G10), J29 (G2), J32 (G6) and J35 (G6)",
+      "expectsFalsifiable": "pass for every journey except those where a blocker below leaves an Expect undecided or not yet observable: J19 (G10), J29 (G2) and J35 (G6)",
       "successCriteriaConcrete": "pass (all 28; each SC has a count, value, or state)",
       "negativesAtTrustPoints": "pass (all 28; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
       "actorsSurfacesInterfacesTrace": "pass (all 28 fill actors, surfaces, interfaces and trace; README lists the rebuild and harness v5 surface keys and maps the v5 prototype paths)",
@@ -123,14 +123,12 @@
           "G7 (out of scope) the unknown-filter prompt in the Import preview (STO-IMP-FR-03) and the Targets Filters strip a rig drives (PLAN-TGT-FR-06) are not exercised here.",
           "G10 (product question) the v5 prototype's session detail offers no \"Add {value} to {rig}\", and the v5 design (HARNESS-V5-IA.md S16) does not say either way, so S4b and S4c keep the contract text (PLAN-EQ-FR-04).",
           "G11 (implementation qualification) the v5 design does not state the rule that matches a header to a camera or telescope added by hand (J37/G3 records the same gap for rigs).",
-          "G12 (out of scope) rig versions (PLAN-EQ-FR-07) are not walked."
+          "G12 (out of scope; product question, open with the owner) rig versions (PLAN-EQ-FR-07) are not walked, and no source decides which version a session captured before a rig's first version gets or the start date a new version takes by default."
         ]
       },
       {
         "id": "J18",
-        "blocking": [
-          "G4 (product question) Round 6 decides only that there is \"an orientation walk after setup\"."
-        ]
+        "blocking": []
       },
       {
         "id": "J19",
@@ -148,7 +146,7 @@
         "blocking": [
           "G4 (out of scope) external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised.",
           "G7 (out of scope) the exposure-mismatch warning per subject and channel (PRJ-FR-11, HARNESS-V5-IA.md S3) is not exercised.",
-          "G9 (product question) PRJ-FR-02 says removing a subject changes only the suggestions, and goals are set per subject (PRJ-FR-03)."
+          "G9 (product question, open with the owner) PRJ-FR-02 says removing a subject changes only the suggestions, and goals are set per subject (PRJ-FR-03); no source says whether a subject removed and added back keeps its goals, gets the template's again, or gets none."
         ]
       },
       {
@@ -164,8 +162,7 @@
           "G2 (implementation qualification) numerical measurement methods, metric set, masks, saturation, background, aperture and tolerances need fixture qualification in PIX planning (D03).",
           "G3 (out of scope) no fixture holds NaN, infinity or masked samples, so PIX-AC-08's invalid-sample evidence is not exercised.",
           "G4 (out of scope) a frame shared by two Projects and its library-wide Rejected state in both (PIX-AC-12) are not observed, because the fixture has one NGC 7000 Project.",
-          "G5 (out of scope) no frame is trashed before this journey.",
-          "G8 (product question) Round 6 asks for confirmation on large bulk marks (\"⌘A then P/X/U on many frames\", \"Mark 120 frames Unusable?\") but sets no size."
+          "G5 (out of scope) no frame is trashed before this journey."
         ]
       },
       {
@@ -185,14 +182,14 @@
       {
         "id": "J25",
         "blocking": [
-          "G4 (out of scope) adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed."
+          "G4 (out of scope) adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed.",
+          "G7 (product question, open with the owner) what the next Apply does with the outgoing View when `View (previous)/` already holds kept files: merge into it with a suffix on name clashes, or move kept files to a separate folder (D-W110)."
         ]
       },
       {
         "id": "J26",
         "blocking": [
-          "G4 (implementation qualification) no fault control yet pauses adoption between destination verification and registration (P6), and S8c depends on it.",
-          "G9 (product question) s8c leaves a verified copy, named unregistered, at the one fixed destination `Astro-T7/Calibration/Flats/RedCat/Ha/2026-10-01/MasterFlat_2026-10-01.fit`, and S9 adopts to that same path."
+          "G4 (implementation qualification) no fault control yet pauses adoption between destination verification and registration (P6), and S8c depends on it."
         ]
       },
       {
@@ -206,8 +203,7 @@
         "blocking": [
           "G2 (implementation qualification) no fault fixture yet produces a destination hash mismatch, so the hash-failure branch is not exercised.",
           "G3 (implementation qualification) no fault control yet makes one symlink's repoint fail (P4), and the flow does not name the method of source retirement after verification.",
-          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5).",
-          "G9 (product question) Round 6 lets Sessions archive sessions that are in no Project."
+          "G5 (implementation qualification) no fault control yet pauses an item after destination verification and before retirement (P5)."
         ]
       },
       {
@@ -232,8 +228,7 @@
         "id": "J32",
         "blocking": [
           "G2 (implementation qualification) P1 and P2 need a seeded catalog in a known state at a fixed local time.",
-          "G5 (out of scope) a session that qualifies for more than one Pending work category, and the Status section's Pause, Resume and Retry actions, are not exercised.",
-          "G6 (product question) Round 6 asks for confirmation on large bulk marks (\"⌘A then P/X/U on many frames\", \"Mark 120 frames Unusable?\") but sets no size, so S4 cannot say whether ⌘A then P on 48 frames asks first."
+          "G5 (out of scope) a session that qualifies for more than one Pending work category, and the Status section's Pause, Resume and Retry actions, are not exercised."
         ]
       },
       {
@@ -271,8 +266,7 @@
         "blocking": [
           "G2 (implementation qualification) P1 chains J19 through S14 and J31 through S9, so it inherits their fixture tooling gaps (J19 G3, G5 and G9; J31 G2).",
           "G3 (implementation qualification) P2 assumes that the RedCat optics keywords of `2 Oct Ha` and `4 Oct Ha` associate rig `RedCat` without user action (LIB-FR-05).",
-          "G5 (out of scope) a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled.",
-          "G6 (product question) Round 6 asks for confirmation on large bulk marks (\"Mark 120 frames Unusable?\") but sets no size."
+          "G5 (out of scope) a Trashed session (Sessions' Trashed filter), reviewing a session whose location is offline, a confirmation made stale by a concurrent edit, and Create Project from a session with no Target, which opens unprefilled."
         ]
       },
       {
@@ -307,7 +301,8 @@
         "id": "J42",
         "blocking": [
           "G2 (implementation qualification) S7 needs a rescan that runs long enough to focus (P6).",
-          "G3 (implementation qualification) SC1 needs a driver that sends only key events and records any pointer event, on both interface profiles."
+          "G3 (implementation qualification) SC1 needs a driver that sends only key events and records any pointer event, on both interface profiles.",
+          "G6 (implementation qualification) no screen-reader check (VoiceOver, NVDA) has confirmed how a table's current row, its selection and its row menu are announced."
         ]
       },
       {

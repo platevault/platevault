@@ -1,13 +1,13 @@
 ---
 id: J22
 title: Review session frames and record quality decisions
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [frame-review, sessions, targets, projects, home]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, D02, D03, D08, D10, D19, D-W13, D-W14, D-W15, D-W22, D-W36, D-W40, D-W79, D-W96, D-W53, D-W78, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality, HARNESS-V5-IA.md#S6, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#d-review, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-6, 068-calibration-inputs, D-W93, D-W94, D-W97, D-W100, D-W101, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, D02, D03, D08, D10, D19, D-W13, D-W14, D-W15, D-W22, D-W36, D-W40, D-W79, D-W96, D-W53, D-W78, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality, HARNESS-V5-IA.md#S6, HARNESS-V5-IA.md#fix-pass, HARNESS-V5-FEEDBACK-R1.md#d-review, HARNESS-V5-FEEDBACK-R1.md#copy-rules, HARNESS-V5-FEEDBACK-R1.md#round-6, 068-calibration-inputs, D-W93, D-W94, D-W97, D-W100, D-W101, D-W105, specs/063-clean-rebuild-contract/spec.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, D-W118]
 ---
 
 ## Goal
@@ -16,7 +16,7 @@ In the Review step of the `30 Sep` session's intake, the user inspects its 48
 frames and star measurements in the table, filmstrip and grid views, culls with
 Lightroom-style hotkeys, and records one library-wide quality decision per
 frame. X rejects a frame library-wide: it reads Unusable in the library, while
-its file stays on disk. A large bulk mark asks first. Imported measurements keep
+its file stays on disk. A mark on a ⌘A or threshold selection asks first, and single-frame and hand-picked marks never ask. Imported measurements keep
 their provenance and never read as content-verified. Done means the intake
 review is finished and the `30 Sep` session is Ready with 42 Usable and six
 Unusable frames. Every Usable frame reads Picked and every rejected frame reads
@@ -104,10 +104,10 @@ moves or trashes no source file.
 
 ### S7a — Select by threshold {#S7a}
 
-- **Do:** Select frames with FWHM above 3.5", then clear the selection.
-- **Expect:** Exactly the measured frames with FWHM above 3.5" are selected, and the plots highlight them. Any frame without an FWHM value is named Not measured and stays unselected.
-- **Expect (negative):** Threshold selection changes no quality state and no membership.
-- **Trace:** flow D2 · PIX-FR-08, PIX-FR-15 · PIX-AC-14 · D-W13
+- **Do:** Select frames with FWHM above 3.5", press **X**, read the confirmation and cancel it, then clear the selection.
+- **Expect:** Exactly the measured frames with FWHM above 3.5" are selected, and the plots highlight them. Any frame without an FWHM value is named Not measured and stays unselected. **X** on the threshold selection opens a confirmation that names the number of selected frames, whatever that number is. After **Cancel**, no frame's quality has changed.
+- **Expect (negative):** The threshold selection and the cancelled mark change no quality state and no membership.
+- **Trace:** flow D2 · PIX-FR-08, PIX-FR-14, PIX-FR-15 · PIX-AC-14, PIX-AC-21 · D-W13, D-W118
 
 ### S7b — Inspect the corners at 1:1 {#S7b}
 
@@ -119,7 +119,7 @@ moves or trashes no source file.
 ### S8 — Reject the six trailed frames {#S8}
 
 - **Do:** Open NGC 7000's Target page, read its OIII integration, and return to the `30 Sep` session's Review step. Press **⌥1** to list every frame. Make each of the six trailed 30 Sep frames current in turn and press **X**. Then read NGC 7000's Target page again and return to the session's Review step.
-- **Expect:** Each **X** applies at once: the frame reads "Rejected · Library" and the next frame becomes current. After the sixth, the session Review lists six Rejected and 42 Unreviewed frames. On the Target page, NGC 7000's Unreviewed OIII integration is 0h 30m lower than before S8, and its usable integration still reads 0h 00m. The session is not Ready until its remaining frames are reviewed.
+- **Expect:** Each **X** applies at once: the frame reads "Rejected · Library" and the next frame becomes current. After the sixth, the session Review lists six Rejected and 42 Unreviewed frames. On the Target page, NGC 7000's Unreviewed OIII integration is 0h 30m lower than before S8, and its usable OIII integration is unchanged. The session is not Ready until its remaining frames are reviewed.
 - **Expect (negative):** No **X** asks for confirmation. The six files stay on disk at their paths and nothing goes to the OS Trash: the manifest still matches P4. No Project holds this session yet, so this step creates no Project pending change.
 - **Trace:** PIX-FR-13, PIX-FR-14, PIX-FR-18 · PIX-AC-12, PIX-AC-20 · LIB-FR-20 · D-W78, D-W79
 
@@ -130,19 +130,26 @@ moves or trashes no source file.
 - **Expect (negative):** Neither mark asks for confirmation. The restored frame's file never moved, and neither mark creates a Project membership revision or changes a Project View.
 - **Trace:** PIX-FR-13, PIX-FR-14, PIX-FR-18 · PIX-AC-12 · LIB-FR-20 · D-W78, D-W79
 
+### S9a — Mark a hand-picked selection without a confirmation {#S9a}
+
+- **Do:** With **⌥1** listing every frame, ⌘-click (Ctrl-click off macOS) two of the six rejected frames so that only they are selected, and press **U**. Select the same two frames again the same way and press **X**.
+- **Expect:** Neither mark asks for confirmation. After **U** both frames read Unreviewed, and after **X** both read "Rejected · Library" again. The session again lists six Rejected and 42 Unreviewed frames.
+- **Expect (negative):** No confirmation opens for a selection picked by hand. Neither file moves, and no Project changes, because no Project holds this session yet.
+- **Trace:** PIX-FR-13, PIX-FR-14, PIX-FR-15 · PIX-AC-16, PIX-AC-21 · LIB-FR-20 · D-W118
+
 ### S10 — Finish reviewing the session's remaining frames {#S10}
 
 - **Do:** Press **⌥4** to list the 42 Unreviewed frames in `30 Sep`, select all with **⌘A**, press **P**, and confirm the bulk mark. Choose **Finish review**, then add the Ready `30 Sep` session to Project `NGC 7000 HOO` from its session row.
 - **Expect:** The confirmation names 42 frames. After confirming, those frames read Picked (library Usable), and the six rejected frames remain Unusable. **Finish review** makes the session Ready. Only after the user adds it does it join the Project; its 42 Usable frames contribute 3h 30m of OIII, and its six Unusable frames are visibly excluded from the Project's inputs.
 - **Expect (negative):** No session joins the Project before the user adds it. Reviewing, marking frames and adding the session moves no source file and sends nothing to the OS Trash.
-- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-14, PIX-FR-18, PIX-AC-20 · PRJ-FR-08, PRJ-FR-09 · VSEL-FR-03, VSEL-FR-15 · D-W78, D-W79, D-W94, D-W96, D-W105
+- **Trace:** LIB-FR-20, LIB-FR-23 · PIX-FR-14, PIX-FR-18, PIX-AC-20, PIX-AC-21 · PRJ-FR-08, PRJ-FR-09 · VSEL-FR-03, VSEL-FR-15 · D-W78, D-W79, D-W94, D-W96, D-W105, D-W118
 
-### S11 — Mark the included frames Usable {#S11}
+### S11 — Check that the Project's frames are all reviewed {#S11}
 
-- **Do:** Press **⌥4** to list the Unreviewed frames, press **⌘A** (Ctrl+A off macOS), then press **P**. Read the confirmation and cancel it. Press **P** again and confirm.
-- **Expect:** **⌥4** lists exactly the 208 included frames, and **⌘A** selects all of them: the status bar reads `208 selected`. **P** opens a confirmation that reads "Mark 208 frames Usable?", in the bulk-mark form of Round 6. After cancelling, every listed frame still reads Unreviewed. After confirming, those 208 frames read Picked (library Usable), **⌥4** shows "No Unreviewed frames", and NGC 7000 usable integration reads Ha 9h 15m and OIII 8h 05m.
-- **Expect (negative):** No frame is marked before the confirmation is accepted, and the cancelled confirmation marks none. The six rejected frames stay "Rejected · Library". A library mark changes no source file; the Project's View changes only through Apply.
-- **Trace:** PIX-FR-13, PIX-FR-14, PIX-FR-18 · PIX-AC-20 · LIB-FR-20 · D-W78, D-W79
+- **Do:** Open Project `NGC 7000 HOO` and read its Sessions step. Then open Sessions filtered to **Needs review**.
+- **Expect:** The Sessions step lists five Ready sessions, 18, 24, 26, 28 and 30 Sep, with 208 included frames, and the six Unusable 30 Sep frames show as excluded. Ha reads `9h 15m in project` and OIII reads `8h 05m in project`. **Needs review** lists none of the five, because a Ready session has no Unreviewed frame left to mark.
+- **Expect (negative):** No included frame reads Unreviewed. Reading the Project marks no frame and opens no confirmation, and the Project's View changes only through Apply.
+- **Trace:** PRJ-FR-04, PRJ-FR-08 · LIB-FR-17, LIB-FR-20 · PIX-FR-14 · D-W78, D-W96
 
 ### S11a — Cull with hotkeys {#S11a}
 
@@ -189,7 +196,7 @@ moves or trashes no source file.
 ### S15a — Replace a reviewed frame in place {#S15a}
 
 - **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then reopen the Ready session's Review step and click **Measure frames**.
-- **Expect:** Before the rescan, usable Ha still reads 9h 15m, labelled as last verified at S11. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, its thumbnail is decoded again, and it reads Not measured until **Measure frames**. Then it is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
+- **Expect:** Before the rescan, usable Ha still reads 9h 15m, with the last-verified label it had before this step. After the rescan completes, the frame reads ChangedContent with its previous Picked decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan. In frame review its cached values never read valid, its imported S14 values show as history, its thumbnail is decoded again, and it reads Not measured until **Measure frames**. Then it is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
 - **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded.
 - **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PIX-FR-12 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19 · J19/G4
 
@@ -212,12 +219,12 @@ moves or trashes no source file.
 - SC1: After S10 the `30 Sep` session is Ready, its 42 Usable OIII frames contribute 3h 30m, its six Unusable frames are excluded from Project inputs, and the user has added the session to `NGC 7000 HOO`.
 - SC2: Source bytes equal P4 for 100% of files at S5, at S5b and at the end.
 - SC3: Measured values are identical with the stretch on and off (S5); the failed fit shows 0 width numbers (S7).
-- SC4: Library quality changes only through the marks in S8, S9, S10, S11a, S13 and S16, and through S15a/S15b applicability. No Project-only quality state exists (S11b, S13).
+- SC4: Library quality changes only through the marks in S8, S9, S9a, S10, S11a, S13 and S16, and through S15a/S15b applicability. No Project-only quality state exists (S11b, S13).
 - SC5: S8 leaves exactly six frames Rejected and 42 Unreviewed; S10 leaves 42 Usable and six Unusable; and S13/S16 each show one Library-sourced pending removal that clears when the frame is marked Picked. The View changes zero times before Apply.
 - SC6: S14 attaches 0 imported values to the P6 frame and shows 0 imported values as verified.
 - SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
 - SC8: Measurement starts exactly three times, at S1, S4 and S15a, each time from **Measure frames**. Opening Review and the corner inspector (S7b) start 0 measurements, and S7b shows exactly 9 tiles.
-- SC9: The 42-frame **P** at S10 asks for confirmation, and zero frames are marked before it is accepted; zero single-frame marks ask (S8, S9, S11a, S13, S16).
+- SC9: The ⌘A **P** on 42 frames at S10 and the threshold **X** at S7a ask for confirmation, and zero frames are marked before a confirmation is accepted or after one is cancelled. Zero single-frame or hand-picked marks ask (S8, S9, S9a, S11a, S13, S16).
 - SC10: 0 files are moved or sent to the OS Trash by any step: the six rejected frames (S8) and F1 (S11a) stay on disk.
 
 ## Known gaps
@@ -228,8 +235,8 @@ moves or trashes no source file.
 - G4: Out of scope for this journey: a frame shared by two Projects and its library-wide Rejected state in both (PIX-AC-12) are not observed, because the fixture has one NGC 7000 Project. A Ready session added with library-Unusable frames visibly excluded (VSEL-AC-13) is not exercised. Blocks readiness until covered by a step or a journey.
 - G5: Out of scope for this journey: no frame is trashed before this journey. J34/S7 covers a Trashed frame's absence from frame review (PIX-AC-19). Mosaic panel progress and the panel map are not exercised. Blocks readiness until covered by a step or a journey.
 - G6: (dissolved 2026-10-12): answered by Round 6 "Reject is library-wide by default"; S8, S9, S10, S13 and S16 now assert X as the way a frame leaves the run: it reads "Rejected · Library" (library Unusable), leaves the draft at once, stays on disk, and U or P brings it back, while "Reject for this Project only" stays in the frame menu (S11b, S13).
-- G7: (dissolved 2026-10-12): answered by Round 6 "Large bulk marks need confirmation"; S11 now asserts ⌥4, ⌘A and P on the 208 included frames asking "Mark 208 frames Usable?", with no frame marked before it is accepted.
-- G8: Unresolved product question: Round 6 asks for confirmation on large bulk marks ("⌘A then P/X/U on many frames", "Mark 120 frames Unusable?") but sets no size. Options: (a, recommended) every mark on a ⌘A "Select all shown" selection asks, whatever its count; (b) a fixed frame count; (c) every mark on more than one frame. Single-frame P, X and U never ask. S8 and S13 mark frames one at a time so they do not depend on it, and a mark on a small multi-frame selection (for example six frames selected in the grid) is not exercised. Blocks readiness.
+- G7: (dissolved 2026-10-12): answered by Round 6 "Large bulk marks need confirmation"; S10 now asserts ⌥4, ⌘A and P on the 42 Unreviewed frames asking for confirmation, with no frame marked before it is accepted.
+- G8: (dissolved 2026-10-16): answered by the owner's D-W118 (PIX-FR-14): every mark on a ⌘A or threshold selection asks, whatever its count, and single-frame and hand-picked marks never ask. S7a asserts the threshold confirmation, S9a a hand-picked two-frame mark with none, and S10 the ⌘A confirmation.
 - G9: (dissolved 2026-10-15): D-W78 moves review into session intake and D-W94 removes runs, so there is no Review draft and no Discard to define. Library marks are durable when made, and reopened Review is allowed on a Ready session. Its marks reach open Projects that hold the session as labelled pending changes (D-W100) and never change a Closed Project (D-W97; LIB-FR-20, PIX-FR-18, VSEL-FR-12).
 - G10: Rests on a provisional F4 item, pending the owner's confirmation in PR #1804: D-W96's "captured" count of every matching suggestion (S12). If the owner changes it, S12's captured value changes.
 
@@ -249,3 +256,6 @@ moves or trashes no source file.
 - **Δ5** 2026-10-15 · S1, S8, S9, S10, S11, S11a, S11b, S13, S15a, S15b, S16 · behavior-change
   Frame review is the session intake Review step. A session must be Ready and have settled calibration before it can be added to a Project; re-review marks on sessions held by open Projects become labelled pending changes, and the View changes only through Apply. Library quality has one scope and no Project-only reject: S11b and S13 assert that the frame menu has no Project-only quality action (D-W79). P1 starts from J21, whose Project holds four sessions, and S10 adds 30 Sep. G9 is dissolved and G10 is new.
   Evidence: D-W78, D-W79, D-W93 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-20, LIB-FR-23, 065 PRJ-FR-08, PRJ-FR-09, 066 VSEL-FR-12, VSEL-FR-15, 067 PIX-FR-14, PIX-FR-18 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-16 · S7a, S10, +S9a · behavior-change
+  A mark on a ⌘A or threshold selection asks first, whatever its count, and a single-frame or hand-picked mark never asks: S7a cancels a threshold mark, and new S9a marks two hand-picked frames with no confirmation. G8 is dissolved. S11 now checks that the Project's Ready sessions hold no Unreviewed frame, since a Ready session is fully reviewed (D-W78).
+  Evidence: D-W118 (owner's second batch of 2026-10-16) in PR #1804, PIX-FR-14, PIX-FR-15, PIX-AC-21, FR-029; D-W78, LIB-FR-20 · by: EncodeOwnerAnswers2 (intent-gated)

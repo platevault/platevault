@@ -1,7 +1,7 @@
 ---
 id: J19
 title: Index capture folders in place and inspect sessions on first use
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
@@ -112,7 +112,7 @@ opens on Home, the control-panel dashboard. Done means:
 ### S7a — Find the raw calibration frames {#S7a}
 
 - **Do:** After indexing completes, open the Calibration library, then Sessions. Open the status bar's ℹ info counter.
-- **Expect:** The Calibration library lists one calibration process for each raw calibration session in P4. Each reads `Calibration → stack`, with the steps Stack, Detect, Import, Register and Raws, and Stack reads To do. The ℹ counter's menu names `Calibration · <n>` (`<n> to stack`), where n is the number of those processes, and that entry opens the Calibration library filtered to them. Sessions lists no calibration session. Indexing also matches calibration to the light sessions (LIB-FR-23, CAL-FR-02, CAL-FR-04): the raw darks and bias are pinned to the 18 Sep, 26 Sep and 28 Sep RedCat sessions, and the Ha flats to the 18 Sep session. The OIII flats are suggested for the 26 Sep session, because they were taken on 30 Sep, outside the default same-or-next-night window (CAL-FR-20). Its calibration stays unsettled until the user confirms that suggestion (S10a), and indexing never waits for it (LIB-FR-24). Sessions' **Needs calibration** filter lists only Ready sessions (LIB-FR-17), so it doesn't list 26 Sep while its frames are Unreviewed.
+- **Expect:** The Calibration library lists one calibration process for each raw calibration session in P4. Each reads `Calibration → stack`, with the steps Stack, Detect, Import, Register and Raws, and Stack reads To do. The ℹ counter's menu names `Calibration · <n>` (`<n> to stack`), where n is the number of those processes, and that entry opens the Calibration library filtered to them. Sessions lists no calibration session. Indexing also matches calibration to the light sessions (LIB-FR-23, CAL-FR-02, CAL-FR-04, CAL-FR-19 to CAL-FR-21). The raw darks and bias are pinned to the six RedCat sessions, the Ha flats to the 18 Sep session and the OIII flats to the 30 Sep session, each taken the same night as those lights. Flats taken outside the default same-or-next-night window are only suggested (CAL-FR-20): the OIII flats, taken on 30 Sep, for 12, 24 and 26 Sep, and the Ha flats, taken on 18 Sep, for 28 Sep. The other-camera session's darks, flats and bias read not found, because no raw set in P4 comes from its camera or optical train. So only 18 and 30 Sep are settled. 26 Sep's calibration stays unsettled until the user confirms its suggestion (S10a), and indexing never waits for it (LIB-FR-24). Sessions' **Needs calibration** filter lists every session whose calibration isn't settled, Ready or not (LIB-FR-17), so it lists the five unsettled sessions while their frames are Unreviewed.
 - **Expect (negative):** No process starts Stack by itself. No tool is launched, and no master or stacking folder is written. No raw frame goes to the OS Trash (P5 still matches). No master made from P4's raw frames is listed.
 - **Trace:** LIB-FR-23, LIB-FR-24, LIB-FR-26 · CAL-FR-02, CAL-FR-09, CAL-FR-19 to CAL-FR-23 · D-W101, D-W102, D-W103, D-W104, D-W105
 
@@ -138,10 +138,10 @@ opens on Home, the control-panel dashboard. Done means:
 
 - **Do:** In Sessions, read the filter counts, then choose the **Needs a Target** filter, then **Not in any Project**. Open Home and read its Pending work section. Choose the status bar's ⚠ counter, then its ℹ counter.
 - **Expect:**
-  - The filters read All 7, Needs a Target 1, Needs review 0, Needs calibration 0, Not in any Project 6 and Trashed 0. Needs review and Needs calibration read 0 because no session has a confirmed Target and rig yet, and Needs calibration lists only Ready sessions (LIB-FR-17).
+  - The filters read All 7, Needs a Target 1, Needs review 0, Needs calibration 5, Not in any Project 6 and Trashed 0. Needs review reads 0 because no session has a confirmed Target and rig yet. **Needs calibration** lists 12, 24, 26 and 28 Sep and the other-camera session (S7a): none of them is Ready, and the filter lists every session whose calibration isn't settled (LIB-FR-17).
   - **Needs a Target** lists exactly 24 Sep, and its row offers **Choose Target**.
   - **Not in any Project** lists exactly 12 Sep, 18 Sep, 26 Sep, 28 Sep, 30 Sep and the other-camera session. Each row reads `No Project` and offers **Add to Project**. Its menu reads `No open Project` and offers **Create Project…**.
-  - Home's Pending work reports the same counts: 24 Sep as needing a Target and the other six as not in a Project, with no session needing review or calibration.
+  - Home's Pending work reports the same counts: 24 Sep as needing a Target, the five S7a sessions as needing calibration and six as not in a Project, with no session needing review.
   - The ⚠ counter reads 1 and opens Sessions filtered to Needs a Target.
   - The ℹ counter opens a menu naming `Sessions · 6` (`6 not in a Project`), which opens Sessions filtered to Not in any Project, and `Calibration · <n>` for the S7a processes waiting to stack.
 - **Expect (negative):** Neither filter assigns a session to a Project. No session is suggested to any Project, because no Project exists. Home shows no Sessions box, issues strip or summary line, and no counter opens a list of issues.
@@ -167,9 +167,9 @@ opens on Home, the control-panel dashboard. Done means:
 ### S10a — Confirm the suggested flats for 26 Sep {#S10a}
 
 - **Do:** Open the 26 Sep session's details and read its darks, flats and bias. On flats, confirm the suggested OIII flats.
-- **Expect:** Before the confirmation, darks and bias read pinned, and flats read suggested with the OIII flats' capture date, 30 Sep, and their evidence. After it, flats read pinned to the OIII flats, so the 26 Sep session's calibration is settled. Each kind offers **Reassign…**.
+- **Expect:** Before the confirmation, darks and bias read pinned, and flats read suggested with the OIII flats' capture date, 30 Sep, and their evidence. After it, flats read pinned to the OIII flats, so the 26 Sep session's calibration is settled. Each kind offers **Reassign…**. **Needs calibration** then lists 4 sessions, no longer 26 Sep.
 - **Expect (negative):** Indexing never confirmed the suggestion by itself. Confirming changes no source byte (P5), no file in `Astro-T7/Calibration` and no other session's calibration.
-- **Trace:** LIB-FR-23 · CAL-FR-05, CAL-FR-20 · D-W102, D-W105
+- **Trace:** LIB-FR-17, LIB-FR-23 · CAL-FR-05, CAL-FR-20 · D-W102, D-W105
 
 ### S11 — See a failed catalog write {#S11}
 
@@ -211,10 +211,10 @@ opens on Home, the control-panel dashboard. Done means:
 - SC2: The S14 manifest equals P5 for 100% of files.
 - SC3: Zero frames read Missing at S5, S12, and S15. 18 Sep reads 55 frames again after S13.
 - SC4: After S10, 24 Sep and 26 Sep read NGC 7000 Confirmed, and 12, 18, 28 and 30 Sep and the other-camera session read NGC 7000 Associated. The six RedCat sessions read rig `RedCat` Confirmed, and their source headers equal P5 (S10, S14).
-- SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed. Indexing pinned the raw darks and bias on the three RedCat sessions and the Ha flats on 18 Sep, and the 26 Sep session's calibration is unsettled with the OIII flats suggested. After S10a the 26 Sep session's flats are pinned and its calibration is settled.
+- SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5). At S7a, every raw calibration session in P4 has exactly one process with Stack To do, and 0 masters are written and 0 raw frames are trashed. Indexing pinned the raw darks and bias on the six RedCat sessions, the Ha flats on 18 Sep and the OIII flats on 30 Sep, so 2 sessions are settled and 5 are not, 26 Sep among them with the OIII flats suggested. After S10a the 26 Sep session's flats are pinned, its calibration is settled, and **Needs calibration** lists 4 sessions.
 - SC6: At the end, 0 frames read Usable (S8).
 - SC7: A failing catalog write never reads Saved (S11).
-- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs a Target 1, Needs review 0, Needs calibration 0, Not in any Project 6 and Trashed 0, Home's Pending work reports the same counts, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target. After S10, **Needs a Target** lists 0 sessions.
+- SC8: Home is the first surface after onboarding (S6). At S9a the filters read exactly All 7, Needs a Target 1, Needs review 0, Needs calibration 5, Not in any Project 6 and Trashed 0, Home's Pending work reports the same counts, and the ⚠ counter reads 1 and opens Sessions filtered to Needs a Target. After S10, **Needs a Target** lists 0 sessions.
 - SC9: With no saved site, 0 windows and 0 Img time values are computed (S6a).
 - SC10: 0 Targets are taken from an OBJECT label: no evidence list names OBJECT at S9, and 24 Sep's picker opens with no Target chosen at S10.
 - SC11: At S15 the status bar reads `2 of 3 online`, and 0 duplicate-copies issues are raised after indexing (S8).
@@ -248,3 +248,6 @@ opens on Home, the control-panel dashboard. Done means:
 - **Δ5** 2026-10-15 · S1, S4, S6, S7a, S9a, S9b, S10, +S10a, S15 · behavior-change
   Indexing matches calibration to light sessions and pins it, a match outside its window is only suggested, and an unsettled session never delays indexing or Import. S10a confirms the flats suggested for 26 Sep, which settles its calibration. Raw calibration still waits as calibration processes awaiting Stack. Pixel size is entered on the camera record, and renaming a rig starts no rig version. Home shows Pending ingestions, Pending work and Open work instead of boxes, header buttons or a checklist, S9a reads Pending work and every Sessions filter, and each status bar counter opens its owning page instead of a list of issues.
   Evidence: D-W78, D-W89, D-W92, D-W101 to D-W106 (F4 Project model, owner's answers of 2026-10-14) in PR #1804, 064 LIB-FR-17, LIB-FR-23, LIB-FR-24, 065 PRJ-FR-17, 068 CAL-FR-02, CAL-FR-04, CAL-FR-05, CAL-FR-20 · by: SpecF4Writer2 (intent-gated)
+- **Δ6** 2026-10-16 · S7a, S9a, S10a · behavior-change
+  Needs calibration lists every session whose calibration isn't settled, Ready or not, so it reads 5 at S9a and 4 after S10a. S7a names each session's calibration after indexing: 18 and 30 Sep are settled, the flats of 12, 24, 26 and 28 Sep are only suggested, and the other-camera session finds no calibration.
+  Evidence: LIB-FR-17 as corrected in PR #1804 (commit 8660e090), CAL-FR-20, CAL-FR-21, D-W105, D-W114 · by: EncodeOwnerAnswers2 (intent-gated)
