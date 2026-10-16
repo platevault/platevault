@@ -19,6 +19,7 @@ import type { ReactNode } from "react"
 import { DesignSystemPage } from "@/app/design-system-page"
 import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
 import { isLibraryEmpty } from "@/domain/library"
+import { DuplicatesReview } from "@/features/t1/components/duplicates-review"
 import { AboutPage } from "@/features/t1/settings/about-page"
 import { HelpPage } from "@/features/t1/settings/help-page"
 import { AppearancePage } from "@/features/t1/settings/appearance-page"
@@ -114,7 +115,8 @@ const planRoute = createRoute({
 })
 
 // Library: S12 Sessions (`?step=` is a session's intake flow), S14 Calibration with its process flows; `/storage` (S15, P-STO2) redirects to Settings › Locations. Footer: S17 Activity.
-const sessionsRoute = page("/sessions", SessionsPage)
+// Its Duplicates facet's review dialog (`?duplicates=review`, P-STO2) is injected here.
+const sessionsRoute = page("/sessions", () => <SessionsPage duplicatesReview={DuplicatesReview} />)
 // `?step=target|rig|review` is session intake; its Review step body is the review workspace (P4), injected here.
 const sessionRoute = page("/sessions/$sessionId", stepFlowOr(SessionPage, () => <SessionIntakePage review={SessionReview} />))
 const calibrationRoute = page("/calibration", CalibrationPage)

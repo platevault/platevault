@@ -9,6 +9,7 @@ import { m, say } from "@/lib/i18n"
 import { pickCalibration } from "@/store/actions/calibration"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
+import type { Action } from "@/components/app/contracts"
 import { addToProjectItems } from "./parts"
 import { SessionPage } from "./session"
 
@@ -38,15 +39,36 @@ describe("Add to Project from any entry: only Ready and settled sessions (PRJ-FR
     const { catalog } = store.getState()
     const blocked = lights().find((s) => sessionReadiness(catalog, s) === "ready" && !canJoinProject(catalog, s))
     expect(blocked, "the demo holds a Ready session whose calibration is not settled").toBeDefined()
-    const items = addToProjectItems(m, catalog, blocked!.id)[0] as { items: Array<{ unavailable?: { reason: string } }> }
+    const items = addToProjectItems(m, catalog, [blocked!.id])[0] as { items: Array<{ unavailable?: { reason: string } }> }
     const projectItems = items.items.filter((i) => "unavailable" in i)
     expect(projectItems.length).toBeGreaterThan(0)
     for (const item of projectItems) expect(item.unavailable?.reason).toBe(say(m, joinBlocker(catalog, blocked!)!))
     const ready = lights().find((s) => canJoinProject(catalog, s))
     if (ready) {
-      const open = (addToProjectItems(m, catalog, ready.id)[0] as { items: Array<{ id?: string; unavailable?: unknown }> }).items.filter((i) => i.id?.startsWith("add-to-"))
+      const open = (addToProjectItems(m, catalog, [ready.id])[0] as { items: Array<{ id?: string; unavailable?: unknown }> }).items.filter((i) => i.id?.startsWith("add-to-"))
       for (const item of open) expect(item.unavailable).toBeUndefined()
     }
+  })
+
+  it("adds a selection to a Project in one confirmed action, and is unavailable while one of them can't join", async () => {
+    const { catalog } = store.getState()
+    const free = lights().filter((s) => canJoinProject(catalog, s))
+    const project = Object.values(catalog.projects).find((p) => p.state === "open" && free.filter((s) => !findInput(p, s.id)).length >= 2)
+    expect(project, "the demo holds an open Project two settled sessions are not in").toBeDefined()
+    const ids = free.filter((s) => !findInput(project!, s.id)).slice(0, 2).map((s) => s.id)
+    const menu = addToProjectItems(m, catalog, ids)
+    // A selection gets the Projects only: New Project… prefills from one session.
+    expect(menu).toHaveLength(1)
+    const add = (menu[0] as { items: Action[] }).items.find((i) => i.id === `add-to-${project!.id}`)!
+    expect(add.unavailable).toBeUndefined()
+    expect(add.confirm?.summary).toContain(m.sessions_join_project({ count: 2 }))
+    await add.run()
+    for (const id of ids) expect(findInput(store.getState().catalog.projects[project!.id]!, id)).toBeDefined()
+
+    // Before the add: one settled session and one that can't join yet, neither in the Project.
+    const blocked = lights().find((s) => !canJoinProject(catalog, s) && !findInput(project!, s.id))!
+    const mixed = (addToProjectItems(m, catalog, [ids[0]!, blocked.id])[0] as { items: Action[] }).items.find((i) => i.id === `add-to-${project!.id}`)!
+    expect(mixed.unavailable?.reason).toBe(m.sessions_cant_join_count({ count: 1 }))
   })
 })
 

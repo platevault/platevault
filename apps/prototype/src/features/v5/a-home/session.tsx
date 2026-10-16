@@ -103,7 +103,7 @@ function SessionDetail({ session }: { session: Session }) {
   const { catalog } = state
   const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is Asset => a !== undefined)
   const review: Action = { id: "review", label: m.session_review_frames(), icon: ListChecks, kind: row.queued ? "primary" : "standard", run: () => follow(sessionIntakeEntry(catalog, session)) }
-  const menu: MenuItem[] = withIssueItems(m, row.trashed ? [] : addToProjectItems(m, catalog, session.id), rowIssues(issueView, { kind: "session", id: session.id }))
+  const menu: MenuItem[] = withIssueItems(m, row.trashed ? [] : addToProjectItems(m, catalog, [session.id]), rowIssues(issueView, { kind: "session", id: session.id }))
   const notice: PageNotice | null = row.trashed ? { tone: "warning", title: m.session_in_os_trash() } : null
   const hours = formatHours(row.seconds)
 

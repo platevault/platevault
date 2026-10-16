@@ -8,11 +8,13 @@
  * Closed one keeps its Close snapshot. The Review step's notice names both.
  *
  * - Target: the Target the picker holds, preselected from the session's own
- *   association or its pointing (P-IMP2); OBJECT shows as a label, never as
- *   evidence. Proceed confirms it, or files an Unclassified session's frames
- *   under it (File into Target, with its moves in the confirm). A Target
- *   associated by agreeing pointing already counts as settled
- *   (`sessionTargetId`), labelled provisional.
+ *   association or its pointing (P-IMP2). The Target box shows only its
+ *   sources, the pointing and the user's choice, and marks the one that
+ *   wins as Used (SD4), with a mismatch warning when the chosen Target does
+ *   not hold the pointing; OBJECT is a label, never a source. Proceed
+ *   confirms it, or files an Unclassified session's frames under it (File
+ *   into Target, with its moves in the confirm). A Target associated by
+ *   agreeing pointing already counts as settled (`sessionTargetId`).
  * - Rig: the rig select with its header evidence; a FILTER value the rig does
  *   not list links to Equipment.
  * - Both list the corrections intake recorded, recorded beside corrected (C15).
@@ -47,14 +49,14 @@ import { isLocked, isTrashedSession, rigFilterFor, SESSION_INTAKE_STEPS, session
 import { pointingAgainst, targetAtPointing } from "@/domain/indexing"
 import { sessionLongLabel } from "@/domain/membership"
 import { matchesQuery } from "@/domain/sky"
-import type { CorrectionField, OpticalTrainId, Session, TargetId } from "@/domain/types"
-import { formatBytes, formatCount, formatDegrees } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import type { CorrectionField, OpticalTrainId, Session, Target, TargetId } from "@/domain/types"
+import { formatBytes, formatCount } from "@/lib/format"
+import { type Messages, say } from "@/lib/i18n"
 import { sessionIntake } from "@/store/actions/flows"
 import { confirmRig, confirmTarget, filedUnclassified, fileIntoTarget, filingMoves } from "@/store/actions/library"
 import { type PrototypeState, useStore } from "@/store/core"
 import { addToProjectItems } from "./parts"
-import { AssociatedTargetNote, ReadinessBadge, SessionPage } from "./session"
+import { ReadinessBadge, SessionPage } from "./session"
 import { projectsHolding } from "./session-model"
 
 /** The intake Review step's body: the review workspace for one session (`SessionReview`, injected by the route). */
@@ -117,7 +119,7 @@ function SessionIntake({ session, review: Review }: { session: Session; review: 
       status={<ReadinessBadge readiness={sessionReadiness(state.catalog, session)} unreviewed={sessionUnreviewedFrames(state.catalog, session)} trashed={isTrashedSession(state.catalog, session)} />}
       menu={{
         label: m.session_label(),
-        items: [{ id: "details", label: m.session_details(), icon: Eye, run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: session.id } }) }, { separator: true }, ...addToProjectItems(m, state.catalog, session.id)],
+        items: [{ id: "details", label: m.session_details(), icon: Eye, run: () => follow({ to: "/sessions/$sessionId", params: { sessionId: session.id } }) }, { separator: true }, ...addToProjectItems(m, state.catalog, [session.id])],
       }}
       notice={viewing === "review" ? holdersNotice(m, state, session) : null}
       flow={flow}
@@ -185,13 +187,38 @@ function libraryResults(state: PrototypeState, query: string): TargetOption[] {
     .map((t) => ({ id: t.id, name: t.name, detail: t.aliases[0] }))
 }
 
+/** One source of the session's Target and what it names (SD4): the one that wins is marked Used. */
+interface TargetSource {
+  id: "pointing" | "user"
+  source: string
+  value: string
+  used: boolean
+  /** The chosen Target's footprint does not hold the pointing (P-IMP2: allowed, with a warning). */
+  mismatch: boolean
+}
+
+/**
+ * The Target's sources: the pointing (what it falls in, or why nothing) and
+ * the user's choice once there is one, confirmed or picked here other than
+ * the pointing's Target. The choice wins; without one, the pointing wins
+ * when it names the Target the step holds. OBJECT is a label, never a source.
+ */
+function targetSources(m: Messages, state: PrototypeState, session: Session, target: Target | undefined): TargetSource[] {
+  const pointed = session.pointing ? targetAtPointing(state.catalog, session.pointing.ra, session.pointing.dec) : null
+  const pointing = session.target.evidence.find((e) => e.source === "pointing")
+  const chosen = target && (session.target.status === "confirmed" || target.id !== pointed?.id) ? target : undefined
+  const against = chosen ? pointingAgainst(chosen, session.pointing) : null
+  return [
+    { id: "pointing", source: m.evidence_source_pointing(), value: pointing ? say(m, pointing.value) : m.session_none(), used: !chosen && pointed !== null && target?.id === pointed.id, mismatch: false },
+    ...(chosen ? [{ id: "user" as const, source: m.evidence_source_user(), value: chosen.name, used: true, mismatch: against !== null && !against.inside }] : []),
+  ]
+}
+
 function TargetStep({ state, session, targetId, onTarget, current }: { state: PrototypeState; session: Session; targetId: TargetId | null; onTarget: (id: TargetId) => void; current: boolean }) {
   const m = useMessages()
   const [query, setQuery] = useState("")
   const target = targetId ? state.catalog.targets[targetId] : undefined
   const settled = sessionTargetId(session)
-  const pointed = session.pointing ? targetAtPointing(state.catalog, session.pointing.ra, session.pointing.dec) : null
-  const against = target ? pointingAgainst(target, session.pointing) : null
   const filing = filedUnclassified(state, session)
   // Off the current step Proceed is gone, so the change is the step's own operation (F8).
   const changed = target !== undefined && (settled !== target.id || session.target.status !== "confirmed")
@@ -201,24 +228,27 @@ function TargetStep({ state, session, targetId, onTarget, current }: { state: Pr
         ? { id: "file-into", label: m.session_file_into({ name: target.name }), icon: Check, confirm: fileIntoConfirm(m, state, session, target.name), run: () => fileIntoTarget(session.id, target.id, session.revision) }
         : { id: "confirm-target", label: m.session_confirm_target(), icon: Check, run: () => confirmTarget(session.id, target.id, session.revision) }
       : null
+  const columns: Column<TargetSource>[] = [
+    { id: "source", header: m.evidence_column_source(), rowHeader: true, sortValue: (s) => s.source, cell: (s) => s.source },
+    {
+      id: "value",
+      header: m.evidence_column_value(),
+      sortValue: (s) => s.value,
+      cell: (s) => {
+        const mismatch = s.mismatch ? <StatusBadge kind="association" value="needs-review" label={m.session_pointing_mismatch()} /> : null
+        const used = s.used ? <StatusBadge kind="assignment" value="accepted" label={m.session_source_used()} /> : null
+        return (
+          <>
+            {s.value} {mismatch} {used}
+          </>
+        )
+      },
+    },
+  ]
   return (
     <>
       <Section title={m.sessions_column_target()} actions={confirm ? <ActionBar actions={[confirm]} /> : undefined}>
-        <KeyValueList
-          columns={2}
-          items={[
-            { label: m.session_chosen_target(), value: target?.name ?? m.session_none() },
-            { label: m.session_target_status(), value: session.target.status === "associated" ? <AssociatedTargetNote /> : <StatusBadge kind="association" value={session.target.status} /> },
-            { label: m.evidence_source_pointing(), value: pointed ? pointed.name : m.session_none() },
-            {
-              label: m.session_pointing_offset(),
-              value: against ? (against.inside ? m.session_from_centre({ angle: formatDegrees(against.separationDeg) }) : <StatusBadge kind="association" value="needs-review" label={m.session_pointing_mismatch()} />) : "–",
-            },
-            // OBJECT is a label and a filter, never Target evidence.
-            { label: m.session_header_label(), value: session.objectLabel ?? m.session_no_object() },
-            ...(filing ? [{ label: m.session_filing(), value: m.import_type_unclassified() }] : []),
-          ]}
-        />
+        <DataTable label={m.session_target_sources({ name: sessionLongLabel(m, session) })} rows={targetSources(m, state, session, target)} columns={columns} getRowId={(s) => s.id} scroll="none" />
         <TargetPicker
           label={m.session_choose_a_target()}
           query={query}
@@ -226,9 +256,6 @@ function TargetStep({ state, session, targetId, onTarget, current }: { state: Pr
           groups={[{ source: "mine", items: libraryResults(state, query) }]}
           onPick={(option) => onTarget(option.id)}
         />
-      </Section>
-      <Section title={m.session_evidence()}>
-        <EvidenceList evidence={session.target.evidence} caption={m.session_target_evidence({ name: sessionLongLabel(m, session) })} />
       </Section>
       <Corrections session={session} fields={TARGET_FIELDS} />
     </>

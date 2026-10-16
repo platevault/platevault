@@ -9,7 +9,8 @@
  *   card when activated, so the card's links have a keyboard path; Escape
  *   closes it and returns focus to the trigger.
  * - BlockersPreview: why an action is unavailable, one row per blocker,
- *   linked to where it can be resolved. Wraps an unavailable control, or
+ *   linked to where it can be resolved; with `columns`, a table of item ·
+ *   where ▸ ("Session · Project"). Wraps an unavailable control, or
  *   renders its own "reason ▸" trigger beside a refusal line.
  * - UsedByPreview: "Used by 6 sessions ▸", a link to the full list,
  *   previewing the first rows.
@@ -39,7 +40,8 @@ import { nightOf } from "@/domain/indexing"
 import type { CalibrationMaster, MasterVersion } from "@/domain/types"
 import { formatCount, formatExposure, formatNight } from "@/lib/format"
 import { type MessageRef, msg, say } from "@/lib/i18n"
-import type { Blocker } from "./contracts"
+import { BoxTable } from "./box"
+import type { Blocker, BlockerColumns, Column } from "./contracts"
 import { KeyValueList } from "./data"
 import { Pill } from "./pill"
 
@@ -125,12 +127,24 @@ function Rows({ rows }: { rows: { label: string; link?: StepLink }[] }) {
   )
 }
 
+/** Blockers held by a place, one row each: the item, then the place, linked to where it is resolved (P7). */
+function BlockerTable({ caption, blockers, columns }: { caption: string; blockers: Blocker[]; columns: BlockerColumns }) {
+  const where = (blocker: Blocker) => blocker.where ?? "–"
+  const table: Column<Blocker>[] = [
+    { id: "item", header: columns.item, rowHeader: true, truncate: true, sortValue: (blocker) => blocker.label, cell: (blocker) => blocker.label },
+    { id: "where", header: columns.where, truncate: true, sortValue: where, cell: (blocker) => (blocker.link ? <PlaceLink link={blocker.link}>{where(blocker)}</PlaceLink> : where(blocker)) },
+  ]
+  return <BoxTable label={caption} rows={blockers} columns={table} getRowId={(blocker) => `${blocker.label}|${where(blocker)}`} />
+}
+
 export interface BlockersPreviewProps {
   /** "Can't archive". */
   action: string
   /** "2 in a Project". */
   reason: string
   blockers: Blocker[]
+  /** The headers that show the blockers as a table, item · where ▸; without them, a list. */
+  columns?: BlockerColumns
   /** Buttons that resolve the refusal, after the blockers. */
   actions?: ReactNode
   /**
@@ -141,11 +155,12 @@ export interface BlockersPreviewProps {
   children?: ReactElement<{ "aria-describedby"?: string }>
 }
 
-export function BlockersPreview({ action, reason, blockers, actions, children }: BlockersPreviewProps) {
+export function BlockersPreview({ action, reason, blockers, columns, actions, children }: BlockersPreviewProps) {
   const descriptionId = useId()
+  const list = blockers.length === 0 ? null : columns ? <BlockerTable caption={`${action} · ${reason}`} blockers={blockers} columns={columns} /> : <Rows rows={blockers} />
   const body = (
     <>
-      {blockers.length > 0 ? <Rows rows={blockers} /> : null}
+      {list}
       {actions ? <div className="flex flex-wrap items-center gap-1.5">{actions}</div> : null}
     </>
   )

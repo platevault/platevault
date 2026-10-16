@@ -91,7 +91,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCount } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { ActionBar, ActionButton, type ActionRunner, MenuItems, useAction } from "./actions"
+import { ActionBar, ActionButton, type ActionRunner, isAction, MenuItems, useAction } from "./actions"
 import { isColumnHideable, isColumnShown, useColumnChoice } from "./column-choice"
 import type { Action, Column, MenuItem } from "./contracts"
 import { FilterChips } from "./data"
@@ -261,8 +261,11 @@ interface DataTableBaseProps<T> {
   onRowClick?: (row: T) => void
   /** The toolbar slot above the table; the batch bar replaces it while rows are selected. */
   toolbar?: DataTableToolbar
-  /** Actions on the whole selection, the rows the filters hide included; shown in the batch bar (three inline, the rest under More). */
-  batchActions?: (selectedIds: string[]) => Action[]
+  /**
+   * Actions on the whole selection, the rows the filters hide included; shown in the batch bar (three inline, the
+   * rest under More, where a submenu such as "Add to Project ▸" goes after them).
+   */
+  batchActions?: (selectedIds: string[]) => MenuItem[]
   /**
    * The key the Columns menu's choice is kept under across reloads ("targets"); one per table. Without it the
    * choice lasts while the table is mounted.
@@ -917,7 +920,7 @@ export function DataTable<T>({
             hidden={hidden}
             onShowHidden={selection.onShowHidden}
             onClear={() => selection.onChange([])}
-            actions={batchActions?.(selection.selected) ?? []}
+            items={batchActions?.(selection.selected) ?? []}
             runner={runner}
           />
         ) : toolbar ? (
@@ -1008,14 +1011,14 @@ function BatchBar({
   hidden,
   onShowHidden,
   onClear,
-  actions,
+  items,
   runner,
 }: {
   countLabel: string
   hidden: number
   onShowHidden?: () => void
   onClear: () => void
-  actions: Action[]
+  items: MenuItem[]
   runner: ActionRunner
 }) {
   const m = useMessages()
@@ -1034,7 +1037,7 @@ function BatchBar({
       ) : null}
       {/* ActionBar keeps one primary and three standard inline and the rest under More, so the bar stays one row. */}
       <div className="ml-auto min-w-0">
-        <ActionBar actions={actions} runner={runner} />
+        <ActionBar actions={items.filter(isAction)} overflow={items.filter((item) => !isAction(item))} runner={runner} />
       </div>
       <Button size="sm" variant="ghost" className="shrink-0" onClick={onClear}>
         <X data-icon="inline-start" aria-hidden="true" />
