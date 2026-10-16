@@ -1008,8 +1008,8 @@ jobs:
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
   #
   # Windows uses 3 shards with explicit filterset expressions instead of
-  # `--partition hash:N/3`. Two tests prefixed `slow_` are pinned one per
-  # shard; the rest are distributed by LPT (longest-processing-time first)
+  # `--partition hash:N/3`. The one test prefixed `slow_` is pinned to shard
+  # 1; the rest are distributed by LPT (longest-processing-time first)
   # to minimise max-shard wall time. `--partition` and `-E filterset` are
   # ANDed by nextest, not ORed, so an explicitly named test that doesn't
   # hash to a bucket is still excluded — shard expressions use pure `-E`
@@ -1026,8 +1026,8 @@ jobs:
   # Adding a new NON-slow_ test: tests in files that have a binary() catch-all
   # in one shard's -E expression are picked up automatically; tests in files
   # that are only covered by individual test(=...) terms — currently
-  # archive_journeys, inbox_ui_journeys, journeys, plan_review_overlay_journeys,
-  # settings_journeys, and targets_journeys — must be pinned explicitly.
+  # inbox_ui_journeys, plan_review_overlay_journeys, settings_journeys, and
+  # targets_journeys — must be pinned explicitly.
   # The shard-coverage CI check (step "Verify shard coverage" in shard 1) will
   # catch any new test that lands in zero shards and turn CI red.
   #
@@ -1035,21 +1035,18 @@ jobs:
   # | Test (short form)                               | Avg(s) | slow_? |
   # |-------------------------------------------------|--------|--------|
   # | slow_dock_pin_and_width_survive_a_real_restart  |  81.1s |   yes  |
-  # | slow_archive_lifecycle_apply_trash_perm_delete  |  25.5s |   yes  |
   # | inbox_ui_confirm_does_not_move_..._destination  |  15.3s |        |
   # | all_top_level_screens_load                      |  10.3s |        |
   # | targets_planner_real_astronomy_after_site_...   |  10.2s |        |
   # | targets_ui_add_target_no_duplicate_...          |   9.1s |        |
   # | reconcile_drops_externally_deleted_frame_...    |   8.5s |        |
   # | targets_ui_identity_columns_stay_pinned_...     |   8.4s |        |
-  # | cleanup_plan_review                             |   8.3s |        |
   # | calibration_ui_confirmed_master_...             |   8.1s |        |
   # | inbox_ui_catalogue_in_place_zero_moves_...      |   7.7s |        |
   # | projects_ui_wizard_creates_real_folders_...     |   7.5s |        |
   # | plan_review_destructive_confirm_gate_and_...    |   7.3s |        |
   # | generate_source_view_creates_reviewable_...     |   7.3s |        |
   # | targets_ui_astronomy_columns_disclose_...       |   7.0s |        |
-  # | ingestion_sessions_search                       |   7.0s |        |
   # | orientation_walk_then_real_confirm_renders_...  |   7.0s |        |
   # | sessions_ui_derived_view_invariants             |   6.9s |        |
   # | cleanup_ui_protected_item_blocks_...            |   6.7s |        |
@@ -1057,18 +1054,18 @@ jobs:
   # | inbox_ui_missing_path_attribute_banner_...      |   5.9s |        |
   # | inbox_ui_mixed_folder_splits_into_single_...    |   5.8s |        |
   # | calibration_ui_masters_ingest_as_individual_... |   5.7s |        |
-  # | first_run_resolve_create_project                |   5.6s |        |
   # | inbox_ui_unsplit_unclassified_folder_badge_...  |   5.5s |        |
   # | inbox_ui_unclassified_gate_bulk_reclassify_...  |   5.5s |        |
-  # | plan_review_apply_with_audit                    |   5.4s |        |
   # | settings_ui_theme_applies_live_and_persists_... |   5.4s |        |
   # | settings_ui_ingestion_toggle_autosaves_...      |   5.3s |        |
-  # | lifecycle_integrity                             |   4.2s |        |
   #
   # LPT assignment -> shard totals 104s / 103s / 104s, max = 104s.
   # (Previous count-balanced assignment: 159s / 97s / 74s, max = 159s.)
+  # #1227 then moved five IPC-only journeys and deleted a redundant sixth,
+  # taking 42.1s from shard 2 and 13.9s from shard 3 (rows removed above):
+  # by these averages 104s / 61s / 90s. Not rebalanced since.
   #
-  # Verified locally (2026-07-23, cargo-nextest 0.9.132):
+  # Verified locally (2026-07-23, cargo-nextest 0.9.132), before #1227:
   #   -E '<shard-1-expr>' ->  5 tests (slow_dock_ + 4 short, ~104s)
   #   -E '<shard-2-expr>' -> 12 tests (slow_archive_ + 11, ~103s)
   #   -E '<shard-3-expr>' -> 13 tests (no slow_, ~104s)
@@ -1091,14 +1088,14 @@ jobs:
           - shard: 1
             filter: >-
               test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db)
-          # Shard 2 (~103s): slow_archive (25.5s) + 11 mid-range tests.
+          # Shard 2 (~61s): 8 mid-range tests.
           - shard: 2
             filter: >-
-              test(=slow_archive_lifecycle_apply_trash_permanent_delete) | test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | test(=ingestion_sessions_search) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply) | test(=plan_review_apply_with_audit) | test(=lifecycle_integrity)
-          # Shard 3 (~104s): no slow_ test, 13 mid-range tests.
+              test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply)
+          # Shard 3 (~90s): no slow_ test, 11 mid-range tests.
           - shard: 3
             filter: >-
-              test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=cleanup_plan_review) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=first_run_resolve_create_project) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)
+              test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -1159,17 +1156,17 @@ jobs:
       # three shard -E expressions (copies of the matrix `filter:` values;
       # keep them identical) from the same archive, and fails if any test
       # is uncovered. A new test added to a file with no binary() catch-all
-      # (archive_journeys, inbox_ui_journeys, journeys,
-      # plan_review_overlay_journeys, settings_journeys, targets_journeys) but
-      # not pinned in an -E expression would produce count_total > count_union,
+      # (inbox_ui_journeys, plan_review_overlay_journeys, settings_journeys,
+      # targets_journeys) but not pinned in an -E expression would produce
+      # count_total > count_union,
       # turning CI red before the test silently disappears from all shards.
       - name: Verify shard coverage
         if: matrix.shard == 1
         shell: bash
         run: |
           SHARD1='test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db)'
-          SHARD2='test(=slow_archive_lifecycle_apply_trash_permanent_delete) | test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | test(=ingestion_sessions_search) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply) | test(=plan_review_apply_with_audit) | test(=lifecycle_integrity)'
-          SHARD3='test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=cleanup_plan_review) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=first_run_resolve_create_project) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
+          SHARD2='test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply)'
+          SHARD3='test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
           TOTAL=$(cargo nextest list \
             --archive-file e2e-archive.tar.zst --workspace-remap . \
             --run-ignored all --message-format oneline | wc -l)
