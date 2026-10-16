@@ -78,9 +78,6 @@ const SCHEMA: &str = schema_modules![
     "view_groups.sql",
     "prepare.sql",
     "results.sql",
-    "cleanup.sql",
-    "archive.sql",
-    "trash_moves.sql",
     "workflow_settings.sql",
     "project_inputs.sql",
     "project_lifecycle.sql",
@@ -182,23 +179,6 @@ mod project_output;
 pub use project_output::{
     OutputBasis, OutputCopy, OutputFolder, OutputPanel, OutputScan, OutputScanRecord, ScannedOutput,
 };
-mod cleanup;
-pub use cleanup::{
-    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, RunCleanupDraft,
-    RunCleanupFolder, RunCleanupItem, RunCleanupRecord, RunFolders,
-};
-mod done_archive;
-pub use done_archive::{
-    AdoptedSource, DoneArchiveBasis, PreparedUse, ProjectFrame, RecordedResult, RegisteredLocation,
-    ResultsIntermediate,
-};
-mod archive;
-pub use archive::{
-    ArchiveAsset, ArchiveItemChange, ArchiveItemState, ArchiveRecord, ArchiveRepoint,
-    EntryReference, EntryRepoint, LatestRepoint, NewArchiveItem, NewArchiveTransfer, SessionFrame,
-};
-mod trash_moves;
-pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 // The F4 admission contract (only Ready, calibration-settled sessions join a
 // Project); its `require_admission` runs inside membership-add transactions.
 mod admission;
@@ -225,8 +205,8 @@ pub use workflow_settings::WORKFLOW_SETTINGS_ID;
 // (project_wrap_up.sql).
 mod project_wrap_up;
 pub use project_wrap_up::{
-    ArchiveDraft, ArchiveMoveRecord, ArchiveRun, ClosedProject, KeptLinkRecord, TrashBasis,
-    TrashItemDraft, WrapUpFrame, WrapUpTrash, WrapUpTrashItem,
+    ArchiveAsset, ArchiveDraft, ArchiveMoveRecord, ArchiveRun, ClosedProject, KeptLinkRecord,
+    TrashBasis, TrashItemDraft, WrapUpFrame, WrapUpTrash, WrapUpTrashItem,
 };
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.

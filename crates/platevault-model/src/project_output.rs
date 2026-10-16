@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    relative_parts, require_sha256, Classification, InputKind, LibraryError, MasterOfferState,
-    NativePath, ObservationFingerprint,
+    relative_parts, require_sha256, Classification, InputKind, LibraryError, NativePath,
+    ObservationFingerprint,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -26,6 +26,17 @@ fn invalid(message: String) -> LibraryError {
 
 /// The folder under `Output/` that holds each panel's result.
 pub const OUTPUT_PANELS: &str = "Panels";
+
+/// The state of the once-only Add to calibration library offer (CAL-FR-06).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MasterOfferState {
+    Offered,
+    /// Declined for this file and digest: the offer does not return, and the
+    /// master stays listed as a candidate in Calibration.
+    Dismissed,
+    Adopted,
+}
 
 /// What a Result is; the user picks it from a dropdown when it isn't known.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

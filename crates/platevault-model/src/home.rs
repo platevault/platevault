@@ -1,20 +1,20 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Home's records (spec 065 PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, root FR-020,
-//! D-W27, D-W35, D-W39, D-W48): its own actions, each Project's row with its
-//! one Next action, the rows of the new-sessions groups, the target status and
-//! the running work. [`RunBlocker`] gathers the three sources of a blocked
-//! run (PRJ-FR-18 rule 2) without changing how any of them is computed.
+//! Home's records (spec 065 PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-FR-32,
+//! root FR-020, D-W27, D-W35, D-W39, D-W48, D-W96, D-W100): its own actions,
+//! each open Project's row with its pending changes and its one Next action,
+//! the rows of the new-sessions groups, the target status and the running
+//! work. [`ProjectWait`] names what keeps a Project waiting on the user
+//! (PRJ-FR-18 rule 2) and the step it opens at.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    AdmissionBlocker, ArchiveKind, CalibrationNeedsReview, CleanupKind, GoalProgress, GoalSpec,
-    Microseconds, NativePath, PreparationFailed, ProjectCandidate, ProjectSummary, ReviewContext,
-    ReviewFilter, RunCounters, RunStage, ScanProgress, StorageOperationKind, TrashOffer,
-    ViewListing,
+    ApplyOutcome, GoalProgress, GoalSpec, Microseconds, NativePath, ProjectOperation,
+    ProjectSuggestion, ProjectSummary, ReviewContext, ReviewFilter, RunCounters, ScanProgress,
+    StorageOperationKind,
 };
 
 /// Home's first section (PRJ-FR-17 section 1).
@@ -31,32 +31,35 @@ impl HomeAction {
     pub const ALL: [Self; 3] = [Self::Import, Self::NewProject, Self::PlanTonight];
 }
 
-/// What keeps a run waiting on the user (PRJ-FR-18 rule 2). Each variant is
-/// its owning feature's own blocker: VSEL's unresolved inputs, CAL's
-/// readiness line and PREP's latest revision.
+/// The Project step a waiting Project opens at (PRJ-FR-18 rule 2).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
-pub enum RunBlocker {
-    /// `members` chosen members have no Available copy: offline, missing,
-    /// unreadable or retired sources to reconnect, locate or remove
-    /// (VSEL-FR-09).
-    UnresolvedInputs { view_id: Uuid, members: u64 },
-    /// Light groups whose calibration needs a review or an acceptance
-    /// (CAL-FR-09, PRJ-AC-23).
-    CalibrationNeedsReview(CalibrationNeedsReview),
-    /// The latest preparation revision Failed, is Partial, or holds entries
-    /// Open found changed (PREP-FR-09, PREP-FR-10).
-    PreparationFailed(PreparationFailed),
+#[serde(rename_all = "snake_case")]
+pub enum ProjectStep {
+    Sessions,
+    View,
 }
 
-impl RunBlocker {
-    /// The stage the blocked run opens at.
+/// What keeps an open Project waiting on the user (PRJ-FR-18 rule 2,
+/// provisional), in rule order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum ProjectWait {
+    /// A session the Project suggests needs calibration before it can join
+    /// ("Choose its flats first", PRJ-AC-23).
+    SuggestionNeedsCalibration { session_id: Uuid },
+    /// The Project's latest Apply failed or was canceled.
+    ApplyNotFinished { operation_id: Uuid, outcome: ApplyOutcome },
+    /// `View (previous)/` holds `files` the user hasn't reviewed (D-W110).
+    PreviousViewHolds { files: u64 },
+}
+
+impl ProjectWait {
+    /// The step the waiting Project opens at.
     #[must_use]
-    pub const fn stage(&self) -> RunStage {
+    pub const fn step(&self) -> ProjectStep {
         match self {
-            Self::UnresolvedInputs { .. } => RunStage::Select,
-            Self::CalibrationNeedsReview(_) => RunStage::Calibrate,
-            Self::PreparationFailed(_) => RunStage::Prepare,
+            Self::SuggestionNeedsCalibration { .. } => ProjectStep::Sessions,
+            Self::ApplyNotFinished { .. } | Self::PreviousViewHolds { .. } => ProjectStep::View,
         }
     }
 }
@@ -69,17 +72,21 @@ pub enum NextAction {
     /// Unreviewed frames; it opens frame review on them filtered to
     /// Unreviewed (PIX-FR-18).
     ReviewNewFrames { frames: u64, context: ReviewContext, filter: ReviewFilter },
-    /// Rule 2: the first blocked run outside the Trash by name, opened at the
-    /// stage of its first blocker.
-    OpenBlockedRun { view_id: Uuid, name: String, stage: RunStage, blockers: Vec<RunBlocker> },
+    /// Rule 2: the Project waits on the user and opens at `step`, the step of
+    /// the first wait.
+    WaitsOnUser { step: ProjectStep, waits: Vec<ProjectWait> },
     /// Rule 3, "Plan tonight": the subjects' Targets with a goal unmet in
     /// project and an observing window tonight (PLAN-FR-11), in subject order.
     PlanTonight { target_ids: Vec<Uuid> },
-    /// Rule 4, "Start a processing run".
-    StartRun,
+    /// Rule 4, "Apply N changes" (provisional copy).
+    ApplyChanges { changes: u64 },
+    /// Rule 4, "Open in {app}" once the View exists (provisional copy).
+    OpenView,
+    /// Rule 4, "Add sessions" before the first Apply (provisional copy).
+    AddSessions,
 }
 
-/// One Project on Home (PRJ-FR-17 section 2).
+/// One open Project on Home (PRJ-FR-17 section 3, PRJ-FR-32).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HomeProject {
@@ -87,12 +94,12 @@ pub struct HomeProject {
     /// "in project" and "captured" of each integration and frame-count goal,
     /// in goal order.
     pub goals: Vec<GoalProgress>,
-    /// Each run outside the Project's Trash with its stage, by name.
-    pub stages: Vec<ViewListing>,
+    /// How many changes wait for the next Apply.
+    pub pending_changes: u64,
     pub next: NextAction,
 }
 
-/// A new-sessions row's one-click action (PRJ-FR-17 section 3, PRJ-FR-19).
+/// A new-sessions row's one-click action (PRJ-FR-17 section 2, PRJ-FR-19).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum SessionAction {
@@ -106,13 +113,6 @@ pub enum SessionAction {
     /// Unreviewed: frame review of the Project's candidates filtered to
     /// Unreviewed.
     ReviewFrames { context: ReviewContext, filter: ReviewFilter },
-    /// Ready to add: the open run on the session's subject and rig.
-    AddToRun { view_id: Uuid },
-    /// Ready to add: the run group holding open panel runs on the session's
-    /// mosaic subject and rig.
-    AddToRunGroup { group_id: Uuid },
-    /// Ready to add, with no open run on the session's subject and rig.
-    StartRun { project_id: Uuid, subject_id: Uuid, rig_id: Uuid },
     /// A session an open Project suggests: open that Project's suggestions
     /// (PRJ-FR-19). Nothing is added until the user adds it.
     OpenSuggestions { project_id: Uuid },
@@ -136,9 +136,7 @@ pub struct UnreviewedSession {
 #[serde(rename_all = "camelCase")]
 pub struct ReadyToAdd {
     pub project_id: Uuid,
-    pub candidate: ProjectCandidate,
-    #[serde(default)]
-    pub blockers: Vec<AdmissionBlocker>,
+    pub suggestion: ProjectSuggestion,
     pub actions: Vec<SessionAction>,
 }
 
@@ -193,7 +191,7 @@ pub struct TargetStatus {
     pub goals: Vec<UnmetGoal>,
 }
 
-/// One Running operation (PRJ-FR-17 section 6). Each feature's own status
+/// One Running operation (PRJ-FR-17 section 4). Each feature's own status
 /// read names the rest.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
@@ -209,58 +207,18 @@ pub enum RunningWork {
         counters: RunCounters,
         started_at: String,
     },
-    Prepare {
-        preparation_id: Uuid,
-        view_id: Uuid,
-        number: u32,
-        folder: NativePath,
-        started_at: String,
-    },
-    /// A run group's Prepare all, listed once for all its panel runs.
-    PrepareAll {
-        group_preparation_id: Uuid,
-        group_id: Uuid,
-        number: u32,
-        /// `<Mosaic>/` or `<Mosaic> (rev N)/`.
-        folder: NativePath,
-        started_at: String,
-    },
     Import {
         import_id: Uuid,
         source_path: NativePath,
         updated_at: String,
     },
-    /// A run's Clean up or Empty Trash, listed once with its storage
-    /// operation, through Empty Trash's folder moves (STO-FR-01/17).
-    Cleanup {
-        cleanup_id: Uuid,
-        action: CleanupKind,
-        view_id: Uuid,
-        run_name: String,
-        /// The storage operation moving its items; none when only folders go.
-        operation_id: Option<Uuid>,
-        /// When its review was recorded.
-        reviewed_at: String,
+    /// A Project's one running operation (Apply, Copy to Output, or a Wrap up
+    /// step), listed once with its Project's name (PREP-FR-19).
+    Project {
+        operation: ProjectOperation,
+        project_name: String,
     },
-    /// A Done Project's archive or restore transfer, listed once with its
-    /// storage operation (STO-FR-06/13).
-    Archive {
-        transfer_id: Uuid,
-        action: ArchiveKind,
-        project_id: Uuid,
-        operation_id: Option<Uuid>,
-        items: u64,
-        updated_at: String,
-    },
-    /// A Done / Archive sheet's OS Trash move of one offer (STO-FR-14/15/16).
-    TrashMove {
-        operation_id: Uuid,
-        offer: TrashOffer,
-        project_id: Uuid,
-        items: u64,
-        updated_at: String,
-    },
-    /// A storage operation no feature above lists.
+    /// A storage operation no Project operation above carries.
     Storage {
         operation_id: Uuid,
         /// OS Trash, copy or move.

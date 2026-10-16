@@ -1,23 +1,21 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Projects (spec 065, amended D-W1..D-W74): the required container for
-//! processing runs.
+//! Projects (spec 065): the processing unit (D-W93).
 //!
-//! A Project names its subjects (Targets, or mosaics of a Target with panels by
-//! centre and rotation), the rigs taking part and goals per subject and channel,
-//! or per panel of a mosaic subject. It has an open or Done state and no capture
-//! site. Its candidate sessions are derived on read from confirmed Target and
-//! confirmed rig and are never stored. Writing a Project changes no file, no
-//! library quality decision and no session record. A Project-only reject is a
-//! separate decision per asset that never changes library quality.
+//! A Project names its subjects (Targets), the rigs taking part and goals per
+//! subject and channel, or per panel group of a mosaic. It is open until Wrap
+//! up closes it and has no capture site. Its suggested sessions are derived
+//! on read from confirmed Target and confirmed rig and are never stored; the
+//! sessions it holds are its inputs (`project_inputs`). Writing a Project
+//! changes no file, no library quality decision and no session record.
 
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::{LibraryError, ObservationFingerprint, Revision};
+use crate::{LibraryError, ProjectLifecycle, Revision};
 
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
@@ -90,68 +88,16 @@ impl<'de> Deserialize<'de> for Microseconds {
 // Inputs
 // ---------------------------------------------------------------------------
 
-/// One mosaic panel by its ICRS centre and rotation. `number` is the panel's
-/// "Panel N" and keeps its identity across edits. A missing rotation is
-/// unknown, never zero.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PanelInput {
-    pub number: u32,
-    pub ra_deg: f64,
-    pub dec_deg: f64,
-    #[serde(default)]
-    pub rotation_deg: Option<f64>,
-}
-
-fn require_angle(
-    number: u32,
-    field: &str,
-    value: f64,
-    valid: bool,
-    range: &str,
-) -> Result<(), LibraryError> {
-    if value.is_finite() && valid {
-        Ok(())
-    } else {
-        Err(invalid(format!("panel {number}: {field} {value} must be a finite angle in {range}")))
-    }
-}
-
-impl PanelInput {
-    /// Validate the panel: `number` at least 1, `raDeg` in [0, 360), `decDeg` in
-    /// [-90, 90] and an optional `rotationDeg` in [0, 360).
-    ///
-    /// # Errors
-    /// `InvalidInput` naming the panel and field.
-    pub fn validate(&self) -> Result<(), LibraryError> {
-        let number = self.number;
-        if number == 0 {
-            return Err(invalid("panel numbers start at 1".into()));
-        }
-        let (ra, dec) = (self.ra_deg, self.dec_deg);
-        require_angle(number, "raDeg", ra, (0.0..360.0).contains(&ra), "[0, 360)")?;
-        require_angle(number, "decDeg", dec, (-90.0..=90.0).contains(&dec), "[-90, 90]")?;
-        if let Some(rotation) = self.rotation_deg {
-            let valid = (0.0..360.0).contains(&rotation);
-            require_angle(number, "rotationDeg", rotation, valid, "[0, 360)")?;
-        }
-        Ok(())
-    }
-}
-
-/// A subject: a saved Target, or a mosaic of that Target with its panels. The
-/// Target identifies the subject within its Project across edits. `name` is an
-/// optional label; the Target's designation is always shown beside it.
+/// A subject: a saved Target, which identifies the subject within its
+/// Project across edits. `name` is an optional label; the Target's
+/// designation is always shown beside it. A mosaic is not a subject kind: its
+/// panels are the Project's panel groups (PRJ-FR-27).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectInput {
     pub target_id: Uuid,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
-    pub mosaic: bool,
-    #[serde(default)]
-    pub panels: Vec<PanelInput>,
 }
 
 impl SubjectInput {
@@ -161,31 +107,11 @@ impl SubjectInput {
         self.name.as_deref().map(str::trim)
     }
 
-    /// Validate the label and panels: a mosaic has at least one panel, each
-    /// number once; a single-Target subject has none.
-    ///
     /// # Errors
-    /// `InvalidInput` naming the Target and the reason.
+    /// `InvalidInput` naming the Target for a blank label.
     pub fn validate(&self) -> Result<(), LibraryError> {
-        let target = self.target_id;
         if self.label().is_some_and(str::is_empty) {
-            return Err(invalid(format!("subject {target}: name is blank")));
-        }
-        if !self.mosaic && !self.panels.is_empty() {
-            return Err(invalid(format!("subject {target} is not a mosaic and has no panels")));
-        }
-        if self.mosaic && self.panels.is_empty() {
-            return Err(invalid(format!("mosaic subject {target} needs at least one panel")));
-        }
-        let mut numbers = BTreeSet::new();
-        for panel in &self.panels {
-            panel.validate()?;
-            if !numbers.insert(panel.number) {
-                return Err(invalid(format!(
-                    "subject {target} lists panel {} twice",
-                    panel.number
-                )));
-            }
+            return Err(invalid(format!("subject {}: name is blank", self.target_id)));
         }
         Ok(())
     }
@@ -379,42 +305,30 @@ impl GoalSpec {
     }
 }
 
-/// A goal to set, naming its subject by Target and, on a mosaic, its panel:
-/// a mosaic panel group of the Project by id (F4, PRJ-FR-03/29), or on a
-/// legacy mosaic subject its panel by number. A goal names at most one of
-/// the two; a quality bar without one applies to every panel.
+/// A goal to set, naming its subject by Target and, for a mosaic panel, the
+/// Project's panel group by id (PRJ-FR-03/29): groups, not names, scope panel
+/// goals. A quality bar without a group applies to every panel.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GoalInput {
     pub target_id: Uuid,
-    #[serde(default)]
-    pub panel: Option<u32>,
-    /// A mosaic panel group of the Project; groups, not names, scope panel
-    /// goals.
     #[serde(default)]
     pub group_id: Option<Uuid>,
     #[serde(flatten)]
     pub goal: GoalSpec,
 }
 
-/// Validate goal values and refuse the same goal twice for one subject or panel.
-/// Which subjects, panels and groups exist is checked against the Project's
-/// records.
+/// Validate goal values and refuse the same goal twice for one subject or
+/// panel group. Which subjects and groups exist is checked against the
+/// Project's records.
 ///
 /// # Errors
-/// `InvalidInput` for an invalid value, a goal naming both a panel and a
-/// group, or a repeated goal.
+/// `InvalidInput` for an invalid value or a repeated goal.
 pub fn validate_goals(goals: &[GoalInput]) -> Result<(), LibraryError> {
     let mut seen = BTreeSet::new();
     for item in goals {
         item.goal.validate()?;
-        if item.panel.is_some() && item.group_id.is_some() {
-            return Err(invalid(format!(
-                "a goal of Target {} names both a panel and a group",
-                item.target_id
-            )));
-        }
-        if !seen.insert((item.target_id, item.panel, item.group_id, item.goal.identity())) {
+        if !seen.insert((item.target_id, item.group_id, item.goal.identity())) {
             return Err(invalid(format!(
                 "Target {} lists the {} goal {:?} twice",
                 item.target_id,
@@ -464,19 +378,6 @@ impl ProjectInput {
     }
 }
 
-/// One "Reject for this Project only" mark or its withdrawal (`rejected` false).
-/// It checks only this asset's latest decision in the Project: `expected_revision`
-/// is the decision revision the user saw, 0 when the asset had none, and
-/// `fingerprint` the observation they reviewed.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RejectionMark {
-    pub asset_id: Uuid,
-    pub fingerprint: ObservationFingerprint,
-    pub expected_revision: Revision,
-    pub rejected: bool,
-}
-
 /// A user goal template to save: `id` is absent on create.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -519,9 +420,10 @@ pub struct ProjectQuery {
     /// Only the Projects with this Target as a subject.
     #[serde(default)]
     pub target_id: Option<Uuid>,
-    /// "Show done": also list Done Projects; only open ones otherwise.
+    /// Also list the Projects Wrap up closed (Closing, Closed, Archived);
+    /// only open ones otherwise.
     #[serde(default)]
-    pub show_done: bool,
+    pub include_closed: bool,
     pub offset: u32,
     pub limit: u32,
 }
@@ -529,24 +431,6 @@ pub struct ProjectQuery {
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProjectState {
-    Open,
-    Done,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubjectPanel {
-    pub id: Uuid,
-    pub number: u32,
-    pub ra_deg: f64,
-    pub dec_deg: f64,
-    /// Unknown when `None`, never zero.
-    pub rotation_deg: Option<f64>,
-}
 
 /// A stored subject; `designation` is its Target's current designation.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -556,20 +440,16 @@ pub struct ProjectSubject {
     pub target_id: Uuid,
     pub designation: String,
     pub name: Option<String>,
-    pub mosaic: bool,
-    /// By panel number.
-    pub panels: Vec<SubjectPanel>,
 }
 
-/// A stored goal; its id stays across edits while its subject, panel or
-/// group, kind and channel (or criterion) stay.
+/// A stored goal; its id stays across edits while its subject, panel group,
+/// kind and channel (or criterion) stay.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectGoal {
     pub id: Uuid,
     pub subject_id: Uuid,
-    pub panel_id: Option<Uuid>,
-    /// The mosaic panel group the goal belongs to (F4).
+    /// The mosaic panel group the goal belongs to (PRJ-FR-29).
     #[serde(default)]
     pub group_id: Option<Uuid>,
     #[serde(flatten)]
@@ -584,8 +464,10 @@ pub struct Project {
     pub id: Uuid,
     pub name: String,
     pub notes: Option<String>,
-    pub state: ProjectState,
-    pub done_at: Option<String>,
+    /// Open until Wrap up closes it (PRJ-FR-32); there is no Reopen.
+    pub lifecycle: ProjectLifecycle,
+    /// When Close project… confirmed; set exactly when not open.
+    pub closed_at: Option<String>,
     pub revision: Revision,
     pub created_at: String,
     pub updated_at: String,
@@ -602,7 +484,7 @@ pub struct Project {
 pub struct ProjectSummary {
     pub id: Uuid,
     pub name: String,
-    pub state: ProjectState,
+    pub lifecycle: ProjectLifecycle,
     pub revision: Revision,
     /// Each subject's label, or its Target's designation, in order.
     pub subjects: Vec<String>,
@@ -625,18 +507,6 @@ pub struct ProjectCandidate {
     pub asset_ids: Vec<Uuid>,
 }
 
-/// The latest Project-only decision of one asset. Decisions are append-only;
-/// `revision` counts this asset's decisions in this Project.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectRejection {
-    pub asset_id: Uuid,
-    pub revision: Revision,
-    pub rejected: bool,
-    /// The observation the user decided on.
-    pub fingerprint: ObservationFingerprint,
-    pub decided_at: String,
-}
 
 /// A built-in or user goal template. Applying it copies its values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -649,15 +519,6 @@ pub struct GoalTemplate {
     pub goals: Vec<GoalSpec>,
 }
 
-/// A Project with its derived candidates and the latest Project-only decision
-/// of each asset, all read from one catalog snapshot.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectDetail {
-    pub project: Project,
-    pub candidates: Vec<ProjectCandidate>,
-    pub rejections: Vec<ProjectRejection>,
-}
 
 // ---------------------------------------------------------------------------
 // Progress
@@ -722,16 +583,16 @@ pub struct GoalProgress {
     pub unknown_for_bar: u64,
 }
 
-/// An automatic warning per subject, rig and channel, read from
-/// calibration-matching evidence (PRJ-FR-11, CAL-FR-12, D-W29). It is never a
-/// goal and never blocks a run.
+/// An automatic warning per subject, rig and channel, computed from the
+/// Project's sessions (PRJ-FR-11, CAL-FR-12, D-W29). It is never a goal and
+/// never blocks Apply.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ProjectWarning {
-    /// The subject's candidate lights on `rig_id` in `channel`, matched as
-    /// that rig's run would be, find darks that differ from them only in
-    /// exposure: every dark not incompatible on another criterion has another
-    /// exposure. Exposures are canonical decimal seconds, ascending.
+    /// The Project's light sessions on the subject on `rig_id` in `channel`
+    /// find darks that differ from them only in exposure: every dark not
+    /// incompatible on another criterion has another exposure. Exposures are
+    /// canonical decimal seconds, ascending.
     ExposureMismatch {
         subject_id: Uuid,
         rig_id: Uuid,

@@ -11,9 +11,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::{
-    ApplicableQuality, Asset, Availability, ImageFormat, LibraryError, MemberReason, MemberState,
-    Membership, NamingFallback, NativePath, ObservationFingerprint, Quality, ReviewDecision,
-    Revision, RunCompletion, SortDirection, ViewMember,
+    ApplicableQuality, Asset, Availability, ExpectedAsset, ImageFormat, LibraryError,
+    NamingFallback, NativePath, ObservationFingerprint, Quality, Revision,
 };
 
 /// Largest preview tile side.
@@ -1250,56 +1249,38 @@ impl FrameState {
 // Review lists (PIX-FR-14, PIX-FR-16, PIX-FR-18)
 // ---------------------------------------------------------------------------
 
-/// Where Review frames opened (PIX-FR-17, PIX-FR-18).
+/// Where Review frames opened (PIX-FR-17, PIX-FR-18). A session's own intake
+/// review lists through `session_review_list`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ReviewContext {
-    /// A run's Review step: its draft members while it is open and has a
-    /// draft, else its latest committed revision's.
-    Run { view_id: Uuid },
-    /// A run group's Review all: every panel run's frames, each listed as
-    /// its own panel run's Review step lists it, with its panel.
-    ViewGroup { group_id: Uuid },
     /// A Project's candidate sessions. Home's "Review N new frames" opens it
     /// filtered to Unreviewed (PRJ-FR-18 rule 1).
     ProjectCandidates { project_id: Uuid },
 }
 
-/// Whose rejection a Rejected frame reads (D-W42).
+/// The review label of a frame's library quality (PIX-FR-14), in sort
+/// order. Quality is global (D-W42): a Project leaves frames out through
+/// its own frame choices, never through a review label.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum LabelScope {
-    /// Library quality Unusable (X): Rejected in every Project and run.
-    Library,
-    /// Reject for this Project only: Rejected in the listed Project alone.
-    ThisProject,
-}
-
-/// The review label of a frame's quality in one Project (PIX-FR-14), in
-/// sort order.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-#[serde(tag = "label", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum QualityLabel {
     Unreviewed,
     Picked,
-    Rejected { scope: LabelScope },
+    Rejected,
 }
 
 impl QualityLabel {
-    /// Library quality is global and comes first: a library-Unusable capture
-    /// reads Rejected with scope Library in every Project. Otherwise the
-    /// Project's own rejection reads Rejected with scope This Project. A
-    /// decision still pending its rehash keeps its label beside its visible
-    /// pending quality; one whose bytes changed, or copies that disagree,
-    /// read Unreviewed.
+    /// A decision still pending its rehash keeps its label beside its
+    /// visible pending quality; one whose bytes changed, or copies that
+    /// disagree, read Unreviewed.
     #[must_use]
-    pub const fn of(quality: &ApplicableQuality, project_rejected: bool) -> Self {
+    pub const fn of(quality: &ApplicableQuality) -> Self {
         match quality {
             ApplicableQuality::Unusable
             | ApplicableQuality::VerificationPending { previous: Quality::Unusable } => {
-                Self::Rejected { scope: LabelScope::Library }
+                Self::Rejected
             }
-            _ if project_rejected => Self::Rejected { scope: LabelScope::ThisProject },
             ApplicableQuality::Usable
             | ApplicableQuality::VerificationPending { previous: Quality::Usable } => Self::Picked,
             _ => Self::Unreviewed,
@@ -1307,7 +1288,16 @@ impl QualityLabel {
     }
 }
 
-/// ⌥1–⌥4: All, Picked, Rejected with either scope, or Unreviewed (D-W14).
+/// One Review frames mark (PIX-FR-14): P, X or U, the frame copy's library
+/// quality decision.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewMark {
+    pub asset: ExpectedAsset,
+    pub quality: Quality,
+}
+
+/// ⌥1–⌥4: All, Picked, Rejected or Unreviewed (D-W14).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewFilter {
@@ -1325,7 +1315,7 @@ impl ReviewFilter {
             (self, label),
             (Self::All, _)
                 | (Self::Picked, QualityLabel::Picked)
-                | (Self::Rejected, QualityLabel::Rejected { .. })
+                | (Self::Rejected, QualityLabel::Rejected)
                 | (Self::Unreviewed, QualityLabel::Unreviewed)
         )
     }
@@ -1344,12 +1334,18 @@ pub enum ReviewSortKey {
     Label,
     Filter,
     Exposure,
-    /// The panel number; frames outside a run group have none.
-    Panel,
     /// A built-in metric's measured value; a frame without one is Not measured.
     Metric {
         metric: MetricId,
     },
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SortDirection {
+    #[default]
+    Asc,
+    Desc,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -1383,58 +1379,6 @@ pub struct DisplayName {
     pub fallbacks: Vec<NamingFallback>,
 }
 
-/// The latest Project-only decision of a copy in the listed Project: the
-/// revision Reject for this Project only and Clear Project reject expect.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectDecision {
-    /// 0 while the copy has no decision.
-    pub revision: Revision,
-    pub rejected: bool,
-}
-
-/// A run row's member in the listed membership.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewMember {
-    pub member_key: Uuid,
-    pub state: MemberState,
-    pub reason: MemberReason,
-}
-
-/// The run a Run context lists.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewRun {
-    pub view_id: Uuid,
-    /// An open run's marks also move its draft members; a Complete run's
-    /// marks write decisions only and its fixed membership stays.
-    pub completion: RunCompletion,
-    pub membership: Membership,
-    /// The draft revision the next mark expects; 0 when no draft is open, so
-    /// the first mark starts one.
-    pub draft_revision: Revision,
-}
-
-/// The panel run of a run group a listed frame is a member of (PIX-FR-17).
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewPanel {
-    pub panel_id: Uuid,
-    pub number: u32,
-    pub view_id: Uuid,
-}
-
-/// One panel run a run group's Review all lists, by panel number: what the
-/// Panel filter offers and the draft revision its marks expect.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewPanelRun {
-    pub panel_id: Uuid,
-    pub number: u32,
-    pub run: ReviewRun,
-}
-
 /// One listed frame: a logical capture (D16) shown, previewed and marked
 /// through one copy outside the Trash.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1447,28 +1391,19 @@ pub struct ReviewFrame {
     pub label: QualityLabel,
     /// The capture's applicable quality the label reads.
     pub quality: ApplicableQuality,
-    /// The copy's decision in the listed Project.
-    pub project: ProjectDecision,
     /// The capture's other copies outside the Trash.
     pub other_copies: Vec<Uuid>,
-    /// In a run or run group context, the frame's member.
-    pub member: Option<ReviewMember>,
-    /// In a run group context, the panel run holding the frame.
-    pub panel: Option<ReviewPanel>,
     pub state: FrameState,
 }
 
-/// Frames per label over the whole context, or the Panel filter's panel,
-/// whatever the label filter. A Trashed frame counts nowhere.
+/// Frames per label over the whole context, whatever the label filter. A
+/// Trashed frame counts nowhere.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewCounts {
     pub all: u64,
     pub picked: u64,
-    /// Both scopes.
     pub rejected: u64,
-    pub rejected_library: u64,
-    pub rejected_this_project: u64,
     pub unreviewed: u64,
 }
 
@@ -1478,42 +1413,26 @@ impl ReviewCounts {
         match label {
             QualityLabel::Unreviewed => self.unreviewed += 1,
             QualityLabel::Picked => self.picked += 1,
-            QualityLabel::Rejected { scope } => {
-                self.rejected += 1;
-                match scope {
-                    LabelScope::Library => self.rejected_library += 1,
-                    LabelScope::ThisProject => self.rejected_this_project += 1,
-                }
-            }
+            QualityLabel::Rejected => self.rejected += 1,
         }
     }
 }
 
-/// `pix_review_list`: the context's frames the filter and the Panel filter
-/// admit, sorted.
+/// `pix_review_list`: the context's frames the filter admits, sorted.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewList {
     pub context: ReviewContext,
-    /// The Project whose labels the list reads.
+    /// The Project whose candidates the list reads.
     pub project_id: Uuid,
-    pub run: Option<ReviewRun>,
-    /// In a run group context, the group's panel runs by panel number.
-    pub panels: Vec<ReviewPanelRun>,
     pub filter: ReviewFilter,
-    /// The Panel filter: only this panel's frames are listed.
-    pub panel_filter: Option<Uuid>,
     pub counts: ReviewCounts,
     pub frames: Vec<ReviewFrame>,
 }
 
-/// What one Review frames mark wrote: the decision and, in an open run, the
-/// draft member it moved in the same transaction.
+/// What one Review frames mark wrote: the decided frame copy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewMarked {
-    pub decision: ReviewDecision,
-    pub member: Option<ViewMember>,
-    /// The draft revision the next mark of an open run expects.
-    pub draft_revision: Option<Revision>,
+    pub asset: Asset,
 }

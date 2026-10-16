@@ -30,32 +30,16 @@ mod catalogue;
 pub use catalogue::*;
 mod volume;
 pub use volume::*;
-mod view;
-pub use view::*;
 pub mod import;
 pub use import::*;
 mod session_filters;
 pub use session_filters::*;
 mod targets_list;
 pub use targets_list::*;
-mod run_lifecycle;
-pub use run_lifecycle::*;
-mod view_group;
-pub use view_group::*;
 mod prepare;
 pub use prepare::*;
 mod home;
 pub use home::*;
-mod results;
-pub use results::*;
-mod cleanup;
-pub use cleanup::*;
-mod done_archive;
-pub use done_archive::*;
-mod archive;
-pub use archive::*;
-mod trash_moves;
-pub use trash_moves::*;
 
 // The F4 Project model (D-W93 to D-W116): canonical types and invariants the
 // persistence schema and every F4 unit share.

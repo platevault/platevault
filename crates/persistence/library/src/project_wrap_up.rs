@@ -33,8 +33,8 @@ use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    admission, capture_quality, db_size, fingerprint_matches, from_json, from_text, json_ids,
-    load_asset, load_assets, logical_captures, now, parse_uuid, path_from_key, path_key,
+    admission, asset_from_row, capture_quality, db_size, fingerprint_matches, from_json, from_text,
+    json_ids, load_asset, load_assets, logical_captures, now, parse_uuid, path_from_key, path_key,
     project_inputs, project_operations, project_view, projects, rebind_association_bases,
     require_revision, revision, storage, to_json, to_text, Catalog, Result,
 };
@@ -967,6 +967,16 @@ const KEPT_LINKS: &str = "SELECT e.project_id, e.generation, e.seq, e.asset_id, 
          AND r.generation = e.generation AND r.seq = e.seq) \
      ORDER BY p.name, e.project_id, e.generation, e.seq";
 
+/// A live frame copy of a session Archive may transfer.
+#[derive(Clone, Debug)]
+pub struct ArchiveAsset {
+    pub session_id: Uuid,
+    pub asset: Asset,
+    /// The session's confirmed Target, the template's `{target}` when the
+    /// header names none.
+    pub target: Option<String>,
+}
+
 impl Catalog {
     /// The open Projects other than `project` that keep each of `sessions`
     /// at its path: they hold it or their View places its files. A
@@ -981,6 +991,43 @@ impl Catalog {
     ) -> Result<BTreeMap<Uuid, Vec<String>>> {
         let mut conn = self.reader().await?;
         holders(&mut conn, project, sessions).await
+    }
+
+    /// The live frame copies of `sessions`, ordered by their location's
+    /// registration, then path, each with its session's confirmed Target.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn archive_assets(&self, sessions: &BTreeSet<Uuid>) -> Result<Vec<ArchiveAsset>> {
+        let mut conn = self.reader().await?;
+        let rows = sqlx::query(asset_sql!(live
+            "WHERE a.session_id IN (SELECT value FROM json_each(?1)) \
+             ORDER BY l.created_at, l.id, a.path_key"
+        ))
+        .bind(json_ids(sessions)?)
+        .fetch_all(&mut *conn)
+        .await?;
+        let mut assets = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let asset = asset_from_row(row)?;
+            let session: Option<String> =
+                sqlx::query_scalar("SELECT session_id FROM assets WHERE id = ?1")
+                    .bind(asset.id.to_string())
+                    .fetch_one(&mut *conn)
+                    .await?;
+            let session_id = parse_uuid(
+                &session.ok_or_else(|| corrupt("archive frame without a session"))?,
+            )?;
+            let target: Option<String> = sqlx::query_scalar(
+                "SELECT t.designation FROM associations a JOIN targets t ON t.id = a.target_id \
+                 WHERE a.session_id = ?1 AND a.kind = 'target' AND a.state = 'confirmed'",
+            )
+            .bind(session_id.to_string())
+            .fetch_optional(&mut *conn)
+            .await?;
+            assets.push(ArchiveAsset { session_id, asset, target });
+        }
+        Ok(assets)
     }
 
     /// The kept-View links that read one of `assets`.
