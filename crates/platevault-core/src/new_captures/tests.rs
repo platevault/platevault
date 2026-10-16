@@ -1007,6 +1007,32 @@ async fn a_release_returns_once_the_walk_in_flight_ended() {
     assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new(), "its walk never counted");
 }
 
+/// App exit (the desktop shell stops discovery, then the window thread a
+/// release blocks) never waits on a release whose walk hangs: it returns
+/// once discovery is asked to stop.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_held_by_a_hung_walk_returns_once_discovery_stops() {
+    let fx = fixture().await;
+    let location = captures(&fx.library, &fx.base.join("Captures")).await;
+    let probe = Arc::new(Probe::default());
+    let _opens = Opens(&probe.list_gate);
+    probe.list_gate.close();
+    let watch = probed(&fx.library, &probe);
+    holding(&probe.list_gate).await;
+    let release = watch.release(location.id);
+    tokio::pin!(release);
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while a walk still listed the volume");
+
+    // The walk still hangs as the app exits; its gate opens only once the
+    // test ends.
+    let exit = async {
+        tokio::join!(watch.shutdown(), release);
+    };
+    let bounded = tokio::time::timeout(SHUTDOWN_GRACE * 2, exit).await;
+    assert!(bounded.is_ok(), "a release held by a hung walk held up exit");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_release_waits_for_a_watcher_still_closing() {
     let fx = fixture().await;

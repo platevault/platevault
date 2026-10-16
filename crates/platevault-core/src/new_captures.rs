@@ -65,8 +65,9 @@
 //!   awaited; nothing touches the root until the next notice),
 //!   [`CaptureWatch::reattach`] when the removal was refused, and
 //!   [`CaptureWatch::gone`] once the volume is removed, which takes the
-//!   location offline without waiting for a sweep. macOS and Linux need none
-//!   of this.
+//!   location offline without waiting for a sweep. A release returns once
+//!   discovery is asked to stop, so app exit never waits on one. macOS and
+//!   Linux need none of this.
 //!
 //! [`CaptureWatch::shutdown`], or dropping the [`CaptureWatch`], stops every
 //! watcher. Shutdown waits a short grace at most. A `stat` of a network mount
@@ -234,14 +235,21 @@ impl CaptureWatch {
     /// Until [`reattach`](Self::reattach) or [`gone`](Self::gone), the
     /// location keeps the count it had, with `live: false`, and nothing
     /// touches its root, a sweep included. For a location that is not
-    /// watched it returns once no watcher of it is still stopping, and it
-    /// returns at once when discovery stopped. Discovery handles one thing at
-    /// a time, so this also waits out a file-system call it is making.
+    /// watched it returns once no watcher of it is still stopping. Discovery
+    /// handles one thing at a time, so this also waits out a file-system call
+    /// it is making. It returns at once when discovery stopped, and as soon
+    /// as it is asked to stop ([`shutdown`](Self::shutdown)), so app exit
+    /// never waits on a removal whose walk or watcher close hangs.
     pub async fn release(&self, location: Uuid) {
         let (released, done) = oneshot::channel();
-        if self.notices.send(Notice::Release { location, released }).is_ok() {
+        if self.notices.send(Notice::Release { location, released }).is_err() {
             // Closed: discovery stopped, which released everything.
-            let _ = done.await;
+            return;
+        }
+        let mut stop = self.stop.subscribe();
+        tokio::select! {
+            _ = done => {}
+            () = stopped(&mut stop) => {}
         }
     }
 
