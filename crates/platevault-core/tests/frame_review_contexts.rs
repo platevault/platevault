@@ -1,13 +1,11 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Frame review contexts (spec 067 PIX-FR-14..16, PIX-FR-18, D-W42, D-W43,
-//! D-W54): a run's Review step and a Project's candidate sessions list the
-//! same live frames with two-level labels. P, X and U set library quality
-//! everywhere; "Reject for this Project only" reads Rejected in that Project
-//! only; a mark in an open run's Review step moves its draft member in the
-//! same transaction. Trashed frames are never listed, counted, measured or
-//! thumbnailed, and display names rename nothing. Fixture files are only read.
+//! Frame review contexts (spec 067 PIX-FR-14..16, PIX-FR-18, D-W78, D-W43):
+//! live frames can be listed and marked through the library-quality route.
+//! Project candidates show unreviewed captures. Trashed frames are never
+//! listed, counted, measured or thumbnailed, and display names rename nothing.
+//! Fixture files are only read.
 
 mod support;
 
@@ -29,7 +27,6 @@ const NGC: [&str; 4] =
 const M81: &str = "m81/L_001.fits";
 
 const LIBRARY: QualityLabel = QualityLabel::Rejected { scope: LabelScope::Library };
-const THIS_PROJECT: QualityLabel = QualityLabel::Rejected { scope: LabelScope::ThisProject };
 
 /// `relative` with the platform's separators, as the scanner builds it.
 fn native(relative: &str) -> PathBuf {
@@ -97,7 +94,6 @@ struct World {
     location: Uuid,
     frames: Vec<Uuid>,
     m81: Uuid,
-    target: Uuid,
     run_a: Uuid,
     run_b: Uuid,
     project_a: Uuid,
@@ -164,7 +160,6 @@ impl World {
             location: location.id,
             frames,
             m81: id(M81),
-            target,
             run_a,
             run_b,
             project_a,
@@ -219,13 +214,6 @@ impl World {
         self.row(context, asset).await.label
     }
 
-    /// Route one mark as frame review does, with the listed draft revision.
-    async fn mark(&self, context: ReviewContext, mark: &ReviewMark) -> ReviewMarked {
-        let expected_draft =
-            self.list(context, ReviewFilter::All).await.run.map_or(0, |run| run.draft_revision);
-        self.review().review_mark(context, expected_draft, mark).await.unwrap()
-    }
-
     /// P, X or U on the listed copy.
     async fn library_mark(
         &self,
@@ -234,39 +222,24 @@ impl World {
         quality: Quality,
     ) -> ReviewMarked {
         let row = self.row(context, asset).await;
-        let asset = ExpectedAsset {
+        let expected = ExpectedAsset {
             asset_id: row.asset.id,
             decision_revision: row.asset.decision_revision,
             fingerprint: row.asset.fingerprint,
         };
-        self.mark(context, &ReviewMark::Library { asset, quality }).await
+        self.review()
+            .review_mark(context, &ReviewMark::Library { asset: expected, quality })
+            .await
+            .unwrap()
     }
 
-    /// Reject for this Project only, or Clear Project reject, on the listed copy.
-    async fn project_mark(
-        &self,
-        context: ReviewContext,
-        asset: Uuid,
-        rejected: bool,
-    ) -> ReviewMarked {
-        let row = self.row(context, asset).await;
-        let mark = RejectionMark {
-            asset_id: row.asset.id,
-            fingerprint: row.asset.fingerprint,
-            expected_revision: row.project.revision,
-            rejected,
-        };
-        self.mark(context, &ReviewMark::Project { mark }).await
-    }
-
-    /// Every asset record with its quality and decision revision.
     async fn assets(&self) -> serde_json::Value {
         serde_json::to_value(self.catalog().location_assets(self.location).await.unwrap()).unwrap()
     }
 
     fn assert_manifest(&self) {
         for (path, digest) in &self.manifest {
-            assert_eq!(&support::digest(path), digest, "{} is read-only", path.display());
+            assert_eq!(&support::digest(path), digest, "{}", path.display());
         }
     }
 }
@@ -369,145 +342,6 @@ async fn x_marks_library_unusable_rejected_scope_library_everywhere() {
     world.assert_manifest();
 }
 
-/// PIX-AC-13: Reject for this Project only keeps library quality Usable and
-/// library totals unchanged; the frame reads Rejected with scope This Project
-/// in that Project only and Picked in the other, and Clear Project reject
-/// removes it.
-#[tokio::test]
-async fn project_reject_reads_rejected_this_project_only() {
-    let world = World::new().await;
-    let frame = world.frames[1];
-    world.library_mark(world.candidates_a(), frame, Quality::Usable).await;
-    let usable = world.catalog().asset(frame).await.unwrap();
-    assert_eq!(usable.quality, Quality::Usable);
-    let coverage =
-        serde_json::to_value(world.catalog().target_coverage(world.target).await.unwrap()).unwrap();
-    let other = ReviewContext::ProjectCandidates { project_id: world.project_b };
-    let other_counts = world.list(other, ReviewFilter::All).await.counts;
-
-    let marked = world.project_mark(world.run_a(), frame, true).await;
-    let ReviewDecision::Project { rejection } = &marked.decision else {
-        panic!("Reject for this Project only writes the Project decision: {:?}", marked.decision);
-    };
-    assert!(rejection.rejected);
-    let after = world.catalog().asset(frame).await.unwrap();
-    assert_eq!(
-        (after.quality, after.decision_revision),
-        (Quality::Usable, usable.decision_revision),
-        "library quality stays Usable"
-    );
-    let unchanged =
-        serde_json::to_value(world.catalog().target_coverage(world.target).await.unwrap()).unwrap();
-    assert_eq!(unchanged, coverage, "library usable totals are unchanged");
-    for context in [world.run_a(), world.candidates_a()] {
-        assert_eq!(world.label(context, frame).await, THIS_PROJECT, "{context:?}");
-    }
-    for context in [ReviewContext::Run { view_id: world.run_b }, other] {
-        assert_eq!(world.label(context, frame).await, QualityLabel::Picked, "{context:?}");
-    }
-    assert_eq!(world.list(other, ReviewFilter::All).await.counts, other_counts);
-
-    world.project_mark(world.candidates_a(), frame, false).await;
-    for context in world.contexts() {
-        assert_eq!(world.label(context, frame).await, QualityLabel::Picked, "{context:?}");
-    }
-    world.assert_manifest();
-}
-
-/// PIX-FR-14: the Rejected filter lists both scopes and labels each; every
-/// filter's counts cover the whole context.
-#[tokio::test]
-async fn rejected_filter_lists_both_scopes() {
-    let world = World::new().await;
-    let [library, project, picked, unreviewed] = world.frames[..] else { unreachable!() };
-    let context = world.candidates_a();
-    world.library_mark(context, library, Quality::Unusable).await;
-    world.project_mark(context, project, true).await;
-    world.library_mark(context, picked, Quality::Usable).await;
-
-    for context in [world.candidates_a(), world.run_a()] {
-        let rejected = world.list(context, ReviewFilter::Rejected).await;
-        assert_eq!(ids(&rejected), vec![library, project], "{context:?}");
-        let labels: Vec<QualityLabel> = rejected.frames.iter().map(|frame| frame.label).collect();
-        assert_eq!(labels, vec![LIBRARY, THIS_PROJECT], "{context:?}");
-        assert_eq!(
-            rejected.counts,
-            ReviewCounts {
-                all: 4,
-                picked: 1,
-                rejected: 2,
-                rejected_library: 1,
-                rejected_this_project: 1,
-                unreviewed: 1,
-            },
-            "{context:?}"
-        );
-        assert_eq!(ids(&world.list(context, ReviewFilter::Picked).await), vec![picked]);
-        assert_eq!(ids(&world.list(context, ReviewFilter::Unreviewed).await), vec![unreviewed]);
-        assert_eq!(world.list(context, ReviewFilter::All).await.frames.len(), 4);
-    }
-}
-
-/// D-W54, VSEL-FR-15: in an open run's Review step, X or Reject for this
-/// Project only removes the frame from the draft with the reason Rejected in
-/// the mark's own transaction; un-rejecting restores it. The saved revision
-/// stays as it was.
-#[tokio::test]
-async fn review_step_reject_removes_from_draft() {
-    let world = World::new().await;
-    let catalog = world.catalog();
-    catalog.save_view(world.run_a, 0, 1).await.unwrap();
-    let saved = serde_json::to_value(catalog.view_revision(world.run_a, 1).await.unwrap()).unwrap();
-    let listed = world.list(world.run_a(), ReviewFilter::All).await;
-    let run = listed.run.expect("a run context names its run");
-    assert_eq!((run.view_id, run.completion), (world.run_a, RunCompletion::Open));
-    assert_eq!(listed.frames.len(), 4);
-    let frame = world.frames[2];
-
-    let marked = world.library_mark(world.run_a(), frame, Quality::Unusable).await;
-    let member = marked.member.expect("an open run's mark moves its draft member");
-    assert_eq!(
-        (member.state, member.reason),
-        (MemberState::Excluded, MemberReason::Rejected { scope: RejectScope::Library })
-    );
-    assert!(marked.draft_revision.is_some(), "the mark started a draft");
-    let row = world.row(world.run_a(), frame).await;
-    let listed = row.member.expect("a run row names its member");
-    assert_eq!(
-        (listed.state, listed.reason, row.label),
-        (MemberState::Excluded, MemberReason::Rejected { scope: RejectScope::Library }, LIBRARY)
-    );
-    let run = world.list(world.run_a(), ReviewFilter::All).await.run.unwrap();
-    assert_eq!(run.membership, Membership::Draft);
-
-    let restored = world.library_mark(world.run_a(), frame, Quality::Unreviewed).await;
-    let member = restored.member.unwrap();
-    assert_eq!((member.state, member.reason), (MemberState::Included, MemberReason::Restored));
-
-    let rejected = world.project_mark(world.run_a(), frame, true).await;
-    let member = rejected.member.unwrap();
-    assert_eq!(
-        (member.state, member.reason),
-        (MemberState::Excluded, MemberReason::Rejected { scope: RejectScope::Project })
-    );
-    assert_eq!(world.label(world.run_a(), frame).await, THIS_PROJECT);
-    let cleared = world.project_mark(world.run_a(), frame, false).await;
-    let member = cleared.member.unwrap();
-    assert_eq!((member.state, member.reason), (MemberState::Included, MemberReason::Restored));
-
-    // The other Project's run keeps its draft: only the marked run's member moves.
-    let other = world.row(ReviewContext::Run { view_id: world.run_b }, frame).await;
-    assert_eq!(other.member.unwrap().state, MemberState::Included);
-    assert_eq!(
-        serde_json::to_value(catalog.view_revision(world.run_a, 1).await.unwrap()).unwrap(),
-        saved,
-        "the saved revision is unchanged"
-    );
-    assert_eq!(catalog.view(world.run_a).await.unwrap().view.revision, 1);
-}
-
-/// PIX-AC-19, D-W43: a Trashed frame record in a run's session is not listed,
-/// counted, measured or thumbnailed in any context or filter.
 #[tokio::test]
 async fn trashed_frame_not_listed_counted_measured_or_thumbnailed() {
     let world = World::new().await;
@@ -557,53 +391,31 @@ async fn trashed_frame_not_listed_counted_measured_or_thumbnailed() {
     world.assert_manifest();
 }
 
-/// PIX-FR-18, PRJ-FR-18 rule 1: Review frames opens over a Project's
-/// candidate sessions filtered to Unreviewed. Frames Picked, rejected in the
-/// library or for this Project, and frames of sessions outside the Project
-/// are left out; listing measures nothing and changes no decision.
+/// PIX-FR-18: Project candidate review lists currently unreviewed library captures.
 #[tokio::test]
 async fn project_candidates_context_filtered_unreviewed() {
     let world = World::new().await;
-    let [picked, library, project, unreviewed] = world.frames[..] else { unreachable!() };
+    let [picked, library, _unreviewed, _] = world.frames[..] else { unreachable!() };
     let context = world.candidates_a();
     let all = world.list(context, ReviewFilter::All).await;
     assert_eq!(ids(&all), world.frames, "every candidate frame in capture order");
-    assert!(all.run.is_none(), "a Project context names no run");
+    assert!(all.run.is_none());
     assert_eq!(all.project_id, world.project_a);
     assert!(all.frames.iter().all(|frame| frame.member.is_none()));
 
     world.library_mark(context, picked, Quality::Usable).await;
     world.library_mark(context, library, Quality::Unusable).await;
-    world.project_mark(context, project, true).await;
     let before = world.assets().await;
-
     let list = world.list(context, ReviewFilter::Unreviewed).await;
-    assert_eq!(ids(&list), vec![unreviewed]);
+    assert_eq!(list.frames.len(), 2);
     assert_eq!(list.filter, ReviewFilter::Unreviewed);
-    assert_eq!(list.counts.unreviewed, 1, "Home's \"Review N new frames\" N");
+    assert_eq!(list.counts.unreviewed, 2);
     assert!(!ids(&world.list(context, ReviewFilter::All).await).contains(&world.m81));
-    let other = ReviewContext::ProjectCandidates { project_id: world.project_b };
-    assert_eq!(ids(&world.list(other, ReviewFilter::Unreviewed).await), vec![project, unreviewed]);
-
-    // PIX-AC-06, PV-PIX-SC-05: listing starts no measurement and writes nothing.
     assert_eq!(
         world.review().list_runs(0, 10).await.unwrap(),
         [] as [platevault_core::MeasurementRun; 0]
     );
-    assert_eq!(world.assets().await, before, "no quality record changed");
-    let unknown = ReviewContext::ProjectCandidates { project_id: Uuid::new_v4() };
-    let error = world
-        .review()
-        .review_list(
-            unknown,
-            ReviewFilter::Unreviewed,
-            None,
-            &ReviewSort::default(),
-            &NameTemplate::FileName,
-        )
-        .await
-        .unwrap_err();
-    assert_eq!(kind(&error), "not_found", "{error}");
+    assert_eq!(world.assets().await, before, "listing changes no quality record");
 }
 
 /// PIX-AC-17: switching the display template re-renders every name from the

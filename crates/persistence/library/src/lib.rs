@@ -201,6 +201,9 @@ pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 // The F4 admission contract (only Ready, calibration-settled sessions join a
 // Project); its `require_admission` runs inside membership-add transactions.
 mod admission;
+// Finish/reopen Review writes the durable session-intake review row only.
+mod session_reviews;
+pub use session_reviews::SessionReviewBasis;
 // One PlateVault operation per Project: Apply, Copy to Output and Wrap up
 // reserve the Project before any file effect (PREP-FR-19).
 mod project_operations;
