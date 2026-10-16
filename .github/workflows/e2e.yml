@@ -886,9 +886,7 @@ jobs:
     needs: [changes, build-frontend, build-app-ubuntu]
     # Full ubuntu matrix only on main pushes and manual dispatch (not PRs).
     # PRs run the lighter smoke-ubuntu job instead (see two-tier strategy above).
-    if: >-
-      needs.changes.outputs.run == 'true'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -1219,15 +1217,16 @@ jobs:
         env:
           PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
           E2E_SHARD_FILTER: ${{ matrix.filter }}
-        run: >-
-          ./scripts/e2e-shard-attempt.ps1 -Attempt 1 --
-          cargo nextest run
-          --archive-file e2e-archive.tar.zst
-          --workspace-remap .
-          --profile e2e
-          --run-ignored all
-          --no-tests=fail
-          -E $env:E2E_SHARD_FILTER
+        # SCRATCH (gl5q wiring proof, never merged): inject one failure class per shard.
+        run: |
+          switch ('${{ matrix.shard }}') {
+            '1' { exit -1073741502 }
+            '2' { ./scripts/e2e-shard-attempt.ps1 -Attempt 1 -- pwsh -NoProfile -Command 'exit -1073741502' }
+            '3' {
+              Set-Content -LiteralPath fake-fail.ps1 -Value "'    Starting 1 test across 1 binary'; '        FAIL [   1.000s] (1/1) e2e_tests::smoke injected_failure'; exit 100"
+              ./scripts/e2e-shard-attempt.ps1 -Attempt 1 -- pwsh -NoProfile -File fake-fail.ps1
+            }
+          }
 
       - name: Re-run E2E once after a runner failure (shard ${{ matrix.shard }}/3)
         if: >-
