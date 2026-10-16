@@ -8,7 +8,7 @@
  * INVARIANT: hover and focus-visible states MUST use disjoint declarations.
  * Conveying focus with the accent recolour alone — as the original CSS did
  * while it shared one block with :hover — leaves keyboard focus visually
- * identical to pointer hover (primitives.focus-vs-hover.test.ts asserts this).
+ * identical to pointer hover.
  */
 
 import { style } from '@vanilla-extract/css';
