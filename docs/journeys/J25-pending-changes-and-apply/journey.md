@@ -117,8 +117,8 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - **Expect:**
   - Before anything else, the sheet lists the two files `View (previous)/` still holds from S7a: the changed copy and the unticked user note. Each offers keep, move and Trash, and Apply stays disabled until both are reviewed. It also lists the `.Info.txt` in the View with its tick box (VSEL-FR-20).
   - After the review, the changed copy is in the OS Trash and Apply is enabled. Apply swaps in a View without the excluded frame.
-  - The note stays in `View (previous)/`, and no `View (previous 2)/` or other numbered folder exists.
-- **Expect (negative):** No leftover is deleted or moved before the user chooses for it, and Apply does not start while one is unreviewed. The kept note's bytes are unchanged.
+  - No `View (previous 2)/` or other numbered folder exists. The kept note still exists, and where it sits after this swap isn't asserted (G7).
+- **Expect (negative):** No leftover is deleted or moved before the user chooses for it, and Apply does not start while one is unreviewed. The kept note isn't deleted, and its bytes are unchanged.
 - **Trace:** VSEL-FR-14, VSEL-FR-20 · VSEL-AC-34 · STO-FR-10 · D-W110
 
 ### S7d — Open the next Apply without the kept note asked again {#S7d}
@@ -138,7 +138,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - SC6: The new View has the added Ha frames exactly once and freshly built from originals; the ticked unplaced file moves only after swap, while the changed copy and unticked note remain in `View (previous)/` and are never deleted (S7a).
 - SC7: The new duplicate copy conflict raises the count from exactly 10 byte-identical duplicate copies to 9, with 0 files moved and no integration change (S1, S7b).
 - SC8: Discard is offered for the Project's own changes and refused for the calibration reassignment, which changes 0 pins (S4).
-- SC9: With 2 leftovers in `View (previous)/`, Apply stays disabled until both are reviewed; afterwards 1 file is in the OS Trash, 1 stays in `View (previous)/`, and 0 numbered `View (previous)` folders exist (S7c).
+- SC9: With 2 leftovers in `View (previous)/`, Apply stays disabled until both are reviewed; afterwards 1 file is in the OS Trash, the kept note exists with its bytes unchanged, and 0 numbered `View (previous)` folders exist (S7c).
 - SC10: The note kept at S7c is offered for review 0 times by the next Apply sheet (S7d).
 
 ## Known gaps
@@ -149,7 +149,7 @@ Done means: the Project shows the addition, group and calibration changes as pen
 - G4: Out of scope for this journey: adding a session while an external application reads the View (VSEL-AC-12) is not exercised, and no frame is an explicit inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
 - G5: Covered elsewhere: the Duplicates review and its clean-up (Keep this copy, Move the others to the OS Trash) opened from the S1 warning are exercised by J39 (S2 to S6); this journey only reads the warning.
 - G6: Rests on provisional F4 items, pending the owner's confirmation in PR #1804: D-W96's matching rule and its "captured" count (S1), D-W95's "re-add View in your tool" note (S5), and D-W108's exposure part that ends every light folder name (S5). If the owner changes one, the steps that cite it change.
-- G7: Unresolved product question, open with the owner (D-W110): what the next Apply does with the outgoing View when `View (previous)/` already holds kept files, merging it into that folder with a suffix on name clashes, or moving kept files to a separate folder. S7c's swap and S7d's sheet assert only what holds under either answer: the kept note stays and isn't asked about again, and no numbered `View (previous)` folder appears. Blocks readiness.
+- G7: Unresolved product question, open with the owner (D-W110): what the next Apply does with the outgoing View when `View (previous)/` already holds kept files, merging it into that folder with a suffix on name clashes, or moving kept files to a separate folder. S7c's swap and S7d's sheet assert only what holds under either answer: the kept note keeps its bytes, isn't deleted and isn't asked about again, and no numbered `View (previous)` folder appears. Neither step says where the kept note sits after the swap. Blocks readiness.
 
 ## Delta log
 - **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S5a · behavior-change
