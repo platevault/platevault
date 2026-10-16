@@ -4,6 +4,7 @@
 //! New-capture discovery over real temp folders, the real OS watcher and a
 //! real catalog (bead astro-plan-ef440).
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -15,9 +16,10 @@ use fs_inventory::artifact_watcher::TreeWatch;
 use uuid::Uuid;
 
 use super::{
-    CaptureWatch, Gate, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, SHUTDOWN_GRACE,
+    CaptureWatch, Gate, NewCaptureCount, Observed, OsProbe, RootProbe, Settings, Watched,
+    WatchedRoot, SHUTDOWN_GRACE,
 };
-use crate::inventory::{Listing, RootStamp};
+use crate::inventory::{self, Entry, Listing, RootStamp};
 use crate::library::{fixtures, Library};
 use crate::{LibraryError, Location, LocationRole, NativePath, ScanOperation, ScanState};
 
@@ -175,12 +177,16 @@ struct Probe {
     /// How many of the next watchers fail to start, as when Linux has no
     /// inotify instance left.
     failing: AtomicUsize,
-    /// How many of the next watchers start with one folder unwatched.
+    /// How many of the next watchers start with a folder a walk lists (the
+    /// root) refused.
     partial: AtomicUsize,
     /// A folder, with a frame, that the next watcher start creates after it
     /// listed the tree and before it registered it: neither listed nor
     /// reported, as one created in that window on a slow tree is.
     late: Mutex<Option<PathBuf>>,
+    /// A folder every watcher start reports refused, as Windows refuses
+    /// `System Volume Information`.
+    refused: Mutex<Option<PathBuf>>,
 }
 
 /// Take one from `counter` unless it is zero.
@@ -210,18 +216,24 @@ impl RootProbe for Probe {
         if take_one(&self.failing) {
             return Err("inotify_init: too many open files".into());
         }
-        if take_one(&self.partial) {
+        let mut started = if take_one(&self.partial) {
             let mut started = OsProbe.watch(root, capacity)?;
-            started.unwatched += 1;
-            return Ok(started);
-        }
-        self.watch_gate.pass();
-        let Some(late) = self.late.lock().unwrap().take() else {
-            return OsProbe.watch(root, capacity);
+            started.refused.push(root.as_std_path().to_path_buf());
+            started
+        } else {
+            self.watch_gate.pass();
+            let late = self.late.lock().unwrap().take();
+            if let Some(late) = late {
+                frame(&late.join("Ha_late.fits"));
+                let mut started = OsProbe.watch(root, capacity)?;
+                started.folders.retain(|listed| *listed != late);
+                started
+            } else {
+                OsProbe.watch(root, capacity)?
+            }
         };
-        frame(&late.join("Ha_late.fits"));
-        let mut started = OsProbe.watch(root, capacity)?;
-        started.folders.retain(|listed| *listed != late);
+        let refused = self.refused.lock().unwrap().clone();
+        started.refused.extend(refused);
         Ok(started)
     }
 
@@ -533,6 +545,53 @@ async fn a_watcher_that_left_a_folder_unwatched_is_not_live_and_is_retried() {
     watchers_are(&watch, 1).await;
 }
 
+/// Restores a folder's permissions when dropped, so a failing test still
+/// leaves its temp tree removable.
+#[cfg(unix)]
+struct Unlock<'a>(&'a Path);
+
+#[cfg(unix)]
+impl Drop for Unlock<'_> {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(self.0, fs::Permissions::from_mode(0o755));
+    }
+}
+
+/// `lost+found` at the root of an ext4 drive, or `System Volume Information`
+/// at the root of an NTFS one: the OS refuses to watch it at every start, and
+/// no walk can list it either.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_refused_for_good_that_no_walk_lists_leaves_the_watcher_live() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let locked = root.join("lost+found");
+    frame(&locked.join("Ha_001.fits"));
+    let _unlock = Unlock(&locked);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(fs::read_dir(&locked).is_err(), "needs a user file permissions bind, not root");
+    let probe = Arc::new(Probe::default());
+    *probe.refused.lock().unwrap() = Some(locked.clone());
+    let watch = probed(&fx.library, &probe);
+
+    // Nothing below it is counted, so the watcher misses nothing the count
+    // holds: live, and neither restarted nor walked again at each sweep.
+    let counts = until(&watch, |counts| !counts.is_empty()).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 0, live: true }]);
+    after(&watch, sweeps, 3).await;
+    assert_eq!((probe.watches.load(Ordering::SeqCst), walks(&watch)), (1, 1));
+
+    // Once it can be listed, the next sweep watches and walks it.
+    *probe.refused.lock().unwrap() = None;
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    let counts = count_is(&watch, location.id, 1).await;
+    assert_eq!(counts, [NewCaptureCount { location_id: location.id, new_files: 1, live: true }]);
+    assert_eq!(probe.watches.load(Ordering::SeqCst), 2);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn watching_starts_when_a_location_is_added() {
     let fx = fixture().await;
@@ -806,6 +865,65 @@ async fn a_release_returns_once_the_walk_in_flight_ended() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_release_waits_for_a_watcher_still_closing() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    let watch = probed(&fx.library, &probe);
+    count_is(&watch, location.id, 0).await;
+
+    // A new folder restarts the watcher: the old one is slow to close, and
+    // no new one starts.
+    let releases = &watch.observed().releases;
+    let _opens = Opens(releases);
+    releases.close();
+    probe.failing.store(1000, Ordering::SeqCst);
+    fs::create_dir(root.join("2026-10-16")).unwrap();
+    holding(releases).await;
+
+    // Only the closing watcher holds the volume, and the release waits for it.
+    let release = watch.release(location.id);
+    tokio::pin!(release);
+    let early = tokio::time::timeout(Duration::from_millis(300), &mut release).await;
+    assert!(early.is_err(), "released while a closing watcher still held the volume");
+    releases.open();
+    tokio::time::timeout(Duration::from_secs(5), release).await.expect("released once it closed");
+    assert_eq!(watchers(&watch), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_root_is_named_from_the_start_of_its_watch_until_it_leaves() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let probe = Arc::new(Probe::default());
+    let _opens = Opens(&probe.list_gate);
+    probe.list_gate.close();
+    let watch = probed(&fx.library, &probe);
+    let roots = || watch.subscribe_roots().borrow().clone();
+    let named = [WatchedRoot {
+        location_id: location.id,
+        root: root.clone(),
+        volume_kind: location.volume_kind,
+    }];
+
+    // The first walk still lists the volume, so nothing is counted, but the
+    // root is named: a removal of its volume can be followed.
+    holding(&probe.list_gate).await;
+    assert_eq!(watch.counts(), Vec::<NewCaptureCount>::new());
+    assert_eq!(roots(), named);
+    probe.list_gate.open();
+    count_is(&watch, location.id, 0).await;
+
+    // Named while its volume is being removed, and no longer once it is.
+    watch.release(location.id).await;
+    assert_eq!(roots(), named);
+    watch.gone(location.id);
+    eventually("the root leaves with its location", || roots().is_empty()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_removed_volume_goes_offline_at_once_and_returns_at_a_sweep() {
     let fx = fixture().await;
     let root = fx.base.join("Captures");
@@ -880,4 +998,69 @@ async fn shutdown_returns_while_a_root_check_hangs() {
     probe.stat_gate.open();
     assert!(stopped.is_ok(), "shutdown waited out a hung root check");
     assert!(released.is_ok(), "a watcher outlived shutdown while a root check hung");
+}
+
+// One worker, for the same reason: a watcher closed on that worker as
+// discovery stops would leave nothing to drive the shutdown grace.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn shutdown_returns_while_a_watcher_is_slow_to_close() {
+    let fx = fixture().await;
+    let location = captures(&fx.library, &fx.base.join("Captures")).await;
+    let watch = watch(&fx.library);
+    count_is(&watch, location.id, 0).await;
+
+    // Closing the watcher hangs, as stopping `FSEvents` on a dead share does.
+    // A regression holds the only worker until this thread opens the gate,
+    // well after the grace, instead of hanging the test.
+    let observed = Arc::clone(&watch.observed);
+    observed.releases.close();
+    let opener = Arc::clone(&observed);
+    std::thread::spawn(move || {
+        std::thread::sleep(SHUTDOWN_GRACE * 3);
+        opener.releases.open();
+    });
+    let started = std::time::Instant::now();
+    watch.shutdown().await;
+    let took = started.elapsed();
+    assert!(took < SHUTDOWN_GRACE * 2, "a watcher's close held shutdown for {took:?}");
+    assert!(observed.releases.held(), "the close waits off the runtime");
+    observed.releases.open();
+    eventually("the watcher closes once it can", || observed.watchers.load(Ordering::SeqCst) == 0)
+        .await;
+}
+
+/// A location as discovery holds it once counted, with nothing new yet.
+fn counted(location: Location, root: &Path) -> Watched {
+    Watched {
+        stamp: inventory::root_stamp(root).unwrap(),
+        root: root.to_path_buf(),
+        prefixes: vec![root.to_path_buf()],
+        location,
+        live: None,
+        known: HashSet::new(),
+        new: HashMap::new(),
+        walk: None,
+        rescan: false,
+        recount: false,
+        listed: true,
+        cataloged: true,
+        released: false,
+    }
+}
+
+/// A folder holding counted frames moved out, and a frame took its name
+/// before the next debounce tick: the move reported no removal below it.
+#[tokio::test]
+async fn a_frame_in_place_of_a_counted_folder_forgets_the_frames_below_it() {
+    let fx = fixture().await;
+    let root = fx.base.join("Captures");
+    let location = captures(&fx.library, &root).await;
+    let mut watched = counted(location, &root);
+    let folder = Path::new("M31.fits");
+    watched.recheck(&folder.join("Ha_001.fits"), Entry::Frame);
+    watched.recheck(&folder.join("Ha_002.fits"), Entry::Frame);
+    assert_eq!(watched.count().new_files, 2);
+
+    watched.recheck(folder, Entry::Frame);
+    assert_eq!(watched.new.into_values().collect::<Vec<_>>(), [folder.to_path_buf()]);
 }

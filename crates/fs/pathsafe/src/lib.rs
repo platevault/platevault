@@ -162,6 +162,44 @@ pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
     if follow_symlinks {
         return vec![root.to_path_buf()];
     }
+    real_dirs(root, |_| true)
+}
+
+/// [`real_dirs_under`] without following links that also stays on `root`'s
+/// volume: a folder another volume is mounted on is left out, with
+/// everything below it, as a scan never enters a nested foreign volume.
+///
+/// On Unix a mount point is an ordinary folder, told apart by its device id.
+/// On Windows a volume mounted in a folder is a reparse point, which no walk
+/// enters anyway. An unreadable root yields nothing.
+#[must_use]
+pub fn real_dirs_on_volume(root: &Path) -> Vec<PathBuf> {
+    let Ok(volume) = fs::symlink_metadata(root) else {
+        return Vec::new();
+    };
+    real_dirs(root, |folder| same_volume(folder, &volume))
+}
+
+/// Whether `folder` is on the volume `root` is on, from their no-follow
+/// metadata.
+fn same_volume(folder: &Metadata, root: &Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        folder.dev() == root.dev()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (folder, root);
+        true
+    }
+}
+
+/// Every real folder below a real `root`, the root first, entering only the
+/// folders `enters` accepts from their no-follow metadata. An entry that
+/// cannot be `stat`ed is refused, as [`is_link_or_junction`] refuses it, and
+/// an unreadable folder is listed without its contents.
+fn real_dirs(root: &Path, mut enters: impl FnMut(&Metadata) -> bool) -> Vec<PathBuf> {
     if is_link_or_junction(root) {
         return Vec::new();
     }
@@ -175,13 +213,14 @@ pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if is_link_or_junction(&path) {
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if is_link_or_junction_metadata(&meta) || !meta.is_dir() || !enters(&meta) {
                 continue;
             }
-            if path.is_dir() {
-                dirs.push(path.clone());
-                stack.push(path);
-            }
+            dirs.push(path.clone());
+            stack.push(path);
         }
     }
 
@@ -383,6 +422,85 @@ mod tests {
         assert!(dirs.contains(&dir.path().to_path_buf()));
         assert!(dirs.contains(&dir.path().join("a")));
         assert!(dirs.contains(&nested));
+    }
+
+    #[test]
+    fn real_dirs_on_volume_lists_the_tree_of_one_volume() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let mut on_volume = real_dirs_on_volume(dir.path());
+        let mut every = real_dirs_under(dir.path(), false);
+        on_volume.sort();
+        every.sort();
+        assert_eq!(on_volume, every);
+        assert_eq!(real_dirs_on_volume(&dir.path().join("missing")), [] as [PathBuf; 0]);
+    }
+
+    /// `mount` is a real folder below `root` that another volume is mounted
+    /// on: [`real_dirs_on_volume`] leaves it out, with all below it.
+    #[cfg(unix)]
+    fn assert_stops_at_mount(root: &Path, mount: &Path) {
+        use std::os::unix::fs::MetadataExt;
+        let device = |path: &Path| fs::symlink_metadata(path).unwrap().dev();
+        assert_ne!(device(mount), device(root), "{} is a mount", mount.display());
+        assert!(real_dirs_under(root, false).iter().any(|dir| dir == mount));
+
+        let on_volume = real_dirs_on_volume(root);
+        assert!(on_volume.iter().any(|dir| dir == root));
+        let entered: Vec<&PathBuf> =
+            on_volume.iter().filter(|dir| dir.starts_with(mount)).collect();
+        assert_eq!(entered, [] as [&PathBuf; 0]);
+    }
+
+    /// devpts is a file system of its own, mounted at `/dev/pts`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn real_dirs_on_volume_stops_at_a_mount_below_the_root() {
+        assert_stops_at_mount(Path::new("/dev"), Path::new("/dev/pts"));
+    }
+
+    /// A disk image attached inside the root.
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "attaches a disk image with hdiutil"]
+    fn real_dirs_on_volume_stops_at_a_disk_image_below_the_root() {
+        use std::process::Command;
+
+        struct Detach<'a>(&'a Path);
+        impl Drop for Detach<'_> {
+            fn drop(&mut self) {
+                let _ = Command::new("/usr/bin/hdiutil")
+                    .arg("detach")
+                    .arg("-force")
+                    .arg(self.0)
+                    .status();
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap().join("Captures");
+        let mount = root.join("card");
+        fs::create_dir_all(&mount).unwrap();
+        let image = dir.path().join("card.dmg");
+        let created = Command::new("/usr/bin/hdiutil")
+            .args(["create", "-quiet", "-size", "8m", "-fs", "HFS+", "-volname", "PVCARD"])
+            .arg(&image)
+            .status()
+            .unwrap();
+        assert!(created.success(), "hdiutil create");
+        let attached = Command::new("/usr/bin/hdiutil")
+            .args(["attach", "-quiet", "-nobrowse", "-mountpoint"])
+            .arg(&mount)
+            .arg(&image)
+            .status()
+            .unwrap();
+        assert!(attached.success(), "hdiutil attach");
+        let _detach = Detach(&mount);
+        fs::create_dir(mount.join("night")).unwrap();
+
+        assert_stops_at_mount(&root, &mount);
     }
 
     #[test]

@@ -89,6 +89,34 @@ pub fn register_watch_paths(
     follow_symlinks: bool,
     fail_fast: bool,
 ) -> Result<WatchRegistrationReport, String> {
+    register(watcher, paths, follow_symlinks, fail_fast, |root| {
+        fs_pathsafe::real_dirs_under(root, false)
+    })
+}
+
+/// [`register_watch_paths`] without following links and without failing
+/// fast, over the folders of each path's own volume only
+/// ([`fs_pathsafe::real_dirs_on_volume`]): a volume mounted inside the tree
+/// is not watched, as a scan never enters it.
+///
+/// # Errors
+/// As [`register_watch_paths`].
+pub fn register_tree_paths(
+    watcher: &mut RecommendedWatcher,
+    paths: &[Utf8PathBuf],
+) -> Result<WatchRegistrationReport, String> {
+    register(watcher, paths, false, false, fs_pathsafe::real_dirs_on_volume)
+}
+
+/// Register `paths`; without `follow_symlinks`, each one's folders as `dirs`
+/// lists them, the path itself first.
+fn register(
+    watcher: &mut RecommendedWatcher,
+    paths: &[Utf8PathBuf],
+    follow_symlinks: bool,
+    fail_fast: bool,
+    dirs: impl Fn(&std::path::Path) -> Vec<std::path::PathBuf>,
+) -> Result<WatchRegistrationReport, String> {
     let mut report = WatchRegistrationReport::default();
     let mut batch = watcher.paths_mut();
 
@@ -101,7 +129,7 @@ pub fn register_watch_paths(
             continue;
         }
 
-        // `real_dirs_under` answers with an empty list for a root it refuses,
+        // The `fs_pathsafe` listers answer with an empty list for a root they refuse,
         // which would leave the loop below with nothing to do and report
         // success while watching nothing. Probe first so an unwatchable root is
         // an error rather than an empty success.
@@ -121,7 +149,7 @@ pub fn register_watch_paths(
             Err(reason) => return Err(format!("failed to watch {path}: {reason}")),
         }
 
-        let dirs = fs_pathsafe::real_dirs_under(path.as_std_path(), false);
+        let dirs = dirs(path.as_std_path());
         // Root path (dirs[0]) failure is always fatal — if we cannot watch the
         // root itself, there is nothing useful the watcher can do.
         let mut is_root = true;
