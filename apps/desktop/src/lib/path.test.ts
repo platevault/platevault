@@ -41,6 +41,25 @@ describe('resolveRevealPath', () => {
   it('returns rootPath when relativePath is empty string', () => {
     expect(resolveRevealPath('/var/lib/pv', '')).toBe('/var/lib/pv');
   });
+
+  // bd astro-plan-3pvvc: on macOS and Linux `\` is part of a name, and the
+  // backend keeps it in the relative path.
+  it('keeps a backslash in a unix folder name', () => {
+    expect(resolveRevealPath('/root', 'c\\d')).toBe('/root/c\\d');
+  });
+
+  it('keeps a backslash at the start of a unix name below a folder', () => {
+    expect(resolveRevealPath('/root/', 'p/\\b.fits')).toBe('/root/p/\\b.fits');
+  });
+
+  it('keeps a backslash in a unix root name', () => {
+    expect(resolveRevealPath('/data/a\\b', 'x')).toBe('/data/a\\b/x');
+  });
+
+  it('still treats every slash and backslash as a separator under a windows root', () => {
+    expect(resolveRevealPath('C:\\lib\\', 'a\\b/c')).toBe('C:\\lib\\a\\b\\c');
+    expect(resolveRevealPath('D:/Astro', 'a\\b')).toBe('D:/Astro/a/b');
+  });
 });
 
 describe('basename', () => {

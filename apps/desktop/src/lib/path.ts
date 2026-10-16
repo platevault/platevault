@@ -8,18 +8,24 @@
  * the OS root may use backslashes (Windows).
  */
 
+/** Whether `path` is a Windows absolute path: a drive (`C:\`, `C:/`) or a UNC share. */
+function isWindowsPath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('\\\\');
+}
+
 /**
  * Resolve a reveal target path: the OS-native source root joined with a
- * forward-slash-normalized relative path. Handles Windows (backslash) roots
- * transparently — all separators in the joined path are rewritten to match the
- * root's native separator so the OS-native reveal command receives a valid
- * path.
+ * forward-slash relative path.
  *
- * Backend contract: `relativePath` is ALWAYS forward-slash, even on Windows
- * (`crates/app/inbox/src/scan.rs` `replace('\\', "/")`), while the root
- * (`source.path`) is native (backslash on Windows, from the folder picker).
- * `pathe.join` is unsuitable here because it rewrites backslashes to forward
- * slashes, which the Windows select-item shell call rejects.
+ * Backend contract: `/` is the only separator in `relativePath`
+ * (`fs_pathsafe::wire_path`). On Windows the backend has already turned
+ * every `\` into `/`, and the root (`source.path`, from the folder picker)
+ * uses backslashes, so under a Windows root every `/` or `\` is a separator
+ * and is rewritten to the root's own separator: the Windows select-item shell
+ * call rejects forward slashes. On macOS and Linux `\` is an ordinary name
+ * character the backend keeps (bd astro-plan-3pvvc), so under any other root
+ * only `/` separates. `pathe.join` is unsuitable here because it rewrites
+ * backslashes to forward slashes.
  *
  * This is the canonical implementation. It was previously duplicated as
  * `resolveRevealPath` in `features/sessions/revealInventory.ts` and
@@ -33,6 +39,11 @@ export function resolveRevealPath(
   relativePath: string | null | undefined,
 ): string {
   if (!relativePath) return rootPath;
+  if (!isWindowsPath(rootPath)) {
+    const root = rootPath.replace(/\/+$/, '');
+    const rel = relativePath.replace(/^\/+/, '').replace(/\/+/g, '/');
+    return `${root}/${rel}`;
+  }
   const sep = rootPath.includes('\\') ? '\\' : '/';
   const root = rootPath.replace(/[/\\]+$/, '');
   const rel = relativePath.replace(/^[/\\]+/, '').replace(/[/\\]+/g, sep);
