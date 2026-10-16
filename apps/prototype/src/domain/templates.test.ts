@@ -60,7 +60,7 @@ describe("goal fraction", () => {
 describe("panel balance setting (C7)", () => {
   it("defaults to ±10 %", () => {
     expect(DEFAULT_PANEL_BALANCE_PCT).toBe(10)
-    expect(subjectConditions({ id: "sub", targetId: "tgt", mosaic: null })).toEqual({ panelBalancePct: 10, window: null })
+    expect(subjectConditions({ id: "sub", targetId: "tgt" })).toEqual({ panelBalancePct: 10, window: null })
   })
 
   it("keeps an edit inside its limits", () => {

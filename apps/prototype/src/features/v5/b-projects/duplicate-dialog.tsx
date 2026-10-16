@@ -20,7 +20,7 @@ const PARTS: Part[] = ["sessions", "groups", "goals", "notes", "settings"]
 export function DuplicateProjectDialog({ project, open, onOpenChange }: { project: Project; open: boolean; onOpenChange: (open: boolean) => void }) {
   const m = useMessages()
   const navigate = useNavigate()
-  const fresh = () => ({ name: m.project_duplicate_name({ name: project.name }), parts: [...PARTS] })
+  const fresh = (): { name: string; parts: Part[] } => ({ name: m.project_duplicate_name({ name: project.name }), parts: [...PARTS] })
   const [draft, setDraft] = useState(fresh)
   // Each opening starts from the Project as it is now, with every part ticked.
   const [wasOpen, setWasOpen] = useState(open)

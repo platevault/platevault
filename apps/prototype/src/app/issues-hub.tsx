@@ -25,7 +25,7 @@ function groupName(m: Messages, group: IssueGroup): string {
     sessions: m.nav_sessions,
     storage: m.common_locations,
     work: m.issues_group_work,
-    runs: m.common_runs,
+    projects: m.nav_projects,
     calibration: m.nav_calibration,
     drift: m.issues_group_drift,
   }

@@ -653,6 +653,13 @@ function inFrames(catalog: Catalog, input: ProjectInput): Set<AssetId> {
   return new Set((catalog.sessions[input.sessionId]?.assetIds ?? []).filter((id) => frameOut(catalog, input, id) === null))
 }
 
+const FRAMES_CHANGE_KEY = {
+  "frames-excluded": "project_change_frames_excluded",
+  "frames-included": "project_change_frames_included",
+  "frames-rejected": "project_change_frames_rejected",
+  "frames-restored": "project_change_frames_restored",
+} as const
+
 /**
  * Every difference between the desired state and the applied View, with its
  * source (VSEL-FR-12). Empty before the first Apply (it builds the View
@@ -704,7 +711,7 @@ export function pendingChanges(world: Pick<World, "catalog" | "disk">, project: 
       const assetIds = byKind[kind]
       if (assetIds.length === 0) continue
       const source: ChangeSource = kind === "frames-excluded" || kind === "frames-included" ? "project" : "library"
-      out.push({ id: `${kind}|${sessionId}|${assetIds.length}`, kind, sessionId, assetIds, source, label: msg(`project_change_${kind.replace("-", "_") as "frames_excluded"}`, { session: sessionLabel(catalog, sessionId), frames: framesRef(assetIds.length) }), link: source === "library" ? sessionLink(sessionId) : null })
+      out.push({ id: `${kind}|${sessionId}|${assetIds.length}`, kind, sessionId, assetIds, source, label: msg(FRAMES_CHANGE_KEY[kind], { session: sessionLabel(catalog, sessionId), frames: framesRef(assetIds.length) }), link: source === "library" ? sessionLink(sessionId) : null })
     }
     const now = catalog.sessions[sessionId]?.calibration
     const then = view.calibration[sessionId]

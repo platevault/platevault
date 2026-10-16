@@ -17,7 +17,7 @@
 import { Check, Eye, FolderSearch, Undo2 } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { useFollowLink } from "@/app/run-ui"
+import { useFollowLink } from "@/components/app/links"
 import { ActionBar } from "@/components/app/actions"
 import type { Action, Column, ConfirmSpec, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"

@@ -37,7 +37,7 @@
 import { FolderPlus, Import, MapPin } from "lucide-react"
 import { useMemo } from "react"
 import { useMessages } from "@/app/preferences"
-import { useFollowLink } from "@/app/run-ui"
+import { useFollowLink } from "@/components/app/links"
 import { openSheet } from "@/app/ui-state"
 import { ActionButton, ActionMenu } from "@/components/app/actions"
 import { BoxTable } from "@/components/app/box"

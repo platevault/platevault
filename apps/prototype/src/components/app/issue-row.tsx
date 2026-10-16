@@ -3,9 +3,9 @@
  * bar popout, as an `<li>` of the host's `<ul>`.
  *
  * - **Open** (default): severity glyph, the terse label, its one action (a
- *   link to where it is fixed) and Dismiss ×. A run's next step
- *   (`run-blocked`, `calibration-review`) has no × (`isDismissable`): it
- *   stays until the run moves on, and an empty slot keeps the columns.
+ *   link to where it is fixed) and Dismiss ×. A Project's own waiting work
+ *   (`apply-refused`, `previous-review`) has no × (`isDismissable`): it
+ *   stays until the Project moves on, and an empty slot keeps the columns.
  * - **Dismissed:** the same row, muted, with Restore, for the hub's
  *   Dismissed group (A SH8: one row, two states).
  *
@@ -41,6 +41,10 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
       return { text: m.issue_needs_target({ count }), action: m.verb_assign() }
     case "not-in-project":
       return { text: m.issue_not_in_project({ count }), action: m.verb_add() }
+    case "needs-calibration":
+      return { text: m.issue_needs_calibration({ count }), action: m.verb_review() }
+    case "pin-drift":
+      return { text: m.issue_pin_drift({ name, count }), action: m.verb_open() }
     case "location-denied":
       return { text: m.issue_location_unreadable({ name }), action: m.verb_fix() }
     case "location-offline":
@@ -49,14 +53,12 @@ export function issueCopy(m: Messages, issue: Issue): { text: string; action: st
       return { text: m.issue_failed({ name }), action: m.nav_activity() }
     case "work-interrupted":
       return { text: m.issue_interrupted({ name }), action: m.nav_activity() }
-    case "calibration-review":
-      return { text: m.issue_to_review({ name, count }), action: m.verb_review() }
-    case "run-blocked":
-      return { text: m.issue_blocked({ name }), action: m.verb_open() }
+    case "apply-refused":
+      return { text: m.issue_apply_refused({ name }), action: m.verb_open() }
+    case "previous-review":
+      return { text: m.issue_previous_review({ name, count }), action: m.verb_review() }
     case "master-offer":
       return { text: m.issue_master_offered({ count }), action: m.verb_review() }
-    case "master-old":
-      return { text: m.issue_master_old({ name, count }), action: m.nav_calibration() }
     case "calibration-waiting":
       return { text: m.issue_to_stack({ count }), action: m.verb_stack() }
     case "calibration-failed":

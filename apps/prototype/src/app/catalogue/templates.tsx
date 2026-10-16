@@ -12,7 +12,7 @@
  * - The DetailPanel docks at the side from 1400 px wide and at the bottom
  *   below; its Display menu pins it and, on the side, sets its width
  *   (Narrow, Medium, Wide), and its leading edge resizes it.
- * - The StepPage sits under view tabs (Runs · Wrap up); "Full-height step"
+ * - The StepPage is a Project's Wrap up under the Project's tabs; "Full-height step"
  *   switches it to `fill`, where the body takes the region and scrolls itself.
  * - The line under a frame measures how far the table, the panel or the
  *   step pane moved on the last selection, row or step change (it reads
@@ -44,9 +44,11 @@ import { ListSection, SettingsPage } from "@/components/templates/settings-page"
 import { StepPage } from "@/components/templates/step-page"
 import { Toggle } from "@/components/ui/toggle"
 import { Button } from "@/components/ui/button"
-import type { Catalog, Location, Run, Session, Subject } from "@/domain/types"
+import { WRAP_UP_NAME, WRAP_UP_STEPS } from "@/domain/labels"
+import { PROJECT_TAB_NAME, PROJECT_TABS, type ProjectTabId } from "@/domain/project-view"
+import type { Catalog, Location, Project, ProjectGroup, Session, Subject, WrapUpStepId } from "@/domain/types"
 import { formatCount, formatDuration, formatExposure, formatNight } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { ComponentSection } from "./specimen"
 
@@ -61,6 +63,11 @@ function targetName(catalog: Catalog, session: Session): string {
 
 function sessionLabel(catalog: Catalog, session: Session): string {
   return `${targetName(catalog, session)} · ${formatNight(session.night)} · ${session.channel ?? "–"}`
+}
+
+/** The sessions a Project holds, in its input order. */
+function heldSessions(catalog: Catalog, project: Project): Session[] {
+  return project.inputs.flatMap((input) => catalog.sessions[input.sessionId] ?? [])
 }
 
 function sessionFacts(m: Messages, catalog: Catalog, session: Session) {
@@ -335,19 +342,15 @@ function ListDemo() {
   )
 }
 
-/** ListPage inside an object: a Project's runs under the path Projects › {Project}, the way the Project's Trash reads. */
+/** ListPage inside an object: a Project's sessions under the path Projects › {Project}. */
 function ListPathDemo() {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const project = Object.values(catalog.projects)[0]
   const [query, setQuery] = useState("")
   if (!project) return <NoSeed />
-  const runs = Object.values(catalog.runs).filter((r) => r.projectId === project.id && r.trashedAt === null)
-  const shown = runs.filter((r) => r.name.toLowerCase().includes(query.trim().toLowerCase()))
-  const columns: Column<Run>[] = [
-    { id: "run", header: m.project_run_noun_capital(), cell: (r) => r.name, sortValue: (r) => r.name, rowHeader: true, truncate: true },
-    { id: "state", header: m.run_col_state(), cell: (r) => <StatusBadge kind="run" value={r.completion} />, sortValue: (r) => r.completion },
-  ]
+  const sessions = heldSessions(catalog, project)
+  const shown = sessions.filter((s) => sessionLabel(catalog, s).toLowerCase().includes(query.trim().toLowerCase()))
   return (
     <ComponentSection components={["ListPage"]} description={m.catalogue_templates_list_path_desc()}>
       <Frame>
@@ -357,15 +360,15 @@ function ListPathDemo() {
             { label: m.nav_projects(), link: { to: "/projects" } },
             { label: project.name, link: { to: "/projects/$projectId", params: { projectId: project.id } } },
           ]}
-          title={m.common_runs()}
-          summary={m.project_runs_count({ count: runs.length })}
+          title={m.nav_sessions()}
+          summary={m.project_sessions_count({ count: sessions.length })}
           table={{
-            label: m.common_runs(),
+            label: m.nav_sessions(),
             rows: shown,
-            columns,
-            getRowId: (r) => r.id,
-            rowLabel: (r) => r.name,
-            toolbar: { search: { label: m.catalogue_templates_search_runs(), value: query, onChange: setQuery }, matchCount: shown.length },
+            columns: sessionColumns(m, catalog),
+            getRowId: (s) => s.id,
+            rowLabel: (s) => sessionLabel(catalog, s),
+            toolbar: { search: { label: m.catalogue_templates_search_sessions(), value: query, onChange: setQuery }, matchCount: shown.length },
           }}
         />
       </Frame>
@@ -377,7 +380,7 @@ function ListPathDemo() {
 // DetailPage: a Project with views, sections (Box, BoxTable) and the dock
 // ---------------------------------------------------------------------------
 
-type ProjectView = "overview" | "runs"
+type ProjectView = "overview" | "groups"
 
 function DetailDemo() {
   const m = useMessages()
@@ -391,9 +394,7 @@ function DetailDemo() {
   if (!project) return <NoSeed />
 
   const ran = (label: string) => () => setLast(label)
-  const subjectIds = new Set(project.subjects.map((subject) => subject.targetId))
-  const sessions = Object.values(catalog.sessions).filter((s) => s.imageType === "light" && s.supersededBy === null && s.target.value !== null && subjectIds.has(s.target.value))
-  const runs = Object.values(catalog.runs).filter((run) => run.projectId === project.id && run.trashedAt === null)
+  const sessions = heldSessions(catalog, project)
   const open = openId ? catalog.sessions[openId] : undefined
   const name = (s: Session) => sessionLabel(catalog, s)
   const subjectName = (subject: Subject) => catalog.targets[subject.targetId]?.name ?? "–"
@@ -407,9 +408,10 @@ function DetailDemo() {
       align: "right",
     },
   ]
-  const runColumns: Column<Run>[] = [
-    { id: "run", header: m.calibration_run(), cell: (run) => run.name, sortValue: (run) => run.name, rowHeader: true },
-    { id: "state", header: m.run_col_state(), cell: (run) => <StatusBadge kind="run" value={run.completion} />, sortValue: (run) => run.completion },
+  const members = (group: ProjectGroup) => project.inputs.filter((i) => i.groupId === group.id).length
+  const groupColumns: Column<ProjectGroup>[] = [
+    { id: "group", header: m.project_col_group(), cell: (group) => group.name, sortValue: (group) => group.name, rowHeader: true },
+    { id: "sessions", header: m.nav_sessions(), cell: (group) => formatCount(members(group)), sortValue: members, align: "right" },
   ]
   const overview: DetailSection[] = [
     {
@@ -455,13 +457,13 @@ function DetailDemo() {
       ),
     },
   ]
-  const runSections: DetailSection[] = [
+  const groupSections: DetailSection[] = [
     {
-      id: "tpl-project-runs",
-      title: m.common_runs(),
-      count: runs.length,
+      id: "tpl-project-groups",
+      title: m.project_groups(),
+      count: project.groups.length,
       flush: true,
-      content: <BoxTable label={m.common_runs()} rows={runs} columns={runColumns} getRowId={(run) => run.id} />,
+      content: <BoxTable label={m.project_groups()} rows={project.groups} columns={groupColumns} getRowId={(group) => group.id} />,
     },
   ]
   const detail: PageDetail | null = open
@@ -485,30 +487,29 @@ function DetailDemo() {
             title={project.name}
             status={<StatusBadge kind="project" value={project.state} />}
             actions={[
-              { id: "start-run", label: m.startrun_open_ellipsis(), kind: "primary", run: ran(m.startrun_open_ellipsis()) },
+              { id: "apply", label: m.project_apply(), kind: "primary", opensDialog: true, run: ran(m.project_apply()) },
               { id: "export", label: m.catalogue_templates_export(), opensDialog: true, run: ran(m.catalogue_templates_export()) },
             ]}
             menu={{
               label: m.project_noun(),
               items: [
                 { id: "edit", label: m.settings_edit(), opensDialog: true, run: ran(m.settings_edit()) },
-                { id: "reopen", label: m.project_reopen(), opensDialog: true, run: ran(m.project_reopen()) },
-                { id: "trash", label: m.run_move_to_trash(), kind: "destructive", opensDialog: true, run: ran(m.run_move_to_trash()) },
+                { id: "duplicate", label: m.project_duplicate(), opensDialog: true, run: ran(m.project_duplicate()) },
               ],
             }}
             views={{
               label: m.catalogue_templates_project_views(),
               value: view,
               onChange: (id) => {
-                setView(id === "runs" ? "runs" : "overview")
+                setView(id === "groups" ? "groups" : "overview")
                 setOpenId(null)
               },
               items: [
                 { id: "overview", label: m.catalogue_templates_overview() },
-                { id: "runs", label: m.common_runs(), count: runs.length },
+                { id: "groups", label: m.project_groups(), count: project.groups.length },
               ],
             }}
-            sections={view === "overview" ? overview : runSections}
+            sections={view === "overview" ? overview : groupSections}
             detail={detail}
           />
         </Frame>
@@ -559,63 +560,60 @@ function DetailAsideDemo() {
 }
 
 // ---------------------------------------------------------------------------
-// StepPage: a run's steps on local state; Proceed, then Finish run
+// StepPage: a Project's Wrap up steps on local state; Proceed, then Close project
 // ---------------------------------------------------------------------------
 
-const RUN_STEPS = ["select", "calibrate", "prepare", "results"] as const
+/** The step whose body is a selection: proceeding with nothing selected records it as skipped (F4). */
+const SELECTION_STEP: WrapUpStepId = "archive"
 
 function StepDemo() {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
-  const run = Object.values(catalog.runs)[0]
-  const project = run ? catalog.projects[run.projectId] : undefined
+  const project = Object.values(catalog.projects).find((p) => p.state === "open")
   const [at, setAt] = useState(0)
   const [finished, setFinished] = useState(false)
-  const [viewing, setViewing] = useState<string>(RUN_STEPS[0])
+  const [viewing, setViewing] = useState<string>(WRAP_UP_STEPS[0]!)
   const [selected, setSelected] = useState<string[]>([])
   const [last, setLast] = useState<string | null>(null)
   // Fill: the step body takes the full region and scrolls itself (the review Workspace's case).
   const [fill, setFill] = useState(false)
   const host = useRef<HTMLDivElement>(null)
   const shift = useShift(host, "[data-step-strip], [data-step-region], [data-step-footer]", `${viewing}|${at}|${finished}|${selected.length}`)
-  if (!run || !project) return <NoSeed />
+  if (!project) return <NoSeed />
 
   const ran = (label: string) => () => setLast(label)
-  const subject = project.subjects.find((item) => item.id === run.subjectId)
-  const sessions = Object.values(catalog.sessions).filter((s) => s.imageType === "light" && s.supersededBy === null && subject !== undefined && s.target.value === subject.targetId)
+  const sessions = heldSessions(catalog, project)
   const name = (s: Session) => sessionLabel(catalog, s)
-  const labels: Record<(typeof RUN_STEPS)[number], string> = { select: m.step_select(), calibrate: m.step_calibrate(), prepare: m.step_prepare(), results: m.step_results() }
-  const steps: FlowStep[] = RUN_STEPS.map((id, index) => ({
+  const steps: FlowStep[] = WRAP_UP_STEPS.map((id, index) => ({
     id,
-    label: labels[id],
-    // F4: proceeding from a selection step with nothing selected records it as skipped.
-    state: finished || index < at ? (id === "select" && selected.length === 0 ? "skipped" : "finished") : index === at ? "current" : "todo",
-    summary: id === "select" ? m.project_sessions_selected({ count: selected.length }) : undefined,
+    label: say(m, WRAP_UP_NAME[id]),
+    state: finished || index < at ? (id === SELECTION_STEP && selected.length === 0 ? "skipped" : "finished") : index === at ? "current" : "todo",
+    summary: id === SELECTION_STEP ? m.project_sessions_selected({ count: selected.length }) : undefined,
   }))
-  const lastStep = at === RUN_STEPS.length - 1
+  const lastStep = at === WRAP_UP_STEPS.length - 1
   const proceed: Action | null = finished
     ? null
     : lastStep
       ? {
-          id: "finish-run",
-          label: m.stepflow_finish_run(),
-          confirm: { title: m.stepflow_finish_run_title({ name: run.name }), confirm: { label: m.stepflow_finish_run() } },
+          id: "close-project",
+          label: m.stepflow_close_project(),
+          confirm: { title: m.stepflow_close_project_title({ name: project.name }), confirm: { label: m.stepflow_close_project() } },
           run: () => {
             setFinished(true)
-            setLast(m.stepflow_finish_run())
+            setLast(m.stepflow_close_project())
           },
         }
       : {
           id: "proceed",
           label: m.stepflow_proceed(),
           run: () => {
-            const next = RUN_STEPS[at + 1] ?? RUN_STEPS[0]
+            const next = WRAP_UP_STEPS[at + 1] ?? WRAP_UP_STEPS[0]!
             setAt(at + 1)
             setViewing(next)
             setLast(m.stepflow_proceed())
           },
         }
-  const flow: StepFlow = { steps, current: RUN_STEPS[at] ?? RUN_STEPS[0], ordered: true, proceed, next: null }
+  const flow: StepFlow = { steps, current: WRAP_UP_STEPS[at] ?? WRAP_UP_STEPS[0]!, ordered: true, proceed, next: null }
   const editable = stepEditable(flow, viewing)
   const restart: Action = {
     id: "restart",
@@ -623,27 +621,25 @@ function StepDemo() {
     run: () => {
       setAt(0)
       setFinished(false)
-      setViewing(RUN_STEPS[0])
+      setViewing(WRAP_UP_STEPS[0]!)
       setSelected([])
     },
   }
   const rows =
-    viewing === "select" ? (
+    viewing === SELECTION_STEP ? (
       <DataTable
         label={m.nav_sessions()}
         rows={sessions}
         columns={sessionColumns(m, catalog)}
         getRowId={(s) => s.id}
         scroll={fill ? "fill" : "none"}
-        // Selection = membership (§5.4): the run's sessions are the data, so no batch bar replaces the toolbar row.
-        selection={editable ? { selected, onChange: setSelected, rowLabel: name, countLabel: (count) => m.project_sessions_selected({ count }), membership: true } : undefined}
+        selection={editable ? { selected, onChange: setSelected, rowLabel: name, countLabel: (count) => m.project_sessions_selected({ count }) } : undefined}
       />
     ) : (
       <KeyValueList
         items={[
-          { label: m.calibration_run(), value: run.name },
           { label: m.run_col_project(), value: project.name },
-          { label: m.nav_sessions(), value: m.project_sessions_selected({ count: selected.length }) },
+          { label: m.nav_sessions(), value: m.project_sessions_count({ count: sessions.length }) },
         ]}
       />
     )
@@ -666,29 +662,23 @@ function StepDemo() {
               { label: m.nav_projects(), link: { to: "/projects" } },
               { label: project.name, link: { to: "/projects/$projectId", params: { projectId: project.id } } },
             ]}
-            title={run.name}
-            status={<StatusBadge kind="run" value={finished ? "complete" : "open"} />}
+            title={m.wrapup_action()}
+            status={<StatusBadge kind="project" value={finished ? "closed" : "open"} />}
             menu={{
-              label: m.project_run_noun_capital(),
-              items: [
-                { id: "rename", label: m.run_rename_ellipsis(), run: ran(m.run_rename_ellipsis()) },
-                { id: "trash", label: m.run_move_to_trash(), kind: "destructive", opensDialog: true, run: ran(m.run_move_to_trash()) },
-              ],
+              label: m.project_noun(),
+              items: [{ id: "duplicate", label: m.project_duplicate(), opensDialog: true, run: ran(m.project_duplicate()) }],
             }}
             flow={flow}
             viewing={viewing}
             onSelectStep={setViewing}
-            stepsLabel={m.catalogue_templates_run_steps()}
+            stepsLabel={m.catalogue_templates_wrapup_steps()}
             views={{
               label: m.catalogue_templates_project_views(),
               value: "wrap-up",
-              items: [
-                { id: "runs", label: m.common_runs() },
-                { id: "wrap-up", label: m.run_wrap_up() },
-              ],
+              items: PROJECT_TABS.map((id) => ({ id, label: say(m, PROJECT_TAB_NAME[id]) })),
               // The host switches template for another view; the specimen records the choice.
               onChange: (id) => {
-                if (id === "runs") setLast(m.common_runs())
+                if (id !== "wrap-up") setLast(say(m, PROJECT_TAB_NAME[id as ProjectTabId]))
               },
             }}
             fill={fill}

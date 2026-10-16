@@ -155,7 +155,7 @@ export function useStepActions(flow: StepFlow, viewing: string): StepActions {
 
 type StepState = FlowStep["state"]
 
-/** Each state has its own glyph shape, so colour only reinforces it (the run gate glyphs in app/run-ui.tsx). */
+/** Each state has its own glyph shape, so colour only reinforces it. */
 const GLYPH: Record<StepState, { icon: LucideIcon; className: string }> = {
   todo: { icon: Circle, className: "text-muted-foreground" },
   current: { icon: CircleArrowRight, className: "text-link" },

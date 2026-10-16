@@ -10,7 +10,7 @@
  *   has no source list) is passed over.
  * - The checklist (`GettingStartedRing`): a ChecklistRing in the sidebar
  *   footer, above Activity and Settings (C OB7). Set up locations, first
- *   import, confirm Targets, first Project, first run and, on Windows, turn
+ *   import, confirm Targets, first Project, its first Apply and, on Windows, turn
  *   on Developer Mode (symlinks need it, P-PREP3), each ticked from the
  *   library's state or the last check. It goes once every step is done or
  *   the user dismisses it.
@@ -64,7 +64,7 @@ export function OrientationWalk() {
 // Getting started checklist (sidebar footer)
 // ---------------------------------------------------------------------------
 
-type CheckId = "locations" | "import" | "targets" | "project" | "run" | "developer-mode"
+type CheckId = "locations" | "import" | "targets" | "project" | "apply" | "developer-mode"
 
 /** Each step, ticked from what the library holds now. */
 function checklist(s: PrototypeState): Array<{ id: CheckId; done: boolean }> {
@@ -74,7 +74,7 @@ function checklist(s: PrototypeState): Array<{ id: CheckId; done: boolean }> {
     { id: "import", done: Object.values(operations).some((op) => op.kind === "import" && (op.status === "succeeded" || op.status === "partial")) },
     { id: "targets", done: Object.values(catalog.sessions).some((x) => x.imageType === "light" && !x.supersededBy && x.target.status === "confirmed") },
     { id: "project", done: Object.keys(catalog.projects).length > 0 },
-    { id: "run", done: Object.keys(catalog.runs).length > 0 },
+    { id: "apply", done: Object.values(catalog.projects).some((p) => p.view !== null) },
     ...(settings.developerModeCheck === "not-windows" ? [] : [{ id: "developer-mode" as const, done: settings.developerModeCheck === "on" }]),
   ]
 }
@@ -100,13 +100,13 @@ export function GettingStartedRing({ collapsed }: { collapsed: boolean }) {
     import: { label: m.onboarding_check_import(), action: { id: "import", label: m.import_open(), run: () => void navigate({ to: "/import" as never }) } },
     targets: { label: m.onboarding_check_targets(), action: { id: "review-targets", label: m.verb_review(), run: () => void navigate({ to: "/sessions", search: { filter: "needs-target" } as never }) } },
     project: { label: m.onboarding_check_project(), action: { id: "new-project", label: m.newproject_open_ellipsis(), run: () => openSheet({ kind: "new-project" }) } },
-    run: {
-      label: m.onboarding_check_run(),
+    apply: {
+      label: m.onboarding_check_apply(),
       action: {
-        id: "start-run",
-        label: m.startrun_open_ellipsis(),
-        run: () => (firstProjectId ? openSheet({ kind: "start-run", projectId: firstProjectId }) : undefined),
-        unavailable: firstProjectId ? undefined : { action: m.startrun_open_ellipsis(), reason: m.onboarding_check_project(), blockers: [] },
+        id: "open-view",
+        label: m.verb_open(),
+        run: () => (firstProjectId ? void navigate({ to: "/projects/$projectId", params: { projectId: firstProjectId }, search: { stage: "view" } }) : undefined),
+        unavailable: firstProjectId ? undefined : { action: m.verb_open(), reason: m.onboarding_check_project(), blockers: [] },
       },
     },
     "developer-mode": { label: m.onboarding_check_developer_mode(), action: { id: "developer-mode", label: m.settings_open_windows_settings(), run: () => openWindowsDeveloperSettings() } },

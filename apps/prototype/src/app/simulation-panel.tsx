@@ -30,7 +30,6 @@ import { store, useStore } from "@/store/core"
 import { updateApp } from "@/store/actions/settings"
 import { resetPrototype } from "@/store"
 import { removableDevices } from "@/domain/devices"
-import { runSimulations } from "@/features/v5/c-runs/actions"
 import {
   connectDevice,
   copyFolderExternally,
@@ -49,6 +48,8 @@ import {
   setVolumeMounted,
   setWindowsWithoutDeveloperMode,
   toolFinishedStacking,
+  rerunTool,
+  setViewFileHeld,
 } from "@/store/simulation"
 import { useMessages } from "./preferences"
 import { closePanel, useShellUi } from "./ui-state"
@@ -84,21 +85,25 @@ function ToggleRow({
   )
 }
 
-/** The run or run group on screen: its prototype simulations (c-runs `runSimulations`), which change the simulated application and disk. */
-function ThisRunSection() {
+/** The Project on screen: an external tool reruns into its `Processing/`, or holds a file in its View (prototype simulations of the application and disk). */
+function ThisProjectSection() {
   const m = useMessages()
-  const { runId, groupId } = useParams({ strict: false }) as { runId?: string; groupId?: string }
-  const run = useStore((s) => (runId ? s.catalog.runs[runId] : undefined))
-  const group = useStore((s) => (groupId ? s.catalog.runGroups[groupId] : undefined))
-  const target = run ? { runId: run.id } : group ? { groupId: group.id } : null
-  if (!target) return null
+  const { projectId } = useParams({ strict: false }) as { projectId?: string }
+  const project = useStore((s) => (projectId ? s.catalog.projects[projectId] : undefined))
+  const held = useStore((s) => s.faults.viewFileHeld)
+  if (!project) return null
+  const rerun = m.simulation_rerun_wbpp()
   return (
-    <Section title={m.simulation_this_run_title({ name: run?.name ?? group?.name ?? "" })} level={3} description={m.simulation_this_run_description()}>
-      <div className="flex flex-wrap gap-2">
-        {runSimulations(target, m).map((action) => (
-          <ActionButton key={action.id} action={action} />
-        ))}
-      </div>
+    <Section title={m.simulation_this_project_title({ name: project.name })} level={3} description={m.simulation_this_project_description()}>
+      <ActionButton
+        action={{
+          id: "rerun-tool",
+          label: rerun,
+          run: () => void rerunTool(project.id),
+          unavailable: project.view ? undefined : { action: rerun, reason: m.project_view_not_built(), blockers: [] },
+        }}
+      />
+      <ToggleRow label={m.simulation_view_file_held()} detail={m.simulation_view_file_held_detail()} checked={held} onChange={setViewFileHeld} />
     </Section>
   )
 }
@@ -165,7 +170,7 @@ export function SimulationControls() {
 
   return (
     <div className="space-y-6">
-      <ThisRunSection />
+      <ThisProjectSection />
       <QuickActionsSection />
       <Section title={m.folder_picker_volumes()} level={3} description={m.simulation_volumes_description()}>
         <div className="divide-y rounded-md border px-3">

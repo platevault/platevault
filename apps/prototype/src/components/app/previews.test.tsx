@@ -36,7 +36,7 @@ describe("MasterPreview", () => {
     expect(card.textContent).toContain("100 · 50")
     expect(card.textContent).toContain("-10 °C")
     expect(card.textContent).toContain(m.flow_master_old({ n: 120 }))
-    expect(card.textContent).toContain(`${m.calibration_used_by()}${m.project_runs_count({ count: 2 })}`)
+    expect(card.textContent).toContain(`${m.calibration_used_by()}${m.about_count_projects({ count: 2, n: "2" })}`)
     // The card holds no controls, so focus stays on the link.
     expect(link).toHaveFocus()
   })

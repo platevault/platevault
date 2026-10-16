@@ -109,10 +109,10 @@ function useChecklist(): ChecklistSection[] {
         { id: "targets", label: m.onboarding_check_targets(), done: false, action: { id: "review", label: m.verb_review(), run: () => undefined } },
         { id: "project", label: m.onboarding_check_project(), done: false, action: { id: "new-project", label: m.newproject_open_ellipsis(), run: () => undefined } },
         {
-          id: "run",
-          label: m.onboarding_check_run(),
+          id: "apply",
+          label: m.onboarding_check_apply(),
           done: false,
-          action: { id: "start-run", label: m.startrun_open_ellipsis(), run: () => undefined, unavailable: { action: m.startrun_open_ellipsis(), reason: m.onboarding_check_project(), blockers: [] } },
+          action: { id: "open-view", label: m.verb_open(), run: () => undefined, unavailable: { action: m.verb_open(), reason: m.onboarding_check_project(), blockers: [] } },
         },
       ],
     },
@@ -128,11 +128,11 @@ function useChecklist(): ChecklistSection[] {
 }
 
 const SAMPLE_ISSUES: Issue[] = [
-  { id: "cat:needs-target", group: "sessions", kind: "needs-target", severity: "warning", count: 2, name: null, about: null, link: { to: "/sessions" } },
-  { id: "cat:location-denied", group: "storage", kind: "location-denied", severity: "danger", count: 1, name: "Captures SSD", about: "loc", link: { to: "/settings/locations" } },
-  { id: "cat:run-blocked", group: "runs", kind: "run-blocked", severity: "warning", count: 1, name: "NGC 7000 HOO RedCat", about: "run", link: { to: "/projects" } },
-  { id: "cat:calibration-review", group: "calibration", kind: "calibration-review", severity: "warning", count: 3, name: "M 31 LRGB FRA400", about: "run", link: { to: "/calibration" } },
-  { id: "cat:duplicates", group: "storage", kind: "duplicates", severity: "info", count: 4, bytes: 1_200_000_000, name: null, about: null, link: { to: "/settings/locations" } },
+  { id: "cat:needs-target", group: "sessions", kind: "needs-target", severity: "warning", count: 2, name: null, about: null, owner: { kind: "library" }, link: { to: "/sessions" } },
+  { id: "cat:location-denied", group: "storage", kind: "location-denied", severity: "danger", count: 1, name: "Captures SSD", about: "loc", owner: { kind: "location", id: "loc" }, link: { to: "/settings/locations" } },
+  { id: "cat:apply-refused", group: "projects", kind: "apply-refused", severity: "warning", count: 1, name: "NGC 7000 HOO", about: "prj", owner: { kind: "project", id: "prj" }, link: { to: "/projects" } },
+  { id: "cat:previous-review", group: "projects", kind: "previous-review", severity: "warning", count: 3, name: "M 31 LRGB", about: "prj2", owner: { kind: "project", id: "prj2" }, link: { to: "/projects" } },
+  { id: "cat:duplicates", group: "storage", kind: "duplicates", severity: "info", count: 4, bytes: 1_200_000_000, name: null, about: null, owner: { kind: "library" }, link: { to: "/settings/locations" } },
 ]
 
 function IssueRows() {

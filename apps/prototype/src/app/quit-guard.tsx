@@ -1,5 +1,5 @@
 /**
- * Quit guard (Round 6): while an import, index or prepare runs, quitting
+ * Quit guard (Round 6): while an import, index or Apply runs, quitting
  * asks first. Prototype › Quit asks "Quit while 2 tasks run? They resume
  * next launch." with Quit and Cancel, then relaunches the prototype (a
  * reload), and the next launch resumes the work it left running. Closing
@@ -16,7 +16,7 @@ import { resumeOperation } from "@/store/operations"
 import { useMessages } from "./preferences"
 
 /** The work a quit would stop mid-way. */
-const GUARDED: ReadonlySet<OperationKind> = new Set(["import", "index", "prepare"])
+const GUARDED: ReadonlySet<OperationKind> = new Set(["import", "index", "apply"])
 
 /** Operations Prototype › Quit left running; the next launch resumes them. */
 const RESUME_KEY = "platevault.resumeOnLaunch"

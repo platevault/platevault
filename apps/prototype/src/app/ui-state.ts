@@ -7,7 +7,7 @@
  * sheets without prop drilling.
  */
 import { useSyncExternalStore } from "react"
-import type { ProjectId, SessionId, TargetId } from "@/domain/types"
+import type { SessionId, TargetId } from "@/domain/types"
 
 export type GlobalPanel = "palette" | "shortcuts" | "simulation" | null
 
@@ -19,8 +19,6 @@ export type GlobalPanel = "palette" | "shortcuts" | "simulation" | null
 export type WorkflowSheet =
   /** S4 New Project (slice B); `fromSessionId` prefills its Target and rig (LIB-FR-17); `targetId` prefills a subject (S10 Target detail). */
   | { kind: "new-project"; fromSessionId?: SessionId; targetId?: TargetId }
-  /** "Start a processing run": one subject and one rig of the Project (slice B, PRJ-FR-10). */
-  | { kind: "start-run"; projectId: ProjectId }
   | null
 
 const SIDEBAR_KEY = "platevault.sidebar"

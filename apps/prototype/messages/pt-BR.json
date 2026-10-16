@@ -167,6 +167,21 @@
       }
     }
   ],
+  "issue_needs_calibration": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sem calibração definida",
+        "countPlural=*": "{count} sem calibração definida"
+      }
+    }
+  ],
   "issue_not_in_project": [
     {
       "declarations": [
@@ -6623,6 +6638,7 @@
   "settings_developer_mode_off": "Desligado",
   "settings_open_windows_settings": "Abrir configurações do Windows",
   "onboarding_check_developer_mode": "Ative o Modo de Desenvolvedor do Windows",
+  "onboarding_check_apply": "Aplique seu primeiro Projeto",
   "location_symlinks_supported": "Com suporte",
   "import_flow_title": "Importar",
   "calibration_process_title": "Processo",
@@ -6962,6 +6978,8 @@
   "simulation_run_writes_outputs": "O aplicativo grava saídas",
   "simulation_this_run_title": "Esta execução: {name}",
   "simulation_this_run_description": "Muda o aplicativo e o disco simulados da execução na tela.",
+  "simulation_this_project_description": "Muda o aplicativo e o disco simulados do projeto na tela.",
+  "simulation_this_project_title": "Este projeto: {name}",
   "simulation_actions_title": "Ações",
   "simulation_quick_actions": "Ações rápidas",
   "simulation_quick_actions_detail": "Um clique executa Restaurar execução, Reabrir execução, marcações em mais de 20 frames, Aprovar o resto e, no Início, Adicionar à execução, Adicionar ao Plano, Escanear e Reescanear onde estão, com Desfazer quando há um. Abrir página leva cada uma à página que a contém.",
@@ -7073,6 +7091,9 @@
   "simulation_confirm_demo_change": "Substituir o catálogo pela biblioteca de demonstração ({projects})",
   "simulation_confirm_empty_change": "Remover todos os locais, sessões, projetos e execuções; a integração inicial recomeça",
   "simulation_sheet_description": "Controles do protótipo. Eles alteram o disco simulado fora do PlateVault; o PlateVault percebe na próxima leitura.",
+  "simulation_rerun_wbpp": "Rodar o WBPP de novo",
+  "simulation_view_file_held": "Uma ferramenta segura um arquivo na View",
+  "simulation_view_file_held_detail": "O Aplicar espera após a montagem até o arquivo ser liberado.",
   "prototype_controls_title": "Protótipo: {title}",
   "prototype_controls_note": "Simula mudanças fora do PlateVault para revisão. Não faz parte do produto.",
   "seed_project_cygnus_notes": "HOO amplo da região da América do Norte e do Pelicano; o equipamento OSC acrescenta dados dual-band.",
@@ -7719,8 +7740,10 @@
   "calibration_hidden_on": "Oculto em",
   "calibration_hidden_masters": "Masters ocultos",
   "catalogue_templates_fill_toggle": "Etapa em altura total",
-  "catalogue_templates_list_path_desc": "Uma página de lista dentro de um objeto: o caminho mostra os pais, como a Lixeira de um Projeto mostra Projetos › o Projeto › Lixeira. Só o título dá nome à aba da janela.",
+  "catalogue_templates_list_path_desc": "Uma página de lista dentro de um objeto: o caminho mostra os pais, como as sessões de um Projeto mostram Projetos › o Projeto › Sessões. Só o título dá nome à aba da janela.",
   "catalogue_templates_search_runs": "Buscar execuções",
+  "catalogue_templates_search_sessions": "Pesquisar sessões",
+  "catalogue_templates_wrapup_steps": "Etapas do encerramento",
   "catalogue_datatable_fill": "Preencher um corpo de altura fixa",
   "catalogue_datatable_destination_nas": "NAS de arquivo",
   "catalogue_datatable_destination_cold": "Armazenamento frio",
@@ -7739,6 +7762,39 @@
       "match": {
         "countPlural=one": "{name} está antigo · em {count} execução não concluída",
         "countPlural=*": "{name} está antigo · em {count} execuções não concluídas"
+      }
+    }
+  ],
+  "issue_apply_refused": "{name}: Aplicar recusado",
+  "issue_pin_drift": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} arquivo fixado alterado",
+        "countPlural=*": "{name}: {count} arquivos fixados alterados"
+      }
+    }
+  ],
+  "issue_previous_review": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} em View (previous)",
+        "countPlural=*": "{name}: {count} em View (previous)"
       }
     }
   ],

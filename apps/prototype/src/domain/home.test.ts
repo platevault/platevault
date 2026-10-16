@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { World } from "./derive"
+import { canJoinProject, type World } from "./derive"
 import { writeFiles } from "./disk"
 import { homeStatus, newFileCount, openWork, pendingIngestions, type PendingWork, pendingWork } from "./home"
 import { isUnder } from "./indexing"
@@ -60,9 +60,9 @@ describe("pendingIngestions: what came into the Captures locations", () => {
 })
 
 describe("pendingWork: what needs sorting", () => {
-  const ORDER: PendingWork["kind"][] = ["needs-target", "unreviewed", "not-in-project", "ready-to-add", "clean-up"]
+  const ORDER: PendingWork["kind"][] = ["needs-target", "unreviewed", "needs-calibration", "not-in-project", "ready-to-add"]
 
-  it("orders a Target, review, a Project, a run, then Clean up, and shows a session reviewed for several Projects once", () => {
+  it("orders a Target, review, calibration, a Project, then Add to Project, and shows a session reviewed for several Projects once", () => {
     const rows = pendingWork(demo())
     expect(rows.length).toBeGreaterThan(0)
     const kinds = rows.map((r) => ORDER.indexOf(r.kind))
@@ -71,40 +71,38 @@ describe("pendingWork: what needs sorting", () => {
     expect(new Set(unreviewed).size).toBe(unreviewed.length)
   })
 
-  it("lists a Finished run whose prepared view is still on disk, with the bytes its copies hold", () => {
-    const rows = pendingWork(demo()).filter((r) => r.kind === "clean-up")
-    for (const row of rows) {
-      expect(row.run.completion).toBe("complete")
-      expect(row.entries).toBeGreaterThan(0)
-      expect(row.bytes).toBeGreaterThanOrEqual(0)
-    }
+  it("offers Add to Project only for Ready sessions with settled calibration; unsettled ones wait in Needs calibration", () => {
+    const world = demo()
+    const rows = pendingWork(world)
+    for (const row of rows.filter((r) => r.kind === "ready-to-add")) expect(canJoinProject(world.catalog, row.session)).toBe(true)
+    for (const row of rows.filter((r) => r.kind === "needs-calibration")) expect(canJoinProject(world.catalog, row.session)).toBe(false)
   })
 
-  it("drops a ready-to-add session once an open run of its Project holds it in its draft, and lists it again without", () => {
+  it("drops a ready-to-add session once its Project holds it, and lists it again after Remove", () => {
     const world = demo()
     const row = pendingWork(world).find((r) => r.kind === "ready-to-add")
     expect(row, "the demo library has a session ready to add").toBeDefined()
     const { session, projectId } = row as Extract<PendingWork, { kind: "ready-to-add" }>
-    const run = Object.values(world.catalog.runs).find((r) => r.projectId === projectId && r.completion === "open" && !r.trashedAt)!
-    const saved = run.revisions.at(-1)!
-    const draft = { ...saved, baseRevision: saved.revision, updatedAt: "2026-10-13T12:00:00.000Z", sessions: [...saved.sessions, { sessionId: session.id, reason: saved.sessions[0]!.reason }] }
+    const project = world.catalog.projects[projectId]!
     const listed = (w: World) => pendingWork(w).some((r) => r.kind === "ready-to-add" && r.session.id === session.id)
-    world.catalog.runs[run.id] = { ...run, draft }
+    world.catalog.projects[projectId] = { ...project, inputs: [...project.inputs, { sessionId: session.id, groupId: project.groups[0]!.id, excluded: [], included: [] }] }
     expect(listed(world)).toBe(false)
-    world.catalog.runs[run.id] = { ...run, draft: null }
+    world.catalog.projects[projectId] = project
     expect(listed(world)).toBe(true)
   })
 })
 
 describe("openWork: open Projects and calibration, with their problems in context", () => {
-  it("puts every run problem on the row of the run's Project", () => {
+  it("puts every Project problem, and those of the sessions it holds, on the Project's row", () => {
     const world = demo()
     const rows = openWork(world, NOW, TONIGHT)
     expect(rows.some((r) => r.kind === "project")).toBe(true)
-    for (const issue of deriveIssues(world, NOW).filter((i) => i.kind === "run-blocked" || i.kind === "calibration-review")) {
-      const projectId = world.catalog.runs[issue.about!]!.projectId
-      const row = rows.find((r) => r.kind === "project" && r.project.id === projectId)
-      expect(row?.issues.map((i) => i.id)).toContain(issue.id)
+    const issues = deriveIssues(world, NOW)
+    for (const row of rows) {
+      if (row.kind !== "project") continue
+      const held = new Set(row.project.inputs.map((i) => i.sessionId))
+      const own = issues.filter((i) => (i.owner.kind === "project" && i.owner.id === row.project.id) || (i.owner.kind === "session" && held.has(i.owner.id)))
+      expect(row.issues.map((i) => i.id).sort()).toEqual(own.map((i) => i.id).sort())
     }
   })
 

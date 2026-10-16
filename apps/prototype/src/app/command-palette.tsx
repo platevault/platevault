@@ -1,7 +1,7 @@
 /**
  * Command palette (foundation-owned): the commands of ⌘K / Ctrl+K. Jump to
- * any surface or named record (Projects, runs and run groups, Targets,
- * sessions), or run a registered app Action. Slices add commands through
+ * any surface or named record (Projects, Targets, sessions), or run a
+ * registered app Action. Slices add commands through
  * their shell contribution. The look lives in `@/components/app/palette`.
  *
  * App Actions (`useAppActions`) are the same descriptors the toolbar's More
@@ -14,7 +14,7 @@ import { FlaskConical, Keyboard, Languages, Palette, PanelLeft } from "lucide-re
 import { type ActionRunner, actionCommand, useAction } from "@/components/app/actions"
 import type { Action } from "@/components/app/contracts"
 import { CommandPalette as PaletteDialog, type PaletteGroup } from "@/components/app/palette"
-import { groupHref, isTrashedSession, runHref } from "@/domain/derive"
+import { isTrashedSession } from "@/domain/derive"
 import { formatExposure, formatNight } from "@/lib/format"
 import { LOCALE_META, LOCALES } from "@/lib/i18n"
 import { useStore } from "@/store/core"
@@ -76,7 +76,6 @@ function useGroups(appActions: Action[], runner: ActionRunner): PaletteGroup[] {
   const goTo = m.palette_group_go_to()
   const targets = m.nav_targets()
   const projects = m.nav_projects()
-  const runs = m.common_runs()
   const sessions = m.nav_sessions()
   const actions = m.palette_group_actions()
   const groups: PaletteGroup[] = [
@@ -97,16 +96,6 @@ function useGroups(appActions: Action[], runner: ActionRunner): PaletteGroup[] {
       value: "projects",
       label: projects,
       items: Object.values(catalog.projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: projects, to: `/projects/${p.id}` })),
-    },
-    {
-      value: "runs",
-      label: runs,
-      items: [
-        ...Object.values(catalog.runs)
-          .filter((r) => !r.trashedAt && !r.groupId)
-          .map((r) => ({ id: `run:${r.id}`, label: r.name, group: runs, keywords: "processing run", to: runHref(r) })),
-        ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: runs, keywords: "run group mosaic panels", to: groupHref(g) })),
-      ],
     },
     {
       value: "sessions",

@@ -167,6 +167,21 @@
       }
     }
   ],
+  "issue_needs_calibration": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} needs calibration",
+        "countPlural=*": "{count} need calibration"
+      }
+    }
+  ],
   "issue_not_in_project": [
     {
       "declarations": [
@@ -6609,6 +6624,7 @@
   "settings_developer_mode_off": "Off",
   "settings_open_windows_settings": "Open Windows settings",
   "onboarding_check_developer_mode": "Turn on Windows Developer Mode",
+  "onboarding_check_apply": "Apply your first Project",
   "location_symlinks_supported": "Supported",
   "import_flow_title": "Import",
   "calibration_process_title": "Process",
@@ -6948,6 +6964,8 @@
   "simulation_run_writes_outputs": "The application writes outputs",
   "simulation_this_run_title": "This run: {name}",
   "simulation_this_run_description": "Changes the simulated application and disk for the run on screen.",
+  "simulation_this_project_description": "Changes the simulated application and disk for the Project on screen.",
+  "simulation_this_project_title": "This Project: {name}",
   "simulation_actions_title": "Actions",
   "simulation_quick_actions": "Quick actions",
   "simulation_quick_actions_detail": "One-click runs Restore run, Reopen run, marks on more than 20 frames, Pick the rest, and Home's Add to run, Add to Plan, Scan and Rescan where they are, with Undo where they have one. Open page sends each to the page that owns it.",
@@ -7059,6 +7077,9 @@
   "simulation_confirm_demo_change": "Replace the catalog with the demo library ({projects})",
   "simulation_confirm_empty_change": "Remove every location, session, Project and run; onboarding starts again",
   "simulation_sheet_description": "Prototype controls. They change the simulated disk outside PlateVault; PlateVault notices on its next read.",
+  "simulation_rerun_wbpp": "Rerun WBPP",
+  "simulation_view_file_held": "A tool holds a file in View",
+  "simulation_view_file_held_detail": "Apply waits after its build until the file is released.",
   "prototype_controls_title": "Prototype: {title}",
   "prototype_controls_note": "Simulates changes outside PlateVault for review. Not part of the product.",
   "seed_project_cygnus_notes": "Wide HOO of the North America and Pelican region; the OSC rig adds dual-band data.",
@@ -7705,8 +7726,10 @@
   "calibration_hidden_on": "Hidden on",
   "calibration_hidden_masters": "Hidden masters",
   "catalogue_templates_fill_toggle": "Full-height step",
-  "catalogue_templates_list_path_desc": "A list page inside an object: the path names its parents, the way a Project's Trash reads Projects › the Project › Trash. Only the title names the window tab.",
+  "catalogue_templates_list_path_desc": "A list page inside an object: the path names its parents, the way a Project's sessions read Projects › the Project › Sessions. Only the title names the window tab.",
   "catalogue_templates_search_runs": "Search runs",
+  "catalogue_templates_search_sessions": "Search sessions",
+  "catalogue_templates_wrapup_steps": "Wrap up steps",
   "catalogue_datatable_fill": "Fill a fixed-height body",
   "catalogue_datatable_destination_nas": "Archive NAS",
   "catalogue_datatable_destination_cold": "Cold storage",
@@ -7725,6 +7748,39 @@
       "match": {
         "countPlural=one": "{name} is old · in {count} unfinished run",
         "countPlural=*": "{name} is old · in {count} unfinished runs"
+      }
+    }
+  ],
+  "issue_apply_refused": "{name}: Apply refused",
+  "issue_pin_drift": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} pinned file changed",
+        "countPlural=*": "{name}: {count} pinned files changed"
+      }
+    }
+  ],
+  "issue_previous_review": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} in View (previous)",
+        "countPlural=*": "{name}: {count} in View (previous)"
       }
     }
   ],

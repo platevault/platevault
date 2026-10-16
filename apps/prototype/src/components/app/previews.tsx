@@ -11,14 +11,15 @@
  * - BlockersPreview: why an action is unavailable, one row per blocker,
  *   linked to where it can be resolved. Wraps an unavailable control, or
  *   renders its own "reason ▸" trigger beside a refusal line.
- * - UsedByPreview: "Used by 6 runs ▸", a link to the full list, previewing
- *   the first rows.
+ * - UsedByPreview: "Used by 6 sessions ▸", a link to the full list,
+ *   previewing the first rows.
  * - MasterPreview: a calibration master's name, a link to it in the
- *   Calibration library, previewing its facts (kind, camera, gain · offset,
- *   temperature, exposure, frames, night), its age badge and how many runs
- *   use it. The card holds no controls, so it takes no focus. Compact, the
- *   trigger is an icon link beside a control that already shows the name
- *   (a master picker), and the card takes the name as its title.
+ *   Calibration library, previewing one version's facts (kind, camera,
+ *   gain · offset, temperature, exposure, frames, night), its age badge and
+ *   how many Projects use it. The card holds no controls, so it takes no
+ *   focus. Compact, the trigger is an icon link beside a control that
+ *   already shows the name (a master picker), and the card takes the name
+ *   as its title.
  *
  * The card opens over the page, so nothing moves when it opens (C-8).
  */
@@ -30,7 +31,7 @@ import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { KIND_NAME } from "@/domain/calibration"
 import type { StepLink } from "@/domain/derive"
-import type { CalibrationMaster } from "@/domain/types"
+import type { CalibrationMaster, MasterVersion } from "@/domain/types"
 import { formatCount, formatExposure, formatNight } from "@/lib/format"
 import { say } from "@/lib/i18n"
 import type { Blocker } from "./contracts"
@@ -195,16 +196,17 @@ export interface MasterPreviewProps {
   label: string
   /** The master in the Calibration library: `{ to: "/calibration", search: { master: id } }`. */
   link: StepLink
-  master: Pick<CalibrationMaster, "kind" | "cameraName" | "gain" | "offset" | "ccdTempC" | "exposureS" | "frameCount">
-  /** The night the master was taken, YYYY-MM-DD. */
+  /** The master's settings with the frame count of the version shown. */
+  master: Pick<CalibrationMaster, "kind" | "cameraName" | "gain" | "offset" | "ccdTempC" | "exposureS"> & Pick<MasterVersion, "frameCount">
+  /** The night the version was taken, YYYY-MM-DD. */
   night: string
   /** "Old · 120 d" once the master is past the age limit (`masterAge`); null while it is younger. */
   age: string | null
-  /** How many runs hand the master off (`masterUsage`). */
+  /** How many Projects use the master through their sessions (`masterProjects`). */
   usedBy: number
   /**
    * An icon trigger ("Open master: <name>") for a place that already shows the
-   * name, such as the master picker in an editable run's Calibrate step.
+   * name, such as a session's Calibration table.
    */
   compact?: boolean
 }
@@ -220,7 +222,7 @@ export function MasterPreview({ label, link, master, night, age, usedBy, compact
     { label: m.calibration_key_exposure(), value: master.exposureS === null ? none : formatExposure(master.exposureS) },
     { label: m.calibration_frames(), value: master.frameCount === null ? none : formatCount(master.frameCount) },
     { label: m.tonight_night(), value: formatNight(night, true) },
-    { label: m.calibration_used_by(), value: m.project_runs_count({ count: usedBy }) },
+    { label: m.calibration_used_by(), value: m.about_count_projects({ count: usedBy, n: formatCount(usedBy) }) },
   ]
   const trigger = compact ? (
     <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${m.calibration_open_master()}: ${label}`} render={routerLink(link)} data-master-preview="">
