@@ -1563,11 +1563,14 @@
 }
 
 /* Map picker (issue #491) — click sets lat/long; fields stay the source of
-   truth and recenter the pin when edited directly. */
+   truth and recenter the pin when edited directly. In the Settings site form
+   the section sits in `.pv-equipment__form-grid`; it spans the full row so the
+   map, or its placeholder, sits above the fields as in the wizard step. */
 .pv-step-site__map-section {
   display: flex;
   flex-direction: column;
   gap: var(--pv-sp-2);
+  grid-column: 1 / -1;
 }
 
 .pv-step-site__map {
@@ -1576,6 +1579,25 @@
   border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   overflow: hidden;
+}
+
+/* Placeholder shown until the user asks for the map (astro-plan-pil2e): no
+   OpenStreetMap tile request happens before "Show map" is clicked. */
+.pv-step-site__map-placeholder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-3);
+  border: 1px dashed var(--pv-border);
+  border-radius: var(--pv-radius-md);
+}
+
+.pv-step-site__map-notice {
+  flex: 1 1 240px;
+  margin: 0;
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-secondary);
 }
 
 .pv-step-site__map-unavailable {

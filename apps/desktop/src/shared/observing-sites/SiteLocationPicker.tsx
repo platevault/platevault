@@ -3,13 +3,14 @@
 
 // Observing Site: interactive map picker (spec 044 journey-1, issue #491).
 //
-// Shared by the first-run wizard (StepSite) and the Settings site form
-// (ObservingSites). Leaflet replaces maplibre-gl: same click-to-pick
-// semantics, ~5× smaller chunk (~240 KB raw vs ~1.1 MB), no WebGL required.
+// Mounted only by SiteMapSection, after the user clicks "Show map", so no
+// OpenStreetMap tile request happens before that (astro-plan-pil2e). Leaflet
+// replaces maplibre-gl: same click-to-pick semantics, ~5× smaller chunk
+// (~240 KB raw vs ~1.1 MB), no WebGL required.
 //
-// Top-level Leaflet import is intentional — React.lazy in StepSite and
-// ObservingSites splits this whole module (and Leaflet) into a separate chunk
-// that loads only when the map section mounts.
+// Top-level Leaflet import is intentional — React.lazy in SiteMapSection
+// splits this whole module (and Leaflet) into a separate chunk that loads
+// only when the user asks for the map.
 //
 // The numeric lat/lon fields remain the source of truth — this component
 // translates between them and the map: a click fires `onPick`, and a prop
@@ -155,6 +156,10 @@ export function SiteLocationPicker({
     });
 
     mapRef.current = map;
+    // The map mounts in response to "Show map", which unmounts that button;
+    // move focus to the map (Leaflet makes its container focusable) so
+    // keyboard and screen-reader users are not dropped to the page body.
+    containerRef.current.focus({ preventScroll: true });
 
     return () => {
       map.remove();

@@ -20,19 +20,11 @@
  * parameterised add/edit form, not a per-pane clone.
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
 import { ConfirmModal } from '@/components';
 import { m } from '@/lib/i18n';
-
-// Leaflet is ~240 KB raw. Lazy-load so it splits to its own chunk and only
-// loads when the add/edit form mounts for the first time.
-const SiteLocationPicker = lazy(() =>
-  import('@/shared/observing-sites/SiteLocationPicker').then((mod) => ({
-    default: mod.SiteLocationPicker,
-  })),
-);
 
 /** Parsed coordinate for the map pin, or `null` when blank/invalid mid-edit. */
 function parsedCoord(text: string): number | null {
@@ -47,6 +39,7 @@ import {
   useObservingState,
   saveSites,
 } from '@/shared/observing-sites/site-store';
+import { SiteMapSection } from '@/shared/observing-sites/SiteMapSection';
 import type {
   ObserverSite,
   Twilight,
@@ -418,30 +411,17 @@ export function ObservingSites() {
           onCancel={() => setForm(null)}
           onSave={handleSubmit}
         >
-          <div className="pv-step-site__map-section">
-            <span className="pv-field-label">{m.setup_site_map_label()}</span>
-            <Suspense
-              fallback={
-                <div
-                  className="pv-step-site__map"
-                  role="status"
-                  aria-label={m.setup_site_map_label()}
-                />
-              }
-            >
-              <SiteLocationPicker
-                latitudeDeg={parsedCoord(form.latitudeDegText)}
-                longitudeDeg={parsedCoord(form.longitudeDegText)}
-                onPick={(lat, lon) =>
-                  setForm({
-                    ...form,
-                    latitudeDegText: lat.toFixed(5),
-                    longitudeDegText: lon.toFixed(5),
-                  })
-                }
-              />
-            </Suspense>
-          </div>
+          <SiteMapSection
+            latitudeDeg={parsedCoord(form.latitudeDegText)}
+            longitudeDeg={parsedCoord(form.longitudeDegText)}
+            onPick={(lat, lon) =>
+              setForm({
+                ...form,
+                latitudeDegText: lat.toFixed(5),
+                longitudeDegText: lon.toFixed(5),
+              })
+            }
+          />
           <div className="pv-stack-1">
             <label className="pv-field-label" htmlFor="observing-site-name">
               {m.settings_observing_sites_field_name()}

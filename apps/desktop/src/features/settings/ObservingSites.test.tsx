@@ -123,6 +123,12 @@ describe('ObservingSites', () => {
         target: { value: '4.9' },
       },
     );
+    // Typed coordinates need no map: it stays behind "Show map", so the form
+    // makes no OpenStreetMap request (astro-plan-pil2e).
+    expect(
+      screen.getByRole('button', { name: m.setup_site_map_show() }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('application')).not.toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByText(m.common_save()));
