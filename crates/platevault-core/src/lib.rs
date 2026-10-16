@@ -23,6 +23,7 @@ pub mod observing_plans;
 pub mod planning;
 pub mod planning_project;
 pub mod prepare;
+pub mod project_output;
 pub mod project_progress;
 pub mod projects;
 pub mod reminders;

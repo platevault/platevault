@@ -175,6 +175,12 @@ pub use results::{
     DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
     VerifiedAcceptance, VerifiedProduct,
 };
+// A Project's `Output/`, Copy to Output and the Processing master offer's
+// hand-off (spec 070, F4).
+mod project_output;
+pub use project_output::{
+    OutputBasis, OutputCopy, OutputFolder, OutputPanel, OutputScan, OutputScanRecord, ScannedOutput,
+};
 mod cleanup;
 pub use cleanup::{
     CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, RunCleanupDraft,
@@ -195,6 +201,9 @@ pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 // The F4 admission contract (only Ready, calibration-settled sessions join a
 // Project); its `require_admission` runs inside membership-add transactions.
 mod admission;
+// One PlateVault operation per Project: Apply, Copy to Output and Wrap up
+// reserve the Project before any file effect (PREP-FR-19).
+mod project_operations;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -44,6 +44,57 @@ WHEN NEW.panel_group_id IS NOT NULL AND NOT EXISTS (
 )
 BEGIN SELECT RAISE(ABORT, 'an Output file belongs only to a panel group of its Project'); END;
 
+-- A Closed Project's Output step is read-only (RES-FR-07): its observations,
+-- Kinds and Channels stay as they were when it closed.
+CREATE TRIGGER IF NOT EXISTS project_outputs_open_insert
+BEFORE INSERT ON project_outputs
+WHEN (SELECT lifecycle FROM projects WHERE id = NEW.project_id) IS NOT 'open'
+BEGIN SELECT RAISE(ABORT, 'a Closed Project''s Output is read-only'); END;
+
+CREATE TRIGGER IF NOT EXISTS project_outputs_open_update
+BEFORE UPDATE ON project_outputs
+WHEN (SELECT lifecycle FROM projects WHERE id = OLD.project_id) IS NOT 'open'
+    OR NEW.project_id IS NOT OLD.project_id OR NEW.path_key IS NOT OLD.path_key
+BEGIN SELECT RAISE(ABORT, 'a Closed Project''s Output is read-only'); END;
+
+CREATE TRIGGER IF NOT EXISTS project_outputs_open_delete
+BEFORE DELETE ON project_outputs
+WHEN (SELECT lifecycle FROM projects WHERE id = OLD.project_id) IS NOT 'open'
+BEGIN SELECT RAISE(ABORT, 'a Closed Project''s Output is read-only'); END;
+
+-- A Copy to Output in flight (RES-FR-02): the Project's `copy_to_output`
+-- operation, the storage journal operation that copies the file, and the
+-- `OutputObservation` JSON it lists once the copy verifies. The row goes when
+-- the copy settles, so nothing durable links a Result to its source.
+CREATE TABLE IF NOT EXISTS output_copies (
+    operation_id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL,
+    storage_operation_id TEXT NOT NULL UNIQUE REFERENCES storage_operations (id),
+    path_key BLOB NOT NULL,
+    observation TEXT NOT NULL,
+    UNIQUE (project_id, path_key),
+    FOREIGN KEY (project_id, operation_id) REFERENCES project_operations (project_id, id),
+    CHECK (json_extract(observation, '$.origin') = 'copied'),
+    CHECK (json_extract(observation, '$.sha256') IS NOT NULL)
+) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS output_copies_reserved
+BEFORE INSERT ON output_copies
+WHEN NOT EXISTS (
+    SELECT 1 FROM project_operations
+    WHERE id = NEW.operation_id AND project_id = NEW.project_id AND kind = 'copy_to_output'
+        AND state = 'active'
+)
+BEGIN SELECT RAISE(ABORT, 'a Copy to Output runs under the Project''s active copy operation'); END;
+
+-- A Copy to Output's operation settles only after its copy has.
+CREATE TRIGGER IF NOT EXISTS project_operations_copy_settled
+BEFORE UPDATE OF state ON project_operations
+WHEN NEW.state = 'settled' AND OLD.kind = 'copy_to_output' AND EXISTS (
+    SELECT 1 FROM output_copies WHERE operation_id = OLD.id
+)
+BEGIN SELECT RAISE(ABORT, 'a Copy to Output settles its copy first'); END;
+
 -- CAL's once-only offer (`ProcessingMasterOffer` JSON in `offer`): a digest
 -- is offered once per Project, whatever path a rerun writes it to.
 CREATE TABLE IF NOT EXISTS processing_master_offers (

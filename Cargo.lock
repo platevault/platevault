@@ -4807,8 +4807,10 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "calibration_master_detect",
+ "camino",
  "csv",
  "fs4",
+ "fs_inventory",
  "fs_pathsafe",
  "hex",
  "jiff",
@@ -4833,10 +4835,12 @@ dependencies = [
  "thiserror 2.0.19",
  "time",
  "tokio",
+ "tracing",
  "trash",
  "unicode-normalization",
  "uuid",
  "winapi-util",
+ "workflow_artifacts",
 ]
 
 [[package]]
