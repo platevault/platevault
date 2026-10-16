@@ -9,7 +9,7 @@
  *
  * The domain carries no copy: rows and the status bar word each issue by its
  * `kind`, `count`, `name` and `bytes` from the message catalogue
- * (`issueCopy`, src/components/app/issue-row.tsx). The Old badge of a dark or
+ * (`issueCopy`, src/components/app/issue-copy.ts). The Old badge of a dark or
  * bias master is a library badge only, never an issue (CAL-FR-15).
  */
 import { sessionPinProblems, versionDrift } from "./calibration"

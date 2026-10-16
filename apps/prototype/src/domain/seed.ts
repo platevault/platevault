@@ -314,6 +314,9 @@ function baseFiles(): DiskFile[] {
     ...light(A, "Captures/NGC7000/2026-10-02/Ha", "Light_NGC7000_300s_Ha", 10, "2026-10-02T19:40:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     // No OBJECT and no pointing: the Target stays unresolved.
     ...light(A, "Captures/Unsorted/2026-09-22", "Light_300s_Ha", 10, "2026-09-22T21:10:00Z", 300, "Ha", null, null),
+    // No OBJECT, but the pointing falls inside NGC 6888: indexing associates the Crescent Nebula from the pointing alone, and
+    // until the user confirms it the session's Target step shows that suggestion (targetAtPointing; astro-plan-tcdx0).
+    ...light(A, "Captures/Unsorted/2026-09-25", "Light_300s_Ha_B", 12, "2026-09-25T21:20:00Z", 300, "Ha", null, { ra: 303.0, dec: 38.35, rotationDeg: rot }),
     // NGC 7000 on Esprit 100 / ASI533MC (OSC, L-eXtreme): 180 s lights; their 180 s darks arrived later (5 Oct).
     ...osc("Captures/NGC7000/2026-09-21/OSC", "Light_NGC7000_180s_LeX", 40, "2026-09-21T20:30:00Z"),
     ...osc("Captures/NGC7000/2026-10-01/OSC", "Light_NGC7000_180s_LeX", 30, "2026-10-01T20:00:00Z"),
@@ -842,6 +845,7 @@ function demoSeed(): SeedData {
     oiii0930: session("2026-09-30", "OIII"),
     ha1002: session("2026-10-02", "Ha"),
     unsorted: session("2026-09-22", "Ha"),
+    crescent: session("2026-09-25", "Ha"),
     osc0921: session("2026-09-21", "L-eXtreme"),
     osc1001: session("2026-10-01", "L-eXtreme"),
     p1ha: session("2026-09-13", "Ha"),
@@ -864,6 +868,8 @@ function demoSeed(): SeedData {
   // Rig confirmed, Target still unresolved: these sessions need a Target.
   confirm(catalog, s.cygnus0926, null, RIG.redcat)
   confirm(catalog, s.unsorted, null, RIG.redcat)
+  // Rig confirmed, Target only associated by its pointing: the Target step suggests it until confirmed.
+  confirm(catalog, s.crescent, null, RIG.redcat)
   // Confirming a rig matches what still waits again (its camera and rig version are now known); pins stay.
   catalog = calibrateSessions(catalog, disk, settings, "2026-10-04T09:00:00.000Z")
 

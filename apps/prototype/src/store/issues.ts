@@ -1,8 +1,8 @@
 /**
- * Issues and source-list counts as hooks (foundation-owned). The toolbar's
- * Issues hub, the status bar's severity counters and the source-list badges
- * read the same derivations (`src/domain/issues.ts`), so their numbers
- * always agree.
+ * Issues and source-list counts as hooks (foundation-owned). The status
+ * bar's severity counters, the rows that show their own issues and the
+ * source-list badges read the same derivations (`src/domain/issues.ts`), so
+ * their numbers always agree. There is no Issues hub (F7).
  *
  * Dismissals (P-ISS1): `PrototypeState.issuesDismissed` holds the
  * fingerprints of dismissed issues. A dismissed issue is hidden from every
@@ -13,7 +13,7 @@
 import { blockedProjectCount, deriveIssues, type Issue, issueFingerprint, type IssueSeverity, isDismissable, worstSeverity } from "@/domain/issues"
 import { type PrototypeState, store, useStore } from "./core"
 
-/** Derived once per state version: the hub and the status bar both read it. */
+/** Derived once per state version: the status bar and the rows all read it. */
 let cached: { state: PrototypeState; issues: Issue[] } | null = null
 
 function selectIssues(s: PrototypeState): Issue[] {
@@ -22,9 +22,9 @@ function selectIssues(s: PrototypeState): Issue[] {
 }
 
 export interface IssueView {
-  /** Issues not dismissed, in hub order: every count, badge and tint reads these. */
+  /** Issues not dismissed, in group order: every count, badge and tint reads these. */
   issues: Issue[]
-  /** Dismissed issues, in hub order. */
+  /** Dismissed issues, in group order. */
   dismissed: Issue[]
   /** Worst severity among `issues`. */
   worst: IssueSeverity | null
@@ -57,7 +57,7 @@ function setDismissed(update: (fingerprints: string[]) => string[]) {
   })
 }
 
-/** Hide `issue` until it changes. A run's next step cannot be dismissed. */
+/** Hide `issue` until it changes. A Project's own waiting work cannot be dismissed. */
 export function dismissIssue(issue: Issue) {
   if (!isDismissable(issue)) return
   const fingerprint = issueFingerprint(issue)
@@ -90,7 +90,7 @@ function selectNavCounts(s: PrototypeState) {
   return { sessions, projects: blockedProjectCount(s) }
 }
 
-/** Source-list badges: Sessions that need attention (as their issues not dismissed), open Projects with a blocked run. */
+/** Source-list badges: Sessions that need attention (as their issues not dismissed), open Projects waiting on the user. */
 export function useNavCounts(): { sessions: number; projects: number } {
   return useStore(selectNavCounts)
 }

@@ -21,6 +21,7 @@ import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
+import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { GradeBadges } from "@/components/domain/grade-badges"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
@@ -28,6 +29,7 @@ import { formatHours, liveLightSessions, rigFieldOfView, rigName, sessionRigId, 
 import { objectTypeRef } from "@/domain/labels"
 import { captureSite, targetCoverage } from "@/domain/library"
 import { nightPlan } from "@/domain/planning"
+import { sessionDuplicateCopies } from "@/domain/storage"
 import type { Catalog, Project, Session } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
@@ -75,6 +77,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
+  const duplicates = useStore(sessionDuplicateCopies)
   const curves = useStore((s) => s.settings.moonAvoidance)
   const ctx = useSkyContext(search.night)
   const night = planNight(ctx)
@@ -153,7 +156,23 @@ function TargetDetail({ targetId }: { targetId: string }) {
   ]
 
   const sessionColumns: Column<Session>[] = [
-    { id: "night", header: m.tonight_night(), rowHeader: true, sortValue: (s) => s.night, cell: (s) => formatNight(s.night, true) },
+    {
+      id: "night",
+      header: m.tonight_night(),
+      rowHeader: true,
+      sortValue: (s) => s.night,
+      // F5: the same duplicates badge as the session's row in Sessions.
+      cell: (s) => {
+        const copies = duplicates.get(s.id) ?? 0
+        return copies > 0 ? (
+          <>
+            {formatNight(s.night, true)} <DuplicatesBadge count={copies} />
+          </>
+        ) : (
+          formatNight(s.night, true)
+        )
+      },
+    },
     { id: "channel", header: m.target_channel(), sortValue: (s) => s.channel, cell: (s) => s.channel ?? "–" },
     { id: "frames", header: m.calibration_frames(), align: "right", sortValue: (s) => frames(s), cell: (s) => frames(s) },
     { id: "rig", header: m.targets_rig(), truncate: true, sortValue: (s) => rigName(m, catalog, sessionRigId(s)), cell: (s) => rigName(m, catalog, sessionRigId(s)) },

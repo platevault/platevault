@@ -58,6 +58,24 @@ describe("Session intake gates (U11 sessionIntake)", () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ step: sessionRigId(session!) ? "review" : "rig" }))
   })
 
+  it("suggests the Target a demo session's pointing falls in, and Confirm Target settles it (astro-plan-tcdx0)", async () => {
+    const state = store.getState()
+    const suggestion = (s: Session) => (s.pointing ? targetAtPointing(state.catalog, s.pointing.ra, s.pointing.dec) : null)
+    const session = lightSessions().find((s) => s.target.status !== "confirmed" && suggestion(s) !== null)
+    expect(session, "the demo seed holds a session with no confirmed Target whose pointing suggests one").toBeDefined()
+    const suggested = suggestion(session!)!
+    expect(state.catalog.targets[suggested.id]?.name, "the suggestion is a catalogue Target in the library").toBe(suggested.name)
+    const user = userEvent.setup()
+    renderIntake(session!.id, "target")
+    // Its rig is confirmed and its frames wait for review, so Target is an earlier step: its change is the step's own Confirm Target (F8).
+    const confirm = await screen.findByRole("button", { name: m.session_confirm_target() })
+    const value = (label: string) => screen.getAllByRole("term").find((dt) => dt.textContent === label)?.nextElementSibling?.textContent
+    expect(value(m.evidence_source_pointing())).toBe(suggested.name)
+    expect(value(m.session_chosen_target())).toBe(suggested.name)
+    await user.click(confirm)
+    await waitFor(() => expect(store.getState().catalog.sessions[session!.id]!.target).toMatchObject({ status: "confirmed", value: suggested.id }))
+  })
+
   it("Finish review stays unavailable while a frame is Unreviewed, and writes nothing", async () => {
     const state = store.getState()
     const session = lightSessions().find((s) => sessionReadiness(state.catalog, s) === "needs-review")

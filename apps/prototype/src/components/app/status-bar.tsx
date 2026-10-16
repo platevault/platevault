@@ -1,7 +1,7 @@
 /**
- * Status bar parts (L2; round 1b "Status bar", round 5 P-SB3): the window's
- * full bottom bar, plain text and glyphs only, no pill backgrounds, and the
- * list popovers that open from it and from the toolbar's Issues.
+ * Status bar parts (L2; round 1b "Status bar", round 5 P-SB3, F7): the
+ * window's full bottom bar, plain text and glyphs only, no pill backgrounds,
+ * and the list popovers that open from it.
  *
  * - `StatusBar`: the `footer` (contentinfo) with a start, a centred middle
  *   and an end, plus one polite live region. The host passes only phase
@@ -13,21 +13,27 @@
  * - `StatusText`, `StatusSelection`: plain words, and the selection count.
  * - `StatusOperation` and `MiniProgress`: one running operation; inline,
  *   Cancel shows on hover or focus in place of what ends the item.
+ * - `StatusCounter`: a glyph and a count that opens the page it counts on
+ *   (F7): one page at once, several through a menu naming each page with
+ *   its count, never a list of the issues themselves.
  * - `ListPopover`: a trigger (glyph plus count) that opens a list panel with
- *   a header. Its body is `ListRows` (rows such as IssueRow), `ListSection`
- *   (a named group), `ListEmpty`, `ListFold` (a folded group with one
- *   action, the Issues hub's "Dismissed (N)") and `ListNotice` rows.
+ *   a header. Its body is `ListRows` with `ListNotice` or
+ *   `ListOperationRow` rows.
  */
 import { Link } from "@tanstack/react-router"
-import { ChevronRight, CircleCheck, Info, type LucideIcon, OctagonX, SquareCheck, TriangleAlert, X } from "lucide-react"
+import { CircleCheck, Info, type LucideIcon, OctagonX, SquareCheck, TriangleAlert, X } from "lucide-react"
 import type { ReactElement, ReactNode, Ref } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import type { StepLink } from "@/domain/derive"
 import { cn } from "@/lib/utils"
+import { MenuItems, useAction } from "./actions"
+import type { MenuItem } from "./contracts"
+import { useFollowLink } from "./links"
 
 /** Data attributes a host passes through for its own focus moves and tests. */
 type DataAttributes = { [key: `data-${string}`]: string | number | boolean | undefined }
@@ -196,6 +202,68 @@ export function StatusOperation({ id, title, href, value, word, onCancel, expand
 }
 
 // ---------------------------------------------------------------------------
+// Issue counters
+// ---------------------------------------------------------------------------
+
+/** A page a counter leads to: the owning page, filtered to the rows the issues are on. */
+export interface StatusCounterPage {
+  id: string
+  /** The page and its count: "Sessions › Needs a Target (3)". */
+  label: string
+  link: StepLink
+}
+
+export interface StatusCounterProps extends DataAttributes {
+  /** What the count is: "2 warnings". */
+  label: string
+  icon: LucideIcon
+  tone: ListTone
+  count: number
+  /** One page opens at once; several open a menu naming each page with its count. */
+  pages: StatusCounterPage[]
+}
+
+/** A count in the bar that opens where its issues are (F7): never a list of the issues, so Dismiss and Restore stay on the rows. */
+export function StatusCounter({ label, icon: Icon, tone, count, pages, ...data }: StatusCounterProps) {
+  const runner = useAction()
+  const follow = useFollowLink()
+  const glyph = (
+    <>
+      <Icon aria-hidden="true" className={cn("size-3", TONE_TEXT[tone])} />
+      {count}
+    </>
+  )
+  const look = "shrink-0 gap-1 px-1 text-muted-foreground"
+  const only = pages.length === 1 ? pages[0] : undefined
+  if (only) {
+    const name = `${label}: ${only.label}`
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button variant="ghost" size="xs" className={look} render={<Link to={only.link.to as never} params={only.link.params as never} search={only.link.search as never} />} aria-label={name} {...data}>
+              {glyph}
+            </Button>
+          }
+        />
+        <TooltipContent side="top">{name}</TooltipContent>
+      </Tooltip>
+    )
+  }
+  const items: MenuItem[] = [{ heading: label }, ...pages.map((page) => ({ id: page.id, label: page.label, run: () => follow(page.link) }))]
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="xs" className={look} />} aria-label={label} {...data}>
+        {glyph}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="end" className="w-auto min-w-48">
+        <MenuItems items={items} runner={runner} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // List popovers
 // ---------------------------------------------------------------------------
 
@@ -268,7 +336,7 @@ export function ListPopover({ open, onOpenChange, trigger, label, title, meta, l
   )
 }
 
-/** The rows of a list popover (IssueRow, ListNotice, operations). `dense` for operation rows. */
+/** The rows of a list popover (ListNotice, operations). `dense` for operation rows. */
 export function ListRows({ ref, dense = false, children }: { ref?: Ref<HTMLUListElement>; dense?: boolean; children: ReactNode }) {
   return (
     <ul ref={ref} className={cn("py-1", dense && "text-xs")}>
@@ -280,54 +348,6 @@ export function ListRows({ ref, dense = false, children }: { ref?: Ref<HTMLUList
 /** One row that holds a status operation in the "+N" popover. */
 export function ListOperationRow({ children }: { children: ReactElement }) {
   return <li className="flex min-h-(--row-h) items-center px-3">{children}</li>
-}
-
-/** A named group of rows: the Issues hub's Sessions, Locations, Runs. */
-export function ListSection({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section aria-label={label} className="border-b border-border py-1 last-of-type:border-0">
-      <h3 data-chrome className="px-3 py-1 text-xs font-semibold text-muted-foreground">
-        {label}
-      </h3>
-      <ul>{children}</ul>
-    </section>
-  )
-}
-
-/** The panel's empty state: one line. */
-export function ListEmpty({ children }: { children: ReactNode }) {
-  return <p className="px-3 py-4 text-sm text-muted-foreground">{children}</p>
-}
-
-export interface ListFoldProps {
-  /** "Dismissed (2)". */
-  label: string
-  /** One action on the whole group: "Restore all". */
-  action?: { label: string; onRun: () => void }
-  ref?: Ref<HTMLDivElement>
-  children: ReactNode
-}
-
-/** A folded group at the end of a panel, with one action on all of it. The trigger is `[data-list-fold-trigger]`, for a host's focus moves. */
-export function ListFold({ label, action, ref, children }: ListFoldProps) {
-  return (
-    <Collapsible ref={ref} className="border-t border-border" data-list-fold="">
-      <div data-chrome className="flex items-center gap-2 px-1.5 py-1">
-        <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="text-muted-foreground" />} data-list-fold-trigger="">
-          <ChevronRight aria-hidden="true" className="transition-transform group-data-panel-open/button:rotate-90 motion-reduce:transition-none" />
-          {label}
-        </CollapsibleTrigger>
-        {action ? (
-          <Button variant="link" size="xs" className="ml-auto" onClick={action.onRun} data-list-fold-action="">
-            {action.label}
-          </Button>
-        ) : null}
-      </div>
-      <CollapsibleContent>
-        <ul className="pb-1">{children}</ul>
-      </CollapsibleContent>
-    </Collapsible>
-  )
 }
 
 const NOTICE_GLYPH: Record<"success" | "warning" | "danger" | "neutral", { icon: LucideIcon; tone: ListTone }> = {

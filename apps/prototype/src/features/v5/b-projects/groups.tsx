@@ -17,6 +17,7 @@ import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { SelectField, SwitchField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
 import { useFollowLink } from "@/components/app/links"
+import { DuplicatesBadge } from "@/components/domain/duplicates-badge"
 import { MosaicField, mosaicFieldModel } from "@/components/domain/mosaic-field"
 import type { DetailSection } from "@/components/templates/detail-page"
 import { KIND_NAME } from "@/domain/calibration"
@@ -38,6 +39,7 @@ import {
 } from "@/domain/derive"
 import { framesRef } from "@/domain/membership"
 import { CHANGE_SOURCE_NAME, groupFolder, groupInputs, panelGroupName, type PendingChange, pendingChanges, splitGroupName } from "@/domain/project-view"
+import { sessionDuplicateCopies } from "@/domain/storage"
 import type { Catalog, Project, ProjectGroup, ProjectGroupId, ProjectInput, Session, SessionId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
@@ -47,6 +49,18 @@ import { AddSessionsDialog } from "./add-sessions"
 import { framingLine, sessionLine, sessionSubjectName, unavailableFor as blocked } from "./parts"
 
 const openSession = (navigate: ReturnType<typeof useNavigate>, sessionId: string) => void navigate({ to: "/sessions/$sessionId", params: { sessionId } })
+
+/** A session row's own cell: its line, with the F5 duplicates badge when its frames have extra copies (the same badge as Sessions). */
+function SessionCell({ session }: { session: Session }) {
+  const m = useMessages()
+  const copies = useStore(sessionDuplicateCopies).get(session.id) ?? 0
+  if (copies === 0) return sessionLine(m, session)
+  return (
+    <>
+      {sessionLine(m, session)} <DuplicatesBadge count={copies} />
+    </>
+  )
+}
 
 /** A pending change in its row's own terms, with its source: "Moved from RedCat 51 (Project)", "Dark changed (Calibration)". */
 function pendingLine(m: Messages, project: Project, change: PendingChange): string {
@@ -268,7 +282,7 @@ export function useHeldSection(project: Project): DetailSection {
   const framing = (r: HeldRow) => framingLine(m, catalog, r.session)
   const pending = (r: HeldRow) => pendingCell(m, project, changes, ofSession(r.session.id))
   const columns: Column<HeldRow>[] = [
-    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
+    { id: "session", header: m.project_col_session(), cell: (r) => <SessionCell session={r.session} />, sortValue: (r) => r.session.night, rowHeader: true },
     { id: "subject", header: m.project_col_subject(), cell: (r) => sessionSubjectName(m, catalog, project, r.session), sortValue: (r) => sessionSubjectName(m, catalog, project, r.session), truncate: true },
     { id: "rig", header: m.project_col_rig(), cell: rigOf, sortValue: rigOf, truncate: true },
     { id: "framing", header: m.project_col_framing(), cell: framing, sortValue: framing, truncate: true },
@@ -483,7 +497,7 @@ export function useSuggestionsSection(project: Project): DetailSection | null {
   const status = (r: Suggestion) => (r.blocked ? say(m, r.blocked) : m.status_ready())
   const reason = (r: Suggestion) => say(m, r.reason)
   const columns: Column<Suggestion>[] = [
-    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
+    { id: "session", header: m.project_col_session(), cell: (r) => <SessionCell session={r.session} />, sortValue: (r) => r.session.night, rowHeader: true },
     { id: "match", header: m.project_col_match(), cell: reason, sortValue: reason, truncate: true },
     { id: "framing", header: m.project_col_framing(), cell: (r) => framingLine(m, catalog, r.session), sortValue: (r) => framingLine(m, catalog, r.session), truncate: true },
     { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(liveAssetIds(catalog, r.session).length), sortValue: (r) => liveAssetIds(catalog, r.session).length, align: "right" },

@@ -80,12 +80,12 @@ function UsedBy({ label, items }: { label: string; items: { label: string; link:
   return <UsedByPreview label={label} link={first.link} items={items} />
 }
 
-/** The rigs a camera, telescope, reducer or filter is on, as a Used by preview. */
+/** The rigs a camera, telescope, reducer or filter is on, as a Used by preview; the column's header says "Rigs", so the count names them. */
 export function RigsUsing({ kind, id }: { kind: Exclude<EquipmentKind, "rig">; id: string }) {
   const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const users = equipmentUsers(catalog, kind, id)
-  return <UsedBy label={m.equipment_used_by_rigs({ count: users.length })} items={users.map((u) => ({ label: say(m, u.label), link: u.link }))} />
+  return <UsedBy label={m.project_rigs_count({ count: users.length })} items={users.map((u) => ({ label: say(m, u.label), link: u.link }))} />
 }
 
 /** Edit…, the one editor of a record. */
@@ -270,12 +270,13 @@ export function CamerasSection() {
   const add: Action = { id: "add-camera", label: m.equipment_add_camera(), opensDialog: true, run: () => setEditing({ camera: null }) }
   const columns: Column<Camera>[] = [
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (c) => c.name, cell: (c) => c.name },
-    { id: "kind", header: m.equipment_camera_kind(), sortValue: (c) => c.kind, cell: (c) => (c.kind === "osc" ? m.equipment_osc() : m.equipment_mono()) },
+    // Kind and source are in the Columns menu (and the details), so the table fits a 1280 px window in both languages.
+    { id: "kind", header: m.equipment_camera_kind(), hideable: true, defaultHidden: true, sortValue: (c) => c.kind, cell: (c) => (c.kind === "osc" ? m.equipment_osc() : m.equipment_mono()) },
     { id: "alias", header: m.equipment_camera_alias(), truncate: true, sortValue: (c) => c.physicalAlias ?? "", cell: (c) => c.physicalAlias ?? "–" },
     { id: "sensor", header: m.equipment_sensor(), align: "right", sortValue: (c) => c.widthPx * c.heightPx, cell: (c) => `${c.widthPx} × ${c.heightPx} px` },
     { id: "pixel", header: m.equipment_pixel_size_short(), align: "right", sortValue: (c) => c.pixelSizeUm, cell: (c) => `${formatDecimal(c.pixelSizeUm, 2)} µm` },
     { id: "rigs", header: m.project_rigs(), sortValue: rigCount, cell: (c) => <RigsUsing kind="camera" id={c.id} /> },
-    { id: "source", header: m.equipment_source(), sortValue: (c) => c.source, cell: (c) => <StatusBadge kind="source" value={c.source} /> },
+    { id: "source", header: m.equipment_source(), hideable: true, defaultHidden: true, sortValue: (c) => c.source, cell: (c) => <StatusBadge kind="source" value={c.source} /> },
   ]
   return (
     <>
@@ -287,6 +288,7 @@ export function CamerasSection() {
           rows: Object.values(catalog.cameras),
           columns,
           getRowId: (c) => c.id,
+          columnsId: "settings.equipment.cameras",
           // Two cameras of one model read apart by their aliases, in their ⋯ menus too.
           rowLabel: cameraLabel,
           initialSort: { columnId: "name", direction: "asc" },
@@ -640,18 +642,19 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (r) => r.name, cell: (r) => r.name },
     { id: "camera", header: m.equipment_camera(), truncate: true, sortValue: cameraName, cell: cameraName },
     { id: "telescope", header: m.equipment_telescope(), truncate: true, sortValue: telescopeName, cell: telescopeName },
-    { id: "reducer", header: m.equipment_reducer(), truncate: true, sortValue: reducerName, cell: reducerName },
+    // Reducer, field of view, version and source are in the Columns menu, so the table fits a 1280 px window in both languages.
+    { id: "reducer", header: m.equipment_reducer(), truncate: true, hideable: true, defaultHidden: true, sortValue: reducerName, cell: reducerName },
     { id: "focal", header: m.run_field_focal_length(), align: "right", sortValue: (r) => r.effectiveFocalLengthMm, cell: (r) => formatMm(r.effectiveFocalLengthMm) },
-    { id: "fov", header: m.equipment_field_of_view(), sortValue: (r) => rigFieldOfView(catalog, r)?.widthDeg ?? null, cell: (r) => formatFov(rigFieldOfView(catalog, r)) },
+    { id: "fov", header: m.equipment_field_of_view(), hideable: true, defaultHidden: true, sortValue: (r) => rigFieldOfView(catalog, r)?.widthDeg ?? null, cell: (r) => formatFov(rigFieldOfView(catalog, r)) },
     { id: "filters", header: m.equipment_filters(), truncate: true, sortValue: (r) => r.filterIds.length, cell: (r) => rigFiltersLine(m, catalog, r) },
-    { id: "version", header: m.equipment_version_since(), sortValue: (r) => r.versionFrom, cell: (r) => formatNight(r.versionFrom, true) },
+    { id: "version", header: m.equipment_version_since(), hideable: true, defaultHidden: true, sortValue: (r) => r.versionFrom, cell: (r) => formatNight(r.versionFrom, true) },
     {
       id: "projects",
       header: m.calibration_used_by(),
       sortValue: (r) => projectsOf(r).length,
-      cell: (r) => <UsedBy label={m.equipment_used_by_projects({ count: projectsOf(r).length })} items={projectsOf(r).map((p) => ({ label: p.name, link: { to: "/projects/$projectId", params: { projectId: p.id } } }))} />,
+      cell: (r) => <UsedBy label={m.projects_count({ count: projectsOf(r).length })} items={projectsOf(r).map((p) => ({ label: p.name, link: { to: "/projects/$projectId", params: { projectId: p.id } } }))} />,
     },
-    { id: "source", header: m.equipment_source(), sortValue: (r) => r.source, cell: (r) => <StatusBadge kind="source" value={r.source} /> },
+    { id: "source", header: m.equipment_source(), hideable: true, defaultHidden: true, sortValue: (r) => r.source, cell: (r) => <StatusBadge kind="source" value={r.source} /> },
   ]
   return (
     <>
@@ -663,6 +666,7 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
           rows: Object.values(catalog.opticalTrains),
           columns,
           getRowId: (r) => r.id,
+          columnsId: "settings.equipment.rigs",
           rowLabel: (r) => r.name,
           activeRowId: activeRigId,
           initialSort: { columnId: "name", direction: "asc" },

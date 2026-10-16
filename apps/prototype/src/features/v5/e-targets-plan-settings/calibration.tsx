@@ -561,6 +561,7 @@ export function CalibrationPage() {
           rows: shown,
           columns: masterColumns(m, catalog, pins, oldLabel),
           getRowId: (master) => master.id,
+          columnsId: "calibration.masters",
           groups: { key: (master) => master.kind, label: (key, rows) => <>{kindHeading(m, key as CalibrationKind)} <CountBadge count={rows.length} /></>, compare: byKind },
           initialSort: { columnId: "night", direction: "desc" },
           activeRowId: detailId,
@@ -589,10 +590,11 @@ function masterColumns(m: Messages, catalog: Catalog, pins: ReadonlyMap<MasterId
   return [
     { id: "master", header: m.calibration_master(), cell: label, sortValue: label, rowHeader: true, truncate: true },
     { id: "filter", header: m.tonight_filter(), truncate: true, cell: (master) => master.channel ?? "–", sortValue: (master) => master.channel ?? "" },
-    { id: "exposure", header: m.calibration_key_exposure(), cell: exposure, sortValue: (master) => master.exposureS, align: "right" },
+    // The name already carries the exposure, and the versions count is in the details: both are in the Columns menu, so the Master name shows in full at 1280 px.
+    { id: "exposure", header: m.calibration_key_exposure(), hideable: true, defaultHidden: true, cell: exposure, sortValue: (master) => master.exposureS, align: "right" },
     { id: "gain", header: m.session_gain_offset(), cell: gainOffset, sortValue: (master) => master.gain, align: "right" },
     { id: "temp", header: m.calibration_key_temp(), cell: temperature, sortValue: (master) => master.ccdTempC, align: "right" },
-    { id: "versions", header: m.calibration_versions(), cell: (master) => formatCount(master.versions.length), sortValue: (master) => master.versions.length, align: "right" },
+    { id: "versions", header: m.calibration_versions(), hideable: true, defaultHidden: true, cell: (master) => formatCount(master.versions.length), sortValue: (master) => master.versions.length, align: "right" },
     { id: "night", header: m.calibration_newest_version(), truncate: true, cell: (master) => formatNight(night(master), true), sortValue: night },
     { id: "used-by", header: m.calibration_used_by(), cell: (master) => <UsedBy sessions={users(master)} />, sortValue: (master) => users(master).length },
     { id: "state", header: m.calibration_state(), cell: (master) => <MasterState master={master} old={oldLabel(master)} />, sortValue: (master) => `${oldLabel(master) ? 0 : 1}${master.state}` },

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest"
 import { m } from "@/lib/i18n"
-import { issueCopy } from "@/components/app/issue-row"
+import { issueCopy } from "@/components/app/issue-copy"
 import { calibrationQueue, type World } from "./derive"
 import { fileAt, writeFiles } from "./disk"
 import { deriveIssues, isDismissable, issuesFor } from "./issues"

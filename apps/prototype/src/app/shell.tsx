@@ -9,9 +9,10 @@
  *   (A SH3): Projects, Sessions and Targets menus of the records opened last.
  *   Getting started (ChecklistRing) sits above Activity and Settings.
  * - Toolbar: the sidebar button, Back and Forward, the search field of the
- *   command palette, Issues, Import… and More ▾ (Prototype controls, Quit,
- *   Theme, Language). The step page's Proceed is ⌘↩ (`shortcuts.tsx`); there
- *   is no second advance button in the toolbar.
+ *   command palette, Import… and More ▾ (Prototype controls, Quit, Theme,
+ *   Language). Issues have no hub: the status bar counts them and each
+ *   counter opens the page they are on (F7). The step page's Proceed is ⌘↩
+ *   (`shortcuts.tsx`); there is no second advance button in the toolbar.
  * - The root carries the quit guard (`quit-guard.tsx`) and the app window
  *   the orientation walk after setup (`onboarding.tsx`).
  */
@@ -48,7 +49,6 @@ import { useNavCounts } from "@/store/issues"
 import { CommandPalette, useAppActions } from "./command-palette"
 import { SHELLS } from "./contributions"
 import { HistoryControl } from "./history"
-import { IssuesHub } from "./issues-hub"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
 import { GettingStartedRing, OrientationWalk, useGettingStartedDue } from "./onboarding"
 import { setLocale, useMessages, usePreferences } from "./preferences"
@@ -325,7 +325,6 @@ function AppWindow({ children }: { children: ReactNode }) {
         center: <PaletteTrigger label={m.shell_search_or_jump_ellipsis()} shortcut={PALETTE_SHORTCUT} compact={!wideSearch} onOpen={() => openPanel("palette")} />,
         trailing: (
           <>
-            <IssuesHub />
             <ActionButton action={importAction} />
             <MoreItems />
           </>

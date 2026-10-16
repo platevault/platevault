@@ -61,11 +61,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} precisa de atenção",
-        "countPlural=*": "{count} precisam de atenção"
+        "count=0, countPlural=*": "{count} precisam de atenção",
+        "count=*, countPlural=one": "{count} precisa de atenção",
+        "count=*, countPlural=*": "{count} precisam de atenção"
       }
     }
   ],
@@ -76,11 +78,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} bloqueado",
-        "countPlural=*": "{count} bloqueados"
+        "count=0, countPlural=*": "{count} bloqueados",
+        "count=*, countPlural=one": "{count} bloqueado",
+        "count=*, countPlural=*": "{count} bloqueados"
       }
     }
   ],
@@ -137,11 +141,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} problema",
-        "countPlural=*": "{count} problemas"
+        "count=0, countPlural=*": "{count} problemas",
+        "count=*, countPlural=one": "{count} problema",
+        "count=*, countPlural=*": "{count} problemas"
       }
     }
   ],
@@ -156,11 +162,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sem Alvo",
-        "countPlural=*": "{count} sem Alvo"
+        "count=0, countPlural=*": "{count} sem Alvo",
+        "count=*, countPlural=one": "{count} sem Alvo",
+        "count=*, countPlural=*": "{count} sem Alvo"
       }
     }
   ],
@@ -171,11 +179,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sem calibração definida",
-        "countPlural=*": "{count} sem calibração definida"
+        "count=0, countPlural=*": "{count} sem calibração definida",
+        "count=*, countPlural=one": "{count} sem calibração definida",
+        "count=*, countPlural=*": "{count} sem calibração definida"
       }
     }
   ],
@@ -186,11 +196,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} fora de Projetos",
-        "countPlural=*": "{count} fora de Projetos"
+        "count=0, countPlural=*": "{count} fora de Projetos",
+        "count=*, countPlural=one": "{count} fora de Projetos",
+        "count=*, countPlural=*": "{count} fora de Projetos"
       }
     }
   ],
@@ -205,11 +217,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} master oferecido",
-        "countPlural=*": "{count} masters oferecidos"
+        "count=0, countPlural=*": "{count} masters oferecidos",
+        "count=*, countPlural=one": "{count} master oferecido",
+        "count=*, countPlural=*": "{count} masters oferecidos"
       }
     }
   ],
@@ -222,11 +236,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} alterado · {name}",
-        "countPlural=*": "{count} alterados · {name}"
+        "count=0, countPlural=*": "{count} alterados · {name}",
+        "count=*, countPlural=one": "{count} alterado · {name}",
+        "count=*, countPlural=*": "{count} alterados · {name}"
       }
     }
   ],
@@ -240,11 +256,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} selecionado",
-        "countPlural=*": "{count} selecionados"
+        "count=0, countPlural=*": "{count} selecionados",
+        "count=*, countPlural=one": "{count} selecionado",
+        "count=*, countPlural=*": "{count} selecionados"
       }
     }
   ],
@@ -368,11 +386,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} frame capturado",
-        "countPlural=*": "{frames} frames capturados"
+        "count=0, countPlural=*": "{frames} frames capturados",
+        "count=*, countPlural=one": "{frames} frame capturado",
+        "count=*, countPlural=*": "{frames} frames capturados"
       }
     }
   ],
@@ -392,11 +412,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Selecionar o {count} exibido",
-        "countPlural=*": "Selecionar todos os {count} exibidos"
+        "count=0, countPlural=*": "Selecionar todos os {count} exibidos",
+        "count=*, countPlural=one": "Selecionar o {count} exibido",
+        "count=*, countPlural=*": "Selecionar todos os {count} exibidos"
       }
     }
   ],
@@ -415,11 +437,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} incluído",
-        "countPlural=*": "{n} incluídos"
+        "count=0, countPlural=*": "{n} incluídos",
+        "count=*, countPlural=one": "{n} incluído",
+        "count=*, countPlural=*": "{n} incluídos"
       }
     }
   ],
@@ -431,11 +455,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} selecionado",
-        "countPlural=*": "{n} selecionados"
+        "count=0, countPlural=*": "{n} selecionados",
+        "count=*, countPlural=one": "{n} selecionado",
+        "count=*, countPlural=*": "{n} selecionados"
       }
     }
   ],
@@ -447,11 +473,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} oculto pelos filtros",
-        "countPlural=*": "{n} ocultos pelos filtros"
+        "count=0, countPlural=*": "{n} ocultos pelos filtros",
+        "count=*, countPlural=one": "{n} oculto pelos filtros",
+        "count=*, countPlural=*": "{n} ocultos pelos filtros"
       }
     }
   ],
@@ -464,11 +492,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} linha",
-        "countPlural=*": "{n} linhas"
+        "count=0, countPlural=*": "{n} linhas",
+        "count=*, countPlural=one": "{n} linha",
+        "count=*, countPlural=*": "{n} linhas"
       }
     }
   ],
@@ -484,11 +514,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} resultado",
-        "countPlural=*": "{n} resultados"
+        "count=0, countPlural=*": "{n} resultados",
+        "count=*, countPlural=one": "{n} resultado",
+        "count=*, countPlural=*": "{n} resultados"
       }
     }
   ],
@@ -520,11 +552,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Última ação: {action} · {n} linha",
-        "countPlural=*": "Última ação: {action} · {n} linhas"
+        "count=0, countPlural=*": "Última ação: {action} · {n} linhas",
+        "count=*, countPlural=one": "Última ação: {action} · {n} linha",
+        "count=*, countPlural=*": "Última ação: {action} · {n} linhas"
       }
     }
   ],
@@ -548,11 +582,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name}: {count} pasta",
-        "countPlural=*": "{name}: {count} pastas"
+        "count=0, countPlural=*": "{name}: {count} pastas",
+        "count=*, countPlural=one": "{name}: {count} pasta",
+        "count=*, countPlural=*": "{name}: {count} pastas"
       }
     }
   ],
@@ -570,11 +606,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name}: {count} item",
-        "countPlural=*": "{name}: {count} itens"
+        "count=0, countPlural=*": "{name}: {count} itens",
+        "count=*, countPlural=one": "{name}: {count} item",
+        "count=*, countPlural=*": "{name}: {count} itens"
       }
     }
   ],
@@ -604,11 +642,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{label} · {count} arquivo · {size}",
-        "countPlural=*": "{label} · {count} arquivos · {size}"
+        "count=0, countPlural=*": "{label} · {count} arquivos · {size}",
+        "count=*, countPlural=one": "{label} · {count} arquivo · {size}",
+        "count=*, countPlural=*": "{label} · {count} arquivos · {size}"
       }
     }
   ],
@@ -636,11 +676,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} impedimento",
-        "countPlural=*": "{count} impedimentos"
+        "count=0, countPlural=*": "{count} impedimentos",
+        "count=*, countPlural=one": "{count} impedimento",
+        "count=*, countPlural=*": "{count} impedimentos"
       }
     }
   ],
@@ -657,11 +699,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão",
-        "countPlural=*": "{count} sessões"
+        "count=0, countPlural=*": "{count} sessões",
+        "count=*, countPlural=one": "{count} sessão",
+        "count=*, countPlural=*": "{count} sessões"
       }
     }
   ],
@@ -687,11 +731,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Importando {files} arquivo · {percent}%",
-        "countPlural=*": "Importando {files} arquivos · {percent}%"
+        "count=0, countPlural=*": "Importando {files} arquivos · {percent}%",
+        "count=*, countPlural=one": "Importando {files} arquivo · {percent}%",
+        "count=*, countPlural=*": "Importando {files} arquivos · {percent}%"
       }
     }
   ],
@@ -707,11 +753,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{files} arquivo novo",
-        "countPlural=*": "{files} arquivos novos"
+        "count=0, countPlural=*": "{files} arquivos novos",
+        "count=*, countPlural=one": "{files} arquivo novo",
+        "count=*, countPlural=*": "{files} arquivos novos"
       }
     }
   ],
@@ -758,11 +806,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} frame não revisado",
-        "countPlural=*": "{frames} frames não revisados"
+        "count=0, countPlural=*": "{frames} frames não revisados",
+        "count=*, countPlural=one": "{frames} frame não revisado",
+        "count=*, countPlural=*": "{frames} frames não revisados"
       }
     }
   ],
@@ -776,11 +826,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} frame",
-        "countPlural=*": "{frames} frames"
+        "count=0, countPlural=*": "{frames} frames",
+        "count=*, countPlural=one": "{frames} frame",
+        "count=*, countPlural=*": "{frames} frames"
       }
     }
   ],
@@ -820,11 +872,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão de luz",
-        "countPlural=*": "{count} sessões de luz"
+        "count=0, countPlural=*": "{count} sessões de luz",
+        "count=*, countPlural=one": "{count} sessão de luz",
+        "count=*, countPlural=*": "{count} sessões de luz"
       }
     }
   ],
@@ -902,11 +956,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} frame bruto",
-        "countPlural=*": "{frames} frames brutos"
+        "count=0, countPlural=*": "{frames} frames brutos",
+        "count=*, countPlural=one": "{frames} frame bruto",
+        "count=*, countPlural=*": "{frames} frames brutos"
       }
     }
   ],
@@ -958,11 +1014,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Importar {frames} frame",
-        "countPlural=*": "Importar {frames} frames"
+        "count=0, countPlural=*": "Importar {frames} frames",
+        "count=*, countPlural=one": "Importar {frames} frame",
+        "count=*, countPlural=*": "Importar {frames} frames"
       }
     }
   ],
@@ -974,11 +1032,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {frames} frame",
-        "countPlural=*": "Mover {frames} frames"
+        "count=0, countPlural=*": "Mover {frames} frames",
+        "count=*, countPlural=one": "Mover {frames} frame",
+        "count=*, countPlural=*": "Mover {frames} frames"
       }
     }
   ],
@@ -990,11 +1050,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {frames} frame?",
-        "countPlural=*": "Mover {frames} frames?"
+        "count=0, countPlural=*": "Mover {frames} frames?",
+        "count=*, countPlural=one": "Mover {frames} frame?",
+        "count=*, countPlural=*": "Mover {frames} frames?"
       }
     }
   ],
@@ -1008,11 +1070,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Copia {frames} frame ({size}) para {locations}",
-        "countPlural=*": "Copia {frames} frames ({size}) para {locations}"
+        "count=0, countPlural=*": "Copia {frames} frames ({size}) para {locations}",
+        "count=*, countPlural=one": "Copia {frames} frame ({size}) para {locations}",
+        "count=*, countPlural=*": "Copia {frames} frames ({size}) para {locations}"
       }
     }
   ],
@@ -1025,11 +1089,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Envia {sources} original verificado em {volume} para a Lixeira do sistema",
-        "countPlural=*": "Envia {sources} originais verificados em {volume} para a Lixeira do sistema"
+        "count=0, countPlural=*": "Envia {sources} originais verificados em {volume} para a Lixeira do sistema",
+        "count=*, countPlural=one": "Envia {sources} original verificado em {volume} para a Lixeira do sistema",
+        "count=*, countPlural=*": "Envia {sources} originais verificados em {volume} para a Lixeira do sistema"
       }
     }
   ],
@@ -1041,11 +1107,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Envia {sources} original verificado na origem para a Lixeira do sistema",
-        "countPlural=*": "Envia {sources} originais verificados na origem para a Lixeira do sistema"
+        "count=0, countPlural=*": "Envia {sources} originais verificados na origem para a Lixeira do sistema",
+        "count=*, countPlural=one": "Envia {sources} original verificado na origem para a Lixeira do sistema",
+        "count=*, countPlural=*": "Envia {sources} originais verificados na origem para a Lixeira do sistema"
       }
     }
   ],
@@ -1057,11 +1125,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{files} arquivo",
-        "countPlural=*": "{files} arquivos"
+        "count=0, countPlural=*": "{files} arquivos",
+        "count=*, countPlural=one": "{files} arquivo",
+        "count=*, countPlural=*": "{files} arquivos"
       }
     }
   ],
@@ -1072,11 +1142,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} importado antes",
-        "countPlural=*": "{count} importados antes"
+        "count=0, countPlural=*": "{count} importados antes",
+        "count=*, countPlural=one": "{count} importado antes",
+        "count=*, countPlural=*": "{count} importados antes"
       }
     }
   ],
@@ -1102,11 +1174,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} master",
-        "countPlural=*": "{count} masters"
+        "count=0, countPlural=*": "{count} masters",
+        "count=*, countPlural=one": "{count} master",
+        "count=*, countPlural=*": "{count} masters"
       }
     }
   ],
@@ -1129,11 +1203,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} frame inutilizável para a Lixeira ({size})",
-        "countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira ({size})"
+        "count=0, countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira ({size})",
+        "count=*, countPlural=one": "Mover {n} frame inutilizável para a Lixeira ({size})",
+        "count=*, countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira ({size})"
       }
     }
   ],
@@ -1147,11 +1223,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} cópia duplicada para a Lixeira ({size})",
-        "countPlural=*": "Mover {n} cópias duplicadas para a Lixeira ({size})"
+        "count=0, countPlural=*": "Mover {n} cópias duplicadas para a Lixeira ({size})",
+        "count=*, countPlural=one": "Mover {n} cópia duplicada para a Lixeira ({size})",
+        "count=*, countPlural=*": "Mover {n} cópias duplicadas para a Lixeira ({size})"
       }
     }
   ],
@@ -1165,11 +1243,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} cópia",
-        "countPlural=*": "{count} cópias"
+        "count=0, countPlural=*": "{count} cópias",
+        "count=*, countPlural=one": "{count} cópia",
+        "count=*, countPlural=*": "{count} cópias"
       }
     }
   ],
@@ -1198,11 +1278,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name} ({count} painel)",
-        "countPlural=*": "{name} ({count} painéis)"
+        "count=0, countPlural=*": "{name} ({count} painéis)",
+        "count=*, countPlural=one": "{name} ({count} painel)",
+        "count=*, countPlural=*": "{name} ({count} painéis)"
       }
     }
   ],
@@ -1219,11 +1301,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} Projeto",
-        "countPlural=*": "{count} Projetos"
+        "count=0, countPlural=*": "{count} Projetos",
+        "count=*, countPlural=one": "{count} Projeto",
+        "count=*, countPlural=*": "{count} Projetos"
       }
     }
   ],
@@ -1244,11 +1328,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} painel",
-        "countPlural=*": "{count} painéis"
+        "count=0, countPlural=*": "{count} painéis",
+        "count=*, countPlural=one": "{count} painel",
+        "count=*, countPlural=*": "{count} painéis"
       }
     }
   ],
@@ -1262,11 +1348,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão",
-        "countPlural=*": "{count} sessões"
+        "count=0, countPlural=*": "{count} sessões",
+        "count=*, countPlural=one": "{count} sessão",
+        "count=*, countPlural=*": "{count} sessões"
       }
     }
   ],
@@ -1279,11 +1367,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame",
-        "countPlural=*": "{n} frames"
+        "count=0, countPlural=*": "{n} frames",
+        "count=*, countPlural=one": "{n} frame",
+        "count=*, countPlural=*": "{n} frames"
       }
     }
   ],
@@ -1294,11 +1384,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} meta",
-        "countPlural=*": "{count} metas"
+        "count=0, countPlural=*": "{count} metas",
+        "count=*, countPlural=one": "{count} meta",
+        "count=*, countPlural=*": "{count} metas"
       }
     }
   ],
@@ -1316,11 +1408,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Também remove {count} meta.",
-        "countPlural=*": "Também remove {count} metas."
+        "count=0, countPlural=*": "Também remove {count} metas.",
+        "count=*, countPlural=one": "Também remove {count} meta.",
+        "count=*, countPlural=*": "Também remove {count} metas."
       }
     }
   ],
@@ -1334,11 +1428,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} objeto",
-        "countPlural=*": "{count} objetos"
+        "count=0, countPlural=*": "{count} objetos",
+        "count=*, countPlural=one": "{count} objeto",
+        "count=*, countPlural=*": "{count} objetos"
       }
     }
   ],
@@ -1349,11 +1445,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "usado por {count} execução",
-        "countPlural=*": "usado por {count} execuções"
+        "count=0, countPlural=*": "usado por {count} execuções",
+        "count=*, countPlural=one": "usado por {count} execução",
+        "count=*, countPlural=*": "usado por {count} execuções"
       }
     }
   ],
@@ -1368,11 +1466,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} setup",
-        "countPlural=*": "{count} setups"
+        "count=0, countPlural=*": "{count} setups",
+        "count=*, countPlural=one": "{count} setup",
+        "count=*, countPlural=*": "{count} setups"
       }
     }
   ],
@@ -1391,11 +1491,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Adicionar {count} sessão",
-        "countPlural=*": "Adicionar {count} sessões"
+        "count=0, countPlural=*": "Adicionar {count} sessões",
+        "count=*, countPlural=one": "Adicionar {count} sessão",
+        "count=*, countPlural=*": "Adicionar {count} sessões"
       }
     }
   ],
@@ -1430,11 +1532,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} campo faltando",
-        "countPlural=*": "{count} campos faltando"
+        "count=0, countPlural=*": "{count} campos faltando",
+        "count=*, countPlural=one": "{count} campo faltando",
+        "count=*, countPlural=*": "{count} campos faltando"
       }
     }
   ],
@@ -1451,11 +1555,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} arquivo de Processing para a Lixeira ({size})",
-        "countPlural=*": "Mover {n} arquivos de Processing para a Lixeira ({size})"
+        "count=0, countPlural=*": "Mover {n} arquivos de Processing para a Lixeira ({size})",
+        "count=*, countPlural=one": "Mover {n} arquivo de Processing para a Lixeira ({size})",
+        "count=*, countPlural=*": "Mover {n} arquivos de Processing para a Lixeira ({size})"
       }
     }
   ],
@@ -1470,11 +1576,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} entrada da View para a Lixeira ({size})",
-        "countPlural=*": "Mover {n} entradas da View para a Lixeira ({size})"
+        "count=0, countPlural=*": "Mover {n} entradas da View para a Lixeira ({size})",
+        "count=*, countPlural=one": "Mover {n} entrada da View para a Lixeira ({size})",
+        "count=*, countPlural=*": "Mover {n} entradas da View para a Lixeira ({size})"
       }
     }
   ],
@@ -1490,11 +1598,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Limpar {count} execução?",
-        "countPlural=*": "Limpar {count} execuções?"
+        "count=0, countPlural=*": "Limpar {count} execuções?",
+        "count=*, countPlural=one": "Limpar {count} execução?",
+        "count=*, countPlural=*": "Limpar {count} execuções?"
       }
     }
   ],
@@ -1505,11 +1615,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Limpar {count} item?",
-        "countPlural=*": "Limpar {count} itens?"
+        "count=0, countPlural=*": "Limpar {count} itens?",
+        "count=*, countPlural=one": "Limpar {count} item?",
+        "count=*, countPlural=*": "Limpar {count} itens?"
       }
     }
   ],
@@ -1520,11 +1632,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} item",
-        "countPlural=*": "{count} itens"
+        "count=0, countPlural=*": "{count} itens",
+        "count=*, countPlural=one": "{count} item",
+        "count=*, countPlural=*": "{count} itens"
       }
     }
   ],
@@ -1536,11 +1650,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} item → Lixeira do sistema ({size})",
-        "countPlural=*": "{count} itens → Lixeira do sistema ({size})"
+        "count=0, countPlural=*": "{count} itens → Lixeira do sistema ({size})",
+        "count=*, countPlural=one": "{count} item → Lixeira do sistema ({size})",
+        "count=*, countPlural=*": "{count} itens → Lixeira do sistema ({size})"
       }
     }
   ],
@@ -1556,11 +1672,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão → {dest} ({size})",
-        "countPlural=*": "{count} sessões → {dest} ({size})"
+        "count=0, countPlural=*": "{count} sessões → {dest} ({size})",
+        "count=*, countPlural=one": "{count} sessão → {dest} ({size})",
+        "count=*, countPlural=*": "{count} sessões → {dest} ({size})"
       }
     }
   ],
@@ -1573,11 +1691,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão para mover",
-        "countPlural=*": "{count} sessões para mover"
+        "count=0, countPlural=*": "{count} sessões para mover",
+        "count=*, countPlural=one": "{count} sessão para mover",
+        "count=*, countPlural=*": "{count} sessões para mover"
       }
     }
   ],
@@ -1663,11 +1783,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} pendente",
-        "countPlural=*": "{count} pendentes"
+        "count=0, countPlural=*": "{count} pendentes",
+        "count=*, countPlural=one": "{count} pendente",
+        "count=*, countPlural=*": "{count} pendentes"
       }
     }
   ],
@@ -1682,11 +1804,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} alvo",
-        "countPlural=*": "{count} alvos"
+        "count=0, countPlural=*": "{count} alvos",
+        "count=*, countPlural=one": "{count} alvo",
+        "count=*, countPlural=*": "{count} alvos"
       }
     }
   ],
@@ -1730,11 +1854,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} h antes",
-        "countPlural=*": "{count} h antes"
+        "count=0, countPlural=*": "{count} h antes",
+        "count=*, countPlural=one": "{count} h antes",
+        "count=*, countPlural=*": "{count} h antes"
       }
     }
   ],
@@ -1745,11 +1871,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} dia antes",
-        "countPlural=*": "{count} dias antes"
+        "count=0, countPlural=*": "{count} dias antes",
+        "count=*, countPlural=one": "{count} dia antes",
+        "count=*, countPlural=*": "{count} dias antes"
       }
     }
   ],
@@ -1774,11 +1902,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} dia",
-        "countPlural=*": "{count} dias"
+        "count=0, countPlural=*": "{count} dias",
+        "count=*, countPlural=one": "{count} dia",
+        "count=*, countPlural=*": "{count} dias"
       }
     }
   ],
@@ -1843,11 +1973,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} quadro",
-        "countPlural=*": "{count} quadros"
+        "count=0, countPlural=*": "{count} quadros",
+        "count=*, countPlural=one": "{count} quadro",
+        "count=*, countPlural=*": "{count} quadros"
       }
     }
   ],
@@ -1882,11 +2014,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} entrada",
-        "countPlural=*": "{n} entradas"
+        "count=0, countPlural=*": "{n} entradas",
+        "count=*, countPlural=one": "{n} entrada",
+        "count=*, countPlural=*": "{n} entradas"
       }
     }
   ],
@@ -1960,11 +2094,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} master",
-        "countPlural=*": "{count} masters"
+        "count=0, countPlural=*": "{count} masters",
+        "count=*, countPlural=one": "{count} master",
+        "count=*, countPlural=*": "{count} masters"
       }
     }
   ],
@@ -1976,11 +2112,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} master importado",
-        "countPlural=*": "{count} masters importados"
+        "count=0, countPlural=*": "{count} masters importados",
+        "count=*, countPlural=one": "{count} master importado",
+        "count=*, countPlural=*": "{count} masters importados"
       }
     }
   ],
@@ -2003,11 +2141,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} não lida",
-        "countPlural=*": "{count} não lidas"
+        "count=0, countPlural=*": "{count} não lidas",
+        "count=*, countPlural=one": "{count} não lida",
+        "count=*, countPlural=*": "{count} não lidas"
       }
     }
   ],
@@ -2039,11 +2179,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} arquivo",
-        "countPlural=*": "{count} arquivos"
+        "count=0, countPlural=*": "{count} arquivos",
+        "count=*, countPlural=one": "{count} arquivo",
+        "count=*, countPlural=*": "{count} arquivos"
       }
     }
   ],
@@ -2077,11 +2219,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} bloqueada",
-        "countPlural=*": "{count} bloqueadas"
+        "count=0, countPlural=*": "{count} bloqueadas",
+        "count=*, countPlural=one": "{count} bloqueada",
+        "count=*, countPlural=*": "{count} bloqueadas"
       }
     }
   ],
@@ -2123,11 +2267,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Remapeamento não salvo: a verificação de hash de {count} arquivo em {volume} falhou. Nada mudou; escolha Tentar de novo.",
-        "countPlural=*": "Remapeamento não salvo: a verificação de hash de {count} arquivos em {volume} falhou. Nada mudou; escolha Tentar de novo."
+        "count=0, countPlural=*": "Remapeamento não salvo: a verificação de hash de {count} arquivos em {volume} falhou. Nada mudou; escolha Tentar de novo.",
+        "count=*, countPlural=one": "Remapeamento não salvo: a verificação de hash de {count} arquivo em {volume} falhou. Nada mudou; escolha Tentar de novo.",
+        "count=*, countPlural=*": "Remapeamento não salvo: a verificação de hash de {count} arquivos em {volume} falhou. Nada mudou; escolha Tentar de novo."
       }
     }
   ],
@@ -2164,11 +2310,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} com os mesmos bytes",
-        "countPlural=*": "{frames} com os mesmos bytes"
+        "count=0, countPlural=*": "{frames} com os mesmos bytes",
+        "count=*, countPlural=one": "{frames} com os mesmos bytes",
+        "count=*, countPlural=*": "{frames} com os mesmos bytes"
       }
     }
   ],
@@ -2180,11 +2328,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} difere",
-        "countPlural=*": "{frames} diferem"
+        "count=0, countPlural=*": "{frames} diferem",
+        "count=*, countPlural=one": "{frames} difere",
+        "count=*, countPlural=*": "{frames} diferem"
       }
     }
   ],
@@ -2196,11 +2346,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} não encontrado",
-        "countPlural=*": "{frames} não encontrados"
+        "count=0, countPlural=*": "{frames} não encontrados",
+        "count=*, countPlural=one": "{frames} não encontrado",
+        "count=*, countPlural=*": "{frames} não encontrados"
       }
     }
   ],
@@ -2215,11 +2367,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Remapear {frames} frame",
-        "countPlural=*": "Remapear {frames} frames"
+        "count=0, countPlural=*": "Remapear {frames} frames",
+        "count=*, countPlural=one": "Remapear {frames} frame",
+        "count=*, countPlural=*": "Remapear {frames} frames"
       }
     }
   ],
@@ -2232,11 +2386,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} frame → {path}",
-        "countPlural=*": "{frames} frames → {path}"
+        "count=0, countPlural=*": "{frames} frames → {path}",
+        "count=*, countPlural=one": "{frames} frame → {path}",
+        "count=*, countPlural=*": "{frames} frames → {path}"
       }
     }
   ],
@@ -2250,11 +2406,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{frames} frame → {path} · {refused} recusados",
-        "countPlural=*": "{frames} frames → {path} · {refused} recusados"
+        "count=0, countPlural=*": "{frames} frames → {path} · {refused} recusados",
+        "count=*, countPlural=one": "{frames} frame → {path} · {refused} recusados",
+        "count=*, countPlural=*": "{frames} frames → {path} · {refused} recusados"
       }
     }
   ],
@@ -2266,11 +2424,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame",
-        "countPlural=*": "{n} frames"
+        "count=0, countPlural=*": "{n} frames",
+        "count=*, countPlural=one": "{n} frame",
+        "count=*, countPlural=*": "{n} frames"
       }
     }
   ],
@@ -2302,11 +2462,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} local",
-        "countPlural=*": "{n} locais"
+        "count=0, countPlural=*": "{n} locais",
+        "count=*, countPlural=one": "{n} local",
+        "count=*, countPlural=*": "{n} locais"
       }
     }
   ],
@@ -2318,11 +2480,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} sessão de lights",
-        "countPlural=*": "{n} sessões de lights"
+        "count=0, countPlural=*": "{n} sessões de lights",
+        "count=*, countPlural=one": "{n} sessão de lights",
+        "count=*, countPlural=*": "{n} sessões de lights"
       }
     }
   ],
@@ -2334,11 +2498,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame",
-        "countPlural=*": "{n} frames"
+        "count=0, countPlural=*": "{n} frames",
+        "count=*, countPlural=one": "{n} frame",
+        "count=*, countPlural=*": "{n} frames"
       }
     }
   ],
@@ -2350,11 +2516,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} projeto",
-        "countPlural=*": "{n} projetos"
+        "count=0, countPlural=*": "{n} projetos",
+        "count=*, countPlural=one": "{n} projeto",
+        "count=*, countPlural=*": "{n} projetos"
       }
     }
   ],
@@ -2389,11 +2557,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} sessão",
-        "countPlural=*": "{n} sessões"
+        "count=0, countPlural=*": "{n} sessões",
+        "count=*, countPlural=one": "{n} sessão",
+        "count=*, countPlural=*": "{n} sessões"
       }
     }
   ],
@@ -2410,11 +2580,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} cópia",
-        "countPlural=*": "{n} cópias"
+        "count=0, countPlural=*": "{n} cópias",
+        "count=*, countPlural=one": "{n} cópia",
+        "count=*, countPlural=*": "{n} cópias"
       }
     }
   ],
@@ -2426,11 +2598,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} cópia fica Aposentada",
-        "countPlural=*": "{n} cópias ficam Aposentadas"
+        "count=0, countPlural=*": "{n} cópias ficam Aposentadas",
+        "count=*, countPlural=one": "{n} cópia fica Aposentada",
+        "count=*, countPlural=*": "{n} cópias ficam Aposentadas"
       }
     }
   ],
@@ -2486,11 +2660,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} Alvo",
-        "countPlural=*": "{n} Alvos"
+        "count=0, countPlural=*": "{n} Alvos",
+        "count=*, countPlural=one": "{n} Alvo",
+        "count=*, countPlural=*": "{n} Alvos"
       }
     }
   ],
@@ -2502,11 +2678,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} objeto de catálogo",
-        "countPlural=*": "{n} objetos de catálogo"
+        "count=0, countPlural=*": "{n} objetos de catálogo",
+        "count=*, countPlural=one": "{n} objeto de catálogo",
+        "count=*, countPlural=*": "{n} objetos de catálogo"
       }
     }
   ],
@@ -2545,11 +2723,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} local registrado",
-        "countPlural=*": "{n} locais registrados"
+        "count=0, countPlural=*": "{n} locais registrados",
+        "count=*, countPlural=one": "{n} local registrado",
+        "count=*, countPlural=*": "{n} locais registrados"
       }
     }
   ],
@@ -2578,11 +2758,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} local não indexado",
-        "countPlural=*": "{n} locais não indexados"
+        "count=0, countPlural=*": "{n} locais não indexados",
+        "count=*, countPlural=one": "{n} local não indexado",
+        "count=*, countPlural=*": "{n} locais não indexados"
       }
     }
   ],
@@ -2608,11 +2790,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} local para indexar",
-        "countPlural=*": "{n} locais para indexar"
+        "count=0, countPlural=*": "{n} locais para indexar",
+        "count=*, countPlural=one": "{n} local para indexar",
+        "count=*, countPlural=*": "{n} locais para indexar"
       }
     }
   ],
@@ -2626,11 +2810,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Indexar {n} novo local",
-        "countPlural=*": "Indexar {n} novos locais"
+        "count=0, countPlural=*": "Indexar {n} novos locais",
+        "count=*, countPlural=one": "Indexar {n} novo local",
+        "count=*, countPlural=*": "Indexar {n} novos locais"
       }
     }
   ],
@@ -2733,11 +2919,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame",
-        "countPlural=*": "{count} frames"
+        "count=0, countPlural=*": "{count} frames",
+        "count=*, countPlural=one": "{count} frame",
+        "count=*, countPlural=*": "{count} frames"
       }
     }
   ],
@@ -2774,11 +2962,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame não medido",
-        "countPlural=*": "{count} frames não medidos"
+        "count=0, countPlural=*": "{count} frames não medidos",
+        "count=*, countPlural=one": "{count} frame não medido",
+        "count=*, countPlural=*": "{count} frames não medidos"
       }
     }
   ],
@@ -2790,11 +2980,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Medição cancelada; {count} não medido.",
-        "countPlural=*": "Medição cancelada; {count} não medidos."
+        "count=0, countPlural=*": "Medição cancelada; {count} não medidos.",
+        "count=*, countPlural=one": "Medição cancelada; {count} não medido.",
+        "count=*, countPlural=*": "Medição cancelada; {count} não medidos."
       }
     }
   ],
@@ -2805,11 +2997,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Medindo {count} frame, começando pelo atual.",
-        "countPlural=*": "Medindo {count} frames, começando pelo atual."
+        "count=0, countPlural=*": "Medindo {count} frames, começando pelo atual.",
+        "count=*, countPlural=one": "Medindo {count} frame, começando pelo atual.",
+        "count=*, countPlural=*": "Medindo {count} frames, começando pelo atual."
       }
     }
   ],
@@ -2824,11 +3018,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame ilegível.",
-        "countPlural=*": "{count} frames ilegíveis."
+        "count=0, countPlural=*": "{count} frames ilegíveis.",
+        "count=*, countPlural=one": "{count} frame ilegível.",
+        "count=*, countPlural=*": "{count} frames ilegíveis."
       }
     }
   ],
@@ -2896,11 +3092,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} saturado",
-        "countPlural=*": "{count} saturados"
+        "count=0, countPlural=*": "{count} saturados",
+        "count=*, countPlural=one": "{count} saturado",
+        "count=*, countPlural=*": "{count} saturados"
       }
     }
   ],
@@ -2911,11 +3109,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} inválido",
-        "countPlural=*": "{count} inválidos"
+        "count=0, countPlural=*": "{count} inválidos",
+        "count=*, countPlural=one": "{count} inválido",
+        "count=*, countPlural=*": "{count} inválidos"
       }
     }
   ],
@@ -2939,11 +3139,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame selecionado.",
-        "countPlural=*": "{count} frames selecionados."
+        "count=0, countPlural=*": "{count} frames selecionados.",
+        "count=*, countPlural=one": "{count} frame selecionado.",
+        "count=*, countPlural=*": "{count} frames selecionados."
       }
     }
   ],
@@ -2956,11 +3158,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame com {metric} acima de {value} selecionado. A qualidade não muda até você marcá-lo.",
-        "countPlural=*": "{count} frames com {metric} acima de {value} selecionados. A qualidade não muda até você marcá-los."
+        "count=0, countPlural=*": "{count} frames com {metric} acima de {value} selecionados. A qualidade não muda até você marcá-los.",
+        "count=*, countPlural=one": "{count} frame com {metric} acima de {value} selecionado. A qualidade não muda até você marcá-lo.",
+        "count=*, countPlural=*": "{count} frames com {metric} acima de {value} selecionados. A qualidade não muda até você marcá-los."
       }
     }
   ],
@@ -2973,11 +3177,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame com {metric} abaixo de {value} selecionado. A qualidade não muda até você marcá-lo.",
-        "countPlural=*": "{count} frames com {metric} abaixo de {value} selecionados. A qualidade não muda até você marcá-los."
+        "count=0, countPlural=*": "{count} frames com {metric} abaixo de {value} selecionados. A qualidade não muda até você marcá-los.",
+        "count=*, countPlural=one": "{count} frame com {metric} abaixo de {value} selecionado. A qualidade não muda até você marcá-lo.",
+        "count=*, countPlural=*": "{count} frames com {metric} abaixo de {value} selecionados. A qualidade não muda até você marcá-los."
       }
     }
   ],
@@ -3039,11 +3245,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Selecionar {count} frame",
-        "countPlural=*": "Selecionar {count} frames"
+        "count=0, countPlural=*": "Selecionar {count} frames",
+        "count=*, countPlural=one": "Selecionar {count} frame",
+        "count=*, countPlural=*": "Selecionar {count} frames"
       }
     }
   ],
@@ -3057,11 +3265,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame exibido de {total}",
-        "countPlural=*": "{count} frames exibidos de {total}"
+        "count=0, countPlural=*": "{count} frames exibidos de {total}",
+        "count=*, countPlural=one": "{count} frame exibido de {total}",
+        "count=*, countPlural=*": "{count} frames exibidos de {total}"
       }
     }
   ],
@@ -3072,11 +3282,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} oculto",
-        "countPlural=*": "{count} ocultos"
+        "count=0, countPlural=*": "{count} ocultos",
+        "count=*, countPlural=one": "{count} oculto",
+        "count=*, countPlural=*": "{count} ocultos"
       }
     }
   ],
@@ -3118,11 +3330,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} linha · escala do subframe {scale} conforme gravada na exportação",
-        "countPlural=*": "{count} linhas · escala do subframe {scale} conforme gravada na exportação"
+        "count=0, countPlural=*": "{count} linhas · escala do subframe {scale} conforme gravada na exportação",
+        "count=*, countPlural=one": "{count} linha · escala do subframe {scale} conforme gravada na exportação",
+        "count=*, countPlural=*": "{count} linhas · escala do subframe {scale} conforme gravada na exportação"
       }
     }
   ],
@@ -3141,11 +3355,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} linha corresponde a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)",
-        "countPlural=*": "{count} linhas correspondem a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)"
+        "count=0, countPlural=*": "{count} linhas correspondem a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)",
+        "count=*, countPlural=one": "{count} linha corresponde a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)",
+        "count=*, countPlural=*": "{count} linhas correspondem a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)"
       }
     }
   ],
@@ -3156,11 +3372,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} não é anexada a nenhum frame até ser revisada",
-        "countPlural=*": "{count} não são anexadas a nenhum frame até serem revisadas"
+        "count=0, countPlural=*": "{count} não são anexadas a nenhum frame até serem revisadas",
+        "count=*, countPlural=one": "{count} não é anexada a nenhum frame até ser revisada",
+        "count=*, countPlural=*": "{count} não são anexadas a nenhum frame até serem revisadas"
       }
     }
   ],
@@ -3177,11 +3395,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Importar {count} linha correspondente",
-        "countPlural=*": "Importar {count} linhas correspondentes"
+        "count=0, countPlural=*": "Importar {count} linhas correspondentes",
+        "count=*, countPlural=one": "Importar {count} linha correspondente",
+        "count=*, countPlural=*": "Importar {count} linhas correspondentes"
       }
     }
   ],
@@ -3193,11 +3413,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} linha anexada como valores importados, conteúdo não verificado",
-        "countPlural=*": "{count} linhas anexadas como valores importados, conteúdo não verificado"
+        "count=0, countPlural=*": "{count} linhas anexadas como valores importados, conteúdo não verificado",
+        "count=*, countPlural=one": "{count} linha anexada como valores importados, conteúdo não verificado",
+        "count=*, countPlural=*": "{count} linhas anexadas como valores importados, conteúdo não verificado"
       }
     }
   ],
@@ -3245,11 +3467,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Falta {n} noite",
-        "countPlural=*": "Faltam {n} noites"
+        "count=0, countPlural=*": "Faltam {n} noites",
+        "count=*, countPlural=one": "Falta {n} noite",
+        "count=*, countPlural=*": "Faltam {n} noites"
       }
     }
   ],
@@ -3261,11 +3485,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Abre em {n} noite",
-        "countPlural=*": "Abre em {n} noites"
+        "count=0, countPlural=*": "Abre em {n} noites",
+        "count=*, countPlural=one": "Abre em {n} noite",
+        "count=*, countPlural=*": "Abre em {n} noites"
       }
     }
   ],
@@ -3283,11 +3509,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Adicionar {count} sessão",
-        "countPlural=*": "Adicionar {count} sessões"
+        "count=0, countPlural=*": "Adicionar {count} sessões",
+        "count=*, countPlural=one": "Adicionar {count} sessão",
+        "count=*, countPlural=*": "Adicionar {count} sessões"
       }
     }
   ],
@@ -3299,11 +3527,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} entrada não pode ser lida",
-        "countPlural=*": "{n} entradas não podem ser lidas"
+        "count=0, countPlural=*": "{n} entradas não podem ser lidas",
+        "count=*, countPlural=one": "{n} entrada não pode ser lida",
+        "count=*, countPlural=*": "{n} entradas não podem ser lidas"
       }
     }
   ],
@@ -3318,11 +3548,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Revisar {n} frame novo",
-        "countPlural=*": "Revisar {n} frames novos"
+        "count=0, countPlural=*": "Revisar {n} frames novos",
+        "count=*, countPlural=one": "Revisar {n} frame novo",
+        "count=*, countPlural=*": "Revisar {n} frames novos"
       }
     }
   ],
@@ -3334,11 +3566,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Aplicar {count} alteração",
-        "countPlural=*": "Aplicar {count} alterações"
+        "count=0, countPlural=*": "Aplicar {count} alterações",
+        "count=*, countPlural=one": "Aplicar {count} alteração",
+        "count=*, countPlural=*": "Aplicar {count} alterações"
       }
     }
   ],
@@ -3359,11 +3593,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} arquivo",
-        "countPlural=*": "{n} arquivos"
+        "count=0, countPlural=*": "{n} arquivos",
+        "count=*, countPlural=one": "{n} arquivo",
+        "count=*, countPlural=*": "{n} arquivos"
       }
     }
   ],
@@ -3375,11 +3611,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} entrada",
-        "countPlural=*": "{n} entradas"
+        "count=0, countPlural=*": "{n} entradas",
+        "count=*, countPlural=one": "{n} entrada",
+        "count=*, countPlural=*": "{n} entradas"
       }
     }
   ],
@@ -3391,11 +3629,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} entrada preparada",
-        "countPlural=*": "{n} entradas preparadas"
+        "count=0, countPlural=*": "{n} entradas preparadas",
+        "count=*, countPlural=one": "{n} entrada preparada",
+        "count=*, countPlural=*": "{n} entradas preparadas"
       }
     }
   ],
@@ -3407,11 +3647,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} item",
-        "countPlural=*": "{n} itens"
+        "count=0, countPlural=*": "{n} itens",
+        "count=*, countPlural=one": "{n} item",
+        "count=*, countPlural=*": "{n} itens"
       }
     }
   ],
@@ -3428,11 +3670,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} arquivo para ler",
-        "countPlural=*": "{n} arquivos para ler"
+        "count=0, countPlural=*": "{n} arquivos para ler",
+        "count=*, countPlural=one": "{n} arquivo para ler",
+        "count=*, countPlural=*": "{n} arquivos para ler"
       }
     }
   ],
@@ -3445,11 +3689,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Incompleta: {count} pasta ilegível. As pastas legíveis foram indexadas.",
-        "countPlural=*": "Incompleta: {count} pastas ilegíveis. As pastas legíveis foram indexadas."
+        "count=0, countPlural=*": "Incompleta: {count} pastas ilegíveis. As pastas legíveis foram indexadas.",
+        "count=*, countPlural=one": "Incompleta: {count} pasta ilegível. As pastas legíveis foram indexadas.",
+        "count=*, countPlural=*": "Incompleta: {count} pastas ilegíveis. As pastas legíveis foram indexadas."
       }
     }
   ],
@@ -3461,11 +3707,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} arquivo lido",
-        "countPlural=*": "{n} arquivos lidos"
+        "count=0, countPlural=*": "{n} arquivos lidos",
+        "count=*, countPlural=one": "{n} arquivo lido",
+        "count=*, countPlural=*": "{n} arquivos lidos"
       }
     }
   ],
@@ -3476,11 +3724,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sem suporte",
-        "countPlural=*": "{count} sem suporte"
+        "count=0, countPlural=*": "{count} sem suporte",
+        "count=*, countPlural=one": "{count} sem suporte",
+        "count=*, countPlural=*": "{count} sem suporte"
       }
     }
   ],
@@ -3491,11 +3741,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} pasta ilegível",
-        "countPlural=*": "{count} pastas ilegíveis"
+        "count=0, countPlural=*": "{count} pastas ilegíveis",
+        "count=*, countPlural=one": "{count} pasta ilegível",
+        "count=*, countPlural=*": "{count} pastas ilegíveis"
       }
     }
   ],
@@ -3508,11 +3760,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} local completo",
-        "countPlural=*": "{count} locais completos"
+        "count=0, countPlural=*": "{count} locais completos",
+        "count=*, countPlural=one": "{count} local completo",
+        "count=*, countPlural=*": "{count} locais completos"
       }
     }
   ],
@@ -3540,11 +3794,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Adicionar {n} sessão",
-        "countPlural=*": "Adicionar {n} sessões"
+        "count=0, countPlural=*": "Adicionar {n} sessões",
+        "count=*, countPlural=one": "Adicionar {n} sessão",
+        "count=*, countPlural=*": "Adicionar {n} sessões"
       }
     }
   ],
@@ -3556,11 +3812,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Remover {n} sessão",
-        "countPlural=*": "Remover {n} sessões"
+        "count=0, countPlural=*": "Remover {n} sessões",
+        "count=*, countPlural=one": "Remover {n} sessão",
+        "count=*, countPlural=*": "Remover {n} sessões"
       }
     }
   ],
@@ -3663,11 +3921,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame mantido",
-        "countPlural=*": "{n} frames mantidos"
+        "count=0, countPlural=*": "{n} frames mantidos",
+        "count=*, countPlural=one": "{n} frame mantido",
+        "count=*, countPlural=*": "{n} frames mantidos"
       }
     }
   ],
@@ -3688,11 +3948,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Calibração salva para {n} sessão",
-        "countPlural=*": "Calibração salva para {n} sessões"
+        "count=0, countPlural=*": "Calibração salva para {n} sessões",
+        "count=*, countPlural=one": "Calibração salva para {n} sessão",
+        "count=*, countPlural=*": "Calibração salva para {n} sessões"
       }
     }
   ],
@@ -3704,11 +3966,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} sessão precisa de calibração novamente",
-        "countPlural=*": "{n} sessões precisam de calibração novamente"
+        "count=0, countPlural=*": "{n} sessões precisam de calibração novamente",
+        "count=*, countPlural=one": "{n} sessão precisa de calibração novamente",
+        "count=*, countPlural=*": "{n} sessões precisam de calibração novamente"
       }
     }
   ],
@@ -3722,11 +3986,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Marcar {n} frame como {quality}",
-        "countPlural=*": "Marcar {n} frames como {quality}"
+        "count=0, countPlural=*": "Marcar {n} frames como {quality}",
+        "count=*, countPlural=one": "Marcar {n} frame como {quality}",
+        "count=*, countPlural=*": "Marcar {n} frames como {quality}"
       }
     }
   ],
@@ -3739,11 +4005,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame marcado como {quality}",
-        "countPlural=*": "{n} frames marcados como {quality}"
+        "count=0, countPlural=*": "{n} frames marcados como {quality}",
+        "count=*, countPlural=one": "{n} frame marcado como {quality}",
+        "count=*, countPlural=*": "{n} frames marcados como {quality}"
       }
     }
   ],
@@ -3814,11 +4082,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} sessão arquivada",
-        "countPlural=*": "{n} sessões arquivadas"
+        "count=0, countPlural=*": "{n} sessões arquivadas",
+        "count=*, countPlural=one": "{n} sessão arquivada",
+        "count=*, countPlural=*": "{n} sessões arquivadas"
       }
     }
   ],
@@ -3829,11 +4099,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} mantida",
-        "countPlural=*": "{count} mantidas"
+        "count=0, countPlural=*": "{count} mantidas",
+        "count=*, countPlural=one": "{count} mantida",
+        "count=*, countPlural=*": "{count} mantidas"
       }
     }
   ],
@@ -3853,11 +4125,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} master",
-        "countPlural=*": "{n} masters"
+        "count=0, countPlural=*": "{n} masters",
+        "count=*, countPlural=one": "{n} master",
+        "count=*, countPlural=*": "{n} masters"
       }
     }
   ],
@@ -3869,11 +4143,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} duplicata ignorada",
-        "countPlural=*": "{n} duplicatas ignoradas"
+        "count=0, countPlural=*": "{n} duplicatas ignoradas",
+        "count=*, countPlural=one": "{n} duplicata ignorada",
+        "count=*, countPlural=*": "{n} duplicatas ignoradas"
       }
     }
   ],
@@ -3890,11 +4166,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame para copiar",
-        "countPlural=*": "{n} frames para copiar"
+        "count=0, countPlural=*": "{n} frames para copiar",
+        "count=*, countPlural=one": "{n} frame para copiar",
+        "count=*, countPlural=*": "{n} frames para copiar"
       }
     }
   ],
@@ -3926,11 +4204,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} cópia em {path} aparece como Aposentada e sai dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado.",
-        "countPlural=*": "{n} cópias em {path} aparecem como Aposentadas e saem dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado."
+        "count=0, countPlural=*": "{n} cópias em {path} aparecem como Aposentadas e saem dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado.",
+        "count=*, countPlural=one": "{n} cópia em {path} aparece como Aposentada e sai dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado.",
+        "count=*, countPlural=*": "{n} cópias em {path} aparecem como Aposentadas e saem dos totais de integração. Nenhum arquivo foi excluído, movido ou modificado."
       }
     }
   ],
@@ -3944,11 +4224,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame verificado por hash de conteúdo.",
-        "countPlural=*": "{n} frames verificados por hash de conteúdo."
+        "count=0, countPlural=*": "{n} frames verificados por hash de conteúdo.",
+        "count=*, countPlural=one": "{n} frame verificado por hash de conteúdo.",
+        "count=*, countPlural=*": "{n} frames verificados por hash de conteúdo."
       }
     }
   ],
@@ -3961,11 +4243,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame verificado por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados).",
-        "countPlural=*": "{n} frames verificados por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados)."
+        "count=0, countPlural=*": "{n} frames verificados por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados).",
+        "count=*, countPlural=one": "{n} frame verificado por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados).",
+        "count=*, countPlural=*": "{n} frames verificados por hash de conteúdo; {refused} recusados (bytes diferem ou não encontrados)."
       }
     }
   ],
@@ -3996,11 +4280,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} linha anexada como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou.",
-        "countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou."
+        "count=0, countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou.",
+        "count=*, countPlural=one": "{n} linha anexada como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou.",
+        "count=*, countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame. Nenhum frame foi excluído e nenhuma qualidade mudou."
       }
     }
   ],
@@ -4015,11 +4301,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} linha anexada como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou.",
-        "countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou."
+        "count=0, countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou.",
+        "count=*, countPlural=one": "{n} linha anexada como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou.",
+        "count=*, countPlural=*": "{n} linhas anexadas como valores importados, conteúdo não verificado, de {path}. {rows} linhas não se anexam a nenhum frame ({changed} porque os bytes do frame diferem do que o PlateVault registrou, ou não podem ser lidos). Nenhum frame foi excluído e nenhuma qualidade mudou."
       }
     }
   ],
@@ -4034,11 +4322,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame medido",
-        "countPlural=*": "{n} frames medidos"
+        "count=0, countPlural=*": "{n} frames medidos",
+        "count=*, countPlural=one": "{n} frame medido",
+        "count=*, countPlural=*": "{n} frames medidos"
       }
     }
   ],
@@ -4049,11 +4339,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} valor em cache ainda válido",
-        "countPlural=*": "{count} valores em cache ainda válidos"
+        "count=0, countPlural=*": "{count} valores em cache ainda válidos",
+        "count=*, countPlural=one": "{count} valor em cache ainda válido",
+        "count=*, countPlural=*": "{count} valores em cache ainda válidos"
       }
     }
   ],
@@ -4070,11 +4362,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} link preparado movido para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados.",
-        "countPlural=*": "{n} links preparados movidos para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados."
+        "count=0, countPlural=*": "{n} links preparados movidos para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados.",
+        "count=*, countPlural=one": "{n} link preparado movido para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados.",
+        "count=*, countPlural=*": "{n} links preparados movidos para a Lixeira do sistema. Origens, Resultados e frames da biblioteca inalterados."
       }
     }
   ],
@@ -4086,11 +4380,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} frame rejeitado para a Lixeira",
-        "countPlural=*": "Mover {n} frames rejeitados para a Lixeira"
+        "count=0, countPlural=*": "Mover {n} frames rejeitados para a Lixeira",
+        "count=*, countPlural=one": "Mover {n} frame rejeitado para a Lixeira",
+        "count=*, countPlural=*": "Mover {n} frames rejeitados para a Lixeira"
       }
     }
   ],
@@ -4102,11 +4398,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão selecionada",
-        "countPlural=*": "{count} sessões selecionadas"
+        "count=0, countPlural=*": "{count} sessões selecionadas",
+        "count=*, countPlural=one": "{count} sessão selecionada",
+        "count=*, countPlural=*": "{count} sessões selecionadas"
       }
     }
   ],
@@ -4145,11 +4443,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} amostra inválida (NaN ou ±∞) mascarada nesta métrica",
-        "countPlural=*": "{count} amostras inválidas (NaN ou ±∞) mascaradas nesta métrica"
+        "count=0, countPlural=*": "{count} amostras inválidas (NaN ou ±∞) mascaradas nesta métrica",
+        "count=*, countPlural=one": "{count} amostra inválida (NaN ou ±∞) mascarada nesta métrica",
+        "count=*, countPlural=*": "{count} amostras inválidas (NaN ou ±∞) mascaradas nesta métrica"
       }
     }
   ],
@@ -4160,11 +4460,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} estrela saturada excluída do ajuste",
-        "countPlural=*": "{count} estrelas saturadas excluídas do ajuste"
+        "count=0, countPlural=*": "{count} estrelas saturadas excluídas do ajuste",
+        "count=*, countPlural=one": "{count} estrela saturada excluída do ajuste",
+        "count=*, countPlural=*": "{count} estrelas saturadas excluídas do ajuste"
       }
     }
   ],
@@ -4192,11 +4494,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} arquivo ficou em View (previous)",
-        "countPlural=*": "{n} arquivos ficaram em View (previous)"
+        "count=0, countPlural=*": "{n} arquivos ficaram em View (previous)",
+        "count=*, countPlural=one": "{n} arquivo ficou em View (previous)",
+        "count=*, countPlural=*": "{n} arquivos ficaram em View (previous)"
       }
     }
   ],
@@ -4211,11 +4515,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Também remove {count} link em visualizações mantidas de execuções",
-        "countPlural=*": "Também remove {count} links em visualizações mantidas de execuções"
+        "count=0, countPlural=*": "Também remove {count} links em visualizações mantidas de execuções",
+        "count=*, countPlural=one": "Também remove {count} link em visualizações mantidas de execuções",
+        "count=*, countPlural=*": "Também remove {count} links em visualizações mantidas de execuções"
       }
     }
   ],
@@ -4228,11 +4534,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} cópia duplicada · {bytes}",
-        "countPlural=*": "{count} cópias duplicadas · {bytes}"
+        "count=0, countPlural=*": "{count} cópias duplicadas · {bytes}",
+        "count=*, countPlural=one": "{count} cópia duplicada · {bytes}",
+        "count=*, countPlural=*": "{count} cópias duplicadas · {bytes}"
       }
     }
   ],
@@ -4243,11 +4551,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} erro",
-        "countPlural=*": "{count} erros"
+        "count=0, countPlural=*": "{count} erros",
+        "count=*, countPlural=one": "{count} erro",
+        "count=*, countPlural=*": "{count} erros"
       }
     }
   ],
@@ -4258,11 +4568,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} aviso",
-        "countPlural=*": "{count} avisos"
+        "count=0, countPlural=*": "{count} avisos",
+        "count=*, countPlural=one": "{count} aviso",
+        "count=*, countPlural=*": "{count} avisos"
       }
     }
   ],
@@ -4273,11 +4585,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} informativo",
-        "countPlural=*": "{count} informativos"
+        "count=0, countPlural=*": "{count} informativos",
+        "count=*, countPlural=one": "{count} informativo",
+        "count=*, countPlural=*": "{count} informativos"
       }
     }
   ],
@@ -4298,11 +4612,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Usado por {count} execução",
-        "countPlural=*": "Usado por {count} execuções"
+        "count=0, countPlural=*": "Usado por {count} execuções",
+        "count=*, countPlural=one": "Usado por {count} execução",
+        "count=*, countPlural=*": "Usado por {count} execuções"
       }
     }
   ],
@@ -4320,11 +4636,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame mantém uma cópia",
-        "countPlural=*": "{n} frames mantêm uma cópia cada"
+        "count=0, countPlural=*": "{n} frames mantêm uma cópia cada",
+        "count=*, countPlural=one": "{n} frame mantém uma cópia",
+        "count=*, countPlural=*": "{n} frames mantêm uma cópia cada"
       }
     }
   ],
@@ -4340,11 +4658,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame movido",
-        "countPlural=*": "{n} frames movidos"
+        "count=0, countPlural=*": "{n} frames movidos",
+        "count=*, countPlural=one": "{n} frame movido",
+        "count=*, countPlural=*": "{n} frames movidos"
       }
     }
   ],
@@ -4357,11 +4677,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} frame para {name}?",
-        "countPlural=*": "Mover {n} frames para {name}?"
+        "count=0, countPlural=*": "Mover {n} frames para {name}?",
+        "count=*, countPlural=one": "Mover {n} frame para {name}?",
+        "count=*, countPlural=*": "Mover {n} frames para {name}?"
       }
     }
   ],
@@ -4376,11 +4698,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Marcar {n} frame como {quality}?",
-        "countPlural=*": "Marcar {n} frames como {quality}?"
+        "count=0, countPlural=*": "Marcar {n} frames como {quality}?",
+        "count=*, countPlural=one": "Marcar {n} frame como {quality}?",
+        "count=*, countPlural=*": "Marcar {n} frames como {quality}?"
       }
     }
   ],
@@ -4418,11 +4742,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame aprovado.",
-        "countPlural=*": "{count} frames aprovados."
+        "count=0, countPlural=*": "{count} frames aprovados.",
+        "count=*, countPlural=one": "{count} frame aprovado.",
+        "count=*, countPlural=*": "{count} frames aprovados."
       }
     }
   ],
@@ -4441,11 +4767,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} importação…",
-        "countPlural=*": "{count} importações…"
+        "count=0, countPlural=*": "{count} importações…",
+        "count=*, countPlural=one": "{count} importação…",
+        "count=*, countPlural=*": "{count} importações…"
       }
     }
   ],
@@ -4461,11 +4789,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Aprovar {n} frame",
-        "countPlural=*": "Aprovar {n} frames"
+        "count=0, countPlural=*": "Aprovar {n} frames",
+        "count=*, countPlural=one": "Aprovar {n} frame",
+        "count=*, countPlural=*": "Aprovar {n} frames"
       }
     }
   ],
@@ -4478,11 +4808,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Aprovar o {n} frame não revisado?",
-        "countPlural=*": "Aprovar os {n} frames não revisados?"
+        "count=0, countPlural=*": "Aprovar os {n} frames não revisados?",
+        "count=*, countPlural=one": "Aprovar o {n} frame não revisado?",
+        "count=*, countPlural=*": "Aprovar os {n} frames não revisados?"
       }
     }
   ],
@@ -4503,11 +4835,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} linha",
-        "countPlural=*": "{count} linhas"
+        "count=0, countPlural=*": "{count} linhas",
+        "count=*, countPlural=one": "{count} linha",
+        "count=*, countPlural=*": "{count} linhas"
       }
     }
   ],
@@ -4520,11 +4854,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão em um Projeto",
-        "countPlural=*": "{count} sessões em um Projeto"
+        "count=0, countPlural=*": "{count} sessões em um Projeto",
+        "count=*, countPlural=one": "{count} sessão em um Projeto",
+        "count=*, countPlural=*": "{count} sessões em um Projeto"
       }
     }
   ],
@@ -4537,11 +4873,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} inutilizável",
-        "countPlural=*": "{n} inutilizáveis"
+        "count=0, countPlural=*": "{n} inutilizáveis",
+        "count=*, countPlural=one": "{n} inutilizável",
+        "count=*, countPlural=*": "{n} inutilizáveis"
       }
     }
   ],
@@ -4553,11 +4891,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {n} frame inutilizável para a Lixeira?",
-        "countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira?"
+        "count=0, countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira?",
+        "count=*, countPlural=one": "Mover {n} frame inutilizável para a Lixeira?",
+        "count=*, countPlural=*": "Mover {n} frames inutilizáveis para a Lixeira?"
       }
     }
   ],
@@ -4582,11 +4922,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} evento",
-        "countPlural=*": "{count} eventos"
+        "count=0, countPlural=*": "{count} eventos",
+        "count=*, countPlural=one": "{count} evento",
+        "count=*, countPlural=*": "{count} eventos"
       }
     }
   ],
@@ -4597,11 +4939,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} noite",
-        "countPlural=*": "{count} noites"
+        "count=0, countPlural=*": "{count} noites",
+        "count=*, countPlural=one": "{count} noite",
+        "count=*, countPlural=*": "{count} noites"
       }
     }
   ],
@@ -4642,11 +4986,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Sair com {n} tarefa em andamento?",
-        "countPlural=*": "Sair com {n} tarefas em andamento?"
+        "count=0, countPlural=*": "Sair com {n} tarefas em andamento?",
+        "count=*, countPlural=one": "Sair com {n} tarefa em andamento?",
+        "count=*, countPlural=*": "Sair com {n} tarefas em andamento?"
       }
     }
   ],
@@ -4657,11 +5003,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Ela continua na próxima abertura.",
-        "countPlural=*": "Elas continuam na próxima abertura."
+        "count=0, countPlural=*": "Elas continuam na próxima abertura.",
+        "count=*, countPlural=one": "Ela continua na próxima abertura.",
+        "count=*, countPlural=*": "Elas continuam na próxima abertura."
       }
     }
   ],
@@ -4744,11 +5092,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {count} arquivo para a Lixeira?",
-        "countPlural=*": "Mover {count} arquivos para a Lixeira?"
+        "count=0, countPlural=*": "Mover {count} arquivos para a Lixeira?",
+        "count=*, countPlural=one": "Mover {count} arquivo para a Lixeira?",
+        "count=*, countPlural=*": "Mover {count} arquivos para a Lixeira?"
       }
     }
   ],
@@ -4760,11 +5110,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{size} · {count} local",
-        "countPlural=*": "{size} · {count} locais"
+        "count=0, countPlural=*": "{size} · {count} locais",
+        "count=*, countPlural=one": "{size} · {count} local",
+        "count=*, countPlural=*": "{size} · {count} locais"
       }
     }
   ],
@@ -4916,11 +5268,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Enviar {count} arquivo para a Lixeira",
-        "countPlural=*": "Enviar {count} arquivos para a Lixeira"
+        "count=0, countPlural=*": "Enviar {count} arquivos para a Lixeira",
+        "count=*, countPlural=one": "Enviar {count} arquivo para a Lixeira",
+        "count=*, countPlural=*": "Enviar {count} arquivos para a Lixeira"
       }
     }
   ],
@@ -4933,11 +5287,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Desativado: aceite ou resolva {count} sugestão de calibração primeiro.",
-        "countPlural=*": "Desativado: aceite ou resolva {count} sugestões de calibração primeiro."
+        "count=0, countPlural=*": "Desativado: aceite ou resolva {count} sugestões de calibração primeiro.",
+        "count=*, countPlural=one": "Desativado: aceite ou resolva {count} sugestão de calibração primeiro.",
+        "count=*, countPlural=*": "Desativado: aceite ou resolva {count} sugestões de calibração primeiro."
       }
     }
   ],
@@ -4969,11 +5325,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} light",
-        "countPlural=*": "{count} lights"
+        "count=0, countPlural=*": "{count} lights",
+        "count=*, countPlural=one": "{count} light",
+        "count=*, countPlural=*": "{count} lights"
       }
     }
   ],
@@ -4986,11 +5344,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão correspondente",
-        "countPlural=*": "{count} sessões correspondentes"
+        "count=0, countPlural=*": "{count} sessões correspondentes",
+        "count=*, countPlural=one": "{count} sessão correspondente",
+        "count=*, countPlural=*": "{count} sessões correspondentes"
       }
     }
   ],
@@ -5011,11 +5371,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Marcar {count} frame incluído como Utilizável na biblioteca?",
-        "countPlural=*": "Marcar {count} frames incluídos como Utilizáveis na biblioteca?"
+        "count=0, countPlural=*": "Marcar {count} frames incluídos como Utilizáveis na biblioteca?",
+        "count=*, countPlural=one": "Marcar {count} frame incluído como Utilizável na biblioteca?",
+        "count=*, countPlural=*": "Marcar {count} frames incluídos como Utilizáveis na biblioteca?"
       }
     }
   ],
@@ -5027,11 +5389,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Marcar {count} frame como utilizável",
-        "countPlural=*": "Marcar {count} frames como utilizáveis"
+        "count=0, countPlural=*": "Marcar {count} frames como utilizáveis",
+        "count=*, countPlural=one": "Marcar {count} frame como utilizável",
+        "count=*, countPlural=*": "Marcar {count} frames como utilizáveis"
       }
     }
   ],
@@ -5101,11 +5465,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} arquivo copiado byte a byte para {path}.",
-        "countPlural=*": "{count} arquivos copiados byte a byte para {path}."
+        "count=0, countPlural=*": "{count} arquivos copiados byte a byte para {path}.",
+        "count=*, countPlural=one": "{count} arquivo copiado byte a byte para {path}.",
+        "count=*, countPlural=*": "{count} arquivos copiados byte a byte para {path}."
       }
     }
   ],
@@ -5190,11 +5556,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Revise {count} frame primeiro",
-        "countPlural=*": "Revise {count} frames primeiro"
+        "count=0, countPlural=*": "Revise {count} frames primeiro",
+        "count=*, countPlural=one": "Revise {count} frame primeiro",
+        "count=*, countPlural=*": "Revise {count} frames primeiro"
       }
     }
   ],
@@ -5243,11 +5611,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} meta combina",
-        "countPlural=*": "{n} metas combinam"
+        "count=0, countPlural=*": "{n} metas combinam",
+        "count=*, countPlural=one": "{n} meta combina",
+        "count=*, countPlural=*": "{n} metas combinam"
       }
     }
   ],
@@ -5259,11 +5629,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} Alvo planejado",
-        "countPlural=*": "{n} Alvos planejados"
+        "count=0, countPlural=*": "{n} Alvos planejados",
+        "count=*, countPlural=one": "{n} Alvo planejado",
+        "count=*, countPlural=*": "{n} Alvos planejados"
       }
     }
   ],
@@ -5313,11 +5685,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame Não revisado",
-        "countPlural=*": "{count} frames Não revisados"
+        "count=0, countPlural=*": "{count} frames Não revisados",
+        "count=*, countPlural=one": "{count} frame Não revisado",
+        "count=*, countPlural=*": "{count} frames Não revisados"
       }
     }
   ],
@@ -5340,11 +5714,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} alteração pendente ainda não foi aplicada",
-        "countPlural=*": "{count} alterações pendentes ainda não foram aplicadas"
+        "count=0, countPlural=*": "{count} alterações pendentes ainda não foram aplicadas",
+        "count=*, countPlural=one": "{count} alteração pendente ainda não foi aplicada",
+        "count=*, countPlural=*": "{count} alterações pendentes ainda não foram aplicadas"
       }
     }
   ],
@@ -5390,11 +5766,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} não resolvido",
-        "countPlural=*": "{count} não resolvidos"
+        "count=0, countPlural=*": "{count} não resolvidos",
+        "count=*, countPlural=one": "{count} não resolvido",
+        "count=*, countPlural=*": "{count} não resolvidos"
       }
     }
   ],
@@ -5405,11 +5783,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame não revisado",
-        "countPlural=*": "{count} frames não revisados"
+        "count=0, countPlural=*": "{count} frames não revisados",
+        "count=*, countPlural=one": "{count} frame não revisado",
+        "count=*, countPlural=*": "{count} frames não revisados"
       }
     }
   ],
@@ -5420,11 +5800,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {count} item para a Lixeira?",
-        "countPlural=*": "Mover {count} itens para a Lixeira?"
+        "count=0, countPlural=*": "Mover {count} itens para a Lixeira?",
+        "count=*, countPlural=one": "Mover {count} item para a Lixeira?",
+        "count=*, countPlural=*": "Mover {count} itens para a Lixeira?"
       }
     }
   ],
@@ -5435,11 +5817,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mais {count} sessão precisa de revisão",
-        "countPlural=*": "Mais {count} sessões precisam de revisão"
+        "count=0, countPlural=*": "Mais {count} sessões precisam de revisão",
+        "count=*, countPlural=one": "Mais {count} sessão precisa de revisão",
+        "count=*, countPlural=*": "Mais {count} sessões precisam de revisão"
       }
     }
   ],
@@ -5530,11 +5914,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} local offline",
-        "countPlural=*": "{n} locais offline"
+        "count=0, countPlural=*": "{n} locais offline",
+        "count=*, countPlural=one": "{n} local offline",
+        "count=*, countPlural=*": "{n} locais offline"
       }
     }
   ],
@@ -5548,11 +5934,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Movendo {n} cópia para a Lixeira do sistema",
-        "countPlural=*": "Movendo {n} cópias para a Lixeira do sistema"
+        "count=0, countPlural=*": "Movendo {n} cópias para a Lixeira do sistema",
+        "count=*, countPlural=one": "Movendo {n} cópia para a Lixeira do sistema",
+        "count=*, countPlural=*": "Movendo {n} cópias para a Lixeira do sistema"
       }
     }
   ],
@@ -5611,11 +5999,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} arquivo selecionado",
-        "countPlural=*": "{count} arquivos selecionados"
+        "count=0, countPlural=*": "{count} arquivos selecionados",
+        "count=*, countPlural=one": "{count} arquivo selecionado",
+        "count=*, countPlural=*": "{count} arquivos selecionados"
       }
     }
   ],
@@ -5627,11 +6017,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} processo",
-        "countPlural=*": "{count} processos"
+        "count=0, countPlural=*": "{count} processos",
+        "count=*, countPlural=one": "{count} processo",
+        "count=*, countPlural=*": "{count} processos"
       }
     }
   ],
@@ -5648,11 +6040,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} oculto",
-        "countPlural=*": "{count} ocultos"
+        "count=0, countPlural=*": "{count} ocultos",
+        "count=*, countPlural=one": "{count} oculto",
+        "count=*, countPlural=*": "{count} ocultos"
       }
     }
   ],
@@ -5678,11 +6072,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name}: {count} arquivo fixado alterado",
-        "countPlural=*": "{name}: {count} arquivos fixados alterados"
+        "count=0, countPlural=*": "{name}: {count} arquivos fixados alterados",
+        "count=*, countPlural=one": "{name}: {count} arquivo fixado alterado",
+        "count=*, countPlural=*": "{name}: {count} arquivos fixados alterados"
       }
     }
   ],
@@ -5694,11 +6090,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name}: {count} em View (previous)",
-        "countPlural=*": "{name}: {count} em View (previous)"
+        "count=0, countPlural=*": "{name}: {count} em View (previous)",
+        "count=*, countPlural=one": "{name}: {count} em View (previous)",
+        "count=*, countPlural=*": "{name}: {count} em View (previous)"
       }
     }
   ],
@@ -5778,11 +6176,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Descartar {count} edição",
-        "countPlural=*": "Descartar {count} edições"
+        "count=0, countPlural=*": "Descartar {count} edições",
+        "count=*, countPlural=one": "Descartar {count} edição",
+        "count=*, countPlural=*": "Descartar {count} edições"
       }
     }
   ],
@@ -5793,11 +6193,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Descartar {count} edição deste projeto?",
-        "countPlural=*": "Descartar {count} edições deste projeto?"
+        "count=0, countPlural=*": "Descartar {count} edições deste projeto?",
+        "count=*, countPlural=one": "Descartar {count} edição deste projeto?",
+        "count=*, countPlural=*": "Descartar {count} edições deste projeto?"
       }
     }
   ],
@@ -5834,11 +6236,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Deixar de fora {n} frame inutilizável",
-        "countPlural=*": "Deixar de fora {n} frames inutilizáveis"
+        "count=0, countPlural=*": "Deixar de fora {n} frames inutilizáveis",
+        "count=*, countPlural=one": "Deixar de fora {n} frame inutilizável",
+        "count=*, countPlural=*": "Deixar de fora {n} frames inutilizáveis"
       }
     }
   ],
@@ -5850,11 +6254,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Deixar de fora {n} frame",
-        "countPlural=*": "Deixar de fora {n} frames"
+        "count=0, countPlural=*": "Deixar de fora {n} frames",
+        "count=*, countPlural=one": "Deixar de fora {n} frame",
+        "count=*, countPlural=*": "Deixar de fora {n} frames"
       }
     }
   ],
@@ -5866,11 +6272,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Incluir de volta {n} frame",
-        "countPlural=*": "Incluir de volta {n} frames"
+        "count=0, countPlural=*": "Incluir de volta {n} frames",
+        "count=*, countPlural=one": "Incluir de volta {n} frame",
+        "count=*, countPlural=*": "Incluir de volta {n} frames"
       }
     }
   ],
@@ -5884,11 +6292,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {count} sessão para {group}",
-        "countPlural=*": "Mover {count} sessões para {group}"
+        "count=0, countPlural=*": "Mover {count} sessões para {group}",
+        "count=*, countPlural=one": "Mover {count} sessão para {group}",
+        "count=*, countPlural=*": "Mover {count} sessões para {group}"
       }
     }
   ],
@@ -5902,11 +6312,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Usar {n} frame inutilizável",
-        "countPlural=*": "Usar {n} frames inutilizáveis"
+        "count=0, countPlural=*": "Usar {n} frames inutilizáveis",
+        "count=*, countPlural=one": "Usar {n} frame inutilizável",
+        "count=*, countPlural=*": "Usar {n} frames inutilizáveis"
       }
     }
   ],
@@ -5917,11 +6329,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mosaico de {count} painel",
-        "countPlural=*": "Mosaico de {count} painéis"
+        "count=0, countPlural=*": "Mosaico de {count} painéis",
+        "count=*, countPlural=one": "Mosaico de {count} painel",
+        "count=*, countPlural=*": "Mosaico de {count} painéis"
       }
     }
   ],
@@ -5956,11 +6370,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "O grupo contém {count} sessão: mova-a ou remova-a primeiro",
-        "countPlural=*": "O grupo contém {count} sessões: mova-as ou remova-as primeiro"
+        "count=0, countPlural=*": "O grupo contém {count} sessões: mova-as ou remova-as primeiro",
+        "count=*, countPlural=one": "O grupo contém {count} sessão: mova-a ou remova-a primeiro",
+        "count=*, countPlural=*": "O grupo contém {count} sessões: mova-as ou remova-as primeiro"
       }
     }
   ],
@@ -5980,11 +6396,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} entrada",
-        "countPlural=*": "{count} entradas"
+        "count=0, countPlural=*": "{count} entradas",
+        "count=*, countPlural=one": "{count} entrada",
+        "count=*, countPlural=*": "{count} entradas"
       }
     }
   ],
@@ -6010,11 +6428,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{name} · {count} item",
-        "countPlural=*": "{name} · {count} itens"
+        "count=0, countPlural=*": "{name} · {count} itens",
+        "count=*, countPlural=one": "{name} · {count} item",
+        "count=*, countPlural=*": "{name} · {count} itens"
       }
     }
   ],
@@ -6030,11 +6450,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mover {count} item para a Lixeira?",
-        "countPlural=*": "Mover {count} itens para a Lixeira?"
+        "count=0, countPlural=*": "Mover {count} itens para a Lixeira?",
+        "count=*, countPlural=one": "Mover {count} item para a Lixeira?",
+        "count=*, countPlural=*": "Mover {count} itens para a Lixeira?"
       }
     }
   ],
@@ -6049,11 +6471,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame mantido",
-        "countPlural=*": "{count} frames mantidos"
+        "count=0, countPlural=*": "{count} frames mantidos",
+        "count=*, countPlural=one": "{count} frame mantido",
+        "count=*, countPlural=*": "{count} frames mantidos"
       }
     }
   ],
@@ -6091,11 +6515,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Importar {frames} frame?",
-        "countPlural=*": "Importar {frames} frames?"
+        "count=0, countPlural=*": "Importar {frames} frames?",
+        "count=*, countPlural=one": "Importar {frames} frame?",
+        "count=*, countPlural=*": "Importar {frames} frames?"
       }
     }
   ],
@@ -6112,11 +6538,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} enquadramento unido",
-        "countPlural=*": "{count} enquadramentos unidos"
+        "count=0, countPlural=*": "{count} enquadramentos unidos",
+        "count=*, countPlural=one": "{count} enquadramento unido",
+        "count=*, countPlural=*": "{count} enquadramentos unidos"
       }
     }
   ],
@@ -6127,11 +6555,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Unir {count} enquadramento",
-        "countPlural=*": "Unir {count} enquadramentos"
+        "count=0, countPlural=*": "Unir {count} enquadramentos",
+        "count=*, countPlural=one": "Unir {count} enquadramento",
+        "count=*, countPlural=*": "Unir {count} enquadramentos"
       }
     }
   ],
@@ -6144,11 +6574,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} frame sem RA/DEC fica nesta sessão",
-        "countPlural=*": "{count} frames sem RA/DEC ficam nesta sessão"
+        "count=0, countPlural=*": "{count} frames sem RA/DEC ficam nesta sessão",
+        "count=*, countPlural=one": "{count} frame sem RA/DEC fica nesta sessão",
+        "count=*, countPlural=*": "{count} frames sem RA/DEC ficam nesta sessão"
       }
     }
   ],
@@ -6177,11 +6609,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} alteração pendente",
-        "countPlural=*": "{count} alterações pendentes"
+        "count=0, countPlural=*": "{count} alterações pendentes",
+        "count=*, countPlural=one": "{count} alteração pendente",
+        "count=*, countPlural=*": "{count} alterações pendentes"
       }
     }
   ],
@@ -6193,11 +6627,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} cópia duplicada",
-        "countPlural=*": "{count} cópias duplicadas"
+        "count=0, countPlural=*": "{count} cópias duplicadas",
+        "count=*, countPlural=one": "{count} cópia duplicada",
+        "count=*, countPlural=*": "{count} cópias duplicadas"
       }
     }
   ],
@@ -6210,11 +6646,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Confirmar as sugestões de {count} sessão?",
-        "countPlural=*": "Confirmar as sugestões de {count} sessões?"
+        "count=0, countPlural=*": "Confirmar as sugestões de {count} sessões?",
+        "count=*, countPlural=one": "Confirmar as sugestões de {count} sessão?",
+        "count=*, countPlural=*": "Confirmar as sugestões de {count} sessões?"
       }
     }
   ],
@@ -6225,11 +6663,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sugestão passa a ser fixada por você",
-        "countPlural=*": "{count} sugestões passam a ser fixadas por você"
+        "count=0, countPlural=*": "{count} sugestões passam a ser fixadas por você",
+        "count=*, countPlural=one": "{count} sugestão passa a ser fixada por você",
+        "count=*, countPlural=*": "{count} sugestões passam a ser fixadas por você"
       }
     }
   ],
@@ -6241,11 +6681,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Definir {choice} para {count} sessão?",
-        "countPlural=*": "Definir {choice} para {count} sessões?"
+        "count=0, countPlural=*": "Definir {choice} para {count} sessões?",
+        "count=*, countPlural=one": "Definir {choice} para {count} sessão?",
+        "count=*, countPlural=*": "Definir {choice} para {count} sessões?"
       }
     }
   ],
@@ -6257,11 +6699,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Em {count} Projeto",
-        "countPlural=*": "Em {count} Projetos"
+        "count=0, countPlural=*": "Em {count} Projetos",
+        "count=*, countPlural=one": "Em {count} Projeto",
+        "count=*, countPlural=*": "Em {count} Projetos"
       }
     }
   ],
@@ -6311,11 +6755,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Esta sessão precisará de calibração novamente: {sessions}",
-        "countPlural=*": "Estas {count} sessões precisarão de calibração novamente: {sessions}"
+        "count=0, countPlural=*": "Estas {count} sessões precisarão de calibração novamente: {sessions}",
+        "count=*, countPlural=one": "Esta sessão precisará de calibração novamente: {sessions}",
+        "count=*, countPlural=*": "Estas {count} sessões precisarão de calibração novamente: {sessions}"
       }
     }
   ],
@@ -6332,11 +6778,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Usado por {count} setup",
-        "countPlural=*": "Usado por {count} setups"
+        "count=0, countPlural=*": "Usado por {count} setups",
+        "count=*, countPlural=one": "Usado por {count} setup",
+        "count=*, countPlural=*": "Usado por {count} setups"
       }
     }
   ],
@@ -6347,11 +6795,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Usado por {count} projeto",
-        "countPlural=*": "Usado por {count} projetos"
+        "count=0, countPlural=*": "Usado por {count} projetos",
+        "count=*, countPlural=one": "Usado por {count} projeto",
+        "count=*, countPlural=*": "Usado por {count} projetos"
       }
     }
   ],
@@ -6362,11 +6812,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão",
-        "countPlural=*": "{count} sessões"
+        "count=0, countPlural=*": "{count} sessões",
+        "count=*, countPlural=one": "{count} sessão",
+        "count=*, countPlural=*": "{count} sessões"
       }
     }
   ],
@@ -6377,11 +6829,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} master",
-        "countPlural=*": "{count} masters"
+        "count=0, countPlural=*": "{count} masters",
+        "count=*, countPlural=one": "{count} master",
+        "count=*, countPlural=*": "{count} masters"
       }
     }
   ],
@@ -6520,11 +6974,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} estrela",
-        "countPlural=*": "{count} estrelas"
+        "count=0, countPlural=*": "{count} estrelas",
+        "count=*, countPlural=one": "{count} estrela",
+        "count=*, countPlural=*": "{count} estrelas"
       }
     }
   ],
@@ -6582,11 +7038,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} original está offline",
-        "countPlural=*": "{count} originais estão offline"
+        "count=0, countPlural=*": "{count} originais estão offline",
+        "count=*, countPlural=one": "{count} original está offline",
+        "count=*, countPlural=*": "{count} originais estão offline"
       }
     }
   ],
@@ -6597,11 +7055,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} arquivo de calibração fixado mudou ou sumiu: reatribua-o",
-        "countPlural=*": "{count} arquivos de calibração fixados mudaram ou sumiram: reatribua-os"
+        "count=0, countPlural=*": "{count} arquivos de calibração fixados mudaram ou sumiram: reatribua-os",
+        "count=*, countPlural=one": "{count} arquivo de calibração fixado mudou ou sumiu: reatribua-o",
+        "count=*, countPlural=*": "{count} arquivos de calibração fixados mudaram ou sumiram: reatribua-os"
       }
     }
   ],
@@ -6612,11 +7072,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Revise a View (previous) primeiro: {count} arquivo restante",
-        "countPlural=*": "Revise a View (previous) primeiro: {count} arquivos restantes"
+        "count=0, countPlural=*": "Revise a View (previous) primeiro: {count} arquivos restantes",
+        "count=*, countPlural=one": "Revise a View (previous) primeiro: {count} arquivo restante",
+        "count=*, countPlural=*": "Revise a View (previous) primeiro: {count} arquivos restantes"
       }
     }
   ],
@@ -6627,11 +7089,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "A View (previous) guarda {count} arquivo mantido: retire-o, ou marque todos os arquivos que o PlateVault não colocou",
-        "countPlural=*": "A View (previous) guarda {count} arquivos mantidos: retire-os, ou marque todos os arquivos que o PlateVault não colocou"
+        "count=0, countPlural=*": "A View (previous) guarda {count} arquivos mantidos: retire-os, ou marque todos os arquivos que o PlateVault não colocou",
+        "count=*, countPlural=one": "A View (previous) guarda {count} arquivo mantido: retire-o, ou marque todos os arquivos que o PlateVault não colocou",
+        "count=*, countPlural=*": "A View (previous) guarda {count} arquivos mantidos: retire-os, ou marque todos os arquivos que o PlateVault não colocou"
       }
     }
   ],
@@ -6643,11 +7107,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão precisa de calibração",
-        "countPlural=*": "{count} sessões precisam de calibração"
+        "count=0, countPlural=*": "{count} sessões precisam de calibração",
+        "count=*, countPlural=one": "{count} sessão precisa de calibração",
+        "count=*, countPlural=*": "{count} sessões precisam de calibração"
       }
     }
   ],
@@ -6660,11 +7126,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} link da View mantida agora aponta para o arquivo",
-        "countPlural=*": "{n} links da View mantida agora apontam para o arquivo"
+        "count=0, countPlural=*": "{n} links da View mantida agora apontam para o arquivo",
+        "count=*, countPlural=one": "{n} link da View mantida agora aponta para o arquivo",
+        "count=*, countPlural=*": "{n} links da View mantida agora apontam para o arquivo"
       }
     }
   ],
@@ -6705,11 +7173,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} noite de diferença",
-        "countPlural=*": "{count} noites de diferença"
+        "count=0, countPlural=*": "{count} noites de diferença",
+        "count=*, countPlural=one": "{count} noite de diferença",
+        "count=*, countPlural=*": "{count} noites de diferença"
       }
     }
   ],
@@ -6720,11 +7190,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} dia de diferença",
-        "countPlural=*": "{count} dias de diferença"
+        "count=0, countPlural=*": "{count} dias de diferença",
+        "count=*, countPlural=one": "{count} dia de diferença",
+        "count=*, countPlural=*": "{count} dias de diferença"
       }
     }
   ],
@@ -6757,11 +7229,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} offline",
-        "countPlural=*": "{n} offline"
+        "count=0, countPlural=*": "{n} offline",
+        "count=*, countPlural=one": "{n} offline",
+        "count=*, countPlural=*": "{n} offline"
       }
     }
   ],
@@ -6777,11 +7251,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} link",
-        "countPlural=*": "{count} links"
+        "count=0, countPlural=*": "{count} links",
+        "count=*, countPlural=one": "{count} link",
+        "count=*, countPlural=*": "{count} links"
       }
     }
   ],
@@ -6793,11 +7269,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} link para o original; nada é copiado.",
-        "countPlural=*": "{n} links para os originais; nada é copiado."
+        "count=0, countPlural=*": "{n} links para os originais; nada é copiado.",
+        "count=*, countPlural=one": "{n} link para o original; nada é copiado.",
+        "count=*, countPlural=*": "{n} links para os originais; nada é copiado."
       }
     }
   ],
@@ -6810,11 +7288,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} cópia independente, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite.",
-        "countPlural=*": "{n} cópias independentes, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite."
+        "count=0, countPlural=*": "{n} cópias independentes, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite.",
+        "count=*, countPlural=one": "{n} cópia independente, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite.",
+        "count=*, countPlural=*": "{n} cópias independentes, {size} no total: cada pasta que usa um arquivo recebe a sua própria cópia do original, clonada onde o volume permite."
       }
     }
   ],
@@ -6828,11 +7308,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Mapa de painéis: {count} painel, norte para cima, leste à esquerda",
-        "countPlural=*": "Mapa de painéis: {count} painéis, norte para cima, leste à esquerda"
+        "count=0, countPlural=*": "Mapa de painéis: {count} painéis, norte para cima, leste à esquerda",
+        "count=*, countPlural=one": "Mapa de painéis: {count} painel, norte para cima, leste à esquerda",
+        "count=*, countPlural=*": "Mapa de painéis: {count} painéis, norte para cima, leste à esquerda"
       }
     }
   ],
@@ -6843,11 +7325,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão aponta para fora do campo do seu painel (ponto âmbar).",
-        "countPlural=*": "{count} sessões apontam para fora do campo do seu painel (pontos âmbar)."
+        "count=0, countPlural=*": "{count} sessões apontam para fora do campo do seu painel (pontos âmbar).",
+        "count=*, countPlural=one": "{count} sessão aponta para fora do campo do seu painel (ponto âmbar).",
+        "count=*, countPlural=*": "{count} sessões apontam para fora do campo do seu painel (pontos âmbar)."
       }
     }
   ],
@@ -6884,11 +7368,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} arquivo em",
-        "countPlural=*": "{count} arquivos em"
+        "count=0, countPlural=*": "{count} arquivos em",
+        "count=*, countPlural=one": "{count} arquivo em",
+        "count=*, countPlural=*": "{count} arquivos em"
       }
     }
   ],
@@ -6902,11 +7388,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Escolha a câmera de {count} arquivo",
-        "countPlural=*": "Escolha a câmera de {count} arquivos"
+        "count=0, countPlural=*": "Escolha a câmera de {count} arquivos",
+        "count=*, countPlural=one": "Escolha a câmera de {count} arquivo",
+        "count=*, countPlural=*": "Escolha a câmera de {count} arquivos"
       }
     }
   ],
@@ -6924,11 +7412,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} conjunto bruto",
-        "countPlural=*": "{count} conjuntos brutos"
+        "count=0, countPlural=*": "{count} conjuntos brutos",
+        "count=*, countPlural=one": "{count} conjunto bruto",
+        "count=*, countPlural=*": "{count} conjuntos brutos"
       }
     }
   ],
@@ -6943,11 +7433,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} candidato",
-        "countPlural=*": "{count} candidatos"
+        "count=0, countPlural=*": "{count} candidatos",
+        "count=*, countPlural=one": "{count} candidato",
+        "count=*, countPlural=*": "{count} candidatos"
       }
     }
   ],
@@ -6997,11 +7489,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} quadro recebe uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados.",
-        "countPlural=*": "{n} quadros recebem uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados."
+        "count=0, countPlural=*": "{n} quadros recebem uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados.",
+        "count=*, countPlural=one": "{n} quadro recebe uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados.",
+        "count=*, countPlural=*": "{n} quadros recebem uma cópia própria com o cabeçalho corrigido, porque o aplicativo não lê correções. Originais e links nunca são alterados."
       }
     }
   ],
@@ -7020,11 +7514,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} quadro copiado",
-        "countPlural=*": "{n} quadros copiados"
+        "count=0, countPlural=*": "{n} quadros copiados",
+        "count=*, countPlural=one": "{n} quadro copiado",
+        "count=*, countPlural=*": "{n} quadros copiados"
       }
     }
   ],
@@ -7036,11 +7532,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} vinculado",
-        "countPlural=*": "{n} vinculados"
+        "count=0, countPlural=*": "{n} vinculados",
+        "count=*, countPlural=one": "{n} vinculado",
+        "count=*, countPlural=*": "{n} vinculados"
       }
     }
   ],
@@ -7053,11 +7551,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "({n} clonada)",
-        "countPlural=*": "({n} clonadas)"
+        "count=0, countPlural=*": "({n} clonadas)",
+        "count=*, countPlural=one": "({n} clonada)",
+        "count=*, countPlural=*": "({n} clonadas)"
       }
     }
   ],
@@ -7080,11 +7580,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Processing/Siril/ contém {n} conjunto, com lights/, flats/, darks/ e biases/ vinculados à View.",
-        "countPlural=*": "Processing/Siril/ contém {n} conjuntos, cada um com lights/, flats/, darks/ e biases/ vinculados à View."
+        "count=0, countPlural=*": "Processing/Siril/ contém {n} conjuntos, cada um com lights/, flats/, darks/ e biases/ vinculados à View.",
+        "count=*, countPlural=one": "Processing/Siril/ contém {n} conjunto, com lights/, flats/, darks/ e biases/ vinculados à View.",
+        "count=*, countPlural=*": "Processing/Siril/ contém {n} conjuntos, cada um com lights/, flats/, darks/ e biases/ vinculados à View."
       }
     }
   ],
@@ -7105,11 +7607,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} entrada da View difere do seu registro do Aplicar: aplique de novo",
-        "countPlural=*": "{n} entradas da View diferem do seu registro do Aplicar: aplique de novo"
+        "count=0, countPlural=*": "{n} entradas da View diferem do seu registro do Aplicar: aplique de novo",
+        "count=*, countPlural=one": "{n} entrada da View difere do seu registro do Aplicar: aplique de novo",
+        "count=*, countPlural=*": "{n} entradas da View diferem do seu registro do Aplicar: aplique de novo"
       }
     }
   ],
@@ -7158,11 +7662,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} frame alterado",
-        "countPlural=*": "{n} frames alterados"
+        "count=0, countPlural=*": "{n} frames alterados",
+        "count=*, countPlural=one": "{n} frame alterado",
+        "count=*, countPlural=*": "{n} frames alterados"
       }
     }
   ],
@@ -7189,11 +7695,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Remover {count} sessão de {project}?",
-        "countPlural=*": "Remover {count} sessões de {project}?"
+        "count=0, countPlural=*": "Remover {count} sessões de {project}?",
+        "count=*, countPlural=one": "Remover {count} sessão de {project}?",
+        "count=*, countPlural=*": "Remover {count} sessões de {project}?"
       }
     }
   ],
@@ -7205,11 +7713,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão vai para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar.",
-        "countPlural=*": "{count} sessões vão para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar."
+        "count=0, countPlural=*": "{count} sessões vão para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar.",
+        "count=*, countPlural=one": "{count} sessão vai para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar.",
+        "count=*, countPlural=*": "{count} sessões vão para o novo grupo com todos os frames. A pasta aparece no próximo Aplicar."
       }
     }
   ],
@@ -7231,11 +7741,13 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} sessão correspondente precisa de revisão antes de ser adicionada",
-        "countPlural=*": "{count} sessões correspondentes precisam de revisão antes de serem adicionadas"
+        "count=0, countPlural=*": "{count} sessões correspondentes precisam de revisão antes de serem adicionadas",
+        "count=*, countPlural=one": "{count} sessão correspondente precisa de revisão antes de ser adicionada",
+        "count=*, countPlural=*": "{count} sessões correspondentes precisam de revisão antes de serem adicionadas"
       }
     }
   ],
@@ -7251,12 +7763,16 @@
         "local countPlural = count: plural"
       ],
       "selectors": [
+        "count",
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{n} sessão precisa de calibração",
-        "countPlural=*": "{n} sessões precisam de calibração"
+        "count=0, countPlural=*": "{n} sessões precisam de calibração",
+        "count=*, countPlural=one": "{n} sessão precisa de calibração",
+        "count=*, countPlural=*": "{n} sessões precisam de calibração"
       }
     }
-  ]
+  ],
+  "status_bar_page_in": "{area} › {page}",
+  "status_bar_issue_page": "{page} ({count})"
 }

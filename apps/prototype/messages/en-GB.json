@@ -7244,5 +7244,7 @@
         "countPlural=*": "{n} sessions need calibration"
       }
     }
-  ]
+  ],
+  "status_bar_page_in": "{area} › {page}",
+  "status_bar_issue_page": "{page} ({count})"
 }

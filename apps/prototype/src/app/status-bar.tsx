@@ -9,24 +9,29 @@
  *   on hover or focus (two from 1440 px, one below, the rest under "+N");
  *   "Idle" when nothing runs.
  * - Right: a counter per severity (errors, warnings, info), shown only when
- *   non-zero, each opening a popout of that severity's issues (`IssueRow`,
- *   from the same `useIssues()` as the hub, so the counts agree, each with
- *   Dismiss); a muted ✓ with no issues. Then the bell with the unread count,
- *   opening the notification history; opening it marks every notification
- *   read. The live region reads each notification once, as it arrives.
+ *   non-zero, counting the issues not dismissed (`useIssues()`, so the
+ *   source-list badges agree). Each opens the owning page filtered to the
+ *   affected rows, or, with several pages, a menu naming each page with its
+ *   count; never a list of the issues (F7). A muted ✓ with no issues. Then
+ *   the bell with the unread count, opening the notification history;
+ *   opening it marks every notification read. The live region reads each
+ *   notification once, as it arrives.
  */
 import { Bell, CircleCheck, HardDrive } from "lucide-react"
 import { type RefObject, useRef, useState } from "react"
-import { ISSUE_SEVERITY_ICON, IssueRow } from "@/components/app/issue-row"
-import { ListNotice, ListOperationRow, ListPopover, ListRows, StatusBar as StatusBarFrame, StatusGroup, StatusLink, StatusOperation, StatusSelection, StatusText } from "@/components/app/status-bar"
+import { ISSUE_SEVERITY_ICON } from "@/components/app/issue-copy"
+import { ListNotice, ListOperationRow, ListPopover, ListRows, StatusBar as StatusBarFrame, StatusCounter, type StatusCounterPage, StatusGroup, StatusLink, StatusOperation, StatusSelection, StatusText } from "@/components/app/status-bar"
+import type { StepLink } from "@/domain/derive"
 import { type Issue, type IssueSeverity, SEVERITY_ORDER } from "@/domain/issues"
 import { locationAvailability } from "@/domain/library"
-import type { Operation } from "@/domain/types"
-import { formatNight, formatTime } from "@/lib/format"
+import { sessionRef } from "@/domain/membership"
+import type { Catalog, Operation } from "@/domain/types"
+import { filterLabel, parseFilter } from "@/features/v5/a-home/session-model"
+import { formatCount, formatNight, formatTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { nowIso, type PrototypeState, useStore } from "@/store/core"
-import { dismissIssue, useIssues } from "@/store/issues"
+import { useIssues } from "@/store/issues"
 import { markNoticesRead, type Notice, noticeText, useNotices } from "@/store/notifications"
 import { cancelOperation } from "@/store/operations"
 import { useMessages } from "./preferences"
@@ -129,37 +134,45 @@ function counterLabel(m: Messages, severity: IssueSeverity, count: number): stri
   return m.status_bar_info({ count })
 }
 
-/** One severity's count with its glyph, opening a popout of its issues in hub order; `refocus` takes focus when its last issue is dismissed. */
-function SeverityCounter({ severity, issues, refocus }: { severity: IssueSeverity; issues: Issue[]; refocus: () => HTMLElement | null | undefined }) {
-  const m = useMessages()
-  const [open, setOpen] = useState(false)
-  const label = counterLabel(m, severity, issues.length)
-  return (
-    <ListPopover
-      open={open}
-      onOpenChange={setOpen}
-      title={label}
-      trigger={{ label, icon: ISSUE_SEVERITY_ICON[severity], tone: severity, content: issues.length, "data-status-counter": severity, "data-count": issues.length }}
-      data-status-popout={severity}
-      data-issue-list=""
-    >
-      <ListRows>
-        {issues.map((issue) => (
-          <IssueRow key={issue.id} issue={issue} onDismiss={dismissIssue} onNavigate={() => setOpen(false)} refocus={refocus} />
-        ))}
-      </ListRows>
-    </ListPopover>
-  )
+/** The words of the page an issue leads to: a Library list by its filter, a record by its name. */
+function pageName(m: Messages, catalog: Catalog, link: StepLink): string {
+  switch (link.to) {
+    case "/sessions":
+      return m.status_bar_page_in({ area: m.nav_sessions(), page: filterLabel(m, parseFilter(link.search?.filter)) })
+    case "/sessions/$sessionId": {
+      const session = catalog.sessions[link.params?.sessionId ?? ""]
+      return session ? say(m, sessionRef(session)) : m.nav_sessions()
+    }
+    case "/projects/$projectId":
+      return catalog.projects[link.params?.projectId ?? ""]?.name ?? m.nav_projects()
+    case "/settings/locations":
+      return link.search?.duplicates ? m.status_bar_page_in({ area: m.common_locations(), page: m.sessions_filter_duplicates() }) : m.common_locations()
+    case "/calibration":
+      return m.nav_calibration()
+    default:
+      // Work that ran on no Project: its row is in Activity.
+      return m.nav_activity()
+  }
+}
+
+/** The pages one severity's issues are on (F7): each issue's owning page, filtered to its rows; issues on the same page share it and add up their rows. */
+function counterPages(m: Messages, catalog: Catalog, issues: Issue[]): StatusCounterPage[] {
+  const pages = new Map<string, { link: StepLink; count: number }>()
+  for (const issue of issues) {
+    const id = JSON.stringify([issue.link.to, issue.link.params ?? null, issue.link.search ?? null])
+    const page = pages.get(id)
+    if (page) page.count += issue.count
+    else pages.set(id, { link: issue.link, count: issue.count })
+  }
+  return [...pages].map(([id, page]) => ({ id, link: page.link, label: m.status_bar_issue_page({ page: pageName(m, catalog, page.link), count: formatCount(page.count) }) }))
 }
 
 function IssueCounters() {
   const m = useMessages()
+  const catalog = useStore((s) => s.catalog)
   const { issues } = useIssues()
-  const group = useRef<HTMLDivElement>(null)
-  // Once a severity's last issue is dismissed its counter goes: focus moves to the next counter, else the notifications trigger (WCAG 2.4.3).
-  const refocus = () => group.current?.querySelector<HTMLElement>("[data-status-counter]") ?? group.current?.closest("footer")?.querySelector<HTMLElement>("[data-status-notice]")
   return (
-    <StatusGroup ref={group} label={m.issues_title()} data-status-issues={issues.length === 0 ? "none" : issues.length}>
+    <StatusGroup label={m.issues_title()} data-status-issues={issues.length === 0 ? "none" : issues.length}>
       {issues.length === 0 ? (
         <StatusText>
           <CircleCheck role="img" aria-label={m.issues_none()} className="size-3" />
@@ -167,7 +180,19 @@ function IssueCounters() {
       ) : (
         SEVERITY_ORDER.map((severity) => {
           const mine = issues.filter((i) => i.severity === severity)
-          return mine.length > 0 ? <SeverityCounter key={severity} severity={severity} issues={mine} refocus={refocus} /> : null
+          if (mine.length === 0) return null
+          return (
+            <StatusCounter
+              key={severity}
+              label={counterLabel(m, severity, mine.length)}
+              icon={ISSUE_SEVERITY_ICON[severity]}
+              tone={severity}
+              count={mine.length}
+              pages={counterPages(m, catalog, mine)}
+              data-status-counter={severity}
+              data-count={mine.length}
+            />
+          )
         })
       )}
     </StatusGroup>

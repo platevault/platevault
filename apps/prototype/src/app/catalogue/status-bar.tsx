@@ -1,33 +1,32 @@
 /**
  * Catalogue entry (§3.3, §8.3): the status bar parts and the list popovers,
- * with sample work, counters and notifications. Real catalogue copy.
+ * with sample work, counters and notifications. Real catalogue copy. The
+ * error counter leads to one page; the warning counter names two pages in a
+ * menu (F7).
  */
 import { Bell, HardDrive, OctagonX, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { MiniProgress, ListEmpty, ListFold, ListNotice, ListOperationRow, ListPopover, ListRows, ListSection, StatusBar, StatusGroup, StatusLink, StatusOperation, StatusSelection, StatusText } from "@/components/app/status-bar"
+import { MiniProgress, ListNotice, ListOperationRow, ListPopover, ListRows, StatusBar, StatusCounter, StatusGroup, StatusLink, StatusOperation, StatusSelection, StatusText } from "@/components/app/status-bar"
 import { ComponentSection, Specimen } from "./specimen"
 
 function Counters() {
   const m = useMessages()
-  const [errors, setErrors] = useState(false)
-  const [warnings, setWarnings] = useState(false)
   const [notices, setNotices] = useState(false)
+  const page = (name: string, count: number) => m.status_bar_issue_page({ page: name, count: String(count) })
   return (
     <StatusGroup label={m.issues_title()}>
-      <ListPopover open={errors} onOpenChange={setErrors} title={m.status_bar_errors({ count: 1 })} trigger={{ label: m.status_bar_errors({ count: 1 }), icon: OctagonX, tone: "danger", content: 1 }}>
-        <ListRows>
-          <ListNotice id="n1" tone="danger" text={m.issue_failed({ name: "Flat OIII" })} full={m.issue_failed({ name: "Flat OIII" })} onNavigate={() => setErrors(false)} at="2026-09-26T21:04:00Z" time="21:04" />
-        </ListRows>
-      </ListPopover>
-      <ListPopover open={warnings} onOpenChange={setWarnings} title={m.issues_title()} meta={m.issues_none()} trigger={{ label: m.status_bar_warnings({ count: 0 }), icon: TriangleAlert, tone: "warning", content: 0 }}>
-        <ListSection label={m.nav_sessions()}>
-          <ListEmpty>{m.issues_none()}</ListEmpty>
-        </ListSection>
-        <ListFold label={m.issues_dismissed({ count: 1 })} action={{ label: m.issues_restore_all(), onRun: () => setWarnings(false) }}>
-          <ListNotice id="n2" tone="warning" text={m.issue_needs_target({ count: 2 })} full={m.issue_needs_target({ count: 2 })} onNavigate={() => setWarnings(false)} at="2026-09-26T20:00:00Z" time="20:00" />
-        </ListFold>
-      </ListPopover>
+      <StatusCounter label={m.status_bar_errors({ count: 1 })} icon={OctagonX} tone="danger" count={1} pages={[{ id: "locations", label: page(m.common_locations(), 1), link: { to: "/settings/locations" } }]} />
+      <StatusCounter
+        label={m.status_bar_warnings({ count: 2 })}
+        icon={TriangleAlert}
+        tone="warning"
+        count={2}
+        pages={[
+          { id: "needs-target", label: page(m.status_bar_page_in({ area: m.nav_sessions(), page: m.sessions_filter_needs_target() }), 3), link: { to: "/sessions", search: { filter: "needs-target" } } },
+          { id: "projects", label: page(m.nav_projects(), 1), link: { to: "/projects" } },
+        ]}
+      />
       <ListPopover open={notices} onOpenChange={setNotices} width="lg" title={m.status_bar_notifications()} link={{ label: m.nav_activity(), to: "/activity" }} trigger={{ label: m.status_bar_notifications(), icon: Bell }}>
         <ListRows>
           <ListNotice id="n3" tone="success" text={m.status_bar_working()} full={m.status_bar_working()} href="/activity" onNavigate={() => setNotices(false)} at="2026-09-26T21:04:00Z" time="21:04" />
@@ -42,7 +41,7 @@ export function StatusBarCatalogue() {
   const [more, setMore] = useState(false)
   return (
     <ComponentSection
-      components={["StatusBar", "StatusGroup", "StatusLink", "StatusText", "StatusSelection", "StatusOperation", "MiniProgress", "ListPopover", "ListRows", "ListOperationRow", "ListSection", "ListEmpty", "ListFold", "ListNotice"]}
+      components={["StatusBar", "StatusGroup", "StatusLink", "StatusText", "StatusSelection", "StatusOperation", "StatusCounter", "MiniProgress", "ListPopover", "ListRows", "ListOperationRow", "ListNotice"]}
       description={m.catalogue_status_bar_desc()}
     >
       <div className="space-y-3">

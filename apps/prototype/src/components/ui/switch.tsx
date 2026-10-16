@@ -6,7 +6,11 @@ function Switch({
   size = "default",
   ...props
 }: SwitchPrimitive.Root.Props & {
-  /** "lg" is a 24 px tall target for dense control lists (WCAG 2.5.8). */
+  /**
+   * "lg" is a 24 px tall box for dense control lists. Every size takes pointer input over its box plus 12 px
+   * each side and 8 px above and below (the `after:` inset), so the default 32 × 18 px switch is a 56 × 34 px
+   * target (WCAG 2.5.8).
+   */
   size?: "sm" | "default" | "lg"
 }) {
   return (

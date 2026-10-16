@@ -1,21 +1,18 @@
 /**
  * Catalogue entry (R9-COMPOSITION-PLAN §3.3 P14, §8.3): the shell parts.
  * NavList (sidebar, rail, Settings; current, holds, badge, menu row),
- * ChecklistRing (expanded, rail, with an unavailable step), IssueRow (open,
- * not dismissable, dismissed) and ThemePicker (form and menu). Component
- * content uses the real catalogue copy; the captions are reviewer labels.
- * Links lead to real routes.
+ * ChecklistRing (expanded, rail, with an unavailable step) and ThemePicker
+ * (form and menu). Component content uses the real catalogue copy; the
+ * captions are reviewer labels. Links lead to real routes.
  */
 import { Activity, Crosshair, FolderKanban, History, House, Layers, Palette, Settings, SlidersHorizontal } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { type ChecklistSection, ChecklistRing } from "@/components/app/checklist"
-import { IssueRow } from "@/components/app/issue-row"
 import { type NavListGroup, NavList } from "@/components/app/nav-list"
 import { ThemeMenuItems, ThemePicker } from "@/components/app/theme-picker"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import type { Issue } from "@/domain/issues"
 import { useStore } from "@/store/core"
 import { ComponentSection } from "./specimen"
 
@@ -127,36 +124,6 @@ function useChecklist(): ChecklistSection[] {
   ]
 }
 
-const SAMPLE_ISSUES: Issue[] = [
-  { id: "cat:needs-target", group: "sessions", kind: "needs-target", severity: "warning", count: 2, name: null, about: null, owner: { kind: "library" }, link: { to: "/sessions" } },
-  { id: "cat:location-denied", group: "storage", kind: "location-denied", severity: "danger", count: 1, name: "Captures SSD", about: "loc", owner: { kind: "location", id: "loc" }, link: { to: "/settings/locations" } },
-  { id: "cat:apply-refused", group: "projects", kind: "apply-refused", severity: "warning", count: 1, name: "NGC 7000 HOO", about: "prj", owner: { kind: "project", id: "prj" }, link: { to: "/projects" } },
-  { id: "cat:previous-review", group: "projects", kind: "previous-review", severity: "warning", count: 3, name: "M 31 LRGB", about: "prj2", owner: { kind: "project", id: "prj2" }, link: { to: "/projects" } },
-  { id: "cat:duplicates", group: "storage", kind: "duplicates", severity: "info", count: 4, bytes: 1_200_000_000, name: null, about: null, owner: { kind: "library" }, link: { to: "/settings/locations" } },
-]
-
-function IssueRows() {
-  const [dismissed, setDismissed] = useState<string[]>(["cat:duplicates"])
-  const open = SAMPLE_ISSUES.filter((issue) => !dismissed.includes(issue.id))
-  const gone = SAMPLE_ISSUES.filter((issue) => dismissed.includes(issue.id))
-  const dismiss = (issue: Issue) => setDismissed((ids) => [...ids, issue.id])
-  const restore = (issue: Issue) => setDismissed((ids) => ids.filter((id) => id !== issue.id))
-  return (
-    <div className="w-88 rounded-lg border border-border bg-popover text-popover-foreground">
-      <ul className="py-1" data-catalogue-issues="open">
-        {open.map((issue) => (
-          <IssueRow key={issue.id} issue={issue} onDismiss={dismiss} />
-        ))}
-      </ul>
-      <ul className="border-t border-border py-1" data-catalogue-issues="dismissed">
-        {gone.map((issue) => (
-          <IssueRow key={issue.id} issue={issue} state="dismissed" onRestore={restore} refocus={(restored) => document.querySelector<HTMLElement>(`[data-catalogue-issues="open"] [data-issue="${CSS.escape(restored.id)}"] [data-dismiss]`)} />
-        ))}
-      </ul>
-    </div>
-  )
-}
-
 export function ShellPartsCatalogue() {
   const m = useMessages()
   const navGroups = useNavGroups()
@@ -220,10 +187,6 @@ export function ShellPartsCatalogue() {
             </Sidebar>
           </Row>
         </div>
-      </ComponentSection>
-
-      <ComponentSection components={["IssueRow"]} description={m.catalogue_shell_issue_desc()}>
-        <IssueRows />
       </ComponentSection>
 
       <ComponentSection components={["ThemePicker"]} description={m.catalogue_shell_theme_desc()}>
