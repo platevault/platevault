@@ -258,12 +258,11 @@ export interface RetireReview {
   availability: Availability
   frames: number
   sessions: string[]
-  runs: string[]
+  /** Projects, open or Closed, that hold one of those sessions. */
   projects: string[]
-  results: string[]
 }
 
-/** What retiring would affect, read now. Catalog-only: no file bytes are read. */
+/** What retiring would affect, read now: its frames, their sessions and the Projects that hold them. Catalog-only: no file bytes are read. */
 export function reviewRetire(state: PrototypeState, locationId: LocationId): RetireReview | null {
   const { catalog, disk } = state
   const location = catalog.locations[locationId]
@@ -272,11 +271,7 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
   const sessions = Object.values(catalog.sessions)
     .filter((s) => !s.supersededBy && s.assetIds.some((id) => assetIds.has(id)))
     .sort((a, b) => a.night.localeCompare(b.night))
-  const runs = Object.values(catalog.runs).filter((r) =>
-    [...r.revisions, ...(r.draft ? [r.draft] : [])].some((m) => [...m.included, ...m.excluded, ...m.rejected, ...m.unresolved].some((id) => assetIds.has(id))),
-  )
-  const runIds = new Set(runs.map((r) => r.id))
-  const projectIds = new Set(runs.map((r) => r.projectId))
+  const sessionIds = new Set(sessions.map((s) => s.id))
   return {
     locationId,
     displayName: location.displayName,
@@ -284,11 +279,9 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
     availability: locationAvailability(disk, location),
     frames: assetIds.size,
     sessions: sessions.map((s) => [formatNight(s.night), s.channel ?? m.palette_session_no_filter(), formatExposure(s.exposureS)].join(" · ")),
-    runs: runs.map((r) => r.name),
-    projects: [...projectIds].map((id) => catalog.projects[id]?.name ?? id),
-    results: Object.values(catalog.results)
-      .filter((r) => r.runId !== null && runIds.has(r.runId))
-      .map((r) => r.path.slice(r.path.lastIndexOf("/") + 1)),
+    projects: Object.values(catalog.projects)
+      .filter((p) => p.inputs.some((i) => sessionIds.has(i.sessionId)))
+      .map((p) => p.name),
   }
 }
 

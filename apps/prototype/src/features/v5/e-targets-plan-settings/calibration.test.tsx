@@ -1,18 +1,19 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { masterAge } from "@/domain/calibration"
-import { masterUsage } from "@/domain/calibration-library"
-import { masterReplacementRuns } from "@/domain/derive"
+import { masterAge, newestVersion } from "@/domain/calibration"
+import { masterPins } from "@/domain/calibration-library"
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
 import { createSeed } from "@/domain/seed"
 import type { CalibrationMaster } from "@/domain/types"
+import { fileName } from "@/lib/format"
 import { m, say } from "@/lib/i18n"
-import { replaceMaster } from "@/store/actions/calibration"
+import { addMasterVersion } from "@/store/actions/calibration"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 
-// The Calibration library on the demo seed (C9): the age badge, and Replace… re-pointing only unfinished runs.
-// The seed dates one dark from the clock (91 days back) and the other masters on fixed nights, so the age
-// badges hold only near the seed's own day: freeze Date there, or every master turns Old after mid-December.
+// The Calibration library on the demo seed (CAL-FR-14, CAL-FR-15): the age badge, and Add version… adding a dated
+// version that moves no session. The seed dates one dark from the clock (91 days back) and the other masters on fixed
+// nights, so the age badges hold only near the seed's own day: freeze Date there, or every master turns Old after
+// mid-December.
 const SEED_DAY = Date.parse("2026-10-13T12:00:00Z")
 let demo: PrototypeState
 beforeAll(() => {
@@ -27,18 +28,16 @@ beforeEach(() => {
   store.replace(structuredClone(demo))
 })
 
-/** Runs that hand off `master`, open and finished. */
-function users(master: CalibrationMaster) {
-  const { catalog, disk } = store.getState()
-  const runs = (masterUsage(catalog, disk).get(master.id) ?? []).map((u) => u.run)
-  return { open: runs.filter((r) => r.completion !== "complete").map((r) => r.id), finished: runs.filter((r) => r.completion === "complete").map((r) => r.id) }
+/** Every pin of `master`, as "session/kind" → the version it pins. */
+function pinsOf(master: CalibrationMaster): Record<string, string> {
+  return Object.fromEntries((masterPins(store.getState().catalog).get(master.id) ?? []).map((p) => [`${p.session.id}/${p.kind}`, p.versionId]))
 }
 
-/** A newer copy of `master`'s file in another folder: the same facts, new bytes, a later night. */
+/** A newer copy of `master`'s newest version in another folder: the same facts, new bytes, a later night. */
 function newerCopy(master: CalibrationMaster): string {
   const state = store.getState()
-  const source = fileAt(state.disk, master.path)!
-  const path = `${master.path.slice(0, master.path.lastIndexOf("/"))}/Incoming/${source.path.split("/").pop()!.replace(/\.xisf$/, "_new.xisf")}`
+  const source = fileAt(state.disk, newestVersion(master)!.path)!
+  const path = `${source.path.slice(0, source.path.lastIndexOf("/"))}/Incoming/${fileName(source.path).replace(/\.xisf$/, "_new.xisf")}`
   const dateObs = new Date(Date.parse(source.header!.dateObs) + 86_400_000).toISOString()
   store.setState((s) => ({ ...s, disk: writeFiles(s.disk, [makeFile({ ...source, path, sha256: undefined, inode: undefined, header: { ...source.header!, dateObs }, modifiedAt: dateObs })]) }))
   return path
@@ -54,22 +53,22 @@ describe("Calibration library", () => {
     expect(old).toEqual(["Old · 91 d"])
   })
 
-  it("Replace re-points the open runs, and finished runs keep their old master", () => {
-    const master = Object.values(store.getState().catalog.masters).find((x) => {
-      const { open, finished } = users(x)
-      return open.length > 0 && finished.length > 0
-    })
-    expect(master, "a seed master that open and finished runs both use").toBeDefined()
-    const before = users(master!)
-    expect(masterReplacementRuns(store.getState(), master!.id).map((r) => r.id).sort()).toEqual([...before.open].sort())
+  it("Add version adds a dated version to the master, and every session keeps the version it pins", () => {
+    const master = Object.values(store.getState().catalog.masters).find((x) => x.kind === "dark" && Object.keys(pinsOf(x)).length > 0)
+    expect(master, "a seed dark that sessions pin").toBeDefined()
+    const before = pinsOf(master!)
+    const path = newerCopy(master!)
 
-    const outcome = replaceMaster(master!.id, newerCopy(master!))
+    const outcome = addMasterVersion(master!.id, path)
 
     expect(outcome.result).toEqual({ ok: true })
-    expect([...outcome.repointed].sort()).toEqual([...before.open].sort())
-    const replaced = store.getState().catalog.masters[master!.id]!
-    expect(replaced.replacedBy).toBe(outcome.masterId)
-    expect(users(replaced)).toEqual({ open: [], finished: before.finished })
-    expect(users(store.getState().catalog.masters[outcome.masterId!]!).open.sort()).toEqual([...before.open].sort())
+    expect(outcome.masterId).toBe(master!.id)
+    const after = store.getState().catalog.masters[master!.id]!
+    expect(after.versions).toHaveLength(master!.versions.length + 1)
+    const added = after.versions.find((v) => v.id === outcome.versionId)!
+    expect(added.origin).toMatchObject({ kind: "imported", sourcePath: path })
+    expect(newestVersion(after)!.id).toBe(added.id)
+    // No pin moves to the new version: a session waiting for a dark may take it, a pinned one never does.
+    expect(pinsOf(after)).toMatchObject(before)
   })
 })

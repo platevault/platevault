@@ -1,12 +1,15 @@
 /**
- * Settings › Equipment, the records (slice E; plan §4a, C E1-E8, ngm9g):
- * cameras, telescopes, reducers and rigs, each a ListSection whose ⋯ holds
- * Edit… and Remove, and the FormDialogs that add or edit them. Gear not yet
- * imaged with is added by hand (Manual, Round 6); detected records edit the
- * same way. A camera, telescope or reducer holds its own properties. A rig
- * only selects what it is made of: Camera ▾ · Telescope ▾ · Reducer ▾ ·
- * Filters (C E2). Its focal length and field of view follow from those, and
- * editing a rig never changes a camera.
+ * Settings › Equipment, the records (slice E; plan §4a, C E1-E8, ngm9g,
+ * PLAN-EQ-FR-07, PLAN-EQ-FR-08): cameras, telescopes, reducers and rigs,
+ * each a ListSection whose ⋯ holds Edit… and Remove, and the FormDialogs
+ * that add or edit them. Gear not yet imaged with is added by hand (Manual,
+ * Round 6); detected records edit the same way. A camera, telescope or
+ * reducer holds its own properties; a camera also holds its alias and its
+ * "Don't use darks" / "Don't use bias" defaults. A rig only selects what it
+ * is made of: Camera ▾ · Telescope ▾ · Reducer ▾ · Filters (C E2) and
+ * whether it has a rotator. Its focal length and field of view follow from
+ * those, editing a rig never changes a camera, and an edit to what it is
+ * made of starts a new version from the night the dialog names.
  */
 import { Camera as CameraIcon, Pencil, Telescope as TelescopeIcon, Trash2, Waypoints, ZoomIn } from "lucide-react"
 import { useState } from "react"
@@ -15,17 +18,18 @@ import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState } from "@/components/app/feedback"
-import { ChoiceListField, FieldGroup, NumberField, SegmentedField, SelectField, TextField } from "@/components/app/fields"
+import { ChoiceListField, FieldGroup, NumberField, SegmentedField, SelectField, SwitchField, TextField } from "@/components/app/fields"
 import { blockedByErrors, type FieldErrors, FormDialog, useDialogForm } from "@/components/app/form-dialog"
 import { UsedByPreview } from "@/components/app/previews"
 import { StatusBadge } from "@/components/app/status"
 import { ListSection } from "@/components/templates/settings-page"
 import { rigFieldOfView, rigFilters, type StepLink } from "@/domain/derive"
+import { nightOf } from "@/domain/indexing"
 import { fieldOfView } from "@/domain/sky"
 import type { Camera, CameraKind, Catalog, OpticalTrain, Reducer, Telescope } from "@/domain/types"
-import { formatDecimal, formatDegrees } from "@/lib/format"
+import { formatDecimal, formatDegrees, formatNight } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { useStore } from "@/store/core"
+import { nowIso, store, useStore } from "@/store/core"
 import { bandsLine, type EquipmentKind, equipmentUsers, filterName, REDUCER_LIMITS, removeEquipment, rigReducerFactor, saveCamera, saveReducer, saveRig, saveTelescope } from "./settings-actions"
 
 // ---------------------------------------------------------------------------
@@ -99,9 +103,14 @@ interface CameraForm {
   width: number | null
   height: number | null
   pixel: number | null
+  alias: string
+  noDarks: boolean
+  noBias: boolean
+  /** The camera an earlier try added, so a retry after a refused alias edits it instead of adding another. */
+  added: string | null
 }
 
-/** Add a camera (`camera` null) or edit one: name, kind, sensor and pixel size. */
+/** Add a camera (`camera` null) or edit one: name, kind, sensor and pixel size, its alias and its calibration defaults. */
 function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera | null; onClose: () => void }) {
   const m = useMessages()
   const { values, set, shown } = useDialogForm<CameraForm>(open, () => ({
@@ -110,6 +119,10 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
     width: camera?.widthPx ?? null,
     height: camera?.heightPx ?? null,
     pixel: camera?.pixelSizeUm ?? null,
+    alias: camera?.physicalAlias ?? "",
+    noDarks: camera?.noDarks ?? false,
+    noBias: camera?.noBias ?? false,
+    added: null,
   }))
   const errors: FieldErrors<keyof CameraForm> = {
     name: values.name.trim() ? undefined : m.targets_name_empty({ label: m.equipment_name() }),
@@ -123,7 +136,12 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
     label,
     kind: "primary",
     unavailable: blockedByErrors(label, errors),
-    run: () => saveCamera(camera?.id ?? null, { name: values.name.trim(), kind: values.kind, widthPx: values.width ?? 0, heightPx: values.height ?? 0, pixelSizeUm: values.pixel ?? 0 }),
+    run: () => {
+      const input = { name: values.name.trim(), kind: values.kind, widthPx: values.width ?? 0, heightPx: values.height ?? 0, pixelSizeUm: values.pixel ?? 0, physicalAlias: values.alias, noDarks: values.noDarks, noBias: values.noBias }
+      const saved = saveCamera(camera?.id ?? values.added, input)
+      if (!camera && store.getState().catalog.cameras[saved.id]) set({ added: saved.id })
+      return saved.result
+    },
   }
   return (
     <FormDialog open={open} onOpenChange={(next) => !next && onClose()} title={camera ? m.settings_edit_title({ name: camera.name }) : m.equipment_add_camera()} confirm={confirm}>
@@ -142,6 +160,11 @@ function CameraDialog({ open, camera, onClose }: { open: boolean; camera: Camera
         <NumberField label={m.equipment_sensor_height()} value={values.height} min={1} step={1} onChange={(height) => set({ height })} error={shown(errors, "height")} />
         <NumberField label={m.equipment_pixel_size()} value={values.pixel} min={0.1} step={0.01} onChange={(pixel) => set({ pixel })} error={shown(errors, "pixel")} />
       </FieldGroup>
+      <TextField label={m.equipment_camera_alias()} description={m.equipment_camera_alias_help()} value={values.alias} onChange={(alias) => set({ alias })} />
+      <FieldGroup label={m.equipment_calibration_defaults()}>
+        <SwitchField label={m.equipment_no_darks()} description={m.equipment_no_calibration_help()} checked={values.noDarks} onChange={(noDarks) => set({ noDarks })} />
+        <SwitchField label={m.equipment_no_bias()} checked={values.noBias} onChange={(noBias) => set({ noBias })} />
+      </FieldGroup>
     </FormDialog>
   )
 }
@@ -156,6 +179,7 @@ export function CamerasSection() {
   const columns: Column<Camera>[] = [
     { id: "name", header: m.equipment_name(), rowHeader: true, truncate: true, sortValue: (c) => c.name, cell: (c) => c.name },
     { id: "kind", header: m.equipment_camera_kind(), sortValue: (c) => c.kind, cell: (c) => (c.kind === "osc" ? m.equipment_osc() : m.equipment_mono()) },
+    { id: "alias", header: m.equipment_camera_alias(), truncate: true, sortValue: (c) => c.physicalAlias ?? "", cell: (c) => c.physicalAlias ?? "–" },
     { id: "sensor", header: m.equipment_sensor(), align: "right", sortValue: (c) => c.widthPx * c.heightPx, cell: (c) => `${c.widthPx} × ${c.heightPx} px` },
     { id: "pixel", header: m.equipment_pixel_size_short(), align: "right", sortValue: (c) => c.pixelSizeUm, cell: (c) => `${formatDecimal(c.pixelSizeUm, 2)} µm` },
     { id: "rigs", header: m.project_rigs(), sortValue: rigCount, cell: (c) => <RigsUsing kind="camera" id={c.id} /> },
@@ -331,6 +355,9 @@ interface RigForm {
   telescopeId: string
   reducerId: string
   filterIds: string[]
+  rotator: boolean
+  /** The night a new rig, or an edit to what a rig is made of, applies from (PLAN-EQ-FR-07), as YYYY-MM-DD. */
+  from: string
 }
 
 /** "Ha, OIII, SII"; "No filters · OSC" for an OSC camera without one. */
@@ -341,11 +368,16 @@ export function rigFiltersLine(m: Messages, catalog: Catalog, rig: OpticalTrain)
   return camera?.kind === "osc" ? m.equipment_no_filters_osc() : m.tonight_no_filters()
 }
 
+/** A night typed as YYYY-MM-DD. */
+const NIGHT = /^\d{4}-\d{2}-\d{2}$/
+
 /**
  * Add rig… (`rig` null) or Edit a rig: Camera ▾ · Telescope ▾ · Reducer ▾ ·
- * Filters (C E2). The focal length is the telescope's times the reducer's
- * factor; an existing rig keeps the focal length its headers gave it while
- * its telescope stays the same.
+ * Filters (C E2) and its rotator. The focal length is the telescope's times
+ * the reducer's factor; an existing rig keeps the focal length its headers
+ * gave it while its telescope stays the same. Editing what an existing rig
+ * is made of starts a new version from the night named here, after its
+ * current version's first night (PLAN-EQ-FR-07); a rename starts none.
  */
 function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: OpticalTrain | null; onClose: () => void; onSaved: (rigId: string) => void }) {
   const m = useMessages()
@@ -362,6 +394,8 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
     telescopeId: rig?.telescopeId ?? NONE,
     reducerId: rig?.reducerId ?? NO_REDUCER,
     filterIds: rig?.filterIds ?? [],
+    rotator: rig?.rotator ?? false,
+    from: nightOf(nowIso()),
   }))
   const camera = catalog.cameras[values.cameraId]
   const telescope = catalog.telescopes[values.telescopeId]
@@ -371,7 +405,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
   const keepsFocal = rig !== null && rig.telescopeId === values.telescopeId
   const baseFocal = keepsFocal ? rig.effectiveFocalLengthMm / rigReducerFactor(catalog, rig) : (telescope?.focalLengthMm ?? null)
   const effective = baseFocal === null ? null : Math.round(baseFocal * rigReducerFactor(catalog, { reducerId }) * 10) / 10
-  const fov = camera && effective ? fieldOfView({ id: "draft", name, source: "manual", cameraId: camera.id, telescopeId: values.telescopeId, effectiveFocalLengthMm: effective, notes: "", filterIds: [] }, camera) : null
+  const fov = camera && effective ? fieldOfView({ id: "draft", name, source: "manual", cameraId: camera.id, telescopeId: values.telescopeId, effectiveFocalLengthMm: effective, notes: "", filterIds: [], rotator: values.rotator, versionId: "draft", versionFrom: values.from, history: [] }, camera) : null
   const trimmed = name.trim()
   const taken = Object.values(catalog.opticalTrains).some((r) => r.id !== rig?.id && r.name.toLowerCase() === trimmed.toLowerCase())
   const picked = values.filterIds.flatMap((id) => catalog.filters[id] ?? [])
@@ -381,6 +415,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
     cameraId: camera ? undefined : m.equipment_error_choose(),
     telescopeId: telescope ? undefined : m.equipment_error_choose(),
     filterIds: twin ? m.equipment_filter_twin({ name: twin.name }) : undefined,
+    from: NIGHT.test(values.from) ? undefined : m.equipment_error_night(),
   }
   const label = rig ? m.settings_save() : m.project_add_rig()
   const confirm: Action = {
@@ -390,7 +425,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
     unavailable: blockedByErrors(label, errors),
     run: () => {
       if (!camera || !telescope || baseFocal === null) return
-      const saved = saveRig(rig?.id ?? null, { name: trimmed, cameraId: camera.id, telescopeId: telescope.id, reducerId, focalLengthMm: baseFocal, filterIds: values.filterIds })
+      const saved = saveRig(rig?.id ?? null, { name: trimmed, cameraId: camera.id, telescopeId: telescope.id, reducerId, focalLengthMm: baseFocal, filterIds: values.filterIds, rotator: values.rotator, from: values.from })
       if (saved.result.ok) onSaved(saved.id)
       return saved.result
     },
@@ -408,6 +443,7 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
           options={[{ value: NO_REDUCER, label: m.equipment_no_reducer() }, ...reducers.map((r) => ({ value: r.id, label: `${r.name} · ${formatFactor(r.factor)}` }))]}
           onChange={(next) => set({ reducerId: next })}
         />
+        <SwitchField label={m.equipment_rotator()} description={m.equipment_rotator_help()} checked={values.rotator} onChange={(rotator) => set({ rotator })} />
       </FieldGroup>
       <KeyValueList
         columns={2}
@@ -423,6 +459,14 @@ function RigDialog({ open, rig, onClose, onSaved }: { open: boolean; rig: Optica
         onChange={(filterIds) => set({ filterIds })}
         error={shown(errors, "filterIds")}
         empty={m.tonight_no_filters()}
+      />
+      <TextField
+        label={rig ? m.equipment_version_from() : m.equipment_first_night()}
+        description={rig ? m.equipment_version_from_help({ night: formatNight(rig.versionFrom, true) }) : undefined}
+        value={values.from}
+        onChange={(from) => set({ from })}
+        error={shown(errors, "from")}
+        mono
       />
     </FormDialog>
   )
@@ -450,6 +494,7 @@ export function RigsSection({ activeRigId, onSaved }: { activeRigId: string | nu
     { id: "focal", header: m.run_field_focal_length(), align: "right", sortValue: (r) => r.effectiveFocalLengthMm, cell: (r) => formatMm(r.effectiveFocalLengthMm) },
     { id: "fov", header: m.equipment_field_of_view(), sortValue: (r) => rigFieldOfView(catalog, r)?.widthDeg ?? null, cell: (r) => formatFov(rigFieldOfView(catalog, r)) },
     { id: "filters", header: m.equipment_filters(), truncate: true, sortValue: (r) => r.filterIds.length, cell: (r) => rigFiltersLine(m, catalog, r) },
+    { id: "version", header: m.equipment_version_since(), sortValue: (r) => r.versionFrom, cell: (r) => formatNight(r.versionFrom, true) },
     {
       id: "projects",
       header: m.calibration_used_by(),

@@ -180,9 +180,7 @@ export function LocationsPage() {
             summary: [
               count(m.location_copies_read_retired, review.frames),
               `${m.nav_sessions()}: ${none(review.sessions)}`,
-              `${m.common_runs()}: ${none(review.runs)}`,
               `${m.nav_projects()}: ${none(review.projects)}`,
-              `${m.status_role_results()}: ${none(review.results)}`,
               m.location_no_file_changes(),
             ].join(" · "),
             confirm: { label, kind: "destructive" },

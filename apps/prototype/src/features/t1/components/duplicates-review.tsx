@@ -6,8 +6,8 @@
  * covers registered library locations only, never a capture card (Round 6),
  * and the copy to keep is preselected (`keepChoice`: the one in the
  * earliest-registered location; a copy that cannot go to the OS Trash is
- * kept, so the others can). A copy linked by an unfinished run's view can't
- * go (`trashBlock`, P-TRASH2) and its row leads to that run. Per frame: Move
+ * kept, so the others can). A copy linked by an open Project's View can't
+ * go (`trashBlock`, P-TRASH2) and its row leads to that Project. Per frame: Move
  * others to Trash, confirmed with its files; for every frame: Move all to
  * Trash. Both run through the shared OS Trash engine, so nothing is deleted
  * permanently, and the issue clears as the copies leave.
@@ -23,7 +23,7 @@ import { DataTable } from "@/components/app/data-table"
 import { EmptyState, toast } from "@/components/app/feedback"
 import { FormDialog } from "@/components/app/form-dialog"
 import { OperationPanel } from "@/components/app/operation-panel"
-import { type DuplicateGroup, duplicateFindings, keepChoice, keptViewLinks, runningDuplicateScan, runViewLinks, type TrashBlock, trashBlock } from "@/domain/storage"
+import { type DuplicateGroup, duplicateFindings, keepChoice, keptViewLinks, runningDuplicateScan, type TrashBlock, trashBlock, viewLinks } from "@/domain/storage"
 import type { AssetCopy, Catalog } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
 import { say } from "@/lib/i18n"
@@ -51,7 +51,7 @@ export function DuplicatesReview({ open, onClose }: { open: boolean; onClose: ()
   const scanning = useStore((s) => runningDuplicateScan(s.operations))
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
-  const links = useMemo(() => runViewLinks(catalog, disk), [catalog, disk])
+  const links = useMemo(() => viewLinks(catalog, disk), [catalog, disk])
   // The copy to keep per frame, once the user picks one; the preselection otherwise.
   const [picked, setPicked] = useState<Record<string, string>>({})
   const groups = findings?.groups ?? []

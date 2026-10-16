@@ -21,6 +21,7 @@ import { OperationLine } from "@/components/app/operation-panel"
 import { PageHeader, Section } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
 import { StepPage } from "@/components/templates/step-page"
+import { masterVersion } from "@/domain/calibration"
 import { CALIBRATION_STEP_NAME, CALIBRATION_STEPS, processView, stackOutputFolder, stackProfiles } from "@/domain/calibration-process"
 import type { CalibrationProcess, CalibrationStepId, ProfileId } from "@/domain/types"
 import { fileName, formatCount, formatNight } from "@/lib/format"
@@ -28,7 +29,7 @@ import { say } from "@/lib/i18n"
 import { startStack } from "@/store/actions/calibration"
 import { calibrationFlow } from "@/store/actions/flows"
 import { useStore } from "@/store/core"
-import { PROCESS_STATUS } from "./calibration-model"
+import { masterLabel, PROCESS_STATUS } from "./calibration-model"
 
 const LIBRARY = { to: "/calibration" }
 const PROCESSES = { to: "/calibration", search: { view: "processes" } }
@@ -119,6 +120,8 @@ function StepBody({ process, step, editable, profileId, onPickProfile }: StepBod
   const reason = record.state === "failed" && record.reason ? say(m, record.reason) : null
   const output = process.outputFolder ?? stackOutputFolder(state.catalog, state.settings, process)
   const session = view.session
+  /** The dated version Register added to the master (CAL-FR-14). */
+  const registered = process.versionId ? masterVersion(view.master ?? undefined, process.versionId) : undefined
 
   const facts: Record<CalibrationStepId, KeyValueItem[]> = {
     stack: [
@@ -150,7 +153,7 @@ function StepBody({ process, step, editable, profileId, onPickProfile }: StepBod
         label: m.calibration_master(),
         value: view.master ? (
           <Link to="/calibration" search={{ master: view.master.id }} className="text-link hover:underline">
-            {fileName(view.master.path)}
+            {registered ? fileName(registered.path) : masterLabel(m, view.master)}
           </Link>
         ) : (
           none

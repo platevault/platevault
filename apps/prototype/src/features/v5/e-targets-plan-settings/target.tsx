@@ -24,7 +24,7 @@ import { StatusBadge } from "@/components/app/status"
 import { GradeBadges } from "@/components/domain/grade-badges"
 import { AltitudeSpark, DarkLine, MoonLine } from "@/components/domain/sky-lines"
 import { DetailPage, type DetailSection } from "@/components/templates/detail-page"
-import { formatHours, liveLightSessions, projectStatus, rigFieldOfView, rigName, sessionRigId, sessionTargetId, subjectProgress } from "@/domain/derive"
+import { formatHours, liveLightSessions, rigFieldOfView, rigName, sessionRigId, sessionTargetId, subjectProgress } from "@/domain/derive"
 import { objectTypeRef } from "@/domain/labels"
 import { captureSite, targetCoverage } from "@/domain/library"
 import { nightPlan } from "@/domain/planning"
@@ -140,7 +140,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
 
   const projectColumns: Column<ProjectUse>[] = [
     { id: "project", header: m.nav_projects(), rowHeader: true, truncate: true, sortValue: (u) => u.project.name, cell: (u) => u.project.name },
-    { id: "status", header: m.target_project_state(), sortValue: (u) => projectStatus(u.project), cell: (u) => <StatusBadge kind="project" value={projectStatus(u.project)} /> },
+    { id: "status", header: m.target_project_state(), sortValue: (u) => u.project.state, cell: (u) => <StatusBadge kind="project" value={u.project.state} /> },
     { id: "goals", header: m.plan_goals(), align: "right", sortValue: (u) => (u.total > 0 ? u.met / u.total : null), cell: (u) => (u.total > 0 ? m.projects_goals_met({ met: u.met, total: u.total }) : m.projects_no_goals()) },
     { id: "window", header: m.tonight_window(), sortValue: (u) => u.window, cell: (u) => u.window ?? "–" },
   ]

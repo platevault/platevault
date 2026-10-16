@@ -13,7 +13,7 @@
  * deadline or season window carry their planning priority
  * (`planningPriorities`, C7), which rises as the window's last night nears.
  */
-import { bandUnion, liveLightSessions, myTargets, panelLabel, planningPriorities, rigRef, type SubjectPriority, sessionTargetId, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
+import { bandUnion, liveLightSessions, myTargets, panelGroups, planningPriorities, rigRef, type SubjectPriority, sessionTargetId, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
 import { BANDS, DEFAULT_MOON_AVOIDANCE, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import type { MoonAvoidance, Stretch, Tonight } from "@/domain/planning"
@@ -131,26 +131,24 @@ export function projectRows(rows: TargetRow[], project: Project): TargetRow[] {
 }
 
 /**
- * The panels of a mosaic subject of an open Project, as rows under the
- * subject's row (D-W63): each points at its panel and reads "Panel 2".
+ * The mosaic panels of a subject of an open Project, as rows under the
+ * subject's row: each panel group that holds a session of this Target
+ * (PRJ-FR-29), at the pointing of its first such session, named as the
+ * group is. A panel group with no pointed session yet has no row.
  */
-export function panelRows(row: TargetRow): TargetRow[] {
+export function panelRows(catalog: Catalog, row: TargetRow): TargetRow[] {
   const targetId = row.target?.id
   if (!targetId) return []
-  const mosaic = row.projects.flatMap((p) => p.subjects).find((s) => s.targetId === targetId && s.mosaic)?.mosaic
-  return (mosaic?.panels ?? []).map((panel) => ({
-    ...row,
-    key: `${row.key}:${panel.id}`,
-    target: null,
-    entry: null,
-    designation: panelLabel(m, panel),
-    aliases: [],
-    ra: panel.ra,
-    dec: panel.dec,
-    sizeDeg: null,
-    mine: false,
-    panelOf: targetId,
-  }))
+  return row.projects.flatMap((project) =>
+    panelGroups(project).flatMap((group) => {
+      const pointing = project.inputs
+        .filter((i) => i.groupId === group.id)
+        .map((i) => catalog.sessions[i.sessionId])
+        .find((s) => s && sessionTargetId(s) === targetId && s.pointing)?.pointing
+      if (!pointing) return []
+      return [{ ...row, key: `${row.key}:${group.id}`, target: null, entry: null, designation: group.name, aliases: [], ra: pointing.ra, dec: pointing.dec, sizeDeg: null, mine: false, panelOf: targetId }]
+    }),
+  )
 }
 
 /** Where a row was found, in the current language: My targets, the library, its bundled catalogues or SIMBAD. */

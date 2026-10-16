@@ -2,15 +2,18 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Router
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { masterPins, masterProjects } from "@/domain/calibration-library"
+import { sessionLabel } from "@/domain/membership"
 import { createSeed } from "@/domain/seed"
-import type { CalibrationMaster } from "@/domain/types"
+import type { CalibrationMaster, Session } from "@/domain/types"
 import { m } from "@/lib/i18n"
 import { type PrototypeState, SCHEMA_VERSION, store } from "@/store/core"
 import { initialSliceStates, sliceVersions } from "@/store/slices"
 import { masterLabel } from "./calibration-model"
 import { CalibrationPage } from "./calibration"
 
-// Hide and Show on the Calibration library (P-CAL2, C2): each panel offers only the verb that applies.
+// Hide, Show and Move to Trash on the Calibration library (CAL-FR-16, CAL-FR-17): each panel offers only the verb that
+// applies, both are refused while a Project uses the master, and Move to Trash lists the sessions it is pinned on.
 let demo: PrototypeState
 // DetailDock measures its room; jsdom has no ResizeObserver and lays nothing out.
 const original = globalThis.ResizeObserver
@@ -36,16 +39,36 @@ function renderPage() {
   render(<RouterProvider router={router} />)
 }
 
-/** The 600 s dark: in the library and handed off by no run, so it can be hidden. */
+/** The 600 s dark: in the library and pinned on no session, so it can be hidden. */
 function unusedMaster(): CalibrationMaster {
   return Object.values(store.getState().catalog.masters).find((x) => x.exposureS === 600)!
 }
 
-async function panelOf(name: string) {
+/** A master an open Project uses through its sessions, with a row label no other master shares. */
+function usedMaster(): CalibrationMaster {
+  const { catalog } = store.getState()
+  const pins = masterPins(catalog)
+  const masters = Object.values(catalog.masters)
+  const unique = (x: CalibrationMaster) => masters.filter((y) => masterLabel(m, y) === masterLabel(m, x)).length === 1
+  return masters.find((x) => unique(x) && masterProjects(catalog, pins, x.id).some((p) => p.state === "open"))!
+}
+
+/** A light session no Project holds: it pins `master`'s only version for darks, as Reassign would. */
+function pinOutsideProjects(master: CalibrationMaster): Session {
+  const { catalog } = store.getState()
+  const held = new Set(Object.values(catalog.projects).flatMap((p) => [...p.inputs.map((i) => i.sessionId), ...Object.keys(p.snapshot?.calibration ?? {})]))
+  const session = Object.values(catalog.sessions).find((s) => s.imageType === "light" && !s.supersededBy && s.calibration && !held.has(s.id))!
+  const version = master.versions[0]!
+  const dark = { state: "pinned" as const, source: { type: "master" as const, masterId: master.id, versionId: version.id }, evidence: { capturedAt: version.capturedAt, apart: 0, rotationDeltaDeg: null, criteria: [], files: [] }, at: "2026-10-12T09:00:00.000Z", by: "user" as const }
+  store.setState((s) => ({ ...s, catalog: { ...s.catalog, sessions: { ...s.catalog.sessions, [session.id]: { ...session, calibration: { ...session.calibration!, dark } } } } }))
+  return store.getState().catalog.sessions[session.id]!
+}
+
+async function detailOf(name: string) {
   return within(await screen.findByRole("complementary", { name }))
 }
 
-describe("Calibration library: Hide and Show", () => {
+describe("Calibration library: Hide, Show and Move to Trash", () => {
   it("hides a master into Hidden and shows it back in Masters, the panel offering only the valid verb", async () => {
     const user = userEvent.setup()
     const master = unusedMaster()
@@ -53,36 +76,59 @@ describe("Calibration library: Hide and Show", () => {
     renderPage()
 
     await user.click(await screen.findByRole("rowheader", { name }))
-    let panel = await panelOf(name)
+    let panel = await detailOf(name)
     expect(panel.queryByRole("button", { name: m.calibration_show_master() })).toBeNull()
     await user.click(panel.getByRole("button", { name: m.calibration_hide_master() }))
-    expect(store.getState().catalog.masters[master.id]!.dismissedAt).toBeDefined()
+    expect(store.getState().catalog.masters[master.id]!.hiddenAt).toBeDefined()
 
     await user.click(screen.getByRole("tab", { name: new RegExp(`^${m.calibration_hidden()}`) }))
     await user.click(await screen.findByRole("rowheader", { name }))
-    panel = await panelOf(name)
+    panel = await detailOf(name)
     expect(panel.queryByRole("button", { name: m.calibration_hide_master() })).toBeNull()
+    expect(panel.queryByRole("button", { name: m.calibration_move_to_trash() })).toBeNull()
     await user.click(panel.getByRole("button", { name: m.calibration_show_master() }))
-    expect(store.getState().catalog.masters[master.id]!.dismissedAt).toBeUndefined()
+    expect(store.getState().catalog.masters[master.id]!.hiddenAt).toBeUndefined()
 
     await user.click(screen.getByRole("tab", { name: new RegExp(`^${m.calibration_masters()}`) }))
     expect(await screen.findByRole("rowheader", { name })).toBeDefined()
   })
 
-  it("offers Restore offer, never Hide, for a dismissed offer in Hidden", async () => {
+  it("refuses Hide and Move to Trash while a Project uses the master, and runs neither", async () => {
     const user = userEvent.setup()
+    const master = usedMaster()
+    const { catalog } = store.getState()
+    const projects = masterProjects(catalog, masterPins(catalog), master.id)
+    const name = masterLabel(m, master)
     renderPage()
-    await user.click(await screen.findByRole("tab", { name: new RegExp(`^${m.calibration_hidden()}`) }))
-    const row = (await screen.findAllByRole("row")).find((r) => within(r).queryByText(m.calibration_offer_dismissed()))!
-    const name = within(row).getByRole("rowheader").textContent!
-    await user.click(within(row).getByRole("rowheader"))
-    const panel = await panelOf(name)
-    expect(panel.getByRole("button", { name: m.store_cal_restore_offer() })).toBeDefined()
-    expect(panel.queryByRole("button", { name: m.calibration_hide_master() })).toBeNull()
 
+    const row = (await screen.findAllByRole("row")).find((r) => within(r).queryByRole("rowheader", { name }))!
     await user.click(within(row).getByRole("button", { name: m.actions_for({ name }) }))
     const menu = await screen.findByRole("menu")
-    expect(within(menu).queryByRole("menuitem", { name: m.calibration_hide_master() })).toBeNull()
-    expect(within(menu).getByRole("menuitem", { name: m.store_cal_restore_offer() })).toBeDefined()
+    // Both confirm before they run, so their menu items read "…".
+    for (const label of [m.calibration_hide_master(), m.calibration_move_to_trash()]) {
+      const item = within(menu).getByRole("menuitem", { name: `${label}…` })
+      expect(item.getAttribute("aria-disabled")).toBe("true")
+      expect(item.textContent).toContain(m.equipment_used_by_projects({ count: projects.length }))
+      await user.click(item)
+    }
+    expect(store.getState().catalog.masters[master.id]).toEqual(master)
+  })
+
+  it("lists the sessions a master is pinned on before Move to Trash, which then need calibration again", async () => {
+    const user = userEvent.setup()
+    const master = unusedMaster()
+    const session = pinOutsideProjects(master)
+    const name = masterLabel(m, master)
+    renderPage()
+
+    const row = (await screen.findAllByRole("row")).find((r) => within(r).queryByRole("rowheader", { name }))!
+    await user.click(within(row).getByRole("button", { name: m.actions_for({ name }) }))
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: `${m.calibration_move_to_trash()}…` }))
+    const dialog = within(await screen.findByRole("alertdialog", { name: m.calibration_trash_master_title({ name }) }))
+    expect(dialog.getByText(m.calibration_sessions_need_again({ count: 1, sessions: sessionLabel(m, session) }))).toBeDefined()
+    await user.click(dialog.getByRole("button", { name: m.calibration_move_to_trash() }))
+
+    expect(store.getState().catalog.masters[master.id]).toBeUndefined()
+    expect(store.getState().catalog.sessions[session.id]!.calibration!.dark).toEqual({ state: "waiting" })
   })
 })
