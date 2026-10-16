@@ -198,9 +198,11 @@ impl World {
         watch.rescan(self.project).await.unwrap()
     }
 
-    /// Wait until the recorded Output satisfies `wanted`, without Rescan.
+    /// Wait until the recorded Output satisfies `wanted`, without Rescan. The
+    /// deadline is generous: each catalog commit and copy syncs to disk, which
+    /// a loaded host slows by seconds.
     async fn until(&self, wanted: impl Fn(&[OutputObservation]) -> bool) -> Vec<OutputObservation> {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + Duration::from_secs(90);
         loop {
             let outputs = self.outputs().await;
             if wanted(&outputs) {
