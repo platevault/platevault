@@ -1,6 +1,6 @@
 /**
- * Slice B parts shared by New Project, Add subject, Edit subject and the
- * mosaic editor: the results a TargetPicker shows for a subject search (My
+ * Slice B parts shared by New Project, Add subject and Edit subject: the
+ * results a TargetPicker shows for a subject search (My
  * targets, the bundled catalogues and, after a short wait, SIMBAD; D-W17),
  * and the pick each result stands for. A pick of a catalogue or resolver
  * entry becomes a Target record on save (`resolvePick`).

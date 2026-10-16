@@ -5,10 +5,9 @@
  * static build portable (Tauri in production).
  *
  * Search params are loose string maps so screens can add keys without a
- * foundation change. Documented keys: `/projects/$projectId?start=run`
- * (open Start a run), `?add=goal` (open Add goal), `?stage=wrap-up` (the
- * Wrap up stage), `?candidates=unreviewed`, `?mosaic=new|<subjectId>` (the
- * mosaic editor); `/projects/$projectId/runs/$runId/review?filter=unreviewed`;
+ * foundation change. Documented keys: `/projects/$projectId?stage=` (the
+ * Project tab: sessions, calibrate, view, output or wrap-up; Wrap up takes
+ * `&step=`), `?add=goal` (open Add goal);
  * `/targets?view=planned` (the Planned view), `?night=YYYY-MM-DD` (the night
  * planning values use; tonight when absent or past), `?project=`;
  * `/settings/locations?duplicates=review` (the Duplicates review sheet);
@@ -37,9 +36,6 @@ import { SessionIntakePage } from "@/features/v5/a-home/session-intake"
 import { SessionsPage } from "@/features/v5/a-home/sessions"
 import { ProjectPage } from "@/features/v5/b-projects/project"
 import { ProjectsPage } from "@/features/v5/b-projects/projects"
-import { ProjectTrashPage } from "@/features/v5/b-projects/trash"
-import { RunGroupPage } from "@/features/v5/c-runs/group"
-import { RunPage } from "@/features/v5/c-runs/run"
 import { SessionReview } from "@/features/v5/d-review/review"
 import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
 import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
@@ -49,7 +45,6 @@ import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings
 import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
 import { TargetPage } from "@/features/v5/e-targets-plan-settings/target"
 import { TargetsPage } from "@/features/v5/e-targets-plan-settings/targets"
-import { groupFlowState, runFlowState } from "@/domain/derive"
 import { store } from "@/store/core"
 
 export type SearchParams = Record<string, string | undefined>
@@ -102,34 +97,9 @@ const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path
 const homeRoute = page("/", HomePage)
 const importRoute = page("/import", ImportPage)
 
-// S2, S3, S8: Projects. S4 New Project is a sheet; Wrap up is S3's `?stage=wrap-up`.
+// S2, S3: Projects. S4 New Project is a sheet; the Project's tabs are S3's `?stage=`.
 const projectsRoute = page("/projects", ProjectsPage)
 const projectRoute = page("/projects/$projectId", ProjectPage)
-const projectTrashRoute = page("/projects/$projectId/trash", ProjectTrashPage)
-
-// S5 Run and S7 Run group (§5.4): a bare run or group opens its flow's current step.
-const runIndexRoute = createRoute({
-  getParentRoute: () => appLayout,
-  path: "/projects/$projectId/runs/$runId",
-  beforeLoad: ({ params }) => {
-    const state = store.getState()
-    const run = state.catalog.runs[params.runId]
-    const step = run ? runFlowState(state, run).current : "select"
-    throw redirect({ to: "/projects/$projectId/runs/$runId/$step", params: { ...params, step } })
-  },
-})
-const runRoute = page("/projects/$projectId/runs/$runId/$step", RunPage)
-const groupIndexRoute = createRoute({
-  getParentRoute: () => appLayout,
-  path: "/projects/$projectId/groups/$groupId",
-  beforeLoad: ({ params }) => {
-    const state = store.getState()
-    const group = state.catalog.runGroups[params.groupId]
-    const step = group ? groupFlowState(state, group).current : "select"
-    throw redirect({ to: "/projects/$projectId/groups/$groupId/$step", params: { ...params, step } })
-  },
-})
-const groupRoute = page("/projects/$projectId/groups/$groupId/$step", RunGroupPage)
 
 // S10 Targets. `/plan` (S11, merged into Targets by P-PLAN2) redirects to the Planned view, or a Project-scoped Plan to that Project's Targets.
 const targetsRoute = page("/targets", TargetsPage)
@@ -193,11 +163,6 @@ const routeTree = rootRoute.addChildren([
     importRoute,
     projectsRoute,
     projectRoute,
-    projectTrashRoute,
-    runIndexRoute,
-    runRoute,
-    groupIndexRoute,
-    groupRoute,
     targetsRoute,
     targetRoute,
     planRoute,

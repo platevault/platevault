@@ -26,7 +26,7 @@
 import { Circle, CircleArrowRight, CircleCheck, CircleSlash, Lock, type LucideIcon, OctagonX, RotateCcw } from "lucide-react"
 import { type FocusEvent, type ReactNode, useId, useLayoutEffect, useRef } from "react"
 import { useMessages } from "@/app/preferences"
-import { CurrentLink, useFollowLink } from "@/components/app/run-step"
+import { CurrentLink, useFollowLink } from "@/components/app/links"
 import { Button } from "@/components/ui/button"
 import type { StepLink } from "@/domain/derive"
 import { m, type Messages } from "@/lib/i18n"

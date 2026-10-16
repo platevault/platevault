@@ -139,10 +139,10 @@ export const STATUS = {
     unverified: s(m.status_unverified, "warning", TriangleAlert),
     complete: s(m.status_complete, "success", ShieldCheck),
   },
-  /** A Project's lifecycle (PRJ-FR-14, D-W46). */
+  /** A Project's lifecycle (PRJ-FR-14, PRJ-FR-25): `ProjectState`, so a badge takes `project.state`. */
   project: {
     open: s(m.status_open, "info", CircleDot),
-    done: s(m.status_done, "success", ShieldCheck),
+    closed: s(m.status_closed, "success", ShieldCheck),
     archived: s(m.status_archived, "neutral", Archive),
   },
   /** A processing run's lifecycle (RES-FR-06, D-W72). */

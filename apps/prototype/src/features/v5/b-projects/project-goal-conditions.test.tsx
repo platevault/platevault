@@ -43,15 +43,18 @@ describe("Project page: goal conditions read from subjectProgress (C7)", () => {
     globalThis.ResizeObserver = original
   })
 
-  it("shows the mosaic's weakest panel and its out-of-balance panel, and NGC 7000's nights left to its Finish by", async () => {
-    const project = store.getState().catalog.projects.prj_cygnus!
+  it("shows the mosaic's weakest panel and its out-of-balance panel", async () => {
+    const project = store.getState().catalog.projects.prj_ic5070!
     renderProject(project.id)
-    const table = m.project_subjects_of({ name: project.name })
-
-    const mosaic = await rowText(table, /IC 5070/)
+    const mosaic = await rowText(m.project_subjects_of({ name: project.name }), /IC 5070/)
     expect(mosaic).toMatch(/weakest Panel 3/)
     expect(mosaic).toMatch(/Panel 3 \d+% below average · limit ±\d+%/)
-    expect(await rowText(table, /NGC 7000/)).toMatch(/\d+ nights? left/)
+  })
+
+  it("shows NGC 7000's nights left to its Finish by", async () => {
+    const project = store.getState().catalog.projects.prj_cygnus!
+    renderProject(project.id)
+    expect(await rowText(m.project_subjects_of({ name: project.name }), /NGC 7000/)).toMatch(/\d+ nights? left/)
   })
 
   it("shows M 31 L's time below its quality bar", async () => {

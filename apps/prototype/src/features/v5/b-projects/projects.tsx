@@ -1,43 +1,44 @@
 /**
  * S2 Projects (`/projects`; ListPage): one row per Project with its
- * subjects, rigs, goal progress, open runs, state and its one Up next action
- * (D-W1, D-W35, D-W48). The State facet (Open · Closed · Archived) starts on
- * Open, so closed Projects stay out of the way until asked for (§5.6). A row
- * opens its Project; its ⋯ menu and right click hold the rest.
+ * subjects, rigs, goal progress, the sessions it holds, its pending changes,
+ * its state and its one Up next action (D-W1, D-W35, D-W48, PRJ-FR-18). The
+ * State facet (Open · Closed · Archived) starts on Open, so closed Projects
+ * stay out of the way until asked for (§5.6). A row opens its Project; its ⋯
+ * menu and right click hold the rest: Edit…, Duplicate… and Wrap up.
  */
 import { useNavigate } from "@tanstack/react-router"
-import { Eye, FolderKanban, Grid2x2Plus, PackageCheck, Pencil, Play, Plus, Trash2 } from "lucide-react"
+import { Copy, Eye, FolderKanban, PackageCheck, Pencil, Plus } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import { ActionButton } from "@/components/app/actions"
 import type { Action, Column, Facet, MenuItem } from "@/components/app/contracts"
 import { EmptyState } from "@/components/app/feedback"
+import { useFollowLink } from "@/components/app/links"
 import { StatusBadge } from "@/components/app/status"
 import { ListPage } from "@/components/templates/list-page"
-import { goalProgress, type NextAction, PROJECT_STATUS_NAME, projectNext, projectRuns, type ProjectStatus, projectStatus, rigName, subjectName } from "@/domain/derive"
-import type { Project } from "@/domain/types"
+import { goalProgress, isLocked, isMosaic, type NextAction, panelGroups, PROJECT_STATUS_NAME, rigName, subjectName } from "@/domain/derive"
+import { pendingChanges, projectNext, wrapUpSummary } from "@/domain/project-view"
 import { matchesQuery } from "@/domain/sky"
+import type { Project, ProjectState } from "@/domain/types"
 import { type Messages, say } from "@/lib/i18n"
 import { nowIso, type PrototypeState, useStore } from "@/store/core"
 import { ProjectDetailsDialog } from "./details-dialog"
-import { wrapUpOf } from "./model"
+import { DuplicateProjectDialog } from "./duplicate-dialog"
 
 interface Row {
   project: Project
-  status: ProjectStatus
   subjects: string[]
   rigs: string[]
   met: number
   goals: number
-  openRuns: number
+  sessions: number
+  pending: number
   next: NextAction | null
   wrapUp: boolean
-  trashed: number
 }
 
-const STATES: ProjectStatus[] = ["open", "done", "archived"]
+const STATES: ProjectState[] = ["open", "closed", "archived"]
 
 function rowsOf(m: Messages, s: PrototypeState): Row[] {
   const now = Date.parse(nowIso())
@@ -45,17 +46,17 @@ function rowsOf(m: Messages, s: PrototypeState): Row[] {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((project): Row => {
       const progress = goalProgress(s.catalog, project)
+      const panels = isMosaic(project) ? panelGroups(project).length : 0
       return {
         project,
-        status: projectStatus(project),
-        subjects: project.subjects.map((subject) => (subject.mosaic ? m.project_subject_with_panels({ name: subjectName(m, s.catalog, subject), count: subject.mosaic.panels.length }) : subjectName(m, s.catalog, subject))),
+        subjects: project.subjects.map((subject) => (panels > 0 ? m.project_subject_with_panels({ name: subjectName(m, s.catalog, subject), count: panels }) : subjectName(m, s.catalog, subject))),
         rigs: project.rigIds.map((id) => rigName(m, s.catalog, id)),
         met: progress.filter((p) => p.met).length,
         goals: progress.length,
-        openRuns: projectRuns(s.catalog, project.id).filter((r) => r.completion === "open").length,
-        next: projectNext(s, project, now, (p) => wrapUpOf(s, p)),
-        wrapUp: project.state === "done" || wrapUpOf(s, project).available,
-        trashed: Object.values(s.catalog.runs).filter((r) => r.projectId === project.id && r.trashedAt).length,
+        sessions: project.inputs.length,
+        pending: pendingChanges(s, project).length,
+        next: projectNext(s, project, now),
+        wrapUp: isLocked(project) || wrapUpSummary(s, project).available,
       }
     })
 }
@@ -68,13 +69,14 @@ export function ProjectsPage() {
   const [query, setQuery] = useState("")
   const [state, setState] = useState<string>("open")
   const [editing, setEditing] = useState<Project | null>(null)
+  const [duplicating, setDuplicating] = useState<Project | null>(null)
   // An empty search matches every row (`matchesQuery` reads an empty query as no match).
-  const shown = rows.filter((r) => (state === "" || r.status === state) && (query.trim() === "" || matchesQuery([r.project.name, ...r.subjects], query)))
+  const shown = rows.filter((r) => (state === "" || r.project.state === state) && (query.trim() === "" || matchesQuery([r.project.name, ...r.subjects], query)))
 
   const open = (r: Row, search: Record<string, string> = {}) => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search })
   const newProject: Action = { id: "new-project", label: m.newproject_title(), icon: Plus, kind: "primary", opensDialog: true, run: () => openSheet({ kind: "new-project" }) }
   const nextAction = (r: Row): Action | null => (r.next ? { id: `next-${r.project.id}`, label: say(m, r.next.label), run: () => follow(r.next!.link) } : null)
-  const statusLabel = (r: Row) => say(m, PROJECT_STATUS_NAME[r.status])
+  const statusLabel = (r: Row) => say(m, PROJECT_STATUS_NAME[r.project.state])
 
   const columns: Column<Row>[] = [
     { id: "name", header: m.project_noun(), cell: (r) => r.project.name, sortValue: (r) => r.project.name, rowHeader: true, truncate: true },
@@ -86,8 +88,9 @@ export function ProjectsPage() {
       cell: (r) => (r.goals === 0 ? m.projects_no_goals() : m.projects_goals_met({ met: r.met, total: r.goals })),
       sortValue: (r) => (r.goals === 0 ? null : r.met / r.goals),
     },
-    { id: "runs", header: m.projects_col_open_runs(), cell: (r) => r.openRuns, sortValue: (r) => r.openRuns, align: "right" },
-    { id: "state", header: m.projects_col_state(), cell: (r) => <StatusBadge kind="project" value={r.status} label={statusLabel(r)} />, sortValue: statusLabel },
+    { id: "sessions", header: m.nav_sessions(), cell: (r) => r.sessions, sortValue: (r) => r.sessions, align: "right" },
+    { id: "pending", header: m.project_pending_changes(), cell: (r) => r.pending, sortValue: (r) => r.pending, align: "right" },
+    { id: "state", header: m.projects_col_state(), cell: (r) => <StatusBadge kind="project" value={r.project.state} label={statusLabel(r)} />, sortValue: statusLabel },
     {
       id: "next",
       header: m.common_up_next(),
@@ -100,21 +103,14 @@ export function ProjectsPage() {
   ]
 
   const rowActions = (r: Row): MenuItem[] => {
-    const editable = r.project.state === "open"
     const next = nextAction(r)
     return [
       { id: "open", label: m.verb_open(), icon: Eye, run: () => open(r) },
       ...(next ? [next] : []),
       { separator: true },
-      ...(editable
-        ? [
-            { id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setEditing(r.project) },
-            { id: "start-run", label: m.startrun_title(), icon: Play, opensDialog: true, run: () => openSheet({ kind: "start-run", projectId: r.project.id }) },
-            { id: "new-mosaic", label: m.mosaic_new_ellipsis(), icon: Grid2x2Plus, run: () => open(r, { mosaic: "new" }) },
-          ]
-        : []),
+      ...(isLocked(r.project) ? [] : [{ id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setEditing(r.project) }]),
+      { id: "duplicate", label: m.project_duplicate(), icon: Copy, opensDialog: true, run: () => setDuplicating(r.project) },
       ...(r.wrapUp ? [{ id: "wrap-up", label: m.wrapup_action(), icon: PackageCheck, run: () => open(r, { stage: "wrap-up" }) }] : []),
-      { id: "trash", label: r.trashed > 0 ? m.trash_with_count({ count: r.trashed }) : m.trash_title(), icon: Trash2, run: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: r.project.id } }) },
     ]
   }
 
@@ -124,13 +120,14 @@ export function ProjectsPage() {
       label: m.projects_col_state(),
       kind: "single",
       value: state,
-      options: STATES.map((value) => ({ value, label: say(m, PROJECT_STATUS_NAME[value]), count: rows.filter((r) => r.status === value).length })),
+      options: STATES.map((value) => ({ value, label: say(m, PROJECT_STATUS_NAME[value]), count: rows.filter((r) => r.project.state === value).length })),
     },
   ]
   const clear = () => {
     setQuery("")
     setState("")
   }
+  const live = (project: Project) => rows.find((r) => r.project.id === project.id)?.project ?? project
 
   return (
     <>
@@ -159,7 +156,8 @@ export function ProjectsPage() {
             ),
         }}
       />
-      {editing ? <ProjectDetailsDialog project={rows.find((r) => r.project.id === editing.id)?.project ?? editing} open onOpenChange={(next) => !next && setEditing(null)} /> : null}
+      {editing ? <ProjectDetailsDialog project={live(editing)} open onOpenChange={(next) => !next && setEditing(null)} /> : null}
+      {duplicating ? <DuplicateProjectDialog project={live(duplicating)} open onOpenChange={(next) => !next && setDuplicating(null)} /> : null}
     </>
   )
 }

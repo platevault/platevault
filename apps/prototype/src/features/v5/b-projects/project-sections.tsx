@@ -1,276 +1,330 @@
 /**
- * S3 Project sections (slice B; DetailPage sections, each a Box holding a
- * BoxTable or a KeyValueList): runs and run groups first, then the Ready
- * candidates, goals, subjects (with the C7 progress: weakest panel, panel
+ * S3 Project sections of the Sessions tab (slice B; DetailPage sections,
+ * each a Box holding a BoxTable or a KeyValueList): the groups and the
+ * sessions they hold first (PRJ-FR-08, PRJ-FR-27 to PRJ-FR-29), then the
+ * suggestions, goals, subjects (with the C7 progress: weakest panel, panel
  * balance, channel ratio and nights left), rigs, tonight's planning and the
- * archived sessions. Every edit goes through a foundation store action; a
- * refusal shows beside the action that was refused. A closed Project is
- * read-only (§5.6): its sections keep their Open and Restore actions only.
+ * archived sessions. Every edit goes through a foundation store action and
+ * changes the desired state only: the View follows on the next Apply. A
+ * refusal shows beside the action that was refused. A Closed or Archived
+ * Project is read-only for good (PRJ-FR-25): its sections keep Open only.
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Crosshair, Eye, Grid2x2Plus, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
+import { Crosshair, Eye, FolderInput, Pencil, Plus, Split, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
-import { useFollowLink } from "@/app/run-ui"
 import { BoxTable } from "@/components/app/box"
-import type { Action, Column, FileRow, MenuItem } from "@/components/app/contracts"
+import type { Action, Column, MenuItem } from "@/components/app/contracts"
 import { KeyValueList } from "@/components/app/data"
-import { DataTable } from "@/components/app/data-table"
-import { SelectField } from "@/components/app/fields"
+import { SelectField, SwitchField, TextField } from "@/components/app/fields"
 import { FormDialog } from "@/components/app/form-dialog"
+import { useFollowLink } from "@/components/app/links"
 import { TargetPicker } from "@/components/app/pickers"
 import { Refusal } from "@/components/app/refusal"
 import { StatusBadge } from "@/components/app/status"
 import type { DetailSection } from "@/components/templates/detail-page"
 import { DEFAULT_GOAL, type GoalKinds, GoalKindsFields, goalKindsError, kindsLine } from "@/components/domain/goal-fields"
 import {
+  findGroup,
   type GoalProgress,
-  type GroupPanelState,
-  type GroupPipeline,
-  groupPipeline,
-  groupStepLink,
-  groupUpdatedAt,
-  latestRevision,
+  isLocked,
+  isMosaic,
   liveAssetIds,
-  panelForSession,
-  panelLabel,
+  panelGroups,
   planningSite,
-  projectCandidates,
-  projectGroups,
-  projectRuns,
   projectSessionsNeedingReview,
-  projectTrash,
+  projectSuggestions,
   rigCameraKind,
   rigFieldOfView,
   rigName,
-  type RunState,
-  runPipeline,
-  runStatus,
-  runStepLink,
-  runUpdatedAt,
   sessionIntakeLink,
+  sessionRigId,
+  sessionTargetId,
   sessionUnreviewedFrames,
-  type StepLink,
+  type Suggestion,
   type SubjectProgress,
   subjectCentre,
   subjectName,
   subjectProgress,
   subjectTarget,
 } from "@/domain/derive"
-import { STEP_NAME } from "@/domain/labels"
+import { sessionLongRef } from "@/domain/membership"
 import { bestWindowTonight, defaultCriteria, tonightAt, upcomingNight } from "@/domain/planning"
-import type { Catalog, Goal, OpticalTrainId, Project, Run, RunGroup, Session, Subject } from "@/domain/types"
-import { formatCount, formatDateTime, formatDegrees, formatNight, formatTime } from "@/lib/format"
+import { groupInputs } from "@/domain/project-view"
+import type { Catalog, Goal, OpticalTrainId, Project, ProjectGroup, ProjectInput, Session, Subject } from "@/domain/types"
+import { formatCount, formatDegrees, formatTime } from "@/lib/format"
 import { type Messages, say } from "@/lib/i18n"
-import { restorePlan } from "@/domain/archive"
-import { startArchiveTransfer } from "@/store/actions/archive"
-import { addRig, addSubject, applyGoalTemplate, changeSubjectTarget, removeRig, removeSubject, rigRuns, setGoals } from "@/store/actions/projects"
-import { trashRun } from "@/store/actions/runs"
+import {
+  addRig,
+  addSessions,
+  addSubject,
+  applyGoalTemplate,
+  changeSubjectTarget,
+  createGroup,
+  moveSessions,
+  removeGroup,
+  removeRig,
+  removeSessions,
+  removeSubject,
+  renameGroup,
+  setGoals,
+  setGroupPanel,
+  splitGroup,
+} from "@/store/actions/projects"
 import { freshId } from "@/store/actions/shared"
 import { type CommitResult, nowIso, type PrototypeState, useStore } from "@/store/core"
 import { goalTemplates, projectChannels, templateChanges } from "./model"
 import { type SubjectPick, useTargetSearch } from "./parts"
-import { StartRunDialog } from "./start-run"
 import { resolvePick } from "./subject-actions"
 
-/** A run's state as its one badge (C2: a finished run reads Finished). */
-function RunBadge({ state }: { state: RunState }) {
-  const m = useMessages()
-  if (state === "complete") return <StatusBadge kind="run" value="complete" label={m.status_finished()} />
-  if (state === "trashed") return <StatusBadge kind="run" value="trashed" />
-  return <StatusBadge kind="gate" value={state} />
-}
-
-const trashLink = (project: Project): StepLink => ({ to: "/projects/$projectId/trash", params: { projectId: project.id } })
-
-function subjectLabel(m: Messages, catalog: Catalog, project: Project, subjectId: string, panelId: string | null = null): string {
+/** A goal's subject, with its panel group in a mosaic: "IC 5070 · Panel 2". */
+function subjectLabel(m: Messages, catalog: Catalog, project: Project, subjectId: string, groupId: string | null = null): string {
   const subject = project.subjects.find((s) => s.id === subjectId)
   if (!subject) return m.project_unknown_subject()
-  const panel = panelId ? subject.mosaic?.panels.find((p) => p.id === panelId) : undefined
-  return panel ? `${subjectName(m, catalog, subject)} · ${panelLabel(m, panel)}` : subjectName(m, catalog, subject)
+  const group = findGroup(project, groupId)
+  return group ? `${subjectName(m, catalog, subject)} · ${group.name}` : subjectName(m, catalog, subject)
 }
 
+/** "18 Sep · Ha · 300 s", as calibration and View lists name a session. */
 function sessionLine(m: Messages, session: Session): string {
-  return `${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}`
+  return say(m, sessionLongRef(session))
 }
 
-// ---------------------------------------------------------------------------
-// Runs and run groups
-// ---------------------------------------------------------------------------
-
-type RunsRow = { kind: "run"; id: string; run: Run; state: RunState; step: string; updatedAt: string } | { kind: "group"; id: string; group: RunGroup; pipeline: GroupPipeline; updatedAt: string }
-
-function runsRows(state: PrototypeState, project: Project): RunsRow[] {
-  const runs = projectRuns(state.catalog, project.id)
-    .filter((r) => !r.groupId)
-    .map((run): RunsRow => {
-      const status = runStatus(runPipeline(state, run))
-      return { kind: "run", id: run.id, run, state: status.state, step: status.step, updatedAt: runUpdatedAt(state.catalog, run) }
-    })
-  const groups = projectGroups(state.catalog, project.id).map((group): RunsRow => ({ kind: "group", id: group.id, group, pipeline: groupPipeline(state, group), updatedAt: groupUpdatedAt(state.catalog, group) }))
-  const createdAt = (row: RunsRow) => (row.kind === "run" ? row.run.createdAt : row.group.createdAt)
-  return [...runs, ...groups].sort((a, b) => createdAt(a).localeCompare(createdAt(b)))
+function subjectNameOf(m: Messages, catalog: Catalog, project: Project, session: Session): string {
+  const subject = project.subjects.find((s) => s.targetId === sessionTargetId(session))
+  return subject ? subjectName(m, catalog, subject) : (session.objectLabel ?? m.project_unknown_subject())
 }
 
-/** The Runs section: single runs and run groups in one table, oldest first; a group expands to its panels (round 5). */
-export function useRunsSection(project: Project): DetailSection {
+const openSession = (navigate: ReturnType<typeof useNavigate>, sessionId: string) => void navigate({ to: "/sessions/$sessionId", params: { sessionId } })
+
+// ---------------------------------------------------------------------------
+// Groups (PRJ-FR-27 to PRJ-FR-29)
+// ---------------------------------------------------------------------------
+
+/** What the group dialog writes: a new group, or a rename of `groupId`. */
+type GroupDraft = { groupId: string | null; name: string; panel: boolean }
+
+/**
+ * The Project's groups: one rig and framing each, or a mosaic panel. New
+ * group… names it (and may mark it a panel); Rename… changes its folder on
+ * the next Apply; marking a group as a panel makes the Project a mosaic.
+ * Remove is refused while the group holds a session.
+ */
+export function useGroupsSection(project: Project): DetailSection {
   const m = useMessages()
-  const follow = useFollowLink()
-  const catalog = useStore((s) => s.catalog)
-  const rows = useStore((s) => runsRows(s, project))
-  const trashed = useStore((s) => projectTrash(s.catalog, project.id).length)
-  const open = project.state === "open"
-
-  const linkOf = (row: RunsRow): StepLink => (row.kind === "run" ? runStepLink(row.run, row.step as Run["stageBeforeComplete"] & string) : groupStepLink(row.group, row.pipeline.status.step))
-  const name = (row: RunsRow) => (row.kind === "run" ? row.run.name : row.group.name)
-  const stepOf = (row: RunsRow) => say(m, STEP_NAME[row.kind === "run" ? (row.step as keyof typeof STEP_NAME) : row.pipeline.status.step])
-  const columns: Column<RunsRow>[] = [
-    { id: "name", header: m.newproject_field_name(), cell: name, sortValue: name, rowHeader: true, truncate: true },
-    { id: "subject", header: m.project_col_subject(), cell: (r) => subjectLabel(m, catalog, project, r.kind === "run" ? r.run.subjectId : r.group.subjectId), sortValue: (r) => subjectLabel(m, catalog, project, r.kind === "run" ? r.run.subjectId : r.group.subjectId), truncate: true },
-    { id: "rig", header: m.project_col_rig(), cell: (r) => rigName(m, catalog, r.kind === "run" ? r.run.rigId : r.group.rigId), sortValue: (r) => rigName(m, catalog, r.kind === "run" ? r.run.rigId : r.group.rigId), truncate: true },
-    { id: "step", header: m.project_col_step(), cell: stepOf, sortValue: stepOf },
-    { id: "status", header: m.rungroup_col_status(), cell: (r) => <RunBadge state={r.kind === "run" ? r.state : r.pipeline.status.state} />, sortValue: (r) => (r.kind === "run" ? r.state : r.pipeline.status.state) },
-    { id: "updated", header: m.project_col_updated(), cell: (r) => formatDateTime(r.updatedAt), sortValue: (r) => r.updatedAt, align: "right" },
+  const [draft, setDraft] = useState<GroupDraft | null>(null)
+  const open = !isLocked(project)
+  const held = (group: ProjectGroup) => groupInputs(project, group.id).length
+  const kind = (group: ProjectGroup) => (group.panel ? m.project_group_kind_panel() : m.project_group_kind_group())
+  const columns: Column<ProjectGroup>[] = [
+    { id: "name", header: m.newproject_field_name(), cell: (g) => g.name, sortValue: (g) => g.name, rowHeader: true, truncate: true },
+    { id: "kind", header: m.project_col_kind(), cell: kind, sortValue: kind },
+    { id: "sessions", header: m.nav_sessions(), cell: held, sortValue: held, align: "right" },
   ]
-  const rowActions = (row: RunsRow): MenuItem[] => [
-    { id: "open", label: m.verb_open(), icon: Eye, run: () => follow(linkOf(row)) },
-    ...(open && row.kind === "run"
+  const rowActions = (group: ProjectGroup): MenuItem[] =>
+    open
       ? [
-          { separator: true } as const,
+          { id: "rename", label: m.project_group_rename(), icon: Pencil, opensDialog: true, run: () => setDraft({ groupId: group.id, name: group.name, panel: group.panel }) },
+          { id: "panel", label: group.panel ? m.project_group_unmark_panel() : m.project_group_mark_panel(), run: () => setGroupPanel(project.id, group.id, !group.panel) },
+          { separator: true },
           {
-            id: "trash",
-            label: m.run_move_to_trash(),
-            icon: Trash2,
-            kind: "destructive" as const,
-            confirm: { title: m.project_run_trash_title({ name: row.run.name }), summary: m.project_run_trash_description(), confirm: { label: m.run_move_to_trash(), kind: "destructive" as const } },
-            run: () => trashRun(row.run.id),
+            id: "remove",
+            label: m.project_group_remove(),
+            icon: X,
+            kind: "destructive",
+            confirm: { title: m.project_group_remove_title({ name: group.name }), confirm: { label: m.project_remove(), kind: "destructive" } },
+            run: () => removeGroup(project.id, group.id),
           },
         ]
-      : []),
-  ]
-  const actions: Action[] = [{ id: "project-trash", label: trashed > 0 ? m.trash_with_count({ count: trashed }) : m.trash_title(), icon: Trash2, run: () => follow(trashLink(project)) }]
-
+      : []
+  const actions: Action[] = open ? [{ id: "new-group", label: m.project_group_new(), icon: Plus, opensDialog: true, run: () => setDraft({ groupId: null, name: "", panel: false }) }] : []
+  const save = (next: GroupDraft): CommitResult => (next.groupId ? renameGroup(project.id, next.groupId, next.name) : createGroup(project.id, next.name, next.panel).result)
+  const saveLabel = draft?.groupId ? m.settings_save() : m.project_group_new()
+  const nameError = draft && !draft.name.trim() ? m.settings_name_required() : undefined
   return {
-    id: "runs",
-    title: m.common_runs(),
-    count: rows.length,
+    id: "groups",
+    title: m.project_groups(),
+    count: project.groups.length,
     flush: true,
     actions,
     content: (
+      <>
+        <BoxTable label={m.project_groups_of({ name: project.name })} rows={project.groups} columns={columns} getRowId={(g) => g.id} rowLabel={(g) => g.name} rowActions={rowActions} empty={m.project_no_groups()} />
+        <FormDialog
+          open={draft !== null}
+          onOpenChange={(next) => !next && setDraft(null)}
+          title={draft?.groupId ? m.project_group_rename_title({ name: project.groups.find((g) => g.id === draft.groupId)?.name ?? "" }) : m.project_group_new()}
+          size="sm"
+          confirm={{
+            id: "group-save",
+            label: saveLabel,
+            kind: "primary",
+            run: () => (draft ? save(draft) : undefined),
+            unavailable: nameError ? { action: m.actions_blocked({ action: saveLabel }), reason: nameError, blockers: [] } : undefined,
+          }}
+        >
+          {draft ? (
+            <>
+              <TextField label={m.newproject_field_name()} value={draft.name} onChange={(name) => setDraft({ ...draft, name })} error={nameError} required autoFocus />
+              {draft.groupId === null ? <SwitchField label={m.project_group_kind_panel()} description={m.project_group_panel_hint()} checked={draft.panel} onChange={(panel) => setDraft({ ...draft, panel })} /> : null}
+            </>
+          ) : null}
+        </FormDialog>
+      </>
+    ),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Held sessions (PRJ-FR-08, PRJ-FR-27)
+// ---------------------------------------------------------------------------
+
+interface HeldRow {
+  input: ProjectInput
+  session: Session
+  group: ProjectGroup | undefined
+  frames: number
+}
+
+function heldRows(state: PrototypeState, project: Project): HeldRow[] {
+  return project.inputs.flatMap((input) => {
+    const session = state.catalog.sessions[input.sessionId]
+    return session ? [{ input, session, group: findGroup(project, input.groupId), frames: liveAssetIds(state.catalog, session).length - input.excluded.length }] : []
+  })
+}
+
+/**
+ * The sessions the Project holds, each in one group. Move to group and
+ * Split into a new group move whole sessions; Remove from Project takes its
+ * frames out of the View on the next Apply. Files, the library and other
+ * Projects never change.
+ */
+export function useHeldSection(project: Project): DetailSection {
+  const m = useMessages()
+  const navigate = useNavigate()
+  const catalog = useStore((s) => s.catalog)
+  const rows = useStore((s) => heldRows(s, project))
+  const open = !isLocked(project)
+  const label = (r: HeldRow) => `${subjectNameOf(m, catalog, project, r.session)} · ${sessionLine(m, r.session)}`
+  const rigOf = (r: HeldRow) => rigName(m, catalog, sessionRigId(r.session))
+  const columns: Column<HeldRow>[] = [
+    { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
+    { id: "subject", header: m.project_col_subject(), cell: (r) => subjectNameOf(m, catalog, project, r.session), sortValue: (r) => subjectNameOf(m, catalog, project, r.session), truncate: true },
+    { id: "rig", header: m.project_col_rig(), cell: rigOf, sortValue: rigOf, truncate: true },
+    { id: "group", header: m.project_col_group(), cell: (r) => r.group?.name ?? "–", sortValue: (r) => r.group?.name ?? null, truncate: true },
+    { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(r.frames), sortValue: (r) => r.frames, align: "right" },
+  ]
+  const rowActions = (r: HeldRow): MenuItem[] => {
+    const others = project.groups.filter((g) => g.id !== r.input.groupId)
+    return [
+      { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
+      ...(open
+        ? [
+            ...(others.length > 0 ? [{ submenu: m.project_move_to_group(), items: others.map((g): MenuItem => ({ id: `move-${g.id}`, label: g.name, icon: FolderInput, run: () => moveSessions(project.id, [r.session.id], g.id) })) }] : []),
+            { id: "split", label: m.project_split_group(), icon: Split, run: () => splitGroup(project.id, r.input.groupId, [r.session.id]).result },
+            { separator: true } as const,
+            {
+              id: "remove",
+              label: m.project_remove_session(),
+              icon: X,
+              kind: "destructive" as const,
+              confirm: { title: m.project_remove_from_title({ name: label(r), project: project.name }), summary: m.project_remove_session_summary(), confirm: { label: m.project_remove(), kind: "destructive" as const } },
+              run: () => removeSessions(project.id, [r.session.id]),
+            },
+          ]
+        : []),
+    ]
+  }
+  return {
+    id: "sessions",
+    title: m.nav_sessions(),
+    count: rows.length,
+    flush: true,
+    content: (
       <BoxTable
-        label={m.project_runs_of({ name: project.name })}
+        label={m.project_sessions_of({ name: project.name })}
         rows={rows}
         columns={columns}
-        getRowId={(r) => r.id}
-        onRowClick={(r) => follow(linkOf(r))}
-        rowLabel={name}
+        getRowId={(r) => r.session.id}
+        initialSort={{ columnId: "session", direction: "desc" }}
+        rowLabel={label}
         rowActions={rowActions}
-        expand={{ isExpandable: (r) => r.kind === "group", render: (r) => (r.kind === "group" ? <GroupPanels group={r.group} panels={r.pipeline.panels} project={project} /> : null) }}
-        empty={m.project_no_runs()}
+        empty={m.project_no_sessions()}
       />
     ),
   }
 }
 
-/** A run group's panels, one level under its row. */
-function GroupPanels({ group, panels, project }: { group: RunGroup; panels: GroupPanelState[]; project: Project }) {
-  const m = useMessages()
-  const follow = useFollowLink()
-  const linkOf = (p: GroupPanelState) => (p.trashed ? trashLink(project) : runStepLink(p.run, p.pipeline.current.id))
-  const state = (p: GroupPanelState): RunState => (p.trashed ? "trashed" : runStatus(p.pipeline).state)
-  const columns: Column<GroupPanelState>[] = [
-    { id: "panel", header: m.rungroup_col_panel(), cell: (p) => panelLabel(m, p.panel), sortValue: (p) => p.panel.n, rowHeader: true },
-    { id: "run", header: m.rungroup_col_panel_run(), cell: (p) => p.run.name, sortValue: (p) => p.run.name, truncate: true },
-    { id: "step", header: m.project_col_step(), cell: (p) => say(m, STEP_NAME[p.pipeline.current.id]), sortValue: (p) => p.pipeline.current.n },
-    { id: "status", header: m.rungroup_col_status(), cell: (p) => <RunBadge state={state(p)} />, sortValue: state },
-  ]
-  return <DataTable label={m.rungroup_panels_label({ name: group.name })} rows={panels} columns={columns} getRowId={(p) => p.run.id} scroll="none" onRowClick={(p) => follow(linkOf(p))} />
-}
-
 // ---------------------------------------------------------------------------
-// Candidates (P-REV2: Ready sessions only)
+// Suggestions (PRJ-FR-08, PRJ-FR-09, P-REV2)
 // ---------------------------------------------------------------------------
-
-interface CandidateRow {
-  session: Session
-  subject: Subject
-  rigId: OpticalTrainId
-  frames: number
-  runs: string[]
-  placement: string | null
-}
-
-function candidateRows(m: Messages, state: PrototypeState, project: Project): CandidateRow[] {
-  const { catalog } = state
-  const runs = projectRuns(catalog, project.id)
-  return projectCandidates(catalog, project).map((c) => {
-    const placed = c.subject.mosaic ? panelForSession(catalog, c.subject, c.session, c.rigId) : null
-    const panel = placed?.panelId ? c.subject.mosaic?.panels.find((p) => p.id === placed.panelId) : undefined
-    return {
-      session: c.session,
-      subject: c.subject,
-      rigId: c.rigId,
-      frames: liveAssetIds(catalog, c.session).length,
-      runs: runs.filter((r) => latestRevision(r)?.sessions.some((member) => member.sessionId === c.session.id)).map((r) => r.name),
-      placement: placed ? (panel ? panelLabel(m, panel) : say(m, placed.detail)) : null,
-    }
-  })
-}
 
 /**
- * Candidates (D2, P-REV2): the matching sessions that are Ready. A session
- * that still needs review waits in the review queue; the section offers its
- * frames to review, counted as every page counts them (`sessionUnreviewedFrames`, C10).
+ * Suggestions: Ready matching sessions the Project doesn't hold. They are
+ * never added by themselves; Add to Project is offered once the session's
+ * calibration is settled, else its blocker shows ("Choose its flats first").
+ * A matching session that still needs review waits in the review queue; the
+ * section offers its frames to review, counted as every page counts them
+ * (`sessionUnreviewedFrames`, C10).
  */
-export function useCandidatesSection(project: Project): DetailSection {
+export function useSuggestionsSection(project: Project): DetailSection {
   const m = useMessages()
   const navigate = useNavigate()
   const follow = useFollowLink()
   const catalog = useStore((s) => s.catalog)
-  const rows = useStore((s) => candidateRows(m, s, project))
+  const rows = useStore((s) => projectSuggestions(s.catalog, project))
   const waiting = useStore((s) => projectSessionsNeedingReview(s.catalog, project))
   const unreviewed = waiting.reduce((n, c) => n + sessionUnreviewedFrames(catalog, c.session), 0)
   const firstWaiting = waiting.find((c) => sessionUnreviewedFrames(catalog, c.session) > 0)
-  const [starting, setStarting] = useState<CandidateRow | null>(null)
-  const open = project.state === "open"
+  const open = !isLocked(project)
+  const addable = rows.filter((r) => r.blocked === null)
 
-  const label = (r: CandidateRow) => `${subjectName(m, catalog, r.subject)} · ${sessionLine(m, r.session)}`
-  const columns: Column<CandidateRow>[] = [
+  const label = (r: Suggestion) => `${subjectName(m, catalog, r.subject)} · ${sessionLine(m, r.session)}`
+  const status = (r: Suggestion) => (r.blocked ? say(m, r.blocked) : m.status_ready())
+  const columns: Column<Suggestion>[] = [
     { id: "session", header: m.project_col_session(), cell: (r) => sessionLine(m, r.session), sortValue: (r) => r.session.night, rowHeader: true, truncate: true },
-    { id: "subject", header: m.project_col_subject(), cell: (r) => (r.placement ? `${subjectName(m, catalog, r.subject)} · ${r.placement}` : subjectName(m, catalog, r.subject)), sortValue: (r) => subjectName(m, catalog, r.subject), truncate: true },
+    { id: "subject", header: m.project_col_subject(), cell: (r) => subjectName(m, catalog, r.subject), sortValue: (r) => subjectName(m, catalog, r.subject), truncate: true },
     { id: "rig", header: m.project_col_rig(), cell: (r) => rigName(m, catalog, r.rigId), sortValue: (r) => rigName(m, catalog, r.rigId), truncate: true },
-    { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(r.frames), sortValue: (r) => r.frames, align: "right" },
-    { id: "runs", header: m.review_col_member(), cell: (r) => r.runs.join(", ") || "–", sortValue: (r) => r.runs.length, truncate: true },
+    { id: "frames", header: m.goal_frames(), cell: (r) => formatCount(liveAssetIds(catalog, r.session).length), sortValue: (r) => liveAssetIds(catalog, r.session).length, align: "right" },
+    { id: "status", header: m.dialog_col_status(), cell: status, sortValue: status, truncate: true },
   ]
-  const rowActions = (r: CandidateRow): MenuItem[] => [
-    { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
-    ...(open ? [{ id: "start-run", label: m.startrun_title(), opensDialog: true, run: () => setStarting(r) }] : []),
+  const addLabel = m.project_add_session()
+  const rowActions = (r: Suggestion): MenuItem[] => [
+    { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, r.session.id) },
+    ...(open
+      ? [
+          {
+            id: "add",
+            label: addLabel,
+            icon: Plus,
+            unavailable: r.blocked ? { action: m.actions_blocked({ action: addLabel }), reason: say(m, r.blocked), blockers: [{ label: label(r), link: { to: "/sessions/$sessionId", params: { sessionId: r.session.id } } }] } : undefined,
+            run: () => addSessions(project.id, [r.session.id]),
+          },
+        ]
+      : []),
   ]
-  const actions: Action[] =
-    unreviewed > 0 && firstWaiting
-      ? [{ id: "review", label: m.domain_next_review_new_frames({ count: unreviewed, n: formatCount(unreviewed) }), run: () => follow(sessionIntakeLink(firstWaiting.session.id, "review")) }]
-      : []
+  const actions: Action[] = [
+    ...(open && addable.length > 0 ? [{ id: "add-all", label: m.project_add_suggested({ count: addable.length }), icon: Plus, run: () => addSessions(project.id, addable.map((r) => r.session.id)) }] : []),
+    ...(unreviewed > 0 && firstWaiting ? [{ id: "review", label: m.domain_next_review_new_frames({ count: unreviewed, n: formatCount(unreviewed) }), run: () => follow(sessionIntakeLink(firstWaiting.session.id, "review")) }] : []),
+  ]
 
   return {
-    id: "candidates",
-    title: m.project_candidates(),
+    id: "suggestions",
+    title: m.project_suggestions(),
     count: rows.length,
     flush: true,
     actions,
     content: (
-      <>
-        <BoxTable
-          label={m.project_candidate_sessions_of({ name: project.name })}
-          rows={rows}
-          columns={columns}
-          getRowId={(r) => `${r.session.id}|${r.rigId}`}
-          initialSort={{ columnId: "session", direction: "desc" }}
-          rowLabel={label}
-          rowActions={rowActions}
-          empty={m.project_no_candidates()}
-        />
-        {starting ? <StartRunDialog project={project} open onOpenChange={(next) => !next && setStarting(null)} initial={{ subjectId: starting.subject.id, rigId: starting.rigId }} /> : null}
-      </>
+      <BoxTable
+        label={m.project_suggestions_of({ name: project.name })}
+        rows={rows}
+        columns={columns}
+        getRowId={(r) => `${r.session.id}|${r.rigId}`}
+        initialSort={{ columnId: "session", direction: "desc" }}
+        rowLabel={label}
+        rowActions={rowActions}
+        empty={m.project_no_suggestions()}
+      />
     ),
   }
 }
@@ -281,8 +335,8 @@ export function useCandidatesSection(project: Project): DetailSection {
 
 type GoalDraft = { goalId: string | null; target: string; channel: Goal["channel"]; kinds: GoalKinds }
 
-/** "subjectId|panelId" for a goal's subject or panel. */
-const targetKey = (subjectId: string, panelId: string | null) => `${subjectId}|${panelId ?? ""}`
+/** "subjectId|groupId" for a goal's subject, or its panel group in a mosaic. */
+const targetKey = (subjectId: string, groupId: string | null) => `${subjectId}|${groupId ?? ""}`
 
 function goalStatus(p: GoalProgress): "met" | "partial" | "missing" {
   if (p.met) return "met"
@@ -292,9 +346,10 @@ function goalStatus(p: GoalProgress): "met" | "partial" | "missing" {
 /**
  * Goals: one row per goal, its counted progress and what the bar leaves out.
  * Add goal… and Edit… share one dialog; Apply template… copies a template's
- * values and conditions in (D-W30, C7). A closed Project reads its frozen
- * figures (`goalProgress`, C7) and offers no edit. `?add=goal` (Home's Add
- * a Goal) opens Add goal; closing the dialog clears it.
+ * values and conditions in (D-W30, C7). A mosaic's goals are per panel group
+ * (PRJ-FR-29). A closed Project reads its frozen figures (`goalProgress`,
+ * C7) and offers no edit. `?add=goal` (Home's Add a Goal) opens Add goal;
+ * closing the dialog clears it.
  */
 export function useGoalsSection(project: Project): DetailSection {
   const m = useMessages()
@@ -304,10 +359,13 @@ export function useGoalsSection(project: Project): DetailSection {
   const progress = useStore((s) => (s.catalog.projects[project.id] ? goalProgressOf(s, project) : []))
   const [draft, setDraft] = useState<GoalDraft | null>(null)
   const [applying, setApplying] = useState(false)
-  const open = project.state === "open"
+  const open = !isLocked(project)
   const channels = projectChannels(catalog, project.rigIds)
+  const panels = panelGroups(project)
 
-  const targets = project.subjects.flatMap((s) => (s.mosaic ? s.mosaic.panels.map((p) => ({ value: targetKey(s.id, p.id), label: subjectLabel(m, catalog, project, s.id, p.id) })) : [{ value: targetKey(s.id, null), label: subjectName(m, catalog, s) }]))
+  const targets = project.subjects.flatMap((s) =>
+    panels.length > 0 ? panels.map((g) => ({ value: targetKey(s.id, g.id), label: subjectLabel(m, catalog, project, s.id, g.id) })) : [{ value: targetKey(s.id, null), label: subjectName(m, catalog, s) }],
+  )
   const newGoal = (): GoalDraft => ({ goalId: null, target: targets[0]?.value ?? "", channel: channels[0] ?? "L", kinds: DEFAULT_GOAL })
   // `?add=goal` opens Add goal once per link; the flag drops when the param does.
   const linked = open && targets.length > 0 && search.add === "goal"
@@ -327,20 +385,20 @@ export function useGoalsSection(project: Project): DetailSection {
     if (search.add === undefined) return
     void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: ({ add: _, ...rest }: Record<string, string | undefined>) => rest, replace: true } as never)
   }
-  const subjectOf = (p: GoalProgress) => subjectLabel(m, catalog, project, p.goal.subjectId, p.goal.panelId)
+  const subjectOf = (p: GoalProgress) => subjectLabel(m, catalog, project, p.goal.subjectId, p.goal.groupId)
   const columns: Column<GoalProgress>[] = [
     { id: "subject", header: m.project_col_subject(), cell: subjectOf, sortValue: subjectOf, rowHeader: true, truncate: true },
-    { id: "channel", header: m.run_col_channel(), cell: (p) => p.goal.channel, sortValue: (p) => p.goal.channel },
+    { id: "channel", header: m.target_channel(), cell: (p) => p.goal.channel, sortValue: (p) => p.goal.channel },
     { id: "goal", header: m.project_goals_title(), cell: (p) => kindsLine(m, p.goal), sortValue: (p) => kindsLine(m, p.goal) },
     { id: "progress", header: m.project_col_progress(), cell: (p) => say(m, p.amounts), sortValue: (p) => p.measure.fraction ?? 0, truncate: true },
     { id: "below", header: m.project_col_below_bar(), cell: (p) => (p.belowBarLine ? say(m, p.belowBarLine) : "–"), sortValue: (p) => p.belowBar.seconds },
-    { id: "status", header: m.rungroup_col_status(), cell: (p) => <StatusBadge kind="checklist" value={goalStatus(p)} />, sortValue: goalStatus },
+    { id: "status", header: m.dialog_col_status(), cell: (p) => <StatusBadge kind="checklist" value={goalStatus(p)} />, sortValue: goalStatus },
   ]
   const write = (goals: Goal[]): CommitResult => setGoals(project.id, goals, project.revision)
   const rowActions = (p: GoalProgress): MenuItem[] =>
     open
       ? [
-          { id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setDraft({ goalId: p.goal.id, target: targetKey(p.goal.subjectId, p.goal.panelId), channel: p.goal.channel, kinds: p.goal }) },
+          { id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setDraft({ goalId: p.goal.id, target: targetKey(p.goal.subjectId, p.goal.groupId), channel: p.goal.channel, kinds: p.goal }) },
           { separator: true },
           {
             id: "remove",
@@ -359,7 +417,7 @@ export function useGoalsSection(project: Project): DetailSection {
           label: m.goal_add(),
           icon: Plus,
           opensDialog: true,
-          unavailable: targets.length === 0 ? { action: m.actions_blocked({ action: m.goal_add() }), reason: m.startrun_no_subject(), blockers: [] } : undefined,
+          unavailable: targets.length === 0 ? { action: m.actions_blocked({ action: m.goal_add() }), reason: m.project_goal_needs_subject(), blockers: [] } : undefined,
           run: () => setDraft(newGoal()),
         },
         { id: "apply-template", label: m.goal_apply_template(), opensDialog: true, run: () => setApplying(true) },
@@ -367,8 +425,8 @@ export function useGoalsSection(project: Project): DetailSection {
     : []
 
   function save(next: GoalDraft): CommitResult {
-    const [subjectId = "", panelId = ""] = next.target.split("|")
-    const goal: Goal = { id: next.goalId ?? freshId("goal", `${subjectId}|${next.channel}`), subjectId, panelId: panelId || null, channel: next.channel, ...next.kinds }
+    const [subjectId = "", groupId = ""] = next.target.split("|")
+    const goal: Goal = { id: next.goalId ?? freshId("goal", `${subjectId}|${next.channel}`), subjectId, groupId: groupId || null, channel: next.channel, ...next.kinds }
     return write(next.goalId ? project.goals.map((g) => (g.id === next.goalId ? goal : g)) : [...project.goals, goal])
   }
 
@@ -401,7 +459,7 @@ export function useGoalsSection(project: Project): DetailSection {
               {draft.goalId === null ? (
                 <>
                   <SelectField label={m.project_col_subject()} value={draft.target} options={targets} onChange={(target) => setDraft({ ...draft, target })} />
-                  <SelectField label={m.run_col_channel()} value={draft.channel} options={channels.map((c) => ({ value: c, label: c }))} onChange={(channel) => setDraft({ ...draft, channel })} />
+                  <SelectField label={m.target_channel()} value={draft.channel} options={channels.map((c) => ({ value: c, label: c }))} onChange={(channel) => setDraft({ ...draft, channel })} />
                 </>
               ) : null}
               <GoalKindsFields value={draft.kinds} onChange={(patch) => setDraft({ ...draft, kinds: { ...draft.kinds, ...patch } })} />
@@ -447,10 +505,11 @@ function ApplyTemplateDialog({ project, open, onOpenChange }: { project: Project
 interface SubjectRow {
   progress: SubjectProgress
   target: string
-  runs: number
+  /** Sessions of this subject the Project holds. */
+  sessions: number
 }
 
-/** A mosaic's panel balance per channel: the out-of-balance channels first; "–" for a plain subject. */
+/** A mosaic's panel balance per channel: the out-of-balance channels first; "–" for a plain Project. */
 function balanceLine(m: Messages, progress: SubjectProgress): string {
   const lines = progress.channels.filter((c) => c.balance).sort((a, b) => Number(a.balance!.balanced) - Number(b.balance!.balanced))
   return lines.map((c) => `${c.channel}: ${say(m, c.balance!.line)}`).join(" · ") || "–"
@@ -499,29 +558,31 @@ export function useSubjectsSection(project: Project): DetailSection {
   const rows = useStore((s) => {
     const tonight = planningNight(s)
     return subjectProgress(s.catalog, project, tonight).map(
-      (progress): SubjectRow => ({ progress, target: subjectName(m, s.catalog, progress.subject), runs: Object.values(s.catalog.runs).filter((r) => r.projectId === project.id && r.subjectId === progress.subject.id && !r.trashedAt).length }),
+      (progress): SubjectRow => ({
+        progress,
+        target: subjectName(m, s.catalog, progress.subject),
+        sessions: project.inputs.filter((i) => {
+          const session = s.catalog.sessions[i.sessionId]
+          return session !== undefined && sessionTargetId(session) === progress.subject.targetId
+        }).length,
+      }),
     )
   })
   const [adding, setAdding] = useState(false)
   const [changing, setChanging] = useState<Subject | null>(null)
-  const open = project.state === "open"
-  const mosaicLink = (subjectId: string) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: subjectId } })
+  const open = !isLocked(project)
+  const mosaic = isMosaic(project)
   const taken = project.subjects.map((s) => subjectTarget(catalog, s)?.name ?? "")
+  const kind = mosaic ? m.project_mosaic_of_panels({ count: panelGroups(project).length }) : m.project_target_label()
 
   const columns: Column<SubjectRow>[] = [
     { id: "subject", header: m.project_col_subject(), cell: (r) => r.target, sortValue: (r) => r.target, rowHeader: true, truncate: true },
-    {
-      id: "kind",
-      header: m.project_col_kind(),
-      cell: (r) => (r.progress.subject.mosaic ? m.mosaic_of_panels({ count: r.progress.subject.mosaic.panels.length }) : m.project_target_label()),
-      truncate: true,
-      sortValue: (r) => r.progress.subject.mosaic?.panels.length ?? 0,
-    },
+    { id: "kind", header: m.project_col_kind(), cell: () => kind, truncate: true, sortValue: () => kind },
     { id: "progress", header: m.project_col_progress(), cell: (r) => (r.progress.line ? say(m, r.progress.line) : "–"), sortValue: (r) => r.progress.fraction, truncate: true },
     { id: "balance", header: m.project_col_panel_balance(), cell: (r) => balanceLine(m, r.progress), sortValue: (r) => Number(r.progress.balanced), truncate: true },
     { id: "ratio", header: m.project_col_channel_ratio(), cell: (r) => (r.progress.ratio ? say(m, r.progress.ratio.line) : "–"), sortValue: (r) => (r.progress.ratio ? say(m, r.progress.ratio.line) : null), truncate: true },
     { id: "window", header: m.project_col_window(), cell: (r) => (r.progress.window ? say(m, r.progress.window.line) : "–"), sortValue: (r) => r.progress.window?.nightsLeft ?? null },
-    { id: "runs", header: m.common_runs(), cell: (r) => r.runs, sortValue: (r) => r.runs, align: "right" },
+    { id: "sessions", header: m.nav_sessions(), cell: (r) => r.sessions, sortValue: (r) => r.sessions, align: "right" },
   ]
   const rowActions = (r: SubjectRow): MenuItem[] => {
     const subject = r.progress.subject
@@ -531,8 +592,7 @@ export function useSubjectsSection(project: Project): DetailSection {
       ...(target ? [{ id: "open-target", label: m.project_open_target(), icon: Crosshair, run: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id } }) }] : []),
       ...(open
         ? [
-            ...(subject.mosaic ? [] : [{ id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setChanging(subject) }]),
-            { id: "mosaic", label: subject.mosaic ? m.mosaic_edit() : m.mosaic_make(), icon: Grid2x2Plus, run: () => mosaicLink(subject.id) },
+            { id: "edit", label: m.project_edit(), icon: Pencil, opensDialog: true, run: () => setChanging(subject) },
             { separator: true } as const,
             {
               id: "remove",
@@ -550,12 +610,7 @@ export function useSubjectsSection(project: Project): DetailSection {
         : []),
     ]
   }
-  const actions: Action[] = open
-    ? [
-        { id: "add-subject", label: m.store_label_add_subject(), icon: Plus, opensDialog: true, run: () => setAdding(true) },
-        { id: "new-mosaic", label: m.mosaic_new_ellipsis(), icon: Grid2x2Plus, run: () => mosaicLink("new") },
-      ]
-    : []
+  const actions: Action[] = open ? [{ id: "add-subject", label: m.store_label_add_subject(), icon: Plus, opensDialog: true, run: () => setAdding(true) }] : []
 
   return {
     id: "subjects",
@@ -574,7 +629,7 @@ export function useSubjectsSection(project: Project): DetailSection {
           taken={taken}
           onConfirm={(pick) => {
             const resolved = resolvePick(pick)
-            return resolved.ok ? addSubject(project.id, { targetId: resolved.targetId, mosaic: null }, project.revision) : { ok: false, reason: "write-failed", message: resolved.message }
+            return resolved.ok ? addSubject(project.id, resolved.targetId, project.revision) : { ok: false, reason: "write-failed", message: resolved.message }
           }}
         />
         <SubjectDialog
@@ -604,15 +659,16 @@ function planningNight(state: PrototypeState): string | null {
 // Rigs
 // ---------------------------------------------------------------------------
 
+/** The Project's rigs: adding or removing one changes suggestions only; held sessions stay held (PRJ-FR-02). */
 export function useRigsSection(project: Project): DetailSection {
   const m = useMessages()
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
-  const candidates = useStore((s) => projectCandidates(s.catalog, project))
+  const suggestions = useStore((s) => projectSuggestions(s.catalog, project))
   const [adding, setAdding] = useState(false)
   const others = Object.values(catalog.opticalTrains).filter((r) => !project.rigIds.includes(r.id))
   const [choice, setChoice] = useState("")
-  const open = project.state === "open"
+  const open = !isLocked(project)
   const chosen = others.find((r) => r.id === choice) ?? others[0]
 
   const camera = (id: string) => {
@@ -625,36 +681,30 @@ export function useRigsSection(project: Project): DetailSection {
     const fov = rig ? rigFieldOfView(catalog, rig) : null
     return fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : "–"
   }
+  const suggested = (id: string) => suggestions.filter((c) => c.rigId === id).length
   const columns: Column<string>[] = [
     { id: "rig", header: m.project_col_rig(), cell: (id) => rigName(m, catalog, id), sortValue: (id) => rigName(m, catalog, id), rowHeader: true, truncate: true },
     { id: "camera", header: m.project_col_camera(), cell: camera, sortValue: camera },
     { id: "channels", header: m.project_col_channels(), cell: (id) => projectChannels(catalog, [id as OpticalTrainId]).join(", ") || "–", sortValue: (id) => projectChannels(catalog, [id as OpticalTrainId]).length, truncate: true },
     { id: "field", header: m.project_col_field(), cell: field, sortValue: field },
-    { id: "candidates", header: m.project_candidates(), cell: (id) => candidates.filter((c) => c.rigId === id).length, sortValue: (id) => candidates.filter((c) => c.rigId === id).length, align: "right" },
+    { id: "suggestions", header: m.project_suggestions(), cell: suggested, sortValue: suggested, align: "right" },
   ]
-  const rowActions = (id: string): MenuItem[] => {
-    const users = rigRuns(catalog, project.id, id as OpticalTrainId)
-    return [
-      { id: "equipment", label: m.project_open_in({ name: m.settings_equipment() }), icon: Eye, run: () => void navigate({ to: "/settings/equipment" }) },
-      ...(open
-        ? [
-            { separator: true } as const,
-            {
-              id: "remove",
-              label: m.project_remove(),
-              icon: X,
-              kind: "destructive" as const,
-              unavailable:
-                users.length > 0
-                  ? { action: m.project_refusal_remove_rig(), reason: m.project_used_by_runs({ count: users.length }), blockers: users.map((r) => ({ label: r.name, link: r.trashedAt ? trashLink(project) : runStepLink(r, runPipelineStep(r)) })) }
-                  : undefined,
-              confirm: { title: m.project_remove_from_title({ name: rigName(m, catalog, id), project: project.name }), confirm: { label: m.project_remove(), kind: "destructive" as const } },
-              run: () => removeRig(project.id, id as OpticalTrainId, project.revision),
-            },
-          ]
-        : []),
-    ]
-  }
+  const rowActions = (id: string): MenuItem[] => [
+    { id: "equipment", label: m.project_open_in({ name: m.settings_equipment() }), icon: Eye, run: () => void navigate({ to: "/settings/equipment" }) },
+    ...(open
+      ? [
+          { separator: true } as const,
+          {
+            id: "remove",
+            label: m.project_remove(),
+            icon: X,
+            kind: "destructive" as const,
+            confirm: { title: m.project_remove_from_title({ name: rigName(m, catalog, id), project: project.name }), confirm: { label: m.project_remove(), kind: "destructive" as const } },
+            run: () => removeRig(project.id, id as OpticalTrainId, project.revision),
+          },
+        ]
+      : []),
+  ]
   const addLabel = m.project_add_rig()
   const actions: Action[] = open
     ? [
@@ -684,11 +734,6 @@ export function useRigsSection(project: Project): DetailSection {
       </>
     ),
   }
-}
-
-/** Where a run that holds a rig opens: its own step. */
-function runPipelineStep(run: Run) {
-  return run.stageBeforeComplete ?? "select"
 }
 
 // ---------------------------------------------------------------------------
@@ -735,39 +780,18 @@ export function usePlanningSection(project: Project): DetailSection {
 }
 
 // ---------------------------------------------------------------------------
-// Archived sessions (D-W69)
+// Archived sessions (STO-FR-13, D-W111)
 // ---------------------------------------------------------------------------
 
-/** Rows a restore moves back, as the confirm's file list: each frame from the archive to where Archive found it. */
-function restoreRows(rows: ReturnType<typeof restorePlan>["rows"]): FileRow[] {
-  return rows.flatMap((row) => row.moves.map((move) => ({ file: move.from.path.split("/").at(-1) ?? move.from.path, from: move.from.path, to: move.to.path, action: "move" as const, size: move.sizeBytes })))
-}
-
-/** The Project's archived sessions; Restore puts them back where Archive found them, also after Reopen (D-W69). */
+/** The sessions Close project archived, with where each went; there is no Restore (D-W111). */
 export function useArchivedSection(project: Project): DetailSection | null {
   const m = useMessages()
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
-  const origins = useStore((s) => s.slices.b.archiveOrigins)
-  const state = useStore((s) => s)
   const ids = project.archive?.sessionIds ?? []
   const sessions = ids.map((id) => catalog.sessions[id]).filter((s): s is Session => s !== undefined)
   if (sessions.length === 0) return null
 
-  const restore = (sessionIds: string[], label: string): Action => {
-    const plan = restorePlan(state, project, origins, sessionIds)
-    const unavailable = plan.rows.length === 0 ? { action: m.actions_blocked({ action: label }), reason: plan.blocked ? say(m, plan.blocked) : m.project_restore_nothing_now(), blockers: plan.refused.map((r) => ({ label: `${sessionLine(m, r.session)} · ${say(m, r.reason)}` })) } : undefined
-    return {
-      id: `restore-${sessionIds.join("-")}`,
-      label,
-      icon: RotateCcw,
-      unavailable,
-      confirm: { title: m.project_restore_title({ count: plan.rows.length }), summary: m.project_restore_description(), groups: [{ label: m.project_restore(), rows: restoreRows(plan.rows) }], confirm: { label: m.project_restore() } },
-      run: () => {
-        startArchiveTransfer(project.id, plan.rows, "restore")
-      },
-    }
-  }
   const archivePath = (session: Session) => {
     const first = liveAssetIds(catalog, session)
       .map((a) => catalog.assets[a])
@@ -783,7 +807,6 @@ export function useArchivedSection(project: Project): DetailSection | null {
     title: m.status_archived(),
     count: sessions.length,
     flush: true,
-    actions: [restore(ids, m.project_restore_all())],
     content: (
       <BoxTable
         label={m.project_archived_of({ name: project.name })}
@@ -791,16 +814,8 @@ export function useArchivedSection(project: Project): DetailSection | null {
         columns={columns}
         getRowId={(s) => s.id}
         rowLabel={(s) => sessionLine(m, s)}
-        rowActions={(s) => [
-          { id: "open-session", label: m.project_open_session(), icon: Eye, run: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: s.id } }) },
-          restore([s.id], m.project_restore()),
-        ]}
+        rowActions={(s) => [{ id: "open-session", label: m.project_open_session(), icon: Eye, run: () => openSession(navigate, s.id) }]}
       />
     ),
   }
-}
-
-function subjectNameOf(m: Messages, catalog: Catalog, project: Project, session: Session): string {
-  const subject = project.subjects.find((s) => s.targetId === session.target.value)
-  return subject ? subjectName(m, catalog, subject) : (session.objectLabel ?? m.project_unknown_subject())
 }

@@ -29,14 +29,13 @@ interface Removal {
 
 const catalog = () => store.getState().catalog
 const project = (id: string): Project => catalog().projects[id]!
-const runsOf = (p: Project) => Object.values(catalog().runs).filter((r) => r.projectId === p.id)
 /** A menu adds "…" to an item a confirmation follows (`actionLabel`). */
 const asked = (label: string) => `${label}…`
 
-/** A goal of a whole subject (no panel), so its row reads "subject · channel". */
+/** A goal of a whole subject (no panel group), so its row reads "subject · channel". */
 function goal(): Removal {
-  const p = Object.values(catalog().projects).find((c) => c.state === "open" && c.goals.some((g) => g.panelId === null))!
-  const { id, channel, subjectId } = p.goals.find((g) => g.panelId === null)!
+  const p = Object.values(catalog().projects).find((c) => c.state === "open" && c.goals.some((g) => g.groupId === null))!
+  const { id, channel, subjectId } = p.goals.find((g) => g.groupId === null)!
   const subject = subjectName(m, catalog(), p.subjects.find((s) => s.id === subjectId)!)
   return {
     projectId: p.id,
@@ -48,12 +47,12 @@ function goal(): Removal {
   }
 }
 
-/** A subject no run holds, so removing it is not refused. */
+/** A subject of an open Project: removing it changes suggestions only, so it is never refused. */
 function subject(): Removal {
-  const free = (c: Project) => c.subjects.find((s) => !runsOf(c).some((r) => r.subjectId === s.id))
-  const p = Object.values(catalog().projects).find((c) => c.state === "open" && free(c))!
-  const { id } = free(p)!
-  const name = subjectName(m, catalog(), free(p)!)
+  const p = Object.values(catalog().projects).find((c) => c.state === "open" && c.subjects.length > 0)!
+  const free = p.subjects[0]!
+  const { id } = free
+  const name = subjectName(m, catalog(), free)
   return {
     projectId: p.id,
     table: m.project_subjects_of({ name: p.name }),
@@ -64,11 +63,10 @@ function subject(): Removal {
   }
 }
 
-/** A rig no run uses, so its Remove is available. */
+/** A rig of an open Project: removing it changes suggestions only, so its Remove is available. */
 function rig(): Removal {
-  const free = (c: Project) => c.rigIds.find((rigId) => !runsOf(c).some((r) => r.rigId === rigId))
-  const p = Object.values(catalog().projects).find((c) => c.state === "open" && free(c))!
-  const rigId = free(p)!
+  const p = Object.values(catalog().projects).find((c) => c.state === "open" && c.rigIds.length > 0)!
+  const rigId = p.rigIds[0]!
   const name = rigName(m, catalog(), rigId)
   return {
     projectId: p.id,
