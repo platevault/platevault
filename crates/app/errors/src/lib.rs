@@ -162,6 +162,20 @@ pub fn bus_err(e: audit::bus::BusError) -> ContractError {
         .with_recovery_action(retry_action())
 }
 
+/// The `export.unfinished_file` `ContractError` for an export that failed and
+/// left its own unfinished file at `path`
+/// (`fs_pathsafe::export_dest::ExportWriteError::LeftUnfinished`).
+///
+/// `details.path` carries the path the backend wrote, under the
+/// canonicalized parent, and the UI shows it: the path the user chose can name
+/// another file once a symlink in it is retargeted. `message` is the backend
+/// diagnostic, never shown to the user.
+#[must_use]
+pub fn export_unfinished_file(path: &std::path::Path, message: String) -> ContractError {
+    ContractError::new(ErrorCode::ExportUnfinishedFile, message, ErrorSeverity::Blocking, false)
+        .with_details(serde_json::json!({ "path": path.to_string_lossy() }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,6 +237,24 @@ mod tests {
         assert_eq!(err.code, ErrorCode::InternalDatabase);
         assert!(err.retryable);
         assert_eq!(err.recovery_actions.len(), 1);
+    }
+
+    #[test]
+    fn export_unfinished_file_carries_the_leftover_path_in_details() {
+        let err = export_unfinished_file(
+            std::path::Path::new("/private/tmp/real/out.json"),
+            "diagnostic".to_owned(),
+        );
+
+        assert_eq!(err.code, ErrorCode::ExportUnfinishedFile);
+        assert_eq!(err.message, "diagnostic");
+        assert!(!err.retryable);
+        assert_eq!(
+            err.details,
+            contracts_core::JsonAny::from(serde_json::json!({
+                "path": "/private/tmp/real/out.json"
+            }))
+        );
     }
 }
 

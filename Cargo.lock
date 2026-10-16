@@ -178,6 +178,7 @@ dependencies = [
  "audit",
  "contracts_core",
  "persistence_core",
+ "serde_json",
  "sqlx",
 ]
 
@@ -2120,6 +2121,7 @@ dependencies = [
  "camino",
  "path-clean",
  "proptest",
+ "rustix",
  "safe-filename",
  "tempfile",
 ]

@@ -478,6 +478,12 @@ pub enum ErrorCode {
     SerialiseError,
     #[serde(rename = "io.error")]
     IoError,
+    /// An export failed after claiming its destination and its own
+    /// unfinished file remains there; the user deletes it before retrying.
+    /// `details.path` names that file, under the destination's canonicalized
+    /// parent.
+    #[serde(rename = "export.unfinished_file")]
+    ExportUnfinishedFile,
 
     // ── Per-frame inventory (spec 048) ───────────────────────────────────────
     /// A root's storage is unavailable (e.g. a removable drive is

@@ -4057,6 +4057,13 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  */
 "launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" | 
 /**
+ *  An export failed after claiming its destination and its own
+ *  unfinished file remains there; the user deletes it before retrying.
+ *  `details.path` names that file, under the destination's canonicalized
+ *  parent.
+ */
+"export.unfinished_file" | 
+/**
  *  A root's storage is unavailable (e.g. a removable drive is
  *  disconnected). Frames under it are reported unavailable/missing —
  *  this is a non-destructive terminal state, never an implicit delete.
