@@ -174,7 +174,7 @@
       {
         "id": "J24",
         "blocking": [
-          "G2 (implementation qualification) siril's exact handoff and its input-write behavior (P2) need a profile capability probe (D04).",
+          "G2 (implementation qualification) Siril's exact handoff and its input-write behavior (P2) need a profile capability probe (D04).",
           "G4 (implementation qualification) the specs do not say which Apply phases offer Cancel \"where safe\" (PREP-FR-09) besides the file-in-use wait of S15a.",
           "G11 (implementation qualification) the Windows file-handle fixture of P8 does not exist in the rebuilt application yet, and S15, S15a and S16 depend on it."
         ]
@@ -250,7 +250,7 @@
         "blocking": [
           "G2 (implementation qualification) no network control yet blocks SIMBAD alone (P3), and no fault control fails adding a Target from a result to exercise its Retry (PLAN-TGT-FR-03).",
           "G3 (out of scope) the Moon and darkness reasons for a zero Img time (PLAN-TGT-AC-06) and a Target without catalogued coordinates (PLAN-TGT-AC-07) need fixture nights and Targets that are not specified.",
-          "G4 (out of scope) fit's \"Size unknown\" and \"Field of view unknown\" reasons (072 edge cases, PLAN-EQ-FR-05) are not exercised.",
+          "G4 (out of scope) Fit's \"Size unknown\" and \"Field of view unknown\" reasons (072 edge cases, PLAN-EQ-FR-05) are not exercised.",
           "G5 (out of scope) no session is Trashed here.",
           "G6 (implementation qualification) the bundled catalogue's angular sizes for NGC 7000, IC 1396 and M 57 are assumed to place them as S10, S11 and S12 state for the J15 fields of view."
         ]
