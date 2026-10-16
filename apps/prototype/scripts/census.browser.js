@@ -10,6 +10,11 @@
  *
  * It reads React's dev fibers for two facts the DOM does not carry: a Button's
  * `variant`/`size` props, and whether a <table> was rendered by DataTable.
+ * The fibers are expandos on the page's own DOM objects, so evaluate it in the
+ * page's main world: a tool that evaluates in an isolated world sees none of
+ * them (every role reads "unknown"); inject it as a <script> there, e.g.
+ * `page.addScriptTag({ content: \`document.documentElement.dataset.census = JSON.stringify(${text})\` })`,
+ * and read the attribute back.
  *
  * Columns (budgets in §4 and §7.4):
  *   btn / combos   Button elements / distinct variant×size combinations
@@ -57,8 +62,9 @@
   const headerActions = header ? [...header.querySelectorAll("[data-slot=button]")].filter(visible).map((el) => `${text(el)} (${role(el)})`) : []
 
   const tables = [...main.querySelectorAll("table")].filter(visible)
-  const dataTables = tables.filter((t) => ownerName(t) === "DataTable")
-  const rawTables = tables.filter((t) => ownerName(t) !== "DataTable")
+  // DataTable renders its <table> through the ui/table parts, so the table's direct owner is `Table`: a table is a DataTable's when one sits above it.
+  const dataTables = tables.filter((t) => componentAbove(t, "DataTable"))
+  const rawTables = tables.filter((t) => !componentAbove(t, "DataTable"))
   const headerCells = [...main.querySelectorAll("thead th")].filter((th) => visible(th) && th.innerText.trim())
   const sortable = headerCells.filter((th) => th.hasAttribute("aria-sort") || th.querySelector("button:not([role=checkbox])"))
 
