@@ -2,8 +2,10 @@
  * Settings layout (S16; plan §3.4 SettingsPage): the page h1 and the section
  * list (NavList on the content surface) beside the open section. Each
  * section is a SettingsPage or a level-2 ListPage, and applies its changes
- * as they are made; there is no global Save button. The sections are
- * `SETTINGS_SECTIONS` in app/navigation.ts.
+ * as they are made; there is no global Save button. The Outlet renders
+ * straight into the detail pane, a shrinkable flex column: a ListPage fills
+ * it and scrolls inside its table frame, a SettingsPage scrolls the pane as
+ * one column. The sections are `SETTINGS_SECTIONS` in app/navigation.ts.
  */
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router"
 import { Undo2 } from "lucide-react"
