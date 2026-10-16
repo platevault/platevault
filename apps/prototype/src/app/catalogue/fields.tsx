@@ -11,7 +11,7 @@ import { useMessages } from "@/app/preferences"
 import { IconButton } from "@/components/app/actions"
 import type { Column } from "@/components/app/contracts"
 import { DataTable } from "@/components/app/data-table"
-import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
+import { ArgumentsField, ChoiceListField, ComboboxField, FieldGroup, FilesField, NumberField, PathField, SegmentedField, SelectField, SwitchField, type TemplateToken, TextAreaField, TextField, TokenTable, TokenTemplateField } from "@/components/app/fields"
 import { Section } from "@/components/app/page"
 import { SettingsRow, SettingsSection } from "@/components/app/settings"
 import { Button } from "@/components/ui/button"
@@ -207,8 +207,9 @@ function SwitchAndPathFields() {
   const [folder, setFolder] = useState<string | null>("/Volumes/Astro/Captures")
   const [file, setFile] = useState<string | null>(null)
   const [app, setApp] = useState<string | null>("/Applications/Siril.app")
+  const [files, setFiles] = useState<string[]>([])
   return (
-    <ComponentSection components={["SwitchField", "PathField"]} level={3}>
+    <ComponentSection components={["SwitchField", "PathField", "FilesField"]} level={3}>
       <Caption>{m.catalogue_fields_switch_caption()}</Caption>
       <div className="grid max-w-3xl grid-cols-2 gap-4">
         <SwitchField label={m.shortcuts_single_key()} checked={on} onChange={setOn} />
@@ -217,6 +218,7 @@ function SwitchAndPathFields() {
         <PathField label={m.run_profile_application()} mode="executable" value={app} onChange={setApp} />
         <PathField label={m.import_type_light()} mode="file" filters={[".fits", ".fit", ".xisf"]} initialPath="/Volumes/Astro/Captures" value={file} onChange={setFile} error={file ? undefined : m.settings_name_required()} />
         <PathField label={m.run_layout_output_folder()} mode="folder" value={folder} onChange={setFolder} disabled />
+        <FilesField label={m.calibration_import_files_label()} description={m.calibration_import_files_help()} filters={[".fits", ".fit", ".xisf"]} initialPath="/Volumes/Astro/Captures" value={files} onChange={setFiles} />
       </div>
     </ComponentSection>
   )

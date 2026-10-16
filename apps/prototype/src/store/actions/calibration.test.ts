@@ -159,7 +159,8 @@ describe("Import masters (CAL-FR-13): Duplicate, New version and New", () => {
     const newer = incomingMaster(base, "dark-300-oct", { dateObs: "2026-10-10T18:00:00.000Z" })
     const fresh = incomingMaster(base, "dark-60-oct", { dateObs: "2026-10-10T18:00:00.000Z", exposureS: 60 })
 
-    const [dup, version, created] = importMasterFiles([duplicate, newer, fresh])
+    const camera = catalog().masters[DARK_300]!.cameraId
+    const [dup, version, created] = importMasterFiles([duplicate, newer, fresh].map((path) => ({ path, cameraId: camera })))
 
     expect(dup!.match?.kind).toBe("duplicate")
     expect(dup!.result.ok).toBe(false)
@@ -175,6 +176,28 @@ describe("Import masters (CAL-FR-13): Duplicate, New version and New", () => {
     expect(catalog().masters[created!.masterId!]!.exposureS).toBe(60)
     expect(catalog().masters[created!.masterId!]!.versions.map((v) => v.origin.kind)).toEqual(["imported"])
     for (const [key, pin] of Object.entries(before)) expect(allPins()[key], key).toEqual(pin)
+  })
+
+  it("links each file to the camera chosen for it: another camera of the model makes a New record, none chosen is refused (LIB-FR-26)", () => {
+    const base = masterFile(DARK_300)
+    const first = catalog().masters[DARK_300]!.cameraId!
+    const second = Object.values(catalog().cameras).find((c) => c.id !== first && c.name === catalog().cameras[first]!.name)!
+    const fromSecond = incomingMaster(base, "dark-300-cam2", { dateObs: "2026-10-10T18:00:00.000Z" })
+    const unchosen = incomingMaster(base, "dark-300-unknown", { dateObs: "2026-10-11T18:00:00.000Z" })
+    const versions = catalog().masters[DARK_300]!.versions
+
+    const [linked, refused] = importMasterFiles([
+      { path: fromSecond, cameraId: second.id },
+      { path: unchosen, cameraId: null },
+    ])
+
+    expect(linked!.match?.kind).toBe("new")
+    expect(linked!.result).toEqual({ ok: true })
+    expect(linked!.masterId).not.toBe(DARK_300)
+    expect(catalog().masters[linked!.masterId!]!.cameraId).toBe(second.id)
+    expect(refused!.result.ok).toBe(false)
+    expect(refused!.masterId).toBeNull()
+    expect(catalog().masters[DARK_300]!.versions).toEqual(versions)
   })
 })
 

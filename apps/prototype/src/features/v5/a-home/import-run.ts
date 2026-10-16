@@ -15,7 +15,7 @@
  * source whose copy failed is never trashed. Also: saving an Import source.
  */
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
-import { bundledTarget, ingestFiles } from "@/domain/indexing"
+import { bundledTarget, ingestFiles, NO_MASTER_CAMERAS } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import type { ImageType, ImportSource, ImportSourceId, LocationId, OperationId, OperationItem, SessionId, VolumeId } from "@/domain/types"
 import { formatBytes, formatCount } from "@/lib/format"
@@ -123,7 +123,7 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
       const file = fileAt(state.disk, item.dest)
       return file?.header ? [{ ...file, header: { ...file.header, imageType: item.type } }] : []
     })
-    catalog = ingestFiles(catalog, state.disk, state.settings, location, files, now)
+    catalog = ingestFiles(catalog, state.disk, state.settings, location, files, now, NO_MASTER_CAMERAS)
   }
   const destPaths = new Map(payload.copied.map((q) => [q.dest, q]))
   const assets = { ...catalog.assets }

@@ -500,8 +500,34 @@ export function ChoiceListField<V extends string>({ value, options, onChange, di
 }
 
 // ---------------------------------------------------------------------------
-// PathField: a path chosen with the OS chooser
+// PathField and FilesField: paths chosen with the OS chooser
 // ---------------------------------------------------------------------------
+
+/** The chosen value as text plus "Choose…", which opens the OS chooser; never a text box (DESIGN.md:180). */
+function ChooserControl({ control, shown, disabled, onChoose }: { control: FieldControlProps; shown: ReactNode; disabled?: boolean; onChoose: () => void }) {
+  const m = useMessages()
+  const valueId = useId()
+  return (
+    <div className="flex min-h-8 w-full min-w-0 items-center gap-2">
+      <div id={valueId} className="min-w-0 flex-1">
+        {shown}
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        id={control.id}
+        // Read as "Capture folder, Choose…", then the current path.
+        aria-labelledby={`${control["aria-labelledby"]} ${control.id}`}
+        aria-describedby={joinIds(valueId, control["aria-describedby"])}
+        aria-invalid={control["aria-invalid"]}
+        disabled={disabled}
+        onClick={onChoose}
+      >
+        {m.fields_choose_ellipsis()}
+      </Button>
+    </div>
+  )
+}
 
 export interface PathFieldProps extends FieldChrome {
   /** What the chooser returns: a folder, a file or an application. */
@@ -519,11 +545,10 @@ export interface PathFieldProps extends FieldChrome {
   disabled?: boolean
 }
 
-/** The chosen path as text plus "Choose…", which opens the OS chooser. Never a text box (DESIGN.md:180). */
+/** One chosen path as text plus "Choose…", which opens the OS chooser. */
 export function PathField({ mode, value, onChange, filters, pickerTitle, chooseVerb, initialPath, disabled, ...chrome }: PathFieldProps) {
   const m = useMessages()
   const [open, setOpen] = useState(false)
-  const valueId = useId()
   const empty = { folder: m.fields_path_none_folder, file: m.fields_path_none_file, executable: m.fields_path_none_executable }[mode]
   // A file or an application opens the chooser in the folder that holds it.
   const openAt = value ? (mode === "folder" ? value : value.slice(0, value.lastIndexOf("/"))) : initialPath
@@ -531,27 +556,59 @@ export function PathField({ mode, value, onChange, filters, pickerTitle, chooseV
     <>
       <Field {...chrome}>
         {(control) => (
-          <div className="flex min-h-8 w-full min-w-0 items-center gap-2">
-            <div id={valueId} className="min-w-0 flex-1">
-              {value ? <PathText path={value} /> : <span className="text-sm text-muted-foreground">{empty()}</span>}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              id={control.id}
-              // Read as "Capture folder, Choose…", then the current path.
-              aria-labelledby={`${control["aria-labelledby"]} ${control.id}`}
-              aria-describedby={joinIds(valueId, control["aria-describedby"])}
-              aria-invalid={control["aria-invalid"]}
-              disabled={disabled}
-              onClick={() => setOpen(true)}
-            >
-              {m.fields_choose_ellipsis()}
-            </Button>
-          </div>
+          <ChooserControl control={control} disabled={disabled} onChoose={() => setOpen(true)} shown={value ? <PathText path={value} /> : <span className="text-sm text-muted-foreground">{empty()}</span>} />
         )}
       </Field>
       <FolderPicker open={open} onOpenChange={setOpen} title={pickerTitle ?? chrome.label} mode={mode} filters={filters} initialPath={openAt} chooseVerb={chooseVerb} onChoose={onChange} />
+    </>
+  )
+}
+
+export interface FilesFieldProps extends FieldChrome {
+  /** The chosen files in the chooser's order; empty while none is chosen. */
+  value: readonly string[]
+  onChange: (paths: string[]) => void
+  /** File extensions the chooser lists, e.g. `[".fits", ".xisf"]`. */
+  filters?: readonly string[]
+  /** Chooser title; the field's label when omitted. */
+  pickerTitle?: string
+  /** Verb of the chooser's primary button; the chosen name or count follows. */
+  chooseVerb?: string
+  /** Where the chooser opens when no file is chosen yet. */
+  initialPath?: string | null
+  disabled?: boolean
+}
+
+/** Several files of one folder chosen at once with the OS chooser: one reads as its path, several as "3 files in {folder}". */
+export function FilesField({ value, onChange, filters, pickerTitle, chooseVerb, initialPath, disabled, ...chrome }: FilesFieldProps) {
+  const m = useMessages()
+  const [open, setOpen] = useState(false)
+  const folder = value.length > 0 ? value[0]!.slice(0, value[0]!.lastIndexOf("/")) : null
+  const shown =
+    value.length === 0 ? (
+      <span className="text-sm text-muted-foreground">{m.fields_path_none_files()}</span>
+    ) : value.length === 1 ? (
+      <PathText path={value[0]!} />
+    ) : (
+      <span className="flex min-w-0 items-baseline gap-1 text-sm">
+        <span className="shrink-0">{m.fields_files_in({ count: value.length })}</span>
+        <PathText path={folder!} />
+      </span>
+    )
+  return (
+    <>
+      <Field {...chrome}>{(control) => <ChooserControl control={control} disabled={disabled} onChoose={() => setOpen(true)} shown={shown} />}</Field>
+      <FolderPicker
+        open={open}
+        onOpenChange={setOpen}
+        title={pickerTitle ?? chrome.label}
+        description={m.folder_picker_files_help()}
+        mode="files"
+        filters={filters}
+        initialPath={folder ?? initialPath}
+        chooseVerb={chooseVerb}
+        onChoose={onChange}
+      />
     </>
   )
 }

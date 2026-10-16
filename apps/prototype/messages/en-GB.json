@@ -6692,5 +6692,92 @@
   "catalogue_f4_tree_one_group": "one group, Copies (M 31 LRGB)",
   "catalogue_f4_tree_symlinks": "groups, two cameras, Symlinks (Cygnus HOO 2026)",
   "catalogue_f4_tree_mixed": "what-if, Copies: darks in the nights, NIGHT_…-2",
-  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)"
+  "catalogue_f4_tree_panels": "mosaic panels (IC 5070 mosaic)",
+  "fields_path_none_files": "No files chosen",
+  "fields_files_in": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file in",
+        "countPlural=*": "{count} files in"
+      }
+    }
+  ],
+  "folder_picker_files_help": "Press each file you want; press it again to leave it out.",
+  "calibration_import_camera_of": "Camera of {file}",
+  "calibration_import_choose_camera": "Choose its camera",
+  "calibration_import_cameras_needed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Choose the camera of {count} file",
+        "countPlural=*": "Choose the camera of {count} files"
+      }
+    }
+  ],
+  "calibration_import_files_label": "Master files",
+  "calibration_import_files_help": "FITS or XISF masters, several at once. The preview reads each file's headers; nothing is imported before you confirm.",
+  "calibration_import_preview_label": "Chosen master files",
+  "calibration_old_after_help": "Darks and bias whose newest version is older than this read Old, a reminder to shoot new ones. Flats never age. Matching keeps its own window in Settings › Equipment.",
+  "store_cal_camera_needed": "The rigs hold several {model} cameras ({cameras}): choose which one this master is from",
+  "calibration_raw_sets": "Raw sets",
+  "calibration_raw_set": "Raw set",
+  "calibration_raw_sets_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} raw set",
+        "countPlural=*": "{count} raw sets"
+      }
+    }
+  ],
+  "calibration_no_raw_sets": "No raw calibration sets",
+  "calibration_no_raw_sets_help": "Raw darks, flats and bias you import, with lights or on their own, are listed here.",
+  "calibration_search_raw_sets": "Filter raw sets",
+  "calibration_candidates": "Candidates",
+  "calibration_candidates_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} candidate",
+        "countPlural=*": "{count} candidates"
+      }
+    }
+  ],
+  "calibration_no_candidates": "No candidate masters",
+  "calibration_no_candidates_help": "Masters a tool generates in a Project's Processing folder are listed here until you add them to the library.",
+  "calibration_search_candidates": "Filter candidates",
+  "calibration_found_in": "Found in",
+  "calibration_output_offer": "Output offer",
+  "calibration_offer_offered": "Offered",
+  "calibration_offer_declined": "Declined",
+  "calibration_adopt_summary": "A verified copy goes to {destination}, SHA-256 {sha256}. The file in Processing stays where it is.",
+  "calibration_own_copy": "PlateVault's own copy",
+  "calibration_trash_copy_and_add": "Move copy to Trash and add",
+  "calibration_open_output": "Open {project} Output",
+  "calibration_newest_version": "Newest version"
 }

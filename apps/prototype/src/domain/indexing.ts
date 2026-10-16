@@ -14,7 +14,7 @@
  */
 import { formatDegrees } from "@/lib/format"
 import { type MessageRef, msg, verbatim } from "@/lib/i18n"
-import { calibrateSessions, emptyCalibration, factsOf, masterRecordKey } from "./calibration"
+import { calibrateSessions, emptyCalibration, factsOf, masterRecordKey, sameMasterCamera } from "./calibration"
 import { routeRawCalibration } from "./calibration-process"
 import { correctedExposureS } from "./corrections"
 import { isRetiredAsset } from "./library"
@@ -27,6 +27,7 @@ import type {
   Association,
   CalibrationKind,
   Camera,
+  CameraId,
   Catalog,
   Disk,
   DiskFile,
@@ -545,11 +546,12 @@ export function sessionFraming(catalog: Catalog, session: Session): Framing | nu
 
 /**
  * A master file in a Calibration location joins the library (CAL-FR-14): a
- * new dated version of the master whose settings it matches, else a new
- * master record. Generated masters found elsewhere stay candidates until
- * adopted (CAL-FR-06).
+ * new dated version of the master whose settings and camera it shares
+ * (`sameMasterCamera`), else a new master record linked to `cameraId`, the
+ * camera the user confirmed at import (LIB-FR-26), or to none. Generated
+ * masters found elsewhere stay candidates until adopted (CAL-FR-06).
  */
-function addLibraryMaster(catalog: Catalog, file: DiskFile, header: FrameHeader): void {
+function addLibraryMaster(catalog: Catalog, file: DiskFile, header: FrameHeader, cameraId: CameraId | null): void {
   const kind = header.imageType.slice("master-".length) as CalibrationKind
   if (Object.values(catalog.masters).some((m) => m.versions.some((v) => v.path === file.path))) return
   const facts = factsOf(file, kind)
@@ -562,7 +564,9 @@ function addLibraryMaster(catalog: Catalog, file: DiskFile, header: FrameHeader)
     origin: { kind: "library", projectId: null, sourcePath: file.path, sessionId: null },
     adoption: null,
   }
-  const record = Object.values(catalog.masters).find((m) => !m.hiddenAt && m.state === "adopted" && masterRecordKey(m) === masterRecordKey(facts))
+  const record = Object.values(catalog.masters).find(
+    (m) => !m.hiddenAt && m.state === "adopted" && masterRecordKey(m) === masterRecordKey(facts) && sameMasterCamera(catalog, header.instrument, m.cameraId, cameraId),
+  )
   if (record) {
     catalog.masters[record.id] = { ...record, versions: [...record.versions, version].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt)) }
     return
@@ -574,7 +578,7 @@ function addLibraryMaster(catalog: Catalog, file: DiskFile, header: FrameHeader)
     id,
     kind,
     cameraName: header.instrument,
-    cameraId: null,
+    cameraId,
     widthPx: header.widthPx,
     heightPx: header.heightPx,
     binning: header.binning,
@@ -640,7 +644,7 @@ function newSession(id: SessionId, header: FrameHeader, framing: number): Sessio
  * Returns a new catalog object (collections are shallow-copied). Every
  * ingestion goes through `ingestFiles`, which matches calibration after it.
  */
-function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime, margins: MatchingSettings["framing"]): Catalog {
+function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime, margins: MatchingSettings["framing"], masterCameras: ReadonlyMap<string, CameraId>): Catalog {
   const catalog: Catalog = {
     ...source,
     assets: { ...source.assets },
@@ -696,7 +700,7 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
     const pathId = assetIdForPath(file.path)
     const id = catalog.assets[pathId] ? assetIdForPath(`${location.id}|${file.path}`) : pathId
     const isMaster = header.imageType.startsWith("master-")
-    if (isMaster && location.role === "calibration") addLibraryMaster(catalog, file, header)
+    if (isMaster && location.role === "calibration") addLibraryMaster(catalog, file, header, masterCameras.get(file.path) ?? null)
     let sessionId: SessionId | undefined
     if (!isMaster) {
       const key = sessionGroupingKey(header)
@@ -733,14 +737,19 @@ function readFiles(source: Catalog, location: Location, files: DiskFile[], now: 
   return catalog
 }
 
+/** For an ingestion that links no master file to a camera: scans, and imports with no camera choice. */
+export const NO_MASTER_CAMERAS: ReadonlyMap<string, CameraId> = new Map()
+
 /**
  * Ingestion (LIB-FR-23, CAL-FR-02): read a batch of files of one location
  * into the catalog, then match calibration for every light session still
  * waiting, so later calibration fills what waits and never replaces a pin.
  * Indexing, Import and a calibration process's Register all go through here.
+ * `masterCameras` links master files, by path, to the camera the user
+ * confirmed at import (LIB-FR-26).
  */
-export function ingestFiles(source: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, location: Location, files: DiskFile[], now: IsoDateTime): Catalog {
-  return calibrateSessions(readFiles(source, location, files, now, settings.matching.framing), disk, settings, now)
+export function ingestFiles(source: Catalog, disk: Disk, settings: Pick<AppSettings, "matching">, location: Location, files: DiskFile[], now: IsoDateTime, masterCameras: ReadonlyMap<string, CameraId>): Catalog {
+  return calibrateSessions(readFiles(source, location, files, now, settings.matching.framing, masterCameras), disk, settings, now)
 }
 
 /**
@@ -838,7 +847,7 @@ export function indexLocationsSync(source: Catalog, disk: Disk, settings: Pick<A
     if (!location) continue
     const listing = listLocation(disk, location)
     if (listing.offline) continue
-    catalog = ingestFiles(catalog, disk, settings, location, listing.readable, now)
+    catalog = ingestFiles(catalog, disk, settings, location, listing.readable, now, NO_MASTER_CAMERAS)
     catalog = settleLocationScan(catalog, disk, locationId, new Set(listing.readable.map((f) => f.path)), now)
   }
   return catalog

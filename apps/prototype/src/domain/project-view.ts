@@ -992,19 +992,25 @@ export interface ProcessingMaster {
 }
 
 /**
- * Generated masters found in the Project's `Processing/` folder that are
- * still to offer: not hidden or adopted for that digest, not a version the
- * library already holds, and no longer being written.
+ * Generated masters found in the Project's `Processing/` folder that the
+ * library does not hold and that are no longer being written, offered or
+ * not: the candidates Calibration lists, where a hidden one can still be
+ * adopted (CAL-FR-06, CAL-AC-12). An adopted offer is never a candidate.
  */
-export function processingMasters(world: Pick<World, "catalog" | "disk" | "settings">, project: Project): ProcessingMaster[] {
+export function generatedMasters(world: Pick<World, "catalog" | "disk" | "settings">, project: Project): ProcessingMaster[] {
   const held = new Set(Object.values(world.catalog.masters).flatMap((mst) => mst.versions.flatMap((v) => [v.sha256, v.adoption?.verifiedSha256 ?? ""])))
   return processingFiles(world, project).flatMap((file) => {
     const kind = masterKindOf(file)
     if (!kind || kind === "dark-flat" || file.growing || held.has(file.sha256)) return []
     const offer = project.masterOffers.find((o) => o.sha256 === file.sha256) ?? null
-    if (offer && offer.state !== "offered") return []
+    if (offer?.state === "adopted") return []
     return [{ file, kind, offer }]
   })
+}
+
+/** The generated masters the Output step still offers: not hidden for that digest (CAL-FR-06). */
+export function processingMasters(world: Pick<World, "catalog" | "disk" | "settings">, project: Project): ProcessingMaster[] {
+  return generatedMasters(world, project).filter((m) => m.offer?.state !== "hidden")
 }
 
 // ---------------------------------------------------------------------------

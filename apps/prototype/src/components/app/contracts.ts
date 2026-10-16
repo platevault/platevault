@@ -93,6 +93,8 @@ export interface FileRow {
   action: "trash" | "move" | "unlink" | "copy" | "keep"
   /** Bytes. */
   size: number
+  /** The file's identity, where the review must name it (CAL-FR-17: a master's Move to Trash). */
+  sha256?: string
   /** A per-file refusal or note: "Read-only", "Linked by NGC 7000 OIII deep ▸". */
   status?: { label: string; link?: StepLink }
 }

@@ -153,7 +153,7 @@ function StepBody({ process, step, editable, profileId, onPickProfile }: StepBod
         label: m.calibration_master(),
         value: view.master ? (
           <Link to="/calibration" search={{ master: view.master.id }} className="text-link hover:underline">
-            {registered ? fileName(registered.path) : masterLabel(m, view.master)}
+            {registered ? fileName(registered.path) : masterLabel(m, state.catalog, view.master)}
           </Link>
         ) : (
           none

@@ -24,6 +24,7 @@ import type {
   CalibrationKind,
   CalibrationMaster,
   CalibrationSource,
+  Camera,
   CameraId,
   Catalog,
   Disk,
@@ -380,8 +381,37 @@ function cameraCriterion(catalog: Catalog, light: LightGeometry, source: Pick<Ca
   }
   const base = criterion("camera", light.cameraName, source.cameraName)
   if (base.result !== "compatible") return base
-  const sameModel = Object.values(catalog.cameras).filter((c) => c.name === light.cameraName || c.aliases.includes(light.cameraName ?? ""))
-  return sameModel.length > 1 ? { ...base, result: "unknown" } : base
+  return camerasOfModel(catalog, light.cameraName).length > 1 ? { ...base, result: "unknown" } : base
+}
+
+/** The cameras in the rigs of one model, by its name or a header alias (LIB-FR-26). */
+export function camerasOfModel(catalog: Pick<Catalog, "cameras">, model: string | null): Camera[] {
+  if (!model) return []
+  return Object.values(catalog.cameras).filter((c) => c.name === model || c.aliases.includes(model))
+}
+
+/**
+ * Whether a master file of `model` linked to `cameraId` (null: not linked)
+ * belongs with a master record linked to `recordCameraId` (LIB-FR-26): two
+ * links must name the same camera; otherwise by model while the rigs hold
+ * one camera of it. With several, an unlinked file joins only an unlinked
+ * record, so a file from one camera never becomes a version of another's.
+ */
+export function sameMasterCamera(catalog: Pick<Catalog, "cameras">, model: string | null, recordCameraId: CameraId | null, cameraId: CameraId | null): boolean {
+  if (recordCameraId && cameraId) return recordCameraId === cameraId
+  return recordCameraId === cameraId || camerasOfModel(catalog, model).length < 2
+}
+
+/** Why a master file of `model` cannot be linked to `cameraId` at import (LIB-FR-26): a camera of another model, or none while the rigs hold several of that model. Null when it can. */
+export function importCameraRefusal(catalog: Pick<Catalog, "cameras">, model: string | null, cameraId: CameraId | null): MessageRef | null {
+  const cameras = camerasOfModel(catalog, model)
+  if (cameraId) {
+    const camera = catalog.cameras[cameraId]
+    if (!camera) return msg("store_record_missing")
+    return cameras.some((c) => c.id === cameraId) ? null : msg("store_cal_camera_other_model", { camera: verbatim(camera.physicalAlias ?? camera.name), model: verbatim(model ?? "–") })
+  }
+  if (cameras.length < 2) return null
+  return msg("store_cal_camera_needed", { model: verbatim(model ?? "–"), cameras: verbatim(cameras.map((c) => c.physicalAlias ?? c.name).join(", ")) })
 }
 
 /** Temperature within the warning level (CAL-FR-21); past it the match is only suggested. */
@@ -750,9 +780,11 @@ export function factsOf(file: DiskFile, kind: CalibrationKind): MasterFacts {
 /**
  * Import masters' preview (CAL-FR-13), per file: Duplicate when a version
  * holds the same bytes or path; New version of a master whose settings it
- * matches (not hidden); else New. Null when the file is not a master.
+ * matches (not hidden) and whose camera it shares (`sameMasterCamera`, with
+ * `cameraId` the camera the user linked the file to, or null); else New.
+ * Null when the file is not a master.
  */
-export function masterImportMatch(catalog: Catalog, disk: Disk, file: DiskFile): MasterMatch | null {
+export function masterImportMatch(catalog: Catalog, disk: Disk, file: DiskFile, cameraId: CameraId | null): MasterMatch | null {
   const kind = masterKindOf(file)
   if (!kind || !file.header) return null
   for (const master of Object.values(catalog.masters)) {
@@ -760,7 +792,7 @@ export function masterImportMatch(catalog: Catalog, disk: Disk, file: DiskFile):
     if (version) return { kind: "duplicate", master, version }
   }
   const key = masterRecordKey(factsOf(file, kind))
-  const master = Object.values(catalog.masters).find((m) => !m.hiddenAt && m.state === "adopted" && masterRecordKey(m) === key)
+  const master = Object.values(catalog.masters).find((m) => !m.hiddenAt && m.state === "adopted" && masterRecordKey(m) === key && sameMasterCamera(catalog, file.header!.instrument, m.cameraId, cameraId))
   return master ? { kind: "version", master } : { kind: "new" }
 }
 

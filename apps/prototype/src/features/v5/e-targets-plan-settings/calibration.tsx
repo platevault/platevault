@@ -1,29 +1,40 @@
 /**
- * S14 Calibration library (slice E; CAL-FR-13 to CAL-FR-17, LIB-FR-26,
- * P-CAL3): a ListPage with three views.
+ * S14 Calibration library (slice E; CAL-FR-01, CAL-FR-06, CAL-FR-13 to
+ * CAL-FR-17, LIB-FR-26, P-CAL3): a ListPage with five views.
  *
- * - Masters: one table grouped by kind, filtered by search, Kind, Camera and
- *   Age. A master is one record with dated versions (CAL-FR-14); darks, bias
- *   and dark flats whose newest version is older than the setting read
- *   "Old · {n} d"; flats never age. A row opens the master's DetailPanel:
- *   every recorded fact, each version with its file, digest and the
- *   sessions it is pinned on, Add version… (a new dated version that moves
- *   no session), Hide and Move to Trash. Hide and Move to Trash are refused
- *   while an open, Closed or Archived Project uses the master through its
- *   sessions, naming those Projects; otherwise their confirmation lists the
- *   sessions it is pinned on, which then need calibration again. The
- *   master's menu links it to one physical camera (LIB-FR-26).
+ * - Masters: one table grouped by kind (darks, flats, bias; dark flats are
+ *   never matched, so the library does not list them), sortable by every
+ *   column and filtered by search, Kind, Camera, Temperature, Gain · offset
+ *   and State. A master is one record with dated versions (CAL-FR-14); none
+ *   is Latest. A dark or bias master whose newest version is older than the
+ *   Old masters after setting reads "Old · {n} d" (CAL-FR-15); flats never
+ *   age, and the badge raises no issue anywhere else. A row opens the
+ *   master's DetailPanel: its facts, then each version with its capture
+ *   date, file, digest and the sessions that pin it. Add version… adds a
+ *   dated version and moves no session. Hide and Move to Trash act on the
+ *   whole master and are refused while an open, Closed or Archived Project
+ *   uses it through its sessions, naming those Projects (provisional);
+ *   otherwise their confirmation lists the sessions it is pinned on, which
+ *   then need calibration again. Move to Trash names every version's file
+ *   with its SHA-256. The master's menu links it to one physical camera
+ *   (LIB-FR-26).
+ * - Raw sets: every raw dark, flat and bias set (CAL-FR-01, CAL-FR-04), with
+ *   its settings, the light sessions that pin it and its stacking state.
+ * - Candidates: generated masters found in a Project's `Processing/` folder
+ *   that the library does not hold, offered on the Output step or hidden
+ *   there; Add to library adopts one as a verified copy (CAL-FR-06,
+ *   CAL-AC-12).
  * - Processes: one row per calibration process; a row opens its StepPage
  *   (`/calibration/processes/$processId/$step`).
- * - Hidden: hidden masters, each with Show master (CAL-FR-16).
+ * - Hidden: hidden masters, each with Restore (CAL-FR-16).
  *
- * Header: Import masters… (Folder → Preview, CAL-FR-13) and the
- * "Calibration ▾" object menu with Calibration settings… (keep raw frames,
- * old masters after). Search parameters: `view`, `process` (opens Processes
- * on that row), `master` (opens its details) and `filter=dismissed` (Hidden).
+ * Header: Import masters… (Files → Preview, CAL-FR-13) and the "Calibration
+ * ▾" object menu with Calibration settings… (keep raw frames, Old masters
+ * after). Search parameters: `view`, `process` (opens Processes on that
+ * row), `master` (opens its details) and `filter=dismissed` (Hidden).
  */
 import { useNavigate, useSearch } from "@tanstack/react-router"
-import { Inbox, Layers, SearchX } from "lucide-react"
+import { Inbox, Layers, SearchX, Sparkles } from "lucide-react"
 import { useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/components/app/links"
@@ -38,35 +49,49 @@ import { StatusBadge } from "@/components/app/status"
 import type { PageDetail } from "@/components/templates/detail-panel"
 import { ListPage } from "@/components/templates/list-page"
 import type { ObjectMenu, PageViews } from "@/components/templates/parts"
-import { KIND_NAME, masterAge, newestVersion, versionDrift, versionsNewestFirst } from "@/domain/calibration"
+import { KIND_NAME, KINDS, masterAge, masterKindOf, newestVersion, versionDrift, versionsNewestFirst } from "@/domain/calibration"
 import { type MasterPin, masterPins, masterProjects, versionPins } from "@/domain/calibration-library"
 import { CALIBRATION_STEP_NAME, calibrationProcesses, type ProcessView } from "@/domain/calibration-process"
-import { projectLink, rigName, type StepLink } from "@/domain/derive"
+import { isLocked, projectLink, rigName, type StepLink } from "@/domain/derive"
 import { fileAt } from "@/domain/disk"
+import { nightOf } from "@/domain/indexing"
 import { sessionLabel } from "@/domain/membership"
-import type { CalibrationKind, CalibrationMaster, Catalog, Disk, MasterId, MasterVersion, Session } from "@/domain/types"
+import type { CalibrationKind, CalibrationMaster, Catalog, Disk, DiskFile, MasterId, MasterVersion, Session } from "@/domain/types"
 import { fileName, formatCount, formatDateTime, formatExposure, formatNight } from "@/lib/format"
-import { type Messages, say } from "@/lib/i18n"
+import { type Messages, msg, say } from "@/lib/i18n"
 import { hideMaster, restoreMaster, setMasterCamera, trashMaster } from "@/store/actions/calibration"
-import { type CommitResult, useStore } from "@/store/core"
-import { masterLabel, masterNight, PROCESS_STATUS, versionNight } from "./calibration-model"
+import { adoptionCheck, adoptProcessingMaster } from "@/store/actions/project-view"
+import { type CommitResult, store, useStore } from "@/store/core"
+import {
+  libraryMasters,
+  type MasterCandidate,
+  masterCamera,
+  masterCandidates,
+  masterLabel,
+  masterNight,
+  PROCESS_STATUS,
+  type RawSet,
+  rawSetName,
+  rawSets,
+  versionNight,
+} from "./calibration-model"
 import { AddMasterVersionDialog, CalibrationSettingsDialog, ImportMastersDialog } from "./dialogs"
 
-type View = "masters" | "processes" | "hidden"
+type View = "masters" | "raw" | "candidates" | "processes" | "hidden"
 
-const KIND_ORDER: CalibrationKind[] = ["flat", "dark", "bias", "dark-flat"]
+const VIEWS: readonly View[] = ["masters", "raw", "candidates", "processes", "hidden"]
 
 function kindHeading(m: Messages, kind: CalibrationKind): string {
   return { flat: m.calibration_heading_flats, dark: m.calibration_heading_darks, bias: m.calibration_heading_bias, "dark-flat": m.calibration_heading_dark_flats }[kind]()
 }
 
 function originWord(m: Messages, kind: MasterVersion["origin"]["kind"]): string {
-  return { library: m.calibration_origin_indexed, generated: m.calibration_origin_results, stacked: m.calibration_origin_stacked, imported: m.calibration_origin_imported }[kind]()
+  return { library: m.calibration_origin_indexed, generated: m.calibration_origin_generated, stacked: m.calibration_origin_stacked, imported: m.calibration_origin_imported }[kind]()
 }
 
-const gainOffset = (master: CalibrationMaster) => `${master.gain ?? "–"} · ${master.offset ?? "–"}`
-const temperature = (master: CalibrationMaster) => (master.ccdTempC === null ? "–" : `${Math.round(master.ccdTempC)} °C`)
-const exposure = (master: CalibrationMaster) => (master.exposureS === null ? "–" : formatExposure(master.exposureS))
+const gainOffset = (s: { gain: number | null; offset: number | null }) => `${s.gain ?? "–"} · ${s.offset ?? "–"}`
+const temperature = (s: { ccdTempC: number | null }) => (s.ccdTempC === null ? "–" : `${Math.round(s.ccdTempC)} °C`)
+const exposure = (s: { exposureS: number | null }) => (s.exposureS === null ? "–" : formatExposure(s.exposureS))
 const sessionLink = (sessionId: string): StepLink => ({ to: "/sessions/$sessionId", params: { sessionId } })
 
 /** The sessions of some pins, once each, in pin order. */
@@ -74,24 +99,27 @@ function pinnedSessions(pins: readonly MasterPin[]): Session[] {
   return [...new Map(pins.map((p) => [p.session.id, p.session])).values()]
 }
 
-/** "3 sessions" with the sessions in its preview, each linked to its page; plain text when no session pins the master. */
-function UsedBy({ pins }: { pins: MasterPin[] }) {
+/** "3 sessions" with the sessions in its preview, each linked to its page; plain text when no session pins it. */
+function UsedBy({ sessions }: { sessions: Session[] }) {
   const m = useMessages()
-  const sessions = pinnedSessions(pins)
   const label = m.session_count({ count: sessions.length })
   const first = sessions[0]
   if (!first) return label
   return <UsedByPreview label={label} link={sessionLink(first.id)} items={sessions.map((s) => ({ label: sessionLabel(m, s), link: sessionLink(s.id) }))} />
 }
 
-/** Adopted or Candidate, then Drifted (a version's bytes no longer match) and Old · {n} d when they apply. */
+/** A master's drift: a version's bytes no longer match what the library verified (CAL-FR-08). */
+function drifted(disk: Disk, master: CalibrationMaster): boolean {
+  return master.state === "adopted" && master.versions.some((v) => versionDrift(disk, v) !== null)
+}
+
+/** Adopted or Candidate, then Drifted and Old · {n} d when they apply. */
 function MasterState({ master, old }: { master: CalibrationMaster; old: string | null }) {
   const disk = useStore((s) => s.disk)
-  const drifted = master.state === "adopted" && master.versions.some((v) => versionDrift(disk, v) !== null)
   return (
     <>
       <StatusBadge kind="master" value={master.state} />
-      {drifted ? <StatusBadge kind="content" value="drifted" /> : null}
+      {drifted(disk, master) ? <StatusBadge kind="content" value="drifted" /> : null}
       {old ? <Pill tone="warning">{old}</Pill> : null}
     </>
   )
@@ -99,16 +127,50 @@ function MasterState({ master, old }: { master: CalibrationMaster; old: string |
 
 /** Search text of a master: kind, filter, camera, rig and its versions' paths. */
 function haystack(m: Messages, catalog: Catalog, master: CalibrationMaster): string {
-  return [say(m, KIND_NAME[master.kind]), master.channel, master.cameraName, master.opticalTrainId ? rigName(m, catalog, master.opticalTrainId) : null, ...master.versions.map((v) => v.path)]
+  return [say(m, KIND_NAME[master.kind]), master.channel, master.cameraName, masterCamera(catalog, master), master.opticalTrainId ? rigName(m, catalog, master.opticalTrainId) : null, ...master.versions.map((v) => v.path)]
     .filter(Boolean)
     .join(" ")
     .toLowerCase()
 }
 
-/** One version's file as the Move to Trash confirmation lists it. */
+/** One version's file as the Move to Trash review names it: its name, folder and SHA-256 (CAL-FR-17). */
 function trashRow(disk: Disk, version: MasterVersion): FileRow {
-  return { file: fileName(version.path), from: version.path.slice(0, version.path.lastIndexOf("/")), action: "trash", size: fileAt(disk, version.path)?.sizeBytes ?? 0 }
+  return {
+    file: fileName(version.path),
+    from: version.path.slice(0, version.path.lastIndexOf("/")),
+    action: "trash",
+    size: fileAt(disk, version.path)?.sizeBytes ?? 0,
+    sha256: version.adoption?.verifiedSha256 ?? version.sha256,
+  }
 }
+
+/** The camera of a raw set: its rig camera's alias, else the header's model. */
+function rawSetCamera(catalog: Catalog, set: RawSet): string {
+  return masterCamera(catalog, set.source) ?? "–"
+}
+
+/** "Dark 300 s", "Flat 1.5 s", "Bias": a generated master's header kind. */
+function candidateKind(m: Messages, file: DiskFile): string {
+  const kind = masterKindOf(file)
+  if (!kind) return "–"
+  const name = say(m, KIND_NAME[kind])
+  return kind === "bias" || !file.header ? name : `${name} ${formatExposure(file.header.exposureS)}`
+}
+
+/** One single facet's options from the values its rows read, each counted, in `order`. */
+function facetOptions<T>(rows: readonly T[], read: (row: T) => string, order: (a: string, b: string) => number = (a, b) => a.localeCompare(b)): Facet["options"] {
+  const counts = new Map<string, number>()
+  for (const row of rows) counts.set(read(row), (counts.get(read(row)) ?? 0) + 1)
+  return [...counts.entries()].sort(([a], [b]) => order(a, b)).map(([value, count]) => ({ value, label: value, count }))
+}
+
+const byKind = (a: string, b: string) => KINDS.indexOf(a as CalibrationKind) - KINDS.indexOf(b as CalibrationKind)
+/** The leading number of a facet value ("-10 °C", "100 · 50"); the unknown "–" sorts last. */
+const leading = (value: string) => {
+  const n = Number.parseFloat(value)
+  return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n
+}
+const byNumber = (a: string, b: string) => leading(a) - leading(b) || a.localeCompare(b)
 
 export function CalibrationPage() {
   const m = useMessages()
@@ -120,15 +182,14 @@ export function CalibrationPage() {
   const settings = useStore((s) => s.settings)
   const clockOffset = useStore((s) => s.faults.clockOffsetMs)
   const [query, setQuery] = useState("")
-  const [kind, setKind] = useState("")
-  const [camera, setCamera] = useState("")
-  const [age, setAge] = useState("")
+  const [filters, setFilters] = useState<Record<string, string>>({})
   const [detailId, setDetailId] = useState<MasterId | null>(search.master ?? null)
   const [importing, setImporting] = useState(false)
   const [editingSettings, setEditingSettings] = useState(false)
   const [addingVersion, setAddingVersion] = useState<CalibrationMaster | null>(null)
 
-  const view: View = search.view === "processes" || search.view === "hidden" || search.view === "masters" ? search.view : search.process ? "processes" : search.filter === "dismissed" ? "hidden" : "masters"
+  const requested = VIEWS.find((v) => v === search.view)
+  const view: View = requested ?? (search.process ? "processes" : search.filter === "dismissed" ? "hidden" : "masters")
   const pins = masterPins(catalog)
   const pinsOf = (master: CalibrationMaster) => pins.get(master.id) ?? []
   const now = Date.now() + clockOffset
@@ -136,14 +197,20 @@ export function CalibrationPage() {
     const found = masterAge(master, settings, now)
     return found ? say(m, found.label) : null
   }
-  const library = Object.values(catalog.masters).filter((master) => !master.hiddenAt)
-  const hidden = Object.values(catalog.masters).filter((master) => master.hiddenAt)
+  const { listed: library, hidden } = libraryMasters(catalog)
+  const raws = rawSets(catalog, disk)
+  const candidates = masterCandidates({ catalog, disk, settings })
   const processes = calibrationProcesses(catalog)
   const needle = query.trim().toLowerCase()
   const open = detailId ? catalog.masters[detailId] : undefined
+  const facet = (id: string) => filters[id] ?? ""
+  const clearFilters = () => {
+    setQuery("")
+    setFilters({})
+  }
 
   const setView = (next: string) => {
-    setQuery("")
+    clearFilters()
     void navigate({ to: "/calibration", search: { view: next }, replace: true })
   }
   const views: PageViews = {
@@ -152,19 +219,22 @@ export function CalibrationPage() {
     onChange: setView,
     items: [
       { id: "masters", label: m.calibration_masters(), count: library.length },
+      { id: "raw", label: m.calibration_raw_sets(), count: raws.length },
+      { id: "candidates", label: m.calibration_candidates(), count: candidates.length },
       { id: "processes", label: m.calibration_processes(), count: processes.length },
       { id: "hidden", label: m.calibration_hidden(), count: hidden.length },
     ],
   }
-
   const importAction: Action = { id: "import-masters", label: m.calibration_import_masters(), kind: "primary", opensDialog: true, run: () => setImporting(true) }
   const menu: ObjectMenu = {
     label: m.nav_calibration(),
     items: [{ id: "calibration-settings", label: m.calibration_settings(), opensDialog: true, run: () => setEditingSettings(true) }],
   }
   const header = { title: m.nav_calibration(), actions: [importAction], menu, views }
+  const toolbarFacets = (items: Facet[]) => ({ items, onChange: (patch: Record<string, string | string[]>) => setFilters((current) => ({ ...current, ...(patch as Record<string, string>) })) })
+  const noMatch = <EmptyState icon={SearchX} title={m.sessions_no_match()} action={<ActionButton action={{ id: "clear", label: m.filters_clear(), run: clearFilters }} />} />
 
-  // --- Master details --------------------------------------------------------
+  // --- Master details ----------------------------------------------------------
 
   const said = (result: CommitResult, message: string): CommitResult => {
     if (result.ok) toast({ message })
@@ -184,12 +254,13 @@ export function CalibrationPage() {
   const hide = (master: CalibrationMaster): Action => {
     const label = m.calibration_hide_master()
     const summary = released(master)
+    const name = masterLabel(m, catalog, master)
     return {
       id: "hide-master",
       label,
       unavailable: inUse(master, label),
-      confirm: summary ? { title: m.calibration_hide_master_title({ name: masterLabel(m, master) }), summary, confirm: { label } } : undefined,
-      run: () => said(hideMaster(master.id), m.calibration_hid_master({ name: masterLabel(m, master) })),
+      confirm: summary ? { title: m.calibration_hide_master_title({ name }), summary, confirm: { label } } : undefined,
+      run: () => said(hideMaster(master.id), m.calibration_hid_master({ name })),
     }
   }
   const trash = (master: CalibrationMaster): Action => {
@@ -200,7 +271,7 @@ export function CalibrationPage() {
       kind: "destructive",
       unavailable: inUse(master, label),
       confirm: {
-        title: m.common_trash_named_title({ name: masterLabel(m, master) }),
+        title: m.common_trash_named_title({ name: masterLabel(m, catalog, master) }),
         summary: released(master),
         groups: [{ label: m.calibration_versions(), rows: versionsNewestFirst(master).map((v) => trashRow(disk, v)), defaultOpen: true }],
         confirm: { label, kind: "destructive" },
@@ -208,7 +279,11 @@ export function CalibrationPage() {
       run: () => trashMaster(master.id).result,
     }
   }
-  const show = (master: CalibrationMaster): Action => ({ id: "show-master", label: m.calibration_show_master(), run: () => said(restoreMaster(master.id), m.calibration_shown_master({ name: masterLabel(m, master) })) })
+  const restore = (master: CalibrationMaster): Action => ({
+    id: "restore-master",
+    label: m.calibration_restore_master(),
+    run: () => said(restoreMaster(master.id), m.calibration_restored_master({ name: masterLabel(m, catalog, master) })),
+  })
   const addVersion = (master: CalibrationMaster): Action => ({ id: "add-version", label: m.calibration_add_version(), opensDialog: true, run: () => setAddingVersion(master) })
   const details = (master: CalibrationMaster): Action => ({ id: "details", label: m.settings_details(), run: () => setDetailId(master.id) })
 
@@ -222,7 +297,6 @@ export function CalibrationPage() {
     if (master.cameraId) items.push({ id: "match-by-model", label: m.calibration_match_by_model(), run: () => setMasterCamera(master.id, null) })
     return items.length > 0 ? [{ submenu: m.calibration_link_camera(), items }] : []
   }
-
   /** The master's own links: the raw session its newest stacked version came from, and its camera link. */
   const masterLinks = (master: CalibrationMaster): MenuItem[] => {
     const items: MenuItem[] = []
@@ -234,16 +308,16 @@ export function CalibrationPage() {
   const detail: PageDetail | null = open
     ? {
         dockId: "calibration-masters",
-        title: masterLabel(m, open),
+        title: masterLabel(m, catalog, open),
         status: <StatusBadge kind="master" value={open.state} />,
-        actions: open.hiddenAt ? [show(open)] : [addVersion(open), hide(open), trash(open)],
+        actions: open.hiddenAt ? [restore(open)] : [addVersion(open), hide(open), trash(open)],
         menu: { label: m.calibration_master(), items: masterLinks(open) },
         content: (
           <>
-            <KeyValueList items={masterFacts(m, catalog, open, pinsOf(open), oldLabel(open), now)} />
+            <KeyValueList items={masterFacts(m, catalog, open, pinnedSessions(pinsOf(open)), oldLabel(open), now)} />
             {versionsNewestFirst(open).map((version) => (
               <Box key={version.id} title={m.calibration_version_of({ night: formatNight(versionNight(catalog, version), true) })} level={4}>
-                <KeyValueList items={versionFacts(m, catalog, version, versionPins(pins, open.id, version.id))} />
+                <KeyValueList items={versionFacts(m, catalog, version, pinnedSessions(versionPins(pins, open.id, version.id)))} />
               </Box>
             ))}
           </>
@@ -259,6 +333,122 @@ export function CalibrationPage() {
       <AddMasterVersionDialog master={addingVersion} onOpenChange={(next) => !next && setAddingVersion(null)} />
     </>
   )
+
+  // --- Raw sets view -----------------------------------------------------------
+
+  if (view === "raw") {
+    const shown = raws.filter(
+      (set) =>
+        (facet("kind") === "" || set.source.kind === facet("kind")) &&
+        (facet("camera") === "" || rawSetCamera(catalog, set) === facet("camera")) &&
+        [rawSetName(m, set), set.session.channel, rawSetCamera(catalog, set)].filter(Boolean).join(" ").toLowerCase().includes(needle),
+    )
+    const openProcess = (set: RawSet) => set.process && follow({ to: "/calibration/processes/$processId/$step", params: { processId: set.process.process.id, step: set.process.current ?? "raws" } })
+    const facets: Facet[] = [
+      { id: "kind", label: m.run_col_kind(), kind: "single", value: facet("kind"), options: facetOptions(raws, (set) => set.source.kind, byKind).map((o) => ({ ...o, label: say(m, KIND_NAME[o.value as CalibrationKind]) })) },
+      { id: "camera", label: m.calibration_key_camera(), kind: "single", value: facet("camera"), options: facetOptions(raws, (set) => rawSetCamera(catalog, set)) },
+    ]
+    return (
+      <>
+        <ListPage
+          {...header}
+          summary={m.calibration_raw_sets_count({ count: raws.length })}
+          table={{
+            label: m.calibration_raw_sets(),
+            rows: shown,
+            columns: rawSetColumns(m, catalog),
+            getRowId: (set) => set.session.id,
+            groups: { key: (set) => set.source.kind, label: (key, rows) => <>{kindHeading(m, key as CalibrationKind)} <CountBadge count={rows.length} /></>, compare: byKind },
+            initialSort: { columnId: "night", direction: "desc" },
+            onRowClick: (set) => follow(sessionLink(set.session.id)),
+            rowLabel: (set) => rawSetName(m, set),
+            rowActions: (set): MenuItem[] => [
+              { id: "open-session", label: m.calibration_open_raw_session(), run: () => follow(sessionLink(set.session.id)) },
+              ...(set.process ? [{ id: "open-process", label: m.calibration_open_process(), run: () => void openProcess(set) }] : []),
+            ],
+            stickyFirstColumn: true,
+            empty:
+              raws.length === 0 ? (
+                <EmptyState icon={Layers} title={m.calibration_no_raw_sets()} description={m.calibration_no_raw_sets_help()} action={<ActionButton action={{ id: "open-import", label: m.import_open(), run: () => follow({ to: "/import" }) }} />} />
+              ) : (
+                noMatch
+              ),
+            toolbar: { search: { label: m.calibration_search_raw_sets(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery }, facets: toolbarFacets(facets), matchCount: shown.length },
+          }}
+        />
+        {dialogs}
+      </>
+    )
+  }
+
+  // --- Candidates view -----------------------------------------------------------
+
+  if (view === "candidates") {
+    const shown = candidates.filter((c) => [fileName(c.master.file.path), c.project.name, candidateKind(m, c.master.file)].join(" ").toLowerCase().includes(needle))
+    /** Add to library (CAL-FR-06): a verified copy into structured calibration storage, refused with its reason; PlateVault's own unregistered copy at the destination goes to the Trash first, as reviewed (section 9). */
+    const adopt = (c: MasterCandidate): Action => {
+      const label = m.project_output_adopt()
+      const name = fileName(c.master.file.path)
+      const check = adoptionCheck(store.getState(), c.project.id, c.master.file.path)
+      const blocked = (reason: string): Action => ({ id: "adopt", label, unavailable: { action: m.actions_blocked({ action: label }), reason, blockers: [] }, run: () => undefined })
+      if (isLocked(c.project)) return blocked(m.apply_refused_locked())
+      const done = (result: CommitResult) => said(result, say(m, msg("store_saved_added_to_library", { name })))
+      if (!check.ok && check.ownCopy) {
+        const own = fileAt(disk, check.ownCopy)
+        return {
+          id: "adopt",
+          label,
+          confirm: {
+            title: m.project_output_adopt_title({ name }),
+            summary: say(m, check.reasons[0]!),
+            groups: own ? [{ label: m.calibration_own_copy(), rows: [{ file: fileName(own.path), from: own.path.slice(0, own.path.lastIndexOf("/")), action: "trash", size: own.sizeBytes, sha256: own.sha256 }], defaultOpen: true }] : undefined,
+            confirm: { label: m.calibration_trash_copy_and_add() },
+          },
+          run: () => done(adoptProcessingMaster(c.project.id, c.master.file.path, c.master.file.sha256, { trashOwnCopy: true })),
+        }
+      }
+      if (!check.ok) return blocked(say(m, check.reasons[0]!))
+      return {
+        id: "adopt",
+        label,
+        confirm: { title: m.project_output_adopt_title({ name }), summary: m.calibration_adopt_summary({ destination: check.destination, sha256: check.sha256 }), confirm: { label } },
+        run: () => done(adoptProcessingMaster(c.project.id, c.master.file.path, check.sha256)),
+      }
+    }
+    const outputLink = (c: MasterCandidate): StepLink => projectLink(c.project.id, { stage: "output" })
+    return (
+      <>
+        <ListPage
+          {...header}
+          summary={m.calibration_candidates_count({ count: candidates.length })}
+          table={{
+            label: m.calibration_candidates(),
+            rows: shown,
+            columns: candidateColumns(m),
+            getRowId: (c) => `${c.project.id}:${c.master.file.path}`,
+            initialSort: { columnId: "captured", direction: "desc" },
+            rowLabel: (c) => fileName(c.master.file.path),
+            primaryRowAction: adopt,
+            rowActions: (c): MenuItem[] => [adopt(c), { id: "open-output", label: m.calibration_open_output({ project: c.project.name }), run: () => follow(outputLink(c)) }],
+            stickyFirstColumn: true,
+            empty:
+              candidates.length === 0 ? (
+                <EmptyState
+                  icon={Sparkles}
+                  title={m.calibration_no_candidates()}
+                  description={m.calibration_no_candidates_help()}
+                  action={<ActionButton action={{ id: "open-projects", label: m.nav_projects(), run: () => follow({ to: "/projects" }) }} />}
+                />
+              ) : (
+                noMatch
+              ),
+            toolbar: { search: { label: m.calibration_search_candidates(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery }, matchCount: shown.length },
+          }}
+        />
+        {dialogs}
+      </>
+    )
+  }
 
   // --- Processes view --------------------------------------------------------
 
@@ -289,7 +479,7 @@ export function CalibrationPage() {
               processes.length === 0 ? (
                 <EmptyState icon={Layers} title={m.calibration_no_raw_sessions()} description={m.calibration_no_processes_help()} action={<ActionButton action={{ id: "open-import", label: m.import_open(), run: () => follow({ to: "/import" }) }} />} />
               ) : (
-                <EmptyState icon={SearchX} title={m.sessions_no_match()} action={<ActionButton action={{ id: "clear", label: m.filters_clear(), run: () => setQuery("") }} />} />
+                noMatch
               ),
             toolbar: { search: { label: m.calibration_search_processes(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery }, matchCount: shown.length },
           }}
@@ -312,19 +502,19 @@ export function CalibrationPage() {
           table={{
             label: m.calibration_hidden_masters(),
             rows: shown,
-            columns: hiddenColumns(m),
+            columns: hiddenColumns(m, catalog),
             getRowId: (master) => master.id,
             initialSort: { columnId: "at", direction: "desc" },
             activeRowId: detailId,
             onRowClick: (master) => setDetailId(master.id),
-            rowLabel: (master) => masterLabel(m, master),
-            rowActions: (master): MenuItem[] => [details(master), show(master)],
-            primaryRowAction: show,
+            rowLabel: (master) => masterLabel(m, catalog, master),
+            rowActions: (master): MenuItem[] => [details(master), restore(master)],
+            primaryRowAction: restore,
             empty:
               hidden.length === 0 ? (
                 <EmptyState icon={Inbox} title={m.calibration_nothing_hidden()} action={<ActionButton action={{ id: "show-masters", label: m.calibration_masters(), run: () => setView("masters") }} />} />
               ) : (
-                <EmptyState icon={SearchX} title={m.sessions_no_match()} action={<ActionButton action={{ id: "clear", label: m.filters_clear(), run: () => setQuery("") }} />} />
+                noMatch
               ),
             toolbar: { search: { label: m.calibration_filter_label(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery }, matchCount: shown.length },
           }}
@@ -337,31 +527,28 @@ export function CalibrationPage() {
 
   // --- Masters view ------------------------------------------------------------
 
-  const cameras = [...new Set(library.map((master) => master.cameraName ?? "–"))].sort()
+  const cameraOf = (master: CalibrationMaster) => masterCamera(catalog, master) ?? "–"
+  const stateOf = (master: CalibrationMaster): string[] => [...(oldLabel(master) ? ["old"] : []), ...(drifted(disk, master) ? ["drifted"] : [])]
   const shown = library.filter(
     (master) =>
-      (kind === "" || master.kind === kind) &&
-      (camera === "" || (master.cameraName ?? "–") === camera) &&
-      (age === "" || oldLabel(master) !== null) &&
+      (facet("kind") === "" || master.kind === facet("kind")) &&
+      (facet("camera") === "" || cameraOf(master) === facet("camera")) &&
+      (facet("temp") === "" || temperature(master) === facet("temp")) &&
+      (facet("gain") === "" || gainOffset(master) === facet("gain")) &&
+      (facet("state") === "" || stateOf(master).includes(facet("state"))) &&
       haystack(m, catalog, master).includes(needle),
   )
+  const stateOptions = [
+    { value: "old", label: m.calibration_age_old(), count: library.filter((master) => oldLabel(master) !== null).length },
+    { value: "drifted", label: m.status_drifted(), count: library.filter((master) => drifted(disk, master)).length },
+  ].filter((o) => o.count > 0)
   const facets: Facet[] = [
-    {
-      id: "kind",
-      label: m.run_col_kind(),
-      kind: "single",
-      value: kind,
-      options: KIND_ORDER.filter((k) => library.some((master) => master.kind === k)).map((k) => ({ value: k, label: say(m, KIND_NAME[k]), count: library.filter((master) => master.kind === k).length })),
-    },
-    { id: "camera", label: m.calibration_key_camera(), kind: "single", value: camera, options: cameras.map((c) => ({ value: c, label: c, count: library.filter((master) => (master.cameraName ?? "–") === c).length })) },
-    { id: "age", label: m.calibration_age(), kind: "single", value: age, options: [{ value: "old", label: m.calibration_age_old(), count: library.filter((master) => oldLabel(master) !== null).length }] },
+    { id: "kind", label: m.run_col_kind(), kind: "single", value: facet("kind"), options: facetOptions(library, (master) => master.kind, byKind).map((o) => ({ ...o, label: say(m, KIND_NAME[o.value as CalibrationKind]) })) },
+    { id: "camera", label: m.calibration_key_camera(), kind: "single", value: facet("camera"), options: facetOptions(library, cameraOf) },
+    { id: "temp", label: m.domain_criterion_temperature(), kind: "single", value: facet("temp"), options: facetOptions(library, temperature, byNumber) },
+    { id: "gain", label: m.session_gain_offset(), kind: "single", value: facet("gain"), options: facetOptions(library, gainOffset, byNumber) },
+    { id: "state", label: m.calibration_state(), kind: "single", value: facet("state"), options: stateOptions },
   ]
-  const clearFilters = () => {
-    setQuery("")
-    setKind("")
-    setCamera("")
-    setAge("")
-  }
   const rowActions = (master: CalibrationMaster): MenuItem[] => [details(master), addVersion(master), ...masterLinks(master), { separator: true }, hide(master), trash(master)]
 
   return (
@@ -374,37 +561,17 @@ export function CalibrationPage() {
           rows: shown,
           columns: masterColumns(m, catalog, pins, oldLabel),
           getRowId: (master) => master.id,
-          groups: {
-            key: (master) => master.kind,
-            label: (key, rows) => (
-              <>
-                {kindHeading(m, key as CalibrationKind)} <CountBadge count={rows.length} />
-              </>
-            ),
-            compare: (a, b) => KIND_ORDER.indexOf(a as CalibrationKind) - KIND_ORDER.indexOf(b as CalibrationKind),
-          },
+          groups: { key: (master) => master.kind, label: (key, rows) => <>{kindHeading(m, key as CalibrationKind)} <CountBadge count={rows.length} /></>, compare: byKind },
           initialSort: { columnId: "night", direction: "desc" },
           activeRowId: detailId,
           onRowClick: (master) => setDetailId(master.id),
-          rowLabel: (master) => masterLabel(m, master),
+          rowLabel: (master) => masterLabel(m, catalog, master),
           rowActions,
           stickyFirstColumn: true,
-          empty:
-            library.length === 0 ? (
-              <EmptyState icon={Inbox} title={m.calibration_no_masters()} action={<ActionButton action={{ ...importAction, kind: "standard" }} />} />
-            ) : (
-              <EmptyState icon={SearchX} title={m.sessions_no_match()} action={<ActionButton action={{ id: "clear", label: m.filters_clear(), run: clearFilters }} />} />
-            ),
+          empty: library.length === 0 ? <EmptyState icon={Inbox} title={m.calibration_no_masters()} action={<ActionButton action={{ ...importAction, kind: "standard" }} />} /> : noMatch,
           toolbar: {
             search: { label: m.calibration_filter_label(), placeholder: m.calibration_filter_placeholder(), value: query, onChange: setQuery },
-            facets: {
-              items: facets,
-              onChange: (patch) => {
-                if (typeof patch.kind === "string") setKind(patch.kind)
-                if (typeof patch.camera === "string") setCamera(patch.camera)
-                if (typeof patch.age === "string") setAge(patch.age)
-              },
-            },
+            facets: toolbarFacets(facets),
             matchCount: shown.length,
           },
         }}
@@ -416,9 +583,9 @@ export function CalibrationPage() {
 }
 
 function masterColumns(m: Messages, catalog: Catalog, pins: ReadonlyMap<MasterId, MasterPin[]>, oldLabel: (master: CalibrationMaster) => string | null): Column<CalibrationMaster>[] {
-  const label = (master: CalibrationMaster) => masterLabel(m, master)
+  const label = (master: CalibrationMaster) => masterLabel(m, catalog, master)
   const night = (master: CalibrationMaster) => masterNight(catalog, master)
-  const users = (master: CalibrationMaster) => pins.get(master.id) ?? []
+  const users = (master: CalibrationMaster) => pinnedSessions(pins.get(master.id) ?? [])
   return [
     { id: "master", header: m.calibration_master(), cell: label, sortValue: label, rowHeader: true, truncate: true },
     { id: "filter", header: m.tonight_filter(), truncate: true, cell: (master) => master.channel ?? "–", sortValue: (master) => master.channel ?? "" },
@@ -426,9 +593,47 @@ function masterColumns(m: Messages, catalog: Catalog, pins: ReadonlyMap<MasterId
     { id: "gain", header: m.session_gain_offset(), cell: gainOffset, sortValue: (master) => master.gain, align: "right" },
     { id: "temp", header: m.calibration_key_temp(), cell: temperature, sortValue: (master) => master.ccdTempC, align: "right" },
     { id: "versions", header: m.calibration_versions(), cell: (master) => formatCount(master.versions.length), sortValue: (master) => master.versions.length, align: "right" },
-    { id: "night", header: m.tonight_night(), truncate: true, cell: (master) => formatNight(night(master), true), sortValue: night },
-    { id: "used-by", header: m.calibration_used_by(), cell: (master) => <UsedBy pins={users(master)} />, sortValue: (master) => pinnedSessions(users(master)).length },
+    { id: "night", header: m.calibration_newest_version(), truncate: true, cell: (master) => formatNight(night(master), true), sortValue: night },
+    { id: "used-by", header: m.calibration_used_by(), cell: (master) => <UsedBy sessions={users(master)} />, sortValue: (master) => users(master).length },
     { id: "state", header: m.calibration_state(), cell: (master) => <MasterState master={master} old={oldLabel(master)} />, sortValue: (master) => `${oldLabel(master) ? 0 : 1}${master.state}` },
+  ]
+}
+
+function rawSetColumns(m: Messages, catalog: Catalog): Column<RawSet>[] {
+  const name = (set: RawSet) => rawSetName(m, set)
+  const stacking = (set: RawSet) => (set.process ? say(m, PROCESS_STATUS[set.process.status].word) : "–")
+  return [
+    { id: "set", header: m.calibration_raw_set(), cell: name, sortValue: name, rowHeader: true, truncate: true },
+    { id: "camera", header: m.calibration_key_camera(), cell: (set) => rawSetCamera(catalog, set), sortValue: (set) => rawSetCamera(catalog, set), truncate: true },
+    { id: "filter", header: m.tonight_filter(), cell: (set) => set.source.channel ?? "–", sortValue: (set) => set.source.channel ?? "" },
+    { id: "exposure", header: m.calibration_key_exposure(), cell: (set) => exposure(set.source), sortValue: (set) => set.source.exposureS, align: "right" },
+    { id: "gain", header: m.session_gain_offset(), cell: (set) => gainOffset(set.source), sortValue: (set) => set.source.gain, align: "right" },
+    { id: "temp", header: m.calibration_key_temp(), cell: (set) => temperature(set.source), sortValue: (set) => set.source.ccdTempC, align: "right" },
+    { id: "frames", header: m.calibration_frames(), cell: (set) => formatCount(set.source.frameCount ?? 0), sortValue: (set) => set.source.frameCount, align: "right" },
+    { id: "night", header: m.tonight_night(), cell: (set) => formatNight(set.session.night, true), sortValue: (set) => set.session.night },
+    { id: "used-by", header: m.calibration_used_by(), cell: (set) => <UsedBy sessions={set.pinnedOn} />, sortValue: (set) => set.pinnedOn.length },
+    {
+      id: "stacking",
+      header: m.calibration_status_stacking(),
+      cell: (set) => (set.process ? <Pill tone={PROCESS_STATUS[set.process.status].tone}>{stacking(set)}</Pill> : "–"),
+      sortValue: stacking,
+    },
+  ]
+}
+
+function candidateColumns(m: Messages): Column<MasterCandidate>[] {
+  const file = (c: MasterCandidate) => c.master.file
+  const header = <T,>(c: MasterCandidate, read: (h: NonNullable<DiskFile["header"]>) => T, none: T) => (file(c).header ? read(file(c).header!) : none)
+  const offer = (c: MasterCandidate) => (c.master.offer?.state === "hidden" ? m.calibration_offer_declined() : m.calibration_offer_offered())
+  return [
+    { id: "file", header: m.dialog_col_file(), cell: (c) => fileName(file(c).path), sortValue: (c) => fileName(file(c).path), rowHeader: true, truncate: true },
+    { id: "kind", header: m.run_col_kind(), cell: (c) => candidateKind(m, file(c)), sortValue: (c) => candidateKind(m, file(c)) },
+    { id: "project", header: m.calibration_found_in(), cell: (c) => c.project.name, sortValue: (c) => c.project.name, truncate: true },
+    { id: "camera", header: m.calibration_key_camera(), cell: (c) => header(c, (h) => h.instrument ?? "–", "–"), sortValue: (c) => header(c, (h) => h.instrument ?? "", ""), truncate: true },
+    { id: "gain", header: m.session_gain_offset(), cell: (c) => header(c, gainOffset, "–"), sortValue: (c) => header(c, (h) => h.gain, null), align: "right" },
+    { id: "temp", header: m.calibration_key_temp(), cell: (c) => header(c, temperature, "–"), sortValue: (c) => header(c, (h) => h.ccdTempC, null), align: "right" },
+    { id: "captured", header: m.coverage_captured(), cell: (c) => header(c, (h) => formatNight(nightOf(h.dateObs), true), "–"), sortValue: (c) => header(c, (h) => h.dateObs, null) },
+    { id: "offer", header: m.calibration_output_offer(), cell: (c) => <Pill tone={c.master.offer?.state === "hidden" ? "muted" : "info"}>{offer(c)}</Pill>, sortValue: offer },
   ]
 }
 
@@ -453,8 +658,8 @@ function processColumns(m: Messages, catalog: Catalog): Column<ProcessView>[] {
   ]
 }
 
-function hiddenColumns(m: Messages): Column<CalibrationMaster>[] {
-  const label = (master: CalibrationMaster) => masterLabel(m, master)
+function hiddenColumns(m: Messages, catalog: Catalog): Column<CalibrationMaster>[] {
+  const label = (master: CalibrationMaster) => masterLabel(m, catalog, master)
   return [
     { id: "master", header: m.calibration_master(), cell: label, sortValue: label, rowHeader: true, truncate: true },
     { id: "at", header: m.calibration_hidden_on(), cell: (master) => (master.hiddenAt ? formatDateTime(master.hiddenAt) : "–"), sortValue: (master) => master.hiddenAt ?? null },
@@ -462,7 +667,7 @@ function hiddenColumns(m: Messages): Column<CalibrationMaster>[] {
 }
 
 /** The master record's facts (CAL-FR-14): what it matches, its camera link, its age by the newest version and the sessions its versions are pinned on. */
-function masterFacts(m: Messages, catalog: Catalog, master: CalibrationMaster, pins: MasterPin[], old: string | null, now: number): KeyValueItem[] {
+function masterFacts(m: Messages, catalog: Catalog, master: CalibrationMaster, sessions: Session[], old: string | null, now: number): KeyValueItem[] {
   const none = "–"
   const newest = newestVersion(master)
   const ageDays = newest ? Math.floor((now - Date.parse(newest.capturedAt)) / 86_400_000) : null
@@ -478,14 +683,14 @@ function masterFacts(m: Messages, catalog: Catalog, master: CalibrationMaster, p
     { label: m.domain_criterion_temperature(), value: temperature(master) },
     { label: m.domain_criterion_binning(), value: `${master.binning}×${master.binning}` },
     { label: m.calibration_age(), value: old ?? (ageDays === null ? none : m.calibration_age_days({ n: ageDays })) },
-    { label: m.calibration_used_by(), value: <UsedBy pins={pins} /> },
+    { label: m.calibration_used_by(), value: <UsedBy sessions={sessions} /> },
   ]
   if (master.hiddenAt) items.push({ label: m.calibration_hidden_on(), value: formatDateTime(master.hiddenAt) })
   return items
 }
 
 /** One dated version's facts: its capture time, provenance, file, digest and the sessions that pin it. */
-function versionFacts(m: Messages, catalog: Catalog, version: MasterVersion, pins: MasterPin[]): KeyValueItem[] {
+function versionFacts(m: Messages, catalog: Catalog, version: MasterVersion, sessions: Session[]): KeyValueItem[] {
   const session = version.origin.sessionId ? catalog.sessions[version.origin.sessionId] : undefined
   const origin = originWord(m, version.origin.kind)
   return [
@@ -494,6 +699,6 @@ function versionFacts(m: Messages, catalog: Catalog, version: MasterVersion, pin
     { label: m.calibration_frames(), value: version.frameCount === null ? "–" : formatCount(version.frameCount) },
     { label: m.calibration_stored(), value: version.path, mono: true },
     { label: m.storage_sha256(), value: version.adoption?.verifiedSha256 ?? version.sha256, mono: true },
-    { label: m.calibration_used_by(), value: <UsedBy pins={pins} /> },
+    { label: m.calibration_used_by(), value: <UsedBy sessions={sessions} /> },
   ]
 }

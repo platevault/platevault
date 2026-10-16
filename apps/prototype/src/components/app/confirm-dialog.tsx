@@ -169,6 +169,9 @@ function FileTable({ group, onNavigate }: { group: ConfirmGroup; onNavigate: () 
     { id: "to", header: m.dialog_col_to(), cell: destination, sortValue: destination, truncate: true, className: "max-w-40" },
     { id: "size", header: m.dialog_col_size(), cell: (row) => formatBytes(row.size), sortValue: (row) => row.size, align: "right" },
   ]
+  if (rows.some((row) => row.sha256)) {
+    columns.push({ id: "sha256", header: m.storage_sha256(), cell: (row) => <span className="font-mono">{row.sha256 ?? "–"}</span>, sortValue: (row) => row.sha256 ?? null, truncate: true, className: "max-w-40" })
+  }
   if (rows.some((row) => row.status)) {
     columns.push({
       id: "status",

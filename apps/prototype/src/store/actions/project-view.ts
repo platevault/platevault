@@ -24,7 +24,7 @@
 import { fileAt, filesUnder, freeBytes, makeFile, removeFile, trashRefusal, volumeForPath, writeFiles } from "@/domain/disk"
 import { adoptionDestination, adoptionDestinationState, calibrationStorage } from "@/domain/calibration-process"
 import { projectHref } from "@/domain/derive"
-import { ingestFiles, isUnder } from "@/domain/indexing"
+import { ingestFiles, isUnder, NO_MASTER_CAMERAS } from "@/domain/indexing"
 import { unitCount } from "@/domain/labels"
 import {
   applyPlan,
@@ -32,6 +32,7 @@ import {
   appliedViewFor,
   copyToOutputRefusal,
   entryVerified,
+  generatedMasters,
   isDiscardable,
   type PendingChange,
   pendingChanges,
@@ -510,13 +511,15 @@ export type AdoptionCheck = { ok: true; destination: string; sha256: string } | 
 /**
  * Adopt's preview (CAL-FR-06): where the master goes in structured
  * calibration storage and the digest it holds now, or why it cannot be
- * added. PlateVault's own unregistered copy at the destination is named, so
- * the page can offer a reviewed Move to Trash before it retries (section 9).
+ * added. A master whose offer was hidden can still be adopted from
+ * Calibration (CAL-AC-12). PlateVault's own unregistered copy at the
+ * destination is named, so the page can offer a reviewed Move to Trash
+ * before it retries (section 9).
  */
 export function adoptionCheck(state: PrototypeState, projectId: ProjectId, path: string): AdoptionCheck {
   const project = state.catalog.projects[projectId]
   if (!project) return { ok: false, reasons: [msg("store_record_missing")], ownCopy: null }
-  const offer = processingMasters(state, project).find((m) => m.file.path === path)
+  const offer = generatedMasters(state, project).find((m) => m.file.path === path)
   if (!offer) return { ok: false, reasons: [msg("store_reason_already_answered")], ownCopy: null }
   if (offer.file.growing) return { ok: false, reasons: [msg("store_reason_still_being_written")], ownCopy: null }
   const storage = calibrationStorage(state.catalog)
@@ -577,7 +580,7 @@ export function adoptProcessingMaster(projectId: ProjectId, path: string, confir
       const at = nowIso()
       const copy = makeFile({ path: destination, volumeId: storage.volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, pixelTruth: source.pixelTruth, sha256: source.sha256, modifiedAt: at })
       const disk = writeFiles(base.disk, [copy])
-      const ingested = ingestFiles(base.catalog, disk, base.settings, storage, [copy], at)
+      const ingested = ingestFiles(base.catalog, disk, base.settings, storage, [copy], at, NO_MASTER_CAMERAS)
       const masters = { ...ingested.masters }
       for (const master of Object.values(masters)) {
         if (!master.versions.some((v) => v.path === destination)) continue
