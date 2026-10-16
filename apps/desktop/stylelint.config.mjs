@@ -22,6 +22,36 @@ export default {
   referenceFiles: ['src/styles/tokens.css', '../../packages/tokens/tokens-docs.css'],
   rules: {
     'no-unknown-custom-properties': true,
+    // Hand-written CSS takes colour from tokens only (#1334): a raw literal
+    // bypasses theming and the contrast checks run on the token set.
+    'color-no-hex': true,
+    // Regex with /i: CSS function names are case-insensitive, so RGB() is rgb().
+    'function-disallowed-list': ['/^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|device-cmyk)$/i'],
+    // Named colours (`red`, `black`) are raw literals too. The rule leaves
+    // transparent, currentColor and the CSS-wide keywords alone.
+    'color-named': 'never',
+    // CSS system colours (Canvas, CanvasText, Highlight and the rest, deprecated
+    // ones included) are raw colours too, and color-named does not know them.
+    // A url() payload is an asset name, so `url(Canvas)` is not a colour.
+    'declaration-property-value-disallowed-list': {
+      // content and list-style accept <image> values, and color-named skips both
+      // (they take identifiers too), so colours inside a gradient there are
+      // checked here.
+      '/^(content|list-style(-image)?)$/i': ['/(?:repeating-)?(?:linear|radial|conic)-gradient\\(.*(^|[\\s,]|(?<!url)\\()(aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen|accentcolor|accentcolortext|activetext|buttonborder|buttonface|buttontext|canvas|canvastext|field|fieldtext|graytext|highlight|highlighttext|linktext|mark|marktext|selecteditem|selecteditemtext|visitedtext|activeborder|activecaption|appworkspace|background|buttonhighlight|buttonshadow|captiontext|inactiveborder|inactivecaption|inactivecaptiontext|infobackground|infotext|menu|menutext|scrollbar|threeddarkshadow|threedface|threedhighlight|threedlightshadow|threedshadow|window|windowframe|windowtext)(?=$|[\\s,);!])/i'],
+      '/^(color|background(-color|-image)?|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?|border-image(-source)?|outline(-color)?|box-shadow|text-shadow|text-decoration(-color)?|text-emphasis(-color)?|caret-color|accent-color|column-rule(-color)?|fill|stroke|stop-color|flood-color|lighting-color|scrollbar-color|filter|backdrop-filter|mask(-image|-border(-source)?)?|list-style(-image)?|shape-outside|-webkit-text-fill-color|-webkit-text-stroke(-color)?|-webkit-tap-highlight-color|--.+)$/i': ['/(^|[\\s,]|(?<!url)\\()(accentcolor|accentcolortext|activetext|buttonborder|buttonface|buttontext|canvas|canvastext|field|fieldtext|graytext|highlight|highlighttext|linktext|mark|marktext|selecteditem|selecteditemtext|visitedtext|activeborder|activecaption|appworkspace|background|buttonhighlight|buttonshadow|captiontext|inactiveborder|inactivecaption|inactivecaptiontext|infobackground|infotext|menu|menutext|scrollbar|threeddarkshadow|threedface|threedhighlight|threedlightshadow|threedshadow|window|windowframe|windowtext)(?=$|[\\s,);!])/i'],
+    },
   },
   ignoreFiles: ['dist/**', 'node_modules/**', '.ds-css/**'],
+  overrides: [
+    {
+      // The generated token stylesheet is where raw colour values live.
+      files: ['src/styles/tokens.css'],
+      rules: {
+        'color-no-hex': null,
+        'function-disallowed-list': null,
+        'color-named': null,
+        'declaration-property-value-disallowed-list': null,
+      },
+    },
+  ],
 };

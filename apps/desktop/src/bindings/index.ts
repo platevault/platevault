@@ -860,6 +860,16 @@ export const commands = {
 	 */
 	updateStatus: () => typedError<UpdateStatus, ContractError_Serialize>(__TAURI_INVOKE("update_status")),
 	/**
+	 *  `update.offer` — where the Install now and Install on quit offer for the
+	 *  release the last check found was made: the system notification, or the
+	 *  in-app notice. Later changes arrive as `update:offer` events.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `InternalError` when the build has no usable updater configuration.
+	 */
+	updateOffer: () => typedError<UpdateOffer, ContractError_Serialize>(__TAURI_INVOKE("update_offer")),
+	/**
 	 *  `update.check_on_startup` — the check at app start, run once per process
 	 *  and only when `automatic` ("Check for updates automatically") is on.
 	 * 
@@ -2194,6 +2204,11 @@ export const commands = {
 	 */
 	devSchemaGet: (request: DevSchemaGetRequest) => typedError<DevSchemaGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_schema_get", { request })),
 };
+
+/* Constants */
+export const UPDATE_OFFER_DEADLINE_MS = 30000 as const;
+
+export const UPDATE_PERSISTENT_OFFER_TIMEOUT_MS = 300000 as const;
 
 /* Types */
 /**
@@ -7152,6 +7167,33 @@ export type NonBlockingSummary = {
 	unprotectedCount: number,
 };
 
+/**
+ *  Where the Install now and Install on quit offer for a release is made
+ *  (astro-plan-c72oo).
+ */
+export type OfferChannel = 
+/**
+ *  A system notification with both buttons is outstanding that stays on
+ *  screen until the user answers it, for a bounded time: on macOS, the
+ *  Alert notification style, unless it was presented while the app was
+ *  frontmost, which shows it as a banner. A Focus may send even an alert
+ *  unseen to Notification Center, which the app cannot read, so after
+ *  that time the in-app notice offers the update too. Elsewhere the
+ *  notification is only a heads-up beside the in-app notice.
+ */
+"system" | 
+/**
+ *  The in-app notice carries them: the notification is a heads-up that
+ *  may leave the screen unanswered (a macOS banner, including any
+ *  notification presented while the app is frontmost, a Windows toast, a
+ *  freedesktop notification), a notification that stays on screen went
+ *  unanswered for that bounded time, notification permission was
+ *  denied, the notification system shows no buttons, the notification
+ *  could not be shown or was not accepted in time, or the user answered
+ *  or closed it, or it was withdrawn.
+ */
+"in-app";
+
 /**  Section-level flags (`onboarding_flags` singleton). */
 export type OnboardingFlagsDto = {
 	orientationDone: boolean,
@@ -10770,6 +10812,13 @@ export type UpdateIngestionSettings = {
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,
 	defaultFilter: string | null,
+};
+
+/**  Where the offer for the release the last check found stands. */
+export type UpdateOffer = {
+	/**  The release offered; `None` until a check has found one. */
+	version: string | null,
+	channel: OfferChannel,
 };
 
 export type UpdateOpticalTrain = {

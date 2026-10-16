@@ -7,9 +7,12 @@
 //! adapts it to Tauri: it builds the [`Updater`] from `tauri.conf.json`
 //! (`plugins.updater`, which the bundler also reads to sign the release
 //! artifacts), pushes every status change to the webview as
-//! [`UPDATE_STATUS_EVENT`], relaunches or exits when an install asks to, and
-//! routes quits through [`Updater::on_quit_requested`] so a staged "Install
-//! on quit" runs first. The commands are in `commands::update`.
+//! [`UPDATE_STATUS_EVENT`], starts the update offer in the system
+//! notification ([`Offers`], astro-plan-c72oo) and pushes where each offer
+//! was made as [`UPDATE_OFFER_EVENT`], relaunches or exits when an install
+//! asks to, and routes quits through [`Updater::on_quit_requested`] so a
+//! staged "Install on quit" runs first. The commands are in
+//! `commands::update`.
 //!
 //! A quit from outside the app never reaches `ExitRequested` or the main
 //! window's `CloseRequested`: the macOS Dock or app-switcher Quit
@@ -19,9 +22,11 @@
 //! update again.
 
 use desktop_services::notifications::Notifier;
+use desktop_services::update::offer::{self, Offers};
 use desktop_services::update::{
     Package, Platform, QuitDecision, UpdateHost, Updater, UpdaterConfig,
 };
+use desktop_services::AppIdentity;
 use semver::Version;
 use tauri::utils::config::BundleType;
 use tauri::utils::platform::bundle_type;
@@ -31,6 +36,9 @@ use crate::MAIN_WINDOW_LABEL;
 
 /// Backend → webview: the current `UpdateStatus`, on every change.
 pub const UPDATE_STATUS_EVENT: &str = "update:status";
+
+/// Backend → webview: the current `UpdateOffer`, on every change.
+pub const UPDATE_OFFER_EVENT: &str = "update:offer";
 
 /// Hands installs back to the Tauri app.
 struct TauriHost<R: Runtime> {
@@ -54,11 +62,12 @@ impl<R: Runtime> UpdateHost for TauriHost<R> {
     }
 }
 
-/// Build the updater, manage it, and start pushing its status to the
-/// webview. `notifier` shows what an install at quit must tell the user
-/// once the window is gone. A configuration the updater cannot use is
-/// logged, and the app runs without updates.
-pub fn register<R: Runtime>(app: &AppHandle<R>, notifier: Notifier) {
+/// Build the updater and its offer, manage both, and start pushing their
+/// state to the webview. `notifier` shows what an install at quit must tell
+/// the user once the window is gone, and the offer posts under `identity`. A
+/// configuration the updater cannot use is logged, and the app runs without
+/// updates.
+pub fn register<R: Runtime>(app: &AppHandle<R>, notifier: Notifier, identity: &AppIdentity) {
     let config = match updater_config(app.config(), current_version(app)) {
         Ok(config) => config,
         Err(error) => {
@@ -79,6 +88,21 @@ pub fn register<R: Runtime>(app: &AppHandle<R>, notifier: Notifier) {
         desktop_services::update::UpdatePort::status(&updater),
         |status, error| tracing::debug!(phase = ?status.phase, %error, "update status event not delivered"),
     ));
+    let speaker = updater.clone();
+    let (offers, offer_task) =
+        Offers::new(updater.clone(), offer::platform(identity), move || speaker.locale());
+    // On Tauri's runtime, as the feed forwards are; the port operations a
+    // button runs are spawned from this task, so they run there too.
+    tauri::async_runtime::spawn(offer_task);
+    tauri::async_runtime::spawn(crate::bootstrap::feeds::forward(
+        app.clone(),
+        UPDATE_OFFER_EVENT,
+        offers.feed(),
+        // At warn: the webview falls back to its in-app notice only once
+        // the offer has gone unanswered past its deadline.
+        |offer, error| tracing::warn!(channel = ?offer.channel, %error, "update offer event not delivered"),
+    ));
+    app.manage(offers);
     app.manage(updater);
 }
 

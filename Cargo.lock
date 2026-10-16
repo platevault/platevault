@@ -1487,6 +1487,7 @@ dependencies = [
  "persistence_core",
  "persistence_lifecycle",
  "platevault_core",
+ "platevault_notify_macos",
  "platevault_pixels",
  "reqwest",
  "rustix",

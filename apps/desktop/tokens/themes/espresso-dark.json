@@ -145,6 +145,9 @@
   "shadow-sm": {
     "$value": "0 1px 3px rgba(0,0,0,0.5)"
   },
+  "shadow-inset": {
+    "$value": "inset 0 2px 5px rgba(0,0,0,0.22)"
+  },
   "onb-spotlight-stroke": {
     "$value": "{accent}"
   },

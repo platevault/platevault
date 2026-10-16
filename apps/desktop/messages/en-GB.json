@@ -1638,6 +1638,7 @@
   "settings_advanced_updates_queued": "Update {version} will install when you quit PlateVault.",
   "update_banner_notes": "Release notes",
   "update_banner_later": "Later",
+  "update_offer_title": "Update available",
   "update_error_unknown": "no reason was given.",
   "update_error_network": "the connection to the update server failed.",
   "update_error_manifest": "the update information on the server is invalid.",

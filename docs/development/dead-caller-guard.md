@@ -65,7 +65,7 @@ consuming builders:
 
 - `ContractError::with_field_error` and `::with_recovery_action`, wired up
   since in #1397.
-- `Confidence::with_evidence`, still uncalled.
+- `Confidence::with_evidence`, since deleted.
 - Two audit-record builders, since deleted.
 
 astro-plan-d1bg weighed the ways to close the gap once, and the

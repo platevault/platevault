@@ -39,6 +39,7 @@
 mod http;
 mod install;
 mod manifest;
+pub mod offer;
 mod signature;
 #[cfg(test)]
 mod tests;

@@ -419,8 +419,9 @@ pub fn run_app(
     std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir, boot_services)));
 
     // astro-plan-5wcib: the services-crate updater. A staged "Install on quit"
-    // holds the first quit while it installs, then exits.
-    updater::register(app.handle(), services.notifier().clone());
+    // holds the first quit while it installs, then exits. astro-plan-c72oo:
+    // its offer goes out as a system notification under the app's identity.
+    updater::register(app.handle(), services.notifier().clone(), services.identity());
 
     app.run(move |handle, event| {
         updater::on_run_event(handle, &event);
