@@ -40,11 +40,18 @@ const ARGUMENT_TOKENS = ["viewFolder"] as const
 
 const INPUT_MODES: InputMode[] = ["symlink", "copy"]
 
-/** What the profile does not support, under its row's disclosure (D04, PREP-FR-01): corrected values only reach it through its configuration, if at all. */
+/** Under its row's disclosure: its launch arguments (the hideable Arguments column, hidden by default so the table fits from 1280 px) and what the profile does not support (D04, PREP-FR-01): corrected values only reach it through its configuration, if at all. */
 function ProfileDetails({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
   const c = profile.capability
-  return <KeyValueList items={[{ label: m.apps_corrected_values(), value: `${c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()} · ${m.apps_rename_note()}` }]} />
+  return (
+    <KeyValueList
+      items={[
+        { label: m.apps_launch_arguments(), value: profile.launchArgs || "–", mono: profile.launchArgs !== "" },
+        { label: m.apps_corrected_values(), value: `${c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through()} · ${m.apps_rename_note()}` },
+      ]}
+    />
+  )
 }
 
 /** The applications PlateVault detects on this computer, for the Detected choice. */
@@ -192,7 +199,7 @@ function profileColumns(m: Messages): Column<ApplicationProfile>[] {
     { id: "profile", header: m.apps_col_profile(), sortValue: (p) => (p.capability.verified ? 0 : 1), cell: (p) => <StatusBadge kind="profile" value={p.capability.verified ? "verified" : "unverified"} /> },
     { id: "path", header: m.apps_col_path(), truncate: true, sortValue: (p) => p.executablePath, cell: (p) => (p.executablePath ? <PathText path={p.executablePath} truncate /> : m.apps_not_located()) },
     { id: "detected", header: m.apps_col_detected(), sortValue: (p) => p.executableState, cell: (p) => <StatusBadge kind="executable" value={p.executableState} /> },
-    { id: "arguments", header: m.apps_col_arguments(), truncate: true, sortValue: (p) => p.launchArgs, cell: (p) => p.launchArgs || "–" },
+    { id: "arguments", header: m.apps_col_arguments(), truncate: true, hideable: true, defaultHidden: true, sortValue: (p) => p.launchArgs, cell: (p) => p.launchArgs || "–" },
   ]
 }
 
@@ -258,6 +265,7 @@ export function SettingsApplicationsPage() {
           label: m.settings_applications(),
           rows,
           columns: profileColumns(m),
+          columnsId: "settings.applications",
           getRowId: (p) => p.id,
           rowLabel: (p) => p.name,
           empty: <EmptyState icon={AppWindow} title={m.apps_none()} action={<ActionButton action={add} />} />,
