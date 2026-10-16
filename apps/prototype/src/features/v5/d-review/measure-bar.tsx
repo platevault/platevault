@@ -23,8 +23,8 @@ function measureTargets(scope: ReviewScope, currentId: string | null): string[] 
   return currentId && ids.includes(currentId) ? [currentId, ...ids.filter((id) => id !== currentId)] : ids
 }
 
-/** The measurement items of the status line. `blocked` keeps Measure frames focusable but unavailable. */
-export function MeasureStatus({ scope, frames, currentId, blocked }: { scope: ReviewScope; frames: ReviewFrame[]; currentId: string | null; blocked: Action["unavailable"] }) {
+/** The measurement items of the status line. */
+export function MeasureStatus({ scope, frames, currentId }: { scope: ReviewScope; frames: ReviewFrame[]; currentId: string | null }) {
   const m = useMessages()
   const active = scope.ops.filter((op) => !isSettled(op.status))
   const running = active.length > 0
@@ -45,10 +45,9 @@ export function MeasureStatus({ scope, frames, currentId, blocked }: { scope: Re
   const start: Action = {
     id: "measure-frames",
     label: m.measure_frames_action(),
-    unavailable: blocked,
     run: () => {
       const ids = measureTargets(scope, currentId)
-      if (startMeasurement(scope.key, ids)) announce(m.measure_started({ count: ids.length }))
+      if (startMeasurement(scope.session.id, ids)) announce(m.measure_started({ count: ids.length }))
     },
   }
 

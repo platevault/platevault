@@ -5,7 +5,7 @@
  * review it came from (`href`), so its activity entry links back there.
  */
 import { stableHash } from "@/domain/indexing"
-import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow } from "@/domain/types"
+import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow, SessionId } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { m, msg } from "@/lib/i18n"
 import { historyEntry } from "@/store/actions/measure"
@@ -29,8 +29,8 @@ function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "ind
   return { assetId, state: "unavailable", inputSha256: sha256, metrics, computedAt: nowIso(), history: [...(earlier ? [earlier] : []), ...(record?.history ?? [])] }
 }
 
-/** Records an import for the review `key` (`session:<id>`): matched values attach, the rest wait for the user. */
-export function importMeasurements(key: string, href: string, path: string, mapped: MappedRow[], reviewAssetIds: ReadonlySet<AssetId>): CommitResult {
+/** Records an import for the review of `sessionId`: matched values attach, the rest wait for the user. */
+export function importMeasurements(sessionId: SessionId, href: string, path: string, mapped: MappedRow[], reviewAssetIds: ReadonlySet<AssetId>): CommitResult {
   const attach = mapped.filter(attaches)
   const rows: MeasurementImportRow[] = mapped
     .filter((m) => !attaches(m))
@@ -38,11 +38,11 @@ export function importMeasurements(key: string, href: string, path: string, mapp
   const changed = rows.filter((r) => r.status === "content-changed" || r.status === "unreadable").length
   const record: MeasurementImport = {
     id: `imp_${stableHash(`${path}|${nowIso()}`)}`,
-    runId: key,
+    sessionId,
     path,
     importedAt: nowIso(),
     matched: attach.length,
-    outsideRun: attach.filter((m) => !reviewAssetIds.has(m.assetId!)).length,
+    outsideSession: attach.filter((m) => !reviewAssetIds.has(m.assetId!)).length,
     rows,
   }
   // Matched values and the rows left to review are one durable write.
@@ -92,7 +92,7 @@ export function resolveImportRow(importId: string, rowIndex: number, assetId: As
   )
 }
 
-/** Frame-review UI state for one review key (slice D); not a durable catalog write. */
-export function setFrameUi(key: string, patch: Partial<FrameUi>) {
-  updateSlice("d", (slice) => ({ ...slice, frames: { ...slice.frames, [key]: { ...(slice.frames[key] ?? defaultFrameUi()), ...patch } } }))
+/** Frame-review UI state for one session's review (slice D); not a durable catalog write. */
+export function setFrameUi(sessionId: SessionId, patch: Partial<FrameUi>) {
+  updateSlice("d", (slice) => ({ ...slice, frames: { ...slice.frames, [sessionId]: { ...(slice.frames[sessionId] ?? defaultFrameUi()), ...patch } } }))
 }
