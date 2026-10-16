@@ -39,9 +39,9 @@ jobs:
       run: |
         $PSNativeCommandUseErrorActionPreference = $true
         $key = Join-Path $env:RUNNER_TEMP 'rehearsal.key'
-        pnpm --dir apps/desktop exec tauri signer generate --ci --password '' --write-keys $key
+        pnpm --dir apps/desktop exec tauri signer generate --ci --password rehearsal --write-keys $key
         "TAURI_SIGNING_PRIVATE_KEY=$((Get-Content -Raw $key).Trim())" | Add-Content -LiteralPath $env:GITHUB_ENV
-        'TAURI_SIGNING_PRIVATE_KEY_PASSWORD=' | Add-Content -LiteralPath $env:GITHUB_ENV
+        'TAURI_SIGNING_PRIVATE_KEY_PASSWORD=rehearsal' | Add-Content -LiteralPath $env:GITHUB_ENV
     - name: Build the Windows app for signing
       id: windows-app
       shell: pwsh
