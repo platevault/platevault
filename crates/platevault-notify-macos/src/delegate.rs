@@ -6,8 +6,10 @@
 //! It serves every notification the process posts and defers each decision
 //! to the category registry (`crate::categories`): reminders keep what they
 //! had without a delegate, and a registered category shows while the app is
-//! frontmost and reports the chosen action. The framework holds its delegate
-//! weakly, so the one instance lives in a static for the whole process.
+//! frontmost, reports that it does, and reports the chosen action. The
+//! framework asks the delegate how to present a notification only while the
+//! app is frontmost. It holds its delegate weakly, so the one instance lives
+//! in a static for the whole process.
 //!
 //! `unsafe` here is the class definition: the method selectors and argument
 //! types must match the protocol's Objective-C declarations, which the
@@ -46,9 +48,20 @@ define_class!(
             notification: &UNNotification,
             completion_handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
         ) {
-            let category = notification.request().content().categoryIdentifier().to_string();
-            let options =
-                registry().presentation(&category, crate::categories::has_banner_options());
+            let request = notification.request();
+            let category = request.content().categoryIdentifier().to_string();
+            let banner_options = crate::categories::has_banner_options();
+            // Out of the registry before the call, as in `did_receive`.
+            let (options, presenter) = {
+                let categories = registry();
+                (
+                    categories.presentation(&category, banner_options),
+                    categories.presenter(&category),
+                )
+            };
+            if let Some(presenter) = presenter {
+                presenter(&request.identifier().to_string());
+            }
             completion_handler.call((options,));
         }
 

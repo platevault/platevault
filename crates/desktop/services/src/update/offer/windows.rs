@@ -23,7 +23,7 @@
 use notify_rust::{Notification, Urgency};
 
 use super::notify::{show, show_blocking};
-use super::{Delivery, Focus, OfferText, Refusal, Responder, SystemOffer};
+use super::{Delivery, OfferText, Refusal, Responder, SystemOffer};
 use crate::AppIdentity;
 
 /// The offer as a toast.
@@ -32,9 +32,7 @@ pub struct ToastOffer {
 }
 
 impl ToastOffer {
-    /// A toast is a heads-up wherever the app's window is, so focus is not
-    /// read.
-    pub fn new(identity: &AppIdentity, _focused: Focus) -> Self {
+    pub fn new(identity: &AppIdentity) -> Self {
         Self {
             app_id: std::env::current_exe().ok().and_then(|exe| {
                 exe.parent().and_then(|dir| identity.windows_app_id(dir)).map(str::to_owned)

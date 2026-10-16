@@ -7,29 +7,33 @@
 //! registered, and only when the app may show notifications on screen: full
 //! permission with the Banner or Alert style ([`delivery`]). When permission
 //! was never asked, it is asked for now. The Alert style stays on screen
-//! until the user acts, so it carries the offer, unless the app is
-//! frontmost: the center delegate then presents the notification as a
-//! banner, whatever the style. A banner leaves the screen by itself, and
-//! Focus sends it to Notification Center, so it is a heads-up beside the
-//! in-app notice. A process without a bundle, such as `cargo tauri dev`,
-//! gets the in-app notice.
+//! until the user acts, so it carries the offer; a banner leaves the screen
+//! by itself, and Focus sends it to Notification Center, so it is a heads-up
+//! beside the in-app notice. The center asks the app how to present a
+//! notification only while the app is frontmost, and the app then presents
+//! it as a banner, whatever the style: the delegate reports that
+//! presentation ([`Responders::present`]), and the offer of its release
+//! turns in-app ([`Responder::heads_up`]). A process without a bundle, such
+//! as `cargo tauri dev`, gets the in-app notice.
 //!
 //! Each release is posted under a request identifier of its own, and the
-//! category's one handler routes a response by the identifier of the
-//! notification that received it ([`Responders`]). A response to an older
+//! category's handlers route a response or a presentation by the identifier
+//! of the notification it concerns ([`Responders`]). A response to an older
 //! release's notification, already queued when a newer release registered
 //! the category again, so answers for its own release, which the offer
-//! then drops as stale. Every post first removes every offer notification
-//! still delivered or pending, so neither an earlier post's nor one left by
-//! an earlier run of the app keeps buttons that reach no responder.
+//! then drops as stale. Every post first removes every other offer
+//! notification still delivered or pending, so neither an earlier post's
+//! nor one left by an earlier run of the app keeps buttons that reach no
+//! responder. A notification under the identifier about to be posted is
+//! left alone: the post replaces it.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use platevault_notify_macos::{Action, AlertStyle, Authorization, NotificationCenter, Settings};
 use tokio::sync::oneshot;
 
-use super::{Delivery, Focus, OfferAction, OfferText, Refusal, Responder, SystemOffer};
+use super::{Delivery, OfferAction, OfferText, Refusal, Responder, SystemOffer};
 use crate::AppIdentity;
 
 /// The category the offer is posted in, which carries its buttons.
@@ -41,8 +45,9 @@ fn request_for(version: &str) -> String {
 }
 
 /// The responder of every offer posted, by request identifier. Kept for the
-/// process, one per release offered, so a response that arrives after a
-/// newer post still reaches the responder of its own release.
+/// process, one per release offered, so a response or presentation that
+/// arrives after a newer post still reaches the responder of its own
+/// release.
 #[derive(Default)]
 struct Responders {
     by_request: HashMap<String, Responder>,
@@ -65,36 +70,41 @@ impl Responders {
             responder.respond_identifier(action);
         }
     }
+
+    /// The notification `request` is presented while the app is frontmost:
+    /// as a banner, which leaves the screen unanswered.
+    fn present(&self, request: &str) {
+        if let Some(responder) = self.by_request.get(request) {
+            responder.heads_up();
+        }
+    }
 }
 
 /// The offer through the process's notification center.
 pub struct MacOffer {
     responders: Arc<Mutex<Responders>>,
-    focused: Focus,
 }
 
 impl MacOffer {
     /// The center posts under the bundle's own identifier.
-    pub fn new(_identity: &AppIdentity, focused: Focus) -> Self {
-        Self { responders: Arc::default(), focused }
+    pub fn new(_identity: &AppIdentity) -> Self {
+        Self { responders: Arc::default() }
     }
 
-    /// The request of the last post.
-    fn last_request(&self) -> Option<String> {
-        self.responders.lock().unwrap_or_else(PoisonError::into_inner).last.clone()
+    fn responders(&self) -> MutexGuard<'_, Responders> {
+        self.responders.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 impl SystemOffer for MacOffer {
     async fn post(&self, text: &OfferText, responder: Responder) -> Result<Delivery, Refusal> {
+        let request = self.responders().add(responder);
         let (send, cleared) = oneshot::channel();
-        center()?.withdraw_category(CATEGORY, move || {
+        center()?.withdraw_category(CATEGORY, &request, move || {
             send.send(()).ok();
         });
         cleared.await.map_err(|_| never_answered())?;
-        let settings = permission().await?;
-        let delivery = delivery(settings, (self.focused)())?;
-        let request = self.responders.lock().unwrap_or_else(PoisonError::into_inner).add(responder);
+        let delivery = delivery(permission().await?)?;
         let (send, registered) = oneshot::channel();
         {
             let actions = OfferAction::ALL
@@ -104,15 +114,19 @@ impl SystemOffer for MacOffer {
                     title: text.label(action).to_owned(),
                 })
                 .collect();
-            let responders = Arc::clone(&self.responders);
+            let (responding, presenting) =
+                (Arc::clone(&self.responders), Arc::clone(&self.responders));
             center()?.register_category(
                 CATEGORY,
                 actions,
                 move |request, action| {
-                    responders
+                    responding
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
                         .respond(request, action);
+                },
+                move |request| {
+                    presenting.lock().unwrap_or_else(PoisonError::into_inner).present(request);
                 },
                 move |registered| {
                     send.send(registered).ok();
@@ -131,25 +145,22 @@ impl SystemOffer for MacOffer {
     }
 
     fn withdraw(&self) {
-        if let (Some(request), Some(center)) = (self.last_request(), NotificationCenter::current())
-        {
+        let last = self.responders().last.clone();
+        if let (Some(request), Some(center)) = (last, NotificationCenter::current()) {
             center.withdraw(&request);
         }
     }
 }
 
-/// How a notification under `settings`, posted while the app is `frontmost`
-/// or not (`None`: not known), stays on screen, or why it would not be seen.
-/// Provisional and ephemeral permission, and the None style, show no
-/// banner, so the buttons would sit unseen in Notification Center. Posted
-/// while the app is frontmost, or may be, even an alert is presented as a
-/// banner.
-fn delivery(settings: Settings, frontmost: Option<bool>) -> Result<Delivery, Refusal> {
-    match (settings.authorization, settings.style, frontmost) {
-        (Authorization::Authorized, AlertStyle::Alert, Some(false)) => Ok(Delivery::Persistent),
-        (Authorization::Authorized, AlertStyle::Alert | AlertStyle::Banner, _) => {
-            Ok(Delivery::Transient)
-        }
+/// How a notification under `settings` stays on screen, or why it would
+/// not be seen. Provisional and ephemeral permission, and the None style,
+/// show no banner, so the buttons would sit unseen in Notification Center.
+/// An alert presented while the app is frontmost shows as a banner after
+/// all, which the delegate reports ([`Responders::present`]).
+fn delivery(settings: Settings) -> Result<Delivery, Refusal> {
+    match (settings.authorization, settings.style) {
+        (Authorization::Authorized, AlertStyle::Alert) => Ok(Delivery::Persistent),
+        (Authorization::Authorized, AlertStyle::Banner) => Ok(Delivery::Transient),
         _ => Err(Refusal::PermissionDenied),
     }
 }
@@ -220,36 +231,40 @@ mod tests {
     }
 
     #[test]
-    fn a_response_to_an_unknown_request_reaches_no_responder() {
+    fn a_frontmost_presentation_of_an_older_alert_reports_its_own_release() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let responder =
+            |version: &str| Responder { version: version.to_owned(), events: events.clone() };
+        let mut responders = Responders::default();
+        let older = responders.add(responder("0.7.0"));
+        let newer = responders.add(responder("0.7.1"));
+        responders.present(&older);
+        responders.present(&newer);
+        let reported: Vec<_> = std::iter::from_fn(|| received.try_recv().ok())
+            .map(|event| match event {
+                Event::HeadsUp { version } => version,
+                _ => panic!("a presentation was reported as something else"),
+            })
+            .collect();
+        assert_eq!(reported, ["0.7.0", "0.7.1"]);
+    }
+
+    #[test]
+    fn a_response_or_presentation_of_an_unknown_request_reaches_no_responder() {
         let (events, mut received) = mpsc::unbounded_channel();
         let mut responders = Responders::default();
         responders.add(Responder { version: "0.7.0".to_owned(), events });
         responders.respond("update-offer", OfferAction::InstallNow.identifier());
+        responders.present("update-offer");
         assert!(received.try_recv().is_err());
     }
 
-    const FRONTMOST: [Option<bool>; 3] = [Some(true), Some(false), None];
-
     #[test]
-    fn only_an_alert_posted_while_the_app_is_in_the_background_carries_the_offer() {
+    fn only_the_alert_style_carries_the_offer_and_a_banner_is_a_heads_up() {
         let authorized = |style| Settings { authorization: Authorization::Authorized, style };
-        assert_eq!(delivery(authorized(AlertStyle::Alert), Some(false)), Ok(Delivery::Persistent));
-        // The delegate presents a notification as a banner while the app is
-        // frontmost; unknown focus may be frontmost.
-        assert_eq!(delivery(authorized(AlertStyle::Alert), Some(true)), Ok(Delivery::Transient));
-        assert_eq!(delivery(authorized(AlertStyle::Alert), None), Ok(Delivery::Transient));
-        for frontmost in FRONTMOST {
-            assert_eq!(
-                delivery(authorized(AlertStyle::Banner), frontmost),
-                Ok(Delivery::Transient),
-                "banner {frontmost:?}"
-            );
-            assert_eq!(
-                delivery(authorized(AlertStyle::None), frontmost),
-                Err(Refusal::PermissionDenied),
-                "none {frontmost:?}"
-            );
-        }
+        assert_eq!(delivery(authorized(AlertStyle::Alert)), Ok(Delivery::Persistent));
+        assert_eq!(delivery(authorized(AlertStyle::Banner)), Ok(Delivery::Transient));
+        assert_eq!(delivery(authorized(AlertStyle::None)), Err(Refusal::PermissionDenied));
     }
 
     #[test]
@@ -262,13 +277,11 @@ mod tests {
             Authorization::Other(99),
         ] {
             for style in [AlertStyle::Alert, AlertStyle::Banner, AlertStyle::None] {
-                for frontmost in FRONTMOST {
-                    assert_eq!(
-                        delivery(Settings { authorization, style }, frontmost),
-                        Err(Refusal::PermissionDenied),
-                        "{authorization:?} {style:?} {frontmost:?}"
-                    );
-                }
+                assert_eq!(
+                    delivery(Settings { authorization, style }),
+                    Err(Refusal::PermissionDenied),
+                    "{authorization:?} {style:?}"
+                );
             }
         }
     }

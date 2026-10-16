@@ -7,10 +7,13 @@
 //! two things about every notification it sees, by the notification's
 //! category identifier:
 //!
-//! - whether to show it while the app is frontmost: a registered category
-//!   shows as a banner and in Notification Center, and every other
-//!   notification, a reminder for one, is not shown, which is what the
-//!   framework does when no delegate is installed;
+//! - how to show it while the app is frontmost, the only time the framework
+//!   asks: a registered category shows as a banner and in Notification
+//!   Center, whatever the user's style, and its presenter gets the
+//!   notification's request identifier, so the caller knows that
+//!   notification leaves the screen by itself. Every other notification, a
+//!   reminder for one, is not shown, which is what the framework does when
+//!   no delegate is installed;
 //! - who handles the user's response: a registered category's handler gets
 //!   the responding notification's request identifier, so a caller that
 //!   posts several notifications in one category tells them apart, and the
@@ -47,9 +50,14 @@ pub struct Action {
 /// identifier of the action the user chose.
 pub type Handler = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
+/// Receives the request identifier of a notification shown while the app is
+/// frontmost.
+pub type Presenter = Arc<dyn Fn(&str) + Send + Sync>;
+
 struct Category {
     actions: Vec<Action>,
     on_action: Handler,
+    on_present: Presenter,
 }
 
 /// The registered categories, by identifier.
@@ -57,8 +65,14 @@ struct Category {
 pub struct Categories(HashMap<String, Category>);
 
 impl Categories {
-    fn insert(&mut self, identifier: &str, actions: Vec<Action>, on_action: Handler) {
-        self.0.insert(identifier.to_owned(), Category { actions, on_action });
+    fn insert(
+        &mut self,
+        identifier: &str,
+        actions: Vec<Action>,
+        on_action: Handler,
+        on_present: Presenter,
+    ) {
+        self.0.insert(identifier.to_owned(), Category { actions, on_action, on_present });
     }
 
     /// How a notification in `category` shows while the app is frontmost, on
@@ -82,6 +96,12 @@ impl Categories {
     /// The handler for a response to a notification in `category`.
     pub fn handler(&self, category: &str) -> Option<Handler> {
         self.0.get(category).map(|category| Arc::clone(&category.on_action))
+    }
+
+    /// Who learns that a notification in `category` is shown while the app
+    /// is frontmost.
+    pub fn presenter(&self, category: &str) -> Option<Presenter> {
+        self.0.get(category).map(|category| Arc::clone(&category.on_present))
     }
 
     /// Every registered category, as the framework takes them.
@@ -131,8 +151,10 @@ impl NotificationCenter {
     /// Register `category` with `actions`, replacing an earlier registration
     /// of it and keeping every other category. A response to a notification
     /// in `category` reaches `on_action` with the notification's request
-    /// identifier and the response's action identifier, on the main thread,
-    /// so `on_action` must return promptly.
+    /// identifier and the response's action identifier. A notification in
+    /// `category` shown while the app is frontmost, as a banner whatever the
+    /// user's style, reaches `on_present` with its request identifier as it
+    /// shows. Both run on a framework queue, so they must return promptly.
     ///
     /// `registered` reports whether the categories the framework reads back
     /// afterwards hold `category`, so the caller posts in it only once its
@@ -142,11 +164,12 @@ impl NotificationCenter {
         category: &str,
         actions: Vec<Action>,
         on_action: impl Fn(&str, &str) + Send + Sync + 'static,
+        on_present: impl Fn(&str) + Send + Sync + 'static,
         registered: impl FnOnce(bool) + Send + 'static,
     ) {
         let built = {
             let mut categories = registry();
-            categories.insert(category, actions, Arc::new(on_action));
+            categories.insert(category, actions, Arc::new(on_action), Arc::new(on_present));
             categories.built()
         };
         self.0.setNotificationCategories(&built);
@@ -171,31 +194,37 @@ mod tests {
 
     const OFFER: &str = "update-offer";
 
-    /// Each response as "request:action".
-    type Chosen = Arc<Mutex<Vec<String>>>;
+    /// Each response as "request:action", and each presentation while the
+    /// app is frontmost as "request:presented".
+    type Seen = Arc<Mutex<Vec<String>>>;
 
-    fn recording(chosen: Chosen) -> Handler {
-        Arc::new(move |request, action| chosen.lock().unwrap().push(format!("{request}:{action}")))
+    /// Register the offer category with `actions`, recording into `seen`.
+    fn register(categories: &mut Categories, actions: Vec<Action>, seen: &Seen) {
+        let (responded, presented) = (Arc::clone(seen), Arc::clone(seen));
+        categories.insert(
+            OFFER,
+            actions,
+            Arc::new(move |request, action| {
+                responded.lock().unwrap().push(format!("{request}:{action}"));
+            }),
+            Arc::new(move |request| presented.lock().unwrap().push(format!("{request}:presented"))),
+        );
     }
 
-    fn with_offer(chosen: Chosen) -> Categories {
+    fn with_offer(seen: &Seen) -> Categories {
         let mut categories = Categories::default();
         let button = |identifier: &str| Action {
             identifier: identifier.to_owned(),
             title: identifier.to_owned(),
         };
-        categories.insert(
-            OFFER,
-            vec![button("install-now"), button("install-on-quit")],
-            recording(chosen),
-        );
+        register(&mut categories, vec![button("install-now"), button("install-on-quit")], seen);
         categories
     }
 
     #[test]
     fn a_reminder_is_not_shown_while_the_app_is_frontmost_as_without_a_delegate() {
         // Reminders post with no category, which the framework reports as "".
-        let categories = with_offer(Arc::default());
+        let categories = with_offer(&Seen::default());
         for banner_options in [true, false] {
             assert_eq!(
                 categories.presentation("", banner_options),
@@ -206,19 +235,20 @@ mod tests {
                 UNNotificationPresentationOptions::empty()
             );
         }
+        assert!(categories.presenter("").is_none());
     }
 
     #[test]
     fn a_response_to_a_reminder_reaches_no_handler() {
-        let chosen: Chosen = Arc::default();
-        let categories = with_offer(Arc::clone(&chosen));
+        let seen = Seen::default();
+        let categories = with_offer(&seen);
         assert!(categories.handler("").is_none());
-        assert!(chosen.lock().unwrap().is_empty());
+        assert!(seen.lock().unwrap().is_empty());
     }
 
     #[test]
     fn a_registered_category_shows_as_a_banner_while_frontmost_from_macos_11() {
-        let categories = with_offer(Arc::default());
+        let categories = with_offer(&Seen::default());
         assert_eq!(
             categories.presentation(OFFER, true),
             UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::List
@@ -228,27 +258,39 @@ mod tests {
     #[test]
     #[allow(deprecated)] // `Alert` is the only option macOS 10.15 knows
     fn a_registered_category_shows_as_an_alert_while_frontmost_before_macos_11() {
-        let categories = with_offer(Arc::default());
+        let categories = with_offer(&Seen::default());
         assert_eq!(categories.presentation(OFFER, false), UNNotificationPresentationOptions::Alert);
     }
 
     #[test]
+    fn a_frontmost_presentation_reaches_its_categorys_presenter_with_its_request() {
+        let seen = Seen::default();
+        let categories = with_offer(&seen);
+        categories.presenter(OFFER).expect("registered")("update-offer-0.7.0");
+        assert_eq!(*seen.lock().unwrap(), ["update-offer-0.7.0:presented"]);
+    }
+
+    #[test]
     fn a_response_reaches_its_categorys_handler_with_its_request_and_action() {
-        let chosen: Chosen = Arc::default();
-        let categories = with_offer(Arc::clone(&chosen));
+        let seen = Seen::default();
+        let categories = with_offer(&seen);
         let handler = categories.handler(OFFER).expect("registered");
         handler("update-offer-0.7.0", "install-on-quit");
-        assert_eq!(*chosen.lock().unwrap(), ["update-offer-0.7.0:install-on-quit"]);
+        assert_eq!(*seen.lock().unwrap(), ["update-offer-0.7.0:install-on-quit"]);
     }
 
     #[test]
     fn registering_a_category_again_replaces_it() {
-        let first: Chosen = Arc::default();
-        let second: Chosen = Arc::default();
-        let mut categories = with_offer(Arc::clone(&first));
-        categories.insert(OFFER, Vec::new(), recording(Arc::clone(&second)));
+        let first = Seen::default();
+        let second = Seen::default();
+        let mut categories = with_offer(&first);
+        register(&mut categories, Vec::new(), &second);
         categories.handler(OFFER).expect("registered")("update-offer-0.7.1", "install-now");
+        categories.presenter(OFFER).expect("registered")("update-offer-0.7.1");
         assert!(first.lock().unwrap().is_empty());
-        assert_eq!(*second.lock().unwrap(), ["update-offer-0.7.1:install-now"]);
+        assert_eq!(
+            *second.lock().unwrap(),
+            ["update-offer-0.7.1:install-now", "update-offer-0.7.1:presented"]
+        );
     }
 }

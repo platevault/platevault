@@ -147,6 +147,12 @@ impl FakeSystem {
         self.answer(last, response);
     }
 
+    /// The OS shows the `index`th posted notification as a heads-up after
+    /// all: macOS presents it as a banner while the app is frontmost.
+    fn heads_up(&self, index: usize) {
+        self.posted.lock().unwrap()[index].1.heads_up();
+    }
+
     /// The OS answers the pending post.
     fn decide(&self, result: Result<Delivery, Refusal>) {
         let pending = self.pending.lock().unwrap().take().expect("a post is pending");
@@ -323,6 +329,43 @@ async fn a_button_on_the_notification_for_an_older_release_is_ignored() {
     system.answer(1, Response::Chose(OfferAction::InstallOnQuit));
     // Port operations start in the order the clicks were handled.
     assert_eq!(port.first_calls().await, ["install_on_quit"]);
+}
+
+#[tokio::test]
+async fn a_notification_shown_as_a_heads_up_after_all_hands_the_offer_to_the_in_app_notice() {
+    let (port, system, offers) = on_screen().await;
+    system.heads_up(0);
+    published(&offers, &offer("0.7.0", OfferChannel::InApp)).await;
+    // Still outstanding: it is withdrawn when the phase leaves available.
+    port.publish(UpdatePhase::Checking, "0.7.0");
+    until("the withdrawal", || system.withdrawn() == 1).await;
+}
+
+#[tokio::test]
+async fn a_heads_up_reported_before_the_os_accepts_the_post_still_counts() {
+    // macOS asks how to present a notification before it reports the post
+    // accepted.
+    let (port, system, offers) = started(Answer::OnDemand);
+    port.publish(UpdatePhase::Available, "0.7.0");
+    until("the post", || system.posts() == 1).await;
+    system.heads_up(0);
+    system.decide(Ok(Delivery::Persistent));
+    published(&offers, &offer("0.7.0", OfferChannel::InApp)).await;
+}
+
+#[tokio::test]
+async fn a_heads_up_of_the_notification_for_an_older_release_changes_nothing() {
+    let (port, system, offers) = on_screen().await;
+    port.publish(UpdatePhase::Available, "0.7.1");
+    published(&offers, &offer("0.7.1", OfferChannel::System)).await;
+    let mut feed = offers.feed();
+    assert_eq!(feed.next().await, Some(offer("0.7.1", OfferChannel::System)));
+    system.heads_up(0);
+    // Handled in order, so the newer release's own heads-up, sent after,
+    // makes the only change.
+    system.heads_up(1);
+    let change = tokio::time::timeout(OFFER_DEADLINE, feed.next()).await;
+    assert_eq!(change.expect("nothing was published"), Some(offer("0.7.1", OfferChannel::InApp)));
 }
 
 #[tokio::test]

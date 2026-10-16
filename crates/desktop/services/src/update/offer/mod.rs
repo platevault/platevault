@@ -19,10 +19,12 @@
 //! notice visible:
 //!
 //! - macOS: `System` for the Alert notification style, which stays until
-//!   the user acts, posted while the app is in the background. Posted while
-//!   the app is frontmost, any notification shows as a banner. The Banner
-//!   style leaves the screen by itself, and Focus sends it to Notification
-//!   Center, so a banner is a heads-up.
+//!   the user acts. While the app is frontmost, the OS asks the app how to
+//!   present a notification, and the app presents it as a banner, so the
+//!   OS's question turns the offer of that release in-app
+//!   ([`Responder::heads_up`]). The Banner style leaves the screen by
+//!   itself, and Focus sends it to Notification Center, so a banner is a
+//!   heads-up.
 //! - Windows: a heads-up until the app can read whether the user turned its
 //!   toasts off (`ToastNotifier.Setting`, decision D2 pending).
 //! - Linux and the other freedesktop systems: a heads-up. The notification
@@ -177,7 +179,9 @@ impl OfferText {
 /// How long an accepted notification stays on screen.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Delivery {
-    /// Until the user answers it: the notification carries the offer.
+    /// Until the user answers it: the notification carries the offer,
+    /// unless the OS shows it as a heads-up after all
+    /// ([`Responder::heads_up`]).
     Persistent,
     /// It may leave the screen unanswered: a heads-up beside the in-app
     /// notice.
@@ -203,12 +207,16 @@ enum Event {
         version: String,
         response: Response,
     },
+    /// The notification for `version` shows as a heads-up.
+    HeadsUp {
+        version: String,
+    },
     /// The update status ended with the updater.
     Ended,
 }
 
-/// Reports the user's response to the notification for one release, from
-/// any thread.
+/// Reports what becomes of the notification for one release, from any
+/// thread.
 #[derive(Clone, Debug)]
 pub struct Responder {
     version: String,
@@ -218,22 +226,34 @@ pub struct Responder {
 impl Responder {
     /// The user responded with `response`.
     pub fn respond(&self, response: Response) {
-        let event = Event::Response { version: self.version.clone(), response };
-        // A closed channel means the offer task ended with the updater.
-        self.events.send(event).ok();
+        self.send(Event::Response { version: self.version.clone(), response });
     }
 
     /// The notification reported `identifier` ([`Response::from_identifier`]).
     pub fn respond_identifier(&self, identifier: &str) {
         self.respond(Response::from_identifier(identifier));
     }
+
+    /// The OS shows the notification as a heads-up that leaves the screen
+    /// unanswered, though it was accepted as [`Delivery::Persistent`]: the
+    /// offer of its release turns in-app. A notification for an older
+    /// release, or one already answered or withdrawn, changes nothing.
+    pub fn heads_up(&self) {
+        self.send(Event::HeadsUp { version: self.version.clone() });
+    }
+
+    fn send(&self, event: Event) {
+        // A closed channel means the offer task ended with the updater.
+        self.events.send(event).ok();
+    }
 }
 
 /// The OS side of the offer: a system notification with both buttons.
 pub trait SystemOffer: Send + Sync + 'static {
     /// Show `text` with an Install now and an Install on quit button, and
-    /// pass the user's response to `responder`. Resolves once the OS accepted
-    /// the notification, with how long it stays on screen, or with why it
+    /// report the user's response, and a heads-up the OS shows instead
+    /// (macOS), to `responder`. Resolves once the OS accepted the
+    /// notification, with how long it stays on screen, or with why it
     /// cannot carry the offer.
     fn post(
         &self,
@@ -253,16 +273,10 @@ type Platform = windows::ToastOffer;
 #[cfg(all(unix, not(target_os = "macos")))]
 type Platform = xdg::XdgOffer;
 
-/// Reads whether the app's main window is frontmost: `None` when that is
-/// not known.
-pub type Focus = Box<dyn Fn() -> Option<bool> + Send + Sync>;
-
-/// This platform's [`SystemOffer`], posting under `identity`. `focused` is
-/// read at each post: macOS shows a notification posted while the app is
-/// frontmost as a banner that leaves the screen, whatever the user's style.
+/// This platform's [`SystemOffer`], posting under `identity`.
 #[must_use]
-pub fn platform(identity: &AppIdentity, focused: Focus) -> impl SystemOffer {
-    Platform::new(identity, focused)
+pub fn platform(identity: &AppIdentity) -> impl SystemOffer {
+    Platform::new(identity)
 }
 
 /// Whether the in-app notice offers `action` for `version` in `status`,
@@ -368,6 +382,7 @@ where
             match event {
                 Event::Status(status) => self.on_status(status).await,
                 Event::Response { version, response } => self.on_response(&version, response),
+                Event::HeadsUp { version } => self.on_heads_up(&version),
                 Event::Ended => return,
             }
         }
@@ -445,6 +460,16 @@ where
                 OfferAction::InstallOnQuit => port.install_on_quit().await,
             }
         });
+    }
+
+    fn on_heads_up(&mut self, version: &str) {
+        if self.offered.as_deref() == Some(version)
+            && self.outstanding == Some(Delivery::Persistent)
+        {
+            // Still on screen for now, and its buttons still work.
+            self.outstanding = Some(Delivery::Transient);
+            self.publish(version, OfferChannel::InApp);
+        }
     }
 
     fn publish(&self, version: &str, channel: OfferChannel) {

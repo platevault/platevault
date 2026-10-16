@@ -133,29 +133,42 @@ impl NotificationCenter {
         self.0.removeDeliveredNotificationsWithIdentifiers(&identifiers);
     }
 
-    /// Remove every notification in `category` from the screen and from
-    /// Notification Center, and drop those still waiting to be shown, then
-    /// call `done`: a notification posted after `done` is not among them.
-    pub fn withdraw_category(&self, category: &str, done: impl FnOnce() + Send + 'static) {
+    /// Remove every notification in `category` but `keep` from the screen
+    /// and from Notification Center, and drop those still waiting to be
+    /// shown, then call `done`: a notification posted after `done` is not
+    /// among them. `keep` is the request about to be posted again, which
+    /// replaces a notification under its identifier.
+    pub fn withdraw_category(
+        &self,
+        category: &str,
+        keep: &str,
+        done: impl FnOnce() + Send + 'static,
+    ) {
         let done = Arc::new(once(move |()| done()));
-        let category = category.to_owned();
+        let (category, keep) = (category.to_owned(), keep.to_owned());
         let block = RcBlock::new(move |delivered: NonNull<NSArray<UNNotification>>| {
             // SAFETY: the framework passes a valid array that lives for the
             // duration of this completion handler.
             #[allow(unsafe_code)]
             let delivered = unsafe { delivered.as_ref() };
             let center = UNUserNotificationCenter::currentNotificationCenter();
-            let shown =
-                in_category(&category, delivered.iter().map(|shown| described(&shown.request())));
+            let shown = in_category(
+                &category,
+                &keep,
+                delivered.iter().map(|shown| described(&shown.request())),
+            );
             center.removeDeliveredNotificationsWithIdentifiers(&identifiers(&shown));
             let done = Arc::clone(&done);
-            let category = category.clone();
+            let (category, keep) = (category.clone(), keep.clone());
             let pending = RcBlock::new(move |pending: NonNull<NSArray<UNNotificationRequest>>| {
                 // SAFETY: as above.
                 #[allow(unsafe_code)]
                 let pending = unsafe { pending.as_ref() };
-                let waiting =
-                    in_category(&category, pending.iter().map(|request| described(&request)));
+                let waiting = in_category(
+                    &category,
+                    &keep,
+                    pending.iter().map(|request| described(&request)),
+                );
                 UNUserNotificationCenter::currentNotificationCenter()
                     .removePendingNotificationRequestsWithIdentifiers(&identifiers(&waiting));
                 done(());
@@ -234,12 +247,16 @@ fn described(request: &UNNotificationRequest) -> (String, String) {
 }
 
 /// The identifiers of the `(identifier, category)` notifications in
-/// `category`.
+/// `category`, but `keep`.
 fn in_category(
     category: &str,
+    keep: &str,
     notifications: impl Iterator<Item = (String, String)>,
 ) -> Vec<String> {
-    notifications.filter(|(_, of)| of == category).map(|(identifier, _)| identifier).collect()
+    notifications
+        .filter(|(identifier, of)| of == category && identifier != keep)
+        .map(|(identifier, _)| identifier)
+        .collect()
 }
 
 fn identifiers(identifiers: &[String]) -> Retained<NSArray<NSString>> {
@@ -272,17 +289,18 @@ mod tests {
     use super::in_category;
 
     #[test]
-    fn withdrawing_a_category_picks_its_notifications_only() {
+    fn withdrawing_a_category_picks_its_notifications_but_the_one_about_to_be_posted() {
         let notifications = [
             ("update-offer-0.6.9", "update-offer"),
             ("reminder-window-3", ""),
+            ("update-offer-0.7.0", "update-offer"),
             ("update-offer", "update-offer"),
             ("other", "other-category"),
         ]
         .into_iter()
         .map(|(identifier, category)| (identifier.to_owned(), category.to_owned()));
         assert_eq!(
-            in_category("update-offer", notifications),
+            in_category("update-offer", "update-offer-0.7.0", notifications),
             ["update-offer-0.6.9", "update-offer"]
         );
     }
