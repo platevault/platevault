@@ -212,7 +212,7 @@ mod tests {
     /// component-wise `Path` comparison it replaced while `Hash` and
     /// `PartialEq` stay consistent across redundant separators and `.`
     /// segments. A recorded `relative_path` carrying either must still match
-    /// the plainly-joined path `real_files_under` yields.
+    /// the plainly-joined path `real_files_under_reporting` yields.
     #[test]
     fn redundant_separators_and_cur_dir_segments_still_match_on_disk() {
         let dir = tempfile::tempdir().unwrap();
@@ -321,7 +321,7 @@ mod tests {
         symlink(&real_root, &linked_root).unwrap();
 
         // `Path::is_dir()` follows the link and would accept this root, but
-        // `real_files_under` refuses to descend it and returns nothing.
+        // `real_files_under_reporting` refuses to descend it and returns nothing.
         assert!(linked_root.is_dir());
         let err =
             reconcile_root(&linked_root, &[known("f1", "light_001.fits", 4)], false).unwrap_err();

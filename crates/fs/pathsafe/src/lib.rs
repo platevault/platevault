@@ -74,9 +74,10 @@ pub fn is_link_or_junction_metadata(meta: &Metadata) -> bool {
     false
 }
 
-/// Why a root cannot be walked by [`real_files_under`] / [`real_dirs_under`].
+/// Why a root cannot be walked by [`real_files_under_reporting`] /
+/// [`real_dirs_under`].
 ///
-/// Callers need this because both walkers return an empty list for a root they
+/// Callers need this because both walkers return no files for a root they
 /// refuse to descend, which is indistinguishable from a genuinely empty root.
 /// Treating the two as the same thing lets an unmounted drive read as "every
 /// file was deleted".
@@ -108,7 +109,7 @@ impl std::fmt::Display for RootUnavailable {
 /// Check that `root` is a directory the link-aware walkers will actually
 /// descend, under the same `follow_symlinks` rule they apply.
 ///
-/// This is the availability precondition for [`real_files_under`] and
+/// This is the availability precondition for [`real_files_under_reporting`] and
 /// [`real_dirs_under`]: it must be checked with the same `follow_symlinks`
 /// value, because a symlinked root is walkable with `true` and gated with
 /// `false`. Note that `Path::is_dir()` alone is not a substitute — it follows
@@ -187,22 +188,13 @@ pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
     dirs
 }
 
-/// Recursively collect every real (non-link) **file** under `root`.
+/// Recursively collect every real (non-link) **file** under `root`, together
+/// with the paths whose state the walk could not observe.
 ///
 /// Mirrors [`real_dirs_under`]'s gating: a symlinked/junction directory is
 /// never descended into, and a symlinked file is never yielded, unless
-/// `follow_symlinks` is `true`.
-///
-/// Drops the paths the walk could not read, so a file's absence from the
-/// result is not evidence that it is gone; a caller that acts on absence must
-/// use [`real_files_under_reporting`].
-#[must_use]
-pub fn real_files_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
-    real_files_under_reporting(root, follow_symlinks).0
-}
-
-/// [`real_files_under`], additionally returning the paths whose state the
-/// walk could not observe.
+/// `follow_symlinks` is `true`. A root that is itself a link while
+/// `follow_symlinks` is off yields nothing; check [`probe_root`] first.
 ///
 /// The walk skips what it cannot read rather than aborting, which makes "no
 /// file here" ambiguous between absent and unreadable. Each path in the
@@ -213,7 +205,9 @@ pub fn real_files_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
 /// - a directory whose listing failed part-way, so entries may be missing;
 /// - an entry whose metadata could not be read, which may be a file or a
 ///   directory. A directory with read but no search permission (mode 644 on
-///   Unix) lists its names but fails this for every entry.
+///   Unix) lists its names but fails this for every entry;
+/// - `root` itself when its metadata cannot be read, for example a network
+///   share that went stale after [`probe_root`] passed.
 ///
 /// When `follow_symlinks` is on, directories are deduplicated by their
 /// canonical path so a link pointing at an ancestor terminates instead of
@@ -242,8 +236,15 @@ where
     let mut files = Vec::new();
     let mut unreadable = Vec::new();
 
-    if !follow_symlinks && is_link_or_junction(root) {
-        return (files, unreadable);
+    if !follow_symlinks {
+        match fs::symlink_metadata(root) {
+            Ok(meta) if is_link_or_junction_metadata(&meta) => return (files, unreadable),
+            Ok(_) => {}
+            Err(_) => {
+                unreadable.push(root.to_path_buf());
+                return (files, unreadable);
+            }
+        }
     }
 
     let mut visited = std::collections::HashSet::new();
@@ -472,6 +473,32 @@ mod tests {
         assert_eq!(unreadable, vec![listable.join("hidden.fits")]);
     }
 
+    /// A root that cannot be stat'd (here: its parent has no search
+    /// permission) was answered as a gated link, so the walk returned nothing
+    /// and every frame below it read as absent. It must be reported instead.
+    #[cfg(unix)]
+    #[test]
+    fn real_files_under_reporting_names_a_root_it_cannot_stat() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let parent = dir.path().join("share");
+        let root = parent.join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("frame.fits"), b"data").unwrap();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let enforced = std::fs::symlink_metadata(&root).is_err();
+        let walked = real_files_under_reporting(&root, false);
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        if !enforced {
+            eprintln!("skipping: this environment can stat below a mode-644 directory (root?)");
+            return;
+        }
+        assert_eq!(walked, (Vec::new(), vec![root]));
+    }
+
     /// A listing that fails part-way may have hidden any entry of that
     /// directory, so the directory itself is unknown; what it did list and
     /// its readable siblings still count.
@@ -518,14 +545,15 @@ mod tests {
     }
 
     #[test]
-    fn real_files_under_finds_nested_files() {
+    fn real_files_under_reporting_finds_nested_files() {
         let dir = tempfile::tempdir().unwrap();
         let nested = dir.path().join("sub");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(nested.join("frame.fits"), b"data").unwrap();
         std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
 
-        let mut files = real_files_under(dir.path(), false);
+        let (mut files, unreadable) = real_files_under_reporting(dir.path(), false);
+        assert_eq!(unreadable, Vec::<PathBuf>::new(), "the whole tree is readable");
         files.sort();
         assert_eq!(files.len(), 2);
         assert!(files.contains(&nested.join("frame.fits")));
@@ -566,8 +594,9 @@ mod tests {
         let dirs = real_dirs_under(&scan_root, false);
         assert!(!dirs.contains(&link_path));
 
-        let files = real_files_under(&scan_root, false);
+        let (files, unreadable) = real_files_under_reporting(&scan_root, false);
         assert!(files.is_empty(), "must not see files behind an un-enabled symlink");
+        assert_eq!(unreadable, Vec::<PathBuf>::new(), "a gated link is skipped, not unknown");
     }
 
     #[cfg(unix)]
@@ -626,7 +655,8 @@ mod tests {
         let dirs = real_dirs_under(&scan_root, false);
         assert!(!dirs.contains(&junction_path));
 
-        let files = real_files_under(&scan_root, false);
+        let (files, unreadable) = real_files_under_reporting(&scan_root, false);
         assert!(files.is_empty(), "must not see files behind an un-enabled junction");
+        assert_eq!(unreadable, Vec::<PathBuf>::new(), "a gated junction is skipped, not unknown");
     }
 }
