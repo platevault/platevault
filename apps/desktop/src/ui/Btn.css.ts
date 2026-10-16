@@ -117,7 +117,7 @@ export const variantStyles = styleVariants({
       },
       '&:active': {
         background: vars.destructiveBgHover,
-        boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.22)',
+        boxShadow: vars.shadowInset,
       },
       '&:disabled': {
         background: vars.destructiveBg,
